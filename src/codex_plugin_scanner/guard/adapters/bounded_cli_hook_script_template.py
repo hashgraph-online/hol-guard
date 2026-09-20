@@ -7,6 +7,8 @@ BOUNDED_HOOK_SCRIPT_TEMPLATE = '''#!/usr/bin/env python3
 from __future__ import annotations
 
 import json
+import os
+import stat
 import sys
 import time
 import urllib.error
@@ -102,12 +104,76 @@ def _event_name(input_text: str) -> str:
     return "PreToolUse"
 
 
+def _private_file_ok(metadata: os.stat_result) -> bool:
+    if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
+        return False
+    if os.name == "nt":
+        return True
+    return metadata.st_uid == os.getuid() and not stat.S_IMODE(metadata.st_mode) & 0o077
+
+
+def _private_dir_ok(metadata: os.stat_result) -> bool:
+    if not stat.S_ISDIR(metadata.st_mode):
+        return False
+    if os.name == "nt":
+        return True
+    return metadata.st_uid == os.getuid() and not stat.S_IMODE(metadata.st_mode) & 0o077
+
+
 def _read_private_text(path: Path, *, max_bytes: int) -> str | None:
     try:
-        data = path.read_bytes()
+        parent_before = path.parent.lstat()
+        path_before = path.lstat()
     except OSError:
         return None
-    if len(data) > max_bytes:
+    if not _private_dir_ok(parent_before) or not _private_file_ok(path_before):
+        return None
+    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(path, flags)
+    except OSError:
+        return None
+    try:
+        opened = os.fstat(descriptor)
+        if (
+            not _private_file_ok(opened)
+            or opened.st_dev != path_before.st_dev
+            or opened.st_ino != path_before.st_ino
+        ):
+            return None
+        if opened.st_size > max_bytes:
+            return None
+        chunks: list[bytes] = []
+        consumed = 0
+        while consumed < max_bytes:
+            chunk = os.read(descriptor, min(64 * 1024, max_bytes - consumed))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            consumed += len(chunk)
+        closed = os.fstat(descriptor)
+        if (
+            closed.st_dev != opened.st_dev
+            or closed.st_ino != opened.st_ino
+            or closed.st_mode != opened.st_mode
+            or closed.st_size != opened.st_size
+            or closed.st_mtime_ns != opened.st_mtime_ns
+            or closed.st_ctime_ns != opened.st_ctime_ns
+        ):
+            return None
+        data = b"".join(chunks)
+    finally:
+        os.close(descriptor)
+    try:
+        parent_after = path.parent.lstat()
+    except OSError:
+        return None
+    if (
+        not _private_dir_ok(parent_after)
+        or parent_after.st_dev != parent_before.st_dev
+        or parent_after.st_ino != parent_before.st_ino
+        or parent_after.st_mode != parent_before.st_mode
+    ):
         return None
     try:
         return data.decode("utf-8")

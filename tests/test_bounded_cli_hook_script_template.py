@@ -18,6 +18,7 @@ from codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge import _render_
 def _load_script(tmp_path: Path, *, harness: str, timeout_seconds: float = 8) -> ModuleType:
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir(parents=True, exist_ok=True)
+    guard_home.chmod(0o700)
     source = _render_bounded_hook_script(
         guard_home=guard_home,
         harness=harness,
@@ -35,11 +36,12 @@ def _load_script(tmp_path: Path, *, harness: str, timeout_seconds: float = 8) ->
 
 def _write_daemon_files(module: ModuleType, *, host: str, port: int, token: str = "token") -> None:
     home = Path(module.GUARD_HOME)
-    (home / "daemon-state.json").write_text(
-        json.dumps({"host": host, "port": port}),
-        encoding="utf-8",
-    )
-    (home / "daemon-auth-token").write_text(token, encoding="utf-8")
+    state = home / "daemon-state.json"
+    auth = home / "daemon-auth-token"
+    state.write_text(json.dumps({"host": host, "port": port}), encoding="utf-8")
+    auth.write_text(token, encoding="utf-8")
+    state.chmod(0o600)
+    auth.chmod(0o600)
 
 
 def _serve(
@@ -205,13 +207,26 @@ def test_generated_client_unavailable_payload_matches_harness(
 
 def test_generated_client_watch_mode_continues(tmp_path: Path) -> None:
     module = _load_script(tmp_path, harness="grok")
-    Path(module.GUARD_HOME).joinpath("config.toml").write_text(
-        'protection_posture = "watch"\nmode = "observe"\n',
-        encoding="utf-8",
-    )
+    config = Path(module.GUARD_HOME) / "config.toml"
+    config.write_text('protection_posture = "watch"\nmode = "observe"\n', encoding="utf-8")
+    config.chmod(0o600)
     payload, code = module._failure_payload("PreToolUse", "down")
     assert code == 0
     assert payload == {"decision": "allow"}
+
+
+def test_generated_client_rejects_symlinked_daemon_token(tmp_path: Path) -> None:
+    module = _load_script(tmp_path, harness="grok")
+    home = Path(module.GUARD_HOME)
+    leaked = tmp_path / "leaked-token"
+    leaked.write_text("stolen", encoding="utf-8")
+    leaked.chmod(0o600)
+    token = home / "daemon-auth-token"
+    token.symlink_to(leaked)
+    state = home / "daemon-state.json"
+    state.write_text(json.dumps({"host": "127.0.0.1", "port": 9}), encoding="utf-8")
+    state.chmod(0o600)
+    assert module._daemon_auth() is None
 
 
 def test_generated_client_waits_for_grok_approval_over_http(tmp_path: Path) -> None:
