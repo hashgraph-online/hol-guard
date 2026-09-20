@@ -29,9 +29,49 @@ def examples(matcher: object) -> set[str]:
 def main() -> None:
     if sys.version_info[:2] != (3, 12):
         raise SystemExit("Native v1 oracle requires CPython 3.12 / UCD15.")
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from tests.test_guard_command_errand_extensions import ERRAND_APPLY_CASES, ERRAND_RUN_CASES, ERRAND_SAFE_COMMANDS
+
     commands = {
         value for extension in REGISTRY.extensions for rule in extension.rules for value in examples(rule.matcher)
     }
+    # Reuse the Python regression corpus as an independent native oracle.
+    commands.update(command for command, _, _ in (*ERRAND_RUN_CASES, *ERRAND_APPLY_CASES))
+    commands.update(ERRAND_SAFE_COMMANDS)
+    commands.update(
+        f"errand fetch --apply={value} linux/job"
+        for value in ("1", "t", "T", "true", "True", "TRUE", "0", "f", "F", "false", "False", "FALSE", "yes", "")
+    )
+    commands.update(
+        {
+            "errand",
+            "errand --",
+            "errand --on",
+            "xargs errand --on",
+            "errand fetch --on",
+            "errand fetch --apply --on",
+            "xargs errand fetch --on",
+            "errand fetch -- linux/job --apply",
+            "errand fetch --apply -- linux/job",
+            "errand FETCH --apply linux/job",
+            "errand fetch --Apply linux/job",
+            "exec -- errand -- make test",
+            "xargs -- errand fetch --apply linux/job",
+            "xargs -I ITEM errand fetch ITEM",
+            "xargs --replace=ITEM errand ITEM",
+            "xargs --unknown errand",
+            "xargs --unknown printf text",
+            "exec -a alias errand",
+            "xargs -n1 errand",
+            "xargs -0r errand",
+            "xargs --max-args=1 errand",
+            "errand fetch --apply linux/job && errand -- make test",
+            "/usr/local/bin/ERRAND -- make test",
+            "xargs /usr/local/bin/ERRAND fetch --apply linux/job",
+            "errand --on=café -- make test",
+            "errand fetch --output=café linux/job",
+        }
+    )
     commands.update(
         {
             "pwd",

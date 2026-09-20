@@ -67,8 +67,8 @@ fn decision(
 fn packaged_program_is_admitted_once_and_exposes_explicit_coverage() {
     let first = packaged_command_program().unwrap();
     assert!(Arc::ptr_eq(&first, &packaged_command_program().unwrap()));
-    assert_eq!(first.extensions.len(), 71);
-    assert_eq!(first.rules.len(), 234);
+    assert_eq!(first.extensions.len(), 72);
+    assert_eq!(first.rules.len(), 236);
     assert_eq!(
         first
             .rules
@@ -180,6 +180,9 @@ fn local_opt_in_selects_ollama_and_safe_evidence_stays_on_its_own_segment() {
             .all(|item| item.extension_id != "command.ollama"));
     }
 }
+
+#[path = "native_command_errand_tests.rs"]
+mod errand;
 
 #[test]
 fn disabled_permission_and_failed_authority_cannot_become_allow() {

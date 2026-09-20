@@ -17,9 +17,12 @@ use crate::command_ascii_comparison::{self as ascii_comparison, lowercase_for_as
 
 #[path = "command_curl_operations.rs"]
 mod curl;
+#[path = "command_errand_matcher.rs"]
+mod errand;
 #[path = "command_reviewed_literal.rs"]
 mod literal;
 
+use errand::ErrandConfig;
 use literal::ReviewedLiteralConfig;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -82,12 +85,17 @@ pub(crate) enum SpecializedMatcher {
     CurlElasticsearch(CurlElasticsearchConfig),
     Repo2nbExpansion(Repo2nbExpansionConfig),
     ReviewedLiteral(ReviewedLiteralConfig),
+    Errand(ErrandConfig),
 }
 
 impl SpecializedMatcher {
     pub(crate) fn from_config(op: &str, config: Value) -> Result<Self, &'static str> {
         let invalid = |_| "invalid_specialized_matcher_config";
         match op {
+            "errand-command.v1" => {
+                let config: ErrandConfig = serde_json::from_value(config).map_err(invalid)?;
+                Ok(Self::Errand(config.validate()?))
+            }
             "php-artisan-script.v1" => {
                 let mut config: PhpArtisanConfig =
                     serde_json::from_value(config).map_err(invalid)?;
@@ -200,6 +208,7 @@ impl SpecializedMatcher {
                     )?
                 }
                 Self::Repo2nbExpansion(config) => config.matches(segment, deadline)?,
+                Self::Errand(config) => config.matches(segment, deadline)?,
                 Self::ReviewedLiteral(_) => unreachable!("handled before segment iteration"),
             };
             check_deadline(deadline)?;
