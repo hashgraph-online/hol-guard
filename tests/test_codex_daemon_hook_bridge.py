@@ -153,16 +153,19 @@ def test_unavailable_prompt_warns_without_stopping_conversation() -> None:
         "continue": True,
         "systemMessage": "review failed",
     }
-    assert (
-        bridge._unavailable_response("PreToolUse", "review failed")["hookSpecificOutput"]["permissionDecision"]
-        == "allow"
-    )
+    pretool = bridge._unavailable_response("PreToolUse", "review failed")
+    assert pretool == {
+        "continue": True,
+        "systemMessage": "review failed",
+        "hookSpecificOutput": {"hookEventName": "PreToolUse"},
+    }
     allow = bridge._unavailable_response(
         "PreToolUse",
         "review failed",
         json.dumps({"hook_event_name": "PreToolUse", "tool_name": "Read", "tool_input": {"file_path": "src/app.ts"}}),
     )
-    assert allow["hookSpecificOutput"]["permissionDecision"] == "allow"
+    assert allow["hookSpecificOutput"] == {"hookEventName": "PreToolUse"}
+    assert "permissionDecision" not in allow["hookSpecificOutput"]
 
 
 def test_launcher_integrity_failure_does_not_stop_user_prompt(
@@ -248,6 +251,40 @@ def test_codex_post_tool_response_excludes_daemon_metadata() -> None:
         )
         == {}
     )
+
+
+def test_codex_pre_tool_response_omits_unsupported_allow() -> None:
+    allowed = bridge._codex_hook_response(
+        {
+            "continue": True,
+            "policy_action": "allow",
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "allow",
+                "permissionDecisionReason": "HOL Guard allowed this action",
+            },
+        },
+        event_name="PreToolUse",
+    )
+    denied = bridge._codex_hook_response(
+        {
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "deny",
+                "permissionDecisionReason": "blocked",
+            }
+        },
+        event_name="PreToolUse",
+    )
+
+    assert allowed == {"continue": True, "hookSpecificOutput": {"hookEventName": "PreToolUse"}}
+    assert denied == {
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "deny",
+            "permissionDecisionReason": "blocked",
+        }
+    }
 
 
 @pytest.mark.parametrize(
@@ -486,7 +523,7 @@ def test_bridge_authenticates_real_daemon_before_hook_delivery(
     response = json.loads(capsys.readouterr().out)
     assert exit_code == 0
     if "could not authenticate the local daemon" in json.dumps(response).lower():
-        assert response["hookSpecificOutput"]["permissionDecision"] == "allow"
+        assert "permissionDecision" not in response.get("hookSpecificOutput", {})
 
 
 def test_bridge_real_daemon_uses_payload_cwd_for_bounded_compound_read(

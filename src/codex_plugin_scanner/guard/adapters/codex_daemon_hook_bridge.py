@@ -140,11 +140,8 @@ def _unavailable_response(
     if event_name == "PreToolUse":
         return {
             "continue": True,
-            "hookSpecificOutput": {
-                "hookEventName": event_name,
-                "permissionDecision": "allow",
-                "permissionDecisionReason": reason,
-            },
+            "systemMessage": reason,
+            "hookSpecificOutput": {"hookEventName": event_name},
         }
     return {
         "continue": True,
@@ -168,6 +165,19 @@ def _codex_hook_response(response: Mapping[str, object], *, event_name: str) -> 
         else:
             post_tool_keys = {"hookEventName", "additionalContext", "updatedMCPToolOutput"}
             filtered["hookSpecificOutput"] = {key: value for key, value in hook_output.items() if key in post_tool_keys}
+        return filtered
+    if event_name == "PreToolUse" and isinstance(hook_output, Mapping):
+        cleaned = {
+            key: value
+            for key, value in hook_output.items()
+            if key in {"hookEventName", "permissionDecision", "permissionDecisionReason"}
+        }
+        decision = cleaned.get("permissionDecision")
+        if isinstance(decision, str) and decision.strip().lower() == "allow":
+            cleaned.pop("permissionDecision", None)
+            cleaned.pop("permissionDecisionReason", None)
+        cleaned.setdefault("hookEventName", event_name)
+        filtered["hookSpecificOutput"] = cleaned
     return filtered
 
 
