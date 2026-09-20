@@ -197,11 +197,11 @@ def test_write_shard_plan_emits_response_files_and_metadata(tmp_path: Path) -> N
 
 
 def test_large_matrix_response_names_match_three_digit_workflow_format(tmp_path: Path) -> None:
-    shards = [[f"tests/test_matrix.py::test_case_{index}"] for index in range(128)]
+    shards = [[f"tests/test_matrix.py::test_case_{index}"] for index in range(192)]
 
-    write_shard_plan(tmp_path, shards=shards, estimated_loads=[1.0] * 128, manifest_used=True)
+    write_shard_plan(tmp_path, shards=shards, estimated_loads=[1.0] * 192, manifest_used=True)
 
-    assert len(list(tmp_path.glob("shard-*.txt"))) == 128
+    assert len(list(tmp_path.glob("shard-*.txt"))) == 192
     assert [
-        (tmp_path / f"shard-{index:03d}.txt").read_text(encoding="utf-8").splitlines() for index in range(128)
+        (tmp_path / f"shard-{index:03d}.txt").read_text(encoding="utf-8").splitlines() for index in range(192)
     ] == shards

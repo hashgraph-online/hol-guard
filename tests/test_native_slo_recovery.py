@@ -15,6 +15,58 @@ from scripts.native_slo_reporting import SloMeasurements, slo_gates, summarize_m
 from scripts.native_slo_session import AdapterSession, NativeStopResult
 
 
+@pytest.mark.parametrize("allowed,route", [(True, "native_fail_safe"), (False, "native_resident")])
+@pytest.mark.parametrize("error", ["native_policy_snapshot_resident_changed", "private-untrusted-error"])
+def test_failed_serialized_warmup_logs_bounded_state_and_still_fails_once(
+    capsys: pytest.CaptureFixture[str], allowed: bool, route: str, error: str
+) -> None:
+    calls: list[tuple[str, str, str]] = []
+
+    def observe(harness: str, event: str, size: str) -> Observation:
+        calls.append((harness, event, size))
+        return Observation(harness, event, size, 123.4567, route, allowed)
+
+    publisher = SimpleNamespace(last_error=error, current_snapshot_binding=lambda: None)
+    session = cast(
+        AdapterSession,
+        cast(
+            object,
+            SimpleNamespace(
+                observe=observe,
+                daemon=SimpleNamespace(
+                    _server=SimpleNamespace(hook_worker=SimpleNamespace(policy_snapshot_publisher=publisher))
+                ),
+            ),
+        ),
+    )
+    with pytest.raises(RuntimeError, match="serialized resident pool warmup"):
+        benchmark._run_serialized_warmup(session, "claude-code", "PreToolUse")
+    assert calls == [("claude-code", "PreToolUse", "1k")]
+    output = capsys.readouterr().err
+    diagnostic = json.loads(output)
+    assert diagnostic["route"] == route
+    assert diagnostic["allowed"] is allowed
+    assert diagnostic["adapter_ms"] == 123.457
+    assert diagnostic["publisher_ready"] is False
+    assert diagnostic["policy_generation"] is None
+    assert diagnostic["publisher_error"] == (error if error == "native_policy_snapshot_resident_changed" else None)
+    assert "private-untrusted-error" not in output
+
+
+def test_allowed_serialized_warmup_keeps_one_request_without_diagnostic(capsys: pytest.CaptureFixture[str]) -> None:
+    calls: list[str] = []
+
+    def observe(harness: str, event: str, size: str) -> Observation:
+        calls.append(harness)
+        return Observation(harness, event, size, 100, "native_resident", True)
+
+    benchmark._run_serialized_warmup(
+        cast(AdapterSession, cast(object, SimpleNamespace(observe=observe))), "claude-code", "PreToolUse"
+    )
+    assert calls == ["claude-code"]
+    assert not capsys.readouterr().err
+
+
 @pytest.mark.parametrize("preserve_clients", [False, True])
 @pytest.mark.parametrize("contained", [False, True])
 def test_resident_stop_always_verifies_containment_before_optional_client_teardown(

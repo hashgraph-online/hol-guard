@@ -15,7 +15,7 @@ from collections import Counter
 from collections.abc import Callable, Mapping
 from datetime import datetime
 
-SHARD_COUNT = 128
+SHARD_COUNT = 192
 # The planner and each dependent shard have separate five-minute watchdogs.
 # Include one minute for polling and scheduling overhead; this bound does not
 # delay successful producers or define the CI performance target.

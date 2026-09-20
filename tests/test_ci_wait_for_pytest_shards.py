@@ -72,9 +72,9 @@ def test_waits_through_planning_queue_and_running_then_requires_last_page() -> N
     running = deepcopy(queued)
     running[0].update(status="in_progress")
     calls, logs = _run([[], other_jobs + queued, other_jobs + queued, other_jobs + running, other_jobs + _jobs()])
-    assert len(calls) == 9
+    assert len(calls) == 13
     assert all(f"/runs/{_RUN_ID}/attempts/2/jobs?per_page=100&page=" in path for path in calls)
-    assert calls[-1].endswith("page=2")
+    assert calls[-1].endswith("page=3")
     assert len(logs) == 6  # initial identity, four transitions, final success
     assert f"{barrier.SHARD_COUNT} not yet scheduled" in logs[1]
     assert f"{barrier.SHARD_COUNT} queued" in logs[2]
@@ -107,6 +107,20 @@ def test_default_wait_accepts_healthy_shards_after_full_planning_and_execution_l
     # execution, and one polling interval for the complete success to appear.
     _, logs = _run([[]] * 60 + [running] * 61 + [_jobs()])
     assert logs[-1] == f"All {barrier.SHARD_COUNT} Python coverage shards succeeded in run {_RUN_ID}, attempt 2"
+
+
+def test_cli_accepts_one_second_poll_without_changing_producer_validation(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, float] = {}
+
+    def capture_wait(_repository: str, _run_id: int, _attempt: int, **kwargs: float) -> None:
+        captured.update(kwargs)
+
+    monkeypatch.setattr(barrier, "wait_for_shards", capture_wait)
+    monkeypatch.setenv("GITHUB_REPOSITORY", "owner/repo")
+    monkeypatch.setenv("GITHUB_RUN_ID", str(_RUN_ID))
+    monkeypatch.setenv("GITHUB_RUN_ATTEMPT", "2")
+    assert barrier.main(["--poll-seconds", "1"]) == 0
+    assert captured == {"timeout_seconds": barrier._DEFAULT_TIMEOUT_SECONDS, "poll_seconds": 1.0}
 
 
 @pytest.mark.parametrize("legacy_shards", [32, 128])
@@ -331,7 +345,7 @@ def test_sonar_accepts_only_complete_coverage_from_successful_current_attempt() 
     root = Path(__file__).resolve().parents[1]
     workflow = yaml.safe_load((root / ".github/workflows/ci.yml").read_text())
     jobs = workflow["jobs"]
-    assert barrier.SHARD_COUNT == 128
+    assert barrier.SHARD_COUNT == 192
     assert jobs["coverage"]["name"] == "coverage (3.12, ${{ matrix.shard-index }})"
     assert jobs["coverage"]["strategy"]["matrix"]["shard-index"] == list(range(barrier.SHARD_COUNT))
     producer = next(
@@ -347,5 +361,21 @@ def test_sonar_accepts_only_complete_coverage_from_successful_current_attempt() 
     assert "run-id" not in consumer["with"]  # Download remains scoped to the current workflow run.
     assert sonar_steps.index(waiter) < sonar_steps.index(consumer)
     assert waiter["env"] == {"GITHUB_TOKEN": "${{ github.token }}"}
+    assert waiter["run"].endswith("--poll-seconds 1")
     assert jobs["sonar"]["permissions"] == {"contents": "read", "actions": "read"}
-    assert 'test "${#reports[@]}" -eq 128' in (root / "scripts/ci/prepare_sonar_analysis.sh").read_text()
+    assert 'test "${#reports[@]}" -eq 192' in (root / "scripts/ci/prepare_sonar_analysis.sh").read_text()
+
+
+def test_sonar_installs_same_pinned_scanner_before_wait_without_analysis_credentials() -> None:
+    root = Path(__file__).resolve().parents[1]
+    workflow = yaml.safe_load((root / ".github/workflows/ci.yml").read_text())
+    steps = workflow["jobs"]["sonar"]["steps"]
+    installer = next(step for step in steps if step.get("name") == "Install pinned Sonar scanner CLI")
+    analysis = next(step for step in steps if step.get("name") == "Analyze with SonarQube Cloud")
+    waiter = next(step for step in steps if "wait_for_pytest_shards.py" in step.get("run", ""))
+    assert installer["uses"] == analysis["uses"]
+    assert installer["with"] == {"args": "--version"}
+    assert installer["env"] == {"SONAR_USER_HOME": analysis["env"]["SONAR_USER_HOME"]}
+    assert "with" not in analysis
+    assert analysis["env"]["SONAR_TOKEN"] == "${{ secrets.SONAR_TOKEN }}"
+    assert steps.index(installer) < steps.index(waiter) < steps.index(analysis)

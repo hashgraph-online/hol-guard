@@ -105,7 +105,7 @@ jobs:
       - uses: ./.github/actions/plan-pytest
         with:
           python-version: "3.12"
-          shard-count: "128"
+          shard-count: "192"
           telemetry-branch: ${{ github.event.pull_request.base.ref || github.ref_name }}
           github-token: ${{ github.token }}
 
@@ -125,7 +125,11 @@ jobs:
           64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79,
           80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95,
           96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111,
-          112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127
+          112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127,
+          128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143,
+          144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159,
+          160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175,
+          176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191
         ]
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
@@ -194,7 +198,7 @@ jobs:
         run: |
           shopt -s globstar nullglob
           reports=(duration-reports/**/pytest-durations.json)
-          test "${#reports[@]}" -eq 128
+          test "${#reports[@]}" -eq 192
           python3 scripts/ci/build_pytest_duration_manifest.py \
             --output pytest-duration-manifest-candidate.json.gz \
             --observed-at "$(date --utc +%Y-%m-%dT%H:%M:%SZ)" \
@@ -276,10 +280,16 @@ jobs:
       - name: Check Rust workspace with pinned Clippy
         shell: bash
         run: cargo clippy --manifest-path rust/Cargo.toml --locked --workspace
+      - name: Install pinned Sonar scanner CLI
+        uses: sonarsource/sonarqube-scan-action@22918119ff8e1ca75a623e15c8296b6ea4fbe28f
+        with:
+          args: --version
+        env:
+          SONAR_USER_HOME: ${{ runner.temp }}/sonar
       - name: Wait for successful pytest coverage producers
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: uv run --no-sync python scripts/ci/wait_for_pytest_shards.py
+        run: uv run --no-sync python scripts/ci/wait_for_pytest_shards.py --poll-seconds 1
       - name: Download pytest coverage data
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:

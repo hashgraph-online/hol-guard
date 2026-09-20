@@ -104,16 +104,18 @@ def _run_preparation(
 
 
 def test_preparation_combines_all_shards_before_creating_coverage_xml(tmp_path: Path) -> None:
-    result, commands = _run_preparation(tmp_path, 128)
+    result, commands = _run_preparation(tmp_path, 192)
     assert result.returncode == 0, result.stderr
     assert len(commands) == 2
     assert commands[0].split() == [
         "uv",
         "run",
         "--no-sync",
-        "coverage",
-        "combine",
-        *sorted(f"coverage-data/shard-{shard:02d}/.coverage" for shard in range(128)),
+        "python",
+        "scripts/ci/parallel_coverage_combine.py",
+        "--workers",
+        "4",
+        *sorted(f"coverage-data/shard-{shard:02d}/.coverage" for shard in range(192)),
     ]
     assert commands[1] == "uv run --no-sync python scripts/ci/parallel_coverage_xml.py --workers 4"
 
@@ -145,7 +147,7 @@ def test_setup_initializes_pinned_toolchain_before_cache(tmp_path: Path) -> None
     ]
 
 
-@pytest.mark.parametrize("shard_count", [0, 96, 127, 129])
+@pytest.mark.parametrize("shard_count", [0, 128, 191, 193])
 def test_preparation_rejects_incomplete_or_excess_coverage_before_running_tools(
     tmp_path: Path, shard_count: int
 ) -> None:
@@ -157,12 +159,12 @@ def test_preparation_rejects_incomplete_or_excess_coverage_before_running_tools(
 @pytest.mark.parametrize(
     "failed_command",
     [
-        "uv run --no-sync coverage combine",
+        "uv run --no-sync python scripts/ci/parallel_coverage_combine.py",
         "uv run --no-sync python scripts/ci/parallel_coverage_xml.py",
     ],
 )
 def test_preparation_stops_at_each_failed_command(tmp_path: Path, failed_command: str) -> None:
-    result, commands = _run_preparation(tmp_path, 128, failed_command)
+    result, commands = _run_preparation(tmp_path, 192, failed_command)
     assert result.returncode == 7
     assert commands[-1].startswith(failed_command)
 

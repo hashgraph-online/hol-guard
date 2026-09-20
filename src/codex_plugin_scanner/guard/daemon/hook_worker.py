@@ -232,7 +232,14 @@ class HookWorker(HookWorkerNativeMixin):
             if native_mode() in {"auto", "force"}:
                 wait_until_ready = getattr(self.policy_snapshot_publisher, "wait_until_ready", None)
                 last_error = getattr(self.policy_snapshot_publisher, "last_error", None)
-                if callable(wait_until_ready) and not (isinstance(last_error, str) and last_error.strip()):
+                # A replacement resident can serve persisted policy before the
+                # publisher confirms its new generation. Await that fresh ACK
+                # within the existing budget; other publication errors still
+                # fail immediately without admitting an unacknowledged policy.
+                transient_resident_change = last_error == "native_policy_snapshot_resident_changed"
+                if callable(wait_until_ready) and (
+                    transient_resident_change or not (isinstance(last_error, str) and last_error.strip())
+                ):
                     readiness_deadline = time.monotonic() + _NATIVE_POLICY_READY_TIMEOUT_SECONDS
                     if deadline is not None:
                         readiness_deadline = min(readiness_deadline, deadline)
