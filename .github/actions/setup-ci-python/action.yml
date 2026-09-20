@@ -37,7 +37,16 @@ runs:
       shell: bash
       env:
         CI_SETUP_PYTHON_VERSION: ${{ inputs.python-version }}
-      run: uv sync --frozen --extra dev --python "$CI_SETUP_PYTHON_VERSION"
+      run: |
+        for attempt in 1 2; do
+          if uv sync --frozen --extra dev --python "$CI_SETUP_PYTHON_VERSION"; then
+            exit 0
+          fi
+          if [[ "$attempt" -eq 2 ]]; then
+            exit 1
+          fi
+          sleep 5
+        done
     - name: Secure the CI virtualenv interpreter
       shell: bash
       run: |
