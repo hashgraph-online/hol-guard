@@ -49,6 +49,7 @@ _OPERATIONS = {
     "build": ("vite", "vite", "vite build"),
     "typecheck": ("typescript", "tsc", "tsc --noEmit --pretty"),
 }
+_CORPUS_PARTITIONS = 32
 
 
 def _write(path: Path, content: str, *, executable: bool = False) -> None:
@@ -150,30 +151,52 @@ def _result(request: ContainmentRequest, exit_code: int = 0) -> ContainmentExecu
     )
 
 
-def test_every_cdx_061_corpus_case_requires_owned_containment_proof() -> None:
-    operations: set[str] = set()
-    count = 0
-    for case, oracle in zip(iter_benign_corpus(), iter_benign_oracle(), strict=True):
+@pytest.mark.parametrize("partition", range(_CORPUS_PARTITIONS))
+def test_every_cdx_061_corpus_case_requires_owned_containment_proof(partition: int) -> None:
+    # Keep all 51,000 cases while allowing CI to distribute this formerly
+    # five-minute pytest node across its duration-balanced shard plan.
+    for case, oracle in zip(
+        iter_benign_corpus(shard_index=partition, shard_count=_CORPUS_PARTITIONS),
+        iter_benign_oracle(shard_index=partition, shard_count=_CORPUS_PARTITIONS),
+        strict=True,
+    ):
+        assert case.case_id == oracle.case_id
         evaluation = evaluate_command(case.command, cwd=Path("workspace"), home_dir=Path("home"))
         operation = contained_routine_candidate_operation(evaluation.command)
         if oracle.owner != "CDX-061":
             assert operation is None
             continue
-        count += 1
         assert operation is not None
-        operations.add(operation)
         assert evaluation.minimum_action == "review"
         assert evaluation.decision_plane.action == "review"
         assert evaluation.decision_plane.proof_routes == frozenset()
         assert any(
             reason.reason_code == "contained-routine-proof-required" for reason in evaluation.decision_plane.reasons
         )
-    assert count == 275
-    assert operations == {"test", "lint", "build", "typecheck", "compile-check", "dependency-tree", "workspace-check"}
-    for case, oracle in zip(iter_adversarial_corpus(), iter_adversarial_oracle(), strict=True):
+    for case, oracle in zip(
+        iter_adversarial_corpus(shard_index=partition, shard_count=_CORPUS_PARTITIONS),
+        iter_adversarial_oracle(shard_index=partition, shard_count=_CORPUS_PARTITIONS),
+        strict=True,
+    ):
+        assert case.case_id == oracle.case_id
         assert oracle.owner != "CDX-061"
         evaluation = evaluate_command(case.command, cwd=Path("workspace"), home_dir=Path("home"))
         assert contained_routine_candidate_operation(evaluation.command) is None
+
+
+def test_cdx_061_corpus_owned_count_and_operations_remain_complete() -> None:
+    operations: set[str] = set()
+    count = 0
+    for case, oracle in zip(iter_benign_corpus(), iter_benign_oracle(), strict=True):
+        if oracle.owner != "CDX-061":
+            continue
+        evaluation = evaluate_command(case.command, cwd=Path("workspace"), home_dir=Path("home"))
+        operation = contained_routine_candidate_operation(evaluation.command)
+        count += 1
+        assert operation is not None
+        operations.add(operation)
+    assert count == 275
+    assert operations == {"test", "lint", "build", "typecheck", "compile-check", "dependency-tree", "workspace-check"}
 
 
 @pytest.mark.parametrize("operation", tuple(_OPERATIONS))
@@ -299,9 +322,12 @@ def test_ambiguous_lock_sources_fail_closed(tmp_path: Path, name: str) -> None:
     (("^1.2.3", "1.9.0", True), ("^0.12.0", "0.12.3", True), ("^0.0.3", "0.0.4", False)),
 )
 def test_caret_version_matching_follows_semver(specifier: str, version: str, expected: bool) -> None:
-    assert evidence_module.version_spec_matches(
-        specifier, version, version_re=evidence_module._VERSION, caret_pins_zero_major=True
-    ) is expected
+    assert (
+        evidence_module.version_spec_matches(
+            specifier, version, version_re=evidence_module._VERSION, caret_pins_zero_major=True
+        )
+        is expected
+    )
 
 
 def test_scoped_registry_tarball_omits_scope_from_filename() -> None:

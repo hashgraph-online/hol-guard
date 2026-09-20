@@ -168,6 +168,28 @@ def _measure_c16(
     ), errors
 
 
+def _prewarm_capacity_workers(
+    session: AdapterSession,
+    routes: tuple[tuple[str, str], ...],
+    ready_workers: int,
+) -> None:
+    """Initialize every ready worker's resident transport before capacity timing."""
+
+    executor = ThreadPoolExecutor(max_workers=ready_workers)
+    try:
+        _prime_load_executor(executor, ready_workers)
+        observations, errors = _prewarm_ready_hook_workers(session, routes, ready_workers, executor)
+        _require(
+            errors == 0 and len(observations) == ready_workers,
+            "hook worker capacity prewarm did not complete every request",
+        )
+    except BaseException:
+        executor.shutdown(wait=False, cancel_futures=True)
+        raise
+    else:
+        executor.shutdown(wait=True)
+
+
 def _measure_rss_and_c64(
     session: AdapterSession,
     routes: tuple[tuple[str, str], ...],
@@ -212,6 +234,13 @@ def measure_capacity(
     include_capacity: bool,
 ) -> CapacityMeasurements:
     ready_workers = _stabilize_ready_hook_workers(session)
+    if include_capacity:
+        # Recovery closes the per-worker resident clients. A ready process has
+        # not necessarily reopened its transport, so initialize the full pool
+        # before measuring steady-state capacity. Cold and recovery latency
+        # remain separate measurements; the 16-client sample still precedes
+        # the larger 64-client overload wave.
+        _prewarm_capacity_workers(session, routes, ready_workers)
     concurrent_16, errors_16 = _measure_c16(session, routes, include_capacity=include_capacity)
     rss_baseline, rss_peak, concurrent_64, errors_64 = _measure_rss_and_c64(
         session,

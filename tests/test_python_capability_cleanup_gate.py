@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import tarfile
 from pathlib import Path
 from zipfile import ZipFile
@@ -13,6 +14,94 @@ SPEC = importlib.util.spec_from_file_location("python_capability_cleanup_gate", 
 assert SPEC is not None and SPEC.loader is not None
 GATE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(GATE)
+
+
+@pytest.fixture
+def cleanup_repository(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A small ownership contract for testing source changes and packaging together."""
+
+    source = tmp_path / "src"
+    source.mkdir()
+    candidates = ["src/retired_first.py", "src/retired_second.py"]
+    for candidate in candidates:
+        (tmp_path / candidate).write_text("", encoding="utf-8")
+    contract = GATE._read_json(ROOT / GATE.CONTRACT)
+    contract.update(
+        scope_globs=["src/retired_*.py"],
+        capabilities=[{"id": "retired", "class": "dead_duplicate", "patterns": ["src/retired_*.py"]}],
+        package_excluded_candidates=candidates,
+        oracle_tests=[],
+        lazy_oracle_modules=[],
+    )
+    contract_path = tmp_path / GATE.CONTRACT
+    contract_path.parent.mkdir(parents=True)
+    contract_path.write_text(json.dumps(contract), encoding="utf-8")
+    fixture = tmp_path / contract["parity_fixture"]
+    fixture.parent.mkdir(parents=True)
+    fixture.write_bytes((ROOT / contract["parity_fixture"]).read_bytes())
+    (tmp_path / "pyproject.toml").write_text(
+        "[tool.hatch.build]\nexclude = " + json.dumps(candidates) + "\n", encoding="utf-8"
+    )
+    monkeypatch.setattr(GATE, "_verify_import_surface", lambda *_args: None)
+    return tmp_path
+
+
+def test_cleanup_shares_one_analysis_across_candidates_and_artifacts(
+    cleanup_repository: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    wheel = cleanup_repository / "clean.whl"
+    with ZipFile(wheel, "w") as archive:
+        archive.writestr("active.py", "")
+    sdist = cleanup_repository / "clean.tar.gz"
+    with tarfile.open(sdist, "w:gz") as archive:
+        archive.add(cleanup_repository / "pyproject.toml", arcname="package/pyproject.toml")
+    analyses = 0
+    analysis_module = importlib.import_module("scripts.ci.python_capability_cleanup_analysis")
+    analyze = analysis_module._module_analyses
+
+    def count_analysis(root: Path):
+        nonlocal analyses
+        analyses += 1
+        return analyze(root)
+
+    monkeypatch.setattr(analysis_module, "_module_analyses", count_analysis)
+
+    payload = GATE.run(cleanup_repository, wheel, artifacts=[sdist])
+
+    assert analyses == 1
+    assert len(payload["candidate_evidence"]) == 2
+    assert payload["checked_artifacts"] == [str(wheel), str(sdist)]
+
+    with tarfile.open(sdist, "w:gz") as archive:
+        archive.add(cleanup_repository / "src/retired_second.py", arcname="package/src/retired_second.py")
+    with pytest.raises(RuntimeError, match=r"package artifact contains excluded dead module: retired_second\.py"):
+        GATE.run(cleanup_repository, artifacts=[wheel, sdist])
+
+
+@pytest.mark.parametrize(
+    "loader",
+    [
+        "import retired_second\n",
+        "import importlib\nimportlib.import_module('retired_second')\n",
+    ],
+)
+def test_cleanup_reanalyzes_changed_sources_for_every_invocation(cleanup_repository: Path, loader: str) -> None:
+    assert GATE.run(cleanup_repository)["status"] == "passed"
+    (cleanup_repository / "src/loader.py").write_text(loader, encoding="utf-8")
+
+    with pytest.raises(
+        RuntimeError, match=r"dead candidate still has source import reachability: src/retired_second\.py"
+    ):
+        GATE.run(cleanup_repository)
+
+
+def test_cleanup_shared_analysis_still_rejects_unbounded_imports(cleanup_repository: Path) -> None:
+    (cleanup_repository / "src/loader.py").write_text(
+        "import importlib\nimportlib.import_module(user_supplied)\n", encoding="utf-8"
+    )
+
+    with pytest.raises(RuntimeError, match="dynamic import destination is not literal or statically bounded: loader:2"):
+        GATE.run(cleanup_repository)
 
 
 def test_cleanup_contract_covers_every_scoped_hook_capability() -> None:

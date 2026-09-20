@@ -23,6 +23,7 @@ on:
       - "ci/native_runtime/native_hook_client_support.py"
       - "ci/native_runtime/test_native_hook_client_transport.py"
       - ".github/workflows/rust-runtime.yml"
+      - ".github/actions/setup-rust/**"
   pull_request:
     branches: [main]
     paths:
@@ -45,6 +46,7 @@ on:
       - "ci/native_runtime/native_hook_client_support.py"
       - "ci/native_runtime/test_native_hook_client_transport.py"
       - ".github/workflows/rust-runtime.yml"
+      - ".github/actions/setup-rust/**"
   workflow_dispatch:
 
 permissions:
@@ -62,10 +64,10 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
-      - name: Install pinned Rust toolchain
-        run: |
-          rustup toolchain install 1.88.0 --profile minimal --component rustfmt --component clippy
-          rustup default 1.88.0
+      - name: Install cached Rust toolchain
+        uses: ./.github/actions/setup-rust
+        with:
+          components: rustfmt clippy
       - name: Verify dependency lock
         working-directory: rust
         run: cargo metadata --locked --format-version 1 --no-deps > /dev/null
@@ -168,10 +170,8 @@ jobs:
           version: "0.9.26"
           enable-cache: true
       - run: uv sync --frozen --extra dev --python 3.12
-      - name: Install pinned Rust toolchain
-        run: |
-          rustup toolchain install 1.88.0 --profile minimal
-          rustup default 1.88.0
+      - name: Install cached Rust toolchain
+        uses: ./.github/actions/setup-rust
       - name: Build version-matched runtime
         env:
           HOL_GUARD_BUILD_SHA: ${{ github.sha }}

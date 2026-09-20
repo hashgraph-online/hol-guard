@@ -31,6 +31,10 @@ jobs:
           version: "0.9.26"
           enable-cache: true
       - run: uv sync --frozen --extra dev --python 3.12
+      - name: Install cached Rust toolchain
+        uses: ./.github/actions/setup-rust
+        with:
+          components: rustfmt
       - name: Enforce always-selected ownership manifest coverage
         env:
           OWNERSHIP_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}

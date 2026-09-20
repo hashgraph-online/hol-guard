@@ -510,6 +510,17 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends musl-tools
+      - name: Cache trusted release compilation
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+        with:
+          prefix-key: release-native-v1
+          workspaces: rust
+          shared-key: release-${{ matrix.target }}
+          cache-workspace-crates: true
+          cache-bin: false
+          # Release builds never consume the validation cache. PR canaries can
+          # restore this trusted cache, but cannot publish entries to it.
+          save-if: ${{ github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/release/3.0') }}
       - name: Build version-matched runtime
         shell: bash
         env:

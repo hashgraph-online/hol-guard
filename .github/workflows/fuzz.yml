@@ -7,6 +7,7 @@ on:
     branches: [main]
   schedule:
     - cron: "0 6 * * 1"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -19,6 +20,7 @@ jobs:
   code-change:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: read
       security-events: write
@@ -39,6 +41,7 @@ jobs:
   batch:
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 40 || 5 }}
     permissions:
       contents: read
       security-events: write
@@ -53,5 +56,6 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           mode: batch
           sanitizer: address
-          fuzz-seconds: 1800
+          # Keep the full campaign on its weekly/manual lane; each commit still fuzzes.
+          fuzz-seconds: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 1800 || 60 }}
           output-sarif: true

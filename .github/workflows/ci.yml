@@ -13,6 +13,7 @@ permissions:
   contents: read
 
 env:
+  CI_PYTHON_VERSION: "3.12.13"
   CI_UV_CACHE_DEPENDENCY_GLOB: |
     pyproject.toml
     uv.lock
@@ -98,7 +99,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
-          python-version: "3.12"
+          python-version: ${{ env.CI_PYTHON_VERSION }}
       - name: Set up uv
         id: setup-uv-primary
         continue-on-error: true
@@ -114,7 +115,7 @@ jobs:
           version: "0.9.26"
           enable-cache: true
           cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
-      - run: uv sync --frozen --extra dev --python 3.12
+      - run: uv sync --frozen --extra dev --python ${{ env.CI_PYTHON_VERSION }}
       - name: Restore latest trusted duration telemetry
         id: latest-duration-telemetry
         continue-on-error: true
@@ -147,7 +148,7 @@ jobs:
             > /tmp/pytest-duration-manifest.json.gz
           gzip -t /tmp/pytest-duration-manifest.json.gz
           mv /tmp/pytest-duration-manifest.json.gz pytest-duration-manifest.latest.json.gz
-      - name: Collect once and build 96 affinity-aware pytest shards
+      - name: Collect in four processes and build 96 affinity-aware pytest shards
         shell: bash
         run: |
           manifest=ci/pytest-duration-manifest.json.gz
@@ -156,6 +157,7 @@ jobs:
           fi
           uv run --no-sync python scripts/ci/build_pytest_shard_plan.py \
             --shard-count 96 \
+            --collection-workers 4 \
             --duration-manifest "$manifest" \
             --max-manifest-age-days 28 \
             --output-directory pytest-shards
@@ -172,7 +174,7 @@ jobs:
   tests:
     needs: test-plan
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 5
     strategy:
       fail-fast: false
       matrix:
@@ -182,8 +184,8 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
-          # Every shard must collect under the same patch release or node assignments can overlap.
-          python-version: "3.12.13"
+          # Planning and execution must agree on version-dependent parameter IDs.
+          python-version: ${{ env.CI_PYTHON_VERSION }}
       - name: Set up uv
         id: setup-uv-primary
         continue-on-error: true
@@ -201,7 +203,7 @@ jobs:
           enable-cache: true
           cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
           save-cache: false
-      - run: uv sync --frozen --extra dev --python ${{ matrix.python-version }}
+      - run: uv sync --frozen --extra dev --python ${{ env.CI_PYTHON_VERSION }}
       - name: Secure the CI virtualenv interpreter
         shell: bash
         run: |
@@ -228,7 +230,7 @@ jobs:
           test -s "$shard_file"
           # This process-pool timing contract is owned by scheduling-sensitive, which runs it untraced.
           PYTHONPATH=scripts/ci GUARD_PYTEST_DURATION_OUTPUT=pytest-durations.json GUARD_PYTEST_UNDER_COVERAGE=1 \
-            uv run --no-sync pytest -p pytest_duration_report "@$shard_file" --tb=short \
+            uv run --no-sync pytest -p pytest_duration_report "@$shard_file" --tb=short --durations=10 \
             --deselect tests/test_guard_hook_process_runner.py::test_scheduler_and_runner_complete_48_routine_reviews_without_capacity_denial \
             --cov --cov-branch --cov-report=
       - name: Upload pytest coverage data artifact
@@ -282,7 +284,6 @@ jobs:
           retention-days: 90
 
   sonar-guard:
-    needs: tests
     runs-on: ubuntu-latest
     timeout-minutes: 2
     outputs:

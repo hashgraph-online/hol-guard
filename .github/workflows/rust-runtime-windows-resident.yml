@@ -10,6 +10,7 @@ on:
       - "ci/native_runtime/test_guard_native_runtime_windows_resident.py"
       - "ci/native_runtime/test_guard_native_runtime_resident.py"
       - ".github/workflows/rust-runtime-windows-resident.yml"
+      - ".github/actions/setup-rust/**"
   push:
     branches: [main]
     paths:
@@ -20,6 +21,7 @@ on:
       - "ci/native_runtime/test_guard_native_runtime_windows_resident.py"
       - "ci/native_runtime/test_guard_native_runtime_resident.py"
       - ".github/workflows/rust-runtime-windows-resident.yml"
+      - ".github/actions/setup-rust/**"
   workflow_dispatch:
 
 permissions:
@@ -44,19 +46,21 @@ jobs:
         with:
           version: "0.9.26"
           enable-cache: true
-      - run: uv sync --frozen --extra dev --python 3.12
-      - name: Install pinned Rust toolchain
-        shell: pwsh
-        run: |
-          rustup toolchain install 1.88.0 --profile minimal --component rustfmt --component clippy
-          rustup default 1.88.0
+      - run: uv sync --frozen --no-dev --extra dev --python 3.12
+      - uses: ./.github/actions/setup-rust
+        with:
+          components: rustfmt clippy
       - name: Check locked Rust workspace
         shell: pwsh
         run: |
           cargo metadata --manifest-path rust/Cargo.toml --locked --format-version 1 --no-deps | Out-Null
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           rustfmt --edition 2021 --check rust/crates/guard-runtime/src/main.rs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cargo clippy --manifest-path rust/Cargo.toml --locked --workspace --all-targets -- -D warnings
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cargo test --manifest-path rust/Cargo.toml --locked --workspace --all-targets
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Check Python transport boundary
         shell: pwsh
         run: |
@@ -69,6 +73,7 @@ jobs:
           $env:HOL_GUARD_BUILD_SHA = "${{ github.sha }}"
           $env:HOL_GUARD_PACKAGE_VERSION = $version
           cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           rust/target/release/hol-guard-runtime.exe self-test --json
       - name: Exercise authenticated Windows resident runtime
         shell: pwsh
@@ -91,11 +96,10 @@ jobs:
         with:
           version: "0.9.26"
           enable-cache: true
-      - run: uv sync --frozen --extra dev --python 3.12
-      - name: Install pinned Rust toolchain
-        run: |
-          rustup toolchain install 1.88.0 --profile minimal --component rustfmt --component clippy
-          rustup default 1.88.0
+      - run: uv sync --frozen --no-dev --extra dev --python 3.12
+      - uses: ./.github/actions/setup-rust
+        with:
+          components: rustfmt clippy
       - name: Check locked Rust workspace
         run: |
           cargo metadata --manifest-path rust/Cargo.toml --locked --format-version 1 --no-deps > /dev/null

@@ -7,14 +7,73 @@ import pytest
 
 from scripts.ci.build_pytest_shard_plan import (
     build_affinity_node_shards,
+    estimate_node_durations,
     node_file,
     write_shard_plan,
 )
 from scripts.ci.pytest_duration_manifest import node_id_digest
+from scripts.ci.pytest_shard import discover_test_nodes
 
 
 def _durations(nodes: list[str], *, seconds: float = 1.0) -> dict[str, float]:
     return {node_id_digest(node_id): seconds for node_id in nodes}
+
+
+def test_new_parameters_inherit_unsplit_duration_without_overriding_observations() -> None:
+    parent = "tests/test_corpus.py::test_all_cases"
+    nodes = [f"{parent}[{index}]" for index in range(4)]
+    durations = {node_id_digest(parent): 320.0, node_id_digest(nodes[0]): 90.0}
+
+    assert estimate_node_durations(nodes, durations) == {
+        nodes[0]: 90.0,
+        nodes[1]: 80.0,
+        nodes[2]: 80.0,
+        nodes[3]: 80.0,
+    }
+
+
+def test_parameterized_long_corpus_is_distributed_on_first_run() -> None:
+    parent = "tests/test_corpus.py::test_all_cases"
+    corpus = [f"{parent}[{index}]" for index in range(32)]
+    filler = [f"tests/test_filler_{index}.py::test_one" for index in range(32)]
+    durations = {node_id_digest(parent): 320.0}
+
+    shards, loads = build_affinity_node_shards(corpus + filler, 8, durations)
+
+    assert max(loads) <= 50.0
+    assert sum(any(node in corpus for node in shard) for shard in shards) == 8
+    assert sorted(node for shard in shards for node in shard) == sorted(corpus + filler)
+
+
+def _collection_repository(tmp_path: Path) -> Path:
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "pytest.ini").write_text("[pytest]\naddopts = -m 'not slow'\nmarkers = slow: excluded\n")
+    (tmp_path / "tests/test_a.py").write_text(
+        "import pytest\n@pytest.mark.parametrize('value', [1, 2])\ndef test_a(value): pass\n"
+    )
+    (tmp_path / "tests/test_b.py").write_text("def test_b(): pass\n")
+    # Empty selected batches must not hide errors in other batches or reject
+    # valid repositories with dedicated opt-in test modules.
+    (tmp_path / "tests/test_slow.py").write_text("import pytest\n@pytest.mark.slow\ndef test_slow(): pass\n")
+    return tmp_path
+
+
+def test_parallel_collection_preserves_all_selected_nodes_and_marker_policy(tmp_path: Path) -> None:
+    root = _collection_repository(tmp_path)
+
+    assert discover_test_nodes(root, collection_workers=3) == [
+        "tests/test_a.py::test_a[1]",
+        "tests/test_a.py::test_a[2]",
+        "tests/test_b.py::test_b",
+    ]
+
+
+def test_parallel_collection_fails_closed_when_one_batch_cannot_import(tmp_path: Path) -> None:
+    root = _collection_repository(tmp_path)
+    (root / "tests/test_b.py").write_text("raise RuntimeError('collection failed')\n")
+
+    with pytest.raises(RuntimeError, match="pytest collection failed"):
+        discover_test_nodes(root, collection_workers=3)
 
 
 def test_affinity_plan_covers_every_node_once_and_is_deterministic() -> None:

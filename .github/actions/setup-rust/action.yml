@@ -1,0 +1,45 @@
+name: Set up cached Rust workspace
+description: Install the pinned toolchain and reuse trusted CI compilation outputs.
+
+inputs:
+  toolchain:
+    description: Exact Rust toolchain version.
+    default: "1.88.0"
+  components:
+    description: Optional space-separated components, such as rustfmt clippy.
+    default: ""
+  targets:
+    description: Optional space-separated compilation targets.
+    default: ""
+  cache-key:
+    description: Cache family; publishing must use its own trusted build cache.
+    default: native
+
+runs:
+  using: composite
+  steps:
+    - name: Install pinned Rust toolchain
+      shell: bash
+      env:
+        RUST_TOOLCHAIN: ${{ inputs.toolchain }}
+        RUST_COMPONENTS: ${{ inputs.components }}
+        RUST_TARGETS: ${{ inputs.targets }}
+      run: |
+        args=(--profile minimal)
+        for component in $RUST_COMPONENTS; do
+          args+=(--component "$component")
+        done
+        for target in $RUST_TARGETS; do
+          args+=(--target "$target")
+        done
+        rustup toolchain install "$RUST_TOOLCHAIN" "${args[@]}"
+        rustup default "$RUST_TOOLCHAIN"
+    - name: Cache Rust compilation
+      uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+      with:
+        prefix-key: ci-rust-v1
+        workspaces: rust
+        shared-key: ${{ inputs.cache-key }}-${{ inputs.targets || 'host' }}
+        cache-workspace-crates: true
+        cache-bin: false
+        save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
