@@ -344,13 +344,114 @@ pub(crate) fn start_resident_workers(
 
 pub(crate) fn admit_connection(
     sender: &SyncSender<BoxedResidentStream>,
-    stream: BoxedResidentStream,
+    mut stream: BoxedResidentStream,
 ) -> Result<(), String> {
-    match sender.try_send(stream) {
-        Ok(()) => Ok(()),
-        Err(TrySendError::Full(_stream)) => Ok(()),
-        Err(TrySendError::Disconnected(_stream)) => {
-            Err("native_resident_worker_pool_stopped".to_owned())
+    let deadline = Instant::now() + crate::AUTH_TIMEOUT;
+    loop {
+        match sender.try_send(stream) {
+            Ok(()) => return Ok(()),
+            Err(TrySendError::Disconnected(_stream)) => {
+                return Err("native_resident_worker_pool_stopped".to_owned());
+            }
+            Err(TrySendError::Full(returned)) => {
+                stream = returned;
+                if Instant::now() >= deadline {
+                    return Ok(());
+                }
+                thread::sleep(Duration::from_millis(1));
+            }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::mpsc::sync_channel;
+    use std::time::Duration;
+
+    struct NullStream;
+
+    impl Read for NullStream {
+        fn read(&mut self, _buf: &mut [u8]) -> io::Result<usize> {
+            Ok(0)
+        }
+    }
+
+    impl Write for NullStream {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl ResidentStream for NullStream {
+        fn set_resident_read_timeout(&self, _timeout: Option<Duration>) -> io::Result<()> {
+            Ok(())
+        }
+
+        fn set_resident_write_timeout(&self, _timeout: Option<Duration>) -> io::Result<()> {
+            Ok(())
+        }
+
+        fn set_resident_nonblocking(&self, _nonblocking: bool) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn admit_connection_waits_for_auth_capacity_instead_of_dropping() {
+        let (sender, receiver) = sync_channel(1);
+        sender
+            .try_send(Box::new(NullStream) as BoxedResidentStream)
+            .expect("seed occupancy");
+        let worker = thread::spawn(move || {
+            thread::sleep(Duration::from_millis(30));
+            let occupied = receiver.recv().expect("drain occupancy");
+            let admitted = receiver.recv().expect("queued admission");
+            (occupied, admitted)
+        });
+        let started = Instant::now();
+        admit_connection(&sender, Box::new(NullStream)).expect("admit after drain");
+        assert!(started.elapsed() >= Duration::from_millis(20));
+        assert!(started.elapsed() < crate::AUTH_TIMEOUT);
+        drop(sender);
+        drop(worker.join().expect("occupancy drain"));
+    }
+
+    #[test]
+    fn spawn_workers_run_queued_jobs_in_parallel() {
+        let started = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let (sender, receiver) = sync_channel(4);
+        spawn_workers(4, receiver, {
+            let started = Arc::clone(&started);
+            move |_item: u8| {
+                started.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                while started.load(std::sync::atomic::Ordering::SeqCst) < 4 {
+                    thread::sleep(Duration::from_millis(1));
+                }
+                thread::sleep(Duration::from_millis(40));
+            }
+        });
+        let started_at = Instant::now();
+        for _ in 0..4 {
+            sender.send(1).expect("enqueue parallel job");
+        }
+        drop(sender);
+        let deadline = Instant::now() + Duration::from_millis(400);
+        while started.load(std::sync::atomic::Ordering::SeqCst) < 4 && Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(1));
+        }
+        assert_eq!(started.load(std::sync::atomic::Ordering::SeqCst), 4);
+        while started_at.elapsed() < Duration::from_millis(40) {
+            thread::sleep(Duration::from_millis(1));
+        }
+        assert!(
+            started_at.elapsed() < Duration::from_millis(160),
+            "queued auth/eval work must overlap instead of running one job at a time"
+        );
     }
 }

@@ -48,7 +48,8 @@ const AUTH_TOKEN_BYTES: usize = 32;
 const AUTH_NONCE_BYTES: usize = 32;
 const AUTH_PROOF_BYTES: usize = 32;
 const AUTH_WORKERS: usize = 4;
-const AUTH_QUEUE_CAPACITY: usize = 16;
+const AUTH_QUEUE_CAPACITY: usize = 32;
+const AUTH_QUEUE_CAPACITY_MAX: usize = 64;
 const EVALUATION_WORKERS: usize = 16;
 const EVALUATION_QUEUE_CAPACITY: usize = 32;
 const AUTHENTICATED_PREFETCH_BYTES: usize = 64 * 1024;
@@ -81,8 +82,8 @@ pub(crate) fn evaluation_queue_capacity() -> usize {
 
 pub(crate) fn auth_queue_capacity() -> usize {
     auth_workers()
-        .saturating_mul(4)
-        .clamp(AUTH_QUEUE_CAPACITY, 32)
+        .saturating_mul(8)
+        .clamp(AUTH_QUEUE_CAPACITY, AUTH_QUEUE_CAPACITY_MAX)
 }
 
 fn read_stdin_bounded() -> Result<Vec<u8>, String> {
@@ -378,6 +379,8 @@ mod tests {
         assert!((EVALUATION_WORKERS..=32).contains(&evaluation));
         assert!((AUTH_WORKERS..=8).contains(&auth));
         assert!((EVALUATION_QUEUE_CAPACITY..=64).contains(&super::evaluation_queue_capacity()));
-        assert!((AUTH_QUEUE_CAPACITY..=32).contains(&super::auth_queue_capacity()));
+        assert!(
+            (AUTH_QUEUE_CAPACITY..=AUTH_QUEUE_CAPACITY_MAX).contains(&super::auth_queue_capacity())
+        );
     }
 }
