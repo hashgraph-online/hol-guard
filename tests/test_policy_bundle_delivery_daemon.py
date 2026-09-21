@@ -36,12 +36,12 @@ from tests.test_guard_headless_daemon_api import (
 
 _POLICY_BUNDLE_FIXTURE_NOW = datetime(2026, 9, 1, 12, 0, tzinfo=timezone.utc)
 
+
 class _PolicyBundleFixtureDatetime(datetime):
     @classmethod
     def now(cls, tz: tzinfo | None = None) -> datetime:
         fixed = _POLICY_BUNDLE_FIXTURE_NOW
         return fixed.replace(tzinfo=None) if tz is None else fixed.astimezone(tz)
-
 
 
 def _fixture(store: GuardStore) -> tuple[dict[str, object], dict[str, object]]:
