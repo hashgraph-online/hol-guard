@@ -108,7 +108,7 @@ jobs:
           HOL_GUARD_NATIVE_BINARY: ${{ github.workspace }}/rust/target/release/hol-guard-runtime
         run: |
           uv run --no-sync pytest -q ci/native_runtime/test_native_hol_guard_wheel.py --tb=short
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
           name: rust-authority-ownership-evidence
