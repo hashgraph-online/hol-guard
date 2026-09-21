@@ -398,6 +398,25 @@ def test_remote_http_url_contract_rejects_multiple_trailing_root_dots() -> None:
     assert normalized_remote_mcp_url(url) is None
 
 
+class _FetchSandboxAuthorityStore:
+    """Local-admin enable for command.mcp-fetchsandbox.
+
+    The shared _AuthorityStore enables instapods only. Reusing it for these
+    cases asserted nothing about FetchSandbox: the decision came back None
+    because an unenabled contribution is correctly inert.
+    """
+
+    def read_extension_control_authority_for_registry(self, registry: object) -> ExtensionControlAuthorityView:
+        digest = getattr(registry, "catalog_digest", "0" * 64)
+        assert isinstance(digest, str)
+        return ExtensionControlAuthorityView(
+            health=AuthorityHealth.PROTECTED,
+            revision=1,
+            catalog_digest=digest,
+            layers=(_layer("command.mcp-fetchsandbox"),),
+        )
+
+
 def _fetchsandbox_artifact(tool_name: str, *, server_name: str = "fetchsandbox", transport: str = "http"):
     identity = build_mcp_server_identity(
         config_path=".mcp.json",
@@ -426,7 +445,7 @@ def test_remote_fetchsandbox_matches_exact_endpoint_even_with_custom_server_name
 def test_remote_fetchsandbox_workspace_upload_tools_strengthen_allow(tool_name: str) -> None:
     """These package the caller's project and send it to a remote runtime."""
     decision = apply_contributed_mcp_decision(
-        _AuthorityStore(), _fetchsandbox_artifact(tool_name), "allow"
+        _FetchSandboxAuthorityStore(), _fetchsandbox_artifact(tool_name), "allow"
     )
     assert decision is not None
     assert decision[0] == "review"
@@ -436,7 +455,7 @@ def test_remote_fetchsandbox_submit_proof_strengthens_allow() -> None:
     """submit_proof publishes evidence to a receipt readable by anyone with
     the link, which is a different risk from uploading a workspace."""
     decision = apply_contributed_mcp_decision(
-        _AuthorityStore(), _fetchsandbox_artifact("submit_proof"), "allow"
+        _FetchSandboxAuthorityStore(), _fetchsandbox_artifact("submit_proof"), "allow"
     )
     assert decision is not None
     assert decision[0] == "review"
@@ -476,3 +495,14 @@ def test_remote_fetchsandbox_does_not_match_a_different_endpoint() -> None:
         server_identity=identity,
     )
     assert matching_mcp_contribution(artifact) is None
+
+
+def test_remote_fetchsandbox_is_inert_without_a_local_admin_enable() -> None:
+    """Contributed servers stay off until someone turns them on.
+
+    _AuthorityStore enables instapods only, so FetchSandbox is unenabled here
+    and must not influence the decision at all.
+    """
+    assert apply_contributed_mcp_decision(
+        _AuthorityStore(), _fetchsandbox_artifact("find_bugs"), "allow"
+    ) is None
