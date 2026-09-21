@@ -53,7 +53,7 @@ def _run_network_status(
             return response
 
     def load_client(_guard_home: Path, *, identity_timeout: float) -> Client:
-        assert identity_timeout == 0.05
+        assert identity_timeout == 0.25
         return Client()
 
     monkeypatch.setattr(

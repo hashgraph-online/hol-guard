@@ -1,0 +1,567 @@
+{
+  "schema": "hol-guard-mcp-streaming-preparation-plan.v1",
+  "status": "prepared_not_launched",
+  "activation_authorized": false,
+  "qualification": false,
+  "candidate_adapter_commit": "ce98191343bbd9df98ec7947a7eafe451abc90a1",
+  "prior_e_comparison_sha256": "bcd01af5aafbf9dcc3d17b3d8243a1358df2fb5498e2d2eac7b6f241d3ac916c",
+  "prior_e_worker_sha256": "6223e0c599e91ef0ac76d2dc510010dab7bf7c22a868e7034055233518808932",
+  "prior_e_collector_sha256": "017fcf38a1356b7dfb15e61b6dd376afdcf732eb331f23bfb50d136fbeb279d2",
+  "ordinary_warm_samples": 30,
+  "large_warm_samples": 3,
+  "ordinary_profile_warm_samples": 10,
+  "cold_first_calls_per_cell": 1,
+  "expected_cells": 64,
+  "expected_pairs": 32,
+  "expected_forwarded_calls_per_arm": 554,
+  "same_runtime_for_both_arms": true,
+  "runtime_source_selection": "one_complete_frozen_runtime_export_for_B_default_and_explicit_F",
+  "oracle_source_selection": "separately_frozen_pre_owned_B_public_API_reference",
+  "schedule_rule": "exact_prior_E_schedule_with_E_arm_replaced_by_F",
+  "measurement_lock": "per_case_POSIX_flock",
+  "inter_case_fairness_yield_seconds": 0.1,
+  "percentile_estimator": "nearest_rank",
+  "latency_scope": "client_roundtrip_excludes_one_cold_first_call",
+  "large_p95_interpretation": "maximum_of_three_warm_calls_not_release_tail",
+  "tree_cpu_scope": "proxy_and_recursive_child_after_catalog_through_final_response_including_cold_call_excluding_client_cleanup",
+  "memory_sampling": "after_catalog_and_each_response_parent_plus_recursive_children_RSS_and_USS",
+  "worker_peak_scope": "OS_RUSAGE_SELF_whole_worker_including_imports_and_transients_excluding_children",
+  "phase_rule": "exclusive_main_thread_nested_phase_attribution_separate_profile_cells",
+  "binding_phase": "retained_binding_creation_and_streaming_comparison_both_count_in_owned_input_binding",
+  "deadlines": {
+    "final_quiet_interval_seconds": 0.005,
+    "benchmark_client_read_seconds": 30,
+    "child_cleanup_wait_seconds": 30,
+    "failed_worker_evidence_wait_seconds": 2,
+    "forced_cleanup_wait_seconds": 10,
+    "runtime_forwarding_and_separate_inline_approval": "unchanged_runtime_absolute_budgets"
+  },
+  "acceptance": {
+    "minimum_p95_or_tree_cpu_improvement_percent": 30,
+    "maximum_other_metric_regression_percent": 5,
+    "activation_by_this_campaign": false,
+    "source_c1_scope_only": true,
+    "no_inferred_size_or_content_selection": true
+  },
+  "before_launch_required": [
+    "root_campaign_coordination",
+    "independent_worker_collector_plan_review",
+    "complete_frozen_runtime_export_and_full_source_asset_hash_manifest",
+    "fixed_python_executable_and_dependency_identity",
+    "record_runtime_source_oracle_source_and_fixture_filesystems",
+    "actual_environment_and_capacity_observation",
+    "same_fixture_filesystem_for_both_arms",
+    "fresh_output_no_overwrite_no_resume",
+    "preserve_E_source_worker_collector_tests_and_raw_artifacts"
+  ],
+  "after_campaign_required": [
+    "preserve_every_failed_or_adverse_cell",
+    "verify_full_export_source_and_harness_identities",
+    "derive_results_without_retries_or_pooling_with_E",
+    "keep_B_default_pending_original_acceptance_and_qualification"
+  ],
+  "harness_sources_sha256": {
+    "compare_guard_mcp_streaming_preparation.py": "a7a56c7264a104c03228365647093ccb24b99d6697fbd84fe68b4d017ef246d6",
+    "compare_guard_mcp_risk.py": "7de4df7178e5d34fe521fd70833fe8cc5df06be7c64f88c3431a583bbf770309",
+    "profile_guard_mcp_streaming_session.py": "2e3a9f7401590c1a15e20074d47dacd12d1ef375d11a4562531834aeed6130c2",
+    "guard_mcp_streaming_preparation_pilot.py": "9157ad89003501b5feae4b3b5024db07d271a83315ecc805ca30c4d4edf744a2"
+  },
+  "cells": [
+    {
+      "payload_bytes": 1024,
+      "payload_kind": "ascii",
+      "samples": 30,
+      "block": 0,
+      "arm": "B"
+    },
+    {
+      "payload_bytes": 1024,
+      "payload_kind": "ascii",
+      "samples": 30,
+      "block": 0,
+      "arm": "F"
+    },
+    {
+      "payload_bytes": 16384,
+      "payload_kind": "ascii",
+      "samples": 30,
+      "block": 0,
+      "arm": "B"
+    },
+    {
+      "payload_bytes": 16384,
+      "payload_kind": "ascii",
+      "samples": 30,
+      "block": 0,
+      "arm": "F"
+    },
+    {
+      "payload_bytes": 131072,
+      "payload_kind": "ascii",
+      "samples": 30,
+      "block": 0,
+      "arm": "B"
+    },
+    {
+      "payload_bytes": 131072,
+      "payload_kind": "ascii",
+      "samples": 30,
+      "block": 0,
+      "arm": "F"
+    },
+    {
+      "payload_bytes": 4193792,
+      "payload_kind": "unicode",
+      "samples": 3,
+      "compact_result": true,
+      "block": 0,
+      "arm": "B"
+    },
+    {
+      "payload_bytes": 4193792,
+      "payload_kind": "unicode",
+      "samples": 3,
+      "compact_result": true,
+      "block": 0,
+      "arm": "F"
+    },
+    {
+      "payload_bytes": 4193792,
+      "payload_kind": "dense-integers",
+      "samples": 3,
+      "compact_result": true,
+      "block": 0,
+      "arm": "B"
+    },
+    {
+      "payload_bytes": 4193792,
+      "payload_kind": "dense-integers",
+      "samples": 3,
+      "compact_result": true,
+      "block": 0,
+      "arm": "F"
+    },
+    {
+      "payload_bytes": 1024,
+      "payload_kind": "ascii",
+      "samples": 30,
+      "block": 1,
+      "arm": "F"
+    },
+    {
+      "payload_bytes": 1024,
+      "payload_kind": "ascii",
+      "samples": 30,
+      "block": 1,
+      "arm": "B"
+    },
+    {
+      "payload_bytes": 16384,
+      "payload_kind": "ascii",
+      "samples": 30,
+      "block": 1,
+      "arm": "F"
+    },
+    {
+      "payload_bytes": 16384,
+      "payload_kind": "ascii",
+      "samples": 30,
+      "block": 1,
+      "arm": "B"
+    },
+    {
+      "payload_bytes": 131072,
+      "payload_kind": "ascii",
+      "samples": 30,
+      "block": 1,
+      "arm": "F"
+    },
+    {
+      "payload_bytes": 131072,
+      "payload_kind": "ascii",
+      "samples": 30,
+      "block": 1,
+      "arm": "B"
+    },
+    {
+      "payload_bytes": 4193792,
+      "payload_kind": "unicode",
+      "samples": 3,
+      "compact_result": true,
+      "block": 1,
+      "arm": "F"
+    },
+    {
+      "payload_bytes": 4193792,
+      "payload_kind": "unicode",
+      "samples": 3,
+      "compact_result": true,
+      "block": 1,
+      "arm": "B"
+    },
+    {
+      "payload_bytes": 4193792,
+      "payload_kind": "dense-integers",
+      "samples": 3,
+      "compact_result": true,
+      "block": 1,
+      "arm": "F"
+    },
+    {
+      "payload_bytes": 4193792,
+      "payload_kind": "dense-integers",
+      "samples": 3,
+      "compact_result": true,
+      "block": 1,
+      "arm": "B"
+    },
+    {
+      "payload_bytes": 1024,
+      "payload_kind": "ascii",
+      "samples": 30,
+      "block": 2,
+      "arm": "B"
+    },
+    {
+      "payload_bytes": 1024,
+      "payload_kind": "ascii",
+      "samples": 30,
+      "block": 2,
+      "arm": "F"
+    },
+    {
+      "payload_bytes": 16384,
+      "payload_kind": "ascii",
+      "samples": 30,
+      "block": 2,
+      "arm": "B"
+    },
+    {
+      "payload_bytes": 16384,
+      "payload_kind": "ascii",
+      "samples": 30,
+      "block": 2,
+      "arm": "F"
+    },
+    {
+      "payload_bytes": 131072,
+      "payload_kind": "ascii",
+      "samples": 30,
+      "block": 2,
+      "arm": "B"
+    },
+    {
+      "payload_bytes": 131072,
+      "payload_kind": "ascii",
+      "samples": 30,
+      "block": 2,
+      "arm": "F"
+    },
+    {
+      "payload_bytes": 4193792,
+      "payload_kind": "unicode",
+      "samples": 3,
+      "compact_result": true,
+      "block": 2,
+      "arm": "B"
+    },
+    {
+      "payload_bytes": 4193792,
+      "payload_kind": "unicode",
+      "samples": 3,
+      "compact_result": true,
+      "block": 2,
+      "arm": "F"
+    },
+    {
+      "payload_bytes": 4193792,
+      "payload_kind": "dense-integers",
+      "samples": 3,
+      "compact_result": true,
+      "block": 2,
+      "arm": "B"
+    },
+    {
+      "payload_bytes": 4193792,
+      "payload_kind": "dense-integers",
+      "samples": 3,
+      "compact_result": true,
+      "block": 2,
+      "arm": "F"
+    },
+    {
+      "payload_bytes": 1024,
+      "payload_kind": "ascii",
+      "samples": 30,
+      "block": 3,
+      "arm": "F"
+    },
+    {
+      "payload_bytes": 1024,
+      "payload_kind": "ascii",
+      "samples": 30,
+      "block": 3,
+      "arm": "B"
+    },
+    {
+      "payload_bytes": 16384,
+      "payload_kind": "ascii",
+      "samples": 30,
+      "block": 3,
+      "arm": "F"
+    },
+    {
+      "payload_bytes": 16384,
+      "payload_kind": "ascii",
+      "samples": 30,
+      "block": 3,
+      "arm": "B"
+    },
+    {
+      "payload_bytes": 131072,
+      "payload_kind": "ascii",
+      "samples": 30,
+      "block": 3,
+      "arm": "F"
+    },
+    {
+      "payload_bytes": 131072,
+      "payload_kind": "ascii",
+      "samples": 30,
+      "block": 3,
+      "arm": "B"
+    },
+    {
+      "payload_bytes": 4193792,
+      "payload_kind": "unicode",
+      "samples": 3,
+      "compact_result": true,
+      "block": 3,
+      "arm": "F"
+    },
+    {
+      "payload_bytes": 4193792,
+      "payload_kind": "unicode",
+      "samples": 3,
+      "compact_result": true,
+      "block": 3,
+      "arm": "B"
+    },
+    {
+      "payload_bytes": 4193792,
+      "payload_kind": "dense-integers",
+      "samples": 3,
+      "compact_result": true,
+      "block": 3,
+      "arm": "F"
+    },
+    {
+      "payload_bytes": 4193792,
+      "payload_kind": "dense-integers",
+      "samples": 3,
+      "compact_result": true,
+      "block": 3,
+      "arm": "B"
+    },
+    {
+      "payload_bytes": 1024,
+      "payload_kind": "ascii",
+      "samples": 30,
+      "block": 4,
+      "arm": "B"
+    },
+    {
+      "payload_bytes": 1024,
+      "payload_kind": "ascii",
+      "samples": 30,
+      "block": 4,
+      "arm": "F"
+    },
+    {
+      "payload_bytes": 16384,
+      "payload_kind": "ascii",
+      "samples": 30,
+      "block": 4,
+      "arm": "B"
+    },
+    {
+      "payload_bytes": 16384,
+      "payload_kind": "ascii",
+      "samples": 30,
+      "block": 4,
+      "arm": "F"
+    },
+    {
+      "payload_bytes": 131072,
+      "payload_kind": "ascii",
+      "samples": 30,
+      "block": 4,
+      "arm": "B"
+    },
+    {
+      "payload_bytes": 131072,
+      "payload_kind": "ascii",
+      "samples": 30,
+      "block": 4,
+      "arm": "F"
+    },
+    {
+      "payload_bytes": 4193792,
+      "payload_kind": "unicode",
+      "samples": 3,
+      "compact_result": true,
+      "block": 4,
+      "arm": "B"
+    },
+    {
+      "payload_bytes": 4193792,
+      "payload_kind": "unicode",
+      "samples": 3,
+      "compact_result": true,
+      "block": 4,
+      "arm": "F"
+    },
+    {
+      "payload_bytes": 4193792,
+      "payload_kind": "dense-integers",
+      "samples": 3,
+      "compact_result": true,
+      "block": 4,
+      "arm": "B"
+    },
+    {
+      "payload_bytes": 4193792,
+      "payload_kind": "dense-integers",
+      "samples": 3,
+      "compact_result": true,
+      "block": 4,
+      "arm": "F"
+    },
+    {
+      "payload_bytes": 1024,
+      "payload_kind": "ascii",
+      "samples": 10,
+      "profile": true,
+      "block": null,
+      "arm": "B"
+    },
+    {
+      "payload_bytes": 1024,
+      "payload_kind": "ascii",
+      "samples": 10,
+      "profile": true,
+      "block": null,
+      "arm": "F"
+    },
+    {
+      "payload_bytes": 16384,
+      "payload_kind": "ascii",
+      "samples": 10,
+      "profile": true,
+      "block": null,
+      "arm": "B"
+    },
+    {
+      "payload_bytes": 16384,
+      "payload_kind": "ascii",
+      "samples": 10,
+      "profile": true,
+      "block": null,
+      "arm": "F"
+    },
+    {
+      "payload_bytes": 131072,
+      "payload_kind": "ascii",
+      "samples": 10,
+      "profile": true,
+      "block": null,
+      "arm": "B"
+    },
+    {
+      "payload_bytes": 131072,
+      "payload_kind": "ascii",
+      "samples": 10,
+      "profile": true,
+      "block": null,
+      "arm": "F"
+    },
+    {
+      "payload_bytes": 4193792,
+      "payload_kind": "unicode",
+      "samples": 3,
+      "compact_result": true,
+      "profile": true,
+      "block": null,
+      "arm": "B"
+    },
+    {
+      "payload_bytes": 4193792,
+      "payload_kind": "unicode",
+      "samples": 3,
+      "compact_result": true,
+      "profile": true,
+      "block": null,
+      "arm": "F"
+    },
+    {
+      "payload_bytes": 4193792,
+      "payload_kind": "dense-integers",
+      "samples": 3,
+      "compact_result": true,
+      "profile": true,
+      "block": null,
+      "arm": "B"
+    },
+    {
+      "payload_bytes": 4193792,
+      "payload_kind": "dense-integers",
+      "samples": 3,
+      "compact_result": true,
+      "profile": true,
+      "block": null,
+      "arm": "F"
+    },
+    {
+      "payload_bytes": 4193792,
+      "payload_kind": "ascii",
+      "samples": 3,
+      "compact_result": true,
+      "profile": true,
+      "block": null,
+      "arm": "B"
+    },
+    {
+      "payload_bytes": 4193792,
+      "payload_kind": "ascii",
+      "samples": 3,
+      "compact_result": true,
+      "profile": true,
+      "block": null,
+      "arm": "F"
+    },
+    {
+      "payload_bytes": 4193792,
+      "payload_kind": "nested-records",
+      "samples": 3,
+      "compact_result": true,
+      "profile": true,
+      "block": null,
+      "arm": "B"
+    },
+    {
+      "payload_bytes": 4193792,
+      "payload_kind": "nested-records",
+      "samples": 3,
+      "compact_result": true,
+      "profile": true,
+      "block": null,
+      "arm": "F"
+    }
+  ],
+  "public_oracle_reference_sources_sha256": {
+    "proxy/runtime_mcp.py": "9de4c965dda733476344e54ef36b38b79fa3f1456bc6dd296d0859c54f203b8b",
+    "proxy/framing.py": "e09bcf8ccfc6937565295f34b3e42bd49bf0d1f4bec69b26d6c3da9ed6c17300",
+    "proxy/tool_catalog.py": "c9220fc23e1c4cb6c9d76af78dcf69a994a309d96dc5975f1deb169c20cc1845",
+    "mcp_tool_calls.py": "02e5614996658bcda67c10357fac4d621db7d794e8264db6db6972bb1bb9e90e"
+  }
+}

@@ -5,6 +5,8 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from functools import wraps
+from typing import Concatenate, ParamSpec
 
 from .oauth_token_claims import oauth_binding_metadata
 from .package_firewall_defaults import build_guard_local_entitlement_defaults
@@ -13,6 +15,26 @@ from .runtime.extension_control_authority import ExtensionControlAuthorityView
 # ruff: noqa: F403,F405
 from .store_base import *
 from .store_oauth_metadata import copy_oauth_binding_metadata
+
+_P = ParamSpec("_P")
+
+
+def _with_oauth_credential_lock(
+    unlocked: Callable[Concatenate[StoreOAuthConnectMixin, _P], None],
+) -> Callable[Concatenate[StoreOAuthConnectMixin, _P], None]:
+    """Bind the OAuth credential lock around an unlocked credential writer."""
+
+    @wraps(unlocked)
+    def _locked(
+        self: StoreOAuthConnectMixin,
+        /,
+        *args: _P.args,
+        **kwargs: _P.kwargs,
+    ) -> None:
+        with self.hold_oauth_credential_lock():
+            getattr(self, unlocked.__name__)(*args, **kwargs)
+
+    return _locked
 
 
 class StoreOAuthConnectMixin:
@@ -135,54 +157,6 @@ class StoreOAuthConnectMixin:
             ]
         )
 
-    def set_oauth_local_credentials(
-        self,
-        *,
-        issuer: str,
-        client_id: str,
-        refresh_token: str,
-        dpop_private_key_pem: str,
-        dpop_public_jwk: dict[str, str],
-        dpop_public_jwk_thumbprint: str,
-        now: str,
-        grant_id: str | None = None,
-        machine_id: str | None = None,
-        device_id: str | None = None,
-        supply_chain_entitlement_expires_at: str | None = None,
-        supply_chain_firewall: bool | None = None,
-        supply_chain_plan_id: str | None = None,
-        workspace_id: str | None = None,
-        cloud_user_profile: dict[str, str] | None = None,
-        runtime_id: str | None = None,
-        runtime_label: str | None = None,
-        access_token: str | None = None,
-        access_token_expires_at: str | None = None,
-        force_primary_secret_rewrite: bool = False,
-    ) -> None:
-        with self.hold_oauth_credential_lock():
-            self._set_oauth_local_credentials_unlocked(
-                issuer=issuer,
-                client_id=client_id,
-                refresh_token=refresh_token,
-                dpop_private_key_pem=dpop_private_key_pem,
-                dpop_public_jwk=dpop_public_jwk,
-                dpop_public_jwk_thumbprint=dpop_public_jwk_thumbprint,
-                now=now,
-                grant_id=grant_id,
-                machine_id=machine_id,
-                device_id=device_id,
-                supply_chain_entitlement_expires_at=supply_chain_entitlement_expires_at,
-                supply_chain_firewall=supply_chain_firewall,
-                supply_chain_plan_id=supply_chain_plan_id,
-                workspace_id=workspace_id,
-                cloud_user_profile=cloud_user_profile,
-                runtime_id=runtime_id,
-                runtime_label=runtime_label,
-                access_token=access_token,
-                access_token_expires_at=access_token_expires_at,
-                force_primary_secret_rewrite=force_primary_secret_rewrite,
-            )
-
     def _set_oauth_local_credentials_unlocked(
         self,
         *,
@@ -272,6 +246,8 @@ class StoreOAuthConnectMixin:
         self._assert_oauth_secret_persisted(self._oauth_local_credentials_ref, secret_json)
         self._remember_oauth_secret_payload(self._oauth_local_credentials_ref, secret_hash, secret_json)
         self.set_sync_payload(self._oauth_local_credentials_state_key, payload, now)
+
+    set_oauth_local_credentials = _with_oauth_credential_lock(_set_oauth_local_credentials_unlocked)
 
     def get_oauth_local_credentials(self, *, allow_primary: bool = False) -> dict[str, object] | None:
         payload = self.get_sync_payload(self._oauth_local_credentials_state_key)

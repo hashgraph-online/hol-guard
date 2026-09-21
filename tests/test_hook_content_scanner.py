@@ -101,6 +101,10 @@ class TestScanContext:
     def test_source_paths_keep_local_sample_assignment_retry(self, path: str | None) -> None:
         assert should_unsuppress_local_sample_secrets(path) is True
 
+    @pytest.mark.parametrize("path", ["skill://guard-dev-testing", "mcp://hub/describe/guard-dev-testing"])
+    def test_virtual_skill_and_describe_reads_keep_sample_assignment_retry(self, path: str) -> None:
+        assert should_unsuppress_local_sample_secrets(path) is True
+
     def test_absolute_paths_are_relativized_to_workspace(self) -> None:
         cwd = "/Users/john/docs/project"
         assert should_unsuppress_local_sample_secrets("/Users/john/docs/project/src/config.py", cwd=cwd) is True

@@ -12,7 +12,9 @@ assert.equal(extensionBrandTestId(resolveExtensionBrand({ extension_id: "command
 assert.equal(extensionBrandTestId(resolveExtensionBrand({ extension_id: "command.cloud.aws" })), "aws");
 assert.equal(extensionBrandTestId(resolveExtensionBrand({ extension_id: "command.cloud.gcp" })), "gcp");
 assert.equal(extensionBrandTestId(resolveExtensionBrand({ extension_id: "command.cloud.azure" })), "azure");
-assert.equal(extensionBrandTestId(resolveExtensionBrand({ extension_id: "command.dns" })), "aws gcp azure");
+assert.equal(extensionBrandTestId(resolveExtensionBrand({ extension_id: "command.dns.aws" })), "aws");
+assert.equal(extensionBrandTestId(resolveExtensionBrand({ extension_id: "command.dns.gcp" })), "gcp");
+assert.equal(extensionBrandTestId(resolveExtensionBrand({ extension_id: "command.dns.azure" })), "azure");
 assert.equal(extensionBrandTestId(resolveExtensionBrand({ extension_id: "command.infrastructure-as-code" })), "terraform opentofu pulumi");
 assert.equal(extensionBrandTestId(resolveExtensionBrand({ extension_id: "command.kubernetes-operations" })), "kubernetes helm");
 assert.equal(extensionBrandTestId(resolveExtensionBrand({ extension_id: "command.package.node" })), "node npm");

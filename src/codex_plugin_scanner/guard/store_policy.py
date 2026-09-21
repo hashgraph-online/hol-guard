@@ -682,6 +682,40 @@ class StorePolicyMixin:
             row["expires_at"],
         )
 
+    def _runtime_policy_row_is_eligible(
+        self,
+        candidate,
+        *,
+        policy_bundle_decision_identities: frozenset[tuple[object, ...]],
+        artifact_id: str | None,
+        artifact_hash: str | None,
+        runtime_exact_match_key: str | None,
+        portable_runtime_exact_match_key: str | None,
+        global_runtime_exact_match_key: str | None,
+    ) -> bool:
+        """Return True when a stored runtime policy row may serve this lookup."""
+
+        if str(candidate["source"]) in {"cloud-sync", "team-policy"}:
+            return False
+        if (
+            str(candidate["source"]) == "policy-bundle"
+            and self._materialized_policy_bundle_row_identity(candidate) not in policy_bundle_decision_identities
+        ):
+            return False
+        return not _scoped_runtime_row_requires_exact_match(
+            scope=str(candidate["scope"]),
+            stored_artifact_id=str(candidate["artifact_id"]) if isinstance(candidate["artifact_id"], str) else None,
+            stored_artifact_hash=(
+                str(candidate["artifact_hash"]) if isinstance(candidate["artifact_hash"], str) else None
+            ),
+            source=str(candidate["source"]),
+            requested_artifact_id=artifact_id,
+            requested_artifact_hash=artifact_hash,
+            requested_runtime_exact_match_key=runtime_exact_match_key,
+            requested_portable_exact_match_key=portable_runtime_exact_match_key,
+            requested_global_exact_match_key=global_runtime_exact_match_key,
+        )
+
     def _cached_policy_bundle_decision_identities(
         self,
         *,
@@ -920,6 +954,7 @@ class StorePolicyMixin:
         from .runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 
         with self._extension_control_authority_lock(), self._connect() as connection:
+            self._invalidate_native_extension_control_policy()
             connection.execute("begin immediate")
             managed_base_authority = self._read_extension_control_authority_locked(
                 BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
@@ -969,6 +1004,7 @@ class StorePolicyMixin:
                     return reject("managed_controls_authority_key_unavailable", connection)
             previous_revision = 0
             previous_bundle_hash: object = None
+            previous_active: dict[str, object] | None = None
             active_managed_layers = ()
             if revision_row is not None:
                 assert managed_authority_key is not None
@@ -984,7 +1020,7 @@ class StorePolicyMixin:
                 assert managed_base_authority is not None
                 assert managed_authority_key is not None
                 try:
-                    previous_active = json.loads(str(active_row["payload_json"]))
+                    previous_active = cast(dict[str, object], json.loads(str(active_row["payload_json"])))
                     active_managed_layers, active_revision = managed_controls_layers_from_activation_state(
                         previous_active,
                         catalog_digest=managed_base_authority.catalog_digest,
@@ -1020,6 +1056,15 @@ class StorePolicyMixin:
                     if previous_bundle_hash == policy_bundle.get("bundleHash") and previous_revision > 0
                     else previous_revision + 1
                 )
+                from .store_managed_control_manifest_context import MANAGED_CONTROLS_SOURCE_MANIFEST_FIELD
+
+                # An idempotent delivery retains the originally acknowledged
+                # source contracts. Only a new activation captures new targets.
+                source_manifest = (
+                    previous_active.get(MANAGED_CONTROLS_SOURCE_MANIFEST_FIELD)
+                    if previous_active is not None and previous_bundle_hash == policy_bundle.get("bundleHash")
+                    else self._catalog_target_manifest(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
+                )
                 managed_state = build_managed_controls_activation_state(
                     dict(policy_bundle),
                     managed_controls_policy,
@@ -1028,6 +1073,7 @@ class StorePolicyMixin:
                     negotiated_capabilities=managed_controls_negotiated_capabilities,
                     authority_key=managed_authority_key,
                     base_snapshot_digest=managed_base_snapshot[1],
+                    source_target_manifest=cast(Mapping[str, str] | None, source_manifest),
                 )
                 encoded_payloads[MANAGED_CONTROLS_ACTIVE_STATE_KEY] = json.dumps(
                     managed_state,
@@ -1132,14 +1178,9 @@ class StorePolicyMixin:
         encoded_payloads = {
             state_key: json.dumps(payload, allow_nan=False) for state_key, payload in state_payloads.items()
         }
-        managed_base_authority = None
         managed_base_snapshot: tuple[int, str] | None = None
         managed_base_snapshot_captured = False
-        from .runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
-
-        managed_base_authority = self.read_extension_control_authority(
-            catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
-        )
+        managed_base_authority = self.read_persisted_extension_control_authority()
         with self._connect() as authority_connection:
             authority_row = authority_connection.execute(
                 "select revision, snapshot_digest from extension_control_authority_snapshot where singleton = 1"
@@ -1150,7 +1191,8 @@ class StorePolicyMixin:
                 int(authority_row["revision"]),
                 str(authority_row["snapshot_digest"]),
             )
-        with self._connect() as connection:
+        with self._extension_control_authority_lock(), self._connect() as connection:
+            self._invalidate_native_extension_control_policy()
             connection.execute("begin immediate")
             if managed_base_snapshot_captured:
                 authority_row = connection.execute(
@@ -1196,9 +1238,14 @@ class StorePolicyMixin:
                 assert managed_authority_key is not None
                 try:
                     previous_active = json.loads(str(active_row["payload_json"]))
+                    active_catalog_digest = (
+                        previous_active.get("catalogDigest") if isinstance(previous_active, dict) else None
+                    )
+                    if not isinstance(active_catalog_digest, str) or not active_catalog_digest:
+                        raise ExtensionControlAuthorityError("invalid managed controls activation catalog")
                     _, active_revision = managed_controls_layers_from_activation_state(
                         previous_active,
-                        catalog_digest=managed_base_authority.catalog_digest,
+                        catalog_digest=active_catalog_digest,
                         authority_key=managed_authority_key,
                     )
                 except (json.JSONDecodeError, ExtensionControlAuthorityError) as exc:
@@ -1755,28 +1802,14 @@ class StorePolicyMixin:
             has_local_rows = any(not is_remote_policy_source(str(candidate["source"])) for candidate in rows)
             if not has_local_rows:
                 for candidate in rows:
-                    if str(candidate["source"]) in {"cloud-sync", "team-policy"}:
-                        continue
-                    if (
-                        str(candidate["source"]) == "policy-bundle"
-                        and self._materialized_policy_bundle_row_identity(candidate)
-                        not in policy_bundle_decision_identities
-                    ):
-                        continue
-                    if _scoped_runtime_row_requires_exact_match(
-                        scope=str(candidate["scope"]),
-                        stored_artifact_id=(
-                            str(candidate["artifact_id"]) if isinstance(candidate["artifact_id"], str) else None
-                        ),
-                        stored_artifact_hash=(
-                            str(candidate["artifact_hash"]) if isinstance(candidate["artifact_hash"], str) else None
-                        ),
-                        source=str(candidate["source"]),
-                        requested_artifact_id=artifact_id,
-                        requested_artifact_hash=artifact_hash,
-                        requested_runtime_exact_match_key=runtime_exact_match_key,
-                        requested_portable_exact_match_key=portable_runtime_exact_match_key,
-                        requested_global_exact_match_key=global_runtime_exact_match_key,
+                    if not self._runtime_policy_row_is_eligible(
+                        candidate,
+                        policy_bundle_decision_identities=policy_bundle_decision_identities,
+                        artifact_id=artifact_id,
+                        artifact_hash=artifact_hash,
+                        runtime_exact_match_key=runtime_exact_match_key,
+                        portable_runtime_exact_match_key=portable_runtime_exact_match_key,
+                        global_runtime_exact_match_key=global_runtime_exact_match_key,
                     ):
                         continue
                     integrity_result = self._policy_integrity_result_for_row(
@@ -1852,28 +1885,14 @@ class StorePolicyMixin:
             trust_status = TrustStatus.from_policy_integrity_state(state).to_dict()
             key, key_id = self._policy_integrity_secret_material(create=True)
             for candidate in rows:
-                if str(candidate["source"]) in {"cloud-sync", "team-policy"}:
-                    continue
-                if (
-                    str(candidate["source"]) == "policy-bundle"
-                    and self._materialized_policy_bundle_row_identity(candidate)
-                    not in policy_bundle_decision_identities
-                ):
-                    continue
-                if _scoped_runtime_row_requires_exact_match(
-                    scope=str(candidate["scope"]),
-                    stored_artifact_id=(
-                        str(candidate["artifact_id"]) if isinstance(candidate["artifact_id"], str) else None
-                    ),
-                    stored_artifact_hash=(
-                        str(candidate["artifact_hash"]) if isinstance(candidate["artifact_hash"], str) else None
-                    ),
-                    source=str(candidate["source"]),
-                    requested_artifact_id=artifact_id,
-                    requested_artifact_hash=artifact_hash,
-                    requested_runtime_exact_match_key=runtime_exact_match_key,
-                    requested_portable_exact_match_key=portable_runtime_exact_match_key,
-                    requested_global_exact_match_key=global_runtime_exact_match_key,
+                if not self._runtime_policy_row_is_eligible(
+                    candidate,
+                    policy_bundle_decision_identities=policy_bundle_decision_identities,
+                    artifact_id=artifact_id,
+                    artifact_hash=artifact_hash,
+                    runtime_exact_match_key=runtime_exact_match_key,
+                    portable_runtime_exact_match_key=portable_runtime_exact_match_key,
+                    global_runtime_exact_match_key=global_runtime_exact_match_key,
                 ):
                     continue
                 integrity_result = self._policy_integrity_result_for_row(

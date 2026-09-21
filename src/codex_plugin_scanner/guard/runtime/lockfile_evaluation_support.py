@@ -14,7 +14,11 @@ from .lockfile_parse_result import (
     incomplete_lockfile_result,
     parse_lockfile_text,
 )
-from .workspace_path_guard import read_bytes_within_workspace, resolve_path_within_workspace
+from .workspace_path_guard import (
+    path_exists_within_workspace,
+    read_bytes_within_workspace,
+    resolve_path_within_workspace,
+)
 
 
 class LockfileTextParser(Protocol):
@@ -46,7 +50,7 @@ def collect_lockfile_parse_results(
                 )
             )
             continue
-        if not lockfile_path.exists() or lockfile_path.name.lower() == "bun.lockb":
+        if not path_exists_within_workspace(workspace_dir, relative_path) or lockfile_path.name.lower() == "bun.lockb":
             continue
         lockfile_bytes = read_bytes_within_workspace(workspace_dir, relative_path)
         if lockfile_bytes is None:
@@ -92,6 +96,15 @@ def incomplete_lockfile_metadata(parse_result: LockfileParseResult) -> dict[str,
         "lockfileParseElapsedMs": round(parse_result.elapsed_ms, 3),
         "lockfileParseBudgetMs": parse_result.budget_ms,
         "lockfileParseWarnings": list(parse_result.warnings),
+        **({"lockfileHashComplete": False} if not parse_result.source_hash_complete else {}),
+        **(
+            {"inputBytesObserved": parse_result.source_byte_count} if parse_result.source_byte_count is not None else {}
+        ),
+        **(
+            {"inputRetainedByteLimit": parse_result.source_byte_limit}
+            if parse_result.source_byte_limit is not None
+            else {}
+        ),
     }
 
 

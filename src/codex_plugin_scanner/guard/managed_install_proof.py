@@ -20,7 +20,7 @@ _MANAGED_PATH_KEYS = (
     "prompt_hook_path",
     "shim_path",
 )
-_MANAGED_PATH_LIST_KEYS = ("shim_paths",)
+_MANAGED_PATH_LIST_KEYS = ("shim_paths", "protection_artifact_paths")
 _MAX_PROOF_FILE_BYTES = 4 * 1024 * 1024
 
 

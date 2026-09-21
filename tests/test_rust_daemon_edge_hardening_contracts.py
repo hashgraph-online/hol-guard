@@ -20,11 +20,12 @@ def test_daemon_http_server_is_bounded() -> None:
 
 
 def test_native_runtime_tracks_total_request_age() -> None:
-    source = (ROOT / "rust/crates/guard-runtime/src/main.rs").read_text(encoding="utf-8")
-    assert "mod hardening;" in source
-    assert "accepted_at: Instant" in source
-    assert "hardening::request_expired" in source
-    assert "native_request_deadline_exceeded" in source
+    runtime_source = (ROOT / "rust/crates/guard-runtime/src/main.rs").read_text(encoding="utf-8")
+    transport_source = (ROOT / "rust/crates/guard-runtime/src/resident_transport.rs").read_text(encoding="utf-8")
+    assert "mod hardening;" in runtime_source
+    assert "accepted_at: Instant" in transport_source
+    assert "hardening::request_expired" in transport_source
+    assert "native_request_deadline_exceeded" in transport_source
 
 
 def test_native_io_failures_have_stable_non_integrity_classes() -> None:

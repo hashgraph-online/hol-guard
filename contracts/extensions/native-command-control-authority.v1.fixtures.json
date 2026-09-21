@@ -1,0 +1,59 @@
+{
+  "schema": "guard.native-command-control-authority-fixtures.v1",
+  "verifier_key_hex": "1111111111111111111111111111111111111111111111111111111111111111",
+  "legacy_floor": {
+    "revision": 7,
+    "managed_revision": 3,
+    "effective_digest": "2222222222222222222222222222222222222222222222222222222222222222"
+  },
+  "legacy_floor_link_digest": "45048aa0a93dbd54754cab5762e435147a064a98fc4cf4ace485866614c3d14a",
+  "null_floor_link_digest": "dd6154d19f03079ea55f73f3c42195fc52a7af8dbe026dd80cff5416c9ce0691",
+  "vectors": [
+    {
+      "name": "committed",
+      "record": {
+        "schema": "guard.native-command-control-authority.v1",
+        "epoch": 1,
+        "mutation_revision": 4,
+        "authority_key_id": "3333333333333333333333333333333333333333333333333333333333333333",
+        "phase": "committed",
+        "effective_digest": "2222222222222222222222222222222222222222222222222222222222222222",
+        "recovery": null
+      },
+      "canonical_signed_json": "{\"authority_key_id\":\"3333333333333333333333333333333333333333333333333333333333333333\",\"effective_digest\":\"2222222222222222222222222222222222222222222222222222222222222222\",\"epoch\":1,\"mac\":\"ed332527eff4b33ed4243635a2deea2dc2546b70266d23cec42889a137cd82e9\",\"mutation_revision\":4,\"phase\":\"committed\",\"recovery\":null,\"schema\":\"guard.native-command-control-authority.v1\"}"
+    },
+    {
+      "name": "closed",
+      "record": {
+        "schema": "guard.native-command-control-authority.v1",
+        "epoch": 1,
+        "mutation_revision": 5,
+        "authority_key_id": "3333333333333333333333333333333333333333333333333333333333333333",
+        "phase": "closed",
+        "effective_digest": null,
+        "recovery": null
+      },
+      "canonical_signed_json": "{\"authority_key_id\":\"3333333333333333333333333333333333333333333333333333333333333333\",\"effective_digest\":null,\"epoch\":1,\"mac\":\"9c275c822399fb1a7a1f0203c3e8a02c66e1af82fc5fd8acc58d59fb5ca8190c\",\"mutation_revision\":5,\"phase\":\"closed\",\"recovery\":null,\"schema\":\"guard.native-command-control-authority.v1\"}"
+    },
+    {
+      "name": "legacy-floor-recovery",
+      "record": {
+        "schema": "guard.native-command-control-authority.v1",
+        "epoch": 2,
+        "mutation_revision": 5,
+        "authority_key_id": "4444444444444444444444444444444444444444444444444444444444444444",
+        "phase": "committed",
+        "effective_digest": "5555555555555555555555555555555555555555555555555555555555555555",
+        "recovery": {
+          "schema": "guard.native-command-control-recovery.v1",
+          "previous_epoch": 0,
+          "previous_mutation_revision": 0,
+          "previous_authority_key_id": "0000000000000000000000000000000000000000000000000000000000000000",
+          "previous_floor_digest": "45048aa0a93dbd54754cab5762e435147a064a98fc4cf4ace485866614c3d14a",
+          "nonce": "6666666666666666666666666666666666666666666666666666666666666666"
+        }
+      },
+      "canonical_signed_json": "{\"authority_key_id\":\"4444444444444444444444444444444444444444444444444444444444444444\",\"effective_digest\":\"5555555555555555555555555555555555555555555555555555555555555555\",\"epoch\":2,\"mac\":\"e4b23f38319e2741bf1ed1a42185fb99f4d00e25d8654f973e66f21e0a591336\",\"mutation_revision\":5,\"phase\":\"committed\",\"recovery\":{\"nonce\":\"6666666666666666666666666666666666666666666666666666666666666666\",\"previous_authority_key_id\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"previous_epoch\":0,\"previous_floor_digest\":\"45048aa0a93dbd54754cab5762e435147a064a98fc4cf4ace485866614c3d14a\",\"previous_mutation_revision\":0,\"schema\":\"guard.native-command-control-recovery.v1\"},\"schema\":\"guard.native-command-control-authority.v1\"}"
+    }
+  ]
+}

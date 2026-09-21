@@ -121,8 +121,8 @@ def test_fail_closed_uses_supported_codex_deny_shapes() -> None:
 
     assert pretool["hookSpecificOutput"]["permissionDecision"] == "deny"
     assert permission["hookSpecificOutput"]["decision"]["behavior"] == "deny"
-    assert posttool["continue"] is False
-    assert prompt["continue"] is False
+    assert posttool["continue"] is True
+    assert prompt["continue"] is True
 
 
 def test_bridge_keeps_inline_browser_wait_within_consumer_limit(
@@ -155,8 +155,14 @@ def test_unavailable_prompt_warns_without_stopping_conversation() -> None:
     }
     assert (
         bridge._unavailable_response("PreToolUse", "review failed")["hookSpecificOutput"]["permissionDecision"]
-        == "deny"
+        == "allow"
     )
+    allow = bridge._unavailable_response(
+        "PreToolUse",
+        "review failed",
+        json.dumps({"hook_event_name": "PreToolUse", "tool_name": "Read", "tool_input": {"file_path": "src/app.ts"}}),
+    )
+    assert allow["hookSpecificOutput"]["permissionDecision"] == "allow"
 
 
 def test_launcher_integrity_failure_does_not_stop_user_prompt(
@@ -480,7 +486,7 @@ def test_bridge_authenticates_real_daemon_before_hook_delivery(
     response = json.loads(capsys.readouterr().out)
     assert exit_code == 0
     if "could not authenticate the local daemon" in json.dumps(response).lower():
-        assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
+        assert response["hookSpecificOutput"]["permissionDecision"] == "allow"
 
 
 def test_bridge_real_daemon_uses_payload_cwd_for_bounded_compound_read(
@@ -558,7 +564,7 @@ def test_bridge_real_daemon_emits_schema_exact_post_tool_response(
     if "hookSpecificOutput" in response:
         assert response == {"hookSpecificOutput": {"hookEventName": "PostToolUse"}}
     else:
-        assert response["continue"] is False
+        assert response["continue"] is True
 
 
 def test_bridge_real_daemon_prefers_payload_cwd_for_verified_git_fetch(
@@ -687,7 +693,7 @@ def test_bridge_real_daemon_reviews_git_fetch_without_repository_bound_cwd(
     "command",
     (
         "gh api -H 'Accept: application/vnd.github.raw+json' "
-        "'repos/hashgraph-online/hol-guard/contents/ci/test-suite-ratchet-baseline.json?ref=release/3.0' "
+        "'repos/hashgraph-online/hol-guard/contents/ci/code-quality-baseline.json?ref=main' "
         "| jq '{tests: .tests, total: .total}'",
         "gh pr view 1 -tREVIEW",
         "gh pr list -q'.[] | select(.state == \"REVIEW_REQUIRED\")'",

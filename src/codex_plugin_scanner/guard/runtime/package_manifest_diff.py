@@ -78,7 +78,9 @@ def parse_manifest_dependencies(
         return {}
 
 
-def _dependency_map_for_path(path: str, text: str, *, deadline: float) -> dict[str, str]:
+def _dependency_map_for_path(
+    path: str, text: str, *, deadline: float, document: dict[str, object] | None = None
+) -> dict[str, str]:
     lower_path = path.lower()
     lower_name = lower_path.rsplit("/", 1)[-1]
     if lower_path.endswith("package.json"):
@@ -88,13 +90,13 @@ def _dependency_map_for_path(path: str, text: str, *, deadline: float) -> dict[s
             deadline,
         )
     if lower_path.endswith("package-lock.json"):
-        return _package_lock_dependency_map(text, deadline)
+        return _package_lock_dependency_map(text, deadline, document=document)
     if lower_path.endswith("pnpm-lock.yaml"):
         return _pnpm_lock_dependency_map(text, deadline)
     if lower_path.endswith("yarn.lock"):
         return _yarn_lock_dependency_map(text, deadline)
     if lower_path.endswith("bun.lock"):
-        return _bun_lock_dependency_map(text, deadline)
+        return _bun_lock_dependency_map(text, deadline, document=document)
     if lower_path.endswith("composer.json"):
         return _json_dependency_map(text, ("require", "require-dev"), deadline)
     if (
@@ -106,17 +108,17 @@ def _dependency_map_for_path(path: str, text: str, *, deadline: float) -> dict[s
     if lower_path.endswith("pyproject.toml"):
         return _pyproject_dependency_map(text, deadline)
     if lower_path.endswith("poetry.lock"):
-        return _poetry_lock_dependency_map(text, deadline)
+        return _poetry_lock_dependency_map(text, deadline, document=document)
     if lower_path.endswith("uv.lock"):
-        return _uv_lock_dependency_map(text, deadline)
+        return _uv_lock_dependency_map(text, deadline, document=document)
     if lower_path.endswith("pipfile"):
         return _toml_table_dependency_map(text, ("packages", "dev-packages"), deadline)
     if lower_path.endswith("pipfile.lock"):
-        return _pipfile_lock_dependency_map(text, deadline)
+        return _pipfile_lock_dependency_map(text, deadline, document=document)
     if lower_path.endswith("cargo.toml"):
         return _cargo_toml_dependency_map(text, deadline)
     if lower_path.endswith("cargo.lock"):
-        return _cargo_lock_dependency_map(text, deadline)
+        return _cargo_lock_dependency_map(text, deadline, document=document)
     if lower_path.endswith("go.mod"):
         return _go_mod_dependency_map(text, deadline)
     if lower_path.endswith("pom.xml"):
@@ -126,7 +128,7 @@ def _dependency_map_for_path(path: str, text: str, *, deadline: float) -> dict[s
     if lower_path.endswith("gradle.lockfile"):
         return _gradle_lockfile_dependency_map(text, deadline)
     if lower_path.endswith("composer.lock"):
-        return _composer_lock_dependency_map(text, deadline)
+        return _composer_lock_dependency_map(text, deadline, document=document)
     if lower_path.endswith("gemfile"):
         return _gemfile_dependency_map(text, deadline)
     if lower_path.endswith("gemfile.lock"):
@@ -147,8 +149,10 @@ def _json_dependency_map(text: str, sections: tuple[str, ...], deadline: float) 
     return dependencies
 
 
-def _package_lock_dependency_map(text: str, deadline: float) -> dict[str, str]:
-    payload = json.loads(text or "{}")
+def _package_lock_dependency_map(
+    text: str, deadline: float, *, document: dict[str, object] | None = None
+) -> dict[str, str]:
+    payload = json.loads(text or "{}") if document is None else document
     dependencies: dict[str, str] = {}
     packages = payload.get("packages")
     if isinstance(packages, dict):
@@ -278,8 +282,10 @@ def _yarn_selector_name(selector: str) -> str | None:
     return package_name or selector
 
 
-def _bun_lock_dependency_map(text: str, deadline: float) -> dict[str, str]:
-    versions_by_name = _bun_lock_package_versions(text, deadline)
+def _bun_lock_dependency_map(
+    text: str, deadline: float, *, document: dict[str, object] | None = None
+) -> dict[str, str]:
+    versions_by_name = _bun_lock_package_versions(text, deadline, document=document)
     dependencies: dict[str, str] = {}
     for package_name, versions in versions_by_name.items():
         if versions:
@@ -287,9 +293,15 @@ def _bun_lock_dependency_map(text: str, deadline: float) -> dict[str, str]:
     return dependencies
 
 
-def _bun_lock_package_versions(text: str, deadline: float) -> dict[str, list[str]]:
+def _bun_lock_package_versions(
+    text: str, deadline: float, *, document: dict[str, object] | None = None
+) -> dict[str, list[str]]:
     _ensure_within_deadline(deadline)
-    payload = loads_jsonc(text or "{}", deadline_check=lambda: _ensure_within_deadline(deadline))
+    payload = (
+        loads_jsonc(text or "{}", deadline_check=lambda: _ensure_within_deadline(deadline))
+        if document is None
+        else document
+    )
     if not isinstance(payload, dict):
         raise ValueError("unsupported Bun lockfile shape")
     packages = payload.get("packages", {})
@@ -435,9 +447,11 @@ def _collect_poetry_dependency_table(
             dependencies[normalized_name] = str(value["version"])
 
 
-def _toml_lock_dependency_map(text: str, deadline: float) -> dict[str, str]:
+def _toml_lock_dependency_map(
+    text: str, deadline: float, *, document: dict[str, object] | None = None
+) -> dict[str, str]:
     _ensure_within_deadline(deadline)
-    payload = tomllib.loads(text or "")
+    payload = tomllib.loads(text or "") if document is None else document
     packages = payload.get("package")
     dependencies: dict[str, str] = {}
     if not isinstance(packages, list):
@@ -458,9 +472,11 @@ _uv_lock_dependency_map = _toml_lock_dependency_map
 _cargo_lock_dependency_map = _toml_lock_dependency_map
 
 
-def _pipfile_lock_dependency_map(text: str, deadline: float) -> dict[str, str]:
+def _pipfile_lock_dependency_map(
+    text: str, deadline: float, *, document: dict[str, object] | None = None
+) -> dict[str, str]:
     _ensure_within_deadline(deadline)
-    payload = json.loads(text or "{}")
+    payload = json.loads(text or "{}") if document is None else document
     dependencies: dict[str, str] = {}
     for section in ("default", "develop"):
         values = payload.get(section)
@@ -587,9 +603,11 @@ def _gradle_lockfile_dependency_map(text: str, deadline: float) -> dict[str, str
     return dependencies
 
 
-def _composer_lock_dependency_map(text: str, deadline: float) -> dict[str, str]:
+def _composer_lock_dependency_map(
+    text: str, deadline: float, *, document: dict[str, object] | None = None
+) -> dict[str, str]:
     _ensure_within_deadline(deadline)
-    payload = json.loads(text or "{}")
+    payload = json.loads(text or "{}") if document is None else document
     dependencies: dict[str, str] = {}
     for section in ("packages", "packages-dev"):
         packages = payload.get(section)

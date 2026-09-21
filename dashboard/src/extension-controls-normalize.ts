@@ -3,9 +3,12 @@ import type {
   ExtensionCatalogItem,
   ExtensionCatalogResponse,
   ExtensionControlLayer,
+  ExtensionControlTerminalCommands,
   ExtensionPermission,
   ExtensionRule,
   ExtensionRuleSafeVariant,
+  McpLaunch,
+  McpToolDefault,
 } from "./extension-controls-api";
 import { normalizeEffectiveExtensionControlProjection } from "./extension-control-projection-normalize";
 
@@ -63,6 +66,25 @@ function catalogText(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value : null;
 }
 
+function publisher(value: unknown, label: string): { id: string; displayName: string; url?: string } {
+  const item = record(value, label);
+  const url = item.url;
+  return {
+    id: string(item.id, `${label}.id`),
+    displayName: string(item.displayName, `${label}.displayName`),
+    ...(url === undefined ? {} : { url: string(url, `${label}.url`) }),
+  };
+}
+
+function icon(value: unknown, label: string): { kind: "react-icon" | "svg-ref" | "none"; name?: string; background?: string } {
+  if (value === undefined || value === null) return { kind: "none" };
+  const item = record(value, label);
+  const kind = enumValue(item.kind, `${label}.kind`, ["react-icon", "svg-ref", "none"] as const);
+  const name = item.name === undefined ? undefined : string(item.name, `${label}.name`);
+  const background = item.background === undefined ? undefined : string(item.background, `${label}.background`);
+  return { kind, ...(name ? { name } : {}), ...(background ? { background } : {}) };
+}
+
 function bool(value: unknown, label: string): boolean {
   if (typeof value !== "boolean") throw new ExtensionControlProtocolError(`${label} must be boolean`);
   return value;
@@ -97,6 +119,16 @@ function version(value: unknown, label: string): string {
   const candidate = string(value, label);
   if (!VERSION.test(candidate)) throw new ExtensionControlProtocolError(`${label} is not a semantic implementation version`);
   return candidate;
+}
+
+function terminalCommands(value: unknown): ExtensionControlTerminalCommands | undefined {
+  if (value === undefined) return undefined;
+  const item = record(value, "effective.terminal_commands");
+  return {
+    ...(item.shell === undefined ? {} : { shell: enumValue(item.shell, "effective.terminal_commands.shell", ["powershell"] as const) }),
+    enroll: string(item.enroll, "effective.terminal_commands.enroll"),
+    recover_authority: string(item.recover_authority, "effective.terminal_commands.recover_authority"),
+  };
 }
 
 function stringList(value: unknown, label: string, max = EXTENSION_CLIENT_LIMITS.relationshipIds): string[] {
@@ -177,6 +209,40 @@ function permission(value: unknown, extensionId: string, label: string): Extensi
   };
 }
 
+function mcpLaunch(value: unknown, label: string): McpLaunch {
+  const item = record(value, label);
+  return {
+    kind: enumValue(item.kind, `${label}.kind`, ["package-launcher"] as const),
+    command: string(item.command, `${label}.command`),
+    package: string(item.package, `${label}.package`),
+  };
+}
+
+function mcpTool(value: unknown, label: string): McpToolDefault {
+  const item = record(value, label);
+  return {
+    name: string(item.name, `${label}.name`),
+    state: enumValue(item.state, `${label}.state`, ["inherit", "allow", "block"] as const),
+  };
+}
+
+function mcpCatalogFields(
+  item: RecordValue,
+  label: string,
+): Pick<ExtensionCatalogItem, "surface" | "mcp_launch" | "mcp_tools"> {
+  if (item.surface === undefined) return {};
+  const surface = enumValue(item.surface, `${label}.surface`, ["mcp"] as const);
+  const launch = item.mcp_launch === undefined ? undefined : mcpLaunch(item.mcp_launch, `${label}.mcp_launch`);
+  const tools = item.mcp_tools === undefined
+    ? undefined
+    : array(item.mcp_tools, `${label}.mcp_tools`, 80).map((entry, index) => mcpTool(entry, `${label}.mcp_tools[${index}]`));
+  return {
+    surface,
+    ...(launch ? { mcp_launch: launch } : {}),
+    ...(tools ? { mcp_tools: tools } : {}),
+  };
+}
+
 function extension(value: unknown, label: string): ExtensionCatalogItem {
   const item = record(value, label);
   const extensionId = id(item.extension_id, `${label}.extension_id`, EXTENSION_ID);
@@ -204,6 +270,16 @@ function extension(value: unknown, label: string): ExtensionCatalogItem {
     description: string(item.description, `${label}.description`),
     enabled: bool(item.enabled, `${label}.enabled`),
     required: bool(item.required, `${label}.required`),
+    trust_class: item.trust_class === undefined
+      ? "first-party"
+      : enumValue(item.trust_class, `${label}.trust_class`, ["first-party", "trusted-library", "external"] as const),
+    activation: item.activation === undefined
+      ? "default-on"
+      : enumValue(item.activation, `${label}.activation`, ["default-on", "opt-in"] as const),
+    publisher: item.publisher === undefined
+      ? { id: "hol", displayName: "Hashgraph Online" }
+      : publisher(item.publisher, `${label}.publisher`),
+    icon: icon(item.icon, `${label}.icon`),
     source: enumValue(item.source, `${label}.source`, ["built-in", "local-admin", "signed-cloud"] as const),
     version: version(item.version, `${label}.version`),
     aliases: idList(item.aliases, `${label}.aliases`, EXTENSION_ID),
@@ -221,6 +297,7 @@ function extension(value: unknown, label: string): ExtensionCatalogItem {
     rules,
     permission_count: permissionCount,
     permissions,
+    ...mcpCatalogFields(item, label),
   };
 }
 
@@ -353,6 +430,7 @@ export function normalizeEffectiveExtensionControls(value: unknown): EffectiveEx
     controls,
     layers,
     failures,
+    terminal_commands: terminalCommands(root.terminal_commands),
     projection: root.projection === undefined ? undefined : normalizeEffectiveExtensionControlProjection(root.projection),
     managed_controls: managedControls,
   };

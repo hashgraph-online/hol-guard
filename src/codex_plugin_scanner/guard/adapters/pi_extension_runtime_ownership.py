@@ -8,6 +8,8 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from ..stable_guard_cli import desktop_core_shim_for_executable
+
 _DESKTOP_RUNTIME_OWNER_ENV = "HOL_GUARD_DESKTOP_RUNTIME_OWNER"
 
 
@@ -67,8 +69,19 @@ def _stable_guard_cli_command(home_dir: Path) -> str:
         if not candidate:
             continue
         path = Path(candidate).expanduser().absolute()
+        try:
+            resolved = path.resolve(strict=False)
+        except RuntimeError:
+            continue
         normalized = str(path).replace("\\", "/").lower()
         if "/tmp/.mount_" in normalized or "/private/tmp/.mount_" in normalized:
+            continue
+        desktop_shim = desktop_core_shim_for_executable(resolved)
+        if desktop_shim is not None:
+            if desktop_shim.is_file() and os.access(desktop_shim, os.X_OK):
+                return str(desktop_shim)
+            # A versioned Desktop executable is not durable enough to own a
+            # generated extension. Continue to the official install instead.
             continue
         if path.is_file() and os.access(path, os.X_OK):
             return str(path)

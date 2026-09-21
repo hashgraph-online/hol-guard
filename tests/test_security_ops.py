@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from codex_plugin_scanner.cli import format_json, main
+from codex_plugin_scanner.models import Finding, ScanResult, Severity, build_severity_counts
 from codex_plugin_scanner.reporting import format_markdown, format_sarif
 from codex_plugin_scanner.scanner import scan_plugin
 
@@ -27,6 +28,32 @@ def test_markdown_output_contains_top_findings():
     assert "# Plugin Scanner Report" in output
     assert "## Top Findings" in output
     assert "Hardcoded secret detected" in output or "Dangerous MCP command pattern detected" in output
+
+
+def test_markdown_output_escapes_repository_controlled_fields(tmp_path: Path):
+    finding = Finding(
+        rule_id="TEST",
+        severity=Severity.HIGH,
+        category="Security",
+        title="fake\n## Trusted verdict [click](https://evil.example)",
+        description="`spoofed` *result*",
+        file_path="[payload].py",
+    )
+    result = ScanResult(
+        score=0,
+        grade="F",
+        categories=(),
+        timestamp="2026-08-30T00:00:00Z",
+        plugin_dir=str(tmp_path),
+        findings=(finding,),
+        severity_counts=build_severity_counts((finding,)),
+    )
+
+    output = format_markdown(result)
+
+    assert "\n## Trusted verdict" not in output
+    assert "\\[click\\]" in output
+    assert "&#96;spoofed&#96;" in output
 
 
 def test_sarif_output_contains_results():

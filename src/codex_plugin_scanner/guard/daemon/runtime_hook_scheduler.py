@@ -295,6 +295,7 @@ class RuntimeHookScheduler:
         self._queued_by_client[item.client_key] = self._queued_by_client.get(item.client_key, 0) + 1
 
     def _dispatch(self) -> None:
+        queued_before_dispatch = self._queued
         self._expire_waiters()
         while self._active < self._active_limit and self._queued > 0:
             item = self._next_item()
@@ -309,7 +310,11 @@ class RuntimeHookScheduler:
             self._active_by_harness[item.harness] = self._active_by_harness.get(item.harness, 0) + 1
             self._active_by_client[item.client_key] = self._active_by_client.get(item.client_key, 0) + 1
             self._admitted += 1
-        self._condition.notify_all()
+        # A condition wake with no dispatch/expiry progress must go back to
+        # sleep. Otherwise queued peers repeatedly wake each other while all
+        # active slots are busy, competing with the reviews that release them.
+        if self._queued != queued_before_dispatch:
+            self._condition.notify_all()
 
     def _next_item(self) -> QueuedRuntimeHook | None:
         boosted = self._oldest_aged_eligible()
@@ -473,6 +478,10 @@ class RuntimeHookScheduler:
                 self._service_time_samples.append(service_time)
                 self._service_time_by_lane[item.lane].append((finished_at, service_time))
             self._dispatch()
+
+            # Byte reservations can wait without any queued reviews. Releasing
+            # a permit must wake them even when dispatch made no progress.
+            self._condition.notify_all()
 
     def _oldest_queued_ms(self, now: float) -> float:
         oldest = min(

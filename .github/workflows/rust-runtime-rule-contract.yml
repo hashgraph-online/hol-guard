@@ -6,12 +6,24 @@ on:
       - "rust/**"
       - "ci/native_runtime/test_native_rule_contract.py"
       - ".github/workflows/rust-runtime-rule-contract.yml"
+      - "src/codex_plugin_scanner/guard/runtime/command*.py"
+      - "ci/native_runtime/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "tests/conftest.py"
+      - "tests/native_*support.py"
   push:
-    branches: [main]
+    branches: [main, release/3.2]
     paths:
       - "rust/**"
       - "ci/native_runtime/test_native_rule_contract.py"
       - ".github/workflows/rust-runtime-rule-contract.yml"
+      - "src/codex_plugin_scanner/guard/runtime/command*.py"
+      - "ci/native_runtime/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "tests/conftest.py"
+      - "tests/native_*support.py"
   workflow_dispatch:
 
 permissions:

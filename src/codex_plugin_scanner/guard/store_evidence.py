@@ -7,6 +7,7 @@ import io
 import json
 import re
 import sqlite3
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
@@ -181,32 +182,46 @@ def _row_to_record(row: sqlite3.Row, *, include_details: bool = True) -> Evidenc
 
 
 def store_evidence(conn: sqlite3.Connection, record: EvidenceRecord) -> EvidenceRecord:
+    store_evidence_batch(conn, (record,))
+    return record
+
+
+def store_evidence_batch(conn: sqlite3.Connection, records: Iterable[EvidenceRecord]) -> None:
+    """Persist one evaluation atomically, retaining the existing replace-by-ID semantics.
+
+    Serialization or SQLite failure rolls back the whole batch. The caller must
+    not rerun the security decision in response to a persistence failure.
+    """
+
     ensure_evidence_schema(conn)
-    conn.execute(
-        """
+    with conn:
+        conn.executemany(
+            """
         insert or replace into guard_evidence
           (evidence_id, action_id, request_id, harness, workspace, signal_id,
            category, severity, confidence, summary, details_json, action_identity, created_at)
         values (?,?,?,?,?,?,?,?,?,?,?,?,?)
-        """,
-        (
-            record.evidence_id,
-            record.action_id,
-            record.request_id,
-            record.harness,
-            record.workspace,
-            record.signal_id,
-            record.category,
-            record.severity,
-            record.confidence,
-            record.summary,
-            json.dumps(record.details),
-            record.action_identity,
-            record.created_at,
-        ),
+            """,
+            (_evidence_values(record) for record in records),
+        )
+
+
+def _evidence_values(record: EvidenceRecord) -> tuple[object, ...]:
+    return (
+        record.evidence_id,
+        record.action_id,
+        record.request_id,
+        record.harness,
+        record.workspace,
+        record.signal_id,
+        record.category,
+        record.severity,
+        record.confidence,
+        record.summary,
+        json.dumps(record.details),
+        record.action_identity,
+        record.created_at,
     )
-    conn.commit()
-    return record
 
 
 def list_evidence(

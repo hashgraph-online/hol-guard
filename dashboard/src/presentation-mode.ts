@@ -3,6 +3,7 @@ export type GuardPresentationMode = "everyday" | "technical";
 export type GuardPresentationSource =
   | "default"
   | "local-explicit"
+  | "migrated"
   | "session-preview"
   | "cloud-profile"
   | "read-error";

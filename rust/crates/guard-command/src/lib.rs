@@ -1,4 +1,15 @@
 #![forbid(unsafe_code)]
+mod command_ascii_comparison;
+mod command_common_cli_matchers;
+pub mod command_compatibility;
+mod command_database_matchers;
+mod command_operand_matchers;
+mod command_option_parsing;
+mod command_specialized_matchers;
+mod command_structured_matchers;
+mod executable_flag_contract;
+pub mod native_command_controls;
+pub mod native_command_program;
 pub mod pretool;
 
 use serde::{Deserialize, Serialize};
@@ -53,6 +64,8 @@ pub struct CommandSegmentV1 {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CanonicalCommandV1 {
+    #[serde(skip)]
+    pub(crate) exact_raw_text: bool,
     pub normalized_text: String,
     pub dialect: String,
     pub transport: String,
@@ -170,6 +183,7 @@ pub fn parse_command(request: &CommandModelRequestV1) -> Result<CanonicalCommand
 
     let path_overridden = segments.iter().any(|segment| segment.path_overridden);
     Ok(CanonicalCommandV1 {
+        exact_raw_text: true,
         normalized_text: raw.to_owned(),
         dialect: request.dialect.clone(),
         transport: request.transport.clone(),
@@ -185,6 +199,7 @@ pub fn parse_command(request: &CommandModelRequestV1) -> Result<CanonicalCommand
 
 fn uncertain(request: &CommandModelRequestV1, raw: &str, reason: &str) -> CanonicalCommandV1 {
     CanonicalCommandV1 {
+        exact_raw_text: false,
         normalized_text: raw.to_owned(),
         dialect: request.dialect.clone(),
         transport: request.transport.clone(),

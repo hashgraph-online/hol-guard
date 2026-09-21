@@ -5,13 +5,17 @@ from __future__ import annotations
 import http.client
 import io
 import json
+import socket
 import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable, Mapping
-from contextlib import suppress
+from contextlib import closing, suppress
+from http.client import HTTPConnection, HTTPException
 from pathlib import Path
+from threading import Timer
 from typing import Protocol, TypeGuard, cast
+from urllib.parse import urlsplit
 
 from .manager import (
     clear_guard_daemon_state,
@@ -20,6 +24,63 @@ from .manager import (
     load_guard_daemon_url,
     load_running_guard_daemon_identity,
 )
+
+_HEALTH_PROBE_DEADLINE_SECONDS = 1.0
+
+
+def _interrupt_health_socket(stream: socket.socket) -> None:
+    """Interrupt a blocked header/body read when the whole probe deadline expires."""
+    # A completed request may already have closed its socket.
+    with suppress(OSError):
+        stream.shutdown(socket.SHUT_RDWR)
+
+
+def read_guard_health_details(daemon_url: str, auth_token: str) -> dict[str, object] | None:
+    """Read bounded authenticated health details over direct, non-redirecting loopback IPC."""
+    try:
+        parsed = urlsplit(daemon_url)
+        if (
+            parsed.scheme != "http"
+            or parsed.hostname not in {"127.0.0.1", "::1"}
+            or parsed.port is None
+            or not 1 <= parsed.port <= 65_535
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.path not in {"", "/"}
+            or parsed.query
+            or parsed.fragment
+        ):
+            return None
+        # HTTPConnection neither consults proxy environment variables nor follows
+        # redirects. Never forward the daemon token to a redirected authority.
+        deadline = time.monotonic() + _HEALTH_PROBE_DEADLINE_SECONDS
+        with closing(
+            HTTPConnection(parsed.hostname, parsed.port, timeout=_HEALTH_PROBE_DEADLINE_SECONDS)
+        ) as connection:
+            connection.connect()
+            stream = connection.sock
+            remaining = deadline - time.monotonic()
+            if stream is None or remaining <= 0:
+                return None
+            interrupt = Timer(remaining, _interrupt_health_socket, args=(stream,))
+            interrupt.daemon = True
+            interrupt.start()
+            try:
+                connection.request("GET", "/v1/healthz/details", headers={"X-Guard-Token": auth_token})
+                response = connection.getresponse()
+                if response.status != 200:
+                    return None
+                content = response.read(65_537)
+            finally:
+                interrupt.cancel()
+        if time.monotonic() >= deadline:
+            return None
+        if len(content) > 65_536:
+            return None
+        payload = json.loads(content.decode("utf-8"))
+        return payload if isinstance(payload, dict) else None
+    except (OSError, ValueError, HTTPException):
+        return None
 
 
 class GuardDaemonRequestError(RuntimeError):
@@ -282,7 +343,21 @@ class GuardSurfaceDaemonClient:
         except UnicodeDecodeError as error:
             raise GuardDaemonResponseSchemaError("Guard daemon response schema is invalid") from error
         except http.client.IncompleteRead as error:
-            raise GuardDaemonTransportError("Guard daemon response was truncated") from error
+            remaining = deadline - time.monotonic()
+            if remaining <= 0.05:
+                raise GuardDaemonTransportError("Guard daemon response was truncated") from error
+            try:
+                with urllib.request.urlopen(request, timeout=remaining) as retry_response:
+                    payload = self._read_response_with_deadline(retry_response, deadline=deadline)
+                    return self._decode_json_response(payload.decode("utf-8"))
+            except TimeoutError as retry_error:
+                raise GuardDaemonTimeoutError("Guard daemon request timed out") from retry_error
+            except urllib.error.URLError as retry_error:
+                if isinstance(retry_error.reason, TimeoutError):
+                    raise GuardDaemonTimeoutError("Guard daemon request timed out") from retry_error
+                raise GuardDaemonTransportError("Guard daemon response was truncated") from retry_error
+            except (OSError, UnicodeDecodeError, http.client.IncompleteRead) as retry_error:
+                raise GuardDaemonTransportError("Guard daemon response was truncated") from retry_error
         except TimeoutError as error:
             raise GuardDaemonTimeoutError("Guard daemon request timed out") from error
         except urllib.error.URLError as error:
@@ -366,6 +441,12 @@ class GuardSurfaceDaemonClient:
         except UnicodeDecodeError as error:
             raise GuardDaemonResponseSchemaError("Guard daemon response schema is invalid") from error
         except http.client.IncompleteRead as error:
+            partial = error.partial
+            if partial:
+                try:
+                    return self._decode_json_response(partial.decode("utf-8"))
+                except (UnicodeDecodeError, GuardDaemonResponseSchemaError):
+                    pass
             raise GuardDaemonTransportError("Guard daemon response was truncated") from error
         except (OSError, urllib.error.URLError) as error:
             raise GuardDaemonTransportError(f"Guard daemon request failed: {error}") from error

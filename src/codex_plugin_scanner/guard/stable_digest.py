@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+from collections.abc import Iterable
 
 _STABLE_DIGEST_KEY = b"hol-guard-stable-digest.v3"
 
@@ -24,3 +25,12 @@ def stable_digest_hex(payload: bytes, *, length: int | None = None) -> str:
     if length is None:
         return digest
     return digest[:length]
+
+
+def stable_digest_chunks(chunks: Iterable[bytes]) -> str:
+    """Hash a bounded-memory byte stream with the same stable content identity."""
+
+    digest = hmac.new(_STABLE_DIGEST_KEY, digestmod="sha512")
+    for chunk in chunks:
+        digest.update(chunk)
+    return digest.hexdigest()[:64]

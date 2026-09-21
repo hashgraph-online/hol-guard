@@ -3,8 +3,12 @@ from __future__ import annotations
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from unittest.mock import Mock
+
+import pytest
 
 from codex_plugin_scanner.guard.daemon.runtime_hook_scheduler import RuntimeHookScheduler
+from tests.coverage_ci import UNDER_COVERAGE_TRACING, under_coverage_scale
 
 
 def test_scheduler_waits_for_capacity_instead_of_rejecting() -> None:
@@ -60,7 +64,60 @@ def test_scheduler_dynamic_capacity_wakes_waiter() -> None:
     assert scheduler.stats()["active_limit"] == 1
 
 
+def test_scheduler_does_not_rebroadcast_spurious_capacity_wake(monkeypatch: pytest.MonkeyPatch) -> None:
+    scheduler = RuntimeHookScheduler(active_limit=0)
+    condition = scheduler._condition  # pyright: ignore[reportPrivateUsage]
+    first_wait = threading.Event()
+    second_wait = threading.Event()
+    original_wait = condition.wait
+    waits = 0
+
+    def observed_wait(timeout: float | None = None) -> bool:
+        nonlocal waits
+        waits += 1
+        (first_wait if waits == 1 else second_wait).set()
+        return original_wait(timeout)
+
+    monkeypatch.setattr(condition, "wait", observed_wait)
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        waiting = executor.submit(
+            scheduler.acquire,
+            harness="pi",
+            client_key="waiting",
+            lane="decision",
+            payload_bytes=1,
+            deadline=time.monotonic() + 5,
+        )
+        try:
+            assert first_wait.wait(timeout=1)
+            with condition:
+                notify_all = condition.notify_all
+                broadcasts = Mock(wraps=notify_all)
+                monkeypatch.setattr(condition, "notify_all", broadcasts)
+                # One external wake must return to sleep while capacity is
+                # unchanged. Rebroadcasting it makes queued peers wake each
+                # other indefinitely and compete with the active reviewers.
+                notify_all()
+            assert second_wait.wait(timeout=1)
+            with condition:
+                assert not waiting.done()
+                assert broadcasts.call_count == 0
+        finally:
+            scheduler.set_active_limit(1)
+            admission = waiting.result(timeout=1)
+            if admission.permit is not None:
+                admission.permit.release()
+
+    assert admission.permit is not None
+    assert scheduler.stats()["completed"] == 1
+
+
+@pytest.mark.skipif(
+    UNDER_COVERAGE_TRACING,
+    reason="Concurrent scheduler throughput shifts under coverage tracing; run untraced",
+)
 def test_scheduler_handles_48_routine_reviews_without_capacity_rejection() -> None:
+    coverage_scale = under_coverage_scale(3.0)
     scheduler = RuntimeHookScheduler(
         active_limit=8,
         queued_limit=64,
@@ -70,13 +127,13 @@ def test_scheduler_handles_48_routine_reviews_without_capacity_rejection() -> No
     barrier = threading.Barrier(48)
 
     def review(index: int) -> None:
-        barrier.wait(timeout=2)
+        barrier.wait(timeout=8 * coverage_scale)
         admission = scheduler.acquire(
             harness="pi",
             client_key=f"client-{index % 6}",
             lane="decision",
             payload_bytes=1,
-            deadline=time.monotonic() + 2,
+            deadline=time.monotonic() + 8 * coverage_scale,
         )
         assert admission.permit is not None
         time.sleep(0.002)
@@ -85,7 +142,7 @@ def test_scheduler_handles_48_routine_reviews_without_capacity_rejection() -> No
     with ThreadPoolExecutor(max_workers=48) as executor:
         futures = [executor.submit(review, index) for index in range(48)]
         for future in futures:
-            future.result(timeout=3)
+            future.result(timeout=12 * coverage_scale)
 
     stats = scheduler.stats()
     assert stats["completed"] == 48
@@ -324,7 +381,46 @@ def test_scheduler_bounds_bytes_before_payload_hydration() -> None:
     assert scheduler.stats()["retained_bytes"] == 0
 
 
-def test_expired_waiter_wakes_byte_reservation_when_dispatch_remains_blocked() -> None:
+def test_permit_release_wakes_byte_reservation_without_queued_reviews(monkeypatch: pytest.MonkeyPatch) -> None:
+    scheduler = RuntimeHookScheduler(active_limit=1, retained_bytes_limit=10)
+    active = scheduler.acquire(
+        harness="pi",
+        client_key="active",
+        lane="decision",
+        payload_bytes=10,
+        deadline=time.monotonic() + 5,
+    )
+    assert active.permit is not None
+    condition = scheduler._condition  # pyright: ignore[reportPrivateUsage]
+    waiting_for_bytes = threading.Event()
+    original_wait = condition.wait
+
+    def observed_wait(timeout: float | None = None) -> bool:
+        waiting_for_bytes.set()
+        return original_wait(timeout)
+
+    monkeypatch.setattr(condition, "wait", observed_wait)
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        waiting = executor.submit(
+            scheduler.reserve_bytes,
+            payload_bytes=10,
+            deadline=time.monotonic() + 5,
+        )
+        try:
+            assert waiting_for_bytes.wait(timeout=1)
+            assert scheduler.stats()["queued"] == 0
+        finally:
+            active.permit.release()
+        reservation, reason = waiting.result(timeout=1)
+
+    assert reservation is not None
+    assert reason is None
+    reservation.release()
+    assert scheduler.stats()["retained_bytes"] == 0
+
+
+@pytest.mark.parametrize("cancel_waiter", [False, True], ids=["deadline", "cancellation"])
+def test_expired_waiter_wakes_byte_reservation_when_dispatch_remains_blocked(cancel_waiter: bool) -> None:
     scheduler = RuntimeHookScheduler(
         active_limit=2,
         per_harness_active_limit=1,
@@ -338,6 +434,7 @@ def test_expired_waiter_wakes_byte_reservation_when_dispatch_remains_blocked() -
         deadline=time.monotonic() + 1,
     )
     assert active.permit is not None
+    cancellation = threading.Event()
 
     with ThreadPoolExecutor(max_workers=3) as executor:
         expires_at = time.monotonic() + 0.5
@@ -348,6 +445,7 @@ def test_expired_waiter_wakes_byte_reservation_when_dispatch_remains_blocked() -
             lane="decision",
             payload_bytes=1,
             deadline=expires_at,
+            cancellation=cancellation if cancel_waiter else None,
         )
         waiting = executor.submit(
             scheduler.acquire,
@@ -366,8 +464,12 @@ def test_expired_waiter_wakes_byte_reservation_when_dispatch_remains_blocked() -
             payload_bytes=1,
             deadline=expires_at + 1,
         )
+        if cancel_waiter:
+            cancellation.set()
 
         assert expired.result(timeout=1).reason_code == "daemon_hook_deadline_exhausted"
+        assert scheduler.stats()["cancelled"] == int(cancel_waiter)
+        assert scheduler.stats()["expired"] == int(not cancel_waiter)
         admitted, reason = reservation.result(timeout=0.25)
         assert admitted is not None
         assert reason is None

@@ -16,11 +16,10 @@ from typing import Final
 if __package__ is None:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from scripts.ci.hook_data_plane_ownership_contract import (
-    SCHEMA,
-    load_manifest,
-    registered_harnesses,
-)
+from scripts.ci.authority_workflow_contract import require_unfiltered_release_pull_requests
+from scripts.ci.hook_data_plane_ownership_contract import SCHEMA, load_manifest, registered_harnesses
+from scripts.ci.python_hook_semantic_callgraph_gate import _graph_failures as _python_semantic_graph_failures
+from scripts.ci.rust_pretool_no_python_gate import _graph_failures
 
 MANIFEST = Path("docs/guard/contracts/hook-data-plane-ownership.v2.json")
 SELF_PROTECTED_PATHS: Final = frozenset(
@@ -29,10 +28,13 @@ SELF_PROTECTED_PATHS: Final = frozenset(
         ".github/workflows/rust-authority-ownership.yml",
         "docs/guard/contracts/hook-data-plane-ownership.v2.json",
         "scripts/ci/hook_data_plane_ownership_contract.py",
+        "scripts/ci/native_approval_contract_gate.py",
+        "scripts/ci/python_hook_semantic_callgraph_gate.py",
         "scripts/ci/rust_authority_ownership_gate.py",
+        "scripts/ci/authority_workflow_contract.py",
+        ".github/workflows/publish.yml",
     }
 )
-
 TEMPORARY_PATHS: Final = (
     Path(".github/workflows/rust-local-toolchain-export.yml"),
     Path(".github/workflows/rust-pretool-authority-bootstrap.yml"),
@@ -215,21 +217,29 @@ def _coverage_narrowing_gate(
 
 
 def _pretool_gate() -> None:
+    graph_failures = _graph_failures(Path("."))
+    if graph_failures:
+        raise RuntimeError("; ".join(graph_failures))
+    semantic_graph_failures = _python_semantic_graph_failures(Path("."))
+    if semantic_graph_failures:
+        raise RuntimeError("; ".join(semantic_graph_failures))
+
     pretool = Path("src/codex_plugin_scanner/guard/native_pretool.py")
     if _python_imports_function(pretool, "command_evaluation", "evaluate_command"):
         raise RuntimeError("native PreToolUse transport imports the Python command evaluator")
     if "evaluate_command(" in _read(pretool):
         raise RuntimeError("native PreToolUse transport calls the Python command evaluator")
     _assert_policy_floor_fail_closed(pretool)
-
     hook = _read(Path("src/codex_plugin_scanner/guard/daemon/hook_worker.py"))
+    native_hook = _read(Path("src/codex_plugin_scanner/guard/daemon/hook_worker_native.py"))
     if "review_pre_tool_native" not in hook:
         raise RuntimeError("PreToolUse hook path is not bound to the native runtime")
-    region = re.search(
-        r'if event_name\s*==\s*"PreToolUse":[\s\S]*?(?=\n\s*if event_name\s*!=\s*"PostToolUse")',
+    route = re.search(
+        r'if event_name\s*==\s*"PreToolUse":[\s\S]*?return self\._review_pre_tool_http',
         hook,
     )
-    if region is None:
+    region = re.search(r"def _review_pre_tool_http\([\s\S]*?(?=\n    def _review_native_edge)", native_hook)
+    if route is None or region is None:
         raise RuntimeError("daemon has no Rust PreToolUse authority route")
     if "self.engine.review(" in region.group(0):
         raise RuntimeError("PreToolUse can reach the Python HookReviewEngine")
@@ -253,7 +263,13 @@ def _pretool_gate() -> None:
         if "Python remains authoritative" in model:
             raise RuntimeError("command-model bridge still declares Python authority")
 
-    runtime = _read(Path("rust/crates/guard-runtime/src/main.rs"))
+    runtime = "\n".join(
+        _read(path)
+        for path in (
+            Path("rust/crates/guard-runtime/src/main.rs"),
+            Path("rust/crates/guard-runtime/src/resident_protocol.rs"),
+        )
+    )
     command = _read(Path("rust/crates/guard-command/src/lib.rs"))
     combined = runtime + "\n" + command
     if not re.search(r"PreToolUse|pre_tool|pre-tool", combined):
@@ -300,7 +316,13 @@ def _mode_gate() -> None:
 
 def _policy_and_identity_gate() -> None:
     cargo = _read(Path("rust/crates/guard-runtime/Cargo.toml"))
-    runtime = _read(Path("rust/crates/guard-runtime/src/main.rs"))
+    runtime = "\n".join(
+        _read(path)
+        for path in (
+            Path("rust/crates/guard-runtime/src/main.rs"),
+            Path("rust/crates/guard-runtime/src/resident_protocol.rs"),
+        )
+    )
     native = _read(Path("src/codex_plugin_scanner/guard/native_runtime.py"))
     release = _read(Path("scripts/verify_native_runtime_release.py"))
     if "guard-policy-snapshot" not in cargo:
@@ -322,10 +344,8 @@ def _policy_and_identity_gate() -> None:
 def _workflow_gate() -> None:
     path = Path(".github/workflows/rust-authority-ownership.yml")
     source = _read(path)
-    trigger = source.split("permissions:", maxsplit=1)[0]
-    if "paths:" in trigger or "paths-ignore:" in trigger:
-        raise RuntimeError("authority workflow must be selected for every pull request to main")
-    for required in ("pull_request:\n    branches: [main]", "fetch-depth: 0", "--base-ref"):
+    require_unfiltered_release_pull_requests(source, label="authority workflow")
+    for required in ("fetch-depth: 0", "--base-ref"):
         if required not in source:
             raise RuntimeError(f"authority workflow is missing its always-selected diff gate: {required}")
     required_commands = (
@@ -335,15 +355,14 @@ def _workflow_gate() -> None:
         "test_guard_native_runtime_mutation_differential.py",
         "bench_guard_native_release_gate.py",
         "test_native_hol_guard_wheel.py",
+        "python_hook_semantic_callgraph_gate.py",
     )
     missing_commands = [value for value in required_commands if value not in source]
     if missing_commands:
         raise RuntimeError(f"authority workflow integration coverage is incomplete: {missing_commands}")
 
     native_wheel = _read(Path(".github/workflows/native-wheel-ci.yml"))
-    native_trigger = native_wheel.split("permissions:", maxsplit=1)[0]
-    if "paths:" in native_trigger or "paths-ignore:" in native_trigger:
-        raise RuntimeError("installed native-wheel proof must be selected for every pull request to main")
+    require_unfiltered_release_pull_requests(native_wheel, label="installed native-wheel proof")
     for required in (
         "HOL_GUARD_NATIVE HOL_GUARD_NATIVE_BINARY HOL_GUARD_HOOK_FAST_PATH",
         "Remove-Item Env:HOL_GUARD_HOOK_FAST_PATH",

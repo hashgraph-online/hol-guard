@@ -83,6 +83,7 @@ def portal_mcp_server_identity(
         "envValuesHash": identity.env_values_hash,
         "identityHash": identity.identity_hash,
         "packageName": identity.package_name,
+        "packageSource": identity.package_source,
         "packageVersion": identity.package_version,
         "publisherStableId": _publisher_stable_id(publisher_source),
         "transport": identity.transport,
@@ -233,7 +234,7 @@ def build_runtime_action_record(
         if action_envelope.command:
             subprocesses.append(action_envelope.command.split()[0])
     claimed = _claimed_capabilities(artifact)
-    observed = _observed_capabilities(risk_categories, artifact)
+    observed = list(risk_categories)
     sensitive = [
         category for category in (*risk_categories, *claimed, *observed) if _SENSITIVE_CLASS_PATTERN.search(category)
     ]
@@ -389,6 +390,7 @@ def _portal_server_from_legacy(record: dict[str, object], artifact: GuardArtifac
         "envValuesHash": env_values_hash,
         "identityHash": identity_hash,
         "packageName": record.get("package_name") or record.get("packageName"),
+        "packageSource": record.get("package_source") or record.get("packageSource"),
         "packageVersion": record.get("package_version") or record.get("packageVersion"),
         "publisherStableId": record.get("publisher_stable_id") or record.get("publisherStableId"),
         "transport": transport,
@@ -426,6 +428,7 @@ def _legacy_server_identity(server: dict[str, object]) -> dict[str, object]:
         "env_values_hash": _legacy_environment_values_hash(server, env_keys=env_keys),
         "identity_hash": server.get("identityHash"),
         "package_name": server.get("packageName"),
+        "package_source": server.get("packageSource"),
         "package_version": server.get("packageVersion"),
         "publisher_stable_id": server.get("publisherStableId"),
         "transport": server.get("transport"),
@@ -507,13 +510,6 @@ def _claimed_capabilities(artifact: GuardArtifact) -> list[str]:
     if isinstance(description, str) and description.strip():
         return ["tool_description"]
     return []
-
-
-def _observed_capabilities(risk_categories: tuple[str, ...], artifact: GuardArtifact) -> list[str]:
-    observed = list(risk_categories)
-    if artifact.artifact_type == "tool_call" and observed:
-        return observed
-    return observed
 
 
 def _unique_strings(values: list[str]) -> list[str]:

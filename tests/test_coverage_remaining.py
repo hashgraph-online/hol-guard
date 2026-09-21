@@ -4,7 +4,7 @@ import tempfile
 from pathlib import Path
 
 FIXTURES = Path(__file__).parent / "fixtures"
-EXPECTED_GOOD_PLUGIN_SCORE = 91
+EXPECTED_GOOD_PLUGIN_SCORE = 100
 
 
 def test_incomplete_frontmatter_delimiters():

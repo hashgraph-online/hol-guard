@@ -5,6 +5,8 @@ import {
   normalizeProtectionHealth,
   PROTECTION_CHECK_IDS,
   PROTECTION_PROVING_GRACE_MS,
+  hasRepairableProtectionGap,
+  isUnsupportedPlatformCheck,
   protectionHeadlineFor,
   protectionHealthFor,
   protectionPresentationState,
@@ -55,6 +57,55 @@ decisionFailure[PROTECTION_CHECK_IDS.indexOf("decision_stream")] = {
   reason_code: "decision_stream_failed",
 };
 assert.equal(normalizeProtectionHealth(payload(decisionFailure)).state, "degraded");
+
+const unsupportedContainment = checks();
+for (const checkId of ["decision_plane_compatibility", "containment_compatibility", "sandbox"] as const) {
+  unsupportedContainment[PROTECTION_CHECK_IDS.indexOf(checkId)] = {
+    check_id: checkId,
+    status: "fail",
+    reason_code: "unsupported_platform",
+  };
+}
+const unsupportedContainmentHealth = normalizeProtectionHealth(payload(unsupportedContainment));
+assert(isUnsupportedPlatformCheck(unsupportedContainment[6]), "unsupported platform gaps use a stable reason code");
+assert.equal(
+  unsupportedContainmentHealth.state,
+  "protected",
+  "unsupported OS containment does not degrade hook-based protection",
+);
+assert(
+  !hasRepairableProtectionGap(unsupportedContainmentHealth.checks),
+  "unsupported-only containment gaps do not offer a futile aggregate repair",
+);
+const spoofedHookFailure = checks();
+spoofedHookFailure[PROTECTION_CHECK_IDS.indexOf("harness_hooks")] = {
+  check_id: "harness_hooks",
+  status: "fail",
+  reason_code: "unsupported_platform",
+};
+assert.equal(
+  normalizeProtectionHealth(payload(spoofedHookFailure)).state,
+  "degraded",
+  "unsupported_platform does not mask non-containment failures",
+);
+assert(
+  hasRepairableProtectionGap(normalizeProtectionHealth(payload(spoofedHookFailure)).checks),
+  "non-containment failures remain repairable even if they reuse unsupported_platform",
+);
+const mixedContainment = unsupportedContainment.map((check) => (
+  check.check_id === "harness_hooks"
+    ? { check_id: check.check_id, status: "fail" as const, reason_code: "hook_verification_failed" }
+    : check
+));
+const mixedContainmentHealth = normalizeProtectionHealth(payload(mixedContainment));
+assert(
+  hasRepairableProtectionGap(mixedContainmentHealth.checks),
+  "mixed unsupported and ordinary gaps retain a supported repair path",
+);
+assert.match(
+  remainingProtectionRepairMessage(mixedContainmentHealth, (harness) => harness).message,
+  /full protection cannot be reached here/,
+);
 
 const malformed = normalizeProtectionHealth({
   ...payload(checks().slice(0, -1)),
@@ -184,6 +235,7 @@ assert.equal(
 
 const appSource = readFileSync(new URL("./app.tsx", import.meta.url), "utf8");
 const appDetailSource = readFileSync(new URL("./apps/app-detail-workspace.tsx", import.meta.url), "utf8");
+const harnessSetupSource = readFileSync(new URL("./apps/harness-setup-panel.tsx", import.meta.url), "utf8");
 const fleetSource = readFileSync(new URL("./fleet-workspace.tsx", import.meta.url), "utf8");
 const harnessDetectionSource = readFileSync(new URL("./harness-detection.ts", import.meta.url), "utf8");
 const reviewStatesSource = readFileSync(new URL("./review-states.tsx", import.meta.url), "utf8");
@@ -271,14 +323,14 @@ assert.match(
   remainingProtectionRepairMessage(normalizeProtectionHealth(payload(noManagedChecks)), (harness) => harness).message,
   /Connect an AI app to start local protection/,
 );
-assert.match(appDetailSource, /Install state" value=\{active \? "Installed"/);
+assert.match(harnessSetupSource, /SetupMetric label="Install state" value=\{installStateLabel\(active, props\.status\)\}/);
 assert.match(appDetailSource, /protectionHealthFor\(runtime, harness\)/);
 assert.match(appDetailSource, /useProtectionPresentationState\(appProtection\)/);
 assert.match(fleetSource, /useProtectionPresentationState\(protectionHealth\)/);
 assert.match(fleetSource, /resolveDetectedAppStatus\(install, appProtection,/);
 assert.match(fleetSource, /onRepairHarness=\{props\.onRepairHarness \?\? props\.onConnectHarness\}/);
 assert.match(readFileSync(new URL("./fleet-protection-recovery.tsx", import.meta.url), "utf8"), /defaultConnectHarness\(props\.repairHarness, props\.repairHarnesses\)/);
-assert.match(harnessDetectionSource, /hookCheck\?\.status === "fail"/);
+assert.match(harnessDetectionSource, /hookCheck\?\.status !== "pass"/);
 assert.match(reviewStatesSource, /useProtectionPresentationState\(protectionHealth\)/);
 assert.match(reviewStatesSource, /protectedAppsCount = protectionHealth\.apps\.filter/);
 assert.match(reviewStatesSource, /if \(runtime === null\)/);

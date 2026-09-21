@@ -18,10 +18,15 @@ on:
       - tests/fixtures/extension-controls/**
       - pyproject.toml
       - uv.lock
+      - rust/**
+      - src/codex_plugin_scanner/guard/native_*.py
+      - src/codex_plugin_scanner/guard/runtime/command*.py
+      - src/codex_plugin_scanner/guard/config*.py
       - .github/workflows/extension-control-center-installed-ci.yml
   push:
     branches:
       - release/3.0
+      - release/3.2
     paths:
       - dashboard/**
       - src/codex_plugin_scanner/guard/daemon/**
@@ -35,6 +40,10 @@ on:
       - tests/fixtures/extension-controls/**
       - pyproject.toml
       - uv.lock
+      - rust/**
+      - src/codex_plugin_scanner/guard/native_*.py
+      - src/codex_plugin_scanner/guard/runtime/command*.py
+      - src/codex_plugin_scanner/guard/config*.py
       - .github/workflows/extension-control-center-installed-ci.yml
 
 permissions:

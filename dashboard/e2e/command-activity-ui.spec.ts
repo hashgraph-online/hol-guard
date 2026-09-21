@@ -32,6 +32,7 @@ const activity = {
   persistence_latency_bucket: "le_1_ms",
   feedback_label: null,
   schema_version: "1.0.0",
+  invocation_preview: "git fetch origin main",
   matches: [{
     ordinal: 0,
     extension_id: "command.git",
@@ -146,6 +147,8 @@ test("Commands evidence renders with zero receipts and keeps private fields hidd
   const fixture = await mountCommandFixture(page);
   await page.goto(`/evidence?view=commands&${DAEMON}`);
   await expect(page.getByRole("heading", { name: "Commands" })).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "Command" })).toBeVisible();
+  await expect(page.getByRole("cell", { name: "git fetch origin main" })).toBeVisible();
   await expect(page.getByRole("cell", { name: "Allowed; execution not confirmed" })).toBeVisible();
   const trend = page.getByRole("img", { name: /2026-07-18: 0; 2026-07-19: 1$/ });
   await expect(trend).toBeVisible();
@@ -160,7 +163,9 @@ test("Commands evidence renders with zero receipts and keeps private fields hidd
   const detailsButton = page.getByRole("button", { name: "Details" });
   await detailsButton.focus();
   await page.keyboard.press("Enter");
-  await expect(page.getByRole("complementary", { name: "Command activity detail" })).toBeFocused();
+  const detail = page.getByRole("complementary", { name: "Command activity detail" });
+  await expect(detail).toBeFocused();
+  await expect(detail.getByText("git fetch origin main")).toBeVisible();
   await expect(page.getByText("Other recorded reason")).toBeVisible();
   await expect(page.getByText(SECRET_SENTINEL)).toHaveCount(0);
   await page.getByRole("button", { name: "Should not have interrupted" }).click();

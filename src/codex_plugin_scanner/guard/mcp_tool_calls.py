@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, fields, replace
+from functools import lru_cache
 from hashlib import sha256
 from ipaddress import ip_address
 from pathlib import Path, PurePath
@@ -16,6 +18,7 @@ from .approval_gate import ApprovalGateGrant
 from .collections_support import dedupe_preserving_order
 from .config import DEFAULT_SECURITY_LEVEL, GuardConfig, resolve_risk_action
 from .local_cli_trust import apply_local_mcp_extension_decision
+from .mcp_authority_binding import AuthorityCheck, check_current_mcp_authority, use_mcp_authority_check
 from .models import GuardAction, GuardArtifact, GuardReceipt, PolicyDecision
 from .receipts import build_receipt
 from .runtime.approval_context import (
@@ -286,13 +289,142 @@ def build_tool_call_artifact(
     )
 
 
+@dataclass(frozen=True, slots=True)
+class ToolCallRiskFacts:
+    """Ordered pure facts bound to one exact, private request snapshot.
+
+    This value carries no policy or approval authority. Consumers must match
+    the complete inputs again and consume their owned matching copy. The
+    private binding may contain request secrets, so it must never be exported.
+    """
+
+    categories: tuple[str, ...]
+    _input_binding: tuple[bytes, tuple[str | int, ...]] = field(repr=False)
+
+
+def _copy_strict_json(value: object, shape: bytearray, leaves: list[str | int]) -> object:
+    """Own containers and bind their exact structure without encoding text.
+
+    The private preorder shape has distinct scalar, key, and container tags.
+    Container closing tags preserve nesting and key tags preserve dict order.
+    Immutable string/integer leaves can be shared; floats use their exact hex
+    spelling so that signed zero cannot compare equal. Neither the eventual
+    bytes shape nor its leaf tuple retains a mutable caller-owned container.
+    """
+
+    kind = type(value)
+    if value is None:
+        shape.append(ord("n"))
+        return value
+    if kind is bool:
+        shape.append(ord("t") if value else ord("f"))
+        return value
+    if kind is str or kind is int:
+        shape.append(ord("s") if kind is str else ord("i"))
+        leaves.append(cast(str | int, value))
+        return value
+    if kind is float and math.isfinite(cast(float, value)):
+        shape.append(ord("d"))
+        leaves.append(cast(float, value).hex())
+        return value
+    if kind is list:
+        shape.append(ord("["))
+        owned = [_copy_strict_json(item, shape, leaves) for item in cast(list[object], value)]
+        shape.append(ord("]"))
+        return owned
+    if kind is dict:
+        shape.append(ord("{"))
+        result: dict[str, object] = {}
+        for key, item in cast(dict[object, object], value).items():
+            if type(key) is not str:
+                raise ValueError("tool_call_facts_require_string_keys")
+            shape.append(ord("k"))
+            leaves.append(cast(str, key))
+            result[cast(str, key)] = _copy_strict_json(item, shape, leaves)
+        shape.append(ord("}"))
+        return result
+    raise ValueError("tool_call_facts_require_plain_finite_json")
+
+
+def _tool_call_risk_snapshot(
+    artifact: GuardArtifact, arguments: object
+) -> tuple[tuple[bytes, tuple[str | int, ...]], GuardArtifact, object] | None:
+    """Keep unsupported inputs on the existing, uncached analysis path."""
+
+    if type(artifact) is not GuardArtifact or type(artifact.args) is not tuple:
+        return None
+    if any(type(item) is not str for item in artifact.args):
+        return None
+    try:
+        shape = bytearray()
+        leaves: list[str | int] = []
+        owned_fields = {
+            item.name: _copy_strict_json(getattr(artifact, item.name), shape, leaves)
+            for item in fields(artifact)
+            if item.name != "args"
+        }
+        # The exact GuardArtifact field order is fixed above. Its args tuple is
+        # already immutable and validated, but still enters the value binding.
+        _copy_strict_json(list(artifact.args), shape, leaves)
+        owned_arguments = _copy_strict_json(arguments, shape, leaves)
+        binding = bytes(shape), tuple(leaves)
+        owned_artifact = replace(artifact, **owned_fields)
+    except (ValueError, TypeError, RecursionError, RuntimeError):
+        return None
+    return binding, owned_artifact, owned_arguments
+
+
+def prepare_tool_call_risk_facts(artifact: GuardArtifact, arguments: object) -> ToolCallRiskFacts | None:
+    """Analyze once for a single authority preparation, never across waits."""
+
+    snapshot = _tool_call_risk_snapshot(artifact, arguments)
+    if snapshot is None:
+        return None
+    binding, owned_artifact, owned_arguments = snapshot
+    return ToolCallRiskFacts(tool_call_risk_categories(owned_artifact, owned_arguments), binding)
+
+
+def _matching_tool_call_risk_snapshot(
+    artifact: GuardArtifact, arguments: object, facts: ToolCallRiskFacts | None
+) -> tuple[GuardArtifact, object] | None:
+    if facts is None:
+        return None
+    snapshot = _tool_call_risk_snapshot(artifact, arguments)
+    if snapshot is None or snapshot[0] != facts._input_binding:
+        return None
+    return snapshot[1], snapshot[2]
+
+
 def build_tool_call_hash(
     artifact: GuardArtifact,
     arguments: object,
     *,
     workspace: Path | str | None = None,
     config: GuardConfig | None = None,
+    risk_facts: ToolCallRiskFacts | None = None,
 ) -> str:
+    matching_snapshot = _matching_tool_call_risk_snapshot(artifact, arguments, risk_facts)
+    if matching_snapshot is not None:
+        artifact, arguments = matching_snapshot
+    return _build_tool_call_hash_for_categories(
+        artifact,
+        arguments,
+        workspace=workspace,
+        config=config,
+        risk_categories=risk_facts.categories if matching_snapshot is not None and risk_facts is not None else None,
+    )
+
+
+def _build_tool_call_hash_for_categories(
+    artifact: GuardArtifact,
+    arguments: object,
+    *,
+    workspace: Path | str | None,
+    config: GuardConfig | None,
+    risk_categories: tuple[str, ...] | None,
+) -> str:
+    """Private kernel; the caller owns any supplied facts and their inputs."""
+
     browser_intent = normalize_browser_mcp_intent(artifact, arguments)
     content_arguments: object = arguments
     if browser_intent is not None:
@@ -374,7 +506,9 @@ def build_tool_call_hash(
         },
         content=content_hash,
         capabilities={
-            "risk_categories": list(tool_call_risk_categories(artifact, arguments)),
+            "risk_categories": list(
+                risk_categories if risk_categories is not None else tool_call_risk_categories(artifact, arguments)
+            ),
             "server_identity": artifact.metadata.get("mcp_server_identity"),
             "tool_catalog_fingerprint": tool_catalog_fingerprint,
             "tool_identity": artifact.metadata.get("mcp_tool_identity"),
@@ -387,12 +521,14 @@ def build_tool_call_hash(
 
 def _tool_call_policy_context(config: GuardConfig, artifact: GuardArtifact) -> dict[str, object]:
     explicit_risk_action = _configured_risk_action(config, "mcp_dangerous_tool", harness=artifact.harness)
+    artifact_override = config.resolve_action_override(
+        artifact.harness,
+        artifact.artifact_id,
+        artifact.publisher,
+    )
+    check_current_mcp_authority()
     return {
-        "artifact_override": config.resolve_action_override(
-            artifact.harness,
-            artifact.artifact_id,
-            artifact.publisher,
-        ),
+        "artifact_override": artifact_override,
         "default_action": config.default_action,
         "effective_risk_action": explicit_risk_action
         or resolve_risk_action(config, "mcp_dangerous_tool", harness=artifact.harness),
@@ -447,12 +583,56 @@ def evaluate_tool_call(
     arguments: object,
     claim_saved_approval: bool = True,
     fresh_authority_provider: (Callable[[], tuple[GuardConfig, GuardArtifact, str, object] | None] | None) = None,
+    risk_facts: ToolCallRiskFacts | None = None,
 ) -> ToolCallDecision:
+    check_current_mcp_authority()
     current = _evaluate_current_tool_call(
         config=config,
         artifact=artifact,
         arguments=arguments,
+        risk_facts=risk_facts,
     )
+    check_current_mcp_authority()
+    return _evaluate_tool_call_with_current(
+        store=store,
+        config=config,
+        artifact=artifact,
+        artifact_hash=artifact_hash,
+        arguments=arguments,
+        current=current,
+        claim_saved_approval=claim_saved_approval,
+        fresh_authority_provider=fresh_authority_provider,
+    )
+
+
+def _evaluate_tool_call_with_current(
+    *,
+    store: GuardStore,
+    config: GuardConfig,
+    artifact: GuardArtifact,
+    artifact_hash: str,
+    arguments: object,
+    current: ToolCallDecision,
+    claim_saved_approval: bool,
+    fresh_authority_provider: Callable[[], tuple[GuardConfig, GuardArtifact, str, object] | None] | None = None,
+    authority_check: AuthorityCheck | None = None,
+) -> ToolCallDecision:
+    """Compose a freshly evaluated current result with current saved state."""
+
+    if authority_check is not None:
+        with use_mcp_authority_check(authority_check, retain_current=True):
+            return _evaluate_tool_call_with_current(
+                store=store,
+                config=config,
+                artifact=artifact,
+                artifact_hash=artifact_hash,
+                arguments=arguments,
+                current=current,
+                claim_saved_approval=claim_saved_approval,
+                fresh_authority_provider=fresh_authority_provider,
+            )
+
+    check_current_mcp_authority()
     current = _apply_temporary_mcp_grant(
         store=store,
         artifact=artifact,
@@ -460,7 +640,9 @@ def evaluate_tool_call(
         arguments=arguments,
         current=current,
     )
+    check_current_mcp_authority()
     runtime_exact_match_context = _browser_runtime_exact_match_context(artifact, arguments)
+    check_current_mcp_authority()
     policy_lookup = store.resolve_policy_decision_lookup_with_memory_pattern(
         artifact.harness,
         artifact.artifact_id,
@@ -473,8 +655,10 @@ def evaluate_tool_call(
         memory_artifact_name=artifact.name,
         consume_one_shot=False,
     )
+    check_current_mcp_authority()
     saved_decision = policy_lookup["decision"]
     ignored_integrity = policy_lookup["ignored_local_integrity"]
+    check_current_mcp_authority()
     if saved_decision is None and ignored_integrity is None:
         diagnosed_reason = store.approval_reuse_validation_reason(
             artifact.harness,
@@ -483,6 +667,7 @@ def evaluate_tool_call(
             str(config.workspace) if config.workspace is not None else None,
             artifact.publisher,
         )
+        check_current_mcp_authority()
         if diagnosed_reason is None:
             return current
         saved_action: object | None = "allow"
@@ -512,6 +697,7 @@ def evaluate_tool_call(
             )
         )
 
+    check_current_mcp_authority()
     reuse = evaluate_approval_reuse(
         current.action,
         saved_action,
@@ -521,11 +707,16 @@ def evaluate_tool_call(
     pending_decision: Mapping[str, object] | None = None
     claim_disposition: ApprovalReuseClaimDisposition | None = None
     if reuse.should_claim and saved_decision is not None:
+        check_current_mcp_authority()
         raw_claim_disposition = store.approval_reuse_claim_disposition(saved_decision)
+        check_current_mcp_authority()
         if raw_claim_disposition in {"consumed", "retained"}:
             claim_disposition = raw_claim_disposition
         if claim_saved_approval:
-            if not store.claim_approval_reuse_decision(saved_decision):
+            check_current_mcp_authority()
+            claimed = store.claim_approval_reuse_decision(saved_decision)
+            check_current_mcp_authority()
+            if not claimed:
                 reuse = evaluate_approval_reuse(
                     current.action,
                     saved_action,
@@ -545,6 +736,7 @@ def evaluate_tool_call(
                 )
         else:
             pending_decision = saved_decision
+    check_current_mcp_authority()
     return _tool_call_decision_with_reuse(
         current,
         reuse,
@@ -561,22 +753,32 @@ def _apply_temporary_mcp_grant(
     arguments: object,
     current: ToolCallDecision,
 ) -> ToolCallDecision:
+    check_current_mcp_authority()
     original_action = current.action
     if original_action == "review":
+        browser_intent = normalize_browser_mcp_intent(artifact, arguments)
+        check_current_mcp_authority()
         selectors = runtime_grant_selectors(
-            normalize_browser_mcp_intent(artifact, arguments),
+            browser_intent,
             current.risk_categories,
             artifact_id=artifact.artifact_id,
             artifact_hash=artifact_hash,
         )
+        check_current_mcp_authority()
         for selector in selectors:
+            check_current_mcp_authority()
             lookup = store.resolve_policy_decision_lookup(
                 artifact.harness,
                 selector,
                 consume_one_shot=False,
             )
+            check_current_mcp_authority()
             decision = lookup["decision"]
-            if decision is not None and decision.get("action") == "allow" and decision.get("source") == "approval-gate":
+            allowed = (
+                decision is not None and decision.get("action") == "allow" and decision.get("source") == "approval-gate"
+            )
+            check_current_mcp_authority()
+            if allowed:
                 current = replace(
                     current,
                     action="allow",
@@ -585,6 +787,7 @@ def _apply_temporary_mcp_grant(
                 )
                 break
     granted = apply_local_mcp_extension_decision(store, artifact, original_action)
+    check_current_mcp_authority()
     if granted is not None and (granted[0] == "block" or current.action != "allow"):
         return replace(current, action=granted[0], source=granted[1], summary=granted[2])
     return current
@@ -760,6 +963,7 @@ def _evaluate_current_tool_call(
     config: GuardConfig,
     artifact: GuardArtifact,
     arguments: object,
+    risk_facts: ToolCallRiskFacts | None = None,
 ) -> ToolCallDecision:
     """Evaluate current configuration and call shape without saved state."""
 
@@ -768,7 +972,34 @@ def _evaluate_current_tool_call(
         artifact.artifact_id,
         artifact.publisher,
     )
+    check_current_mcp_authority()
     current_config_action = configured_override if configured_override is not None else config.default_action
+
+    # Resolve current policy before the public matching/owned-copy boundary.
+    matching_snapshot = _matching_tool_call_risk_snapshot(artifact, arguments, risk_facts)
+    if matching_snapshot is not None and risk_facts is not None:
+        artifact, arguments = matching_snapshot
+        risk_categories = risk_facts.categories
+    else:
+        risk_categories = tool_call_risk_categories(artifact, arguments)
+    return _evaluate_current_tool_call_for_categories(
+        config=config,
+        artifact=artifact,
+        arguments=arguments,
+        current_config_action=current_config_action,
+        risk_categories=risk_categories,
+    )
+
+
+def _evaluate_current_tool_call_for_categories(
+    *,
+    config: GuardConfig,
+    artifact: GuardArtifact,
+    arguments: object,
+    current_config_action: GuardAction,
+    risk_categories: tuple[str, ...],
+) -> ToolCallDecision:
+    """Private kernel, called only after resolving current policy and inputs."""
 
     def with_current_config(decision: ToolCallDecision) -> ToolCallDecision:
         effective_action = most_restrictive_guard_action(decision.action, current_config_action)
@@ -781,8 +1012,7 @@ def _evaluate_current_tool_call(
             summary=("Local Guard's current configuration is stricter than the tool-call-specific recommendation."),
         )
 
-    signals = tool_call_risk_signals(artifact, arguments)
-    risk_categories = tool_call_risk_categories(artifact, arguments)
+    signals = _tool_call_risk_signals_for_categories(artifact, arguments, risk_categories)
     explicit_risk_action = _configured_risk_action(config, "mcp_dangerous_tool", harness=artifact.harness)
 
     if len(signals) == 0:
@@ -801,7 +1031,7 @@ def _evaluate_current_tool_call(
                 action="allow",
                 source="browser-routine",
                 signals=signals,
-                summary=tool_call_risk_summary(artifact, arguments),
+                summary=_tool_call_summary_for_signals(signals),
                 risk_categories=risk_categories,
             )
         )
@@ -825,7 +1055,7 @@ def _evaluate_current_tool_call(
                 action=configured_risk_action,
                 source=source,
                 signals=signals,
-                summary=tool_call_risk_summary(artifact, arguments),
+                summary=_tool_call_summary_for_signals(signals),
                 risk_categories=risk_categories,
             )
         )
@@ -834,7 +1064,7 @@ def _evaluate_current_tool_call(
             action="review" if config.mode == "prompt" else "block",
             source="heuristic",
             signals=signals,
-            summary=tool_call_risk_summary(artifact, arguments),
+            summary=_tool_call_summary_for_signals(signals),
             risk_categories=risk_categories,
         )
     )
@@ -904,6 +1134,14 @@ def _configured_risk_action(config: GuardConfig, risk_class: str, *, harness: st
 
 
 def tool_call_risk_signals(artifact: GuardArtifact, arguments: object) -> tuple[str, ...]:
+    return _tool_call_risk_signals_for_categories(artifact, arguments, tool_call_risk_categories(artifact, arguments))
+
+
+def _tool_call_risk_signals_for_categories(
+    artifact: GuardArtifact,
+    arguments: object,
+    categories: tuple[str, ...],
+) -> tuple[str, ...]:
     browser_intent = normalize_browser_mcp_intent(artifact, arguments)
     signals_by_category: dict[str, str] = {
         "filesystem_access": "call shape implies filesystem path access",
@@ -930,7 +1168,7 @@ def tool_call_risk_signals(artifact: GuardArtifact, arguments: object) -> tuple[
                 ),
             }
         )
-    return tuple(signals_by_category[category] for category in tool_call_risk_categories(artifact, arguments))
+    return tuple(signals_by_category[category] for category in categories)
 
 
 def tool_call_risk_categories(artifact: GuardArtifact, arguments: object) -> tuple[str, ...]:
@@ -971,11 +1209,6 @@ def _tool_call_risk_category_set(artifact: GuardArtifact, arguments: object) -> 
     # browser navigation targets.
     browser_intent = normalize_browser_mcp_intent(artifact, arguments)
     is_browser_navigation = browser_intent is not None and browser_intent.intent == "browser.navigation"
-    routine_browser_intent = browser_intent is not None and browser_intent.intent in {
-        "browser.navigation",
-        "browser.inspect",
-        "browser.interact",
-    }
 
     if len(tool_name_tokens.intersection({"delete", "remove", "rm", "destroy", "erase"})) > 0:
         categories.add("destructive_mutation")
@@ -984,18 +1217,47 @@ def _tool_call_risk_category_set(artifact: GuardArtifact, arguments: object) -> 
     ) > 0 or _matches_any(
         combined,
         (
-            r"(?<![a-z0-9_])(subprocess|child_process|childprocess|popen|os\.system|runtime\.exec)(?![a-z0-9_])",
-            r"(?<![a-z0-9_])(spawn|execfile|system)(?:_sync)?\s*\(",
+            _literal_pattern(
+                "subprocess",
+                "child_process",
+                "childprocess",
+                "popen",
+                "os.system",
+                "runtime.exec",
+                prefix=r"(?<![a-z0-9_])",
+                suffix=r"(?![a-z0-9_])",
+            ),
+            _literal_pattern("spawn", "execfile", "system", prefix=r"(?<![a-z0-9_])", suffix=r"(?:_sync)?\s*\("),
         ),
     ):
         categories.add("command_execution")
     network_patterns = (
-        r"https?://",
+        _literal_pattern("http://", "https://"),  # NOSONAR(S5332) Detector literals, without network I/O.
         _token_pattern("curl", "wget", "fetch", "axios", "requests"),
-        r"(?<![a-z0-9_])(?:socket|net|dns)\s*[.(]",
-        r"(?<![a-z0-9_])(?:create_connection|getaddrinfo|gethostbyname|sendto|recvfrom)\s*\(",
-        r"(?<![a-z0-9_])(?:urllib(?:\.request)?|http\.client|https?)\s*\.",
-        r"(?<![a-z0-9_])(udp|tcp|socks|proxy|tunnel|port_forward|port-forward)(?![a-z0-9_])",
+        _literal_pattern("socket", "net", "dns", prefix=r"(?<![a-z0-9_])", suffix=r"\s*[.(]"),
+        _literal_pattern(
+            "create_connection",
+            "getaddrinfo",
+            "gethostbyname",
+            "sendto",
+            "recvfrom",
+            prefix=r"(?<![a-z0-9_])",
+            suffix=r"\s*\(",
+        ),
+        _literal_pattern(
+            "urllib.request", "urllib", "http.client", "http", "https", prefix=r"(?<![a-z0-9_])", suffix=r"\s*\."
+        ),
+        _literal_pattern(
+            "udp",
+            "tcp",
+            "socks",
+            "proxy",
+            "tunnel",
+            "port_forward",
+            "port-forward",
+            prefix=r"(?<![a-z0-9_])",
+            suffix=r"(?![a-z0-9_])",
+        ),
     )
     if (_matches_any(combined, network_patterns) or _contains_ip_address(combined)) and not is_browser_navigation:
         # Browser navigation intent suppresses generic outbound_network;
@@ -1004,10 +1266,10 @@ def _tool_call_risk_category_set(artifact: GuardArtifact, arguments: object) -> 
     if _matches_any(
         combined,
         (
-            r"(?<![a-z0-9_-])\.env(?![a-z0-9_-])",
-            r"(?<![a-z0-9_-])\.ssh(?![a-z0-9_-])",
-            r"(?<![a-z0-9])(id[_-]?rsa|credentials|token|secret|passwd)(?![a-z0-9])",
-            r"(?<![a-z0-9_-])\.(npmrc|pypirc)(?![a-z0-9_-])",
+            _literal_pattern(".env", prefix=r"(?<![a-z0-9_-])", suffix=r"(?![a-z0-9_-])"),
+            _literal_pattern(".ssh", prefix=r"(?<![a-z0-9_-])", suffix=r"(?![a-z0-9_-])"),
+            _token_pattern("idrsa", "id_rsa", "id-rsa", "credentials", "token", "secret", "passwd"),
+            _literal_pattern(".npmrc", ".pypirc", prefix=r"(?<![a-z0-9_-])", suffix=r"(?![a-z0-9_-])"),
         ),
     ):
         categories.add("secret_access")
@@ -1020,7 +1282,7 @@ def _tool_call_risk_category_set(artifact: GuardArtifact, arguments: object) -> 
     categories.update(schema_categories)
     categories.update(description_categories)
     if (
-        routine_browser_intent
+        browser_intent is not None
         and "filesystem_access" not in argument_categories
         and "filesystem_access" not in description_categories
     ):
@@ -1073,6 +1335,11 @@ def _serialized_tool_arguments(arguments: object) -> str:
 
 
 def _contains_ip_address(value: str) -> bool:
+    # An IPv4 string contains a dot. IPv6 either compresses with :: or has
+    # at least seven colons. Reject only impossible shapes before the exact
+    # existing candidate extraction and ip_address validation.
+    if "." not in value and "::" not in value and value.count(":") < 7:
+        return False
     for match in re.finditer(r"(?<![0-9a-z])\[?([0-9a-f:.]{3,})\]?(?![0-9a-z])", value, flags=re.IGNORECASE):
         candidate = match.group(1)
         if candidate.count(":") == 1 and "." in candidate:
@@ -1085,13 +1352,36 @@ def _contains_ip_address(value: str) -> bool:
     return False
 
 
-def _matches_any(value: str, patterns: tuple[str, ...]) -> bool:
-    return any(re.search(pattern, value) is not None for pattern in patterns)
+@dataclass(frozen=True)
+class _LiteralRiskPattern:
+    literals: tuple[str, ...]
+    expression: str
 
 
-def _token_pattern(*tokens: str) -> str:
+@lru_cache(maxsize=128)
+def _literal_pattern(*tokens: str, prefix: str = "", suffix: str = "") -> _LiteralRiskPattern:
+    # Both the fast necessary-condition check and the authoritative regex
+    # derive from these same literal alternatives. Adding an alternative
+    # cannot leave a separately maintained prefilter behind.
     alternatives = "|".join(re.escape(token) for token in tokens)
-    return rf"(?<![a-z0-9])({alternatives})(?![a-z0-9])"
+    return _LiteralRiskPattern(tokens or ("",), rf"{prefix}({alternatives}){suffix}")
+
+
+def _matches_any(value: str, patterns: tuple[str | _LiteralRiskPattern, ...]) -> bool:
+    for pattern in patterns:
+        if isinstance(pattern, _LiteralRiskPattern):
+            if not any(token in value for token in pattern.literals):
+                continue
+            expression = pattern.expression
+        else:
+            expression = pattern
+        if re.search(expression, value) is not None:
+            return True
+    return False
+
+
+def _token_pattern(*tokens: str) -> _LiteralRiskPattern:
+    return _literal_pattern(*tokens, prefix=r"(?<![a-z0-9])", suffix=r"(?![a-z0-9])")
 
 
 def _argument_key_risk_categories(arguments: object) -> set[str]:
@@ -1378,7 +1668,10 @@ def _normalized_argument_key(value: str) -> str:
 
 
 def tool_call_risk_summary(artifact: GuardArtifact, arguments: object) -> str:
-    signals = tool_call_risk_signals(artifact, arguments)
+    return _tool_call_summary_for_signals(tool_call_risk_signals(artifact, arguments))
+
+
+def _tool_call_summary_for_signals(signals: tuple[str, ...]) -> str:
     if len(signals) == 0:
         return "No high-risk signal was detected in this tool call."
     if len(signals) == 1:
@@ -1573,4 +1866,6 @@ def _risk_match_text(value: str) -> str:
 
 
 def _camel_token_normalized(value: str) -> str:
+    if value.islower():
+        return value
     return re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", value)

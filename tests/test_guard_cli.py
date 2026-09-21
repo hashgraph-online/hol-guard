@@ -48,6 +48,7 @@ from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.cloud_exception_bundle_fixtures import build_cloud_exception_policy_bundle
 from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
+from tests.support.network import stub_authenticated_urlopen
 from tests.update_context_test_support import build_legacy_update_context, stage_legacy_wheel
 
 
@@ -10053,8 +10054,8 @@ url = http://127.0.0.1:8787/guard-canary
     def test_guard_sync_reports_non_string_url_errors_in_json_mode(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
         _seed_sync_credentials(home_dir, "https://hol.org/api/guard/receipts/sync")
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.runtime.runner.urllib.request.urlopen",
+        stub_authenticated_urlopen(
+            monkeypatch,
             lambda *args, **kwargs: (_ for _ in ()).throw(
                 urllib.error.URLError(ConnectionRefusedError(61, "Connection refused"))
             ),

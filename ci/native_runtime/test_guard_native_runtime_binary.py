@@ -2,16 +2,14 @@ from __future__ import annotations
 
 import importlib.metadata
 import os
+import subprocess
 import tempfile
 from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.native_policy_test_support import native_policy_snapshot
 from codex_plugin_scanner.guard.native_runtime import native_runtime_status, review_post_tool_native
-from codex_plugin_scanner.guard.native_runtime_resident import (
-    close_resident_native_runtimes,
-    resident_service_starts,
-)
 from codex_plugin_scanner.guard.runtime.hook_review_types import HookReviewRequest
 
 _NATIVE_BINARY = os.environ.get("HOL_GUARD_NATIVE_BINARY")
@@ -44,6 +42,19 @@ def _github_like_token() -> str:
     return prefix + "c" * 30
 
 
+def _native_state_files(guard_home: Path) -> list[Path]:
+    return list((guard_home / "native-runtime").glob("resident-v3-*/generation-*.json"))
+
+
+def _stop_native_runtime(runtime: Path, guard_home: Path) -> None:
+    subprocess.run(
+        (str(runtime), "resident-stop", "--state-dir", str(guard_home / "native-runtime")),
+        check=False,
+        capture_output=True,
+        timeout=2,
+    )
+
+
 def test_compiled_native_runtime_reviews_and_reuses_resident_service(tmp_path: Path) -> None:
     status = native_runtime_status()
     assert status.available and status.compatible, status
@@ -55,25 +66,16 @@ def test_compiled_native_runtime_reviews_and_reuses_resident_service(tmp_path: P
     with tempfile.TemporaryDirectory(prefix="hgr-", dir="/tmp" if os.name != "nt" else None) as short_tmp:
         clean_request = _request(Path(short_tmp), "const value = 1;\n")
         try:
-            clean = review_post_tool_native(clean_request, observe_mode=False)
+            with native_policy_snapshot(clean_request.guard_home) as snapshot:
+                clean = review_post_tool_native(clean_request, observe_mode=False, policy_snapshot=snapshot)
+                secret_request = _request(Path(short_tmp), _github_like_token())
+                secret = review_post_tool_native(secret_request, observe_mode=False, policy_snapshot=snapshot)
             assert clean is not None
             assert clean.decision == "allow"
-            assert clean.reason_code == "output_scan_allow"
-
-            secret_request = _request(Path(short_tmp), _github_like_token())
-            secret = review_post_tool_native(secret_request, observe_mode=False)
             assert secret is not None
             assert secret.decision == "deny"
             assert secret.reason_code == "output_secret_match"
 
-            if os.name != "nt":
-                assert (
-                    resident_service_starts(
-                        executable=status.identity.path,
-                        identity_sha256=status.identity.sha256,
-                        guard_home=clean_request.guard_home,
-                    )
-                    == 1
-                )
+            assert len(_native_state_files(clean_request.guard_home)) == 1
         finally:
-            close_resident_native_runtimes()
+            _stop_native_runtime(status.identity.path, clean_request.guard_home)

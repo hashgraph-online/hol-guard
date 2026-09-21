@@ -83,6 +83,8 @@ jobs:
 
 
 def test_job_level_read_permissions_remove_inherited_write_capability(tmp_path: Path) -> None:
+    """A read-only job avoids pin checks but does not excuse an unsafe workflow default."""
+
     _write_workflow(
         tmp_path,
         """
@@ -97,13 +99,18 @@ jobs:
 """,
     )
 
-    assert validate_privileged_workflows(tmp_path) == ()
+    violations = validate_privileged_workflows(tmp_path)
+    assert [violation.code for violation in violations] == ["workflow-write-permission"]
+    assert violations[0].job == "<workflow>"
 
 
 def test_privileged_job_accepts_commit_pins_and_exact_uv_version(tmp_path: Path) -> None:
+    """Job-scoped writes remain usable with immutable action and tool versions."""
+
     _write_workflow(
         tmp_path,
         f"""
+permissions: {{}}
 jobs:
   release:
     permissions:

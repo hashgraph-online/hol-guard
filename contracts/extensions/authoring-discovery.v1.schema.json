@@ -1,0 +1,235 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "adapter": {
+      "enum": [
+        "cli",
+        "help",
+        "click",
+        "oclif",
+        "mcp"
+      ]
+    },
+    "digest": {
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[a-f0-9]{64}$",
+      "type": "string"
+    },
+    "limitations": {
+      "items": {
+        "enum": [
+          "metadata-is-not-semantics",
+          "unknown-cli-operations-review",
+          "help-inventory-partial",
+          "unrecognized-help-grammar",
+          "click-multi-value-options",
+          "click-runtime-plugins-not-inspected",
+          "manifest-runtime-plugins-not-inspected",
+          "mcp-inventory-is-snapshot",
+          "mcp-tool-annotations-untrusted",
+          "mcp-schemas-fingerprinted-not-executed"
+        ]
+      },
+      "maxItems": 10,
+      "minItems": 0,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "metadata": {
+      "additionalProperties": false,
+      "properties": {
+        "executable": {
+          "maxLength": 64,
+          "minLength": 0,
+          "type": "string"
+        },
+        "homepage": {
+          "maxLength": 512,
+          "minLength": 1,
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "cli",
+            "mcp"
+          ]
+        },
+        "launcher": {
+          "enum": [
+            "",
+            "npx",
+            "uvx",
+            "bunx",
+            "pnpm",
+            "npm",
+            "yarn",
+            "pipx"
+          ]
+        },
+        "name": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "package": {
+          "maxLength": 256,
+          "minLength": 0,
+          "type": "string"
+        },
+        "publisher": {
+          "additionalProperties": false,
+          "properties": {
+            "displayName": {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            "id": {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "displayName"
+          ],
+          "type": "object"
+        },
+        "slug": {
+          "maxLength": 40,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$",
+          "type": "string"
+        },
+        "upstreamVersion": {
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "slug",
+        "name",
+        "publisher",
+        "homepage",
+        "upstreamVersion",
+        "executable",
+        "launcher",
+        "package"
+      ],
+      "type": "object"
+    },
+    "operations": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "evidenceSha256": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-f0-9]{64}$",
+            "type": "string"
+          },
+          "flags": {
+            "items": {
+              "maxLength": 64,
+              "minLength": 1,
+              "pattern": "^--?[A-Za-z0-9][A-Za-z0-9_-]*$",
+              "type": "string"
+            },
+            "maxItems": 128,
+            "minItems": 0,
+            "type": "array",
+            "uniqueItems": true
+          },
+          "hints": {
+            "items": {
+              "enum": [
+                "read-name",
+                "destructive-name",
+                "read-only-hint",
+                "destructive-hint",
+                "network-hint"
+              ]
+            },
+            "maxItems": 5,
+            "minItems": 0,
+            "type": "array",
+            "uniqueItems": true
+          },
+          "id": {
+            "maxLength": 21,
+            "minLength": 1,
+            "pattern": "^(?:op|tool)-[a-f0-9]{16}$",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 128,
+            "minLength": 0,
+            "type": "string"
+          },
+          "optionsWithValues": {
+            "items": {
+              "maxLength": 64,
+              "minLength": 1,
+              "pattern": "^--?[A-Za-z0-9][A-Za-z0-9_-]*$",
+              "type": "string"
+            },
+            "maxItems": 128,
+            "minItems": 0,
+            "type": "array",
+            "uniqueItems": true
+          },
+          "path": {
+            "items": {
+              "maxLength": 64,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:+-]*$",
+              "type": "string"
+            },
+            "maxItems": 8,
+            "minItems": 0,
+            "type": "array",
+            "uniqueItems": false
+          }
+        },
+        "required": [
+          "id",
+          "path",
+          "name",
+          "flags",
+          "optionsWithValues",
+          "evidenceSha256",
+          "hints"
+        ],
+        "type": "object"
+      },
+      "maxItems": 256,
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "schemaVersion": {
+      "const": "guard.extension-discovery.v1"
+    },
+    "sourceSha256": {
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[a-f0-9]{64}$",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "metadata",
+    "adapter",
+    "sourceSha256",
+    "operations",
+    "limitations",
+    "digest"
+  ],
+  "type": "object"
+}

@@ -68,6 +68,7 @@ def _record_enrollment_abuse_rejection(
     identities: dict[str, dict[str, object]],
     recorder: Recorder,
 ) -> None:
+    # These deterministic values are public fixtures shared with the isolated lab stack, not deployed secrets.
     replay_identity = identities["device-a"]
     replay_status, _, replay_body = http_request(
         "POST",
@@ -79,7 +80,7 @@ def _record_enrollment_abuse_rejection(
             "installationGeneration": "a" * 32,
             "keyId": replay_identity.get("keyId"),
             "publicKeyPem": replay_identity.get("publicKeyPem"),
-            "token": "enrollment-token-device-a",
+            "token": "enrollment-token-device-a",  # NOSONAR - public deterministic lab fixture
         },
     )
     recorder.add(
@@ -97,7 +98,7 @@ def _record_enrollment_abuse_rejection(
             "installationGeneration": "e" * 32,
             "keyId": replay_identity.get("keyId"),
             "publicKeyPem": replay_identity.get("publicKeyPem"),
-            "token": "enrollment-token-clone-probe",
+            "token": "enrollment-token-clone-probe",  # NOSONAR - public deterministic lab fixture
         },
     )
     recorder.add(
