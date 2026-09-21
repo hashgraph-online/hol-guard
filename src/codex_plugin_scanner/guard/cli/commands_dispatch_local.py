@@ -117,7 +117,9 @@ def _run_guard_command_inspection_command(
 
         guard_home = resolve_guard_home(getattr(args, "guard_home", None) or getattr(args, "home", None))
         return run_extension_controls_command(args, guard_home=guard_home, output_stream=output_stream)
-    from ..runtime.command_inspection import command_extensions_payload, inspect_command
+    from ..daemon.client import GuardDaemonRequestError
+    from ..runtime.command_inspection import command_extensions_payload, unavailable_command_inspection
+    from .extension_controls_commands import _client
 
     command_command = str(getattr(args, "command_command", ""))
     try:
@@ -138,13 +140,23 @@ def _run_guard_command_inspection_command(
         if command_command not in {"test", "explain"}:
             print("Choose command test, command explain, command extensions, or command setup.", file=sys.stderr)
             return 2
-        payload = inspect_command(str(getattr(args, "command_text", "")), cwd=Path.cwd(), home_dir=Path.home())
+        command_text = str(getattr(args, "command_text", "")).strip()
+        if not command_text:
+            raise ValueError("Command text cannot be empty")
+        guard_home = resolve_guard_home(getattr(args, "guard_home", None) or getattr(args, "home", None))
+        workspace, home = Path.cwd(), Path.home()
+        try:
+            payload = _client(guard_home).inspect_command({
+                "command": command_text, "cwd": str(workspace), "home_dir": str(home),
+            })
+        except GuardDaemonRequestError:
+            payload = unavailable_command_inspection(command_text, cwd=workspace, home_dir=home)
     except ValueError as error:
         print(f"Error: {error}", file=sys.stderr)
         return 2
     payload["mode"] = command_command
     _emit("command-inspection", payload, bool(getattr(args, "json", False)))
-    return 0
+    return 2 if payload.get("status") == "native_unavailable" else 0
 
 def _run_guard_scan_command(
     args: argparse.Namespace,

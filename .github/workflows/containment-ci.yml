@@ -51,8 +51,8 @@ jobs:
           GUARD_VITEST_FIXTURE: ${{ runner.temp }}/guard-vitest-fixture
         run: |
           mkdir -p "$GUARD_VITEST_FIXTURE"
-          printf '%s\n' '{"name":"guard-containment-test","private":true,"type":"module","devDependencies":{"vitest":"3.2.4","typescript":"5.8.3"}}' > "$GUARD_VITEST_FIXTURE/package.json"
-          npm install --prefix "$GUARD_VITEST_FIXTURE" --ignore-scripts --no-audit --no-fund
+          cp .github/tools/containment-ci/package{,-lock}.json "$GUARD_VITEST_FIXTURE/"
+          npm ci --prefix "$GUARD_VITEST_FIXTURE" --ignore-scripts --no-audit --no-fund
       - name: Exercise real contained execution and failure paths
         env:
           GUARD_VITEST_FIXTURE: ${{ runner.temp }}/guard-vitest-fixture

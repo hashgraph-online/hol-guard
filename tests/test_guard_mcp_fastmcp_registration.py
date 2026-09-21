@@ -6,8 +6,8 @@ from mcp.server.fastmcp import FastMCP
 
 from codex_plugin_scanner.guard.mcp.registry import build_tool_registry
 from codex_plugin_scanner.guard.mcp.server import (
-    GuardMCPServer,
     _ORIGINAL_TOOL_DESCRIPTIONS,
+    GuardMCPServer,
     _create_annotations,
 )
 

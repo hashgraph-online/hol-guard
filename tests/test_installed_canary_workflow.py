@@ -85,7 +85,7 @@ def test_same_repo_post_publish_matrix_covers_all_supported_operating_systems() 
     assert _mapping(bun["with"])["bun-version"] == "1.3.14"
 
 
-def test_dynamic_native_wheel_checkout_cannot_write_dependency_cache() -> None:
+def test_pr_native_wheel_checkout_cannot_write_release_compilation_cache() -> None:
     steps = _steps(_job("build-native-guard-wheels"))
     checkout = _action_step(steps, "actions/checkout")
     setup_python = _action_step(steps, "actions/setup-python")
@@ -95,7 +95,19 @@ def test_dynamic_native_wheel_checkout_cannot_write_dependency_cache() -> None:
     assert "github.sha" in checkout_ref
     assert not any(str(step.get("uses", "")).startswith("astral-sh/setup-uv") for step in steps)
     assert steps.index(setup_python) < steps.index(checkout)
-    assert not any("cache" in str(step.get("uses", "")) for step in steps)
+    caches = [step for step in steps if "cache" in str(step.get("uses", ""))]
+    assert len(caches) == 1
+    cache = caches[0]
+    assert cache["uses"] == "Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6"
+    cache_inputs = _mapping(cache["with"])
+    assert cache_inputs["prefix-key"] == "release-native-v1"
+    assert cache_inputs["shared-key"] == "release-${{ matrix.target }}"
+    assert cache_inputs["cache-bin"] is False
+    assert cache_inputs["save-if"] == (
+        "${{ github.event_name != 'pull_request' && "
+        "(github.ref == 'refs/heads/main' || github.ref == 'refs/heads/release/3.0') }}"
+    )
+    assert not cache.get("env")
     setup_python_inputs = _mapping(setup_python["with"])
     assert not {"cache", "cache-dependency-path", "pip-install"} & setup_python_inputs.keys()
     commands = "\n".join(str(step.get("run", "")) for step in steps)

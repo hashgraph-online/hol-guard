@@ -32,6 +32,7 @@ from codex_plugin_scanner.guard.daemon.server import (
 )
 from codex_plugin_scanner.guard.sqlite_tuning import sqlite_connect_timeout_override, sqlite_connect_timeout_seconds
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.native_command_activity_test_support import use_real_native_activity_reviews
 
 
 def _is_string_object_dict(value: object) -> TypeGuard[dict[str, object]]:
@@ -276,6 +277,7 @@ def test_store_promotes_rollback_journal_before_bounded_hook_writes(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    use_real_native_activity_reviews(monkeypatch)
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir()
     database_path = guard_home / "guard.db"

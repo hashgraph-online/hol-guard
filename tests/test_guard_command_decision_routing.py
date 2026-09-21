@@ -1,47 +1,20 @@
-"""Compatibility and evidence tests for command decision routing."""
+"""Reducer tests over synthetic, wire-valid native evidence projections."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import cast
+import hashlib
+import json
+from dataclasses import replace
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime import command_extension_interaction, secret_file_requests
 from codex_plugin_scanner.guard.runtime.command_decision_adapter import extension_evidence_batch
-from codex_plugin_scanner.guard.runtime.command_evaluation import CommandDecisionFloor, evaluate_command
-from codex_plugin_scanner.guard.runtime.command_extension_observations import (
-    CommandExtensionObservation,
-    observe_command_extensions,
-)
-from codex_plugin_scanner.guard.runtime.command_extensions import (
-    BUILT_IN_COMMAND_EXTENSION_REGISTRY,
-    CommandSafetyExtension,
-    CommandSafetyExtensionRegistry,
-)
-from codex_plugin_scanner.guard.runtime.command_matcher_contracts import MatcherEvidence
-from codex_plugin_scanner.guard.runtime.command_model import CanonicalCommand, parse_shell_command
+from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
+from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
+from codex_plugin_scanner.guard.runtime.command_model import parse_shell_command
 from codex_plugin_scanner.guard.runtime.command_risk_effects import COMMAND_RISK_EFFECTS
-from codex_plugin_scanner.guard.runtime.command_rules import (
-    CommandRuleMode,
-    CommandRuleSeverity,
-    CommandSafetyRule,
-    CommandSafeVariant,
-    ExecutableMatcher,
-)
-from codex_plugin_scanner.guard.runtime.effect_contract import DecisionBasis, EffectKind, UncertaintyKind
-from codex_plugin_scanner.guard.runtime.effect_decision import (
-    EFFECT_DECISION_SCHEMA_VERSION,
-    DecisionFactor,
-    DecisionFactorSource,
-    EffectDecision,
-    EffectDecisionRequest,
-    evaluate_effect_decision,
-)
-from codex_plugin_scanner.guard.runtime.extension_control_authority import (
-    AuthorityHealth,
-    ExtensionControlAuthorityView,
-)
+from codex_plugin_scanner.guard.runtime.effect_contract import EffectKind, ProofRoute
+from codex_plugin_scanner.guard.runtime.extension_control_authority import AuthorityHealth
 from codex_plugin_scanner.guard.runtime.extension_control_contract import (
     CONTROL_SCHEMA_VERSION,
     ControlLayerKind,
@@ -51,463 +24,315 @@ from codex_plugin_scanner.guard.runtime.extension_control_contract import (
     ExtensionControl,
     ExtensionControlLayer,
 )
-from codex_plugin_scanner.guard.runtime.extension_control_runtime import (
-    ExtensionControlRuntimeSnapshot,
+from codex_plugin_scanner.guard.runtime.extension_control_runtime import ExtensionControlRuntimeSnapshot
+from codex_plugin_scanner.guard.runtime.generated_command_catalog import GeneratedCommandCatalog
+from codex_plugin_scanner.guard.runtime.native_command_extension_evidence import (
+    NativeCommandExtensionEvidenceError,
 )
 
-
-@dataclass(frozen=True, slots=True)
-class _FailingMatcher:
-    def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
-        del command
-        raise RuntimeError("private matcher detail")
+_FLOOR = {"disabled": "allow", "monitor": "warn", "review": "review", "enforce": "block", "required": "review"}
 
 
-@dataclass(frozen=True, slots=True)
-class _MalformedMatcher:
-    def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
-        del command
-        return cast(tuple[MatcherEvidence, ...], ("not-evidence",))
-
-
-@dataclass(frozen=True, slots=True)
-class _EmptyMatcher:
-    def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
-        del command
-        return ()
-
-
-@dataclass(frozen=True, slots=True)
-class _LeakingMatcher:
-    def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
-        del command
-        return (MatcherEvidence(0, "/private/path/test-tool", "private matcher-provided detail"),)
-
-
-@dataclass(frozen=True, slots=True)
-class _OutOfBoundsMatcher:
-    def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
-        del command
-        return (MatcherEvidence(99, "test-tool", "invalid index"),)
-
-
-@dataclass(frozen=True, slots=True, init=False)
-class _SegmentMatcher:
-    _segment_indexes: tuple[int, ...]
-
-    def __init__(self, *segment_indexes: int) -> None:
-        object.__setattr__(self, "_segment_indexes", segment_indexes)
-
-    def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
-        del command
-        return tuple(MatcherEvidence(index, None, "test evidence") for index in self._segment_indexes)
-
-
-def _registry(
-    mode: CommandRuleMode,
+def _synthetic_native_fixture(
     *,
-    action_classes: tuple[str, ...] = (),
-    compatibility_fallback: bool = False,
+    mode: str = "review",
     required: bool = False,
+    severity: str = "high",
     risk_classes: tuple[str, ...] = ("destructive_shell",),
-    severity: CommandRuleSeverity = "high",
-    matcher: object | None = None,
-    safe_variants: tuple[CommandSafeVariant, ...] = (),
-) -> CommandSafetyExtensionRegistry:
-    rule = CommandSafetyRule(
-        rule_id="command.test.rule",
-        title="Test rule",
-        description="Exercises decision routing compatibility.",
+    safe: bool = False,
+    uncertainty: bool = False,
+    disabled: bool = False,
+    command_text: str = "aws apigateway delete-rest-api --rest-api-id abc",
+    evidence_indexes: tuple[int, ...] = (0,),
+    safe_indexes: tuple[int, ...] | None = None,
+    uncertain_command: bool = False,
+    explicitly_benign: bool = False,
+    native_minimum_action: str | None = None,
+):
+    source = BUILT_IN_COMMAND_EXTENSION_REGISTRY.get("command.api-gateway")
+    assert source is not None
+    rule = replace(
+        source.rules[0],
+        default_mode=mode,
         severity=severity,
         risk_classes=risk_classes,
-        action_classes=action_classes,
-        safer_alternatives=("Preview the operation.",),
-        default_mode=mode,
-        example_command="test-tool inspect",
-        matcher=cast(ExecutableMatcher, matcher)
-        if matcher is not None
-        else ExecutableMatcher(executables=frozenset({"test-tool"})),
-        safe_variants=safe_variants,
-        compatibility_fallback=compatibility_fallback,
     )
-    extension = CommandSafetyExtension(
-        extension_id="command.test",
-        version="1.0.0",
-        name="Test extension",
-        description="Exercises decision routing compatibility.",
-        action_classes=action_classes,
-        risk_classes=risk_classes,
-        safer_alternatives=("Preview the operation.",),
-        rules=(rule,),
+    permission = replace(
+        source.permissions[0],
+        baseline_floor=_FLOOR[mode],
+        risk_tier=severity,
+        rule_ids=(rule.rule_id,),
+    )
+    extension = replace(
+        source,
         required=required,
+        risk_classes=risk_classes,
+        rules=(rule,),
+        permissions=(permission,),
     )
-    return CommandSafetyExtensionRegistry((extension,))
+    registry = GeneratedCommandCatalog(
+        (extension,),
+        program_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.program_digest,
+        source_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.source_digest,
+        implementation_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.implementation_digest,
+    )
+    layers = ()
+    if disabled:
+        layers = (
+            ExtensionControlLayer(
+                schema_version=CONTROL_SCHEMA_VERSION,
+                kind=ControlLayerKind.LOCAL_ADMIN,
+                catalog_digest=registry.catalog_digest,
+                global_lockdown=False,
+                controls=(
+                    ExtensionControl(
+                        ControlTarget(ControlTargetKind.EXTENSION, extension.extension_id),
+                        ControlState.DISABLED,
+                    ),
+                ),
+            ),
+        )
+    snapshot = ExtensionControlRuntimeSnapshot(
+        AuthorityHealth.PROTECTED,
+        1,
+        registry.catalog_digest,
+        "d" * 64,
+        layers,
+        0,
+    )
+    command = parse_shell_command(command_text)
+    if uncertain_command:
+        command = replace(command, confidence="uncertain", uncertainty_reason="native_test_uncertainty")
+    evidence = [
+        {
+            "segment_index": index,
+            "executable": "aws",
+            "detail": "Matched bounded structured command constraints.",
+        }
+        for index in evidence_indexes
+    ]
+    safe_variants = []
+    if safe:
+        selected_safe_indexes = evidence_indexes if safe_indexes is None else safe_indexes
+        safe_variants = [
+            {
+                "match_class": "safe-variant",
+                "variant_id": rule.safe_variants[0].variant_id,
+                "matcher_evidence": [item for item in evidence if item["segment_index"] in selected_safe_indexes],
+            }
+        ]
+    observation = {
+        "extension_id": extension.extension_id,
+        "extension_version": extension.version,
+        "rule_id": rule.rule_id,
+        "rule_version": rule.rule_version,
+        "match_class": "uncertainty" if uncertainty else "unsafe",
+        "match_classes": ["unsafe", "uncertainty"] if uncertainty else ["unsafe"],
+        "matcher_evidence": evidence,
+        "safe_variants": safe_variants,
+        "uncertainty_reasons": ["matcher-failure"] if uncertainty else [],
+        "effective_segment_indexes": [
+            index
+            for index in evidence_indexes
+            if not safe or index not in (evidence_indexes if safe_indexes is None else safe_indexes)
+        ],
+    }
+    native = {
+        "schema": "guard.native-command-observations.v1",
+        "binding": {
+            "schema": "guard.native-command-receipt-binding.v1",
+            "program_digest": registry.program_digest,
+            "catalog_digest": registry.catalog_digest,
+            "trust_digest": "c" * 64,
+            "control_revision": snapshot.revision,
+            "managed_control_revision": snapshot.managed_revision,
+            "control_effective_digest": snapshot.effective_digest,
+            "observations_digest": "0" * 64,
+            "observation_count": 1,
+            "uncertainty_count": int(uncertainty),
+        },
+        "observations": [observation],
+        "permission_observations": [],
+        "evaluation_error": None,
+    }
+    canonical = json.dumps(
+        {key: native[key] for key in ("observations", "permission_observations", "evaluation_error")},
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+    native["binding"]["observations_digest"] = hashlib.sha256(
+        b"hol-guard.native-command-observations.v1\0" + canonical
+    ).hexdigest()
+    payload = {
+        "command_model": {"normalized_text": command.normalized_text},
+        "command_extensions": native,
+        "minimum_action": native_minimum_action or ("allow" if explicitly_benign else "review"),
+        "explicitly_benign": explicitly_benign,
+    }
+    return registry, snapshot, command, payload
+
+
+def _evaluate(**kwargs):
+    registry, snapshot, command, payload = _synthetic_native_fixture(**kwargs)
+    return evaluate_command(
+        command.normalized_text,
+        canonical_command=command,
+        registry=registry,
+        extension_control_snapshot=snapshot,
+        native_extension_evidence=payload,
+    )
+
+
+def test_native_evidence_cannot_fall_back_to_python_semantic_parsing() -> None:
+    registry, snapshot, command, payload = _synthetic_native_fixture()
+    with pytest.raises(RuntimeError, match="native canonical command model is required"):
+        evaluate_command(
+            command.normalized_text,
+            registry=registry,
+            extension_control_snapshot=snapshot,
+            native_extension_evidence=payload,
+        )
 
 
 @pytest.mark.parametrize(
-    ("mode", "expected_legacy", "expected_plane"),
+    ("mode", "legacy", "plane"),
     [
-        ("disabled", "allow", "review"),
-        ("monitor", "monitor", "review"),
+        ("disabled", "review", "review"),
+        ("monitor", "review", "review"),
         ("review", "review", "review"),
         ("enforce", "block", "block"),
         ("required", "review", "review"),
     ],
 )
-def test_legacy_floor_is_preserved_without_inventing_permissive_proof(
-    mode: CommandRuleMode,
-    expected_legacy: CommandDecisionFloor,
-    expected_plane: str,
-) -> None:
-    evaluation = evaluate_command("test-tool target", registry=_registry(mode))
-    assert evaluation.minimum_action == expected_legacy
-    assert evaluation.decision_plane.action == expected_plane
+def test_generated_rule_floor_is_preserved_without_permissive_proof(mode: str, legacy: str, plane: str) -> None:
+    evaluation = _evaluate(mode=mode)
+    assert evaluation.minimum_action == legacy
+    assert evaluation.decision_plane.action == plane
 
 
-def test_runtime_extension_control_disable_is_a_monotonic_blocking_factor() -> None:
-    registry = _registry("disabled")
-    layer = ExtensionControlLayer(
-        schema_version=CONTROL_SCHEMA_VERSION,
-        kind=ControlLayerKind.LOCAL_ADMIN,
-        catalog_digest=registry.catalog_digest,
-        global_lockdown=False,
-        controls=(
-            ExtensionControl(
-                target=ControlTarget(ControlTargetKind.EXTENSION, "command.test"),
-                state=ControlState.DISABLED,
-            ),
-        ),
-    )
-
-    evaluation = evaluate_command(
-        "test-tool target",
-        registry=registry,
-        extension_control_layers=(layer,),
-    )
-
+def test_native_uncertainty_is_typed_blocking_and_private() -> None:
+    evaluation = _evaluate(mode="disabled", uncertainty=True)
     assert evaluation.minimum_action == "block"
-    assert evaluation.decision_plane.action == "block"
-    assert evaluation.control_resolution is not None
-    assert evaluation.control_resolution.blocked
-    assert any(reason.source is DecisionFactorSource.CONTROL for reason in evaluation.decision_plane.reasons)
+    payload = evaluation.extension_observations[0].to_dict()
+    assert payload["match_class"] == "uncertainty"
+    assert payload["uncertainty_reasons"] == ["matcher-failure"]
+    assert "private" not in repr(evaluation.to_dict())
 
 
-def test_disabled_extension_blocks_an_observed_safe_variant() -> None:
-    registry = _registry(
-        "review",
-        safe_variants=(CommandSafeVariant("safe", "Safe variant", _SegmentMatcher(0)),),
-    )
-    layer = ExtensionControlLayer(
-        schema_version=CONTROL_SCHEMA_VERSION,
-        kind=ControlLayerKind.LOCAL_ADMIN,
-        catalog_digest=registry.catalog_digest,
-        global_lockdown=False,
-        controls=(
-            ExtensionControl(
-                target=ControlTarget(ControlTargetKind.EXTENSION, "command.test"),
-                state=ControlState.DISABLED,
-            ),
-        ),
-    )
-
-    evaluation = evaluate_command(
-        "test-tool target",
-        registry=registry,
-        extension_control_layers=(layer,),
-    )
-
-    assert evaluation.extension_observations
+def test_native_safe_variant_remains_visible_and_suppresses_only_its_segment() -> None:
+    evaluation = _evaluate(safe=True)
+    observation = evaluation.extension_observations[0]
+    assert observation.safe_variants
+    assert observation.effective_evidence == ()
     assert evaluation.matches == ()
+
+
+def test_partial_native_safe_evidence_cannot_silence_matcher_uncertainty() -> None:
+    # Python matcher callbacks no longer exist. This is the wire-level native
+    # replacement for the former "one safe matcher fails" callback test: an
+    # authenticated partial safe projection still carries native uncertainty.
+    evaluation = _evaluate(
+        command_text=(
+            "aws apigateway delete-rest-api --rest-api-id abc && aws apigateway delete-rest-api --rest-api-id def"
+        ),
+        evidence_indexes=(0, 1),
+        safe=True,
+        safe_indexes=(0,),
+        uncertainty=True,
+    )
+    observation = evaluation.extension_observations[0]
+    assert tuple(item.segment_index for item in observation.effective_evidence) == (1,)
+    assert observation.uncertainty_reasons
     assert evaluation.minimum_action == "block"
     assert evaluation.decision_plane.action == "block"
-    assert evaluation.control_resolution.blocked
 
 
-def test_unavailable_runtime_control_authority_fails_closed_with_private_evidence() -> None:
-    registry = _registry("disabled")
-    snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(
-        ExtensionControlAuthorityView(AuthorityHealth.UNENROLLED, 0, registry.catalog_digest, ())
-    )
+def test_adapter_rejects_out_of_bounds_native_matcher_evidence() -> None:
+    # Native evidence is rejected at admission; the adapter never normalizes
+    # attacker-controlled indexes into a projected match.
+    with pytest.raises(NativeCommandExtensionEvidenceError, match="native_command_extension_evidence_invalid"):
+        _evaluate(evidence_indexes=(128,))
 
-    evaluation = evaluate_command(
-        "test-tool target",
-        registry=registry,
-        extension_control_snapshot=snapshot,
-    )
 
+def test_uncertain_command_cannot_claim_native_parser_confidence_proof() -> None:
+    evaluation = _evaluate(safe=True, uncertain_command=True, explicitly_benign=True)
+    assert ProofRoute.VERIFIED not in evaluation.decision_plane.proof_routes
+    assert evaluation.decision_plane.action != "allow"
+
+
+def test_explicit_benign_cannot_discharge_unrelated_enforced_rule() -> None:
+    evaluation = _evaluate(mode="enforce", explicitly_benign=True)
     assert evaluation.minimum_action == "block"
+    assert evaluation.decision_plane.action == "block"
+
+
+def test_explicit_benign_cannot_discharge_native_block_or_matcher_uncertainty() -> None:
+    native_block = _evaluate(explicitly_benign=True, native_minimum_action="block")
+    uncertain = _evaluate(mode="disabled", explicitly_benign=True, uncertainty=True)
+    assert native_block.decision_plane.action == "block"
+    assert uncertain.minimum_action == "block"
+    assert uncertain.decision_plane.action == "block"
+
+
+def test_explicit_benign_cannot_discharge_control_floor() -> None:
+    evaluation = _evaluate(mode="disabled", explicitly_benign=True, disabled=True)
     assert evaluation.control_resolution.blocked
-    assert [failure.code.value for failure in evaluation.control_resolution.failures] == ["authority-unavailable"]
-    assert evaluation.private_control_evidence == snapshot.private_evidence
-    assert "private_control_evidence" not in evaluation.to_dict()
+    assert evaluation.minimum_action == "block"
+    assert evaluation.decision_plane.action == "block"
+
+
+def test_public_projection_contains_versions_without_raw_command_or_private_detail() -> None:
+    private_operand = "private-customer-name"
+    evaluation = _evaluate(command_text=f"aws apigateway delete-rest-api --rest-api-id {private_operand}")
+    payload = evaluation.to_dict()
+    observations = payload["extension_observations"]
+    assert isinstance(observations, list) and observations
+    assert all(item["extension_version"] and item["rule_version"] for item in observations)
+    assert private_operand not in repr(payload)
+    assert "private matcher detail" not in repr(payload)
+
+
+def test_disabled_extension_is_a_monotonic_blocking_factor() -> None:
+    evaluation = _evaluate(mode="disabled", safe=True, disabled=True)
+    assert evaluation.control_resolution.blocked
+    assert evaluation.minimum_action == "block"
+    assert evaluation.decision_plane.action == "block"
 
 
 def test_required_extension_floors_remain_monotonic() -> None:
-    high = evaluate_command("test-tool target", registry=_registry("disabled", required=True))
-    critical = evaluate_command(
-        "test-tool target",
-        registry=_registry("disabled", required=True, severity="critical"),
-    )
-    assert (high.minimum_action, high.decision_plane.action) == ("review", "review")
-    assert (critical.minimum_action, critical.decision_plane.action) == ("block", "block")
-
-
-def test_safe_variant_remains_visible_without_suppressing_stronger_sibling() -> None:
-    evaluation = evaluate_command("git clean -nfdx && rm -rf ./build")
-    force_clean = next(
-        item for item in evaluation.extension_observations if item.rule.rule_id == "command.git.force-clean"
-    )
-    assert force_clean.matcher_evidence
-    assert [item.variant_id for item in force_clean.safe_variants] == ["dry-run"]
-    assert force_clean.effective_evidence == ()
+    evaluation = _evaluate(mode="disabled", required=True)
     assert evaluation.minimum_action == "review"
-    assert evaluation.decision_plane.action == "review"
+    assert ProofRoute.VERIFIED not in evaluation.decision_plane.proof_routes
+    assert (_evaluate(mode="disabled", required=True, severity="critical").minimum_action) == "block"
 
 
-def test_owned_safe_variant_is_preserved_in_strict_extension_evidence() -> None:
-    command = parse_shell_command("git clean -nfdx")
-    observations = observe_command_extensions(
-        command,
-        BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions,
-        BUILT_IN_COMMAND_EXTENSION_REGISTRY.candidate_rule_ids(command),
-    )
-    batch = extension_evidence_batch(command, observations)
-    force_clean = next(item for item in batch.evidence if item.identity.rule_id == "command.git.force-clean")
-    assert force_clean.safe_variant is not None
-    assert force_clean.safe_variant.safe_variant_id == "dry-run"
-    assert force_clean.effective_floor is None
+@pytest.mark.parametrize("required", [False, True])
+def test_noncritical_disabled_rule_requires_explicit_native_benign_proof_to_allow(required: bool) -> None:
+    evaluation = _evaluate(mode="disabled", required=required, explicitly_benign=True)
+    assert evaluation.minimum_action == "allow"
+    assert evaluation.decision_plane.action == "allow"
+    assert ProofRoute.VERIFIED in evaluation.decision_plane.proof_routes
 
 
-@pytest.mark.parametrize(
-    "action_class",
-    [
-        "destructive shell command",
-        "GitHub remote mutation command",
-        "package installation command",
-        "unresolved interpreter command",
-    ],
-)
-def test_parallel_legacy_heuristics_route_through_plane(action_class: str) -> None:
-    evaluation = evaluate_command(
-        "routine-tool inspect",
-        compatibility_action_class=action_class,
-        compatibility_reason="Existing heuristic requires review.",
-    )
-    assert evaluation.minimum_action == "review"
-    assert evaluation.decision_plane.action == "review"
-    assert any(reason.reason_code == "compatibility-action" for reason in evaluation.decision_plane.reasons)
-
-
-@pytest.mark.parametrize(
-    ("mode", "required", "severity", "expected"),
-    [
-        ("disabled", False, "high", "review"),
-        ("monitor", False, "high", "review"),
-        ("enforce", False, "high", "block"),
-        ("disabled", True, "critical", "block"),
-    ],
-)
-def test_compatibility_fallback_preserves_its_block_floor_in_central_decision(
-    mode: CommandRuleMode,
-    required: bool,
-    severity: CommandRuleSeverity,
-    expected: CommandDecisionFloor,
-) -> None:
-    action_class = "compatibility fallback"
-    evaluation = evaluate_command(
-        "unmatched-tool target",
-        compatibility_action_class=action_class,
-        registry=_registry(
-            mode,
-            action_classes=(action_class,),
-            compatibility_fallback=True,
-            required=required,
-            severity=severity,
-            matcher=_EmptyMatcher(),
-        ),
-    )
-    assert evaluation.minimum_action == expected
-    assert evaluation.decision_plane.action == expected
-
-
-def test_public_payload_contains_versions_without_raw_command_or_failure_detail() -> None:
-    payload = evaluate_command("rm -rf ./private-name").to_dict()
-    observations = cast(list[dict[str, object]], payload["extension_observations"])
-    assert observations
-    assert all(item["extension_version"] and item["rule_version"] for item in observations)
-    assert "./private-name" not in repr(payload)
-    assert cast(dict[str, object], payload["decision_plane"])["schema_version"] == EFFECT_DECISION_SCHEMA_VERSION
-
-
-@pytest.mark.parametrize("matcher", [_FailingMatcher(), _MalformedMatcher()])
-def test_matcher_failure_becomes_typed_blocking_uncertainty(matcher: object) -> None:
-    evaluation = evaluate_command(
-        "test-tool target",
-        registry=_registry("disabled", matcher=matcher),
-    )
+def test_native_benign_proof_cannot_discharge_required_critical_disabled_rule() -> None:
+    evaluation = _evaluate(mode="disabled", required=True, severity="critical", explicitly_benign=True)
     assert evaluation.minimum_action == "block"
     assert evaluation.decision_plane.action == "block"
-    payload = evaluation.extension_observations[0].to_dict()
-    assert payload["match_class"] == "uncertainty"
-    assert payload["match_classes"] == ["uncertainty"]
-    assert payload["uncertainty_reasons"] == ["matcher-failure"]
-    assert "private matcher detail" not in repr(evaluation.to_dict())
 
 
 def test_risk_effect_mapping_does_not_use_substring_classification() -> None:
-    evaluation = evaluate_command(
-        "test-tool target",
-        registry=_registry("review", risk_classes=("non-destructive",)),
-    )
+    evaluation = _evaluate(risk_classes=("non-destructive",))
     batch = extension_evidence_batch(evaluation.command, evaluation.extension_observations)
-    effect_claims = frozenset(effect for item in batch.evidence for effect in item.effect_claims)
-    assert EffectKind.DESTRUCTIVE_OR_IRREVERSIBLE_OPERATION not in effect_claims
-    assert EffectKind.PROCESS_EXECUTION in effect_claims
+    effects = frozenset(effect for item in batch.evidence for effect in item.effect_claims)
+    assert EffectKind.DESTRUCTIVE_OR_IRREVERSIBLE_OPERATION not in effects
+    assert EffectKind.PROCESS_EXECUTION in effects
 
 
 @pytest.mark.parametrize(("risk_class", "expected"), tuple(COMMAND_RISK_EFFECTS.items()))
-def test_extension_evidence_uses_canonical_risk_effect_mapping(
-    risk_class: str,
-    expected: frozenset[EffectKind],
+def test_native_extension_evidence_uses_canonical_risk_effect_mapping(
+    risk_class: str, expected: frozenset[EffectKind]
 ) -> None:
-    evaluation = evaluate_command(
-        "test-tool target",
-        registry=_registry("review", risk_classes=(risk_class,)),
-    )
+    evaluation = _evaluate(risk_classes=(risk_class,))
     batch = extension_evidence_batch(evaluation.command, evaluation.extension_observations)
     assert frozenset(effect for item in batch.evidence for effect in item.effect_claims) == expected
-
-
-def test_typed_matcher_evidence_is_bounded_and_privacy_normalized() -> None:
-    command = parse_shell_command("test-tool target")
-    registry = _registry("review", matcher=_LeakingMatcher())
-    observations = observe_command_extensions(command, registry.extensions, registry.candidate_rule_ids(command))
-    payload = observations[0].to_dict()
-    assert payload["matcher_evidence"] == [
-        {
-            "segment_index": 0,
-            "executable": "test-tool",
-            "detail": "Matched bounded structured command constraints.",
-        }
-    ]
-    assert "private matcher-provided detail" not in repr(payload)
-    assert "/private/path" not in repr(payload)
-
-
-def test_live_request_classifier_routes_matcher_failure_through_plane(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    registry = _registry("disabled", matcher=_OutOfBoundsMatcher())
-    monkeypatch.setattr(secret_file_requests, "BUILT_IN_COMMAND_EXTENSION_REGISTRY", registry)
-    match = secret_file_requests.extract_sensitive_tool_action_request(
-        "Shell",
-        {"command": "test-tool target"},
-    )
-    assert match is not None
-    assert match.action_class == "command extension matcher failure"
-    assert "invalid index" not in match.reason
-
-
-def test_matcher_failure_projection_requires_a_controlling_uncertainty_reason(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    decision = evaluate_effect_decision(
-        EffectDecisionRequest(
-            factors=(
-                DecisionFactor(
-                    source=DecisionFactorSource.POLICY,
-                    reason_code="rule-match",
-                    basis=DecisionBasis("block", None),
-                    producer_ref="test:controlling-rule",
-                ),
-            )
-        )
-    )
-
-    def fixed_decision(
-        command: CanonicalCommand,
-        observations: tuple[CommandExtensionObservation[CommandSafetyExtension], ...],
-    ) -> EffectDecision:
-        del command, observations
-        return decision
-
-    monkeypatch.setattr(command_extension_interaction, "evaluate_extension_interaction", fixed_decision)
-    interaction = command_extension_interaction.classify_command_extension_interaction(
-        parse_shell_command("test-tool target"),
-        _registry("disabled", matcher=_FailingMatcher()),
-    )
-    assert interaction.priority is None
-    assert interaction.fallback is None
-
-
-def test_legacy_matching_projection_cannot_silence_matcher_failure() -> None:
-    registry = _registry("disabled", matcher=_FailingMatcher())
-    with pytest.raises(RuntimeError, match="matcher boundary failure") as captured:
-        _ = registry.matching_rules(parse_shell_command("test-tool target"))
-    assert "private matcher detail" not in str(captured.value)
-
-
-def test_safe_variant_failure_is_scoped_to_an_owning_base_match() -> None:
-    safe_variant = CommandSafeVariant("broken-safe", "Broken safe matcher", _FailingMatcher())
-    evaluation = evaluate_command(
-        "unrelated-tool inspect",
-        registry=_registry("review", matcher=_EmptyMatcher(), safe_variants=(safe_variant,)),
-    )
-    assert evaluation.minimum_action == "allow"
-    assert evaluation.extension_observations == ()
-
-
-def test_owned_safe_variant_failure_remains_blocking_uncertainty() -> None:
-    safe_variant = CommandSafeVariant("broken-safe", "Broken safe matcher", _FailingMatcher())
-    evaluation = evaluate_command(
-        "test-tool target",
-        registry=_registry("review", safe_variants=(safe_variant,)),
-    )
-    assert evaluation.minimum_action == "block"
-    assert evaluation.decision_plane.action == "block"
-
-
-def test_failed_optional_safe_matcher_does_not_override_complete_safe_evidence() -> None:
-    safe_variants = (
-        CommandSafeVariant("broken-safe", "Broken safe matcher", _FailingMatcher()),
-        CommandSafeVariant("proven-safe", "Proven safe matcher", _SegmentMatcher(0)),
-    )
-    evaluation = evaluate_command(
-        "test-tool target",
-        registry=_registry("review", safe_variants=safe_variants),
-    )
-    assert evaluation.extension_observations[0].uncertainty_reasons == ()
-    assert evaluation.extension_observations[0].effective_evidence == ()
-
-
-def test_failed_safe_matcher_remains_uncertain_when_safe_evidence_is_partial() -> None:
-    safe_variants = (
-        CommandSafeVariant("broken-safe", "Broken safe matcher", _FailingMatcher()),
-        CommandSafeVariant("partially-safe", "Partial safe matcher", _SegmentMatcher(0)),
-    )
-    evaluation = evaluate_command(
-        "test-tool target && other-tool target",
-        registry=_registry("review", matcher=_SegmentMatcher(0, 1), safe_variants=safe_variants),
-    )
-    assert evaluation.extension_observations[0].uncertainty_reasons == (UncertaintyKind.MATCHER_FAILURE,)
-    assert evaluation.minimum_action == "block"
-    payload = evaluation.extension_observations[0].to_dict()
-    assert payload["match_class"] == "uncertainty"
-    assert payload["match_classes"] == ["unsafe", "uncertainty"]
-
-
-def test_rule_versions_are_stable_and_serialized() -> None:
-    rule = _registry("review").extensions[0].rules[0]
-    assert rule.to_dict()["rule_version"] == "1.0.0"
-    with pytest.raises(ValueError, match="invalid rule version"):
-        _ = CommandSafetyRule(
-            rule_id="command.test.invalid",
-            title="Invalid version",
-            description="Exercises version validation.",
-            severity="high",
-            risk_classes=("test_risk",),
-            action_classes=(),
-            safer_alternatives=("Review the operation.",),
-            matcher=_EmptyMatcher(),
-            rule_version="01.0.0",
-        )

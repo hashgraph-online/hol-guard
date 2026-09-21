@@ -215,7 +215,7 @@ def _no_post_execution_proof_smoke() -> dict[str, object]:
                     """
                 ).fetchone(),
             )
-        expected = (harness, "pre", "allowed_unconfirmed", "pre_hook", "warn", "no_match", 0)
+        expected = (harness, "pre", "allowed_unconfirmed", "pre_hook", "warn", "policy", 0)
         if row is None or tuple(row) != expected:
             raise InstalledCanaryError(
                 f"Installed no-post-proof hook persisted unexpected activity evidence: {tuple(row) if row else None!r}"

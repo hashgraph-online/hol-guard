@@ -25,26 +25,30 @@ class _Report:
     duration: float
 
 
-def test_duration_report_writes_sorted_call_phase_nodes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_duration_report_accounts_for_fixture_setup_call_and_teardown(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     output = tmp_path / "durations.json"
     monkeypatch.setenv(duration_report.OUTPUT_ENV, str(output))
     duration_report.pytest_sessionstart()
     duration_report.pytest_runtest_logreport(_Report("setup", "tests/test_a.py::test_a", 8.0))
     duration_report.pytest_runtest_logreport(_Report("call", "tests/test_b.py::test_b", 2.5))
     duration_report.pytest_runtest_logreport(_Report("call", "tests/test_a.py::test_a", 1.0))
+    duration_report.pytest_runtest_logreport(_Report("teardown", "tests/test_b.py::test_b", 4.0))
+    duration_report.pytest_runtest_logreport(_Report("collect", "tests/test_a.py::test_a", 100.0))
 
     duration_report.pytest_sessionfinish(object(), 0)
 
     assert json.loads(output.read_text(encoding="utf-8")) == {
         "node_durations_seconds": {
-            "tests/test_a.py::test_a": 1.0,
-            "tests/test_b.py::test_b": 2.5,
+            "tests/test_a.py::test_a": 9.0,
+            "tests/test_b.py::test_b": 6.5,
         },
         "schema_version": 1,
     }
     assert duration_report.load_duration_report(output) == {
-        "tests/test_a.py::test_a": 1.0,
-        "tests/test_b.py::test_b": 2.5,
+        "tests/test_a.py::test_a": 9.0,
+        "tests/test_b.py::test_b": 6.5,
     }
 
 

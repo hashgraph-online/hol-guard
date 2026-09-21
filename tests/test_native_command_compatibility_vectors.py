@@ -6,9 +6,9 @@ import json
 import shlex
 from pathlib import Path
 
-from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
 from codex_plugin_scanner.guard.runtime.github_capability_contract import github_capability_contract
 from codex_plugin_scanner.guard.runtime.github_command_capabilities import classify_github_cli
+from tests.native_command_test_support import real_native_command_evaluation
 
 _ROOT = Path(__file__).resolve().parents[1]
 _FIXTURE = _ROOT / "rust/crates/guard-command/tests/fixtures/native-command-compatibility-v1.json"
@@ -34,10 +34,8 @@ def test_frozen_github_capabilities_and_owners_match_independent_python_oracle()
     assert fixture["qualification_complete"] is False
 
 
-def test_git_attribution_expansion_is_explicitly_not_claimed_as_legacy_observation_parity() -> None:
-    # These catalog entries currently have no Python matcher/fallback. Native
-    # attribution intentionally closes that omission for disabled permissions.
+def test_git_attribution_expansion_is_owned_by_native_observations() -> None:
     for command in ("git status", "git log", "git diff --no-ext-diff --no-textconv", "git ls-files"):
-        evaluation = evaluate_command(command, extension_control_layers=())
-        assert not evaluation.extension_observations
-        assert not evaluation.matches
+        evaluation = real_native_command_evaluation(command, extension_control_layers=()).evaluation
+        assert evaluation.extension_observations
+        assert evaluation.matches

@@ -27,11 +27,12 @@ def _noodle_payload() -> dict[str, object]:
     return payload
 
 
-def test_in_tree_contributions_match_external_trust_class() -> None:
+def test_in_tree_contributions_match_reviewed_trust_classes() -> None:
     payloads = load_contribution_payloads()
     ids = {str(item["id"]) for item in payloads}
     assert ids == contribution_ids()
-    assert contribution_ids() | mcp_catalog_ids() == ids_for_class("external")
+    expected = ids_for_class("external") | ids_for_class("first-party") | ids_for_class("trusted-library")
+    assert contribution_ids() | mcp_catalog_ids() == expected
     for payload in payloads:
         validate_contribution(payload, filename=str(payload["id"]))
 
@@ -39,7 +40,7 @@ def test_in_tree_contributions_match_external_trust_class() -> None:
 def test_contribution_cannot_self_declare_trusted_library() -> None:
     payload = _noodle_payload()
     payload["trustClass"] = "trusted-library"
-    with pytest.raises(ValueError, match="schema"):
+    with pytest.raises(ValueError, match="trust class"):
         validate_contribution(payload, filename="evil.json")
 
 
@@ -50,20 +51,13 @@ def test_contribution_schema_rejects_missing_required_fields() -> None:
         validate_contribution(payload, filename="missing.json")
 
 
-def test_contribution_rejects_unknown_icon_and_unbound_detector() -> None:
+def test_contribution_rejects_unknown_icon_and_unbound_native_source() -> None:
     payload = _noodle_payload()
-    payload["icon"] = {"kind": "react-icon", "name": "NotAnAllowlistedIcon"}
+    payload["icon"] = {"kind": "react-icon", "name": "NotAnAllowlistedIcon", "background": "#000000"}
     with pytest.raises(ValueError, match="allowlisted"):
         validate_contribution(payload, filename="icon.json")
     payload = _noodle_payload()
-    payload["detector"] = {"kind": "python-module", "module": "os.path"}
-    with pytest.raises(ValueError, match="schema"):
-        validate_contribution(payload, filename="module.json")
-    payload = _noodle_payload()
-    payload["detector"] = {
-        "kind": "python-module",
-        "module": "codex_plugin_scanner.guard.runtime.command_git_extensions",
-    }
+    payload["nativeSource"] = dict(payload["nativeSource"], path="contributions/command-sources/command.git.json")
     with pytest.raises(ValueError, match="not bound"):
         validate_contribution(payload, filename="bind.json")
 
@@ -77,8 +71,12 @@ def test_frozen_packaged_payloads_load_from_meipass(tmp_path: Path, monkeypatch:
         repo / "contributions" / "extensions" / "command.noodle.json", contributions / "command.noodle.json"
     )
     shutil.copyfile(
-        repo / "contracts" / "extensions" / "contribution.v1.schema.json",
-        dest / "contribution.v1.schema.json",
+        repo / "contracts" / "extensions" / "contribution.v2.schema.json",
+        dest / "contribution.v2.schema.json",
+    )
+    shutil.copyfile(
+        repo / "contracts" / "extensions" / "trust-class-map.v1.json",
+        dest / "trust-class-map.v1.json",
     )
     monkeypatch.setattr(sys, "frozen", True, raising=False)
     monkeypatch.setattr(sys, "_MEIPASS", str(tmp_path), raising=False)
@@ -109,33 +107,8 @@ def test_frozen_packaged_payloads_fail_closed_without_package_data(
         contribution_module._load_packaged_payloads()
 
 
-def test_frozen_bind_detector_accepts_importable_module_without_source(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(sys, "frozen", True, raising=False)
-    monkeypatch.setattr(
-        contribution_module,
-        "_detector_source_path",
-        lambda _leaf: tmp_path / "missing.py",
-    )
-    contribution_module._bind_detector(
-        "command.noodle",
-        "codex_plugin_scanner.guard.runtime.command_noodle_extensions",
-        "command.noodle.json",
-    )
-
-
-def test_frozen_bind_detector_fails_when_module_is_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(sys, "frozen", True, raising=False)
-    monkeypatch.setattr(
-        contribution_module,
-        "_detector_source_path",
-        lambda _leaf: tmp_path / "missing.py",
-    )
-    monkeypatch.setattr(contribution_module.importlib.util, "find_spec", lambda _name: None)
-    with pytest.raises(ValueError, match="missing"):
-        contribution_module._bind_detector(
-            "command.noodle",
-            "codex_plugin_scanner.guard.runtime.command_noodle_extensions",
-            "command.noodle.json",
-        )
+def test_legacy_detector_descriptor_requires_explicit_conversion() -> None:
+    payload = _noodle_payload()
+    payload["schemaVersion"] = "guard.extension-contribution.v1"
+    with pytest.raises(ValueError, match="convert it to a command source"):
+        validate_contribution(payload, filename="legacy.json")

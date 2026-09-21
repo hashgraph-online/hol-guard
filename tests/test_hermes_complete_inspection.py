@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -305,6 +306,83 @@ def test_file_change_during_streaming_hash_is_not_reported_complete(tmp_path: Pa
     assert inspection.complete is False
     assert inspection.reason == "file_changed_during_read"
     assert inspection.content_hash is None
+
+
+@pytest.mark.parametrize("changed_at", (None, "open", "open-unavailable", "read", "after"))
+def test_windows_locked_reader_compares_matching_stat_apis(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, changed_at: str | None
+) -> None:
+    path = _write(tmp_path / "config.yaml", "mcp_servers: {}\n")
+    original_os = inspection_module.os
+    metadata = original_os.lstat(path)
+    fields = {
+        name: getattr(metadata, name)
+        for name in (
+            "st_dev",
+            "st_ino",
+            "st_mode",
+            "st_nlink",
+            "st_size",
+            "st_mtime",
+            "st_mtime_ns",
+            "st_ctime",
+            "st_ctime_ns",
+        )
+    }
+    path_stats = 0
+    descriptor_stats = 0
+    locked = False
+
+    def path_stat(_path: Path) -> SimpleNamespace:
+        nonlocal path_stats
+        path_stats += 1
+        assert locked is (path_stats == 2)
+        if changed_at == "open-unavailable" and path_stats == 2:
+            raise FileNotFoundError("parent directory moved while the file handle remained locked")
+        result = {**fields, "st_file_attributes": 0x20}
+        if (changed_at == "open" and path_stats == 2) or (changed_at == "after" and path_stats == 3):
+            result["st_ino"] += 1
+        return SimpleNamespace(**result)
+
+    def descriptor_stat(_descriptor: int) -> SimpleNamespace:
+        nonlocal descriptor_stats
+        descriptor_stats += 1
+        assert locked
+        # CRT descriptor fields need not equal the native path stat fields.
+        result = {**fields, "st_dev": fields["st_dev"] + 1, "st_file_attributes": 0}
+        if changed_at == "read" and descriptor_stats == 2:
+            result["st_mtime_ns"] += 1
+        return SimpleNamespace(**result)
+
+    def open_locked(candidate: Path) -> int:
+        nonlocal locked
+        assert candidate == path
+        descriptor = original_os.open(candidate, original_os.O_RDONLY)
+        locked = True
+        return descriptor
+
+    def close_locked(descriptor: int) -> None:
+        nonlocal locked
+        original_os.close(descriptor)
+        locked = False
+
+    monkeypatch.setattr(inspection_module, "open_windows_locked_regular_descriptor", open_locked)
+    monkeypatch.setattr(
+        inspection_module,
+        "os",
+        SimpleNamespace(name="nt", lstat=path_stat, fstat=descriptor_stat, read=original_os.read, close=close_locked),
+    )
+    inspection = inspect_hermes_text_file(path, content_limit_bytes=1024)
+
+    assert not locked
+    if changed_at is None:
+        assert inspection.complete
+        assert inspection.content == "mcp_servers: {}\n"
+        assert inspection.content_hash == f"sha256:{hashlib.sha256(path.read_bytes()).hexdigest()}"
+    else:
+        assert not inspection.complete
+        assert inspection.reason == "file_changed_during_read"
+        assert inspection.content_hash is None
 
 
 def test_unreadable_file_failure_is_typed(tmp_path: Path, monkeypatch) -> None:

@@ -68,8 +68,12 @@ def _grok_hooks_are_current(context: HarnessContext) -> bool:
         return False
     timeout = _pretool_timeout(payload)
     command = _pretool_command(payload)
+    if timeout != GROK_PRETOOL_HOOK_TIMEOUT_SECONDS:
+        return False
+    if _isolated_bounded_hook_is_current(command, context=context):
+        return True
     marker = f'"timeout_seconds":{GROK_HOOK_INTERNAL_TIMEOUT_SECONDS}'
-    if timeout != GROK_PRETOOL_HOOK_TIMEOUT_SECONDS or marker not in command.replace(" ", ""):
+    if marker not in command.replace(" ", ""):
         return False
     hook_config = _hook_config_from_command(command)
     if hook_config is None:
@@ -88,6 +92,30 @@ def _grok_hooks_are_current(context: HarnessContext) -> bool:
     except OSError:
         return False
     return isinstance(cli_args, list) and "--json" in cli_args
+
+
+def _isolated_bounded_hook_is_current(command: str, *, context: HarnessContext) -> bool:
+    from ..adapters.bounded_cli_hook_bridge import bounded_hook_script_path
+    from ..adapters.cursor_hook_config import isolated_cursor_hook_python
+
+    interpreter = isolated_cursor_hook_python()
+    expected_script = bounded_hook_script_path(context.guard_home, "grok")
+    if interpreter is None or expected_script is None:
+        return False
+    argv = _split_hook_command(command, posix=True)
+    if len(argv) != 3 or argv[1] != "-I":
+        argv = _split_hook_command(command, posix=False)
+    if len(argv) != 3 or argv[1] != "-I":
+        return False
+    try:
+        if Path(argv[0]).resolve() != Path(interpreter).resolve():
+            return False
+        if Path(argv[2]).resolve() != expected_script.resolve():
+            return False
+        source = expected_script.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    return 'HARNESS = "grok"' in source and f"TIMEOUT_SECONDS = {GROK_HOOK_INTERNAL_TIMEOUT_SECONDS}" in source
 
 
 def _hook_config_from_command(command: str) -> dict[str, object] | None:

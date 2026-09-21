@@ -29,6 +29,11 @@ EXACT_FIXTURES = (
     r"printf escaped\ space",
     r"printf \#not-a-comment",
     "./tool --flag=value",
+    # Bounded sudo wrappers preserve the same source tokens, spans, and
+    # wrapper provenance as Python; exact parsing does not authorize execution.
+    "sudo rm -rf /tmp/example",
+    "sudo -n rm -rf /tmp/example",
+    "sudo --non-interactive -- rm -rf /tmp/example",
 )
 UNCERTAIN_FIXTURES = (
     "echo $(uname)",
@@ -36,7 +41,9 @@ UNCERTAIN_FIXTURES = (
     "cat <<EOF",
     "echo hello > out.txt",
     "sleep 1 &",
-    "sudo rm -rf /tmp/example",
+    "sudo -u root rm -rf /tmp/example",
+    "sudo -i rm -rf /tmp/example",
+    "sudo -s rm -rf /tmp/example",
     "env FOO=bar tool",
     "time tool",
     "stdbuf -o0 tool",
@@ -47,9 +54,9 @@ UNCERTAIN_FIXTURES = (
     "source ./script.sh",
     ". ./script.sh",
     "if true; then echo yes; fi",
-    "for item in one two; do echo \"$item\"; done",
+    'for item in one two; do echo "$item"; done',
     "while true; do break; done",
-    "case \"$value\" in one) echo one;; esac",
+    'case "$value" in one) echo one;; esac',
     "[[ -f Cargo.toml ]]",
     "echo $'non-posix quote'",
     'echo $"localized quote"',

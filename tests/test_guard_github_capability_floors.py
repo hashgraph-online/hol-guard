@@ -16,6 +16,7 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     classify_github_shell_capabilities,
     extract_sensitive_tool_action_request,
 )
+from tests.native_command_test_support import extract_sensitive_tool_action_request_native_test
 
 _EXPECTED_FLOORS = {
     "read_local": "allow",
@@ -376,7 +377,7 @@ def test_no_remote_mutation_is_prompt_free(tmp_path: Path, command: str) -> None
     ),
 )
 def test_branch_deletion_keeps_a_destructive_floor(tmp_path: Path, command: str) -> None:
-    match = extract_sensitive_tool_action_request("Bash", {"command": command}, cwd=tmp_path)
+    match = extract_sensitive_tool_action_request_native_test("Bash", {"command": command}, cwd=tmp_path)
 
     assert match is not None
     assert match.action_class == "git destructive command"

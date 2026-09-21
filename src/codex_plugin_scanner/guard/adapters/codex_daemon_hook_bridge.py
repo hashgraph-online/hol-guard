@@ -140,11 +140,8 @@ def _unavailable_response(
     if event_name == "PreToolUse":
         return {
             "continue": True,
-            "hookSpecificOutput": {
-                "hookEventName": event_name,
-                "permissionDecision": "allow",
-                "permissionDecisionReason": reason,
-            },
+            "systemMessage": reason,
+            "hookSpecificOutput": {"hookEventName": event_name},
         }
     return {
         "continue": True,
@@ -168,6 +165,26 @@ def _codex_hook_response(response: Mapping[str, object], *, event_name: str) -> 
         else:
             post_tool_keys = {"hookEventName", "additionalContext", "updatedMCPToolOutput"}
             filtered["hookSpecificOutput"] = {key: value for key, value in hook_output.items() if key in post_tool_keys}
+        return filtered
+    if event_name == "PreToolUse" and "hookSpecificOutput" in filtered:
+        cleaned: dict[str, object] = {"hookEventName": event_name}
+        if isinstance(hook_output, Mapping):
+            decision = hook_output.get("permissionDecision")
+            normalized = decision.strip().lower() if isinstance(decision, str) else ""
+            reason = hook_output.get("permissionDecisionReason")
+            if normalized in {"deny", "ask"}:
+                cleaned["permissionDecision"] = normalized
+                if isinstance(reason, str) and reason:
+                    cleaned["permissionDecisionReason"] = reason
+            elif normalized == "allow":
+                if (
+                    response.get("policy_action") == "warn"
+                    and isinstance(reason, str)
+                    and reason.strip()
+                    and not filtered.get("systemMessage")
+                ):
+                    filtered["systemMessage"] = reason
+        filtered["hookSpecificOutput"] = cleaned
     return filtered
 
 

@@ -2968,6 +2968,88 @@ def test_authenticated_state_with_proven_foreign_recycled_pid_is_tombstoned(tmp_
     assert state_clears == [62_222]
 
 
+@pytest.mark.skipif(os.name == "nt" or not hasattr(os, "waitid"), reason="requires POSIX waitid")
+def test_daemon_death_wait_observes_exact_exited_child_without_poll_delay(monkeypatch) -> None:
+    process = subprocess.Popen([sys.executable, "-c", "raise SystemExit(17)"])
+    try:
+        os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOWAIT)
+        assert daemon_manager_module._guard_daemon_pid_is_running(process.pid)
+
+        def unexpected_sleep(_seconds: float) -> None:
+            pytest.fail("An exited daemon must not consume a signal grace period")
+
+        monkeypatch.setattr(daemon_manager_module.time, "sleep", unexpected_sleep)
+        assert daemon_manager_module._wait_for_guard_daemon_pid_death(process.pid)
+        assert daemon_manager_module._guard_daemon_pid_is_proven_dead(process.pid)
+        assert process.wait(timeout=5) == 17
+    finally:
+        process.wait(timeout=5)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="requires POSIX child processes")
+def test_daemon_death_wait_preserves_live_child_and_non_child() -> None:
+    process = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+    try:
+        assert not daemon_manager_module._wait_for_guard_daemon_pid_death(process.pid, timeout=0)
+        assert process.poll() is None
+        assert not daemon_manager_module._wait_for_guard_daemon_pid_death(os.getpid(), timeout=0)
+    finally:
+        process.terminate()
+        process.wait(timeout=5)
+
+
+@pytest.mark.parametrize("pid", (0, -1, -42))
+def test_daemon_child_exit_probe_never_waits_for_a_process_group(monkeypatch, pid: int) -> None:
+    def unexpected_wait(*_args: object) -> tuple[int, int]:
+        pytest.fail("Only an exact positive daemon PID can be observed")
+
+    monkeypatch.setattr(daemon_manager_module.os, "waitid", unexpected_wait, raising=False)
+    assert not daemon_manager_module._guard_daemon_child_has_exited(pid)
+
+
+@pytest.mark.parametrize("outcome", (None, "wrong-pid", "stopped", "error"))
+def test_daemon_child_exit_probe_preserves_uncertain_liveness(monkeypatch, outcome: str | None) -> None:
+    proxy = _PosixOSProxy()
+    monkeypatch.setattr(daemon_manager_module, "os", proxy)
+    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_running", lambda _pid: True)
+    for name, value in (
+        ("P_PID", 1),
+        ("WEXITED", 4),
+        ("WNOHANG", 1),
+        ("WNOWAIT", 8),
+        ("CLD_EXITED", 1),
+        ("CLD_KILLED", 2),
+        ("CLD_DUMPED", 3),
+    ):
+        monkeypatch.setattr(proxy, name, value, raising=False)
+
+    def observe(*_args: object) -> object:
+        if outcome == "error":
+            raise PermissionError("unavailable process status")
+        if outcome is None:
+            return None
+        return SimpleNamespace(
+            si_pid=1235 if outcome == "wrong-pid" else 1234, si_code=4 if outcome == "stopped" else proxy.CLD_EXITED
+        )
+
+    monkeypatch.setattr(proxy, "waitid", observe, raising=False)
+    assert not daemon_manager_module._guard_daemon_pid_is_proven_dead(1234)
+
+
+def test_daemon_child_exit_probe_preserves_platform_without_waitid(monkeypatch) -> None:
+    class WithoutWaitid(_PosixOSProxy):
+        def __getattr__(self, name: str):
+            if name == "waitid":
+                raise AttributeError(name)
+            return super().__getattr__(name)
+
+    monkeypatch.setattr(daemon_manager_module, "os", WithoutWaitid())
+    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_running", lambda _pid: True)
+    assert not daemon_manager_module._guard_daemon_pid_is_proven_dead(1234)
+    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_running", lambda _pid: False)
+    assert daemon_manager_module._guard_daemon_pid_is_proven_dead(1234)
+
+
 def test_posix_daemon_retirement_waits_for_sigkill_to_finish(monkeypatch) -> None:
     pid = 62_223
     signals: list[int] = []
@@ -3111,6 +3193,88 @@ def test_daemon_inventory_ignores_malformed_unrelated_process_with_guard_text(tm
 @pytest.mark.skipif(os.name == "nt", reason="POSIX process-list coverage")
 def test_daemon_inventory_fails_closed_for_malformed_python_guard_process(tmp_path, monkeypatch) -> None:
     command_line = '/usr/bin/python3 -m codex_plugin_scanner.cli guard daemon --serve "'
+    monkeypatch.setattr(daemon_manager_module, "_trusted_posix_ps_path", lambda: "/bin/ps")
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_bounded_process_query_stdout",
+        lambda _command: f"123 {command_line}\n",
+    )
+
+    assert daemon_manager_module._guard_daemon_process_inventory_for_guard_home(tmp_path) is None
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX process-list coverage")
+def test_daemon_inventory_skips_serve_without_guard_home(tmp_path, monkeypatch) -> None:
+    command_line = "/usr/local/bin/hol-guard daemon --serve --port 5474"
+    monkeypatch.setattr(daemon_manager_module, "_trusted_posix_ps_path", lambda: "/bin/ps")
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_bounded_process_query_stdout",
+        lambda _command: f"123 {command_line}\n",
+    )
+
+    assert daemon_manager_module._guard_daemon_process_inventory_for_guard_home(tmp_path) == []
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX process-list coverage")
+def test_daemon_inventory_adopts_implicit_default_home(tmp_path, monkeypatch) -> None:
+    default_home = tmp_path / "default-home"
+    default_home.mkdir()
+    monkeypatch.setattr(daemon_manager_module, "_implicit_daemon_guard_home", lambda: default_home)
+    monkeypatch.setattr(daemon_manager_module, "_trusted_posix_ps_path", lambda: "/bin/ps")
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_bounded_process_query_stdout",
+        lambda _command: "123 /usr/local/bin/hol-guard daemon --serve --port 5474\n",
+    )
+
+    assert daemon_manager_module._guard_daemon_process_inventory_for_guard_home(default_home) == [(123, 5474)]
+    assert daemon_manager_module._guard_daemon_process_inventory_for_guard_home(tmp_path) == []
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX process-list coverage")
+def test_daemon_inventory_parses_equals_guard_home(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(daemon_manager_module, "_trusted_posix_ps_path", lambda: "/bin/ps")
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_bounded_process_query_stdout",
+        lambda _command: f"123 /usr/local/bin/hol-guard daemon --serve --guard-home={tmp_path} --port 5474\n",
+    )
+
+    assert daemon_manager_module._guard_daemon_process_inventory_for_guard_home(tmp_path) == [(123, 5474)]
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX process-list coverage")
+def test_daemon_inventory_fails_closed_for_equals_home_without_port(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(daemon_manager_module, "_trusted_posix_ps_path", lambda: "/bin/ps")
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_bounded_process_query_stdout",
+        lambda _command: f"123 /usr/local/bin/hol-guard daemon --serve --guard-home={tmp_path}\n",
+    )
+
+    assert daemon_manager_module._guard_daemon_process_inventory_for_guard_home(tmp_path) is None
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX process-list coverage")
+def test_daemon_inventory_ignores_bounded_hook_launcher(tmp_path, monkeypatch) -> None:
+    command_line = (
+        "/usr/local/bin/hol-guard __guard-bounded-hook "
+        '{"python_executable":"/usr/local/bin/hol-guard","cli_args":["guard","hook"]}'
+    )
+    monkeypatch.setattr(daemon_manager_module, "_trusted_posix_ps_path", lambda: "/bin/ps")
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_bounded_process_query_stdout",
+        lambda _command: f"123 {command_line}\n",
+    )
+
+    assert daemon_manager_module._guard_daemon_process_inventory_for_guard_home(tmp_path) == []
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX process-list coverage")
+def test_daemon_inventory_fails_closed_for_matching_home_without_port(tmp_path, monkeypatch) -> None:
+    command_line = f"/usr/local/bin/hol-guard daemon --serve --guard-home {tmp_path}"
     monkeypatch.setattr(daemon_manager_module, "_trusted_posix_ps_path", lambda: "/bin/ps")
     monkeypatch.setattr(
         daemon_manager_module,

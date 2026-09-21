@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import threading
 import time
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -263,25 +264,62 @@ def test_authority_health_maps_to_fail_closed_runtime_failure() -> None:
     assert tampered.authority_failure is ResolverFailureCode.AUTHORITY_TAMPERED
 
 
-def test_unavailable_authority_blocks_compatibility_destructive_shell() -> None:
+@pytest.mark.parametrize(
+    "command",
+    (
+        "echo MALICIOUS > dangerous-marker.json",
+        "echo MALICIOUS 2> dangerous-marker.json",
+        "echo MALICIOUS >| dangerous-marker.json",
+    ),
+)
+def test_unavailable_authority_cannot_relax_native_redirect_block(command: str) -> None:
+    from codex_plugin_scanner.guard.native_command_model import _canonical_command_from_native
     from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
+    from codex_plugin_scanner.guard.runtime.native_command_evaluation import review_command_native
+    from tests.native_command_test_support import real_native_review_fixture
 
-    snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(
-        ExtensionControlAuthorityView(
-            AuthorityHealth.UNENROLLED,
-            0,
-            BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
-            (),
-        )
-    )
+    fixture = real_native_review_fixture(command)
+    canonical = _canonical_command_from_native(command, fixture.payload["command_model"])
+    assert canonical is not None
+    assert fixture.payload["minimum_action"] == "block"
+    assert canonical.uncertainty_reason == "command_redirect_not_yet_supported"
+    assert fixture.payload["command_extensions"]["evaluation_error"] == "native_command_evaluation_failed"
+    assert fixture.payload["command_extensions"]["observations"] == []
+    snapshot = replace(fixture.snapshot, health=AuthorityHealth.UNENROLLED)
     with use_extension_control_snapshot(snapshot):
-        evaluation = evaluate_command("echo MALICIOUS > dangerous-marker.json")
-        fd_evaluation = evaluate_command("echo MALICIOUS 2> dangerous-marker.json")
-        noclobber_evaluation = evaluate_command("echo MALICIOUS >| dangerous-marker.json")
+        evaluation = evaluate_command(command, canonical_command=canonical, native_extension_evidence=fixture.payload)
+        # Valid, request-bound failure evidence remains an authoritative block
+        # even after host authority becomes unavailable. It supplies no match
+        # observations and cannot issue an execution proof.
+        assert evaluation.minimum_action == "block"
+        assert evaluation.decision_plane.action == "block"
+        assert evaluation.matches == ()
+        assert evaluation.decision_plane.proof_routes == frozenset()
+        assert any(reason.reason_code == "native.classification-block" for reason in evaluation.decision_plane.reasons)
+        assert review_command_native(command, guard_home=Path("unused-guard-home")) is None
+
+
+def test_unavailable_authority_blocks_otherwise_valid_native_destructive_evidence() -> None:
+    from codex_plugin_scanner.guard.native_command_model import _canonical_command_from_native
+    from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
+    from tests.native_command_test_support import real_native_review_fixture
+
+    command = "rm -rf ./build"
+    fixture = real_native_review_fixture(command)
+    canonical = _canonical_command_from_native(command, fixture.payload["command_model"])
+    assert canonical is not None
+    assert fixture.payload["command_extensions"]["evaluation_error"] is None
+    # Even otherwise matching native evidence cannot authorize an unhealthy
+    # control snapshot. This exercises the reducer's independent health floor.
+    snapshot = replace(fixture.snapshot, health=AuthorityHealth.UNENROLLED)
+    with use_extension_control_snapshot(snapshot):
+        evaluation = evaluate_command(
+            command,
+            canonical_command=canonical,
+            native_extension_evidence=fixture.payload,
+        )
 
     assert evaluation.decision_plane.action == "block"
-    assert fd_evaluation.decision_plane.action == "block"
-    assert noclobber_evaluation.decision_plane.action == "block"
     assert any(
         reason.reason_code == "control.resolver-failure" for reason in evaluation.decision_plane.controlling_reasons
     )
@@ -325,7 +363,7 @@ def test_daemon_refreshes_resident_snapshot_after_external_authority_change(
         monkeypatch.setattr(
             store,
             "read_extension_control_authority_for_registry",
-            lambda registry: updated,
+            lambda registry, *, read_only=False: updated,
         )
         deadline = time.monotonic() + 1
         while daemon._server.extension_control_runtime.current().revision != 7:

@@ -164,7 +164,10 @@ pub fn compatibility_observations(
         || command.uncertainty_reason.is_some()
         || command.segments.is_empty()
         || command.path_overridden
-        || !command.wrapper_chain.is_empty()
+        || command
+            .wrapper_chain
+            .iter()
+            .any(|wrapper| wrapper != "sudo")
     {
         return Err("native_command_compatibility_model_unsupported");
     }
@@ -173,7 +176,10 @@ pub fn compatibility_observations(
         deadline_check(deadline)?;
         if segment.executable.is_none()
             || segment.path_overridden
-            || !segment.wrapper_chain.is_empty()
+            || segment
+                .wrapper_chain
+                .iter()
+                .any(|wrapper| wrapper != "sudo")
             || !segment.environment_names.is_empty()
             || segment.text.contains('\0')
             || segment.arguments.iter().any(|value| value.contains('\0'))

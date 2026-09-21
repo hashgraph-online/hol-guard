@@ -80,6 +80,18 @@ jobs:
           cache-dependency-glob: uv.lock
       - name: Install the locked development environment
         run: uv sync --frozen --extra dev --python "${{ matrix.python }}"
+      - name: Build native command evaluators
+        run: |
+          cargo build --manifest-path rust/Cargo.toml --locked --release -p guard-command --bin guard-command-source
+          cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime
+          compiler="$GITHUB_WORKSPACE/rust/target/release/guard-command-source"
+          runtime="$GITHUB_WORKSPACE/rust/target/release/hol-guard-runtime"
+          if [[ "$RUNNER_OS" == "Windows" ]]; then compiler="${compiler}.exe"; fi
+          if [[ "$RUNNER_OS" == "Windows" ]]; then runtime="${runtime}.exe"; fi
+          echo "HOL_GUARD_NATIVE_SOURCE_COMPILER=$compiler" >> "$GITHUB_ENV"
+          echo "HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER=$compiler" >> "$GITHUB_ENV"
+          echo "HOL_GUARD_NATIVE_BINARY=$runtime" >> "$GITHUB_ENV"
+          echo "HOL_GUARD_NATIVE_REGRESSION=1" >> "$GITHUB_ENV"
       - name: Run builder and contribution trust tests
         run: |
           mkdir -p builder-evidence

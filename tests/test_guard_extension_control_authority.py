@@ -19,7 +19,6 @@ from codex_plugin_scanner.guard.runtime.command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
     CommandSafetyExtensionRegistry,
 )
-from codex_plugin_scanner.guard.runtime.command_rules import AnyMatcher, ExecutableMatcher
 from codex_plugin_scanner.guard.runtime.extension_control_authority import (
     AuthorityHealth,
     AuthorityPhase,
@@ -322,23 +321,10 @@ def _matcher_contract_registry() -> tuple[CommandSafetyExtensionRegistry, str]:
     rule_index = next(
         index
         for index, rule in enumerate(extension.rules)
-        if rule.rule_id.endswith("compose-destructive-cleanup") and isinstance(rule.matcher, AnyMatcher)
+        if rule.rule_id.endswith("compose-destructive-cleanup")
     )
     rule = extension.rules[rule_index]
-    assert isinstance(rule.matcher, AnyMatcher)
-    leaf_index = next(
-        index
-        for index, matcher in enumerate(rule.matcher.matchers)
-        if isinstance(matcher, ExecutableMatcher) and matcher.required_option_values
-    )
-    leaf = rule.matcher.matchers[leaf_index]
-    assert isinstance(leaf, ExecutableMatcher)
-    changed_leaf = replace(leaf, required_flags=leaf.required_flags | {"--catalog-migration-identity"})
-    changed_matcher = replace(
-        rule.matcher,
-        matchers=(*rule.matcher.matchers[:leaf_index], changed_leaf, *rule.matcher.matchers[leaf_index + 1 :]),
-    )
-    changed_rule = replace(rule, matcher=changed_matcher)
+    changed_rule = replace(rule, matcher_contract_digest="0" * 64)
     changed_extension = replace(
         extension,
         rules=(*extension.rules[:rule_index], changed_rule, *extension.rules[rule_index + 1 :]),

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
-
 from . import command_managed_service_extensions as _cloud_cli
 from .command_extension_matchers import (
     executable_matcher,
@@ -13,13 +11,6 @@ from .command_extension_matchers import (
 )
 from .command_extension_specs import CommandExtensionSpec
 from .command_rules import AnyMatcher, CommandRuleSeverity, CommandSafetyRule, CommandSafeVariant
-from .extension_control_contract import (
-    ControlState,
-    ControlTarget,
-    ControlTargetKind,
-    ExtensionControl,
-    ExtensionControlLayer,
-)
 
 _AWS_OPT = _cloud_cli.AWS_CLI_GLOBAL_OPTIONS
 _AWS_FLAGS = _cloud_cli.AWS_CLI_GLOBAL_FLAGS
@@ -412,59 +403,3 @@ DNS_COMMAND_EXTENSION_SPECS = (
         executables=("az",),
     ),
 )
-
-LEGACY_DNS_EXTENSION_ID = "command.dns"
-LEGACY_DNS_PERMISSION_ID = "command.dns.permission.delete"
-DNS_PROVIDER_EXTENSION_IDS = (_AWS, _GCP, _AZURE)
-DNS_ZONE_PERMISSION_IDS = (
-    f"{_AWS}.permission.zone-deletion",
-    f"{_GCP}.permission.zone-deletion",
-    f"{_AZURE}.permission.public-zone-deletion",
-)
-
-
-def expand_legacy_dns_target(target: ControlTarget) -> tuple[ControlTarget, ...]:
-    """Expand the retired aggregate DNS identifiers onto provider-specific targets."""
-
-    if target.kind is ControlTargetKind.EXTENSION and target.target_id == LEGACY_DNS_EXTENSION_ID:
-        return tuple(
-            ControlTarget(ControlTargetKind.EXTENSION, extension_id) for extension_id in DNS_PROVIDER_EXTENSION_IDS
-        )
-    if target.kind is ControlTargetKind.PERMISSION and target.target_id == LEGACY_DNS_PERMISSION_ID:
-        return tuple(
-            ControlTarget(ControlTargetKind.PERMISSION, permission_id) for permission_id in DNS_ZONE_PERMISSION_IDS
-        )
-    return (target,)
-
-
-def expand_legacy_dns_layers(layers: tuple[ExtensionControlLayer, ...]) -> tuple[ExtensionControlLayer, ...]:
-    """Rewrite persisted aggregate DNS controls onto the provider-specific replacements.
-
-    Expansion-induced collisions (legacy aggregate plus an already-present provider
-    target) merge with disable dominance. Duplicate original targets stay duplicated
-    so composition can still fail closed.
-    """
-
-    rewritten: list[ExtensionControlLayer] = []
-    for layer in layers:
-        merged: dict[ControlTarget, ControlState] = {}
-        order: list[ControlTarget] = []
-        extras: list[ExtensionControl] = []
-        seen_originals: set[ControlTarget] = set()
-        for control in layer.controls:
-            expanded_targets = expand_legacy_dns_target(control.target)
-            if control.target in seen_originals:
-                extras.extend(ExtensionControl(target, control.state) for target in expanded_targets)
-                continue
-            seen_originals.add(control.target)
-            for target in expanded_targets:
-                previous = merged.get(target)
-                if previous is None:
-                    order.append(target)
-                    merged[target] = control.state
-                elif previous is ControlState.DISABLED or control.state is ControlState.DISABLED:
-                    merged[target] = ControlState.DISABLED
-        expanded = [ExtensionControl(target, merged[target]) for target in order]
-        expanded.extend(extras)
-        rewritten.append(replace(layer, controls=tuple(expanded)))
-    return tuple(rewritten)

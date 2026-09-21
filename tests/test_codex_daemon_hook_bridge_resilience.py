@@ -28,6 +28,20 @@ from tests.codex_daemon_hook_bridge_fixtures import (
 )
 
 
+def _is_codex_pretool_continue(response: object) -> bool:
+    if response == {}:
+        return True
+    if not isinstance(response, dict):
+        return False
+    hook = response.get("hookSpecificOutput")
+    if not isinstance(hook, dict):
+        return False
+    decision = hook.get("permissionDecision")
+    if decision == "deny":
+        return True
+    return hook.get("hookEventName") == "PreToolUse" and "permissionDecision" not in hook
+
+
 def test_real_daemon_rejects_consumed_challenge_replay(tmp_path: Path) -> None:
     guard_home = tmp_path / "guard-home"
     workspace = tmp_path / "workspace"
@@ -118,7 +132,8 @@ def test_malformed_daemon_and_fallback_outputs_fail_closed(
 
     assert exit_code == 0
     output = json.loads(capsys.readouterr().out)
-    assert output["hookSpecificOutput"]["permissionDecision"] == "allow"
+    assert output["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
+    assert "permissionDecision" not in output["hookSpecificOutput"]
 
 
 def test_post_tool_use_stdout_is_exactly_one_json_object_with_noisy_fallback(
@@ -274,8 +289,9 @@ def test_authenticated_overload_fails_closed_without_fallback_or_restart(
     assert starts == []
     payload = json.loads(capsys.readouterr().out)
     output = payload["hookSpecificOutput"]
-    assert output["permissionDecision"] == "allow"
-    assert "temporarily saturated" in output["permissionDecisionReason"]
+    assert "permissionDecision" not in output
+    assert output["hookEventName"] == "PreToolUse"
+    assert "temporarily saturated" in str(payload.get("systemMessage") or "")
 
 
 def test_typed_transient_overload_retries_once_when_deadline_fits(
@@ -305,7 +321,9 @@ def test_typed_transient_overload_retries_once_when_deadline_fits(
 
     assert bridge.main(**_bridge_config(guard_home, 1)) == 0
     assert attempts == 2
-    assert json.loads(capsys.readouterr().out)["hookSpecificOutput"]["permissionDecision"] == "allow"
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["hookSpecificOutput"] == {"hookEventName": "PreToolUse"}
+    assert "permissionDecision" not in payload["hookSpecificOutput"]
 
 
 def test_daemon_failure_kind_separates_overload_transport_and_control_plane() -> None:
@@ -392,10 +410,7 @@ except SystemExit:
         (result.returncode, result.stdout, result.stderr) for result in results
     ]
     responses = [json.loads(result.stdout) for result in results]
-    assert all(
-        response == {} or response.get("hookSpecificOutput", {}).get("permissionDecision") == "deny"
-        for response in responses
-    )
+    assert all(_is_codex_pretool_continue(response) for response in responses)
     elapsed_samples = [float(result.stderr.rsplit("bridge-elapsed=", 1)[1]) for result in results]
     # The process timeout enforces the hard two-second wall-clock budget. The
     # in-process sample retains the one-second bridge budget without charging

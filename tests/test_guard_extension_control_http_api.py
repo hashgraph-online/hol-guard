@@ -5,6 +5,7 @@ import json
 import urllib.error
 import urllib.request
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 
@@ -113,4 +114,23 @@ def test_http_routes_authenticate_before_reading_sensitive_post_body(tmp_path: P
         assert response.status == 413
     finally:
         connection.close()
+        daemon.stop()
+
+
+def test_http_inspect_command_uses_authenticated_client_route(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    inspected = {"status": "native_unavailable", "command": "echo ok"}
+    inspector = Mock(return_value=inspected)
+    daemon._server.extension_control_api.inspect_command = inspector
+    daemon.start()
+    try:
+        auth_token = load_guard_daemon_auth_token(store.guard_home)
+        assert auth_token is not None
+        client = GuardSurfaceDaemonClient(f"http://127.0.0.1:{daemon.port}", auth_token)
+        payload = {"command": "echo ok", "cwd": str(tmp_path), "home_dir": str(tmp_path)}
+
+        assert client.inspect_command(payload) == inspected
+        inspector.assert_called_once_with(payload)
+    finally:
         daemon.stop()

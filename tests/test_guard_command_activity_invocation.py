@@ -6,6 +6,8 @@ import sqlite3
 from datetime import date, datetime, timezone
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.guard.cli.commands_support_command_activity import (
     record_pre_hook_command_activity_best_effort,
 )
@@ -24,6 +26,7 @@ from codex_plugin_scanner.guard.store_command_activity_display_schema import (
     COMMAND_ACTIVITY_DISPLAY_SCHEMA_MIGRATION_VERSION,
 )
 from tests.guard_command_activity_api_support import evidence
+from tests.native_command_activity_test_support import use_real_native_activity_reviews
 
 
 def test_invocation_preview_redacts_secrets_and_keeps_the_command() -> None:
@@ -111,7 +114,8 @@ def test_payload_preview_reads_codex_tool_calls() -> None:
     assert preview == "git status"
 
 
-def test_recorded_command_activity_exposes_local_preview(tmp_path: Path) -> None:
+def test_recorded_command_activity_exposes_local_preview(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    use_real_native_activity_reviews(monkeypatch)
     store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
     assert record_pre_hook_command_activity_best_effort(
         store=store,

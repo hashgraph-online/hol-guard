@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from functools import partial
+import hashlib
+import json
 from pathlib import Path
 from typing import cast
 
@@ -12,60 +12,29 @@ from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.models import GuardArtifact
 from codex_plugin_scanner.guard.runtime import secret_file_requests
 from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
-from codex_plugin_scanner.guard.runtime.command_extensions import (
-    CommandSafetyExtension,
-    CommandSafetyExtensionRegistry,
-)
-from codex_plugin_scanner.guard.runtime.command_matcher_contracts import MatcherEvidence
-from codex_plugin_scanner.guard.runtime.command_model import CanonicalCommand
-from codex_plugin_scanner.guard.runtime.command_rules import CommandSafetyRule
-
-
-@dataclass(frozen=True, slots=True)
-class _FailingMatcher:
-    def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
-        del command
-        raise RuntimeError("private matcher detail")
-
-
-def _failing_registry() -> CommandSafetyExtensionRegistry:
-    rule = CommandSafetyRule(
-        rule_id="command.test.failure",
-        title="Failing matcher",
-        description="Exercises the matcher failure boundary.",
-        severity="high",
-        risk_classes=("destructive_shell",),
-        action_classes=(),
-        safer_alternatives=("Review the operation.",),
-        example_command="test-tool inspect",
-        matcher=_FailingMatcher(),
-    )
-    return CommandSafetyExtensionRegistry(
-        (
-            CommandSafetyExtension(
-                extension_id="command.test",
-                version="1.0.0",
-                name="Test extension",
-                description="Exercises runtime policy composition.",
-                action_classes=(),
-                risk_classes=("destructive_shell",),
-                safer_alternatives=("Review the operation.",),
-                rules=(rule,),
-            ),
-        )
-    )
+from codex_plugin_scanner.guard.runtime.native_command_extension_evidence import NativeCommandExtensionEvidenceError
+from tests.test_guard_command_decision_routing import _synthetic_native_fixture
 
 
 def test_matcher_failure_central_block_reaches_final_runtime_policy(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    registry = _failing_registry()
+    registry, snapshot, command, payload = _synthetic_native_fixture(mode="disabled", uncertainty=True)
+    evaluation = evaluate_command(
+        command.normalized_text,
+        canonical_command=command,
+        registry=registry,
+        extension_control_snapshot=snapshot,
+        native_extension_evidence=payload,
+    )
+    assert evaluation.extension_observations[0].to_dict()["uncertainty_reasons"] == ["matcher-failure"]
     monkeypatch.setattr(secret_file_requests, "BUILT_IN_COMMAND_EXTENSION_REGISTRY", registry)
-    monkeypatch.setattr(secret_file_requests, "evaluate_command", partial(evaluate_command, registry=registry))
     request = secret_file_requests.extract_sensitive_tool_action_request(
         "Shell",
-        {"command": "test-tool target"},
+        {"command": command.normalized_text},
+        canonical_command=command,
+        native_evaluation=evaluation,
     )
     assert request is not None
     artifact = secret_file_requests.build_tool_action_request_artifact(
@@ -73,6 +42,9 @@ def test_matcher_failure_central_block_reaches_final_runtime_policy(
         request,
         config_path="guard-config",
         source_scope="project",
+        extension_control_snapshot=snapshot,
+        native_extension_evidence=payload,
+        native_evaluation=evaluation,
     )
 
     assert artifact.metadata["command_action_floor"] == "block"
@@ -90,6 +62,29 @@ def test_matcher_failure_central_block_reaches_final_runtime_policy(
     assert _runtime_artifact_policy_action(config, artifact, "codex") == "block"
     artifact.metadata["command_action_floor"] = floor
     assert _runtime_artifact_policy_action(config, artifact, "codex") == "block"
+
+    # Only the typed native failure reaches policy. Private matcher diagnostics
+    # must be rejected even when the observation digest is internally valid.
+    native = payload["command_extensions"]
+    native["observations"][0]["matcher_evidence"][0]["detail"] = "private matcher detail"
+    canonical = json.dumps(
+        {key: native[key] for key in ("observations", "permission_observations", "evaluation_error")},
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode()
+    native["binding"]["observations_digest"] = hashlib.sha256(
+        b"hol-guard.native-command-observations.v1\0" + canonical
+    ).hexdigest()
+    with pytest.raises(NativeCommandExtensionEvidenceError, match="native_command_extension_evidence_invalid") as error:
+        evaluate_command(
+            command.normalized_text,
+            canonical_command=command,
+            registry=registry,
+            extension_control_snapshot=snapshot,
+            native_extension_evidence=payload,
+        )
+    assert "private matcher detail" not in str(error.value)
 
 
 def test_verified_pytest_restricted_profile_overrides_generic_execution_floor(tmp_path: Path) -> None:

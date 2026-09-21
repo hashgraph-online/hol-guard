@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.github_command_capabilities import classify_github_cli
 from tests.command_extension_contracts import assert_reviewed_command_cases, assert_safe_command_cases
+from tests.native_command_test_support import real_native_command_evaluation
 
 GIT_PORCELAIN_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
     ("git switch feature", "git workspace command", "command.git.switch"),
@@ -28,7 +28,12 @@ GIT_PORCELAIN_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
 
 
 def test_git_porcelain_mutating_commands_are_reviewed(tmp_path: Path) -> None:
-    assert_reviewed_command_cases(GIT_PORCELAIN_REVIEW_CASES, tmp_path)
+    wrapper_cases = {case[0] for case in GIT_PORCELAIN_REVIEW_CASES if case[0].startswith("zsh -lc")}
+    assert_reviewed_command_cases(
+        tuple(case for case in GIT_PORCELAIN_REVIEW_CASES if case[0] not in wrapper_cases), tmp_path
+    )
+    for command in wrapper_cases:
+        assert real_native_command_evaluation(command, cwd=tmp_path).native_minimum_action == "block"
 
 
 GIT_PORCELAIN_SAFE_COMMANDS: tuple[str, ...] = (
@@ -45,8 +50,11 @@ GIT_PORCELAIN_SAFE_COMMANDS: tuple[str, ...] = (
 )
 
 
-def test_git_read_and_nonforce_push_remain_safe(tmp_path: Path) -> None:
-    assert_safe_command_cases(GIT_PORCELAIN_SAFE_COMMANDS, tmp_path)
+def test_git_reads_and_nonforce_pushes_keep_their_native_floors(tmp_path: Path) -> None:
+    for command in GIT_PORCELAIN_SAFE_COMMANDS:
+        evaluation = real_native_command_evaluation(command, cwd=tmp_path).evaluation
+        expected = "allow" if command == "git ls-files" else "review"
+        assert evaluation.minimum_action == expected, command
 
 
 def test_git_catalog_lists_everyday_porcelain_commands() -> None:
@@ -103,7 +111,7 @@ def test_github_account_switch_is_reviewed(tmp_path: Path) -> None:
     )
 
 
-def test_cataloged_git_reads_do_not_own_runtime_inspection(tmp_path: Path) -> None:
-    evaluation = evaluate_command("git status --short", cwd=tmp_path, home_dir=tmp_path)
+def test_cataloged_git_reads_are_owned_by_native_runtime_inspection(tmp_path: Path) -> None:
+    evaluation = real_native_command_evaluation("git status --short", cwd=tmp_path, home_dir=tmp_path).evaluation
 
-    assert evaluation.matches == ()
+    assert [owned.match.rule.rule_id for owned in evaluation.matches] == ["command.git.status"]

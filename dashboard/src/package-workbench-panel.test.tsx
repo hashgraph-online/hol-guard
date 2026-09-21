@@ -88,6 +88,26 @@ const panelMarkup = renderToStaticMarkup(
   <PackageWorkbenchPanel auditSnapshot={snapshot} onRunAudit={() => undefined} />,
 );
 
+const workspaceRecoveryMarkup = renderToStaticMarkup(
+  <PackageWorkbenchPanel
+    auditSnapshot={null}
+    auditWorkspaceSelectionRequired
+    auditWorkspaceDir=""
+    onAuditWorkspaceDirChange={() => undefined}
+    onRunAudit={() => undefined}
+  />,
+);
+
+const selectedWorkspaceMarkup = renderToStaticMarkup(
+  <PackageWorkbenchPanel
+    auditSnapshot={null}
+    auditWorkspaceSelectionRequired
+    auditWorkspaceDir="/workspace/project"
+    onAuditWorkspaceDirChange={() => undefined}
+    onRunAudit={() => undefined}
+  />,
+);
+
 assert(panelMarkup.includes("Filters"), "PWP1: panel should expose a Filters button");
 assert(panelMarkup.includes("All packages"), "PWP2: panel should render all-packages chip");
 assert(panelMarkup.includes("Needs review"), "PWP3: panel should render needs-review chip");
@@ -101,6 +121,22 @@ assert(!panelMarkup.includes("Search packages…"), "PWP8: inline search input s
 assert(panelMarkup.includes('aria-pressed="true"'), "PWP9: view-mode chips use aria-pressed");
 assert(!panelMarkup.includes('role="switch"'), "PWP10: view-mode chips do not use role switch");
 assert(!panelMarkup.includes("aria-checked"), "PWP11: view-mode chips do not use aria-checked");
+assert(
+  workspaceRecoveryMarkup.includes("Project folder"),
+  "PWP12: workspace recovery should show a project-folder field",
+);
+assert(
+  workspaceRecoveryMarkup.includes('data-testid="workspace-audit-folder-input"'),
+  "PWP13: workspace recovery should expose a controllable project-folder input",
+);
+assert(
+  workspaceRecoveryMarkup.includes('aria-disabled="true"'),
+  "PWP14: audit should stay disabled until a project folder is provided",
+);
+assert(
+  selectedWorkspaceMarkup.includes('aria-disabled="false"'),
+  "PWP15: audit should be enabled after a project folder is provided",
+);
 
 const singleFilter: PackageWorkbenchFilters = {
   ecosystem: "npm",
@@ -110,7 +146,7 @@ const singleFilter: PackageWorkbenchFilters = {
 };
 assert(
   buildFilterSummary(singleFilter, "severity" as PackageWorkbenchSortKey, "desc").length === 1,
-  "PWP12: a single active filter produces a chip",
+  "PWP16: a single active filter produces a chip",
 );
 assert(
   buildFilterSummary(
@@ -118,12 +154,12 @@ assert(
     "severity" as PackageWorkbenchSortKey,
     "desc",
   ).length === 0,
-  "PWP13: default filters produce no chips",
+  "PWP17: default filters produce no chips",
 );
 
 const chipMarkup = renderToStaticMarkup(
   <ActiveFilterChip label="Ecosystem: npm" onRemove={() => undefined} />,
 );
-assert(chipMarkup.includes("Ecosystem: npm"), "PWP14: active filter chip renders its label");
+assert(chipMarkup.includes("Ecosystem: npm"), "PWP18: active filter chip renders its label");
 
 console.log("package-workbench-panel.test.tsx: all assertions passed");

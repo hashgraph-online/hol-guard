@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.command_inspection import inspect_command
+from tests.native_command_test_support import inspect_command_native_test as inspect_command
 
 
 @pytest.mark.parametrize("value", ["all", "local"])

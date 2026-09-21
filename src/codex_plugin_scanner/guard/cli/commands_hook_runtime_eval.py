@@ -283,6 +283,7 @@ def _evaluate_runtime_artifact_hook(
     workflow_state = prepare_github_workflow_hook_state(
         runtime_artifact,
         workspace=runtime_workspace,
+        guard_home=guard_home,
         config=config,
         store=store,
         approval_request_id=_claimed_approval_request_id,

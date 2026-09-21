@@ -1,0 +1,115 @@
+{
+  "extension": {
+    "action_classes": [
+      "PostgreSQL destructive command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews explicit PostgreSQL database removal commands.",
+    "ecosystem_ids": [],
+    "executables": [],
+    "extension_id": "command.database.postgresql",
+    "homepage": null,
+    "icon": {
+      "kind": "none"
+    },
+    "license": null,
+    "name": "PostgreSQL command protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "PostgreSQL destructive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies dropdb invocations that remove a PostgreSQL database.",
+        "example_command": "dropdb production",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "PostgreSQL database removal",
+        "permission_id": "command.database.postgresql.permission.drop",
+        "replacement_permission_id": null,
+        "risk_tier": "critical",
+        "safer_guidance": [
+          "List the target database, active connections, and a current backup before removal."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": null,
+    "reference_urls": [
+      "https://www.postgresql.org/docs/current/app-dropdb.html"
+    ],
+    "required": false,
+    "risk_classes": [
+      "destructive_shell",
+      "network_egress"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "PostgreSQL destructive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies dropdb invocations that remove a PostgreSQL database.",
+        "family": null,
+        "matcher": {
+          "config": {
+            "executables": [
+              "dropdb",
+              "dropdb.cmd",
+              "dropdb.exe"
+            ],
+            "forbidden_flags": [
+              "--help",
+              "--version",
+              "-?",
+              "-V"
+            ],
+            "minimum_operands": 1,
+            "options_with_values": [
+              "--host",
+              "--maintenance-db",
+              "--port",
+              "--username",
+              "-U",
+              "-h",
+              "-p"
+            ]
+          },
+          "op": "leading-operand-count.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.database.postgresql.permission.drop",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.database.postgresql.drop",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "List the target database, active connections, and a current backup before removal."
+        ],
+        "severity": "critical",
+        "title": "PostgreSQL database removal"
+      }
+    ],
+    "safer_alternatives": [
+      "Verify active connections and a current backup before running dropdb."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

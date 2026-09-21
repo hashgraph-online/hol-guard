@@ -19,7 +19,7 @@ from .managed_controls_policy_bundle import (
     managed_controls_layers_from_activation_state,
     managed_controls_revision_from_state,
 )
-from .runtime.command_dns_extensions import expand_legacy_dns_layers
+from .runtime.command_dns_control_migration import expand_legacy_dns_layers
 from .runtime.command_extensions import CommandSafetyExtensionRegistry
 from .runtime.command_matcher_contracts import MatcherContractError, canonical_contract_value
 from .runtime.extension_control_authority import (

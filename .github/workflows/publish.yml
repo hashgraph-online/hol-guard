@@ -57,19 +57,32 @@ jobs:
           GITHUB_SHA: ${{ github.sha }}
           RELEASE_CHANNEL: ${{ github.event.inputs.release_channel }}
           RELEASE_TRAIN: ${{ github.event.inputs.release_train }}
+          RELEASE_VERSION: ${{ github.event.inputs.release_version }}
           EXPECTED_SHA: ${{ github.event.inputs.expected_sha }}
         run: |
           if [[ "$GITHUB_RUN_ATTEMPT" != "1" ]]; then
             echo "Release workflow reruns are denied; create a fresh authorized dispatch" >&2
             exit 1
           fi
-          if [[ "$GITHUB_ACTOR_ID" != "6068672" && "$GITHUB_ACTOR_ID" != "301892678" ]]; then
-            echo "Release dispatch actor is not an authorized maintainer" >&2
-            exit 1
-          fi
           case "${RELEASE_CHANNEL}:${RELEASE_TRAIN}:${GITHUB_REF}" in
-            alpha:3.0:refs/heads/release/3.0) ;;
-            stable:main:refs/heads/main) ;;
+            alpha:3.0:refs/heads/release/3.0)
+              if [[ "$GITHUB_ACTOR_ID" != "6068672" && "$GITHUB_ACTOR_ID" != "301892678" ]]; then
+                echo "Release dispatch actor is not an authorized maintainer" >&2
+                exit 1
+              fi
+              ;;
+            stable:main:refs/heads/main)
+              if [[ "$GITHUB_ACTOR_ID" != "6068672" && "$GITHUB_ACTOR_ID" != "301892678" && "$GITHUB_ACTOR_ID" != "41898282" ]]; then
+                echo "Release dispatch actor is not an authorized maintainer" >&2
+                exit 1
+              fi
+              ;;
+            "stable:main:refs/tags/v${RELEASE_VERSION}")
+              if [[ "$GITHUB_ACTOR_ID" != "6068672" && "$GITHUB_ACTOR_ID" != "301892678" && "$GITHUB_ACTOR_ID" != "41898282" ]]; then
+                echo "Release dispatch actor is not an authorized maintainer" >&2
+                exit 1
+              fi
+              ;;
             *)
               echo "Release channel, train, and source branch are not an authorized combination" >&2
               exit 1
@@ -118,8 +131,6 @@ jobs:
             --setup-action-ref "$SETUP_UV_ACTION_REF"
       - name: Install dependencies
         run: uv sync --frozen --extra dev --extra publish --extra cisco
-      - name: Verify native command program is current
-        run: uv run --no-sync python scripts/build_native_command_program.py --check
       - name: Compute publish version
         id: version
         env:
@@ -154,13 +165,13 @@ jobs:
               echo "Release workflow reruns are denied; create a fresh authorized dispatch" >&2
               exit 1
             fi
-            if [[ "$GITHUB_ACTOR_ID" != "6068672" && "$GITHUB_ACTOR_ID" != "301892678" ]]; then
-              echo "Release dispatch actor is not an authorized maintainer" >&2
-              exit 1
-            fi
             CHANNEL="$RELEASE_CHANNEL"
             TRAIN="$RELEASE_TRAIN"
             if [[ "$CHANNEL" == "alpha" && "$TRAIN" == "3.0" ]]; then
+              if [[ "$GITHUB_ACTOR_ID" != "6068672" && "$GITHUB_ACTOR_ID" != "301892678" ]]; then
+                echo "Release dispatch actor is not an authorized maintainer" >&2
+                exit 1
+              fi
               TRAIN_REF="refs/heads/release/${TRAIN}"
               if [[ "$GITHUB_REF" != "$TRAIN_REF" ]]; then
                 echo "Alpha releases must run from ${TRAIN_REF}" >&2
@@ -189,7 +200,11 @@ jobs:
               done
               VERSION=$(uv run --no-sync python scripts/validate_alpha_release.py "${VALIDATOR_ARGS[@]}")
             elif [[ "$CHANNEL" == "stable" && "$TRAIN" == "main" ]]; then
-              if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
+              if [[ "$GITHUB_ACTOR_ID" != "6068672" && "$GITHUB_ACTOR_ID" != "301892678" && "$GITHUB_ACTOR_ID" != "41898282" ]]; then
+                echo "Release dispatch actor is not an authorized maintainer" >&2
+                exit 1
+              fi
+              if [[ "$GITHUB_REF" != "refs/heads/main" && "$GITHUB_REF" != "refs/tags/v${RELEASE_VERSION}" ]]; then
                 echo "Stable releases must run from refs/heads/main" >&2
                 exit 1
               fi
@@ -203,12 +218,20 @@ jobs:
                 --argjson pypi "$PYPI_VERSIONS" \
                 --argjson testpypi "$TESTPYPI_VERSIONS" \
                 --argjson tags "$TAG_VERSIONS" \
-                '$pypi + $testpypi + $tags | unique')
+                --arg candidate "$RELEASE_VERSION" \
+                '$pypi + $testpypi + ($tags | map(select(. != $candidate))) | unique')
               EXPECTED_VERSION=$(uv run --no-sync python scripts/compute_main_release_version.py \
                 --base-version "$BASE_VERSION" <<< "$VERSIONS")
               if [[ "$RELEASE_VERSION" != "$EXPECTED_VERSION" ]]; then
                 echo "Stable release version must match the next registry-derived version: ${EXPECTED_VERSION}" >&2
                 exit 1
+              fi
+              if git rev-parse -q --verify "v${RELEASE_VERSION}^{commit}" >/dev/null; then
+                tag_sha=$(git rev-parse "v${RELEASE_VERSION}^{commit}")
+                if [[ "$tag_sha" != "$SOURCE_SHA" ]]; then
+                  echo "Stable tag does not target the dispatch source" >&2
+                  exit 1
+                fi
               fi
               VERSION="$RELEASE_VERSION"
             else
@@ -423,7 +446,7 @@ jobs:
           needs.build.outputs.channel == 'stable' &&
           github.event_name == 'workflow_dispatch' &&
           github.run_attempt == 1 &&
-          github.ref == 'refs/heads/main' &&
+          (github.ref == 'refs/heads/main' || github.ref == format('refs/tags/v{0}', github.event.inputs.release_version)) &&
           github.event.inputs.release_channel == 'stable' &&
           github.event.inputs.release_train == 'main'
         )
@@ -441,19 +464,23 @@ jobs:
             platform_tag: manylinux_2_17_x86_64
             target: x86_64-unknown-linux-musl
             runtime: rust/target/x86_64-unknown-linux-musl/release/hol-guard-runtime
+            source_compiler: rust/target/x86_64-unknown-linux-musl/release/guard-command-source
           - runner: macos-15-intel
             platform_tag: macosx_13_0_x86_64
             target: x86_64-apple-darwin
             runtime: rust/target/x86_64-apple-darwin/release/hol-guard-runtime
+            source_compiler: rust/target/x86_64-apple-darwin/release/guard-command-source
           - runner: macos-15
             platform_tag: macosx_11_0_arm64
             target: aarch64-apple-darwin
             runtime: rust/target/aarch64-apple-darwin/release/hol-guard-runtime
+            source_compiler: rust/target/aarch64-apple-darwin/release/guard-command-source
           - runner: windows-latest
             platform_tag: win_amd64
             rustflags: -C link-arg=/Brepro
             target: x86_64-pc-windows-msvc
             runtime: rust/target/x86_64-pc-windows-msvc/release/hol-guard-runtime.exe
+            source_compiler: rust/target/x86_64-pc-windows-msvc/release/guard-command-source.exe
     steps:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
@@ -485,6 +512,17 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends musl-tools
+      - name: Cache trusted release compilation
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+        with:
+          prefix-key: release-native-v1
+          workspaces: rust
+          shared-key: release-${{ matrix.target }}
+          cache-workspace-crates: true
+          cache-bin: false
+          # Release builds never consume the validation cache. PR canaries can
+          # restore this trusted cache, but cannot publish entries to it.
+          save-if: ${{ github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/release/3.0') }}
       - name: Build version-matched runtime
         shell: bash
         env:
@@ -495,9 +533,24 @@ jobs:
           RUSTFLAGS: ${{ matrix.rustflags }}
           RUST_TARGET: ${{ matrix.target }}
           RUNTIME: ${{ matrix.runtime }}
+          SOURCE_COMPILER: ${{ matrix.source_compiler }}
         run: |
           cargo build --manifest-path rust/Cargo.toml --locked --release --target "$RUST_TARGET" -p hol-guard-runtime
+          cargo build --manifest-path rust/Cargo.toml --locked --release --target "$RUST_TARGET" -p guard-command --bin guard-command-source
           "$RUNTIME" self-test --json
+      - name: Verify native command program is current
+        shell: bash
+        env:
+          SOURCE_COMPILER: ${{ matrix.source_compiler }}
+        run: python scripts/build_native_command_program.py --check --compiler "$SOURCE_COMPILER"
+      - name: Verify native source compiler output
+        shell: bash
+        env:
+          SOURCE_COMPILER: ${{ matrix.source_compiler }}
+        run: |
+          jq -n --slurpfile source rust/crates/guard-command/tests/fixtures/command-source-example.v1.json --slurpfile trust contracts/extensions/trust-class-map.v1.json \
+            '{schema:"guard.command-extension-build.v1",sources:$source,mcp_sources:[],trust:$trust[0],base:"packaged"}' > source-build.json
+          "$SOURCE_COMPILER" compile < source-build.json > source-compiled.json
       - name: Verify Linux runtime is static
         if: runner.os == 'Linux'
         shell: bash
@@ -515,6 +568,7 @@ jobs:
           PLATFORM_TAG: ${{ matrix.platform_tag }}
           RUNTIME: ${{ matrix.runtime }}
           SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
+          SOURCE_COMPILER: ${{ matrix.source_compiler }}
           TARGET: ${{ matrix.target }}
           VERSION: ${{ needs.build.outputs.version }}
         run: |
@@ -527,7 +581,10 @@ jobs:
             --platform-tag "$PLATFORM_TAG" \
             --target "$TARGET" \
             --source-sha "$SOURCE_SHA" \
-            --rule-digest "$RULE_DIGEST"
+            --rule-digest "$RULE_DIGEST" \
+            --source-compiler "$SOURCE_COMPILER" \
+            --implementation-digest "$(python -c 'import json,sys; print(json.load(open("source-compiled.json"))["implementation_digest"])')" \
+            --base-program-digest "$(python -c 'import json,sys; print(json.load(open("source-compiled.json"))["base_program_digest"])')"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: native-guard-wheel-${{ matrix.platform_tag }}
@@ -1099,7 +1156,7 @@ jobs:
       vars.MAIN_TESTPYPI_ENABLED == 'true' &&
       github.event_name == 'workflow_dispatch' &&
       github.run_attempt == 1 &&
-      github.ref == 'refs/heads/main' &&
+      (github.ref == 'refs/heads/main' || github.ref == format('refs/tags/v{0}', github.event.inputs.release_version)) &&
       github.event.inputs.release_channel == 'stable' &&
       github.event.inputs.release_train == 'main' &&
       needs.build.result == 'success' &&
@@ -1133,11 +1190,21 @@ jobs:
       - name: Revalidate main source before TestPyPI
         env:
           SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
+          VERSION: ${{ needs.build.outputs.version }}
+          GITHUB_REF: ${{ github.ref }}
         run: |
-          remote_main_sha=$(git ls-remote --exit-code origin refs/heads/main | awk '{print $1}')
-          if [[ "$remote_main_sha" != "$SOURCE_SHA" ]]; then
-            echo "Main publication source is no longer the branch head" >&2
-            exit 1
+          git fetch --force origin refs/heads/main:refs/remotes/origin/main
+          if [[ "$GITHUB_REF" == "refs/tags/v${VERSION}" ]]; then
+            if ! git merge-base --is-ancestor "$SOURCE_SHA" origin/main; then
+              echo "Stable tag source is not an ancestor of main" >&2
+              exit 1
+            fi
+          else
+            remote_main_sha=$(git ls-remote --exit-code origin refs/heads/main | awk '{print $1}')
+            if [[ "$remote_main_sha" != "$SOURCE_SHA" ]]; then
+              echo "Main publication source is no longer the branch head" >&2
+              exit 1
+            fi
           fi
       - name: Inspect TestPyPI release state
         id: testpypi
@@ -1195,7 +1262,7 @@ jobs:
       vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
       github.event_name == 'workflow_dispatch' &&
       github.run_attempt == 1 &&
-      github.ref == 'refs/heads/main' &&
+      (github.ref == 'refs/heads/main' || github.ref == format('refs/tags/v{0}', github.event.inputs.release_version)) &&
       github.event.inputs.release_channel == 'stable' &&
       github.event.inputs.release_train == 'main' &&
       needs.build.result == 'success' &&
@@ -1215,11 +1282,20 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
           VERSION: ${{ needs.build.outputs.version }}
+          GITHUB_REF: ${{ github.ref }}
         run: |
-          remote_main_sha=$(git ls-remote --exit-code origin refs/heads/main | awk '{print $1}')
-          if [[ "$remote_main_sha" != "$SOURCE_SHA" ]]; then
-            echo "Stable tag source is no longer the main branch head" >&2
-            exit 1
+          git fetch --force origin refs/heads/main:refs/remotes/origin/main
+          if [[ "$GITHUB_REF" == "refs/tags/v${VERSION}" ]]; then
+            if ! git merge-base --is-ancestor "$SOURCE_SHA" origin/main; then
+              echo "Stable tag source is not an ancestor of main" >&2
+              exit 1
+            fi
+          else
+            remote_main_sha=$(git ls-remote --exit-code origin refs/heads/main | awk '{print $1}')
+            if [[ "$remote_main_sha" != "$SOURCE_SHA" ]]; then
+              echo "Stable tag source is no longer the main branch head" >&2
+              exit 1
+            fi
           fi
           tag="v${VERSION}"
           remote_tag_sha=$(git ls-remote origin "refs/tags/${tag}" | awk '{print $1}')
@@ -1244,7 +1320,7 @@ jobs:
       vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
       github.event_name == 'workflow_dispatch' &&
       github.run_attempt == 1 &&
-      github.ref == 'refs/heads/main' &&
+      (github.ref == 'refs/heads/main' || github.ref == format('refs/tags/v{0}', github.event.inputs.release_version)) &&
       github.event.inputs.release_channel == 'stable' &&
       github.event.inputs.release_train == 'main' &&
       needs.build.result == 'success' &&
@@ -1410,7 +1486,7 @@ jobs:
       vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
       github.event_name == 'workflow_dispatch' &&
       github.run_attempt == 1 &&
-      github.ref == 'refs/heads/main' &&
+      (github.ref == 'refs/heads/main' || github.ref == format('refs/tags/v{0}', github.event.inputs.release_version)) &&
       github.event.inputs.release_channel == 'stable' &&
       github.event.inputs.release_train == 'main' &&
       needs.build.result == 'success' &&
@@ -1447,7 +1523,7 @@ jobs:
           rm -f dist/plugin_scanner-* dist/plugin-scanner-*
       - name: Attest main release assets
         id: provenance
-        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8
         with:
           subject-path: dist/*
       - name: Materialize provenance bundle
@@ -1474,15 +1550,27 @@ jobs:
             echo "Stable tag does not target the published source" >&2
             exit 1
           fi
-          if release_json=$(gh release view "$tag" --json isDraft,isPrerelease 2>/dev/null); then
+          mapfile -d '' local_files < <(find dist -maxdepth 1 -type f -print0 | sort -z)
+          [[ "${#local_files[@]}" -gt 0 ]]
+          if release_json=$(gh release view "$tag" --json isDraft,isPrerelease,assets 2>/dev/null); then
             if ! jq -e '.isDraft == false and .isPrerelease == false' <<< "$release_json" >/dev/null; then
               echo "Existing stable release is a draft or prerelease" >&2
               exit 1
             fi
             existing_dir=$(mktemp -d)
-            gh release download "$tag" --dir "$existing_dir"
-            mapfile -d '' local_files < <(find dist -maxdepth 1 -type f -print0 | sort -z)
-            [[ "${#local_files[@]}" -gt 0 ]]
+            gh release download "$tag" --dir "$existing_dir" || true
+            missing_files=()
+            for local_file in "${local_files[@]}"; do
+              remote_file="$existing_dir/$(basename "$local_file")"
+              if [[ ! -f "$remote_file" ]]; then
+                missing_files+=("$local_file")
+              fi
+            done
+            if [[ "${#missing_files[@]}" -gt 0 ]]; then
+              gh release upload "$tag" "${missing_files[@]}"
+              existing_dir=$(mktemp -d)
+              gh release download "$tag" --dir "$existing_dir"
+            fi
             for local_file in "${local_files[@]}"; do
               remote_file="$existing_dir/$(basename "$local_file")"
               [[ -f "$remote_file" ]]
@@ -1552,7 +1640,7 @@ jobs:
           rm -f dist/plugin_scanner-* dist/plugin-scanner-*
       - name: Attest alpha release assets
         id: provenance
-        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8
         with:
           subject-path: dist/*
       - name: Materialize provenance bundle
@@ -1637,7 +1725,7 @@ jobs:
         (
           github.event_name == 'workflow_dispatch' &&
           github.run_attempt == 1 &&
-          github.ref == 'refs/heads/main' &&
+          (github.ref == 'refs/heads/main' || github.ref == format('refs/tags/v{0}', github.event.inputs.release_version)) &&
           github.event.inputs.release_channel == 'stable' &&
           github.event.inputs.release_train == 'main' &&
           needs.build.outputs.channel == 'stable' &&

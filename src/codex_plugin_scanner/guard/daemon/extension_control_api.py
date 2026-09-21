@@ -8,6 +8,7 @@ import threading
 from collections import OrderedDict
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ..approval_gate import (
@@ -16,6 +17,7 @@ from ..approval_gate import (
     input_from_mapping,
     require_extension_control,
 )
+from ..runtime import command_inspection
 from ..runtime.command_extensions import CommandSafetyExtensionRegistry
 from ..runtime.extension_control_authority import (
     AuthorityHealth,
@@ -57,6 +59,7 @@ _MAX_PENDING_PROOFS = 128
 _MAX_APPLIED_MUTATIONS = 128
 _MAX_EVENT_TARGETS = 512
 _MAX_EVENT_RULE_IDS = 1024
+_MAX_INSPECTION_COMMAND_CHARS = 4096
 
 
 @dataclass(frozen=True, slots=True)
@@ -124,6 +127,31 @@ class ExtensionControlApiService:
             runtime=self._runtime,
             payload=payload,
         )
+
+    def inspect_command(self, payload: dict[str, object]) -> dict[str, object]:
+        raw_command = payload.get("command")
+        command = raw_command.strip() if isinstance(raw_command, str) else ""
+        if not command or len(command) > _MAX_INSPECTION_COMMAND_CHARS or "\x00" in command:
+            raise ExtensionControlApiError(400, "invalid_inspection_command")
+        paths: dict[str, Path] = {}
+        for field in ("cwd", "home_dir"):
+            raw_path = payload.get(field)
+            if not isinstance(raw_path, str) or not raw_path or "\x00" in raw_path:
+                raise ExtensionControlApiError(400, f"invalid_{field}")
+            path = Path(raw_path)
+            if not path.is_absolute():
+                raise ExtensionControlApiError(400, f"invalid_{field}")
+            paths[field] = path
+        try:
+            return command_inspection.inspect_command(
+                command,
+                cwd=paths["cwd"],
+                home_dir=paths["home_dir"],
+                guard_home=self._store.guard_home,
+                extension_control_snapshot=self._runtime.current(),
+            )
+        except ValueError as exc:
+            raise ExtensionControlApiError(400, "invalid_inspection_command") from exc
 
     def history(self) -> dict[str, object]:
         current = self._runtime.current()

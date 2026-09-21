@@ -9,14 +9,17 @@ from pathlib import Path
 
 from ..config import GuardConfig
 from ..models import GuardArtifact
+from ..native_command_control_authority_io import NativeCommandControlMutationRequiredError
 from ..runtime.command_decision_adapter import effect_decision_to_dict
-from ..runtime.command_evaluation import evaluate_command
+from ..runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
+from ..runtime.extension_control_runtime import ExtensionControlRuntimeSnapshot
 from ..runtime.github_workflow_approval_record import GitHubWorkflowApprovalRecord
 from ..runtime.github_workflow_context import GitHubWorkflowDescriptor, build_github_workflow_descriptor
 from ..runtime.github_workflow_runtime import (
     claim_resolved_github_workflow_authorization,
     github_workflow_capability_required,
 )
+from ..runtime.native_command_evaluation import evaluate_command_native
 from ..store import GuardStore
 from .commands_support_runtime_policy import (
     _runtime_artifact_command_action_floor,
@@ -37,6 +40,7 @@ def prepare_github_workflow_hook_state(
     artifact: GuardArtifact,
     *,
     workspace: Path | None,
+    guard_home: Path,
     config: GuardConfig,
     store: GuardStore,
     approval_request_id: str | None,
@@ -50,17 +54,34 @@ def prepare_github_workflow_hook_state(
     required = approval_request_id is not None and github_workflow_capability_required(store, approval_request_id)
     if descriptor is None or approval_request_id is None:
         return GitHubWorkflowHookState(artifact, descriptor, record, False, required)
+    try:
+        authority = store.read_extension_control_authority_for_registry(
+            BUILT_IN_COMMAND_EXTENSION_REGISTRY,
+            read_only=True,
+        )
+    except NativeCommandControlMutationRequiredError:
+        metadata = dict(artifact.metadata)
+        metadata["command_action_floor"] = "require-reapproval"
+        metadata["command_evaluation_status"] = "native_unavailable"
+        return GitHubWorkflowHookState(replace(artifact, metadata=metadata), descriptor, record, False, required)
+    snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(authority)
     authorization = claim_resolved_github_workflow_authorization(store, approval_request_id, descriptor)
     if authorization is None:
         return GitHubWorkflowHookState(artifact, descriptor, record, False, required)
     metadata = dict(artifact.metadata)
-    evaluation = evaluate_command(
+    evaluation = evaluate_command_native(
         artifact.command or "",
+        guard_home=guard_home,
+        extension_control_snapshot=snapshot,
         compatibility_action_class=_optional_string(metadata.get("action_class")),
         compatibility_reason=_optional_string(metadata.get("runtime_request_reason")),
         cwd=workspace,
         workflow_authorization=authorization,
     )
+    if evaluation is None:
+        metadata["command_action_floor"] = "require-reapproval"
+        metadata["command_evaluation_status"] = "native_unavailable"
+        return GitHubWorkflowHookState(replace(artifact, metadata=metadata), descriptor, record, True, required)
     metadata["command_action_floor"] = evaluation.decision_plane.action
     metadata["command_decision_plane"] = effect_decision_to_dict(evaluation.decision_plane)
     return GitHubWorkflowHookState(replace(artifact, metadata=metadata), descriptor, record, True, required)

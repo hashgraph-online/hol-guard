@@ -338,6 +338,7 @@ impl CompiledNativeCommandControls {
 
 #[path = "native_command_delegated.rs"]
 mod delegated;
+pub(crate) use delegated::normalized_tool;
 
 fn rule_floor(rule: &ProgramRule, required: bool) -> &'static str {
     if rule.is_compatibility_attribution_only() {

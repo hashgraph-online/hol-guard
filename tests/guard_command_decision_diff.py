@@ -13,7 +13,10 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from itertools import chain
 from pathlib import Path
-from typing import Final, cast
+from typing import TYPE_CHECKING, Final, cast
+
+if TYPE_CHECKING:
+    from tests.guard_command_decision_diff_runner import DecisionDiffShard
 
 REPO_ROOT: Final = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
@@ -38,9 +41,7 @@ def _install_evaluator_packages() -> _EvaluatorPackageState:
         for name, module in sys.modules.items()
         if name == _PACKAGE_PREFIX or name.startswith(f"{_PACKAGE_PREFIX}.")
     }
-    existing_parent_snapshots = tuple(
-        (module, module.__dict__.copy()) for module in existing_modules.values()
-    )
+    existing_parent_snapshots = tuple((module, module.__dict__.copy()) for module in existing_modules.values())
     package_root = REPO_ROOT / "src" / "codex_plugin_scanner"
     packages = (
         ("codex_plugin_scanner", package_root),
@@ -105,10 +106,6 @@ def _restore_evaluator_packages(state: _EvaluatorPackageState) -> None:
 
 _evaluator_package_state = _install_evaluator_packages()
 try:
-    from codex_plugin_scanner.guard.runtime.command_shadow_evaluation import (
-        COMMAND_SHADOW_BASELINE_PROPOSAL_VERSION,
-    )
-    from codex_plugin_scanner.guard.runtime.effect_decision import EFFECT_DECISION_SCHEMA_VERSION
     from tests.guard_command_corpus import (
         KNOWN_GAPS_PATH,
         MANIFEST_PATH,
@@ -118,20 +115,27 @@ try:
         iter_benign_corpus,
         load_seed_manifest,
     )
+    from tests.guard_command_corpus_native_contract import (
+        NATIVE_CONTRACT_PATH,
+        expected_native_groups,
+    )
     from tests.guard_command_corpus_oracle import iter_adversarial_oracle, iter_benign_oracle
     from tests.guard_command_corpus_oracle_types import OracleRecord
     from tests.guard_command_corpus_runner import peak_rss_mib
-    from tests.guard_command_decision_diff_runner import (
-        MAX_CONCURRENT_WORKERS,
-        evaluate_decision_diff_shards,
-    )
 finally:
     _restore_evaluator_packages(_evaluator_package_state)
 
-REPORT_SCHEMA_VERSION: Final = "guard.command-decision-diff.v1"
+REPORT_SCHEMA_VERSION: Final = "guard.command-decision-diff.v2"
 BASE_RELEASE_SHA: Final = "21a81a6d5ca55e262bac837eb7a2ac8d530c6d28"
 REPORT_PATH: Final = REPO_ROOT / "tests" / "fixtures" / "guard-command-corpus" / "decision-diff-report.json"
 _EVIDENCE_SOURCE_PATHS: Final = (
+    REPO_ROOT / "contracts" / "extensions" / "command-catalog.v1.json",
+    REPO_ROOT / "contracts" / "extensions" / "native-command-program.v1.json",
+    REPO_ROOT / "docs" / "guard" / "native-command-corpus-contract.md",
+    REPO_ROOT / "docs" / "guard" / "declarative-authoring-adr.md",
+    REPO_ROOT / "rust" / "crates" / "guard-command" / "src" / "native_command_source_evaluation_batch.rs",
+    REPO_ROOT / "rust" / "crates" / "guard-command" / "src" / "native_command_source.rs",
+    REPO_ROOT / "rust" / "crates" / "guard-command" / "src" / "bin" / "guard-command-source.rs",
     REPO_ROOT / "src" / "codex_plugin_scanner" / "guard" / "action_lattice.py",
     REPO_ROOT / "src" / "codex_plugin_scanner" / "guard" / "models.py",
     REPO_ROOT / "src" / "codex_plugin_scanner" / "guard" / "cli" / "commands_parser.py",
@@ -150,7 +154,12 @@ _EVIDENCE_SOURCE_PATHS: Final = (
     *REPO_ROOT.joinpath("tests").glob("guard_command_corpus*.py"),
     *REPO_ROOT.joinpath("tests").glob("guard_command_decision_diff*.py"),
     REPO_ROOT / "tests" / "test_guard_command_corpus.py",
+    REPO_ROOT / "tests" / "guard_test_invariants.py",
+    REPO_ROOT / "tests" / "test_guard_command_corpus_native_contract.py",
     REPO_ROOT / "tests" / "test_guard_command_decision_diff.py",
+    REPO_ROOT / "tests" / "native_command_test_support.py",
+    REPO_ROOT / "tests" / "test_native_command_test_support_batch.py",
+    REPO_ROOT / "tests" / "test_guard_native_classification_baseline.py",
     REPO_ROOT / "tests" / "test_guard_contained_package_script_execution.py",
     REPO_ROOT / "tests" / "test_guard_contained_workspace_write_cli.py",
     REPO_ROOT / "tests" / "test_guard_contained_workspace_write_contract.py",
@@ -186,49 +195,92 @@ def report_framed_sha256(report: Mapping[str, object] | None = None) -> str:
 
 
 def generate_decision_diff_report() -> dict[str, object]:
-    """Evaluate the complete corpus and reconcile all legacy decisions."""
+    """Verify native decisions and publish every difference from the original oracle."""
 
     report, _rss_mib = _generate_decision_diff_report()
     return report
+
+
+def _evaluate_native_diff() -> tuple[str, str, int, tuple[DecisionDiffShard, ...]]:
+    """Load evaluator modules only when needed, keeping spawn bootstrap small."""
+
+    state = _install_evaluator_packages()
+    try:
+        from codex_plugin_scanner.guard.runtime.command_shadow_evaluation import (
+            COMMAND_SHADOW_BASELINE_PROPOSAL_VERSION,
+        )
+        from codex_plugin_scanner.guard.runtime.effect_decision import EFFECT_DECISION_SCHEMA_VERSION
+        from tests.guard_command_decision_diff_runner import (
+            MAX_CONCURRENT_WORKERS,
+            evaluate_decision_diff_shards,
+        )
+
+        return (
+            EFFECT_DECISION_SCHEMA_VERSION,
+            COMMAND_SHADOW_BASELINE_PROPOSAL_VERSION,
+            MAX_CONCURRENT_WORKERS,
+            evaluate_decision_diff_shards(),
+        )
+    finally:
+        _restore_evaluator_packages(state)
 
 
 def _generate_decision_diff_report() -> tuple[dict[str, object], float]:
     manifest = load_seed_manifest()
     known_gaps = _load_object(KNOWN_GAPS_PATH)
     transition_ids: defaultdict[str, list[str]] = defaultdict(list)
-    legacy_ids: defaultdict[str, list[str]] = defaultdict(list)
+    native_floor_ids: defaultdict[str, list[str]] = defaultdict(list)
     reconciliation_ids: defaultdict[str, list[str]] = defaultdict(list)
     actual_gap_ids: defaultdict[str, list[str]] = defaultdict(list)
-    shards = evaluate_decision_diff_shards()
+    native_contract_ids: defaultdict[str, list[str]] = defaultdict(list)
+    native_error_ids: defaultdict[str, list[str]] = defaultdict(list)
+    evaluator_schema_version, proposal_version, max_concurrent_workers, shards = _evaluate_native_diff()
     for shard in shards:
         _merge_groups(transition_ids, shard.transition_ids)
-        _merge_groups(legacy_ids, shard.legacy_ids)
+        _merge_groups(native_floor_ids, shard.native_floor_ids)
         _merge_groups(reconciliation_ids, shard.reconciliation_ids)
         _merge_groups(actual_gap_ids, shard.actual_gap_ids)
+        _merge_groups(native_contract_ids, shard.native_contract_ids)
+        _merge_groups(native_error_ids, shard.native_error_ids)
     lowered_count = sum(shard.lowered_count for shard in shards)
-    legacy_lowered_count = sum(shard.legacy_lowered_count for shard in shards)
+    action_changed_count = sum(shard.action_changed_count for shard in shards)
+    native_floor_lowered_count = sum(shard.native_floor_lowered_count for shard in shards)
     disposition_changed_count = sum(shard.disposition_changed_count for shard in shards)
     total = sum(shard.total for shard in shards)
 
     expected_gaps = _expected_known_gaps(known_gaps)
     actual_gaps = _known_gap_summaries(actual_gap_ids)
-    if actual_gaps != expected_gaps:
-        raise ValueError("legacy decision gaps do not equal the frozen known-gap fixture")
+    observed_native_groups = {key: (len(ids), _framed_values_sha256(ids)) for key, ids in native_contract_ids.items()}
+    if observed_native_groups != expected_native_groups():
+        raise ValueError("native decision groups differ from the inherited native contract")
+    below_original_count = sum(len(ids) for key, ids in actual_gap_ids.items() if "|underclassified|" in key)
+    above_original_count = sum(len(ids) for key, ids in actual_gap_ids.items() if "|overclassified|" in key)
+    if below_original_count:
+        raise ValueError("native decisions fall below the original oracle")
+    if action_changed_count or disposition_changed_count or native_floor_lowered_count:
+        raise ValueError("current and proposed native decisions differ or lower a native floor")
 
     benign_count = _integer(manifest["benign_target_count"], "benign_target_count")
     adversarial_count = _integer(manifest["adversarial_target_count"], "adversarial_target_count")
     if total != benign_count + adversarial_count:
         raise ValueError("evaluated case count does not match the seed manifest")
-    reconciled_count = sum(len(case_ids) for case_ids in reconciliation_ids.values())
-    unreconciled_count = total - reconciled_count
-    if unreconciled_count != 0:
+    categorized_count = sum(len(case_ids) for case_ids in reconciliation_ids.values())
+    uncategorized_count = total - categorized_count
+    if uncategorized_count != 0:
         raise ValueError("every corpus case must have an oracle reconciliation category")
 
     report: dict[str, object] = {
         "schema_version": REPORT_SCHEMA_VERSION,
         "base_release_sha": BASE_RELEASE_SHA,
-        "evaluator_schema_version": EFFECT_DECISION_SCHEMA_VERSION,
-        "proposal_version": COMMAND_SHADOW_BASELINE_PROPOSAL_VERSION,
+        "scope": {
+            "baseline": "reviewed-native-engine-and-current-host-effect-decision",
+            "original_oracle": "immutable-original-labels-with-all-native-differences-reported",
+            "parser_grammar": "bounded-reviewed-parser-and-classifier-updates-with-explicit-contract-changes",
+            "bounded_parser_update_commit": "5a076ded9182f4466b875effffae3b156fba9e04",
+            "authority": "offline-native-evidence-not-authenticated-execution-receipts",
+        },
+        "evaluator_schema_version": evaluator_schema_version,
+        "proposal_version": proposal_version,
         "attestation": {
             "mechanism": "gpg-signed-commit-trailer",
             "trailer": "Decision-Diff-Framed-SHA256",
@@ -249,30 +301,44 @@ def _generate_decision_diff_report() -> tuple[dict[str, object], float]:
                 "known-gaps.json": _sha256(KNOWN_GAPS_PATH),
                 "minimal-delta-pairs.json": _sha256(PAIRS_PATH),
                 "seed-manifest.json": _sha256(MANIFEST_PATH),
+                "native-contract.json": _sha256(NATIVE_CONTRACT_PATH),
             },
         },
         "current_vs_proposed": {
             "lowered_count": lowered_count,
+            "action_changed_count": action_changed_count,
             "disposition_changed_count": disposition_changed_count,
             "transition_groups": _group_summaries(transition_ids),
         },
-        "legacy_to_current": {
-            "lowered_count": legacy_lowered_count,
-            "transition_groups": _group_summaries(legacy_ids),
+        "native_floor_to_current": {
+            "scope": "raw-native-floor-to-current-host-effect-decision",
+            "lowered_count": native_floor_lowered_count,
+            "transition_groups": _group_summaries(native_floor_ids),
+        },
+        "native_contract": {
+            "equality": True,
+            "matched_count": sum(len(ids) for ids in native_contract_ids.values()),
+            "unexpected_count": 0,
+            "groups": _group_summaries(native_contract_ids),
+            "native_rejection_count": sum(len(ids) for ids in native_error_ids.values()),
+            "native_rejection_groups": _group_summaries(native_error_ids),
         },
         "oracle_reconciliation": {
+            "scope": "comparison-against-the-unchanged-original-oracle",
             "truth_table": {
-                "unchanged_meets_oracle": "current equals legacy and meets the oracle floor",
-                "unchanged_below_oracle": "current equals legacy and remains assigned to a frozen gap owner",
-                "strengthened_meets_oracle": "current raises legacy to the oracle floor",
-                "strengthened_below_oracle": "current raises legacy but remains assigned to a frozen gap owner",
+                "unchanged_meets_oracle": "current equals its native floor and meets the original oracle floor",
+                "unchanged_below_oracle": "current equals its native floor but is below the original oracle",
+                "strengthened_meets_oracle": "current raises its native floor to the original oracle floor",
+                "strengthened_below_oracle": "current raises its native floor but is below the original oracle",
                 "strengthened_above_oracle": "current conservatively exceeds the oracle floor",
             },
             "category_groups": _group_summaries(reconciliation_ids),
             "known_gaps": actual_gaps,
-            "known_gap_equality": True,
-            "reconciled_count": reconciled_count,
-            "unreconciled_count": unreconciled_count,
+            "known_gap_equality": actual_gaps == expected_gaps,
+            "below_original_count": below_original_count,
+            "above_original_count": above_original_count,
+            "categorized_count": categorized_count,
+            "uncategorized_count": uncategorized_count,
         },
         "privacy": {
             "case_material": "opaque-case-identifiers-only",
@@ -282,7 +348,7 @@ def _generate_decision_diff_report() -> tuple[dict[str, object], float]:
         },
     }
     _validate_manifest_digests(report, manifest)
-    active_rss = sum(sorted((shard.rss_mib for shard in shards), reverse=True)[:MAX_CONCURRENT_WORKERS])
+    active_rss = sum(sorted((shard.rss_mib for shard in shards), reverse=True)[:max_concurrent_workers])
     return report, peak_rss_mib() + active_rss
 
 

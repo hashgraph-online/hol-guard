@@ -8,6 +8,7 @@ import json
 import marshal
 import os
 import struct
+import subprocess
 import sys
 import zipfile
 from pathlib import Path
@@ -49,15 +50,37 @@ def test_current_corpus_manifest_is_verified_by_its_canonical_bindings() -> None
     assert bindings["source_files_verified"] == 1 + len(tuple((root / "tests").glob("guard_command_corpus_oracle*.py")))
 
 
-def test_harness_without_post_execution_proof_remains_unconfirmed() -> None:
+def test_harness_without_post_execution_proof_remains_unconfirmed(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Exercise the installed native route in the child process; the unit-test
+    # oracle callbacks do not cross the subprocess boundary with their env vars.
+    monkeypatch.setenv("HOL_GUARD_NATIVE", "auto")
+    monkeypatch.delenv("HOL_GUARD_PYTHON_ORACLE", raising=False)
+    monkeypatch.delenv("HOL_GUARD_NATIVE_DIAGNOSTIC", raising=False)
+    run = subprocess.run
+    hook_responses: list[dict[str, object]] = []
+
+    def capture_native_hook(command: list[str], **kwargs):
+        is_hook = command[:3] == [sys.executable, "-m", "codex_plugin_scanner.cli"]
+        completed = run(command, **kwargs)
+        if is_hook:
+            assert completed.returncode == 0, (completed.stdout, completed.stderr)
+            hook_responses.append(json.loads(completed.stdout))
+        return completed
+
+    monkeypatch.setattr(subprocess, "run", capture_native_hook)
     assert _no_post_execution_proof_smoke() == {
         "harness": "opencode",
         "post_execution_surface": False,
         "execution_status": "allowed_unconfirmed",
         "proof_level": "pre_hook",
         "policy_action": "warn",
-        "decision_reason_code": "no_match",
+        "decision_reason_code": "policy",
     }
+    assert len(hook_responses) == 1
+    # The fresh guard-home has no resident-ACKed policy. Its availability warning
+    # must remain explicit and must never be promoted to execution proof.
+    assert hook_responses[0]["reason_code"] == "native_pre_tool_unavailable"
+    assert hook_responses[0]["policy_action"] == "warn"
 
 
 class _ConsoleScriptDistribution(importlib.metadata.Distribution):

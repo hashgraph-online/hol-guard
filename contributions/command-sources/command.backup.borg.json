@@ -1,0 +1,610 @@
+{
+  "extension": {
+    "action_classes": [
+      "Borg destructive command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews Borg operations that delete, prune, or recreate archives.",
+    "ecosystem_ids": [],
+    "executables": [],
+    "extension_id": "command.backup.borg",
+    "homepage": null,
+    "icon": {
+      "kind": "none"
+    },
+    "license": null,
+    "name": "Borg command protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "Borg destructive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies archive deletion, retention pruning, and archive recreation operations.",
+        "example_command": "borg delete",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Borg backup mutation",
+        "permission_id": "command.backup.borg.permission.mutation",
+        "replacement_permission_id": null,
+        "risk_tier": "critical",
+        "safer_guidance": [
+          "List retained backups and run the documented preview before changing backup data."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": null,
+    "reference_urls": [
+      "https://borgbackup.readthedocs.io/en/stable/usage/prune.html"
+    ],
+    "required": false,
+    "risk_classes": [
+      "destructive_shell",
+      "network_egress"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "Borg destructive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies archive deletion, retention pruning, and archive recreation operations.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "borg",
+                  "borg.cmd",
+                  "borg.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--show-rc",
+                  "--show-version",
+                  "--verbose",
+                  "-n",
+                  "-v"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--debug-profile",
+                  "--debug-topic",
+                  "--lock-wait",
+                  "--remote-path",
+                  "--remote-ratelimit",
+                  "--repo",
+                  "--rsh",
+                  "--socket",
+                  "--umask",
+                  "--upload-buffer",
+                  "--upload-ratelimit",
+                  "-a",
+                  "-e",
+                  "-p",
+                  "-r"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "delete"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "borg",
+                  "borg.cmd",
+                  "borg.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--show-rc",
+                  "--show-version",
+                  "--verbose",
+                  "-n",
+                  "-v"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--debug-profile",
+                  "--debug-topic",
+                  "--lock-wait",
+                  "--remote-path",
+                  "--remote-ratelimit",
+                  "--repo",
+                  "--rsh",
+                  "--socket",
+                  "--umask",
+                  "--upload-buffer",
+                  "--upload-ratelimit",
+                  "-a",
+                  "-e",
+                  "-p",
+                  "-r"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "prune"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "borg",
+                  "borg.cmd",
+                  "borg.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--show-rc",
+                  "--show-version",
+                  "--verbose",
+                  "-n",
+                  "-v"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--debug-profile",
+                  "--debug-topic",
+                  "--lock-wait",
+                  "--remote-path",
+                  "--remote-ratelimit",
+                  "--repo",
+                  "--rsh",
+                  "--socket",
+                  "--umask",
+                  "--upload-buffer",
+                  "--upload-ratelimit",
+                  "-a",
+                  "-e",
+                  "-p",
+                  "-r"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "recreate"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.backup.borg.permission.mutation",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.backup.borg.mutation",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "borg",
+                      "borg.cmd",
+                      "borg.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--show-rc",
+                      "--show-version",
+                      "--verbose",
+                      "-n",
+                      "-v"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--debug-profile",
+                      "--debug-topic",
+                      "--lock-wait",
+                      "--remote-path",
+                      "--remote-ratelimit",
+                      "--repo",
+                      "--rsh",
+                      "--socket",
+                      "--umask",
+                      "--upload-buffer",
+                      "--upload-ratelimit",
+                      "-a",
+                      "-e",
+                      "-p",
+                      "-r"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "delete"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "borg",
+                      "borg.cmd",
+                      "borg.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--show-rc",
+                      "--show-version",
+                      "--verbose",
+                      "-n",
+                      "-v"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--debug-profile",
+                      "--debug-topic",
+                      "--lock-wait",
+                      "--remote-path",
+                      "--remote-ratelimit",
+                      "--repo",
+                      "--rsh",
+                      "--socket",
+                      "--umask",
+                      "--upload-buffer",
+                      "--upload-ratelimit",
+                      "-a",
+                      "-e",
+                      "-p",
+                      "-r"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "prune"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "borg",
+                      "borg.cmd",
+                      "borg.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--show-rc",
+                      "--show-version",
+                      "--verbose",
+                      "-n",
+                      "-v"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--debug-profile",
+                      "--debug-topic",
+                      "--lock-wait",
+                      "--remote-path",
+                      "--remote-ratelimit",
+                      "--repo",
+                      "--rsh",
+                      "--socket",
+                      "--umask",
+                      "--upload-buffer",
+                      "--upload-ratelimit",
+                      "-a",
+                      "-e",
+                      "-p",
+                      "-r"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "recreate"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Borg command help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "borg",
+                      "borg.cmd",
+                      "borg.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--show-rc",
+                      "--show-version",
+                      "--verbose",
+                      "-n",
+                      "-v"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--debug-profile",
+                      "--debug-topic",
+                      "--lock-wait",
+                      "--remote-path",
+                      "--remote-ratelimit",
+                      "--repo",
+                      "--rsh",
+                      "--socket",
+                      "--umask",
+                      "--upload-buffer",
+                      "--upload-ratelimit",
+                      "-a",
+                      "-e",
+                      "-p",
+                      "-r"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--dry-run"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "prune"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "borg",
+                      "borg.cmd",
+                      "borg.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--show-rc",
+                      "--show-version",
+                      "--verbose",
+                      "-n",
+                      "-v"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--debug-profile",
+                      "--debug-topic",
+                      "--lock-wait",
+                      "--remote-path",
+                      "--remote-ratelimit",
+                      "--repo",
+                      "--rsh",
+                      "--socket",
+                      "--umask",
+                      "--upload-buffer",
+                      "--upload-ratelimit",
+                      "-a",
+                      "-e",
+                      "-p",
+                      "-r"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--dry-run"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "recreate"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Borg dry run",
+            "variant_id": "dry-run"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "borg",
+                      "borg.cmd",
+                      "borg.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--show-rc",
+                      "--show-version",
+                      "--verbose",
+                      "-n",
+                      "-v"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--debug-profile",
+                      "--debug-topic",
+                      "--lock-wait",
+                      "--remote-path",
+                      "--remote-ratelimit",
+                      "--repo",
+                      "--rsh",
+                      "--socket",
+                      "--umask",
+                      "--upload-buffer",
+                      "--upload-ratelimit",
+                      "-a",
+                      "-e",
+                      "-p",
+                      "-r"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-n"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "prune"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "borg",
+                      "borg.cmd",
+                      "borg.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--show-rc",
+                      "--show-version",
+                      "--verbose",
+                      "-n",
+                      "-v"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--debug-profile",
+                      "--debug-topic",
+                      "--lock-wait",
+                      "--remote-path",
+                      "--remote-ratelimit",
+                      "--repo",
+                      "--rsh",
+                      "--socket",
+                      "--umask",
+                      "--upload-buffer",
+                      "--upload-ratelimit",
+                      "-a",
+                      "-e",
+                      "-p",
+                      "-r"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-n"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "recreate"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Borg no-act",
+            "variant_id": "no-act"
+          }
+        ],
+        "safer_alternatives": [
+          "List retained backups and run the documented preview before changing backup data."
+        ],
+        "severity": "critical",
+        "title": "Borg backup mutation"
+      }
+    ],
+    "safer_alternatives": [
+      "Use --dry-run where documented and inspect the selected archive set."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

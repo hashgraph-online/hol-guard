@@ -86,6 +86,22 @@ def _explicit_python_differential_oracle(monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.setattr(commands_hook_source_ref, "_test_source_ref_oracle", source_ref_oracle)
 
 
+@pytest.fixture
+def native_command_artifact_reviews(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Supply actual native command evidence to legacy hook orchestration tests."""
+    from codex_plugin_scanner.guard.cli import commands_support_runtime_artifacts
+    from tests.native_command_test_support import real_native_command_evaluation
+
+    def review(command: str, *, guard_home: Path, cwd: Path | None = None, home_dir: Path | None = None):
+        del guard_home
+        try:
+            return real_native_command_evaluation(command, cwd=cwd, home_dir=home_dir)
+        except Exception as exc:
+            pytest.fail(f"Native command artifact fixture failed: {type(exc).__name__}: {exc}")
+
+    monkeypatch.setattr(commands_support_runtime_artifacts, "review_command_native", review)
+
+
 def pytest_addoption(parser: pytest.Parser) -> None:
     parser.addoption(
         "--validate-test-invariants",

@@ -1,0 +1,5759 @@
+{
+  "extension": {
+    "action_classes": [
+      "repo2nb forced directory overwrite command",
+      "repo2nb notebook sync command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews repo2nb commands that can overwrite an existing destination directory or silently drop untracked notebook cells.",
+    "ecosystem_ids": [],
+    "executables": [],
+    "extension_id": "command.repo2nb",
+    "homepage": null,
+    "icon": {
+      "background": "#4338CA",
+      "kind": "react-icon",
+      "name": "HiMiniFolder"
+    },
+    "license": "MIT",
+    "name": "repo2nb command protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "repo2nb forced directory overwrite command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `repo2nb reverse --force`, which can overwrite an existing non-empty destination directory. A symlink inside the destination can cause writes to land outside the intended root even with --force's existing non-empty-directory check. Reverse invocations carrying unresolved shell expansions are reviewed because they cannot prove --force absent.",
+        "example_command": "repo2nb reverse --force",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "repo2nb forced notebook reversal",
+        "permission_id": "command.repo2nb.permission.reverse-force",
+        "replacement_permission_id": null,
+        "risk_tier": "critical",
+        "safer_guidance": [
+          "Run repo2nb reverse without --force first and review what it reports about the existing directory.",
+          "Confirm the destination path is not a sensitive system or home directory before forcing.",
+          "Expand shell variables and command substitutions before running repo2nb reverse."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "repo2nb notebook sync command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `repo2nb sync`, a one-directional repo-to-notebook sync that can silently drop manually-added notebook cells not tracked in .repo2nb/manifest.json.",
+        "example_command": "repo2nb sync",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "repo2nb notebook sync",
+        "permission_id": "command.repo2nb.permission.sync",
+        "replacement_permission_id": null,
+        "risk_tier": "medium",
+        "safer_guidance": [
+          "Review .repo2nb/manifest.json to see which cells are tracked before syncing.",
+          "Back up or export manually-added cells before running sync."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": {
+      "display_name": "Community",
+      "id": "community.repo2nb",
+      "url": null
+    },
+    "reference_urls": [
+      "https://github.com/David-Magdy/repo2nb"
+    ],
+    "required": false,
+    "risk_classes": [
+      "destructive_shell"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "repo2nb forced directory overwrite command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `repo2nb reverse --force`, which can overwrite an existing non-empty destination directory. A symlink inside the destination can cause writes to land outside the intended root even with --force's existing non-empty-directory check. Reverse invocations carrying unresolved shell expansions are reviewed because they cannot prove --force absent.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "repo2nb",
+                  "repo2nb.cmd",
+                  "repo2nb.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--force"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "repo2nb",
+                  "repo2nb.cmd",
+                  "repo2nb.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--forc"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "repo2nb",
+                  "repo2nb.cmd",
+                  "repo2nb.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--for"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "repo2nb",
+                  "repo2nb.cmd",
+                  "repo2nb.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--fo"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "repo2nb",
+                  "repo2nb.cmd",
+                  "repo2nb.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--f"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "python",
+                  "python.cmd",
+                  "python.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--force"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "-m",
+                  "repo2nb",
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "python",
+                  "python.cmd",
+                  "python.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--forc"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "-m",
+                  "repo2nb",
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "python",
+                  "python.cmd",
+                  "python.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--for"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "-m",
+                  "repo2nb",
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "python",
+                  "python.cmd",
+                  "python.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--fo"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "-m",
+                  "repo2nb",
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "python",
+                  "python.cmd",
+                  "python.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--f"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "-m",
+                  "repo2nb",
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "python3",
+                  "python3.cmd",
+                  "python3.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--force"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "-m",
+                  "repo2nb",
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "python3",
+                  "python3.cmd",
+                  "python3.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--forc"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "-m",
+                  "repo2nb",
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "python3",
+                  "python3.cmd",
+                  "python3.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--for"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "-m",
+                  "repo2nb",
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "python3",
+                  "python3.cmd",
+                  "python3.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--fo"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "-m",
+                  "repo2nb",
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "python3",
+                  "python3.cmd",
+                  "python3.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--f"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "-m",
+                  "repo2nb",
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "py",
+                  "py.cmd",
+                  "py.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--force"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "-m",
+                  "repo2nb",
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "py",
+                  "py.cmd",
+                  "py.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--forc"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "-m",
+                  "repo2nb",
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "py",
+                  "py.cmd",
+                  "py.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--for"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "-m",
+                  "repo2nb",
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "py",
+                  "py.cmd",
+                  "py.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--fo"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "-m",
+                  "repo2nb",
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "py",
+                  "py.cmd",
+                  "py.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--f"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "-m",
+                  "repo2nb",
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "exec",
+                  "exec.cmd",
+                  "exec.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-i",
+                  "-l",
+                  "-n",
+                  "-p",
+                  "-s"
+                ],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--force"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "repo2nb",
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "exec",
+                  "exec.cmd",
+                  "exec.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-i",
+                  "-l",
+                  "-n",
+                  "-p",
+                  "-s"
+                ],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--forc"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "repo2nb",
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "exec",
+                  "exec.cmd",
+                  "exec.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-i",
+                  "-l",
+                  "-n",
+                  "-p",
+                  "-s"
+                ],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--for"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "repo2nb",
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "exec",
+                  "exec.cmd",
+                  "exec.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-i",
+                  "-l",
+                  "-n",
+                  "-p",
+                  "-s"
+                ],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--fo"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "repo2nb",
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "exec",
+                  "exec.cmd",
+                  "exec.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-i",
+                  "-l",
+                  "-n",
+                  "-p",
+                  "-s"
+                ],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--f"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "repo2nb",
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "exec",
+                  "exec.cmd",
+                  "exec.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-i",
+                  "-l",
+                  "-n",
+                  "-p",
+                  "-s"
+                ],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--force"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "python",
+                  "-m",
+                  "repo2nb",
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "exec",
+                  "exec.cmd",
+                  "exec.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-i",
+                  "-l",
+                  "-n",
+                  "-p",
+                  "-s"
+                ],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--forc"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "python",
+                  "-m",
+                  "repo2nb",
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "exec",
+                  "exec.cmd",
+                  "exec.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-i",
+                  "-l",
+                  "-n",
+                  "-p",
+                  "-s"
+                ],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--for"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "python",
+                  "-m",
+                  "repo2nb",
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "exec",
+                  "exec.cmd",
+                  "exec.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-i",
+                  "-l",
+                  "-n",
+                  "-p",
+                  "-s"
+                ],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--fo"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "python",
+                  "-m",
+                  "repo2nb",
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "exec",
+                  "exec.cmd",
+                  "exec.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-i",
+                  "-l",
+                  "-n",
+                  "-p",
+                  "-s"
+                ],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--f"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "python",
+                  "-m",
+                  "repo2nb",
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "exec",
+                  "exec.cmd",
+                  "exec.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-i",
+                  "-l",
+                  "-n",
+                  "-p",
+                  "-s"
+                ],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--force"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "python3",
+                  "-m",
+                  "repo2nb",
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "exec",
+                  "exec.cmd",
+                  "exec.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-i",
+                  "-l",
+                  "-n",
+                  "-p",
+                  "-s"
+                ],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--forc"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "python3",
+                  "-m",
+                  "repo2nb",
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "exec",
+                  "exec.cmd",
+                  "exec.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-i",
+                  "-l",
+                  "-n",
+                  "-p",
+                  "-s"
+                ],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--for"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "python3",
+                  "-m",
+                  "repo2nb",
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "exec",
+                  "exec.cmd",
+                  "exec.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-i",
+                  "-l",
+                  "-n",
+                  "-p",
+                  "-s"
+                ],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--fo"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "python3",
+                  "-m",
+                  "repo2nb",
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "exec",
+                  "exec.cmd",
+                  "exec.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-i",
+                  "-l",
+                  "-n",
+                  "-p",
+                  "-s"
+                ],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--f"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "python3",
+                  "-m",
+                  "repo2nb",
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "exec",
+                  "exec.cmd",
+                  "exec.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-i",
+                  "-l",
+                  "-n",
+                  "-p",
+                  "-s"
+                ],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--force"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "py",
+                  "-m",
+                  "repo2nb",
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "exec",
+                  "exec.cmd",
+                  "exec.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-i",
+                  "-l",
+                  "-n",
+                  "-p",
+                  "-s"
+                ],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--forc"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "py",
+                  "-m",
+                  "repo2nb",
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "exec",
+                  "exec.cmd",
+                  "exec.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-i",
+                  "-l",
+                  "-n",
+                  "-p",
+                  "-s"
+                ],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--for"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "py",
+                  "-m",
+                  "repo2nb",
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "exec",
+                  "exec.cmd",
+                  "exec.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-i",
+                  "-l",
+                  "-n",
+                  "-p",
+                  "-s"
+                ],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--fo"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "py",
+                  "-m",
+                  "repo2nb",
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "exec",
+                  "exec.cmd",
+                  "exec.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-i",
+                  "-l",
+                  "-n",
+                  "-p",
+                  "-s"
+                ],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--f"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "py",
+                  "-m",
+                  "repo2nb",
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "xargs",
+                  "xargs.cmd",
+                  "xargs.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-i",
+                  "-l",
+                  "-n",
+                  "-p",
+                  "-s"
+                ],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--force"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "repo2nb",
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "xargs",
+                  "xargs.cmd",
+                  "xargs.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-i",
+                  "-l",
+                  "-n",
+                  "-p",
+                  "-s"
+                ],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--forc"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "repo2nb",
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "xargs",
+                  "xargs.cmd",
+                  "xargs.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-i",
+                  "-l",
+                  "-n",
+                  "-p",
+                  "-s"
+                ],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--for"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "repo2nb",
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "xargs",
+                  "xargs.cmd",
+                  "xargs.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-i",
+                  "-l",
+                  "-n",
+                  "-p",
+                  "-s"
+                ],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--fo"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "repo2nb",
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "xargs",
+                  "xargs.cmd",
+                  "xargs.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-i",
+                  "-l",
+                  "-n",
+                  "-p",
+                  "-s"
+                ],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--f"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "repo2nb",
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "xargs",
+                  "xargs.cmd",
+                  "xargs.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-i",
+                  "-l",
+                  "-n",
+                  "-p",
+                  "-s"
+                ],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--force"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "python",
+                  "-m",
+                  "repo2nb",
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "xargs",
+                  "xargs.cmd",
+                  "xargs.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-i",
+                  "-l",
+                  "-n",
+                  "-p",
+                  "-s"
+                ],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--forc"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "python",
+                  "-m",
+                  "repo2nb",
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "xargs",
+                  "xargs.cmd",
+                  "xargs.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-i",
+                  "-l",
+                  "-n",
+                  "-p",
+                  "-s"
+                ],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--for"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "python",
+                  "-m",
+                  "repo2nb",
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "xargs",
+                  "xargs.cmd",
+                  "xargs.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-i",
+                  "-l",
+                  "-n",
+                  "-p",
+                  "-s"
+                ],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--fo"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "python",
+                  "-m",
+                  "repo2nb",
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "xargs",
+                  "xargs.cmd",
+                  "xargs.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-i",
+                  "-l",
+                  "-n",
+                  "-p",
+                  "-s"
+                ],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--f"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "python",
+                  "-m",
+                  "repo2nb",
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "xargs",
+                  "xargs.cmd",
+                  "xargs.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-i",
+                  "-l",
+                  "-n",
+                  "-p",
+                  "-s"
+                ],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--force"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "python3",
+                  "-m",
+                  "repo2nb",
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "xargs",
+                  "xargs.cmd",
+                  "xargs.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-i",
+                  "-l",
+                  "-n",
+                  "-p",
+                  "-s"
+                ],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--forc"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "python3",
+                  "-m",
+                  "repo2nb",
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "xargs",
+                  "xargs.cmd",
+                  "xargs.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-i",
+                  "-l",
+                  "-n",
+                  "-p",
+                  "-s"
+                ],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--for"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "python3",
+                  "-m",
+                  "repo2nb",
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "xargs",
+                  "xargs.cmd",
+                  "xargs.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-i",
+                  "-l",
+                  "-n",
+                  "-p",
+                  "-s"
+                ],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--fo"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "python3",
+                  "-m",
+                  "repo2nb",
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "xargs",
+                  "xargs.cmd",
+                  "xargs.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-i",
+                  "-l",
+                  "-n",
+                  "-p",
+                  "-s"
+                ],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--f"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "python3",
+                  "-m",
+                  "repo2nb",
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "xargs",
+                  "xargs.cmd",
+                  "xargs.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-i",
+                  "-l",
+                  "-n",
+                  "-p",
+                  "-s"
+                ],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--force"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "py",
+                  "-m",
+                  "repo2nb",
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "xargs",
+                  "xargs.cmd",
+                  "xargs.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-i",
+                  "-l",
+                  "-n",
+                  "-p",
+                  "-s"
+                ],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--forc"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "py",
+                  "-m",
+                  "repo2nb",
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "xargs",
+                  "xargs.cmd",
+                  "xargs.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-i",
+                  "-l",
+                  "-n",
+                  "-p",
+                  "-s"
+                ],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--for"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "py",
+                  "-m",
+                  "repo2nb",
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "xargs",
+                  "xargs.cmd",
+                  "xargs.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-i",
+                  "-l",
+                  "-n",
+                  "-p",
+                  "-s"
+                ],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--fo"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "py",
+                  "-m",
+                  "repo2nb",
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "xargs",
+                  "xargs.cmd",
+                  "xargs.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-i",
+                  "-l",
+                  "-n",
+                  "-p",
+                  "-s"
+                ],
+                "options_with_values": [
+                  "--output",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--f"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "py",
+                  "-m",
+                  "repo2nb",
+                  "reverse"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "expansion_markers": [
+                  "$",
+                  "`"
+                ],
+                "launchers": [
+                  [
+                    "repo2nb"
+                  ],
+                  [
+                    "python",
+                    "-m",
+                    "repo2nb"
+                  ],
+                  [
+                    "python3",
+                    "-m",
+                    "repo2nb"
+                  ],
+                  [
+                    "py",
+                    "-m",
+                    "repo2nb"
+                  ],
+                  [
+                    "exec",
+                    "repo2nb"
+                  ],
+                  [
+                    "exec",
+                    "python",
+                    "-m",
+                    "repo2nb"
+                  ],
+                  [
+                    "exec",
+                    "python3",
+                    "-m",
+                    "repo2nb"
+                  ],
+                  [
+                    "exec",
+                    "py",
+                    "-m",
+                    "repo2nb"
+                  ],
+                  [
+                    "xargs",
+                    "repo2nb"
+                  ],
+                  [
+                    "xargs",
+                    "python",
+                    "-m",
+                    "repo2nb"
+                  ],
+                  [
+                    "xargs",
+                    "python3",
+                    "-m",
+                    "repo2nb"
+                  ],
+                  [
+                    "xargs",
+                    "py",
+                    "-m",
+                    "repo2nb"
+                  ]
+                ],
+                "leading_options_with_values": [
+                  "-I",
+                  "-L",
+                  "-P",
+                  "-n",
+                  "-s"
+                ],
+                "subcommand": "reverse"
+              },
+              "op": "repo2nb-expansion.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.repo2nb.permission.reverse-force",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.repo2nb.reverse-force",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "repo2nb",
+                      "repo2nb.cmd",
+                      "repo2nb.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--force",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "repo2nb",
+                      "repo2nb.cmd",
+                      "repo2nb.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--forc",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "repo2nb",
+                      "repo2nb.cmd",
+                      "repo2nb.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--for",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "repo2nb",
+                      "repo2nb.cmd",
+                      "repo2nb.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--fo",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "repo2nb",
+                      "repo2nb.cmd",
+                      "repo2nb.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--f",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "python",
+                      "python.cmd",
+                      "python.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--force",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "-m",
+                      "repo2nb",
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "python",
+                      "python.cmd",
+                      "python.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--forc",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "-m",
+                      "repo2nb",
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "python",
+                      "python.cmd",
+                      "python.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--for",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "-m",
+                      "repo2nb",
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "python",
+                      "python.cmd",
+                      "python.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--fo",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "-m",
+                      "repo2nb",
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "python",
+                      "python.cmd",
+                      "python.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--f",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "-m",
+                      "repo2nb",
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "python3",
+                      "python3.cmd",
+                      "python3.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--force",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "-m",
+                      "repo2nb",
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "python3",
+                      "python3.cmd",
+                      "python3.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--forc",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "-m",
+                      "repo2nb",
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "python3",
+                      "python3.cmd",
+                      "python3.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--for",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "-m",
+                      "repo2nb",
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "python3",
+                      "python3.cmd",
+                      "python3.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--fo",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "-m",
+                      "repo2nb",
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "python3",
+                      "python3.cmd",
+                      "python3.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--f",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "-m",
+                      "repo2nb",
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "py",
+                      "py.cmd",
+                      "py.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--force",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "-m",
+                      "repo2nb",
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "py",
+                      "py.cmd",
+                      "py.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--forc",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "-m",
+                      "repo2nb",
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "py",
+                      "py.cmd",
+                      "py.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--for",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "-m",
+                      "repo2nb",
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "py",
+                      "py.cmd",
+                      "py.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--fo",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "-m",
+                      "repo2nb",
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "py",
+                      "py.cmd",
+                      "py.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--f",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "-m",
+                      "repo2nb",
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "exec",
+                      "exec.cmd",
+                      "exec.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--force",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "repo2nb",
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "exec",
+                      "exec.cmd",
+                      "exec.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--forc",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "repo2nb",
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "exec",
+                      "exec.cmd",
+                      "exec.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--for",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "repo2nb",
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "exec",
+                      "exec.cmd",
+                      "exec.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--fo",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "repo2nb",
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "exec",
+                      "exec.cmd",
+                      "exec.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--f",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "repo2nb",
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "exec",
+                      "exec.cmd",
+                      "exec.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--force",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "python",
+                      "-m",
+                      "repo2nb",
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "exec",
+                      "exec.cmd",
+                      "exec.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--forc",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "python",
+                      "-m",
+                      "repo2nb",
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "exec",
+                      "exec.cmd",
+                      "exec.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--for",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "python",
+                      "-m",
+                      "repo2nb",
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "exec",
+                      "exec.cmd",
+                      "exec.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--fo",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "python",
+                      "-m",
+                      "repo2nb",
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "exec",
+                      "exec.cmd",
+                      "exec.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--f",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "python",
+                      "-m",
+                      "repo2nb",
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "exec",
+                      "exec.cmd",
+                      "exec.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--force",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "python3",
+                      "-m",
+                      "repo2nb",
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "exec",
+                      "exec.cmd",
+                      "exec.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--forc",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "python3",
+                      "-m",
+                      "repo2nb",
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "exec",
+                      "exec.cmd",
+                      "exec.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--for",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "python3",
+                      "-m",
+                      "repo2nb",
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "exec",
+                      "exec.cmd",
+                      "exec.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--fo",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "python3",
+                      "-m",
+                      "repo2nb",
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "exec",
+                      "exec.cmd",
+                      "exec.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--f",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "python3",
+                      "-m",
+                      "repo2nb",
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "exec",
+                      "exec.cmd",
+                      "exec.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--force",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "py",
+                      "-m",
+                      "repo2nb",
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "exec",
+                      "exec.cmd",
+                      "exec.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--forc",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "py",
+                      "-m",
+                      "repo2nb",
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "exec",
+                      "exec.cmd",
+                      "exec.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--for",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "py",
+                      "-m",
+                      "repo2nb",
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "exec",
+                      "exec.cmd",
+                      "exec.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--fo",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "py",
+                      "-m",
+                      "repo2nb",
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "exec",
+                      "exec.cmd",
+                      "exec.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--f",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "py",
+                      "-m",
+                      "repo2nb",
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "xargs",
+                      "xargs.cmd",
+                      "xargs.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--force",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "repo2nb",
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "xargs",
+                      "xargs.cmd",
+                      "xargs.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--forc",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "repo2nb",
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "xargs",
+                      "xargs.cmd",
+                      "xargs.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--for",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "repo2nb",
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "xargs",
+                      "xargs.cmd",
+                      "xargs.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--fo",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "repo2nb",
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "xargs",
+                      "xargs.cmd",
+                      "xargs.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--f",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "repo2nb",
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "xargs",
+                      "xargs.cmd",
+                      "xargs.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--force",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "python",
+                      "-m",
+                      "repo2nb",
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "xargs",
+                      "xargs.cmd",
+                      "xargs.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--forc",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "python",
+                      "-m",
+                      "repo2nb",
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "xargs",
+                      "xargs.cmd",
+                      "xargs.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--for",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "python",
+                      "-m",
+                      "repo2nb",
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "xargs",
+                      "xargs.cmd",
+                      "xargs.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--fo",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "python",
+                      "-m",
+                      "repo2nb",
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "xargs",
+                      "xargs.cmd",
+                      "xargs.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--f",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "python",
+                      "-m",
+                      "repo2nb",
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "xargs",
+                      "xargs.cmd",
+                      "xargs.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--force",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "python3",
+                      "-m",
+                      "repo2nb",
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "xargs",
+                      "xargs.cmd",
+                      "xargs.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--forc",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "python3",
+                      "-m",
+                      "repo2nb",
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "xargs",
+                      "xargs.cmd",
+                      "xargs.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--for",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "python3",
+                      "-m",
+                      "repo2nb",
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "xargs",
+                      "xargs.cmd",
+                      "xargs.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--fo",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "python3",
+                      "-m",
+                      "repo2nb",
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "xargs",
+                      "xargs.cmd",
+                      "xargs.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--f",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "python3",
+                      "-m",
+                      "repo2nb",
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "xargs",
+                      "xargs.cmd",
+                      "xargs.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--force",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "py",
+                      "-m",
+                      "repo2nb",
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "xargs",
+                      "xargs.cmd",
+                      "xargs.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--forc",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "py",
+                      "-m",
+                      "repo2nb",
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "xargs",
+                      "xargs.cmd",
+                      "xargs.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--for",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "py",
+                      "-m",
+                      "repo2nb",
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "xargs",
+                      "xargs.cmd",
+                      "xargs.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--fo",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "py",
+                      "-m",
+                      "repo2nb",
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "xargs",
+                      "xargs.cmd",
+                      "xargs.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--output",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--f",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "py",
+                      "-m",
+                      "repo2nb",
+                      "reverse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "repo2nb reverse command help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Run repo2nb reverse without --force first and review what it reports about the existing directory.",
+          "Confirm the destination path is not a sensitive system or home directory before forcing.",
+          "Expand shell variables and command substitutions before running repo2nb reverse."
+        ],
+        "severity": "critical",
+        "title": "repo2nb forced notebook reversal"
+      },
+      {
+        "action_classes": [
+          "repo2nb notebook sync command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `repo2nb sync`, a one-directional repo-to-notebook sync that can silently drop manually-added notebook cells not tracked in .repo2nb/manifest.json.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "repo2nb",
+                  "repo2nb.cmd",
+                  "repo2nb.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--notebook"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "sync"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "python",
+                  "python.cmd",
+                  "python.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--notebook"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "-m",
+                  "repo2nb",
+                  "sync"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "python3",
+                  "python3.cmd",
+                  "python3.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--notebook"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "-m",
+                  "repo2nb",
+                  "sync"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "py",
+                  "py.cmd",
+                  "py.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--notebook"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "-m",
+                  "repo2nb",
+                  "sync"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "exec",
+                  "exec.cmd",
+                  "exec.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-i",
+                  "-l",
+                  "-n",
+                  "-p",
+                  "-s"
+                ],
+                "options_with_values": [
+                  "--notebook"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "repo2nb",
+                  "sync"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "exec",
+                  "exec.cmd",
+                  "exec.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-i",
+                  "-l",
+                  "-n",
+                  "-p",
+                  "-s"
+                ],
+                "options_with_values": [
+                  "--notebook"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "python",
+                  "-m",
+                  "repo2nb",
+                  "sync"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "exec",
+                  "exec.cmd",
+                  "exec.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-i",
+                  "-l",
+                  "-n",
+                  "-p",
+                  "-s"
+                ],
+                "options_with_values": [
+                  "--notebook"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "python3",
+                  "-m",
+                  "repo2nb",
+                  "sync"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "exec",
+                  "exec.cmd",
+                  "exec.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-i",
+                  "-l",
+                  "-n",
+                  "-p",
+                  "-s"
+                ],
+                "options_with_values": [
+                  "--notebook"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "py",
+                  "-m",
+                  "repo2nb",
+                  "sync"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "xargs",
+                  "xargs.cmd",
+                  "xargs.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-i",
+                  "-l",
+                  "-n",
+                  "-p",
+                  "-s"
+                ],
+                "options_with_values": [
+                  "--notebook"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "repo2nb",
+                  "sync"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "xargs",
+                  "xargs.cmd",
+                  "xargs.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-i",
+                  "-l",
+                  "-n",
+                  "-p",
+                  "-s"
+                ],
+                "options_with_values": [
+                  "--notebook"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "python",
+                  "-m",
+                  "repo2nb",
+                  "sync"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "xargs",
+                  "xargs.cmd",
+                  "xargs.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-i",
+                  "-l",
+                  "-n",
+                  "-p",
+                  "-s"
+                ],
+                "options_with_values": [
+                  "--notebook"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "python3",
+                  "-m",
+                  "repo2nb",
+                  "sync"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "xargs",
+                  "xargs.cmd",
+                  "xargs.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-i",
+                  "-l",
+                  "-n",
+                  "-p",
+                  "-s"
+                ],
+                "options_with_values": [
+                  "--notebook"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "py",
+                  "-m",
+                  "repo2nb",
+                  "sync"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.repo2nb.permission.sync",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.repo2nb.sync",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "repo2nb",
+                      "repo2nb.cmd",
+                      "repo2nb.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--notebook"
+                    ],
+                    "required_flags": [
+                      "--dry-run"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "sync"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "python",
+                      "python.cmd",
+                      "python.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--notebook"
+                    ],
+                    "required_flags": [
+                      "--dry-run"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "-m",
+                      "repo2nb",
+                      "sync"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "python3",
+                      "python3.cmd",
+                      "python3.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--notebook"
+                    ],
+                    "required_flags": [
+                      "--dry-run"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "-m",
+                      "repo2nb",
+                      "sync"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "py",
+                      "py.cmd",
+                      "py.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--notebook"
+                    ],
+                    "required_flags": [
+                      "--dry-run"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "-m",
+                      "repo2nb",
+                      "sync"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "exec",
+                      "exec.cmd",
+                      "exec.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--notebook"
+                    ],
+                    "required_flags": [
+                      "--dry-run"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "repo2nb",
+                      "sync"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "exec",
+                      "exec.cmd",
+                      "exec.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--notebook"
+                    ],
+                    "required_flags": [
+                      "--dry-run"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "python",
+                      "-m",
+                      "repo2nb",
+                      "sync"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "exec",
+                      "exec.cmd",
+                      "exec.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--notebook"
+                    ],
+                    "required_flags": [
+                      "--dry-run"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "python3",
+                      "-m",
+                      "repo2nb",
+                      "sync"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "exec",
+                      "exec.cmd",
+                      "exec.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--notebook"
+                    ],
+                    "required_flags": [
+                      "--dry-run"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "py",
+                      "-m",
+                      "repo2nb",
+                      "sync"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "xargs",
+                      "xargs.cmd",
+                      "xargs.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--notebook"
+                    ],
+                    "required_flags": [
+                      "--dry-run"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "repo2nb",
+                      "sync"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "xargs",
+                      "xargs.cmd",
+                      "xargs.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--notebook"
+                    ],
+                    "required_flags": [
+                      "--dry-run"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "python",
+                      "-m",
+                      "repo2nb",
+                      "sync"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "xargs",
+                      "xargs.cmd",
+                      "xargs.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--notebook"
+                    ],
+                    "required_flags": [
+                      "--dry-run"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "python3",
+                      "-m",
+                      "repo2nb",
+                      "sync"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "xargs",
+                      "xargs.cmd",
+                      "xargs.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--notebook"
+                    ],
+                    "required_flags": [
+                      "--dry-run"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "py",
+                      "-m",
+                      "repo2nb",
+                      "sync"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "repo2nb sync dry run",
+            "variant_id": "dry-run"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "repo2nb",
+                      "repo2nb.cmd",
+                      "repo2nb.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--notebook"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "sync"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "python",
+                      "python.cmd",
+                      "python.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--notebook"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "-m",
+                      "repo2nb",
+                      "sync"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "python3",
+                      "python3.cmd",
+                      "python3.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--notebook"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "-m",
+                      "repo2nb",
+                      "sync"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "py",
+                      "py.cmd",
+                      "py.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--notebook"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "-m",
+                      "repo2nb",
+                      "sync"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "exec",
+                      "exec.cmd",
+                      "exec.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--notebook"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "repo2nb",
+                      "sync"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "exec",
+                      "exec.cmd",
+                      "exec.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--notebook"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "python",
+                      "-m",
+                      "repo2nb",
+                      "sync"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "exec",
+                      "exec.cmd",
+                      "exec.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--notebook"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "python3",
+                      "-m",
+                      "repo2nb",
+                      "sync"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "exec",
+                      "exec.cmd",
+                      "exec.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--notebook"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "py",
+                      "-m",
+                      "repo2nb",
+                      "sync"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "xargs",
+                      "xargs.cmd",
+                      "xargs.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--notebook"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "repo2nb",
+                      "sync"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "xargs",
+                      "xargs.cmd",
+                      "xargs.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--notebook"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "python",
+                      "-m",
+                      "repo2nb",
+                      "sync"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "xargs",
+                      "xargs.cmd",
+                      "xargs.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--notebook"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "python3",
+                      "-m",
+                      "repo2nb",
+                      "sync"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "xargs",
+                      "xargs.cmd",
+                      "xargs.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-i",
+                      "-l",
+                      "-n",
+                      "-p",
+                      "-s"
+                    ],
+                    "options_with_values": [
+                      "--notebook"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "py",
+                      "-m",
+                      "repo2nb",
+                      "sync"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "repo2nb sync command help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Review .repo2nb/manifest.json to see which cells are tracked before syncing.",
+          "Back up or export manually-added cells before running sync."
+        ],
+        "severity": "medium",
+        "title": "repo2nb notebook sync"
+      }
+    ],
+    "safer_alternatives": [
+      "Run repo2nb reverse without --force first to see what it reports.",
+      "Review the manifest before syncing to catch untracked manual edits."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

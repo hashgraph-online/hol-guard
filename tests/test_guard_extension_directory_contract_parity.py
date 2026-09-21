@@ -35,7 +35,8 @@ def test_listing_and_directory_preserve_native_schema_bounds(kind: Literal["cli"
     example = "command.blitcp" if kind == "cli" else "mcp.filesystem"
     payload = json.loads((REPOSITORY / "contributions" / directory / f"{example}.json").read_text())
     payload["id"] = extension_id
-    native_schema = json.loads((REPOSITORY / "contracts" / directory / "contribution.v1.schema.json").read_text())
+    schema_version = "contribution.v2.schema.json" if kind == "cli" else "contribution.v1.schema.json"
+    native_schema = json.loads((REPOSITORY / "contracts" / directory / schema_version).read_text())
     Draft202012Validator(native_schema).validate(payload)
 
     catalog = json.loads((REPOSITORY / "docs/guard/extensions/catalog.v1.json").read_text())
@@ -114,6 +115,7 @@ def test_exporter_never_infers_claim_authority_when_ids_are_omitted(tmp_path: Pa
         assert entry["trustClass"] == "external"
         assert entry["protectionModel"] == "external-opt-in"
 
-    description = directory_schema()["properties"]["entries"]["items"]["properties"]["maintainerGithubIds"]["description"]
+    entry_properties = directory_schema()["properties"]["entries"]["items"]["properties"]
+    description = entry_properties["maintainerGithubIds"]["description"]
     assert "only IDs in this accepted array" in description
     assert "Pull-request authorship is attribution evidence only" in description

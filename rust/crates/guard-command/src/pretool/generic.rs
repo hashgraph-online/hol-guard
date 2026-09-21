@@ -377,17 +377,22 @@ fn evaluate_signals(
         true,
         signals.sensitive_target,
     );
-    if let Some(tool) = signals.tool_name.as_deref() {
-        if tool_matches(
-            tool,
-            &["shutdown", "reboot", "wipe", "format", "kill", "terminate"],
-        ) {
-            return generic_result(
-                action,
-                "block",
-                "native_process_service_dangerous",
-                "HOL Guard blocked a destructive process or service action before execution.",
-            );
+    let command_proves_benign = command_decision
+        .and_then(|decision| decision.as_ref().ok())
+        .is_some_and(|decision| decision.explicitly_benign);
+    if !command_proves_benign {
+        if let Some(tool) = signals.tool_name.as_deref() {
+            if tool_matches(
+                tool,
+                &["shutdown", "reboot", "wipe", "format", "kill", "terminate"],
+            ) {
+                return generic_result(
+                    action,
+                    "block",
+                    "native_process_service_dangerous",
+                    "HOL Guard blocked a destructive process or service action before execution.",
+                );
+            }
         }
     }
     if signals.sensitive_target
@@ -432,7 +437,12 @@ fn evaluate_signals(
         if action_type == PreToolActionTypeV1::Command {
             // A benign command proves only its command text. Independent
             // structured paths still describe the action the tool will take.
-            if signals.sensitive_target {
+            if signals.sensitive_target
+                && matches!(
+                    command_decision.minimum_action.as_str(),
+                    "allow" | "warn" | "review"
+                )
+            {
                 return generic_result(
                     action,
                     "review",

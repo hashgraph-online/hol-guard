@@ -305,7 +305,8 @@
         "src/codex_plugin_scanner/guard/runtime/hook_review_engine.py",
         "src/codex_plugin_scanner/guard/runtime/hook_source_read.py",
         "src/codex_plugin_scanner/guard/runtime/source_paths.py",
-        "src/codex_plugin_scanner/guard/native_command_model.py"
+        "src/codex_plugin_scanner/guard/native_command_model.py",
+        "src/codex_plugin_scanner/guard/native_command_model_wrappers.py"
       ],
       "current": "differential-test oracle only; production off is fail-safe and shadow is diagnostic-only",
       "target": "differential tests only"
@@ -345,6 +346,8 @@
         "src/codex_plugin_scanner/guard/approvals.py",
         "src/codex_plugin_scanner/guard/**/approval*.py",
         "src/codex_plugin_scanner/guard/config.py",
+        "src/codex_plugin_scanner/guard/config_file_io.py",
+        "src/codex_plugin_scanner/guard/directory_path_authority.py",
         "src/codex_plugin_scanner/guard/config_mutation.py",
         "src/codex_plugin_scanner/guard/native_policy_snapshot.py",
         "src/codex_plugin_scanner/guard/native_policy_snapshot_*.py",

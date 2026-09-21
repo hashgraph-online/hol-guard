@@ -348,6 +348,10 @@ class TestZCodeInstallUninstall:
         ctx = _ctx(tmp_path)
         self._patch_shims(monkeypatch, ctx)
         monkeypatch.setattr("codex_plugin_scanner.guard.adapters.zcode.sys.frozen", True, raising=False)
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge.isolated_cursor_hook_python",
+            lambda: None,
+        )
         ZCodeHarnessAdapter().install(ctx)
         payload = json.loads((ctx.home_dir / ".zcode" / "cli" / "config.json").read_text(encoding="utf-8"))
         handler = payload["hooks"]["events"]["PreToolUse"][0]["hooks"][0]

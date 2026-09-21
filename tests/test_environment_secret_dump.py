@@ -7,8 +7,14 @@ from pathlib import Path
 
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.redaction import redact_text
-from codex_plugin_scanner.guard.runtime.command_inspection import inspect_command
-from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sensitive_tool_action_request
+from codex_plugin_scanner.guard.runtime.secret_file_request_services.environment_secret_dump import (
+    environment_secret_dump_request,
+)
+from tests.native_command_test_support import (
+    extract_sensitive_tool_action_request_native_test as extract_sensitive_tool_action_request,
+)
+from tests.native_command_test_support import inspect_command_native_test as inspect_command
+from tests.native_command_test_support import real_native_command_evaluation
 
 _ACTION = "process environment secret read"
 
@@ -52,7 +58,28 @@ def test_python_getenv_secret_is_process_environment_secret_read() -> None:
 
 
 def test_python_getenv_path_is_not_secret_read() -> None:
-    assert _match("python3 -c \"import os; print(os.getenv('PATH'))\"") is None
+    command = "python3 -c \"import os; print(os.getenv('PATH'))\""
+    assert (
+        environment_secret_dump_request(
+            tool_name="run_terminal_command",
+            normalized_tool_name="run_terminal_command",
+            command_text=command,
+            cwd=Path("/tmp"),
+            home_dir=Path("/tmp"),
+        )
+        is None
+    )
+    reviewed = real_native_command_evaluation(command, cwd=Path("/tmp"))
+    assert not reviewed.evaluation.extension_observations
+    assert reviewed.native_minimum_action == "review"
+    assert reviewed.evaluation.minimum_action == "review"
+    assert not reviewed.evaluation.decision_plane.proof_routes
+    # Host discovery may prove the running interpreter's harmless PATH lookup
+    # or retain an independent interpreter review when that identity is absent.
+    # Neither result is evidence of a secret read; the native floor above is
+    # unchanged and does not claim an execution proof.
+    match = _match(command)
+    assert match is None or match.action_class != _ACTION
 
 
 def test_node_process_env_dump_is_process_environment_secret_read() -> None:

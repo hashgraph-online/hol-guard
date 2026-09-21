@@ -1,37 +1,32 @@
-"""Compile checked authoring contracts into ordinary in-tree contribution files."""
+"""Render reviewed contribution data for native compilation and MCP metadata."""
 
 from __future__ import annotations
 
-import ast
-
-from jsonschema.exceptions import ValidationError
-
-from ..runtime.extension_contribution import _validator as cli_contribution_validator
 from ..runtime.mcp_server_contribution import validate_mcp_contribution
 from .errors import BuilderError
 from .io import canonical_json, digest
 from .models import Discovery, Metadata, Operation
-from .python_literals import LiteralCall, emit, quoted
 from .review import DEFAULT_GUIDANCE, Decision, Review
 
-RUNTIME_PATH = "src/codex_plugin_scanner/guard/runtime"
+COMMAND_SOURCE_SCHEMA = "guard.command-extension-source.v1"
+COMMAND_FIXTURE_SCHEMA = "guard.command-extension-fixtures.v1"
 
 
 def contribution_path(metadata: Metadata) -> str:
-    directory = "extensions" if metadata.kind == "cli" else "mcp-servers"
-    return f"contributions/{directory}/{metadata.contribution_id}.json"
+    family = "extensions" if metadata.kind == "cli" else "mcp-servers"
+    return f"contributions/{family}/{metadata.contribution_id}.json"
 
 
-def detector_path(metadata: Metadata) -> str:
-    return f"{RUNTIME_PATH}/{metadata.module_leaf}.py"
+def command_source_path(metadata: Metadata) -> str:
+    return f"contributions/command-sources/{metadata.contribution_id}.json"
+
+
+def command_fixture_path(metadata: Metadata) -> str:
+    return f"tests/fixtures/command-source-{metadata.slug}.v1.json"
 
 
 def test_path(metadata: Metadata) -> str:
     return f"tests/test_generated_{metadata.kind}_{metadata.slug.replace('-', '_')}_extension.py"
-
-
-def constant_prefix(metadata: Metadata) -> str:
-    return metadata.slug.upper().replace("-", "_")
 
 
 def revision_digest(discovery: Discovery, review: Review) -> str:
@@ -42,10 +37,164 @@ def _risks(review: Review) -> tuple[str, ...]:
     return tuple(sorted({risk for _, decision in review.entries for risk in decision.risk_classes}))
 
 
+def _executable_matcher(metadata: Metadata, operation: Operation | None) -> dict[str, object]:
+    return {
+        "op": "executable.v1",
+        "config": {
+            "executables": [metadata.executable],
+            "subcommands": list(operation.path if operation else ()),
+            "allow_leading_options": bool(operation and operation.path),
+            "leading_options_with_values": list(operation.options_with_values if operation else ()),
+            "interspersed_options_with_values": list(operation.options_with_values if operation else ()),
+            "interspersed_flags": list(operation.flags if operation else ()),
+            "options_with_values": [],
+            "required_flags": [],
+            "required_flags_in_all_arguments": False,
+            "required_option_values": [],
+            "forbidden_flags": [],
+            "inverse_flag_pairs": [],
+            "fail_secure_unknown_options": bool(operation and operation.path),
+        },
+    }
+
+
+def _literal_matcher(metadata: Metadata, argv: tuple[str, ...]) -> dict[str, object]:
+    return {"op": "reviewed-literal.v1", "config": {"executable": metadata.executable, "arguments": list(argv)}}
+
+
+def render_command_source(discovery: Discovery, review: Review) -> str:
+    metadata = discovery.metadata
+    decisions = review.by_id()
+    revision = f"1.0.{int(revision_digest(discovery, review)[:16], 16)}"
+    action_class = f"{metadata.catalog_id} invocation"
+    permissions: list[dict[str, object]] = []
+    rules: list[dict[str, object]] = []
+    for operation in (None, *discovery.operations):
+        suffix = "unclassified" if operation is None else operation.operation_id
+        decision = Decision("review") if operation is None else decisions[operation.operation_id]
+        permission_id = f"{metadata.catalog_id}.permission.{suffix}"
+        title = "Unclassified invocation" if operation is None else (" ".join(operation.path) or "Root invocation")[:96]
+        description = "Reviews inventoried operations; unknown invocations also require review."
+        permissions.append(
+            {
+                "permission_id": permission_id,
+                "implementation_version": revision,
+                "label": title,
+                "description": description,
+                "risk_tier": "high" if decision.state == "block" else "medium",
+                "baseline_floor": "block" if decision.state == "block" else "review",
+                "default_enabled": True,
+                "configurable": operation is not None,
+                "fixed_reason": None if operation is not None else "Unknown operations retain review.",
+                "typed_capabilities": [],
+                "action_classes": [action_class],
+                "dependencies": [],
+                "conflicts": [],
+                "implied_permissions": [],
+                "introduced_version": "1.0.0",
+                "deprecated": False,
+                "safer_guidance": [decision.safer_alternative],
+                "example_command": " ".join((metadata.executable, *(operation.path if operation else ())))[:120],
+            }
+        )
+        rules.append(
+            {
+                "rule_id": f"{metadata.catalog_id}.{suffix}",
+                "rule_version": revision,
+                "permission_id": permission_id,
+                "title": title,
+                "description": description,
+                "severity": "high" if decision.state == "block" else "medium",
+                "risk_classes": list(decision.risk_classes),
+                "action_classes": [action_class],
+                "safer_alternatives": [decision.safer_alternative],
+                "default_mode": "enforce" if decision.state == "block" else "review",
+                "matcher": _executable_matcher(metadata, operation),
+                "safe_variants": [
+                    {
+                        "variant_id": f"literal-{digest(list(argv))[:16]}",
+                        "title": "Explicitly reviewed literal invocation",
+                        "matcher": _literal_matcher(metadata, argv),
+                    }
+                    for argv in decision.safe_argv
+                ],
+            }
+        )
+    return canonical_json(
+        {
+            "schema": COMMAND_SOURCE_SCHEMA,
+            "extension": {
+                "extension_id": metadata.catalog_id,
+                "version": "1.0.0",
+                "name": metadata.name,
+                "description": "Conservative operation knowledge compiled from a contributor inventory.",
+                "action_classes": [action_class],
+                "risk_classes": list(_risks(review)),
+                "safer_alternatives": [DEFAULT_GUIDANCE],
+                "reference_urls": [metadata.homepage],
+                "required": False,
+                "source": "built-in",
+                "aliases": [],
+                "dependencies": [],
+                "conflicts": [],
+                "ecosystem_ids": [],
+                "executables": [metadata.executable],
+                "project_markers": [],
+                "publisher": {
+                    "id": metadata.publisher_id,
+                    "display_name": metadata.publisher_name,
+                    "url": metadata.homepage,
+                },
+                "homepage": metadata.homepage,
+                "icon": {"kind": "none"},
+                "license": None,
+                "permissions": permissions,
+                "rules": rules,
+            },
+        }
+    )
+
+
+def render_command_fixture_cases(discovery: Discovery, review: Review) -> list[dict[str, object]]:
+    metadata = discovery.metadata
+    decisions = review.by_id()
+    cases: list[dict[str, object]] = []
+    for operation in discovery.operations:
+        decision = decisions[operation.operation_id]
+        rule_id = f"{metadata.catalog_id}.{operation.operation_id}"
+        cases.append(
+            {
+                "id": operation.operation_id,
+                "command": " ".join((metadata.executable, *operation.path)),
+                "enabled_extensions": [metadata.catalog_id],
+                "disabled_permissions": [],
+                "expected_action": decision.state,
+                "rule_id": rule_id,
+                "expected_effective_segments": [0],
+            }
+        )
+        for index, argv in enumerate(decision.safe_argv):
+            cases.append(
+                {
+                    "id": f"{operation.operation_id}-safe-{index}",
+                    "command": " ".join((metadata.executable, *argv)),
+                    "enabled_extensions": [metadata.catalog_id],
+                    "disabled_permissions": [],
+                    "expected_action": "review",
+                    "rule_id": rule_id,
+                    "expected_effective_segments": [],
+                }
+            )
+    return cases
+
+
 def render_contribution(discovery: Discovery, review: Review) -> str:
     metadata = discovery.metadata
+    if metadata.kind != "mcp":
+        raise BuilderError("native_contract", "CLI contribution descriptors must be generated by Rust.")
+    decisions = review.by_id()
     payload: dict[str, object] = {
-        "schemaVersion": f"guard.{'extension' if metadata.kind == 'cli' else 'mcp-server'}-contribution.v1",
+        "schemaVersion": "guard.mcp-server-contribution.v1",
         "id": metadata.contribution_id,
         "version": "1.0.0",
         "name": metadata.name,
@@ -58,158 +207,17 @@ def render_contribution(discovery: Discovery, review: Review) -> str:
         "referenceUrls": [metadata.homepage],
         "riskClasses": list(_risks(review)),
         "saferAlternatives": [DEFAULT_GUIDANCE],
+        "launch": {"kind": "package-launcher", "command": metadata.launcher, "package": metadata.package},
+        "tools": [
+            {"name": operation.name, "state": decisions[operation.operation_id].state}
+            for operation in discovery.operations
+        ]
+        + [{"name": "other", "state": "inherit"}],
     }
-    if metadata.kind == "cli":
-        payload.update(
-            {
-                "executables": [metadata.executable],
-                "actionClasses": [f"{metadata.catalog_id} invocation"],
-                "detector": {
-                    "kind": "python-module",
-                    "module": f"codex_plugin_scanner.guard.runtime.{metadata.module_leaf}",
-                },
-            }
-        )
-    else:
-        decisions = review.by_id()
-        payload.update(
-            {
-                "launch": {"kind": "package-launcher", "command": metadata.launcher, "package": metadata.package},
-                "tools": [
-                    {"name": operation.name, "state": decisions[operation.operation_id].state}
-                    for operation in discovery.operations
-                ]
-                + [{"name": "other", "state": "inherit"}],
-            }
-        )
     try:
-        if metadata.kind == "cli":
-            # Shape only here. Native in-tree detector binding is additionally checked
-            # by the normal contribution tests after explicit repository integration.
-            cli_contribution_validator().validate(payload)
-        else:
-            validate_mcp_contribution(payload)
-    except (ValidationError, ValueError) as exc:
+        validate_mcp_contribution(payload)
+    except ValueError as exc:
         raise BuilderError(
             "native_contract", "Generated contribution is incompatible with the installed Guard schema."
         ) from exc
     return canonical_json(payload)
-
-
-def _matcher_lines(operation: Operation | None) -> list[str]:
-    if operation is None or not operation.path:
-        return ["        matcher=ExecutableMatcher(executables=_EXECUTABLES),"]
-    return [
-        "        matcher=ExecutablePathSetMatcher(",
-        "            executables=_EXECUTABLES,",
-        *emit(LiteralCall("frozenset", (operation.path,)), prefix="            paths=", suffix=","),
-        "            allow_leading_options=True,",
-        *emit(
-            LiteralCall("frozenset", operation.options_with_values),
-            prefix="            leading_options_with_values=",
-            suffix=",",
-        ),
-        *emit(
-            LiteralCall("frozenset", operation.options_with_values),
-            prefix="            interspersed_options_with_values=",
-            suffix=",",
-        ),
-        *emit(LiteralCall("frozenset", operation.flags), prefix="            interspersed_flags=", suffix=","),
-        "            fail_secure_unknown_options=True,",
-        "        ),",
-    ]
-
-
-def _rule_lines(metadata: Metadata, operation: Operation | None, decision: Decision) -> list[str]:
-    suffix = "unclassified" if operation is None else operation.operation_id
-    path = () if operation is None else operation.path
-    title = "Unclassified invocation" if operation is None else (" ".join(path) or "Root invocation")[:96]
-    mode = "enforce" if decision.state == "block" else "review"
-    example = " ".join((metadata.executable, *path))
-    return [
-        "    CommandSafetyRule(",
-        f"        rule_id={quoted(f'{metadata.catalog_id}.{suffix}')},",
-        "        rule_version=_RULE_REVISION,",
-        *emit(title, prefix="        title=", suffix=","),
-        '        description="Reviews inventoried operations; unknown invocations also require review.",',
-        f"        severity={quoted('high' if mode == 'enforce' else 'medium')},",
-        *emit(decision.risk_classes, prefix="        risk_classes=", suffix=","),
-        "        action_classes=(_ACTION_CLASS,),",
-        *emit((decision.safer_alternative,), prefix="        safer_alternatives=", suffix=","),
-        f"        default_mode={quoted(mode)},",
-        *_matcher_lines(operation),
-        *emit(() if mode == "enforce" else LiteralCall("_safe_for", path), prefix="        safe_variants=", suffix=","),
-        *emit(example if len(example) <= 120 else None, prefix="        example_command=", suffix=","),
-        "    ),",
-    ]
-
-
-def render_detector(discovery: Discovery, review: Review) -> str:
-    metadata = discovery.metadata
-    prefix = constant_prefix(metadata)
-    safe_vectors = tuple(sorted(argv for _, decision in review.entries for argv in decision.safe_argv))
-    safe_rows = tuple((f"literal-{digest(list(argv))[:16]}", argv) for argv in safe_vectors)
-    # The complete SHA-256 becomes a valid SemVer patch identifier. A changed
-    # grammar or review cannot retain a prior rule version or remembered identity.
-    revision = f"1.0.{int(revision_digest(discovery, review), 16)}"
-    lines = [
-        '"""Generated contributor knowledge. Review source semantics before enabling this extension."""',
-        "",
-        "from __future__ import annotations",
-        "",
-        "from .command_extension_specs import CommandExtensionSpec",
-        *(
-            ["from .command_path_set_matcher import ExecutablePathSetMatcher"]
-            if any(row.path for row in discovery.operations)
-            else []
-        ),
-        "from .command_reviewed_literal_matcher import ReviewedLiteralCommandMatcher",
-        "from .command_rules import CommandSafetyRule, CommandSafeVariant, ExecutableMatcher",
-        "",
-        f"_EXECUTABLE = {quoted(metadata.executable)}",
-        "_EXECUTABLES = frozenset((_EXECUTABLE,))",
-        f"_ACTION_CLASS = {quoted(f'{metadata.catalog_id} invocation')}",
-        f"_RULE_REVISION = {quoted(revision)}",
-        *emit(safe_rows, prefix="_SAFE_ROWS: tuple[tuple[str, tuple[str, ...]], ...] = "),
-        "",
-        "",
-        "def _safe_for(path: tuple[str, ...]) -> tuple[CommandSafeVariant, ...]:",
-        "    return tuple(",
-        "        CommandSafeVariant(",
-        "            variant_id=variant_id,",
-        '            title="Explicitly reviewed literal invocation",',
-        "            matcher=ReviewedLiteralCommandMatcher(_EXECUTABLE, argv),",
-        "        )",
-        "        for variant_id, argv in _SAFE_ROWS",
-        "        if tuple(part.lower() for part in argv[: len(path)]) == tuple(part.lower() for part in path)",
-        "    )",
-        "",
-        "",
-        f"{prefix}_COMMAND_RULES = (",
-        *_rule_lines(metadata, None, Decision("review")),
-    ]
-    decisions = review.by_id()
-    for operation in discovery.operations:
-        lines.extend(_rule_lines(metadata, operation, decisions[operation.operation_id]))
-    lines.extend(
-        [
-            ")",
-            "",
-            f"{prefix}_COMMAND_EXTENSION_SPECS = (",
-            "    CommandExtensionSpec(",
-            f"        extension_id={quoted(metadata.catalog_id)},",
-            *emit(metadata.name, prefix="        name=", suffix=","),
-            '        description="Reviews contributor CLI invocations without granting global approval.",',
-            "        action_classes=(_ACTION_CLASS,),",
-            *emit(_risks(review), prefix="        risk_classes=", suffix=","),
-            *emit((DEFAULT_GUIDANCE,), prefix="        safer_alternatives=", suffix=","),
-            *emit((metadata.homepage,), prefix="        reference_urls=", suffix=","),
-            "        executables=(_EXECUTABLE,),",
-            "    ),",
-            ")",
-            "",
-        ]
-    )
-    content = "\n".join(lines)
-    ast.parse(content, feature_version=(3, 10))
-    return content

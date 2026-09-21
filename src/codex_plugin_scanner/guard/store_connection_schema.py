@@ -382,10 +382,16 @@ class StoreConnectionSchemaMixin:
                     failed_identity = None
                 if yielded:
                     error.guard_failed_sqlite_identity = failed_identity
-                    raise
         if fatal_error is None:
             return
-        recovered = self._recover_fatal_sqlite_store(fatal_error, failed_identity=failed_identity)
+        try:
+            recovered = self._recover_fatal_sqlite_store(fatal_error, failed_identity=failed_identity)
+        except Exception as recovery_error:
+            raise recovery_error from fatal_error
+        if yielded:
+            # The caller already ran SQL on the failed connection, so this
+            # operation still raises. Recovery makes the next connect usable.
+            raise fatal_error
         if not recovered and not sqlite_error_is_busy_locked(fatal_error):
             raise fatal_error
         with self._hold_storage_gate(exclusive=False), self._connect_once() as connection:
@@ -546,10 +552,11 @@ class StoreConnectionSchemaMixin:
         try:
             self._initialize_serialized_once()
         except sqlite3.DatabaseError as error:
-            if self._schema_is_current():
-                self._initialize_policy_integrity()
-                return
-            if not self._recover_fatal_sqlite_store(error):
+            schema_current = self._schema_is_current()
+            fatal = self._is_fatal_sqlite_error(error) or SQLITE_IO_ERROR_MARKER in str(error).lower()
+            # Recovery declining after a transient means the store is healthy.
+            # Re-raise only when the schema is not already current.
+            if (fatal or not schema_current) and not self._recover_fatal_sqlite_store(error) and not schema_current:
                 raise
             self._initialize_policy_integrity()
 
