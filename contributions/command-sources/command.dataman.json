@@ -1,0 +1,315 @@
+{
+  "extension": {
+    "action_classes": [
+      "DataMan database table scaffolding command",
+      "DataMan database namespace creation command",
+      "DataMan database migration execution command",
+      "DataMan programmatic API token creation command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews state-mutating DataMan CLI commands that create schema tables, provision database namespaces, apply live migrations, or generate API access tokens.",
+    "ecosystem_ids": [],
+    "executables": [
+      "dataman",
+      "dataman.exe",
+      "dataman.cmd"
+    ],
+    "extension_id": "command.dataman",
+    "homepage": "https://github.com/vikashgraja/DataMan",
+    "icon": {
+      "background": "#0F172A",
+      "kind": "react-icon",
+      "name": "HiDatabase"
+    },
+    "license": "MIT",
+    "name": "DataMan command protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "DataMan database table scaffolding command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `dataman create table`, which scaffolds new Django models, views, and endpoint configurations in the project.",
+        "example_command": "dataman create table Employee -o crud",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "DataMan table scaffolding",
+        "permission_id": "command.dataman.permission.create-table",
+        "replacement_permission_id": null,
+        "risk_tier": "medium",
+        "safer_guidance": [
+          "Review the table name and operations flags before scaffolding.",
+          "Check existing tables/ directory to avoid naming collisions."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "DataMan database namespace creation command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `dataman create database`, which provisions a new database namespace directory and updates project database connection settings.",
+        "example_command": "dataman create database analytics",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "DataMan database namespace creation",
+        "permission_id": "command.dataman.permission.create-database",
+        "replacement_permission_id": null,
+        "risk_tier": "medium",
+        "safer_guidance": [
+          "Confirm the database identifier does not conflict with existing database aliases.",
+          "Verify the connection URL in database.py before migrating."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "DataMan database migration execution command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `dataman migrate`, which executes database schema migrations against configured databases and can modify persistent database schemas.",
+        "example_command": "dataman migrate",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "DataMan database migration",
+        "permission_id": "command.dataman.permission.migrate",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Run dataman makemigration first and inspect the generated migration files.",
+          "Check target database connection before executing migrations on production databases."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "DataMan programmatic API token creation command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `dataman users create-token`, which provisions new programmatic API tokens with scoped table access permissions.",
+        "example_command": "dataman users create-token ServiceAccount --scopes \"customer:read\"",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "DataMan token creation",
+        "permission_id": "command.dataman.permission.create-token",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Limit token scopes to only the required tables and operations.",
+          "Set an explicit expiration duration using --expires-in."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [
+      "database.py",
+      "tables"
+    ],
+    "publisher": {
+      "display_name": "Vikash G",
+      "id": "community.dataman",
+      "url": "https://github.com/vikashgraja/DataMan"
+    },
+    "reference_urls": [
+      "https://github.com/vikashgraja/DataMan",
+      "https://pypi.org/project/dataman-engine/"
+    ],
+    "required": false,
+    "risk_classes": [
+      "database_mutation",
+      "security_credential_provisioning"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "DataMan database table scaffolding command"
+        ],
+        "default_mode": "review",
+        "description": "Reviews dataman create table invocations that scaffold schema tables.",
+        "family": null,
+        "matcher": {
+          "config": {
+            "allow_leading_options": false,
+            "executables": [
+              "dataman",
+              "dataman.exe",
+              "dataman.cmd"
+            ],
+            "fail_secure_unknown_options": false,
+            "forbidden_flags": [],
+            "interspersed_flags": [],
+            "interspersed_options_with_values": [],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [],
+            "options_with_values": [
+              "--database",
+              "-d",
+              "--operations",
+              "-o"
+            ],
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": [
+              "create",
+              "table"
+            ]
+          },
+          "op": "executable.v1"
+        },
+        "permission_id": "command.dataman.permission.create-table",
+        "priority": 100,
+        "rule_id": "command.dataman.rule.create-table"
+      },
+      {
+        "action_classes": [
+          "DataMan database namespace creation command"
+        ],
+        "default_mode": "review",
+        "description": "Reviews dataman create database invocations that provision database directories.",
+        "family": null,
+        "matcher": {
+          "config": {
+            "allow_leading_options": false,
+            "executables": [
+              "dataman",
+              "dataman.exe",
+              "dataman.cmd"
+            ],
+            "fail_secure_unknown_options": false,
+            "forbidden_flags": [],
+            "interspersed_flags": [],
+            "interspersed_options_with_values": [],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [],
+            "options_with_values": [],
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": [
+              "create",
+              "database"
+            ]
+          },
+          "op": "executable.v1"
+        },
+        "permission_id": "command.dataman.permission.create-database",
+        "priority": 100,
+        "rule_id": "command.dataman.rule.create-database"
+      },
+      {
+        "action_classes": [
+          "DataMan database migration execution command"
+        ],
+        "default_mode": "review",
+        "description": "Reviews dataman migrate invocations that modify database schema and data.",
+        "family": null,
+        "matcher": {
+          "config": {
+            "allow_leading_options": false,
+            "executables": [
+              "dataman",
+              "dataman.exe",
+              "dataman.cmd"
+            ],
+            "fail_secure_unknown_options": false,
+            "forbidden_flags": [],
+            "interspersed_flags": [],
+            "interspersed_options_with_values": [],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [],
+            "options_with_values": [
+              "--database",
+              "-d"
+            ],
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": [
+              "migrate"
+            ]
+          },
+          "op": "executable.v1"
+        },
+        "permission_id": "command.dataman.permission.migrate",
+        "priority": 100,
+        "rule_id": "command.dataman.rule.migrate"
+      },
+      {
+        "action_classes": [
+          "DataMan programmatic API token creation command"
+        ],
+        "default_mode": "review",
+        "description": "Reviews dataman users create-token invocations that provision access tokens.",
+        "family": null,
+        "matcher": {
+          "config": {
+            "allow_leading_options": false,
+            "executables": [
+              "dataman",
+              "dataman.exe",
+              "dataman.cmd"
+            ],
+            "fail_secure_unknown_options": false,
+            "forbidden_flags": [],
+            "interspersed_flags": [],
+            "interspersed_options_with_values": [],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [],
+            "options_with_values": [
+              "--scopes",
+              "--expires-in"
+            ],
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": [
+              "users",
+              "create-token"
+            ]
+          },
+          "op": "executable.v1"
+        },
+        "permission_id": "command.dataman.permission.create-token",
+        "priority": 100,
+        "rule_id": "command.dataman.rule.create-token"
+      }
+    ]
+  },
+  "schema": "guard.command-extension-source.v1"
+}
