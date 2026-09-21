@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timezone, tzinfo
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -38,7 +38,7 @@ _POLICY_BUNDLE_FIXTURE_NOW = datetime(2026, 9, 1, 12, 0, tzinfo=timezone.utc)
 
 class _PolicyBundleFixtureDatetime(datetime):
     @classmethod
-    def now(cls, tz=None):  # type: ignore[no-untyped-def]
+    def now(cls, tz: tzinfo | None = None) -> datetime:
         fixed = _POLICY_BUNDLE_FIXTURE_NOW
         return fixed.replace(tzinfo=None) if tz is None else fixed.astimezone(tz)
 
