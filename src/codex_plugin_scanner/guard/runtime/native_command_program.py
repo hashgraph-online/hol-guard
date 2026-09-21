@@ -50,7 +50,6 @@ def _digest(domain: bytes, value: object) -> str:
 def _reviewed_types() -> dict[type[object], str]:
     # Keep this an explicit import/identity allowlist. Matching a class name,
     # a module prefix, or a subclass would admit unreviewed Python semantics.
-    from .command_claude_tmux_extensions import ConfirmationFedMatcher
     from .command_database_matchers import ArgumentCommandMatcher, CommandSequenceMatcher, LeadingSubcommandMatcher
     from .command_framework_extensions import PhpArtisanScriptMatcher
     from .command_operand_matchers import (
@@ -95,7 +94,6 @@ def _reviewed_types() -> dict[type[object], str]:
         CurlElasticsearchDeleteMatcher: "curl-elasticsearch-delete.v1",
         Repo2nbUnresolvedExpansionMatcher: "repo2nb-expansion.v1",
         ReviewedLiteralCommandMatcher: "reviewed-literal.v1",
-        ConfirmationFedMatcher: "confirmation-fed.v1",
     }
 
 
