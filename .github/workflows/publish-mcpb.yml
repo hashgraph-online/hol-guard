@@ -39,7 +39,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Check out verified immutable source
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
           ref: ${{ needs.verify.outputs.sha }}
@@ -77,7 +77,7 @@ jobs:
       contents: write
     steps:
       - name: Check out verified exact release source
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ needs.verify.outputs.sha }}
           fetch-depth: 0
