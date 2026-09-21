@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from .command_extension_matchers import executable_names, safe_flag_variant
 from .command_extension_specs import CommandExtensionSpec
+from .command_remote_essh_extensions import ESSH_COMMAND_EXTENSION_SPECS, ESSH_COMMAND_RULES
 from .command_rules import (
     AnyMatcher,
     CommandMatcher,
@@ -197,6 +198,7 @@ def _remote_rule(
     risk_classes: tuple[str, ...] = ("destructive_shell", "network_egress"),
     safe_variants: tuple[CommandSafeVariant, ...] = (),
     example_command: str | None = None,
+    compatibility_fallback: bool = False,
 ) -> CommandSafetyRule:
     return CommandSafetyRule(
         rule_id=rule_id,
@@ -208,6 +210,7 @@ def _remote_rule(
         safer_alternatives=(safer_alternative,),
         matcher=matcher,
         safe_variants=safe_variants,
+        compatibility_fallback=compatibility_fallback,
         example_command=example_command,
     )
 
@@ -284,6 +287,7 @@ REMOTE_COMMAND_RULES = (
             ),
         ),
     ),
+    *ESSH_COMMAND_RULES,
 )
 
 
@@ -315,4 +319,5 @@ REMOTE_COMMAND_EXTENSION_SPECS = (
         safer_alternatives=("Use --dry-run and inspect the itemized change list before applying deletions.",),
         reference_urls=("https://rsync.samba.org/ftp/rsync/rsync.1.html",),
     ),
+    *ESSH_COMMAND_EXTENSION_SPECS,
 )

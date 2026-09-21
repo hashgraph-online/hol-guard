@@ -1,0 +1,9 @@
+import datetime,hashlib,json,subprocess,sys,time
+from pathlib import Path
+repo,name,*command=sys.argv[1:]
+out=Path('/dev/shm/hol-guard-takeover/probe-scope-admission')
+began=time.monotonic();start=datetime.datetime.now(datetime.timezone.utc).isoformat()
+r=subprocess.run(command,cwd=Path('/dev/shm/hol-guard-takeover/work')/repo,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
+p=out/(repo+'-'+name+'.log');p.write_bytes(r.stdout)
+d={'cwd':str(Path('/dev/shm/hol-guard-takeover/work')/repo),'command':command,'started_utc':start,'finished_utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'elapsed_seconds_including_lock':time.monotonic()-began,'exit_code':r.returncode,'bytes':len(r.stdout),'sha256':hashlib.sha256(r.stdout).hexdigest()}
+(out/(repo+'-'+name+'.json')).write_text(json.dumps(d,indent=2)+'\n');print(json.dumps(d));print(r.stdout.decode(errors='replace')[-9000:]);sys.exit(r.returncode)

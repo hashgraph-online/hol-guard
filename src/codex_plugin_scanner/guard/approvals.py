@@ -20,6 +20,7 @@ from .action_lattice import normalize_guard_action_result
 from .adapters import get_adapter
 from .adapters.base import HarnessContext
 from .approval_gate import ApprovalGateGrant, ApprovalGateInput, require_approval_decision
+from .approval_once_eligibility import requires_local_once_approval
 from .approval_resolution import require_resolvable_approval_request
 from .approval_scope_support import (
     IneligibleApprovalScopeError,
@@ -32,6 +33,8 @@ from .approval_scope_support import (
 )
 from .cli.connect_flow import (
     connect_retry_refresh_race_from_reason,
+    connect_retry_refresh_race_from_state,
+    connect_retry_required_from_state,
     resolve_guard_cloud_repair_detail,
     resolve_guard_cloud_state,
 )
@@ -64,9 +67,9 @@ from .runtime.approval_context import parse_approval_context_token
 from .runtime.command_capability import command_capability_status
 from .runtime.decisions import AUTHORITATIVE_DECISION_INCONSISTENT, authoritative_decision_from_artifact
 from .runtime.github_workflow_runtime import (
-    github_workflow_requires_local_once,
     issue_github_workflow_capability_for_resolution,
 )
+from .runtime.package_protect_projection import LOCAL_SUPPLY_CHAIN_HARNESS
 from .runtime.protection_health_runtime import build_runtime_protection_health
 from .store import (
     GuardStore,
@@ -173,6 +176,20 @@ def _normalize_harness_slug(harness: str | None) -> str | None:
     if normalized in {"claude", "claude-code"}:
         return "claude-code"
     return normalized or None
+
+
+def _approval_policy_harness(request: Mapping[str, object]) -> str:
+    """Keep local package policy identity separate from display attribution."""
+
+    artifact_type = request.get("artifact_type")
+    artifact_id = request.get("artifact_id")
+    if (
+        artifact_type == "package_request"
+        and isinstance(artifact_id, str)
+        and artifact_id.startswith(f"{LOCAL_SUPPLY_CHAIN_HARNESS}:project:package-request:")
+    ):
+        return LOCAL_SUPPLY_CHAIN_HARNESS
+    return str(request["harness"])
 
 
 def _is_decision_scope(value: object) -> TypeGuard[DecisionScope]:
@@ -455,6 +472,7 @@ def queue_blocked_approvals(
     notify: bool = True,
     redaction_level: str = "full",
     continuation_operation: Mapping[str, object] | None = None,
+    config_reader: Callable[[Path], dict[str, object]] | None = None,
 ) -> list[dict[str, object]]:
     timestamp = now or _now()
     artifacts_by_id = {artifact.artifact_id: artifact for artifact in detection.artifacts}
@@ -582,6 +600,7 @@ def queue_blocked_approvals(
                 now=timestamp,
                 headless=True,
                 operation=continuation_operation,
+                config_reader=config_reader,
             ),
         )
         persisted_request_id = store.add_approval_request(request, timestamp)
@@ -596,7 +615,7 @@ def queue_blocked_approvals(
         if created_new_request:
             _record_created_event(store, request, timestamp)
         if notify:
-            _notify_pending_approval(store=store, request=request)
+            _notify_pending_approval(store=store, request=request, config_reader=config_reader)
         request_payload = store.get_approval_request(persisted_request_id)
         if request_payload is None:
             raise RuntimeError(f"Persisted approval request not found: {persisted_request_id}")
@@ -751,7 +770,7 @@ def apply_approval_resolution(
         if browser_mcp_exact_key is not None:
             scoped_artifact_hash = browser_mcp_exact_key
     decision = PolicyDecision(
-        harness="*" if scope == "global" else str(request["harness"]),
+        harness="*" if scope == "global" else _approval_policy_harness(request),
         scope=scope,
         action="allow" if action == "allow" else "block",
         artifact_id=scoped_artifact_id,
@@ -779,12 +798,12 @@ def apply_approval_resolution(
             now=resolved_at,
         )
         store.upsert_policy(decision, resolved_at, approval_gate_grant=resolved_gate_grant)
-        if action == "allow" and _should_record_local_once_replay(request):
+        if action == "allow" and requires_local_once_approval(request):
             local_once_fallback = _record_local_once_approval(
                 store,
                 request_id=request_id,
                 decision=decision,
-                harness=str(request["harness"]),
+                harness=_approval_policy_harness(request),
                 created_at=resolved_at,
             )
     elif persist_policy is None and scope == "artifact" and temporary_mcp_selection is None:
@@ -802,12 +821,12 @@ def apply_approval_resolution(
             resolved_at,
             approval_gate_grant=resolved_gate_grant,
         )
-        if action == "allow" and _should_record_local_once_replay(request):
+        if action == "allow" and requires_local_once_approval(request):
             local_once_fallback = _record_local_once_approval(
                 store,
                 request_id=request_id,
                 decision=once_decision,
-                harness=str(request["harness"]),
+                harness=_approval_policy_harness(request),
                 created_at=resolved_at,
             )
 
@@ -1147,11 +1166,17 @@ def _append_guard_token_to_url(url: str, auth_token: str) -> str:
     return urlunparse(parsed._replace(fragment=urlencode(fragment_pairs)))
 
 
-def _notify_pending_approval(*, store: GuardStore, request: GuardApprovalRequest) -> None:
+def _notify_pending_approval(
+    *,
+    store: GuardStore,
+    request: GuardApprovalRequest,
+    config_reader: Callable[[Path], dict[str, object]] | None = None,
+) -> None:
     try:
         config = load_guard_config(
             store.guard_home,
             Path(request.workspace) if request.workspace is not None else None,
+            config_reader=config_reader,
         )
     except Exception:
         config = None
@@ -1505,30 +1530,22 @@ def _live_hook_verification(
             continue
         try:
             if harness == "codex":
-                from .adapters.codex import codex_native_hook_state
+                from .codex_hook_health import codex_runtime_hooks_verified
 
-                proven = _recorded_hook_verification(codex_native_hook_state(context))
-                if proven is None:
-                    continue
-                verified[harness] = proven
+                verified[harness] = codex_runtime_hooks_verified(context)
                 continue
             if harness == "cursor":
-                from .adapters.cursor_hooks import cursor_native_hook_state
+                from .cursor_hook_health import cursor_runtime_hooks_verified
 
-                proven = _recorded_hook_verification(cursor_native_hook_state(context))
+                proven = cursor_runtime_hooks_verified(context)
                 if proven is None:
                     continue
                 verified[harness] = proven
                 continue
             if harness == "grok":
-                from .cli.install_commands import grok_hooks_protection_ready
+                from .adapters.grok import grok_runtime_hooks_verified
 
-                verified[harness] = grok_hooks_protection_ready(context)
-                continue
-            if harness == "grok":
-                from .cli.install_commands import grok_hooks_protection_ready
-
-                verified[harness] = grok_hooks_protection_ready(context)
+                verified[harness] = grok_runtime_hooks_verified(context)
                 continue
             verified[harness] = verify_managed_install_proof(install.get("manifest"), context) is True
         except (ImportError, OSError, RuntimeError, TypeError, ValueError):
@@ -1828,21 +1845,6 @@ def _approval_once_policy_expires_at(resolved_at: str) -> str:
     return (parsed + _APPROVAL_ONCE_POLICY_TTL).isoformat()
 
 
-def _should_record_local_once_replay(request: Mapping[str, object]) -> bool:
-    artifact_type = request.get("artifact_type")
-    if artifact_type == "package_request":
-        return False
-    artifact_id = request.get("artifact_id")
-    if isinstance(artifact_id, str) and ":package-request:" in artifact_id:
-        return False
-    if github_workflow_requires_local_once(request):
-        return True
-    launch_target = request.get("launch_target")
-    if not isinstance(launch_target, str):
-        return False
-    return launch_target.startswith(("npm ", "npx ", "pnpm ", "yarn ", "bun "))
-
-
 def _record_local_once_approval(
     store: GuardStore,
     *,
@@ -1877,8 +1879,8 @@ def _build_runtime_cloud_context(
     oauth_repair_required = (
         bool(oauth_storage_health.get("configured")) and oauth_storage_health.get("state") == "degraded"
     )
-    connect_retry_required = _connect_retry_required(latest_connect_state)
-    connect_retry_refresh_race = _connect_retry_refresh_race(latest_connect_state)
+    connect_retry_required = connect_retry_required_from_state(latest_connect_state)
+    connect_retry_refresh_race = connect_retry_refresh_race_from_state(latest_connect_state)
     sync_url = cloud_profile["sync_url"] if cloud_profile is not None else None
     sync_summary = store.get_sync_payload("sync_summary") or {}
     alert_preferences = store.get_sync_payload("alert_preferences") or {}
@@ -2128,20 +2130,6 @@ def _runtime_proof_status_detail(state: str) -> str:
         "not_connected": "Connect Guard Cloud to sync this device proof.",
     }
     return details.get(state, "Connect Guard Cloud to sync this device proof.")
-
-
-def _connect_retry_required(latest_state: dict[str, object] | None) -> bool:
-    if latest_state is None:
-        return False
-    status = _optional_string(latest_state.get("status"))
-    milestone = _optional_string(latest_state.get("milestone"))
-    return status == "retry_required" or milestone == "first_sync_failed"
-
-
-def _connect_retry_refresh_race(latest_state: dict[str, object] | None) -> bool:
-    if latest_state is None or not _connect_retry_required(latest_state):
-        return False
-    return connect_retry_refresh_race_from_reason(_optional_string(latest_state.get("reason")))
 
 
 def _build_cloud_sync_health(

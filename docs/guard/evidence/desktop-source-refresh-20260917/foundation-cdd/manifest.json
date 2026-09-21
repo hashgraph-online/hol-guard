@@ -1,0 +1,128 @@
+{
+  "schema": "hol-guard.desktop-source-binding-refresh.v1",
+  "scope": "foundation-cdd",
+  "trigger": {
+    "source_head": "cdd14176ef0e0a258d4655c64210524d7047a257",
+    "test_merge": "c92e557349cabd633db408912c644471c002ee4d",
+    "tree": "efb4e859e19b5456f2bdfbac17b2de784adf36a7",
+    "workflow_run": 35269309997,
+    "job": 105364317958,
+    "observed_failure": "decision-diff report fixture is stale"
+  },
+  "generated_fixture": "tests/fixtures/guard-command-corpus/decision-diff-report.json",
+  "decoded_content_identical_except_source_bindings": true,
+  "changed_source_bindings": 5,
+  "complete_corpus_count": 51000,
+  "regressions": {
+    "passed": 15,
+    "failed": 1,
+    "seconds": 132.03
+  },
+  "unchanged_budget_seconds": 45,
+  "original_failed_attempt_preserved": true,
+  "regeneration_or_check_retries": 0,
+  "hosted_correction_verified": false,
+  "source_stability": {
+    "source_unchanged": true,
+    "observed_files": 1361,
+    "changed": []
+  },
+  "bound_source_files": 392,
+  "all_bound_source_hashes_verified_after_checks": true,
+  "security_alert_disposition_changed": false,
+  "files": [
+    {
+      "path": "bound-source-verification.json",
+      "storage": "exact bytes",
+      "original_bytes": 293,
+      "original_sha256": "52be8f7e35abcc5f9390ec323ad1a87b624032aa08feacfa03df40d30a179f27",
+      "stored_sha256": "52be8f7e35abcc5f9390ec323ad1a87b624032aa08feacfa03df40d30a179f27"
+    },
+    {
+      "path": "check.log",
+      "storage": "exact bytes",
+      "original_bytes": 0,
+      "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stored_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "checks.json",
+      "storage": "exact bytes",
+      "original_bytes": 881,
+      "original_sha256": "def1b51b19aad01713506ac24b0352f7917c4873fb16e7569fcd90bb3747e78b",
+      "stored_sha256": "def1b51b19aad01713506ac24b0352f7917c4873fb16e7569fcd90bb3747e78b"
+    },
+    {
+      "path": "comparison.json",
+      "storage": "exact bytes",
+      "original_bytes": 1997,
+      "original_sha256": "ca0833c2eaba95591bff4d1aed2f7cc320ac0fc571aadf432c1b804b9a9ad3d1",
+      "stored_sha256": "ca0833c2eaba95591bff4d1aed2f7cc320ac0fc571aadf432c1b804b9a9ad3d1"
+    },
+    {
+      "path": "fixture-after.json",
+      "storage": "exact bytes",
+      "original_bytes": 49541,
+      "original_sha256": "af2148b4376865d35d642a5a23c812b3332947b2cf4fa10601b5dbd6339d4497",
+      "stored_sha256": "af2148b4376865d35d642a5a23c812b3332947b2cf4fa10601b5dbd6339d4497"
+    },
+    {
+      "path": "fixture-before.json",
+      "storage": "exact bytes",
+      "original_bytes": 49541,
+      "original_sha256": "b2489e025083bca0683f638b0a014de75b575bfc92c316b8f6c4683c05c9a67d",
+      "stored_sha256": "b2489e025083bca0683f638b0a014de75b575bfc92c316b8f6c4683c05c9a67d"
+    },
+    {
+      "path": "generate.log",
+      "storage": "exact bytes",
+      "original_bytes": 0,
+      "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stored_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "regressions.log",
+      "storage": "exact bytes",
+      "original_bytes": 2247,
+      "original_sha256": "ff8f1d80ebfd4a87f4bd00e4d53f64b88653be032e93c4535d3c1bc03e06d5cd",
+      "stored_sha256": "ff8f1d80ebfd4a87f4bd00e4d53f64b88653be032e93c4535d3c1bc03e06d5cd"
+    },
+    {
+      "path": "source-after.json.gz",
+      "storage": "gzip",
+      "original_bytes": 181659,
+      "original_sha256": "40d9cdb5c4e01e4070869ce512d3ae44eff4e62cc98b8c4ab6e835e70eb04924",
+      "stored_sha256": "9f39f24e6af123406343748f684436435e59720ab367f8c0cac2b0f2a3d4c31c"
+    },
+    {
+      "path": "source-before.json.gz",
+      "storage": "gzip",
+      "original_bytes": 181659,
+      "original_sha256": "40d9cdb5c4e01e4070869ce512d3ae44eff4e62cc98b8c4ab6e835e70eb04924",
+      "stored_sha256": "9f39f24e6af123406343748f684436435e59720ab367f8c0cac2b0f2a3d4c31c"
+    },
+    {
+      "path": "source-stability.json",
+      "storage": "exact bytes",
+      "original_bytes": 74,
+      "original_sha256": "ddfc1d2e6337b5644b8e1902aa112279ef05169afa59d3dfeef8b39e0da168e7",
+      "stored_sha256": "ddfc1d2e6337b5644b8e1902aa112279ef05169afa59d3dfeef8b39e0da168e7"
+    },
+    {
+      "path": "original-cdd-desktop-failure.log.gz",
+      "storage": "gzip",
+      "original_bytes": 33164,
+      "original_sha256": "fc8b038934a8988a7b26b455dc6e96e9718e991aa59a551a7515e16b629b3e4a",
+      "stored_sha256": "2f1569c507eb801e89d0bc640b3074de56ee1153ad6d1b44b68e1b8681c77d45"
+    }
+  ],
+  "remaining_failure": {
+    "test": "test_fresh_process_report_is_environment_independent_and_bounded",
+    "reason": "One of two retained matching-digest fresh-process evaluations did not satisfy the unchanged elapsed_seconds <45 budget.",
+    "first_elapsed_seconds": 43.905451821003226,
+    "second_elapsed_seconds": null,
+    "second_elapsed_constraint": ">=45",
+    "second_exact_value_available": false,
+    "unavailability_reason": "Default pytest assertion repr elided the second numeric value; subprocess metrics were not separately persisted. No repeat was performed."
+  }
+}

@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -12,8 +14,10 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard.adapters import pi_extension_source
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.pi_extension_source import managed_extension_source
+from codex_plugin_scanner.guard.adapters.pi_extension_runtime_ownership import PiExtensionRuntimeOwnership
+from codex_plugin_scanner.guard.adapters.pi_extension_source import legacy_managed_extension_source
 from codex_plugin_scanner.guard.cli import update_commands
 from codex_plugin_scanner.guard.cli.commands import (
     _resolve_default_install_workspace,
@@ -22,6 +26,17 @@ from codex_plugin_scanner.guard.cli.commands import (
 from codex_plugin_scanner.guard.config import resolve_guard_home
 from codex_plugin_scanner.guard.launcher import merge_guard_launcher_env
 from codex_plugin_scanner.guard.store import GuardStore
+
+LEGACY_OMP_BASE_SOURCE_SHA256 = "1ece8ea273833b4a9d237a9fad4cb6ca6c217d36b2b3d0e616152c0185890d10"
+
+
+def _legacy_omp_base_source_sha256(source: str) -> str:
+    normalized = re.sub(
+        r'(const GUARD_(?:CLI_WRAPPER|DAEMON_RECOVERY)_COMMAND = )"[^"]*";',
+        r'\1"/snapshot/bin/hol-guard";',
+        source,
+    )
+    return hashlib.sha256(normalized.encode()).hexdigest()
 
 
 def _install_args(*, harness: str = "cursor", workspace: str | None = None) -> argparse.Namespace:
@@ -127,6 +142,49 @@ def test_install_omp_preserves_legacy_pi_record(
     assert store.get_managed_install("omp") is not None
 
 
+def test_legacy_omp_source_matches_pre_response_contract_snapshot(monkeypatch: pytest.MonkeyPatch) -> None:
+    guard_home = Path("/omp-snapshot/guard-home")
+    home_dir = Path("/omp-snapshot/home")
+    monkeypatch.setattr(
+        pi_extension_source,
+        "resolve_pi_extension_runtime_ownership",
+        lambda **_: PiExtensionRuntimeOwnership(
+            guard_args=("hook", "--json", "--guard-home", str(guard_home), "--harness", "pi", "--home", str(home_dir)),
+            cli_command="/snapshot/bin/hol-guard",
+            cli_args=(
+                "hook",
+                "--json",
+                "--guard-home",
+                str(guard_home),
+                "--harness",
+                "pi",
+                "--home",
+                str(home_dir),
+            ),
+            cli_accepts_json_args=False,
+            recovery_command="/snapshot/bin/hol-guard",
+            recovery_args=(
+                "daemon",
+                "recover",
+                "--guard-home",
+                str(guard_home),
+                "--home",
+                str(home_dir),
+            ),
+            recovery_accepts_failure_kind=True,
+        ),
+    )
+    monkeypatch.setattr(pi_extension_source, "windows_system_executable_path", lambda _: None)
+    source = legacy_managed_extension_source(
+        guard_home=guard_home,
+        home_dir=home_dir,
+        settings_path=Path("/omp-snapshot/home/.omp/agent/settings.json"),
+        harness="pi",
+    )
+
+    assert _legacy_omp_base_source_sha256(source) == LEGACY_OMP_BASE_SOURCE_SHA256
+
+
 def test_update_migrates_verified_legacy_omp_extension_to_its_own_record(tmp_path: Path) -> None:
     home_dir = tmp_path / "home"
     guard_home = tmp_path / "guard-home"
@@ -137,7 +195,7 @@ def test_update_migrates_verified_legacy_omp_extension_to_its_own_record(tmp_pat
     omp_extension_path = omp_settings_path.parent / "extensions" / "hol-guard.ts"
     omp_extension_path.parent.mkdir(parents=True)
     omp_extension_path.write_text(
-        managed_extension_source(
+        legacy_managed_extension_source(
             guard_home=guard_home,
             home_dir=home_dir,
             settings_path=omp_settings_path,
@@ -164,6 +222,41 @@ def test_update_migrates_verified_legacy_omp_extension_to_its_own_record(tmp_pat
     omp_source = omp_extension_path.read_text(encoding="utf-8")
     assert '"--harness", "omp"' in omp_source
     assert "Oh My Pi hook failed before completing review" in omp_source
+
+
+def test_update_does_not_migrate_modified_legacy_omp_extension(tmp_path: Path) -> None:
+    home_dir = tmp_path / "home"
+    guard_home = tmp_path / "guard-home"
+    context = HarnessContext(home_dir=home_dir, workspace_dir=None, guard_home=guard_home)
+    store = GuardStore(guard_home)
+    pi_extension_path = home_dir / ".pi" / "agent" / "extensions" / "hol-guard.ts"
+    omp_settings_path = home_dir / ".omp" / "agent" / "settings.json"
+    omp_extension_path = omp_settings_path.parent / "extensions" / "hol-guard.ts"
+    omp_extension_path.parent.mkdir(parents=True)
+    omp_extension_path.write_text(
+        legacy_managed_extension_source(
+            guard_home=guard_home,
+            home_dir=home_dir,
+            settings_path=omp_settings_path,
+            harness="pi",
+        )
+        + "\n// user edit\n",
+        encoding="utf-8",
+    )
+    omp_settings_path.parent.mkdir(parents=True, exist_ok=True)
+    omp_settings_path.write_text(json.dumps({"extensions": [str(omp_extension_path)]}), encoding="utf-8")
+    store.set_managed_install("pi", True, None, {"config_path": str(pi_extension_path)}, "2026-08-05T00:00:00Z")
+
+    update_commands._repair_supported_harnesses_in_process(
+        context=context,
+        store=store,
+        workspace=None,
+        now="2026-08-05T00:00:01Z",
+        dry_run=False,
+    )
+
+    assert store.get_managed_install("omp") is None
+    assert omp_extension_path.read_text(encoding="utf-8").endswith("\n// user edit\n")
 
 
 def test_update_does_not_migrate_unverified_omp_extension(tmp_path: Path) -> None:

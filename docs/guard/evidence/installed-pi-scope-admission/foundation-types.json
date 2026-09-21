@@ -1,0 +1,19 @@
+{
+  "cwd": "/dev/shm/hol-guard-takeover/work/foundation",
+  "command": [
+    "flock",
+    "--close",
+    "-w",
+    "180",
+    "/workspace/scratch/c911dc702e23/performance-measurement.lock",
+    ".venv/bin/basedpyright",
+    "--outputjson",
+    "ci/native_runtime/probe_installed_pi_output.py"
+  ],
+  "started_utc": "2026-09-17T20:57:59.097526+00:00",
+  "finished_utc": "2026-09-17T20:58:02.407311+00:00",
+  "elapsed_seconds_including_lock": 3.309805545010022,
+  "exit_code": 1,
+  "bytes": 91628,
+  "sha256": "fb2432d118dc5f8451a7b8689a1ca91cf2e86b9de73b17e96ee3f5f49ad6c814"
+}

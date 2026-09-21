@@ -24,14 +24,15 @@ from codex_plugin_scanner.guard.runtime.extension_catalog_sync import (
 from codex_plugin_scanner.guard.runtime.extension_control_runtime import ExtensionControlRuntime
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.managed_controls_activation_support import CAPABILITIES, parse_managed_bundle
+from tests.support.network import stub_authenticated_urlopen
 from tests.test_guard_runtime import _seed_guard_cloud
 
 _VECTOR_PATH = (
     Path(__file__).resolve().parents[1]
     / "contracts/managed-controls/v1/policy-bundle-v2-extension-signature-vector.json"
 )
-_GUARD_RELEASE_CATALOG_DIGEST = "a805b737aa06d0bc25e0ebf30efb48bcc21671f08023b5965afcad46a3a879c6"
-_GUARD_RELEASE_PROJECTION_DIGEST = "sha256:d43abf635f76c6803312a505cb0a9ea18f5d2a2c3e92fffb7cd5f94aea785e8e"
+_GUARD_RELEASE_CATALOG_DIGEST = "fa50c5b05280a07be97a12954a91a06970308293645cacb34332df811e2ba681"
+_GUARD_RELEASE_PROJECTION_DIGEST = "sha256:5ebcc18e7917adf5089d18e4f62047f58d6d8bc0639b330b497279f4f62a11c8"
 
 
 class _Response:
@@ -94,7 +95,7 @@ def test_signed_cloud_extension_projection_matches_shared_vector() -> None:
 
 
 def _stub_sync(monkeypatch: pytest.MonkeyPatch, response: dict[str, object]) -> None:
-    monkeypatch.setattr(runner.urllib.request, "urlopen", lambda request, timeout: _Response(response))
+    stub_authenticated_urlopen(monkeypatch, lambda request, timeout: _Response(response))
     monkeypatch.setattr(
         runner,
         "validate_synced_policy_bundle",

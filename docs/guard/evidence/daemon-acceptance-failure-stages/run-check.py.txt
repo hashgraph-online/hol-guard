@@ -1,0 +1,31 @@
+from pathlib import Path
+import datetime, hashlib, json, os, subprocess, time
+
+BASE = Path('/dev/shm/hol-guard-takeover/work')
+LOCK = '/workspace/scratch/c911dc702e23/performance-measurement.lock'
+OWNED = ['tests/guard_daemon_acceptance_fixtures.py', 'tests/test_guard_daemon_acceptance_failure_stages.py']
+def hashes(root):
+    return {name: hashlib.sha256((root / name).read_bytes()).hexdigest() for name in OWNED}
+for branch in ['hol-guard', 'foundation']:
+    root = BASE / branch
+    evidence = root / 'docs/guard/evidence/daemon-acceptance-failure-stages'
+    commands = [
+        ('ruff-check', [str(root / '.venv/bin/ruff'), 'check', *OWNED]),
+        ('ruff-format-check', [str(root / '.venv/bin/ruff'), 'format', '--check', *OWNED]),
+        ('focused-tests', [str(root / '.venv/bin/python'), '-m', 'pytest', '-q', OWNED[1], *(['tests/test_guard_daemon_acceptance_clients.py'] if branch == 'hol-guard' else [])]),
+    ]
+    for name, command in commands:
+        before = hashes(root)
+        started = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        timer = time.monotonic()
+        env = os.environ.copy()
+        env['PYTHONPATH'] = 'src'
+        actual = ['flock', '--close', '-w', '180', LOCK, *command]
+        result = subprocess.run(actual, cwd=root, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        after = hashes(root)
+        receipt = {'command': actual, 'cwd': str(root), 'started_at': started, 'seconds_including_lock': round(time.monotonic() - timer, 6), 'exit_code': result.returncode, 'source_before': before, 'source_after': after, 'owned_source_unchanged': before == after, 'bytes': len(result.stdout), 'sha256': hashlib.sha256(result.stdout).hexdigest()}
+        (evidence / (name + '.txt')).write_bytes(result.stdout)
+        (evidence / (name + '.json')).write_text(json.dumps(receipt, indent=2) + '\n')
+        print(json.dumps({'branch': branch, 'check': name, 'exit_code': result.returncode, 'seconds_including_lock': receipt['seconds_including_lock'], 'tail': result.stdout.decode(errors='replace')[-1000:]}), flush=True)
+        if result.returncode != 0 or before != after:
+            raise SystemExit(1)

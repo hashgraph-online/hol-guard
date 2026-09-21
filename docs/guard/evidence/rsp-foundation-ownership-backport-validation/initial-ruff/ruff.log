@@ -1,0 +1,14 @@
+I001 [*] Import block is un-sorted or un-formatted
+ --> scripts/ci/rust_io_ownership_contract.py:3:1
+  |
+1 |   """Capability contract for the decision-critical I/O ownership gate."""
+2 |
+3 | / from __future__ import annotations
+4 | |
+5 | | from collections.abc import Iterable
+  | |____________________________________^
+  |
+help: Organize imports
+
+Found 1 error.
+[*] 1 fixable with the `--fix` option.

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from typing import Final, cast
+from typing import Final
 
 from codex_plugin_scanner.guard.runtime.execution_assurance_contract import (
     AtomicGuarantee,
@@ -30,6 +30,8 @@ from codex_plugin_scanner.guard.runtime.oci_mount_security import (
     resolve_oci_bundle_path,
     resolve_oci_bundle_root,
 )
+
+from .payload_coercion import object_list, object_map, string_tuple
 
 # --- Forbidden / hostile input constants ---
 
@@ -270,28 +272,6 @@ def _is_forbidden_socket(path: str) -> str | None:
     return None
 
 
-def _object_map(value: object) -> dict[str, object] | None:
-    if not isinstance(value, dict):
-        return None
-    raw = cast(dict[object, object], value)
-    if not all(isinstance(key, str) for key in raw):
-        return None
-    return {cast(str, key): item for key, item in raw.items()}
-
-
-def _object_list(value: object) -> list[object] | None:
-    if not isinstance(value, list):
-        return None
-    return cast(list[object], value)
-
-
-def _string_tuple(value: object) -> tuple[str, ...]:
-    items = _object_list(value)
-    if items is None:
-        return ()
-    return tuple(item for item in items if isinstance(item, str))
-
-
 def _is_guard_state_path(path: str) -> bool:
     """Return True if path targets guard state directories."""
     if not path:
@@ -313,7 +293,7 @@ def _extract_all_capabilities(
     """Extract all capabilities and their dangerous subset."""
     all_caps: set[str] = set()
     for key in ("effective", "permitted", "ambient", "bounding"):
-        all_caps.update(_string_tuple(caps_spec.get(key)))
+        all_caps.update(string_tuple(caps_spec.get(key)))
     all_list = sorted(all_caps)
     dangerous = [capability for capability in all_list if _is_dangerous_cap(capability)]
     return all_list, dangerous
@@ -332,7 +312,7 @@ def _parse_namespaces(ns_list: list[object]) -> OCIPlanNamespace:
     host_namespaces: list[str] = []
 
     for ns_entry in ns_list:
-        namespace = _object_map(ns_entry)
+        namespace = object_map(ns_entry)
         if namespace is None:
             continue
         raw_type = namespace.get("type")
@@ -400,7 +380,7 @@ def _classify_mount(
     source = raw_source if isinstance(raw_source, str) else ""
     mount_type = raw_type if isinstance(raw_type, str) else ""
     raw_options = mount.get("options")
-    options = (raw_options,) if isinstance(raw_options, str) else _string_tuple(raw_options)
+    options = (raw_options,) if isinstance(raw_options, str) else string_tuple(raw_options)
     readonly = "readonly" in options or "ro" in options
     return destination, mount_type, readonly, source, options
 
@@ -423,7 +403,7 @@ def _analyze_mounts(
     has_hostile = False
 
     for raw_mount in mounts_list:
-        mount = _object_map(raw_mount)
+        mount = object_map(raw_mount)
         if mount is None:
             violations.append("mount:not-object")
             continue
@@ -547,7 +527,7 @@ def _analyze_capabilities(
 def _analyze_lsm(spec: dict[str, object]) -> tuple[bool, str]:
     """Analyze LSM configuration. Returns (enabled, profile_name)."""
     apparmor = spec.get("apparmor")
-    selinux = _object_map(spec.get("selinux"))
+    selinux = object_map(spec.get("selinux"))
     if isinstance(apparmor, str) and apparmor:
         return True, apparmor
     if selinux:
@@ -569,7 +549,7 @@ def _analyze_cgroup(spec: dict[str, object]) -> tuple[bool, str]:
 
 def _analyze_seccomp(linux_spec: dict[str, object]) -> tuple[str, bool]:
     """Analyze seccomp profile. Returns (kind, enforced)."""
-    seccomp = _object_map(linux_spec.get("seccomp"))
+    seccomp = object_map(linux_spec.get("seccomp"))
     if seccomp is None:
         return "unset", False
     raw_action = seccomp.get("defaultAction")
@@ -589,7 +569,7 @@ def _analyze_seccomp(linux_spec: dict[str, object]) -> tuple[str, bool]:
 
 def _analyze_user(process_spec: dict[str, object]) -> tuple[int, int, bool]:
     """Analyze user configuration. Returns (uid, gid, non_root)."""
-    user = _object_map(process_spec.get("user"))
+    user = object_map(process_spec.get("user"))
     if user is None:
         return 0, 0, False
     raw_uid = user.get("uid")
@@ -607,7 +587,7 @@ def _analyze_network(
     namespaces: OCIPlanNamespace,
 ) -> OCIPlanNetwork:
     """Analyze network configuration."""
-    network_spec = _object_map(linux_spec.get("network"))
+    network_spec = object_map(linux_spec.get("network"))
     if network_spec is None:
         return OCIPlanNetwork(
             mode="default",
@@ -616,7 +596,7 @@ def _analyze_network(
 
     raw_mode = network_spec.get("mode")
     mode = raw_mode if isinstance(raw_mode, str) else "default"
-    ports = _object_list(network_spec.get("ports")) or []
+    ports = object_list(network_spec.get("ports")) or []
     port_mappings = tuple(str(port) for port in ports)
 
     loopback_only = mode not in _HOST_NETWORK_MODES and namespaces.net_isolated
@@ -866,16 +846,16 @@ class OCIPlanGenerator:
         except ValueError as error:
             raise ProviderPlanError(str(error)) from error
 
-        bundle_map = _object_map(bundle)
+        bundle_map = object_map(bundle)
         if bundle_map is None:
             raise ProviderPlanError("bundle must be a dict")
         bundle = bundle_map
         hooks = bundle.get("hooks")
         if hooks not in (None, {}):
             raise ProviderPlanError("OCI lifecycle hooks are unsupported")
-        rootfs = rootfs or _object_map(bundle.get("root")) or {}
-        process = process or _object_map(bundle.get("process")) or {}
-        linux = linux or _object_map(bundle.get("linux")) or {}
+        rootfs = rootfs or object_map(bundle.get("root")) or {}
+        process = process or object_map(bundle.get("process")) or {}
+        linux = linux or object_map(bundle.get("linux")) or {}
 
         # --- Extract bundle version ---
         version = bundle.get("ociVersion", "0.0.0")
@@ -887,7 +867,7 @@ class OCIPlanGenerator:
             raise ProviderPlanError("malformed OCI spec: missing ociVersion")
 
         # --- Analyze mounts ---
-        mounts_list = _object_list(bundle.get("mounts")) or []
+        mounts_list = object_list(bundle.get("mounts")) or []
         plan_mounts, mount_violations, has_forbidden_mounts, has_hostile_mounts = _analyze_mounts(
             mounts_list,
             bundle_root=bundle_root,
@@ -895,7 +875,7 @@ class OCIPlanGenerator:
         )
 
         # --- Analyze capabilities ---
-        caps_spec = _object_map(linux.get("capabilities")) or {}
+        caps_spec = object_map(linux.get("capabilities")) or {}
         all_caps, dangerous_caps, has_dangerous_caps = _analyze_capabilities(caps_spec)
 
         # --- Reject dangerous capabilities ---
@@ -911,7 +891,7 @@ class OCIPlanGenerator:
             raise ProviderPlanError("refusing plan: hostile mount configuration")
 
         # --- Analyze namespaces ---
-        ns_list = _object_list(linux.get("namespaces")) or []
+        ns_list = object_list(linux.get("namespaces")) or []
         namespace = _parse_namespaces(ns_list)
 
         # --- Analyze network ---

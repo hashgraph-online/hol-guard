@@ -1,0 +1,16 @@
+{
+  "exit_code": 0,
+  "seconds_including_lock": 28.194,
+  "reason": "Original tests assume an ordinary workspace; /dev/shm is deliberately rejected by unchanged availability-floor policy. Only these two small path-classification tests use a dedicated /tmp basetemp.",
+  "unchanged_floor_sha256": "8142b31001e8fd8d093c5c2d57aecefb2ce878ab251bf17bf983109f11ca09e5",
+  "original_failure_log": "tests.log",
+  "command": [
+    "/dev/shm/hol-guard-takeover/work/foundation/.venv/bin/python",
+    "-m",
+    "pytest",
+    "-q",
+    "--basetemp=/tmp/hol-guard-foundation-scope-policy-fixtures",
+    "tests/test_hook_availability_policy.py::test_workspace_source_read_is_emergency_safe",
+    "tests/test_hook_availability_policy.py::test_rg_and_cat_are_emergency_safe"
+  ]
+}

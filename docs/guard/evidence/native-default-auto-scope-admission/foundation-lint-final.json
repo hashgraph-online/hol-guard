@@ -1,0 +1,15 @@
+{
+  "cwd": "/dev/shm/hol-guard-takeover/work/foundation",
+  "command": [
+    ".venv/bin/ruff",
+    "check",
+    "ci/native_runtime/probe_native_default_auto.py",
+    "tests/test_native_default_auto_scope_admission.py"
+  ],
+  "started_utc": "2026-09-17T20:30:07.104779+00:00",
+  "finished_utc": "2026-09-17T20:30:07.139618+00:00",
+  "elapsed_seconds_including_lock": 0.03486843200516887,
+  "exit_code": 0,
+  "bytes": 19,
+  "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+}

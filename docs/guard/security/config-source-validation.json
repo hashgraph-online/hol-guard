@@ -1,0 +1,101 @@
+{
+  "schema": "hol-guard.config-source-validation.v1",
+  "source_base": "1f8331728d60537637f3bf42761e805759f0c1a1",
+  "source_files": [
+    {
+      "path": "src/codex_plugin_scanner/guard/config_source_io.py",
+      "sha256": "f5f7ad2a0321ef754971b41e88879f5fcb9b3b7eb2e91d9746ad7de2b0bb1e8d",
+      "bytes": 8575
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/config.py",
+      "sha256": "da65e352e4b207118e0bc8aa671720e55203777fc86e1b06e11930d77243b53e",
+      "bytes": 61034
+    },
+    {
+      "path": "tests/test_guard_config_source_io.py",
+      "sha256": "85f6b593d55ce2e428d33114bde71f32a2b8db5ba279f7c0589ac5824ed38cfa",
+      "bytes": 13854
+    }
+  ],
+  "steps": [
+    {
+      "name": "ruff",
+      "command": [
+        "ruff",
+        "check",
+        "src/codex_plugin_scanner/guard/config_source_io.py",
+        "src/codex_plugin_scanner/guard/config.py",
+        "tests/test_guard_config_source_io.py"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 8.388,
+      "bytes": 19,
+      "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+    },
+    {
+      "name": "format",
+      "command": [
+        "ruff",
+        "format",
+        "--check",
+        "src/codex_plugin_scanner/guard/config_source_io.py",
+        "src/codex_plugin_scanner/guard/config.py",
+        "tests/test_guard_config_source_io.py"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.039,
+      "bytes": 26,
+      "sha256": "eee76f865de5a9f2456950f710ae5d5f9b5bd0ea02aa54f614c5eed6642a0bfd"
+    },
+    {
+      "name": "tests",
+      "command": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/test_guard_config_source_io.py",
+        "tests/test_guard_config_paths.py"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 8.001,
+      "bytes": 110,
+      "sha256": "6574527e16fe2db616fb38e7d84d4c5339537fdc580e962ddc77fd1f01370266"
+    },
+    {
+      "name": "types",
+      "command": [
+        "basedpyright",
+        "src/codex_plugin_scanner/guard/config_source_io.py",
+        "src/codex_plugin_scanner/guard/config.py",
+        "--outputjson"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 4.347,
+      "bytes": 36670,
+      "sha256": "5443800ea69bb57e837888de2a6b51aa7dcbfad7d9f1f85de8abeaef574202b1",
+      "summary": {
+        "filesAnalyzed": 2,
+        "errorCount": 0,
+        "warningCount": 61,
+        "informationCount": 0,
+        "timeInSec": 3.33
+      }
+    }
+  ],
+  "platform": "posix",
+  "windows_runtime_verified": false,
+  "scope": "Shared reader and actual config loading; one Windows-only handle-sharing test requires hosted execution.",
+  "validation_result": "67 passed; 1 actual-Windows-only test skipped. Production source type check: 2 files, 0 errors, 61 warnings.",
+  "earlier_attempts": [
+    {
+      "result": "1 failed, 59 passed, 1 skipped",
+      "reason": "New alias test compared logical GuardConfig paths to canonical paths; all 45 effective settings were equal. Test corrected to require logical path preservation."
+    },
+    {
+      "result": "64 passed, 1 skipped",
+      "scope": "Before the independent-review dangling-parent regression and rejection fix."
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "commit": "dae0115961d43cfdb7e97a9807b253f01fa7baf9",
+  "parent": "a059ddf138fe8a6335f1c5ea099df2b366550aa0",
+  "source_files": {
+    "src/codex_plugin_scanner/guard/config_source_io.py": "fcccf07dfb99e689b2f50bfa04e960527830258e1ef43531a5aafc459e31bfa8",
+    "src/codex_plugin_scanner/guard/config.py": "987e1ab080d8340fd39c5d650ada61dd469a370fc45c7a86ac8288866277825c",
+    "src/codex_plugin_scanner/guard/daemon/config_read_scope.py": "3fc8f0612d7a55f0cbf22a130886e6c872b4f614aabe465d3ee90cb9abf970b8",
+    "src/codex_plugin_scanner/guard/native_policy_snapshot.py": "01f398e5c835d03d0c6bcc7d038e0c5b273d4a448324a75167e3c11c6f24d47d",
+    "src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py": "4c5a1bf2c45feb743fb67a9d026141534bd83d109d830379fdc400e3f255a75d",
+    "src/codex_plugin_scanner/guard/native_policy_snapshot_publisher_inputs.py": "1f9bd9035b34942a355cac3b0679cacb359e1762296831ab88c411b94210af98",
+    "tests/test_daemon_config_read_scope.py": "a4d86cfac53517f96df2bb3cbe6eba9ca1a37ff0c1fa43545666f0461ab207d0"
+  },
+  "tests": {
+    "passed": 92,
+    "skipped": 2,
+    "seconds": 4.72
+  },
+  "types": {
+    "files": 6,
+    "errors": 0,
+    "warnings": 208
+  },
+  "ruff_lint_and_format": "pass",
+  "git_diff_check": "pass",
+  "semantic_backport": "Foundation retains its uncached policy compiler; load config and workspace readers accept the capture injection. No main caching, workspace capacity, or command binding changes imported."
+}

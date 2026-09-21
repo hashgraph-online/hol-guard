@@ -1,0 +1,77 @@
+{
+  "schema": "hol-guard.foundation-config-scope-validation.v1",
+  "scope": "Earlier core and propagation source checks; suites overlap and counts must not be added. Later callback completion is validated separately.",
+  "hosted_security_analysis": "pending; no alert disposition",
+  "attempts": [
+    {
+      "name": "core",
+      "files": [
+        {
+          "path": "core/tests.log",
+          "sha256": "96e57d74cdda37d7bd1ed523b0d55eb0dabf070bbf1f15e4ff3ee4d8a292bf05",
+          "bytes": 190,
+          "preservation": "exact bytes"
+        },
+        {
+          "path": "core/types.log",
+          "sha256": "9c3dcc90e421f6bc710a347903e4c0bd75a9344520cc34e57e749e2f7f42ddc6",
+          "bytes": 125338,
+          "preservation": "exact bytes"
+        },
+        {
+          "path": "core/receipt.json",
+          "sha256": "0ffff7057b4f67c5b45da769c8b51b9b9c6d135c98270f391546cd3b8fdb380d",
+          "bytes": 347,
+          "preservation": "exact bytes"
+        },
+        {
+          "path": "core/commit-receipt.json",
+          "sha256": "b96c3980bfb614d1bcb4ec1ec9e702e02258519cabfb96cf1a598a4918e9a8e1",
+          "bytes": 1472,
+          "preservation": "exact bytes"
+        }
+      ]
+    },
+    {
+      "name": "propagation",
+      "files": [
+        {
+          "path": "propagation/tests.log",
+          "sha256": "262535df3cd0d16ee7ba5ea88f2c950036cf497d7ce1a375b9f203555b438b7d",
+          "bytes": 2548,
+          "preservation": "exact bytes"
+        },
+        {
+          "path": "propagation/types.log",
+          "sha256": "439c709809538701c59c79aacab82904e3c8623592486b34bb4c05231f139853",
+          "bytes": 224041,
+          "preservation": "exact bytes"
+        },
+        {
+          "path": "propagation/receipt.json",
+          "sha256": "3819d7a4138501298d78c7a8e484c77be47924b1c217d5943d395dace4c3a36b",
+          "bytes": 365,
+          "preservation": "exact bytes"
+        },
+        {
+          "path": "propagation/commit-receipt.json",
+          "sha256": "f002e21263bdbca0999f00e201307d01fd9e5a2cd91ee6e05dc5e09b949e1549",
+          "bytes": 2349,
+          "preservation": "exact bytes"
+        },
+        {
+          "path": "propagation/ordinary-path-regressions.log",
+          "sha256": "d2e19278f2acef7cfe468afa87fbba8925315ff38a8d23649526ec4f7bbe6521",
+          "bytes": 98,
+          "preservation": "exact bytes"
+        },
+        {
+          "path": "propagation/ordinary-path-regressions.json",
+          "sha256": "452ec62fb0b10cc7e4b57e2bac6db6e910d6268f4ca942f88bd05f705a6336ef",
+          "bytes": 765,
+          "preservation": "exact bytes"
+        }
+      ]
+    }
+  ]
+}

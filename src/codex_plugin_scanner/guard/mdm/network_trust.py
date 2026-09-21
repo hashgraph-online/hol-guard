@@ -2,15 +2,29 @@
 
 from __future__ import annotations
 
+import os
 import ssl
 import sys
+from contextlib import suppress
 from pathlib import Path
 
 import requests.certs as requests_certs
 
+from .managed_file_trust import machine_controlled_file_is_trusted
+
 
 class ManagedTrustError(RuntimeError):
     """A managed TLS trust source is unavailable or invalid."""
+
+
+def build_default_ssl_context() -> ssl.SSLContext:
+    """Keep platform trust and explicit CA overrides usable in bundled runtimes."""
+    context = ssl.create_default_context()
+    if not os.environ.get("SSL_CERT_FILE") and not os.environ.get("SSL_CERT_DIR"):
+        # Preserve platform trust; an empty context still fails TLS verification.
+        with suppress(ManagedTrustError, OSError):
+            context.load_verify_locations(cafile=str(_requests_ca_bundle()))
+    return context
 
 
 def _requests_ca_bundle() -> Path:
@@ -60,14 +74,8 @@ def _load_public_and_system_trust(context: ssl.SSLContext) -> None:
 
 def _validate_managed_ca_bundle(path_value: str) -> Path:
     bundle = Path(path_value)
-    if not bundle.is_absolute() or bundle.is_symlink() or not bundle.is_file():
+    if not machine_controlled_file_is_trusted(bundle):
         raise ManagedTrustError("managed_ca_bundle_invalid")
-    if sys.platform != "win32":
-        try:
-            if bundle.stat().st_mode & 0o022:
-                raise ManagedTrustError("managed_ca_bundle_invalid")
-        except OSError as exc:
-            raise ManagedTrustError("managed_ca_bundle_invalid") from exc
     return bundle
 
 

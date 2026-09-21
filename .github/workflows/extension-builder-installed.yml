@@ -1,0 +1,92 @@
+name: Extension builder installed verification
+
+on:
+  pull_request:
+    paths:
+      - 'src/codex_plugin_scanner/guard/extension_builder/**'
+      - 'src/codex_plugin_scanner/guard/cli/extension_builder_commands.py'
+      - 'src/codex_plugin_scanner/guard/cli/commands_parser.py'
+      - 'src/codex_plugin_scanner/guard/cli/commands_router.py'
+      - 'src/codex_plugin_scanner/guard/runtime/**'
+      - 'contracts/extensions/**'
+      - 'contracts/mcp-servers/**'
+      - 'contributions/**'
+      - 'tests/*extension_builder*'
+      - 'docs/guard/extension-builder/**'
+      - 'scripts/ci/verify_extension_builder_install.py'
+      - 'scripts/release/stage_guard_cloud_review_artifacts.py'
+      - 'pyproject.toml'
+      - '.github/workflows/extension-builder-installed.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/codex_plugin_scanner/guard/extension_builder/**'
+      - 'src/codex_plugin_scanner/guard/cli/extension_builder_commands.py'
+      - 'src/codex_plugin_scanner/guard/cli/commands_parser.py'
+      - 'src/codex_plugin_scanner/guard/cli/commands_router.py'
+      - 'src/codex_plugin_scanner/guard/runtime/**'
+      - 'contracts/extensions/**'
+      - 'contracts/mcp-servers/**'
+      - 'contributions/**'
+      - 'tests/*extension_builder*'
+      - 'docs/guard/extension-builder/**'
+      - 'scripts/ci/verify_extension_builder_install.py'
+      - 'scripts/release/stage_guard_cloud_review_artifacts.py'
+      - 'pyproject.toml'
+      - '.github/workflows/extension-builder-installed.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: extension-builder-installed-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  extension-builder-installed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out the contribution
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - name: Prepare isolated verification tools
+        run: |
+          python3 -m venv .builder-ci-venv
+          .builder-ci-venv/bin/python -m pip install --disable-pip-version-check -e '.[dev]'
+      - name: Verify compiler and native integration contracts
+        run: |
+          .builder-ci-venv/bin/python -m pytest -q tests/test_guard_extension_builder_*.py --tb=short
+          .builder-ci-venv/bin/python -m ruff check \
+            src/codex_plugin_scanner/guard/extension_builder \
+            src/codex_plugin_scanner/guard/cli/extension_builder_commands.py \
+            src/codex_plugin_scanner/guard/runtime/command_reviewed_literal_matcher.py
+          .builder-ci-venv/bin/python -m ruff format --check \
+            src/codex_plugin_scanner/guard/extension_builder \
+            src/codex_plugin_scanner/guard/cli/extension_builder_commands.py \
+            src/codex_plugin_scanner/guard/runtime/command_reviewed_literal_matcher.py
+      - name: Build the actual wheel
+        run: .builder-ci-venv/bin/python -m build --wheel --outdir builder-artifacts
+      - name: Verify the installed command outside the checkout
+        run: |
+          wheel=$(find builder-artifacts -maxdepth 1 -type f -name '*.whl' -print -quit)
+          test -n "$wheel"
+          installed_env="$RUNNER_TEMP/guard-builder-wheel"
+          python3 -m venv "$installed_env"
+          .builder-ci-venv/bin/python -m pip freeze --exclude-editable > "$RUNNER_TEMP/guard-builder-constraints.txt"
+          "$installed_env/bin/python" -m pip install --disable-pip-version-check \
+            --constraint "$RUNNER_TEMP/guard-builder-constraints.txt" "$wheel"
+          .builder-ci-venv/bin/python scripts/ci/verify_extension_builder_install.py \
+            --python "$installed_env/bin/python" \
+            --wheel "$wheel" \
+            --source-root "$GITHUB_WORKSPACE" \
+            --output builder-artifacts/installed-verification.json
+      - name: Verify source files remain unchanged
+        run: git diff --exit-code
+      - name: Record installed verification
+        run: |
+          echo '### Extension builder installed verification' >> "$GITHUB_STEP_SUMMARY"
+          echo 'CLI and MCP generation, validation, deterministic replay, integration planning, expected-plan writes, and idempotence passed from an isolated wheel installation.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Target programs were not executed and local activation was not changed.' >> "$GITHUB_STEP_SUMMARY"

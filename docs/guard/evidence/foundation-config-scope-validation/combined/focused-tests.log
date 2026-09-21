@@ -1,0 +1,48 @@
+................................s....................................... [ 22%]
+...........s............................................................ [ 44%]
+........................................................................ [ 67%]
+........................................................................ [ 89%]
+........................F........                                        [100%]
+=================================== FAILURES ===================================
+______________ test_codex_app_server_result_is_bounded_and_opaque ______________
+
+tmp_path = PosixPath('/tmp/hol-guard-foundation-final-config/test_codex_app_server_result_i0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f184347b920>
+
+    def test_codex_app_server_result_is_bounded_and_opaque(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        store = GuardStore(tmp_path / "codex-app-server")
+        request = _seed_request(
+            store,
+            harness="codex",
+            request_id="request-codex-session",
+            metadata={"codex_thread_id": "thread-safe-0001"},
+        )
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.continuation_runtime._run_store_continuation_plan",
+            _successful_isolated_plan,
+        )
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.continuation_runtime.codex_app_server_target_reachable",
+            lambda _metadata: True,
+        )
+    
+        payload = continue_request_after_application(
+            store,
+            request_row=request,
+            action="allow_once",
+            now=NOW,
+            timeout_seconds=2.0,
+            headless=False,
+        )
+    
+>       assert payload["continuationStatus"] == "resumed", payload
+E       AssertionError: {'codexResume': {'capability': 'session-resume', 'completedAt': '2026-08-24T12:00:00+00:00', 'correlationId': 'gcr_bde...nCompletedAt': '2026-08-24T12:00:00+00:00', 'continuationEvidenceId': 'evidence-46d881dff7384794889a7822d127c6ec', ...}
+E       assert 'failed' == 'resumed'
+E         
+E         - resumed
+E         + failed
+
+tests/test_guard_continuation_runtime.py:321: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_guard_continuation_runtime.py::test_codex_app_server_result_is_bounded_and_opaque
+1 failed, 318 passed, 2 skipped in 99.54s (0:01:39)

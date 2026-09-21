@@ -1,0 +1,17 @@
+{
+  "schema": "hol-guard.source-test-failure-diagnostic.v1",
+  "test": "tests/test_guard_continuation_runtime.py::test_codex_app_server_result_is_bounded_and_opaque",
+  "observed_state": [
+    {
+      "status": "failed",
+      "reason": "continuation_adapter_timeout",
+      "last_error": "continuation_adapter_timeout",
+      "continuation_status": "failed",
+      "continuation_reason": "continuation_adapter_timeout"
+    }
+  ],
+  "original_sqlite_sha256": "6ec4b3b7d1eaeff8481fa0d2c63be5c763604c8cc8d18062cd7dc601d2ad8395",
+  "configured_timeout_seconds": 2.0,
+  "cause": "unresolved; persisted adapter timeout is an observation, not attribution to host contention or the scoped reader",
+  "threshold_changed": false
+}

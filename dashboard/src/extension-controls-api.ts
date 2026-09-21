@@ -64,6 +64,32 @@ export type ExtensionPermission = {
   family: string | null;
 };
 
+export type ExtensionTrustClass = "first-party" | "trusted-library" | "external";
+export type ExtensionActivation = "default-on" | "opt-in";
+export type ExtensionPublisher = {
+  id: string;
+  displayName: string;
+  url?: string;
+};
+export type ExtensionIcon = {
+  kind: "react-icon" | "svg-ref" | "none";
+  name?: string;
+  background?: string;
+};
+
+export type McpToolDefaultState = "inherit" | "allow" | "block";
+
+export type McpLaunch = {
+  kind: "package-launcher";
+  command: string;
+  package: string;
+};
+
+export type McpToolDefault = {
+  name: string;
+  state: McpToolDefaultState;
+};
+
 export type ExtensionCatalogItem = {
   schema_version: number;
   extension_id: string;
@@ -71,6 +97,10 @@ export type ExtensionCatalogItem = {
   description: string;
   enabled: boolean;
   required: boolean;
+  trust_class: ExtensionTrustClass;
+  activation: ExtensionActivation;
+  publisher: ExtensionPublisher;
+  icon: ExtensionIcon;
   source: "built-in" | "local-admin" | "signed-cloud";
   version: string;
   aliases: string[];
@@ -88,6 +118,9 @@ export type ExtensionCatalogItem = {
   rules: ExtensionRule[];
   permission_count: number;
   permissions: ExtensionPermission[];
+  surface?: "mcp";
+  mcp_launch?: McpLaunch;
+  mcp_tools?: McpToolDefault[];
 };
 
 export type ExtensionControlLayer = {
@@ -134,6 +167,12 @@ export type EffectivePermissionProjectionItem = {
   reason_codes: string[];
 };
 
+export type ExtensionControlTerminalCommands = {
+  shell?: "powershell";
+  enroll: string;
+  recover_authority: string;
+};
+
 export type EffectiveExtensionControlProjection = {
   schema_version: "guard.daemon.extension-control-projection.v1";
   revision: number;
@@ -172,6 +211,7 @@ export type EffectiveExtensionControls = {
   }>;
   layers: ExtensionControlLayer[];
   failures: Array<{ code: string; detail?: string; layer_kind?: string }>;
+  terminal_commands?: ExtensionControlTerminalCommands;
   projection?: EffectiveExtensionControlProjection;
   managed_controls?: ManagedControlsStatus;
 };

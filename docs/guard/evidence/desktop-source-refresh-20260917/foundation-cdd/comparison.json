@@ -1,0 +1,40 @@
+{
+  "source_head": "95ef48e878175a32685f71c3fe6e95556a7705c9",
+  "fixture": "tests/fixtures/guard-command-corpus/decision-diff-report.json",
+  "old_sha256": "b2489e025083bca0683f638b0a014de75b575bfc92c316b8f6c4683c05c9a67d",
+  "new_sha256": "af2148b4376865d35d642a5a23c812b3332947b2cf4fa10601b5dbd6339d4497",
+  "decoded_content_identical_except_source_bindings": true,
+  "changed_bindings": [
+    {
+      "id": "source-c2ff8d48b7ac42da437d7d07",
+      "path": "src/codex_plugin_scanner/guard/runtime/supply_chain_package_eval.py",
+      "old": "290acd61239de3cb7ae0ef0a7df41b83281f561c7e52ded2beef73693890582b",
+      "new": "ce7e5261127550881f2c1c50b9f51de93102309158dff471cd51a1173f57f544"
+    },
+    {
+      "id": "source-d4123c59bc428b987753caa4",
+      "path": "src/codex_plugin_scanner/guard/runtime/surface_server.py",
+      "old": "c5cf2754981e407b1dec0553071a16ced1a0de19565ed1df497aff8b83e3c8f6",
+      "new": "b530ea70d62915b05f3085576609b489ccec068d321fcf95c43175e48a548112"
+    },
+    {
+      "id": "source-d5c61fdacdf270009e5bc2e7",
+      "path": "src/codex_plugin_scanner/guard/runtime/command_executors.py",
+      "old": "6db8d79483913debd8bb5748fd946ba7f83c728cabedfe4ef112c68d8c0698b5",
+      "new": "5788c8640b39c59b849b177f56c5a1ce30809a768bd2076a9bf7fed5a012b3da"
+    },
+    {
+      "id": "source-df92657d1e6736882b70808c",
+      "path": "src/codex_plugin_scanner/guard/runtime/command_queue.py",
+      "old": "ccba158ae046834707ec7efe301bab385803a4720f513cb04aa8af3114dbec87",
+      "new": "7e05b8390bd6af4ba89aa9dec6fb967dbd6fa5dde673b1e2ec7c01172c50408f"
+    },
+    {
+      "id": "source-e4a25e12163ae68c101bcc17",
+      "path": "src/codex_plugin_scanner/guard/runtime/approval_attention.py",
+      "old": "f8656c3eb136e7985b7e4d6467d32740a5d72e761e16006d80f17b2e5a073be9",
+      "new": "e24120a7421e49337296188f1cef7dbb71f9a8b0f4a15a7fd36f05b83369448f"
+    }
+  ],
+  "unchanged_decision_content_sha256": "ebfd48ed52410b62aa1d5c1c8105da84cc5605e2ccb5f6311a743bea3fc28cd6"
+}

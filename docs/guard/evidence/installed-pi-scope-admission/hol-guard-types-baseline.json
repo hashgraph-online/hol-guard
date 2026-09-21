@@ -1,0 +1,21 @@
+{
+  "cwd": "/dev/shm/hol-guard-takeover/work/hol-guard",
+  "command": [
+    "flock",
+    "--close",
+    "-w",
+    "180",
+    "/workspace/scratch/c911dc702e23/performance-measurement.lock",
+    ".venv/bin/basedpyright",
+    "--project",
+    "pyproject.toml",
+    "--outputjson",
+    "/dev/shm/hol-guard-takeover/pi-scope-admission/baseline_probe_installed_pi_output.py"
+  ],
+  "started_utc": "2026-09-17T20:59:21.378740+00:00",
+  "finished_utc": "2026-09-17T20:59:36.160577+00:00",
+  "elapsed_seconds_including_lock": 14.781856765999692,
+  "exit_code": 1,
+  "bytes": 90662,
+  "sha256": "b8e92a3a77c9d36ab29af594ed08154277aeedad1b72d70cb24a22f6e93a4c18"
+}

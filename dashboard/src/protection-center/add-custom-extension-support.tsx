@@ -17,6 +17,9 @@ export function addDialogSubmitLabel(input: {
   if (input.recognized === null) {
     return input.busy ? "Looking…" : "Find this tool";
   }
+  if (input.busy && input.recognized.surface === "mcp" && input.step !== "confirm") {
+    return "Listing tools…";
+  }
   if (input.step !== "confirm") {
     return "Continue";
   }
@@ -89,17 +92,72 @@ export function blockActionLabel(surface: LocalCliItem["surface"]): string {
 export function dialogIntro(
   hasProjects: boolean,
   surface: LocalCliItem["surface"] | null,
+  discovering = false,
+  mcpHasTools = true,
 ): string {
   if (surface === "package-scripts") {
     return "Allow these scripts so Protect can stop asking about them. Type a nested name such as guard:audit to inspect one.";
   }
   if (surface === "mcp") {
+    if (!mcpHasTools) {
+      return "You can still add this server. List tools again to set Recommended, Allow, or Block on each tool.";
+    }
     return "Choose Recommended, Allow all, or Block all, then confirm this server.";
+  }
+  if (discovering) {
+    return "Looking for project scripts and app servers on this device.";
   }
   if (hasProjects) {
     return "Guard already found project scripts on this device. Pick a project, or paste another folder.";
   }
   return "Paste a script, binary, MCP launch, or package scripts such as npm run. Everyday commands such as rg, grep, and whoami are not custom extensions.";
+}
+
+export function listToolsAgainLabel(): string {
+  return "List tools again";
+}
+
+export function mcpListingBusyCopy(name: string): string {
+  return `Listing tools from ${name}. This can take a few seconds.`;
+}
+
+export function mcpListingRetryFailedCopy(): string {
+  return "Guard still could not list tools. You can add the server anyway.";
+}
+
+export function mcpCatalogHasTools(commands: LocalCliItem["commands"]): boolean {
+  return commands.some((entry) => entry.command_id !== "other");
+}
+
+export function mcpListingRetryError(
+  helpStatus: LocalCliItem["help_status"],
+  commands: LocalCliItem["commands"],
+): string | null {
+  if (mcpCatalogHasTools(commands) || helpStatus === "empty") return null;
+  return mcpListingRetryFailedCopy();
+}
+
+export function McpListingStatus(props: {
+  name: string;
+  busy: boolean;
+  onRetry: () => void;
+}) {
+  if (props.busy) {
+    return (
+      <p className="mt-4 max-w-xl text-sm leading-6 text-brand-dark/70" role="status" aria-live="polite">
+        {mcpListingBusyCopy(props.name)}
+      </p>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={props.onRetry}
+      className="mt-4 min-h-11 text-sm font-semibold text-brand-blue"
+    >
+      {listToolsAgainLabel()}
+    </button>
+  );
 }
 
 export function filterCountCopy(visible: number, total: number): string {
@@ -131,6 +189,7 @@ export function suggestionSummary(item: LocalCliItem): string {
 
 export function SuggestionPanel(props: {
   query: string;
+  discovering?: boolean;
   hasSuggestions: boolean;
   packageScriptSuggestions: LocalCliItem[];
   harnessSuggestions: LocalCliItem[];
@@ -139,13 +198,18 @@ export function SuggestionPanel(props: {
 }) {
   if (!props.hasSuggestions) {
     return (
-      <p className="mt-5 text-sm leading-6 text-brand-dark/70">
-        {suggestionEmptyCopy(props.query)}
+      <p className="mt-5 text-sm leading-6 text-brand-dark/70" role="status" aria-live="polite">
+        {suggestionEmptyCopy(props.query, props.discovering === true)}
       </p>
     );
   }
   return (
     <>
+      {props.discovering === true ? (
+        <p className="mt-5 text-sm leading-6 text-brand-dark/70" role="status" aria-live="polite">
+          Looking for more project scripts and app servers on this device.
+        </p>
+      ) : null}
       <SuggestionGroup
         heading="From this device"
         helper="Projects Guard has already seen, including nested names such as guard:audit."
@@ -188,9 +252,12 @@ export function ProjectSwitcher(props: {
   );
 }
 
-function suggestionEmptyCopy(query: string): string {
+function suggestionEmptyCopy(query: string, discovering: boolean): string {
   if (query.trim() !== "") {
     return "No matching tools. Try npm run, a project folder, or a nested script name. Everyday commands such as rg stay hidden.";
+  }
+  if (discovering) {
+    return "Scanning this device for package scripts and app servers.";
   }
   return "No extra tools yet. Paste npm run, a project folder, a script, or an MCP launch.";
 }

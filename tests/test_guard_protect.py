@@ -1285,3 +1285,76 @@ class TestGuardProtect:
         assert protect_output["supply_chain_evaluation"]["decision"] == "block"
         synced_advisories = GuardStore(home_dir).list_cached_advisories(limit=None)
         assert any(item.get("id") == "adv-sync-block" for item in synced_advisories)
+
+    def test_guard_protect_trusted_session_failure_keeps_approval_link_actionable(
+        self,
+        tmp_path,
+        capsys,
+        monkeypatch,
+    ) -> None:
+        """A trusted-session cloud failure must queue review, not dead-end the block.
+
+        The install still stops, but the blocked output has to carry the local
+        approval link so a human can review the request and the retry can pass.
+        """
+        import codex_plugin_scanner.guard.cli.commands as commands_module
+        import codex_plugin_scanner.guard.runtime.supply_chain_package_eval as evaluator_module
+        from tests.test_guard_package_shims import WORKSPACE_ID
+
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir(parents=True)
+        store = GuardStore(home_dir)
+        _seed_guard_cloud(store, workspace_id=WORKSPACE_ID)
+
+        def raise_trusted_session_error(*_args: object, **_kwargs: object) -> dict[str, object]:
+            raise RuntimeError("cloud token refresh failed")
+
+        monkeypatch.setattr(
+            evaluator_module,
+            "_resolve_guard_sync_auth_context",
+            raise_trusted_session_error,
+        )
+        monkeypatch.setattr(commands_module, "sync_supply_chain_bundle", lambda *args, **kwargs: None)
+        monkeypatch.setattr(commands_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
+
+        rc = main(
+            [
+                "guard",
+                "protect",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+                "--dry-run",
+                "npm",
+                "install",
+                "@hol-org/cigar",
+            ]
+        )
+
+        output = json.loads(capsys.readouterr().out)
+        user_copy = output["supply_chain_evaluation"]["user_copy"]
+
+        assert rc == 2
+        assert output["verdict"]["action"] == "require-reapproval"
+        assert output["verdict"]["blocking"] is True
+        assert output["approval_center_url"] == "http://127.0.0.1:5474"
+        assert output["primary_approval_request_id"]
+        assert output["primary_approval_url"].startswith("http://127.0.0.1:5474/requests/")
+        assert user_copy["dashboard_url"] == output["primary_approval_url"]
+        assert "Open HOL Guard to approve or keep this blocked:" in user_copy["harness_message"]
+        assert user_copy["harness_message"].index("Open HOL Guard") < user_copy["harness_message"].index(
+            "http://127.0.0.1:5474/requests/"
+        )
+        assert "hol-guard connect" in user_copy["harness_message"]
+        # The actionable approval link must be the final instruction, after the
+        # reconnect guidance, so copy refactors cannot bury it.
+        harness_message = user_copy["harness_message"]
+        assert harness_message.index("hol-guard connect") < harness_message.index("Open HOL Guard")
+        assert harness_message.rstrip().endswith("retry the same package install action.")
+        pending = GuardStore(home_dir).list_approval_requests(status="pending", limit=5)
+        assert len(pending) == 1
+        assert pending[0]["policy_action"] == "require-reapproval"
+        assert pending[0]["decision_v2_json"]["package_review_cloud_reason_code"] == "cloud_auth_error"

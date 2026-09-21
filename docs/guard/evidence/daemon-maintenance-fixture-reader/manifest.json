@@ -1,0 +1,96 @@
+{
+  "schema": "hol-guard-daemon-maintenance-fixture-reader.v1",
+  "branch_architecture": "foundation",
+  "head_before": "7597b2e6ca7951fd1775507070474fc664bdc1ee",
+  "production_changes": false,
+  "deadline_changes": false,
+  "source_before": {
+    "tests/test_guard_command_activity_maintenance_runtime.py": "2d063237765e886b3c91eacfc629fc47075e55b192791664dd7d664db5c02e02"
+  },
+  "artifacts": [
+    {
+      "path": "test_guard_command_activity_maintenance_runtime.py.before.gz",
+      "kind": "source_before",
+      "original_path": "tests/test_guard_command_activity_maintenance_runtime.py",
+      "encoding": "gzip",
+      "bytes": 1223,
+      "sha256": "cb6278782b6bdc1c93b92a991b17b2478fd4d814df7f501cf57af3c94c5cadbf",
+      "original_bytes": 3523,
+      "original_sha256": "2d063237765e886b3c91eacfc629fc47075e55b192791664dd7d664db5c02e02"
+    },
+    {
+      "path": "foundation-hosted-job-105364728372.log.gz",
+      "kind": "hosted_pre_fix_failure",
+      "original_path": "/dev/shm/hol-guard-takeover/foundation-cdd-hosted/job-105364728372.log",
+      "encoding": "gzip",
+      "bytes": 11096,
+      "sha256": "13182ebd825d413e1086cdd393cdb7de206025332ba20cb38df5657e948d27d4",
+      "original_bytes": 44399,
+      "original_sha256": "6307d345451c67c2ef113d543cf9d2da7e1c9001b039abf3746feaef87a0e653"
+    },
+    {
+      "path": "focused-test.txt",
+      "kind": "focused_local_after",
+      "encoding": "identity",
+      "bytes": 98,
+      "sha256": "3b4ad3097d7020cd8b172384869bd1db1102ffc4c9316bde31fef1b3bcacf9c6",
+      "exit_code": 0
+    },
+    {
+      "path": "ruff-check.txt",
+      "kind": "ruff_check",
+      "encoding": "identity",
+      "bytes": 19,
+      "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+      "exit_code": 0
+    },
+    {
+      "path": "ruff-format-check.txt",
+      "kind": "ruff_format_check",
+      "encoding": "identity",
+      "bytes": 25,
+      "sha256": "fd2299c9f1c6dc869070883e281051bfe93aacf66c1a3b0069f45b4aa410ca50",
+      "exit_code": 0
+    }
+  ],
+  "source_after": {
+    "tests/test_guard_command_activity_maintenance_runtime.py": "bdbe3dfaeffbd7109ae97c2b7498d9124246b193c6b3e4292935647ec2c25806"
+  },
+  "local_result": {
+    "passed": 1,
+    "elapsed_seconds": 0.27,
+    "exit_code": 0
+  },
+  "hosted_before": {
+    "pull_request_head": "cdd14176ef0e0a258d4655c64210524d7047a257",
+    "synthetic_merge_commit": "c92e557349cabd633db408912c644471c002ee4d",
+    "source_architecture": "foundation",
+    "main_hosted_failure_claim": false,
+    "test_fixture_identical_before_on_main_and_foundation": true
+  },
+  "pytest_node": "tests/test_guard_command_activity_maintenance_runtime.py::test_long_lived_daemon_rechecks_daily_and_uses_global_retention",
+  "pytest_boundary": {
+    "lock": "/workspace/scratch/c911dc702e23/performance-measurement.lock",
+    "flock_arguments": [
+      "--close",
+      "-w",
+      "180"
+    ],
+    "command_prefix": [
+      "env",
+      "PYTHONPATH=src",
+      ".venv/bin/python",
+      "-m",
+      "pytest",
+      "-q"
+    ],
+    "tmp_path": "ordinary pytest /tmp; no --basetemp override",
+    "rerun_scope": "Only this failed node, once per branch."
+  },
+  "limits": [
+    "Hosted failure is from foundation. The original fixture bytes match cdd and were identical in main; no main hosted failure is claimed.",
+    "The fake server gains the reader field and its load double accepts the explicit keyword. Global-home/no-workspace, interval, retention and original assertions are unchanged.",
+    "Only the owned test-file before/after bytes are pinned here; this is not a complete frozen-tree or full hosted gate claim.",
+    "Ruff check and format check are direct lightweight checks; pytest uses the shared lock."
+  ]
+}

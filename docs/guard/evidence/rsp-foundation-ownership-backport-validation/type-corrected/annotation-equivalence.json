@@ -1,0 +1,13 @@
+{
+  "schema": "hol-guard.ownership-tool-type-correction.v1",
+  "prior_resolver_sha256": "c9053a74b6f31ba312ce660df284c825e6363f11991b1e7657ee0596a6d3256a",
+  "corrected_resolver_sha256": "cc7ffac34e7169c5e19fce983c49361bf79511a2d45fd6734fbde703dd5076a5",
+  "comparison": "Complete module AST unchanged after excluding the typing-only FunctionRecordLike declaration and normalizing the four unused private visitor parameter labels. All four visitor bodies remain bare return.",
+  "renamed_unused_visitor_parameters": [
+    "visit_FunctionDef",
+    "visit_AsyncFunctionDef",
+    "visit_ClassDef",
+    "visit_Lambda"
+  ],
+  "behavior_tests": "Earlier 26-test passing receipt remains applicable; no new resolver algorithm or gate behavior introduced by this final correction."
+}

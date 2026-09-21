@@ -1,0 +1,55 @@
+{
+  "base": "1cb1068056c8eeef5babc5f4f355481b37bc06e0",
+  "main_source_commit": "b2f029900cd28a0c4cce6bd8c15f87511b7de8de",
+  "scope": "Only supporting imports plus reader/capture keyword arguments and parameters removed before comparing. All other source AST nodes must remain identical.",
+  "files": [
+    {
+      "path": "src/codex_plugin_scanner/guard/cli/commands_hook.py",
+      "base_sha256": "79a150f789c7a6c6142ca7e14cf9fe4944884907067c6305ad639a502a2c5ce3",
+      "candidate_sha256": "5556beb734a5efe56d0ed6623d4f10acd309732109cdf8f51cfe3a21cd8290a4",
+      "nontransport_ast_equal": true
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/cli/commands_hook_copilot.py",
+      "base_sha256": "8f6fe400757d334cd76d921f5b016e5df3e53f0dd9f6e7d4cd87fb3d6d08d72a",
+      "candidate_sha256": "fa16f7c345c8890b5c3d3bec05b16b6983d6d2b47f21ffed26b6926f76fb122c",
+      "nontransport_ast_equal": true
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/cli/commands_hook_generic.py",
+      "base_sha256": "c684627b372ecdc48e937daf03de78fdf3fe485cc32744888a954c631fa67066",
+      "candidate_sha256": "d199f25804504bc6096106d7628f72781a5a86b340c2a5201b2b0326393cb6aa",
+      "nontransport_ast_equal": true
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/cli/commands_hook_native_authority.py",
+      "base_sha256": "12aa90827651d275c4ace9c4903a1a6135494a85246e0d760553030981dc0f8a",
+      "candidate_sha256": "be4f45d56bc831ae219bdaf8f5f24c2900bbe6ece172904cb2cfedd1246a3114",
+      "nontransport_ast_equal": true
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/cli/commands_hook_runtime_eval.py",
+      "base_sha256": "b91f0d7d2b6237edf938c3e942b819aeaae86bb739b9b93ae5cff0dc1cb1310b",
+      "candidate_sha256": "828f33b2e64ca306858d2d336c13e741fb28af8503416891ab52a9eef9430c02",
+      "nontransport_ast_equal": true
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/cli/commands_hook_runtime_review.py",
+      "base_sha256": "5c8d28c666718e5716ca5d104d9c3f1099546e280291672add2fe06677a7eae9",
+      "candidate_sha256": "c1970bf0c2cecc417750f20c221d80024ddc14d9bb1a0a7fb3ee70e989f50cd2",
+      "nontransport_ast_equal": true
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/cli/commands_support_observe_queue.py",
+      "base_sha256": "b002d6ad4fdbd2ff549beaf669d62fb8b0b482817743659c45d9324a3f3583d8",
+      "candidate_sha256": "1bc152f13b3f7bc9b2f7e2eecfc36cb68f0dadf38971596a90ae86ccf87dd490",
+      "nontransport_ast_equal": true
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/runtime/supply_chain_package_eval.py",
+      "base_sha256": "290acd61239de3cb7ae0ef0a7df41b83281f561c7e52ded2beef73693890582b",
+      "candidate_sha256": "ce7e5261127550881f2c1c50b9f51de93102309158dff471cd51a1173f57f544",
+      "nontransport_ast_equal": true
+    }
+  ]
+}

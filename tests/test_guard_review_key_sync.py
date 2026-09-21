@@ -19,6 +19,7 @@ from tests.policy_bundle_signing_helpers import (
     policy_bundle_test_verification_key,
     sign_policy_bundle,
 )
+from tests.support.network import stub_authenticated_urlopen
 
 _WORKSPACE_ID = "workspace-1"
 
@@ -127,7 +128,7 @@ def test_first_sync_anchors_review_key_after_policy_activation(
         return 0
 
     monkeypatch.setattr(runner, "validate_synced_policy_bundle", validate_policy_bundle)
-    monkeypatch.setattr(urllib.request, "urlopen", open_sync)
+    stub_authenticated_urlopen(monkeypatch, open_sync)
     monkeypatch.setattr(runner, "sync_pain_signals", no_auxiliary_sync)
     monkeypatch.setattr(runner, "sync_guard_events", no_auxiliary_sync)
 

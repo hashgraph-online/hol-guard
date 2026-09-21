@@ -299,7 +299,9 @@ def test_ambiguous_lock_sources_fail_closed(tmp_path: Path, name: str) -> None:
     (("^1.2.3", "1.9.0", True), ("^0.12.0", "0.12.3", True), ("^0.0.3", "0.0.4", False)),
 )
 def test_caret_version_matching_follows_semver(specifier: str, version: str, expected: bool) -> None:
-    assert evidence_module._version_spec_matches(specifier, version) is expected  # pyright: ignore[reportPrivateUsage]
+    assert evidence_module.version_spec_matches(
+        specifier, version, version_re=evidence_module._VERSION, caret_pins_zero_major=True
+    ) is expected
 
 
 def test_scoped_registry_tarball_omits_scope_from_filename() -> None:

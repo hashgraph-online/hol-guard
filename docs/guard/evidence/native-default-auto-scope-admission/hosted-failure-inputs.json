@@ -1,0 +1,32 @@
+[
+  {
+    "job": "105364319651",
+    "platform": "macOS Intel",
+    "retained_raw_path": "/dev/shm/hol-guard-takeover/foundation-cdd-hosted/job-105364319651.log",
+    "bytes": 52274,
+    "sha256": "606a6f7b063598bfe25dab3cc82de1ca7e91120bc8500ea051bce614f5e68119",
+    "readiness_failure_lines": [
+      "2026-09-17T20:13:48.7859980Z RuntimeError: native_default_auto_probe_failed: {'elapsed_ms': 0.06, 'policy_ready': False}"
+    ]
+  },
+  {
+    "job": "105364319920",
+    "platform": "macOS ARM",
+    "retained_raw_path": "/dev/shm/hol-guard-takeover/foundation-cdd-hosted/job-105364319920.log",
+    "bytes": 51677,
+    "sha256": "341b2e92406ed4eb08ae263834e98cfa0a30028b6610f7726585fada2d2a9abc",
+    "readiness_failure_lines": [
+      "2026-09-17T20:13:23.5458830Z RuntimeError: native_default_auto_probe_failed: {'elapsed_ms': 0.06, 'policy_ready': False}"
+    ]
+  },
+  {
+    "job": "105364320017",
+    "platform": "Windows",
+    "retained_raw_path": "/dev/shm/hol-guard-takeover/foundation-cdd-hosted/job-105364320017.log",
+    "bytes": 52422,
+    "sha256": "36076ad72f2d1cbcd88bdcaf924a7aeff98ce688fc6062789bf20229af081aab",
+    "readiness_failure_lines": [
+      "2026-09-17T20:13:27.7933019Z RuntimeError: native_default_auto_probe_failed: {'elapsed_ms': 0.0, 'policy_ready': False}"
+    ]
+  }
+]

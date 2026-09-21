@@ -971,11 +971,6 @@ def _tool_call_risk_category_set(artifact: GuardArtifact, arguments: object) -> 
     # browser navigation targets.
     browser_intent = normalize_browser_mcp_intent(artifact, arguments)
     is_browser_navigation = browser_intent is not None and browser_intent.intent == "browser.navigation"
-    routine_browser_intent = browser_intent is not None and browser_intent.intent in {
-        "browser.navigation",
-        "browser.inspect",
-        "browser.interact",
-    }
 
     if len(tool_name_tokens.intersection({"delete", "remove", "rm", "destroy", "erase"})) > 0:
         categories.add("destructive_mutation")
@@ -1020,7 +1015,7 @@ def _tool_call_risk_category_set(artifact: GuardArtifact, arguments: object) -> 
     categories.update(schema_categories)
     categories.update(description_categories)
     if (
-        routine_browser_intent
+        browser_intent is not None
         and "filesystem_access" not in argument_categories
         and "filesystem_access" not in description_categories
     ):

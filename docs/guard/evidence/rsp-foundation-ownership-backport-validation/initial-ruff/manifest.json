@@ -1,0 +1,29 @@
+{
+  "base": "a7b675a84b732ead542cdf77e5153c57b4257d9b",
+  "files": {
+    "docs/guard/contracts/hook-data-plane-ownership.v2.json": "d88c08243314c815ff1a7ba0404b354caff16c93d12c1bd10a3b791395a76518",
+    "scripts/ci/rust_io_ownership_contract.py": "01e39c4c620285727879c2cfde5beb3604ca201a49bfa26c13feacd31972a685",
+    "scripts/ci/rust_io_ownership_gate.py": "228631359f3e52915478485e42537843969b60214bd9c953160b6cb8ba2e356e",
+    "scripts/ci/rust_io_ownership_resolver.py": "c9053a74b6f31ba312ce660df284c825e6363f11991b1e7657ee0596a6d3256a",
+    "tests/test_hook_data_plane_ownership_gate.py": "b24bd33ad63c8354273db5b3e93605e9fbc57e61a38fa4ce2d0dcc53a82a6316",
+    "tests/test_rust_io_ownership_gate.py": "09d9cd1486bcf2dc7a21d24bae602dc48710646dc5f4aa512cda5602f562b779"
+  },
+  "steps": [
+    {
+      "name": "ruff",
+      "command": [
+        "/dev/shm/hol-guard-takeover/work/foundation/.venv/bin/ruff",
+        "check",
+        "scripts/ci/rust_io_ownership_contract.py",
+        "scripts/ci/rust_io_ownership_gate.py",
+        "scripts/ci/rust_io_ownership_resolver.py",
+        "tests/test_hook_data_plane_ownership_gate.py",
+        "tests/test_rust_io_ownership_gate.py"
+      ],
+      "exit_code": 1,
+      "seconds": 0.128,
+      "bytes": 402,
+      "sha256": "28f83527c260c53adc528a73b5cae9381d9871f4fdc5d8809753bf2d654f8bfa"
+    }
+  ]
+}

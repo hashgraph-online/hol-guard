@@ -39,7 +39,6 @@ _merge_hook_group = _hook_config.merge_hook_group
 _prune_guard_hook_entries = _hook_config.prune_guard_hook_entries
 _remove_unsupported_guard_hook_groups = _hook_config.remove_unsupported_guard_hook_groups
 _sync_runtime_hook_groups = _hook_config.sync_runtime_hook_groups
-
 CLAUDE_SETTINGS_FILES = ("settings.json", "settings.local.json")
 
 
@@ -429,6 +428,7 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
 
     def refresh_runtime_hook_urls(self, context: HarnessContext) -> None:
         settings_path = _claude_managed_settings_path(context)
+        _ensure_path_within_root(context.home_dir, settings_path, label="Claude Code")
         payload = _json_payload(settings_path)
         hooks = payload.get("hooks")
         if not isinstance(hooks, dict):

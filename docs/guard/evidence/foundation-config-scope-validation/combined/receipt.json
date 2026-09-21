@@ -1,0 +1,106 @@
+[
+  {
+    "check": "focused-tests",
+    "command": [
+      "/dev/shm/hol-guard-takeover/work/foundation/.venv/bin/python",
+      "-m",
+      "pytest",
+      "-q",
+      "--basetemp=/tmp/hol-guard-foundation-final-config",
+      "tests/test_guard_config_source_io.py",
+      "tests/test_guard_config_paths.py",
+      "tests/test_daemon_config_read_scope.py",
+      "tests/test_native_policy_snapshot_v3_publisher.py",
+      "tests/test_daemon_config_reader_propagation.py",
+      "tests/test_hook_availability_policy.py",
+      "tests/test_guard_approval_attention.py",
+      "tests/test_hook_package_config_reader.py",
+      "tests/test_native_pretool_compatibility.py",
+      "tests/test_guard_hook_post_claim_freshness.py",
+      "tests/test_daemon_persisted_config_reader.py",
+      "tests/test_codex_pretool_live_hook_defer.py",
+      "tests/test_codex_live_decision.py",
+      "tests/test_daemon_remote_config_reader.py",
+      "tests/test_guard_command_queue.py",
+      "tests/test_guard_continuation_runtime.py",
+      "tests/test_guard_approvals.py::TestGuardApprovals::test_guard_queue_respects_disabled_desktop_notifications",
+      "tests/test_guard_approvals.py::TestGuardApprovals::test_guard_queue_respects_workspace_disabled_desktop_notifications"
+    ],
+    "exit_code": 1,
+    "started_at": "2026-09-17T19:52:35.911769+00:00",
+    "seconds_including_lock": 116.911,
+    "source_unchanged": true,
+    "source_files": 2646,
+    "free_overlay_bytes_after": 202645504,
+    "log": "focused-tests.log"
+  },
+  {
+    "check": "ownership-tests",
+    "command": [
+      "/dev/shm/hol-guard-takeover/work/foundation/.venv/bin/python",
+      "-m",
+      "pytest",
+      "-q",
+      "--basetemp=/tmp/hol-guard-foundation-final-ownership",
+      "tests/test_hook_data_plane_ownership_gate.py",
+      "tests/test_rust_io_ownership_gate.py"
+    ],
+    "exit_code": 0,
+    "started_at": "2026-09-17T19:54:33.457150+00:00",
+    "seconds_including_lock": 163.413,
+    "source_unchanged": true,
+    "source_files": 2646,
+    "free_overlay_bytes_after": 176386048,
+    "log": "ownership-tests.log"
+  },
+  {
+    "check": "full-types",
+    "command": [
+      "/dev/shm/hol-guard-takeover/work/foundation/.venv/bin/python",
+      "-m",
+      "basedpyright",
+      "--outputjson"
+    ],
+    "exit_code": 0,
+    "started_at": "2026-09-17T19:57:16.998409+00:00",
+    "seconds_including_lock": 297.653,
+    "source_unchanged": true,
+    "source_files": 2646,
+    "free_overlay_bytes_after": 260722688,
+    "log": "full-types.log"
+  },
+  {
+    "check": "authority-gate",
+    "command": [
+      "/dev/shm/hol-guard-takeover/work/foundation/.venv/bin/python",
+      "scripts/ci/rust_authority_ownership_gate.py",
+      "--base-ref",
+      "4b89e0d2d496a85f04922b2e019a4aea15326bb9",
+      "--json",
+      "/dev/shm/hol-guard-takeover/foundation-config-final-validation/authority-gate.json"
+    ],
+    "exit_code": 0,
+    "started_at": "2026-09-17T20:02:14.864053+00:00",
+    "seconds_including_lock": 1.875,
+    "source_unchanged": true,
+    "source_files": 2646,
+    "free_overlay_bytes_after": 254214144,
+    "log": "authority-gate.log"
+  },
+  {
+    "check": "semantic-gate",
+    "command": [
+      "/dev/shm/hol-guard-takeover/work/foundation/.venv/bin/python",
+      "scripts/ci/python_hook_semantic_callgraph_gate.py",
+      "--json",
+      "/dev/shm/hol-guard-takeover/foundation-config-final-validation/semantic-gate.json"
+    ],
+    "exit_code": 0,
+    "started_at": "2026-09-17T20:02:16.908269+00:00",
+    "seconds_including_lock": 0.582,
+    "source_unchanged": true,
+    "source_files": 2646,
+    "free_overlay_bytes_after": 248807424,
+    "log": "semantic-gate.log"
+  }
+]

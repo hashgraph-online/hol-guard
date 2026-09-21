@@ -1,0 +1,113 @@
+{
+  "schema": "foundation-hook-package-config-reader.backport.v1",
+  "foundation_base": "1cb1068056c8eeef5babc5f4f355481b37bc06e0",
+  "main_source_commit": "b2f029900cd28a0c4cce6bd8c15f87511b7de8de",
+  "implementation": "Explicit reader/capture parameters and forwarded keyword arguments only; all 8 nontransport module ASTs equal the foundation base.",
+  "differences": [
+    "Seven CLI changes applied directly.",
+    "Foundation package evaluator has no workspace_input_snapshot wrapper or WorkspaceInputSnapshotError recovery branch; neither was introduced. Its existing public/uncached/failure helpers carry the reader.",
+    "Focused package test omits the 2 absent snapshot-error cases; the existing native compatibility and freshness tests receive the same reader/capture assertions."
+  ],
+  "validation": {
+    "ruff": "passed for 11 files",
+    "format": "passed for 11 files",
+    "transport_ast": "8 of 8 pass",
+    "execution_tests": "not run by this backport agent; reserved for combined foundation gate",
+    "types": "not run by this backport agent; reserved for combined foundation gate",
+    "initial_patch_check": "Main patch rejected on the package evaluator; retained output. No partial apply occurred; CLI subset applied and package transport adapted to foundation."
+  },
+  "source_files": [
+    {
+      "path": "src/codex_plugin_scanner/guard/cli/commands_hook.py",
+      "sha256": "5556beb734a5efe56d0ed6623d4f10acd309732109cdf8f51cfe3a21cd8290a4",
+      "bytes": 20378
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/cli/commands_hook_copilot.py",
+      "sha256": "fa16f7c345c8890b5c3d3bec05b16b6983d6d2b47f21ffed26b6926f76fb122c",
+      "bytes": 22379
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/cli/commands_hook_generic.py",
+      "sha256": "d199f25804504bc6096106d7628f72781a5a86b340c2a5201b2b0326393cb6aa",
+      "bytes": 60344
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/cli/commands_hook_native_authority.py",
+      "sha256": "be4f45d56bc831ae219bdaf8f5f24c2900bbe6ece172904cb2cfedd1246a3114",
+      "bytes": 8202
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/cli/commands_hook_runtime_eval.py",
+      "sha256": "828f33b2e64ca306858d2d336c13e741fb28af8503416891ab52a9eef9430c02",
+      "bytes": 59583
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/cli/commands_hook_runtime_review.py",
+      "sha256": "c1970bf0c2cecc417750f20c221d80024ddc14d9bb1a0a7fb3ee70e989f50cd2",
+      "bytes": 19326
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/cli/commands_support_observe_queue.py",
+      "sha256": "1bc152f13b3f7bc9b2f7e2eecfc36cb68f0dadf38971596a90ae86ccf87dd490",
+      "bytes": 3717
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/runtime/supply_chain_package_eval.py",
+      "sha256": "ce7e5261127550881f2c1c50b9f51de93102309158dff471cd51a1173f57f544",
+      "bytes": 205706
+    },
+    {
+      "path": "tests/test_hook_package_config_reader.py",
+      "sha256": "4fcffe4bc41e617ef7ae8f51c985816930c5f88ccf93b9c51fb68af4a8325e1f",
+      "bytes": 9321
+    },
+    {
+      "path": "tests/test_native_pretool_compatibility.py",
+      "sha256": "87521bc23e50acc72fcd8556cd8ffac031e4840e3f99a6a3440367d3c336ab99",
+      "bytes": 2920
+    },
+    {
+      "path": "tests/test_guard_hook_post_claim_freshness.py",
+      "sha256": "093727256071eac6a69151d2029a72c3a97d3d94b843aee519b53f681d97c1b9",
+      "bytes": 42269
+    }
+  ],
+  "raw_files": [
+    {
+      "path": "format-check.json",
+      "sha256": "640f96743fd52b0a5e0973cb9c28f75397fdb1310890d2de15277ff53d432a75",
+      "bytes": 1055
+    },
+    {
+      "path": "format-check.txt",
+      "sha256": "75b7030be9d7de96bf4e76e79b1f03f14af8899d169fd8d79564d59167d1ab80",
+      "bytes": 27
+    },
+    {
+      "path": "format.txt",
+      "sha256": "c88e0bfacfad47de5675d0d81af70037a9f4eaaccdd2276a8ec81d82ab6fd99e",
+      "bytes": 44
+    },
+    {
+      "path": "patch-check.txt",
+      "sha256": "511941a3625f7b2414e562a99af31ce15b0f8406a03e4bae92d0a18e0b9f74c5",
+      "bytes": 189
+    },
+    {
+      "path": "ruff.json",
+      "sha256": "52c7e1658d5989ce660891fd345dfabf30dddcea8e4883aa19ecf6592dfe4867",
+      "bytes": 1039
+    },
+    {
+      "path": "ruff.txt",
+      "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+      "bytes": 19
+    },
+    {
+      "path": "transport-ast.json",
+      "sha256": "90915b83ffa9fb1b8f1aa7cbc91e5b88fb6b804a00fd091f7e5e696651ce4e7a",
+      "bytes": 2819
+    }
+  ]
+}

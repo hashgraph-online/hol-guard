@@ -2,10 +2,65 @@
 
 from __future__ import annotations
 
+import os
+import stat
 from pathlib import Path
 from urllib.parse import urlparse
 
 REMOTE_PREFIXES = ("https://", "git+", "github://")
+DEFAULT_SAFE_READ_LIMIT_BYTES = 1_048_576
+
+
+def path_entry_exists(path: Path) -> bool:
+    """Return whether a directory entry exists without following its final link."""
+    try:
+        path.lstat()
+    except FileNotFoundError:
+        return False
+    except OSError:
+        # An unreadable entry is security-relevant and must reach the safe reader.
+        return True
+    return True
+
+
+def read_text_file_within_root(
+    root: Path,
+    candidate: Path,
+    *,
+    max_bytes: int = DEFAULT_SAFE_READ_LIMIT_BYTES,
+    encoding: str = "utf-8",
+    errors: str = "strict",
+) -> str:
+    """Read a bounded regular file without following symbolic links."""
+    resolved_root = root.resolve(strict=True)
+    metadata = candidate.lstat()
+    if not stat.S_ISREG(metadata.st_mode):
+        raise OSError(f"not a regular file: {candidate}")
+    resolved_candidate = candidate.resolve(strict=True)
+    try:
+        resolved_candidate.relative_to(resolved_root)
+    except ValueError as exc:
+        raise OSError(f"file escapes root: {candidate}") from exc
+    if metadata.st_size > max_bytes:
+        raise OSError(f"file exceeds {max_bytes} bytes: {candidate}")
+
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(candidate, flags)
+    try:
+        opened = os.fstat(descriptor)
+        if not stat.S_ISREG(opened.st_mode):
+            raise OSError(f"not a regular file: {candidate}")
+        if (opened.st_dev, opened.st_ino) != (metadata.st_dev, metadata.st_ino):
+            raise OSError(f"file changed while opening: {candidate}")
+        if opened.st_size > max_bytes:
+            raise OSError(f"file exceeds {max_bytes} bytes: {candidate}")
+        with os.fdopen(descriptor, "rb", closefd=False) as handle:
+            raw = handle.read(max_bytes + 1)
+        if len(raw) > max_bytes:
+            raise OSError(f"file exceeds {max_bytes} bytes: {candidate}")
+        return raw.decode(encoding, errors=errors)
+    finally:
+        os.close(descriptor)
 
 
 def is_remote_reference(value: str) -> bool:

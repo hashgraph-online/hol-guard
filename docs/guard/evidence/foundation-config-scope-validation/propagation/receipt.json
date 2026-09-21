@@ -1,0 +1,14 @@
+[
+  {
+    "check": "tests",
+    "exit_code": 1,
+    "seconds_including_lock": 184.44,
+    "log": "/dev/shm/hol-guard-takeover/foundation-reader-propagation-validation/tests.log"
+  },
+  {
+    "check": "types",
+    "exit_code": 0,
+    "seconds_including_lock": 105.58,
+    "log": "/dev/shm/hol-guard-takeover/foundation-reader-propagation-validation/types.log"
+  }
+]

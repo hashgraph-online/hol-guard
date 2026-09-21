@@ -87,6 +87,10 @@ export function commandInteractionLabel(item: CommandActivityItem): string {
   return item.prompted ? "Guard asked for review" : "No review prompt recorded";
 }
 
+export function commandInvocationLabel(preview: string | null): string {
+  return preview === null || preview.length === 0 ? "Command not recorded" : preview;
+}
+
 export function safeEvidenceId(value: string | null): string {
   if (value === null || value.length > 256 || !/^[a-z][a-z0-9]*(?:[._:-][a-z0-9]+)*$/.test(value)) {
     return "Unavailable";

@@ -79,10 +79,11 @@ class ClaudeAdapter:
         ):
             components["mcp_servers"] = (str(mcp_file.relative_to(root)),)
 
-        strict_mode = manifest.get("strict")
         policies: dict[str, str] = {}
-        if isinstance(strict_mode, bool):
-            policies["strict"] = "true" if strict_mode else "false"
+        if candidate.package_kind != "marketplace":
+            strict_mode = manifest.get("strict")
+            if isinstance(strict_mode, bool):
+                policies["strict"] = "true" if strict_mode else "false"
         raw_name = manifest.get("name")
         raw_version = manifest.get("version")
 

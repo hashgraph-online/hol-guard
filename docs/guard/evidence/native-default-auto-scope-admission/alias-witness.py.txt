@@ -1,0 +1,38 @@
+import sys
+sys.path.insert(0,'/dev/shm/hol-guard-takeover/work/foundation/src')
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from types import SimpleNamespace
+from codex_plugin_scanner.guard.daemon.config_read_scope import HookConfigReadScope
+from codex_plugin_scanner.guard.native_policy_snapshot_publisher import NativePolicySnapshotPublisher, _REQUIRED_PUBLISH_FEATURES
+from codex_plugin_scanner.guard.config_source_io import GuardConfigSourceError
+with TemporaryDirectory(prefix='publisher-alias-witness-',dir='/dev/shm/hol-guard-takeover') as temp:
+ root=Path(temp);real=root/'real';real.mkdir();alias=root/'alias';alias.symlink_to(real,target_is_directory=True)
+ home=alias/'hook-home';home.mkdir();workspace=alias/'hook-workspace';workspace.mkdir()
+ scope=HookConfigReadScope.for_guard_home(home)
+ store=SimpleNamespace(guard_home=home,_policy_integrity_secret_material=lambda **_kw:(b'fixture-key-32-bytes-only000000000','fixture-id'))
+ status=lambda:SimpleNamespace(mode='auto',available=True,compatible=True,identity=object(),capabilities=SimpleNamespace(features=tuple(_REQUIRED_PUBLISH_FEATURES)))
+ def forbidden_client(*_args,**_kwargs):raise AssertionError('native IPC must not run')
+ publisher=NativePolicySnapshotPublisher(store=store,config_capture=scope,status_provider=status,client_request=forbidden_client)
+ publisher.register_workspace(workspace)
+ try:
+  publisher._compiled_effective_policy()
+ except GuardConfigSourceError as error:
+  print('lexical_workspace_compilation_error',str(error))
+ else:raise AssertionError('expected canonical binding rejection')
+ publisher._publish_once()
+ print('actual_publish_once_last_error',publisher.last_error,'acked',publisher.current_snapshot_binding() is not None,'capture_identity',publisher.config_capture is scope)
+ assert publisher.last_error=='guardconfigsourceerror'
+ publisher.close()
+ admitted=workspace.resolve()
+ canonical=NativePolicySnapshotPublisher(store=store,config_capture=scope,status_provider=status,client_request=forbidden_client)
+ canonical.register_workspace(admitted)
+ context=canonical._publication_context()
+ print('admitted_canonical_workspace_context_ready',context is not None,'capture_identity',canonical.config_capture is scope)
+ assert context is not None
+ # Retargeting the already admitted canonical path must remain rejected.
+ admitted.rename(real/'original-workspace');other=real/'other-workspace';other.mkdir();admitted.symlink_to(other,target_is_directory=True)
+ try:canonical._compiled_effective_policy()
+ except GuardConfigSourceError as error:print('retargeted_admitted_workspace_error',str(error))
+ else:raise AssertionError('retargeted canonical workspace must stay rejected')
+ canonical.close()

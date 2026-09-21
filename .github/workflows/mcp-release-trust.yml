@@ -1,0 +1,88 @@
+name: MCP release trust
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release-trust:
+    name: MCP release provenance and Scorecard
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+      - name: Install locked test tools
+        run: uv sync --frozen --extra dev --python 3.12
+      - name: Validate release verifier and regression contracts
+        run: |
+          uv run --no-sync ruff check scripts/ci/verify_release_workflow_run.py tests/test_mcp_release_source_verification.py tests/test_ci_speed_contracts.py
+          uv run --no-sync ruff format --check --diff scripts/ci/verify_release_workflow_run.py tests/test_mcp_release_source_verification.py tests/test_ci_speed_contracts.py
+          uv run --no-sync pytest -q tests/test_mcp_release_source_verification.py tests/test_ci_speed_contracts.py tests/test_release_patch_alpha_consumers.py tests/test_workflow_token_permissions.py tests/test_privileged_workflow_policy.py
+      - name: Install checksum-verified Scorecard
+        env:
+          SCORECARD_SHA256: 83b90a05c1540ef1390db1cd5711e5fd04be9c1d8537fb84d39d02092d6a8dff
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/scorecard-bin"
+          archive="$RUNNER_TEMP/scorecard-bin/scorecard.tar.gz"
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            https://github.com/ossf/scorecard/releases/download/v5.5.0/scorecard_5.5.0_linux_amd64.tar.gz \
+            --output "$archive"
+          printf '%s  %s\n' "$SCORECARD_SHA256" "$archive" | sha256sum --check --strict
+          tar -xzf "$archive" -C "$RUNNER_TEMP/scorecard-bin" scorecard
+      - name: Require safe workflows and least-privilege tokens
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/scorecard-reports"
+          # Normalize only local Git metadata; keep the exact tested checkout unchanged.
+          git remote set-url origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          if [[ "$BASE_SHA" =~ ^[0-9a-f]{40}$ ]] && git cat-file -e "${BASE_SHA}^{commit}"; then
+            # Scorecard's local client requires a real repository and origin, not a source archive.
+            baseline="$RUNNER_TEMP/scorecard-baseline"
+            git clone --shared --no-checkout -- "$GITHUB_WORKSPACE" "$baseline"
+            git -C "$baseline" remote set-url origin "https://github.com/${GITHUB_REPOSITORY}.git"
+            git -C "$baseline" -c core.hooksPath=/dev/null checkout --detach "$BASE_SHA"
+            test "$(git -C "$baseline" rev-parse HEAD)" = "$BASE_SHA"
+            "$RUNNER_TEMP/scorecard-bin/scorecard" --local="$baseline" \
+              --checks=Dangerous-Workflow,Token-Permissions --format=json --show-details \
+              --output="$RUNNER_TEMP/scorecard-reports/before.json"
+          fi
+          "$RUNNER_TEMP/scorecard-bin/scorecard" --local="$GITHUB_WORKSPACE" \
+            --checks=Dangerous-Workflow,Token-Permissions --format=json --show-details \
+            --output="$RUNNER_TEMP/scorecard-reports/after.json"
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path(os.environ["RUNNER_TEMP"]) / "scorecard-reports"
+          for path in sorted(root.glob("*.json")):
+              checks = json.loads(path.read_text())["checks"]
+              print(path.name, [(check["name"], check["score"]) for check in checks])
+          checks = {check["name"]: check["score"] for check in json.loads((root / "after.json").read_text())["checks"]}
+          if checks != {"Dangerous-Workflow": 10, "Token-Permissions": 10}:
+              raise SystemExit(f"Workflow security regression: {checks}")
+          PY
+      - name: Upload actual Scorecard results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: mcp-release-scorecard
+          path: ${{ runner.temp }}/scorecard-reports/*.json
+          if-no-files-found: warn

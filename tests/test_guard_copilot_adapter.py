@@ -506,6 +506,7 @@ def test_copilot_uninstall_keeps_workspace_mcp_config_when_backup_metadata_is_un
     uninstall_payload = adapter.uninstall(context)
 
     assert uninstall_payload["active"] is False
+    assert uninstall_payload["complete"] is False
     assert workspace_cli_mcp_path.exists() is True
     assert json.loads(workspace_cli_mcp_path.read_text(encoding="utf-8")) != {}
     assert primary_backup_path.exists() is True
@@ -532,8 +533,32 @@ def test_copilot_uninstall_keeps_backup_when_restore_content_is_missing(tmp_path
     uninstall_payload = adapter.uninstall(context)
 
     assert uninstall_payload["active"] is False
+    assert uninstall_payload["complete"] is False
     assert workspace_cli_mcp_path.exists() is True
     assert primary_backup_path.exists() is True
+
+
+def test_copilot_unsigned_legacy_state_reports_incomplete_without_restoring_untrusted_backup(tmp_path):
+    context = _build_context(tmp_path)
+    adapter = CopilotHarnessAdapter()
+    target = context.workspace_dir / ".mcp.json"
+    _write_json(target, {"mcpServers": {"example": {"command": "python3", "args": ["server.py"]}}})
+    installed = adapter.install(context)
+    before = target.read_bytes()
+    for value in installed["state_paths"]:
+        path = Path(value)
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload.pop("state_authentication")
+        _write_json(path, payload)
+
+    result = adapter.uninstall(context)
+
+    assert result["complete"] is False
+    assert result["mcp_cleanup_complete"] is False
+    assert result["unresolved_lifecycle_artifact_count"] > 0
+    assert any("cleanup is incomplete" in note for note in result["notes"])
+    assert target.read_bytes() == before
+    assert all(Path(value).exists() for value in installed["state_paths"])
 
 
 def test_copilot_install_manages_workspace_mcp_servers_for_ide(tmp_path):

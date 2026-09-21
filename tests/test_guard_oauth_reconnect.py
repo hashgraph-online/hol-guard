@@ -15,6 +15,7 @@ from codex_plugin_scanner.guard.cli.oauth_client import PRODUCTION_GUARD_ISSUER,
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.support.network import stub_authenticated_urlopen
 
 
 def _store_with_oauth_credentials(
@@ -70,7 +71,7 @@ def test_prepare_guard_cloud_connect_authorization_clears_revoked_sign_in(tmp_pa
     def _fake_urlopen(request, timeout):
         raise _invalid_grant_http_error()
 
-    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+    stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
 
     result = guard_runner_module.prepare_guard_cloud_connect_authorization(store)
 
@@ -85,7 +86,7 @@ def test_connect_repair_clears_revoked_sign_in_and_points_to_connect(tmp_path, m
     def _fake_urlopen(request, timeout):
         raise _invalid_grant_http_error()
 
-    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+    stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
 
     payload = run_guard_connect_repair_command(
         store=store,
@@ -104,7 +105,7 @@ def test_invalid_grant_refresh_preserves_sign_in_until_explicit_repair(tmp_path,
     def _fake_urlopen(request, timeout):
         raise _invalid_grant_http_error()
 
-    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+    stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
 
     with pytest.raises(guard_runner_module.GuardSyncAuthorizationExpiredError) as error:
         guard_runner_module._resolve_guard_sync_auth_context(store)
@@ -382,7 +383,7 @@ def test_upgraded_running_process_does_not_refresh_shared_oauth_grant(monkeypatc
         "_hol_guard_runtime_package_identity",
         lambda: (loaded_identity[0], "0" * 64),
     )
-    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _unexpected_urlopen)
+    stub_authenticated_urlopen(monkeypatch, _unexpected_urlopen)
 
     with pytest.raises(guard_runner_module.GuardSyncNotAvailableError) as error:
         guard_runner_module._refresh_guard_oauth_access_token(
@@ -431,7 +432,7 @@ def test_prepare_guard_cloud_connect_authorization_tolerates_network_errors(tmp_
     def _fake_urlopen(request, timeout):
         raise OSError("network unreachable")
 
-    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+    stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
 
     result = guard_runner_module.prepare_guard_cloud_connect_authorization(store)
 
@@ -522,11 +523,7 @@ def test_refresh_guard_oauth_access_token_prefers_jwt_expiry_claim(monkeypatch) 
         def __exit__(self, exc_type, exc, tb) -> None:
             return None
 
-    monkeypatch.setattr(
-        guard_runner_module.urllib.request,
-        "urlopen",
-        lambda request, timeout: _Response(),
-    )
+    stub_authenticated_urlopen(monkeypatch, lambda request, timeout: _Response())
 
     refreshed = guard_runner_module._refresh_guard_oauth_access_token(
         token_endpoint="https://hol.org/api/guard/oauth/token",
@@ -632,11 +629,7 @@ def test_refresh_guard_oauth_access_token_extracts_cloud_user_profile(monkeypatc
         def __exit__(self, exc_type, exc, tb) -> None:
             return None
 
-    monkeypatch.setattr(
-        guard_runner_module.urllib.request,
-        "urlopen",
-        lambda request, timeout: _Response(),
-    )
+    stub_authenticated_urlopen(monkeypatch, lambda request, timeout: _Response())
 
     refreshed = guard_runner_module._refresh_guard_oauth_access_token(
         token_endpoint="https://hol.org/api/guard/oauth/token",
@@ -678,11 +671,7 @@ def test_refresh_guard_oauth_access_token_returns_none_cloud_user_profile_when_a
         def __exit__(self, exc_type, exc, tb) -> None:
             return None
 
-    monkeypatch.setattr(
-        guard_runner_module.urllib.request,
-        "urlopen",
-        lambda request, timeout: _Response(),
-    )
+    stub_authenticated_urlopen(monkeypatch, lambda request, timeout: _Response())
 
     refreshed = guard_runner_module._refresh_guard_oauth_access_token(
         token_endpoint="https://hol.org/api/guard/oauth/token",
@@ -731,11 +720,7 @@ def test_prepare_guard_cloud_connect_authorization_persists_refreshed_cloud_user
         def __exit__(self, exc_type, exc, tb) -> None:
             return None
 
-    monkeypatch.setattr(
-        guard_runner_module.urllib.request,
-        "urlopen",
-        lambda request, timeout: _Response(),
-    )
+    stub_authenticated_urlopen(monkeypatch, lambda request, timeout: _Response())
 
     guard_runner_module.prepare_guard_cloud_connect_authorization(store)
 
@@ -797,11 +782,7 @@ def test_prepare_guard_cloud_connect_authorization_clears_stale_cloud_user_profi
         def __exit__(self, exc_type, exc, tb) -> None:
             return None
 
-    monkeypatch.setattr(
-        guard_runner_module.urllib.request,
-        "urlopen",
-        lambda request, timeout: _Response(),
-    )
+    stub_authenticated_urlopen(monkeypatch, lambda request, timeout: _Response())
 
     guard_runner_module.prepare_guard_cloud_connect_authorization(store)
 

@@ -1,0 +1,43 @@
+.......F...........F........................................             [100%]
+=================================== FAILURES ===================================
+_________________ test_workspace_source_read_is_emergency_safe _________________
+
+tmp_path = PosixPath('/dev/shm/hol-guard-takeover/ci-tests/pytest-of-root/pytest-15/test_workspace_source_read_is_0')
+
+    def test_workspace_source_read_is_emergency_safe(tmp_path: Path) -> None:
+        payload = {
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Read",
+            "tool_input": {"file_path": str(tmp_path / "src" / "main.ts")},
+        }
+>       assert hook_action_is_emergency_safe(payload, workspace=tmp_path, home_dir=tmp_path / "home") is True
+E       AssertionError: assert False is True
+E        +  where False = hook_action_is_emergency_safe({'hook_event_name': 'PreToolUse', 'tool_input': {'file_path': '/dev/shm/hol-guard-takeover/ci-tests/pytest-of-root/pytest-15/test_workspace_source_read_is_0/src/main.ts'}, 'tool_name': 'Read'}, workspace=PosixPath('/dev/shm/hol-guard-takeover/ci-tests/pytest-of-root/pytest-15/test_workspace_source_read_is_0'), home_dir=(PosixPath('/dev/shm/hol-guard-takeover/ci-tests/pytest-of-root/pytest-15/test_workspace_source_read_is_0') / 'home'))
+
+tests/test_hook_availability_policy.py:21: AssertionError
+______________________ test_rg_and_cat_are_emergency_safe ______________________
+
+tmp_path = PosixPath('/dev/shm/hol-guard-takeover/ci-tests/pytest-of-root/pytest-15/test_rg_and_cat_are_emergency_0')
+
+    def test_rg_and_cat_are_emergency_safe(tmp_path: Path) -> None:
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        assert (
+            hook_action_is_emergency_safe(
+                {"hook_event_name": "PreToolUse", "tool_input": {"command": "rg HookWorker src"}},
+                workspace=workspace,
+            )
+            is True
+        )
+>       assert (
+            hook_action_is_emergency_safe(
+                {"hook_event_name": "PreToolUse", "tool_input": {"command": "cat src/app.ts"}},
+                workspace=workspace,
+            )
+            is True
+        )
+E       AssertionError: assert False is True
+E        +  where False = hook_action_is_emergency_safe({'hook_event_name': 'PreToolUse', 'tool_input': {'command': 'cat src/app.ts'}}, workspace=PosixPath('/dev/shm/hol-guard-takeover/ci-tests/pytest-of-root/pytest-15/test_rg_and_cat_are_emergency_0/workspace'))
+
+tests/test_hook_availability_policy.py:135: AssertionError
+2 failed, 58 passed in 46.55s

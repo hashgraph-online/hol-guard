@@ -1,0 +1,43 @@
+{
+  "commit": "1cb1068056c8eeef5babc5f4f355481b37bc06e0",
+  "parent": "dae0115961d43cfdb7e97a9807b253f01fa7baf9",
+  "files": {
+    "src/codex_plugin_scanner/guard/daemon/hook_availability_policy.py": "417478d3c6fc7adacaf8207bbd9ef363b7b111f39fb8380ffcc32a4fd439a4f0",
+    "src/codex_plugin_scanner/guard/daemon/hook_worker.py": "cc68db1ab6d11d40f9c0c08781aa61592451997c5c4e8805029450ecee66f786",
+    "src/codex_plugin_scanner/guard/daemon/hook_worker_native.py": "f370e638368435e6a0114356c74c9013564afc498b2e95fb4ed7cd82f09e654e",
+    "src/codex_plugin_scanner/guard/runtime/approval_attention.py": "e24120a7421e49337296188f1cef7dbb71f9a8b0f4a15a7fd36f05b83369448f",
+    "src/codex_plugin_scanner/guard/daemon/server.py": "0e2c1122d30ba89cb3edbd8bd2b13db82b39105cb10bc31095a064ebfca7934f",
+    "src/codex_plugin_scanner/guard/daemon/hook_process_entrypoint.py": "03e27dade015a52ccc7b2a0a834f170d25d19c410cd79ee638d5b076465f9711",
+    "tests/test_daemon_config_reader_propagation.py": "27f1e742de953734c9847105a748d3c77c8541c85859af0e9e77b8c04fceb310"
+  },
+  "source_backport": "Applicable worker/posture/attention portions of891d91b06 and root server/child scope changes. No foundation Codex authority/continuation architecture change.",
+  "original_focused_tests": {
+    "passed": 58,
+    "failed": 2,
+    "seconds": 46.55,
+    "new_propagation_tests_passed": 7,
+    "failures": "Two unchanged emergency-safe path tests use an ordinary-workspace assumption; original /dev/shm basetemp is correctly rejected by existing /dev policy."
+  },
+  "ordinary_path_targeted_recheck": {
+    "passed": 2,
+    "seconds": 0.27,
+    "policy_and_test_source_unchanged": true,
+    "receipt": "ordinary-path-regressions.json"
+  },
+  "types": {
+    "files": 6,
+    "errors": 0,
+    "warnings": 363,
+    "seconds": 11.918
+  },
+  "ruff_lint_and_format": "pass",
+  "git_diff_check": "pass",
+  "deferred_reader_keywords": [
+    "_run_guard_hook_command",
+    "apply_local_approval_continuation",
+    "runtime.queue_blocked_operation",
+    "complete_codex_live_decision"
+  ],
+  "architectural_difference": "Foundation has no implementation-only native_codex_wait_operation module or associated native continuation/approval authority. Those features were not imported or characterized as required missing coverage.",
+  "complete_daemon_reader_propagation_claimed": false
+}

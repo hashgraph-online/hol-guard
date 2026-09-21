@@ -1,0 +1,262 @@
+{
+  "schema": "hol-guard.foundation-config-scope-final-validation.v1",
+  "combined_source_commit": "4e8a55c8b24b5e4892f1c0b5b8d8dfe9f367667b",
+  "final_source_commit": "3885e4b20abddb7aa7824c9f9a4b28bfb94f72fd",
+  "combined_focused_tests": {
+    "passed": 318,
+    "skipped": 2,
+    "failed": 1,
+    "seconds": 99.54,
+    "failure": "test_codex_app_server_result_is_bounded_and_opaque",
+    "observed_reason": "continuation_adapter_timeout",
+    "unchanged_timeout_seconds": 2.0,
+    "cause": "unresolved; no host-contention or scoped-reader attribution claimed"
+  },
+  "ownership_tests": {
+    "passed": 28,
+    "seconds": 153.61
+  },
+  "full_production_types": {
+    "filesAnalyzed": 1231,
+    "errorCount": 0,
+    "warningCount": 19759,
+    "informationCount": 0,
+    "timeInSec": 273.781
+  },
+  "authority_gate": "passed against release base 4b89e0d2d496a85f04922b2e019a4aea15326bb9",
+  "semantic_gate": "passed",
+  "audit_followup_tests": {
+    "passed": 6,
+    "seconds": 3.05,
+    "scope": "Five remote-reader cases (including two new audit cases) and the unchanged original continuation timeout case. The original failed attempt remains retained."
+  },
+  "audit_focused_types": {
+    "filesAnalyzed": 1,
+    "errorCount": 0,
+    "warningCount": 5,
+    "informationCount": 0,
+    "timeInSec": 5.171
+  },
+  "changed_paths_after_full_validation": [
+    "src/codex_plugin_scanner/guard/runtime/command_executors.py",
+    "tests/test_daemon_remote_config_reader.py"
+  ],
+  "all_check_source_snapshots_unchanged": true,
+  "observed_source_files_per_check": 2646,
+  "counts_are_not_additive": true,
+  "hosted_security_analysis_claimed": false,
+  "installed_qualification_claimed": false,
+  "security_alert_disposition_changed": false,
+  "thresholds_or_test_deadlines_changed": false,
+  "preservation": "Every source check receipt, log, source manifest and bounded failure diagnostic is retained with unchanged decoded bytes; large files are losslessly gzip-compressed.",
+  "files": [
+    {
+      "path": "combined/authority-gate-source-after.json.gz",
+      "storage": "gzip",
+      "original_bytes": 330876,
+      "original_sha256": "aec1bea051d1ac9eceebbe10df983a0e53c23635ea93c92797b1c4d8adaf3565",
+      "stored_bytes": 129218,
+      "stored_sha256": "b3643bdd8ba34019874e3560868f91ac99e6863aa3cd6e84ba0df9e594f6cc84"
+    },
+    {
+      "path": "combined/authority-gate-source-before.json.gz",
+      "storage": "gzip",
+      "original_bytes": 330876,
+      "original_sha256": "aec1bea051d1ac9eceebbe10df983a0e53c23635ea93c92797b1c4d8adaf3565",
+      "stored_bytes": 129218,
+      "stored_sha256": "b3643bdd8ba34019874e3560868f91ac99e6863aa3cd6e84ba0df9e594f6cc84"
+    },
+    {
+      "path": "combined/authority-gate.json.gz",
+      "storage": "gzip",
+      "original_bytes": 109149,
+      "original_sha256": "39d6e824d66df1687089e58345238c57bc35142b5bf2fc0bc51d78a71086bc72",
+      "stored_bytes": 15584,
+      "stored_sha256": "0c84cbfe91dc774c94067bc24c74f081f6e5ff9b98c61e86856ecfde86051ed7"
+    },
+    {
+      "path": "combined/authority-gate.log.gz",
+      "storage": "gzip",
+      "original_bytes": 109149,
+      "original_sha256": "39d6e824d66df1687089e58345238c57bc35142b5bf2fc0bc51d78a71086bc72",
+      "stored_bytes": 15584,
+      "stored_sha256": "0c84cbfe91dc774c94067bc24c74f081f6e5ff9b98c61e86856ecfde86051ed7"
+    },
+    {
+      "path": "combined/continuation-timeout-diagnostic.json",
+      "storage": "exact bytes",
+      "original_bytes": 722,
+      "original_sha256": "5f06d0958e7b15fea01bebfa51d31f0516d3e00af18a7f1557b1b221dcd3b22a",
+      "stored_bytes": 722,
+      "stored_sha256": "5f06d0958e7b15fea01bebfa51d31f0516d3e00af18a7f1557b1b221dcd3b22a"
+    },
+    {
+      "path": "combined/focused-tests-source-after.json.gz",
+      "storage": "gzip",
+      "original_bytes": 330876,
+      "original_sha256": "aec1bea051d1ac9eceebbe10df983a0e53c23635ea93c92797b1c4d8adaf3565",
+      "stored_bytes": 129218,
+      "stored_sha256": "b3643bdd8ba34019874e3560868f91ac99e6863aa3cd6e84ba0df9e594f6cc84"
+    },
+    {
+      "path": "combined/focused-tests-source-before.json.gz",
+      "storage": "gzip",
+      "original_bytes": 330876,
+      "original_sha256": "aec1bea051d1ac9eceebbe10df983a0e53c23635ea93c92797b1c4d8adaf3565",
+      "stored_bytes": 129218,
+      "stored_sha256": "b3643bdd8ba34019874e3560868f91ac99e6863aa3cd6e84ba0df9e594f6cc84"
+    },
+    {
+      "path": "combined/focused-tests.log",
+      "storage": "exact bytes",
+      "original_bytes": 2405,
+      "original_sha256": "9f73e215e39370b7b4c30767b72c724684f391cdc1d536404bfdc23f758e5866",
+      "stored_bytes": 2405,
+      "stored_sha256": "9f73e215e39370b7b4c30767b72c724684f391cdc1d536404bfdc23f758e5866"
+    },
+    {
+      "path": "combined/full-types-source-after.json.gz",
+      "storage": "gzip",
+      "original_bytes": 330876,
+      "original_sha256": "aec1bea051d1ac9eceebbe10df983a0e53c23635ea93c92797b1c4d8adaf3565",
+      "stored_bytes": 129218,
+      "stored_sha256": "b3643bdd8ba34019874e3560868f91ac99e6863aa3cd6e84ba0df9e594f6cc84"
+    },
+    {
+      "path": "combined/full-types-source-before.json.gz",
+      "storage": "gzip",
+      "original_bytes": 330876,
+      "original_sha256": "aec1bea051d1ac9eceebbe10df983a0e53c23635ea93c92797b1c4d8adaf3565",
+      "stored_bytes": 129218,
+      "stored_sha256": "b3643bdd8ba34019874e3560868f91ac99e6863aa3cd6e84ba0df9e594f6cc84"
+    },
+    {
+      "path": "combined/full-types.log.gz",
+      "storage": "gzip",
+      "original_bytes": 12062755,
+      "original_sha256": "5be06411e749b23fa47eb93bc3439ee5382fc899cf562eb7e3e054c9ae2577eb",
+      "stored_bytes": 411743,
+      "stored_sha256": "416e719968a4fab6f78f5f431ff1893e725a6d8bbeaa7c0a985c570ca0bbafe1"
+    },
+    {
+      "path": "combined/ownership-tests-source-after.json.gz",
+      "storage": "gzip",
+      "original_bytes": 330876,
+      "original_sha256": "aec1bea051d1ac9eceebbe10df983a0e53c23635ea93c92797b1c4d8adaf3565",
+      "stored_bytes": 129218,
+      "stored_sha256": "b3643bdd8ba34019874e3560868f91ac99e6863aa3cd6e84ba0df9e594f6cc84"
+    },
+    {
+      "path": "combined/ownership-tests-source-before.json.gz",
+      "storage": "gzip",
+      "original_bytes": 330876,
+      "original_sha256": "aec1bea051d1ac9eceebbe10df983a0e53c23635ea93c92797b1c4d8adaf3565",
+      "stored_bytes": 129218,
+      "stored_sha256": "b3643bdd8ba34019874e3560868f91ac99e6863aa3cd6e84ba0df9e594f6cc84"
+    },
+    {
+      "path": "combined/ownership-tests.log",
+      "storage": "exact bytes",
+      "original_bytes": 111,
+      "original_sha256": "435c10ab032a7f64cfc61aa213e39c59c12c90b08f75bacf9efccf6fb50161ff",
+      "stored_bytes": 111,
+      "stored_sha256": "435c10ab032a7f64cfc61aa213e39c59c12c90b08f75bacf9efccf6fb50161ff"
+    },
+    {
+      "path": "combined/receipt.json",
+      "storage": "exact bytes",
+      "original_bytes": 3670,
+      "original_sha256": "7742cc6bd9a485efa42d1f26c83e97256d4845895a8aad6d40a2e6af13cb79bb",
+      "stored_bytes": 3670,
+      "stored_sha256": "7742cc6bd9a485efa42d1f26c83e97256d4845895a8aad6d40a2e6af13cb79bb"
+    },
+    {
+      "path": "combined/semantic-gate-source-after.json.gz",
+      "storage": "gzip",
+      "original_bytes": 330876,
+      "original_sha256": "aec1bea051d1ac9eceebbe10df983a0e53c23635ea93c92797b1c4d8adaf3565",
+      "stored_bytes": 129218,
+      "stored_sha256": "b3643bdd8ba34019874e3560868f91ac99e6863aa3cd6e84ba0df9e594f6cc84"
+    },
+    {
+      "path": "combined/semantic-gate-source-before.json.gz",
+      "storage": "gzip",
+      "original_bytes": 330876,
+      "original_sha256": "aec1bea051d1ac9eceebbe10df983a0e53c23635ea93c92797b1c4d8adaf3565",
+      "stored_bytes": 129218,
+      "stored_sha256": "b3643bdd8ba34019874e3560868f91ac99e6863aa3cd6e84ba0df9e594f6cc84"
+    },
+    {
+      "path": "combined/semantic-gate.json",
+      "storage": "exact bytes",
+      "original_bytes": 99,
+      "original_sha256": "752fb655a71d697c87b94aab52dbf97a76b93d18bfc6225386c7d69f1262bade",
+      "stored_bytes": 99,
+      "stored_sha256": "752fb655a71d697c87b94aab52dbf97a76b93d18bfc6225386c7d69f1262bade"
+    },
+    {
+      "path": "combined/semantic-gate.log",
+      "storage": "exact bytes",
+      "original_bytes": 99,
+      "original_sha256": "752fb655a71d697c87b94aab52dbf97a76b93d18bfc6225386c7d69f1262bade",
+      "stored_bytes": 99,
+      "stored_sha256": "752fb655a71d697c87b94aab52dbf97a76b93d18bfc6225386c7d69f1262bade"
+    },
+    {
+      "path": "audit-followup/audit-and-timeout-followup-source-after.json.gz",
+      "storage": "gzip",
+      "original_bytes": 330876,
+      "original_sha256": "61dc827efc58433e4327d2b0d2a930022cc662d361296fdcaa1fc09361e91d38",
+      "stored_bytes": 129216,
+      "stored_sha256": "34d2eaddb5facbcb9b954fc575bb59fe9c2f80d8d7aabf501cb84d2a55b58988"
+    },
+    {
+      "path": "audit-followup/audit-and-timeout-followup-source-before.json.gz",
+      "storage": "gzip",
+      "original_bytes": 330876,
+      "original_sha256": "61dc827efc58433e4327d2b0d2a930022cc662d361296fdcaa1fc09361e91d38",
+      "stored_bytes": 129216,
+      "stored_sha256": "34d2eaddb5facbcb9b954fc575bb59fe9c2f80d8d7aabf501cb84d2a55b58988"
+    },
+    {
+      "path": "audit-followup/audit-and-timeout-followup.log",
+      "storage": "exact bytes",
+      "original_bytes": 98,
+      "original_sha256": "f326a5c8ec90400356c32cc7022db6c2726b51c43059acf965ab44a031d6e7e7",
+      "stored_bytes": 98,
+      "stored_sha256": "f326a5c8ec90400356c32cc7022db6c2726b51c43059acf965ab44a031d6e7e7"
+    },
+    {
+      "path": "audit-followup/audit-focused-types-source-after.json.gz",
+      "storage": "gzip",
+      "original_bytes": 330876,
+      "original_sha256": "61dc827efc58433e4327d2b0d2a930022cc662d361296fdcaa1fc09361e91d38",
+      "stored_bytes": 129216,
+      "stored_sha256": "34d2eaddb5facbcb9b954fc575bb59fe9c2f80d8d7aabf501cb84d2a55b58988"
+    },
+    {
+      "path": "audit-followup/audit-focused-types-source-before.json.gz",
+      "storage": "gzip",
+      "original_bytes": 330876,
+      "original_sha256": "61dc827efc58433e4327d2b0d2a930022cc662d361296fdcaa1fc09361e91d38",
+      "stored_bytes": 129216,
+      "stored_sha256": "34d2eaddb5facbcb9b954fc575bb59fe9c2f80d8d7aabf501cb84d2a55b58988"
+    },
+    {
+      "path": "audit-followup/audit-focused-types.log",
+      "storage": "exact bytes",
+      "original_bytes": 3442,
+      "original_sha256": "51528818234f9df68f96c0a2cc82007796b70e1090c73cd718864cdc4ce42eb2",
+      "stored_bytes": 3442,
+      "stored_sha256": "51528818234f9df68f96c0a2cc82007796b70e1090c73cd718864cdc4ce42eb2"
+    },
+    {
+      "path": "audit-followup/receipt.json",
+      "storage": "exact bytes",
+      "original_bytes": 1164,
+      "original_sha256": "c6753641ab22d2c418bf4be62c31f2f0d4a8d8b15093cb8bc417e81b45cd4a9b",
+      "stored_bytes": 1164,
+      "stored_sha256": "c6753641ab22d2c418bf4be62c31f2f0d4a8d8b15093cb8bc417e81b45cd4a9b"
+    }
+  ]
+}

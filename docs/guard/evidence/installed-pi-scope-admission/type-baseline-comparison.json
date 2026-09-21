@@ -1,0 +1,42 @@
+{
+  "hol-guard": {
+    "baseline_summary": {
+      "filesAnalyzed": 1,
+      "errorCount": 3,
+      "warningCount": 158,
+      "informationCount": 0,
+      "timeInSec": 5.593
+    },
+    "candidate_summary": {
+      "filesAnalyzed": 1,
+      "errorCount": 3,
+      "warningCount": 158,
+      "informationCount": 0,
+      "timeInSec": 2.159
+    },
+    "all_diagnostics_equal_after_ignoring_source_filename_and_two_inserted_lines": true,
+    "diagnostics_compared": 161,
+    "new_errors": 0,
+    "type_gate_passed": false
+  },
+  "foundation": {
+    "baseline_summary": {
+      "filesAnalyzed": 1,
+      "errorCount": 3,
+      "warningCount": 158,
+      "informationCount": 0,
+      "timeInSec": 5.593
+    },
+    "candidate_summary": {
+      "filesAnalyzed": 1,
+      "errorCount": 3,
+      "warningCount": 158,
+      "informationCount": 0,
+      "timeInSec": 2.609
+    },
+    "all_diagnostics_equal_after_ignoring_source_filename_and_two_inserted_lines": true,
+    "diagnostics_compared": 161,
+    "new_errors": 0,
+    "type_gate_passed": false
+  }
+}

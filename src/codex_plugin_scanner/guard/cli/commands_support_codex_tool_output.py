@@ -10,16 +10,11 @@ from functools import partial
 from ..runtime.env_wrapper import parse_env_wrapper
 from ..runtime.shell_execution_context import model_shell_execution_context, validate_shell_execution_segment
 from ._commands_shared import *
-from .codex_output_safety import (
-    output_uses_placeholder_private_key_fixture,
-    source_name_stem_has_compound_secret_segment,
-)
+from .codex_output_safety import output_uses_placeholder_private_key_fixture
 from .commands_parser_helpers import *
-from .commands_support_codex_paths import _PROMPT_PATH_TOKEN_PATTERN, _codex_search_target_is_source_like
+from .commands_support_codex_paths import _PROMPT_PATH_TOKEN_PATTERN
 from .commands_support_codex_reads import (
-    _codex_source_inspection_target_tokens,
-    _split_codex_safe_read_only_chain,
-    _split_codex_safe_read_only_pipeline,
+    codex_scan_targets_secret_like_source_name,
 )
 
 _CODEX_PRIVATE_KEY_FIXTURE_PATTERN = re.compile(
@@ -29,21 +24,6 @@ _CODEX_PRIVATE_KEY_FIXTURE_PATTERN = re.compile(
 
 _CODEX_PRIVATE_KEY_FIXTURE_BODY_PATTERN = re.compile(
     r"(?i)\b(?:secret-key-material|fixture|fake|example|sample|dummy|test-key|placeholder)\b"
-)
-
-_CODEX_SECRET_LIKE_SOURCE_NAME_STEMS = frozenset(
-    {
-        "auth",
-        "credential",
-        "credentials",
-        "passwd",
-        "password",
-        "private-key",
-        "private_key",
-        "secret",
-        "secrets",
-        "token",
-    }
 )
 
 _CODEX_PYTEST_SAFE_FLAGS = frozenset({"-q", "-s", "-x", "-v", "-vv", "-vvv", "-ra", "--lf", "--ff"})
@@ -140,12 +120,6 @@ _codex_output_uses_placeholder_private_key_fixture = partial(
 )
 
 
-_codex_source_name_stem_has_compound_secret_segment = partial(
-    source_name_stem_has_compound_secret_segment,
-    secret_like_stems=_CODEX_SECRET_LIKE_SOURCE_NAME_STEMS,
-)
-
-
 def _codex_command_targets_secret_like_source_name(
     command_text: str,
     *,
@@ -172,44 +146,12 @@ def _codex_command_targets_secret_like_source_name(
                 ):
                     return True
             return False
-    chained_segments = _split_codex_safe_read_only_chain(command_text)
-    if chained_segments is not None:
-        return any(
-            _codex_command_targets_secret_like_source_name(segment, cwd=cwd, home_dir=home_dir)
-            for segment in chained_segments
-        )
-    pipeline_segments = _split_codex_safe_read_only_pipeline(command_text)
-    if pipeline_segments:
-        return _codex_command_targets_secret_like_source_name(
-            pipeline_segments[0],
-            cwd=cwd,
-            home_dir=home_dir,
-        )
-    try:
-        parts = shlex.split(command_text)
-    except ValueError:
-        return False
-    for part in _codex_source_inspection_target_tokens(parts):
-        stripped = part.strip().strip("'\"")
-        if not stripped:
-            continue
-        name = Path(stripped).name.lower().lstrip(".")
-        stem = Path(name).stem or name
-        exact_secret_like = stem.lower() in _CODEX_SECRET_LIKE_SOURCE_NAME_STEMS
-        compound_secret_like = _codex_source_name_stem_has_compound_secret_segment(
-            stem,
-            split_compound=cwd is not None,
-        )
-        if not exact_secret_like and not compound_secret_like and not name.startswith("id_"):
-            continue
-        if compound_secret_like and cwd is not None and _codex_search_target_is_source_like(
-            stripped,
-            cwd=cwd,
-            home_dir=home_dir,
-        ):
-            continue
-        return True
-    return False
+    return codex_scan_targets_secret_like_source_name(
+        command_text,
+        cwd=cwd,
+        home_dir=home_dir,
+        recurse=lambda segment: _codex_command_targets_secret_like_source_name(segment, cwd=cwd, home_dir=home_dir),
+    )
 
 
 def _codex_command_references_sensitive_local_source(command_text: str, *, cwd: Path | None) -> bool:

@@ -22,6 +22,7 @@ from codex_plugin_scanner.guard.daemon.manager import (
     guard_daemon_retirement_is_complete,
     retire_all_guard_daemons_for_home,
 )
+from codex_plugin_scanner.guard.daemon.runtime_peer import daemon_refresh_outcome_succeeded
 from codex_plugin_scanner.guard.store import GuardStore
 
 _DASHBOARD_UPDATE_DAEMON_SETTLE_SECONDS = 1.5
@@ -137,11 +138,10 @@ def _isolated_daemon_refresh(
 
 
 def _daemon_refresh_restarted(payload: object) -> bool:
-    return (
-        isinstance(payload, dict)
-        and payload.get("status") in {"restarted", "retained_newer_runtime"}
-        and payload.get("runtime_verified") is True
-    )
+    # Unlike the CLI summary gate, the dashboard flow must end with a live
+    # daemon, so "not_running" still counts as failure and falls back to the
+    # legacy in-process restart.
+    return daemon_refresh_outcome_succeeded(payload)
 
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:

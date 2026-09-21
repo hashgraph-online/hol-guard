@@ -1,0 +1,128 @@
+{
+  "schema": "hol-guard-daemon-worker-fixture-keywords.v1",
+  "branch_architecture": "foundation",
+  "head_before": "95ef48e878175a32685f71c3fe6e95556a7705c9",
+  "production_changes": false,
+  "deadline_changes": false,
+  "source_before": {
+    "tests/test_guard_daemon_worker_isolation.py": "002a2ec2fe294bd99058e6f9b85ce2baa9dc0c7aa3a36e61b7db80152e3e93d7",
+    "tests/test_guard_exact_cloud_review.py": "2acf988bc9b0b4ea4b91beb7a748d73a35843bf4e4dbc5cae8fb2ef91bd79b19"
+  },
+  "artifacts": [
+    {
+      "path": "test_guard_daemon_worker_isolation.py.before.gz",
+      "kind": "source_before",
+      "original_path": "tests/test_guard_daemon_worker_isolation.py",
+      "encoding": "gzip",
+      "bytes": 1010,
+      "sha256": "2cd15e40ee614215be6b8bb87bdf2da91b2f602ff994766bb4ebb7245650255e",
+      "original_bytes": 3804,
+      "original_sha256": "002a2ec2fe294bd99058e6f9b85ce2baa9dc0c7aa3a36e61b7db80152e3e93d7"
+    },
+    {
+      "path": "test_guard_exact_cloud_review.py.before.gz",
+      "kind": "source_before",
+      "original_path": "tests/test_guard_exact_cloud_review.py",
+      "encoding": "gzip",
+      "bytes": 5111,
+      "sha256": "525cbf75b12419cff752b5fff69e4128cf7e7e3e507257e45334055ef16930b8",
+      "original_bytes": 27580,
+      "original_sha256": "2acf988bc9b0b4ea4b91beb7a748d73a35843bf4e4dbc5cae8fb2ef91bd79b19"
+    },
+    {
+      "path": "foundation-hosted-job-105364728419.log.gz",
+      "kind": "hosted_pre_fix_failure",
+      "source_branch": "foundation",
+      "original_path": "/dev/shm/hol-guard-takeover/foundation-cdd-hosted/job-105364728419.log",
+      "encoding": "gzip",
+      "bytes": 11261,
+      "sha256": "10839c2c5044fb1e9a8999b2e2bdd3ec1788900cd964fd11dbd9f726a074b8e1",
+      "original_bytes": 44767,
+      "original_sha256": "acde988605c1cc3bc7c62ebf29cf0d8d24f2fbc43426f96d88b7020fda5a7712"
+    },
+    {
+      "path": "foundation-hosted-job-105364732249.log.gz",
+      "kind": "hosted_pre_fix_failure",
+      "source_branch": "foundation",
+      "original_path": "/dev/shm/hol-guard-takeover/foundation-cdd-hosted/job-105364732249.log",
+      "encoding": "gzip",
+      "bytes": 11298,
+      "sha256": "a0d95e6cce585e8dfe7cd112f14368fbfaeae7c1e5728682fdfc0900b1de1dbc",
+      "original_bytes": 44999,
+      "original_sha256": "6db1ff9879a0f5e0f775026cb54a87bd03273dbc35bcfb51ae1cc7a56a297760"
+    },
+    {
+      "path": "focused-tests.txt",
+      "kind": "focused_local_after",
+      "encoding": "identity",
+      "bytes": 98,
+      "sha256": "7a2ddaaebc358414ab264a8497569c4ffef53cd643bfa45c60313c5f98acf505",
+      "exit_code": 0
+    },
+    {
+      "path": "ruff-check.txt",
+      "kind": "ruff_check",
+      "encoding": "identity",
+      "bytes": 19,
+      "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+      "exit_code": 0
+    },
+    {
+      "path": "ruff-format-check.txt",
+      "kind": "ruff_format_check",
+      "encoding": "identity",
+      "bytes": 26,
+      "sha256": "3bc53bf3e981a98a34a852e175bf9b77af841edea74fca595d9aedcbaf9a4938",
+      "exit_code": 0
+    }
+  ],
+  "source_after": {
+    "tests/test_guard_daemon_worker_isolation.py": "0f924010430e2070cb10477a20a0a580eb33f42407150396de53db4b5770af76",
+    "tests/test_guard_exact_cloud_review.py": "aa605cee52af6f7b01a05e2c814ec2402debd3a032ad1b1a295fc90ef136e04c"
+  },
+  "hosted_before": {
+    "pull_request_head": "cdd14176ef0e0a258d4655c64210524d7047a257",
+    "checkout_kind": "GitHub synthetic merge ref",
+    "source_architecture": "foundation",
+    "main_hosted_failure_claim": false,
+    "test_fixtures_identical_before_on_main_and_foundation": true,
+    "synthetic_merge_commit": "c92e557349cabd633db408912c644471c002ee4d",
+    "pull_request_head_fixture_sha256": {
+      "tests/test_guard_daemon_worker_isolation.py": "002a2ec2fe294bd99058e6f9b85ce2baa9dc0c7aa3a36e61b7db80152e3e93d7",
+      "tests/test_guard_exact_cloud_review.py": "2acf988bc9b0b4ea4b91beb7a748d73a35843bf4e4dbc5cae8fb2ef91bd79b19"
+    }
+  },
+  "pytest_nodes": [
+    "tests/test_guard_daemon_worker_isolation.py::test_daemon_start_composes_all_background_workers",
+    "tests/test_guard_exact_cloud_review.py::test_command_queue_worker_refresh_serializes_with_shutdown"
+  ],
+  "pytest_boundary": {
+    "lock": "/workspace/scratch/c911dc702e23/performance-measurement.lock",
+    "flock_arguments": [
+      "--close",
+      "-w",
+      "180"
+    ],
+    "command_prefix": [
+      "env",
+      "PYTHONPATH=src",
+      ".venv/bin/python",
+      "-m",
+      "pytest",
+      "-q"
+    ],
+    "tmp_path": "ordinary pytest /tmp; no --basetemp override",
+    "rerun_scope": "Only the two actual failed node IDs, once per branch."
+  },
+  "limits": [
+    "The retained hosted failures belong to foundation; main had identical original test fixture bytes and was validated locally after the same fix.",
+    "These two focused local passes do not establish a complete hosted shard or release gate.",
+    "Only the test doubles accept the explicit reader keyword; return values, recording, assertions, worker behavior, production policies and deadlines are unchanged.",
+    "Source hashes pin the owned test files. The branch HEAD plus these file hashes do not assert a fully frozen concurrently edited checkout."
+  ],
+  "local_result": {
+    "passed": 2,
+    "elapsed_seconds": 8.02,
+    "exit_code": 0
+  }
+}

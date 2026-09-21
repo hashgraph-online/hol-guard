@@ -124,9 +124,17 @@ def validate_manifest(binary: Path, manifest: Path, **kwargs: str) -> None:
         raise SystemExit("Manifest is missing publishedAt")
 
 
+_LINUX_SIDECAR_TARGET = "x86_64-unknown-linux-gnu"
+
+
 def _marker_metadata(
     *, version: str, source_commit: str, source_tag: str, target: str, apple_signing_identity: str, apple_team_id: str
 ) -> dict[str, str]:
+    if target == _LINUX_SIDECAR_TARGET:
+        if apple_signing_identity or apple_team_id:
+            raise SystemExit("Linux Desktop Core marker must not include Apple identity")
+    elif not apple_signing_identity.strip() or not apple_team_id.strip():
+        raise SystemExit("Apple identity is required for this Desktop Core target")
     return {
         "schema": MARKER_SCHEMA,
         "version": version,

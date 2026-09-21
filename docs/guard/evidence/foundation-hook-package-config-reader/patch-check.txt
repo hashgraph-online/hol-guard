@@ -1,0 +1,2 @@
+error: patch failed: src/codex_plugin_scanner/guard/runtime/supply_chain_package_eval.py:11
+error: src/codex_plugin_scanner/guard/runtime/supply_chain_package_eval.py: patch does not apply
