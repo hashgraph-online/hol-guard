@@ -22,5 +22,6 @@ uv run --no-sync hol-guard extensions handoff --repo . \
 - [ ] Generated descriptor, native program, catalog, and package resources are included.
 - [ ] Cases cover the intended destructive operations and their safe counterparts.
 - [ ] Optional public listing data contains no private email, secrets, or inferred claim authority.
+- [ ] For a personal-fork PR, I enabled **Allow edits from maintainers** if I want Gitar to commit mechanical repairs. If GitHub says this also grants access to secrets, I left it disabled and will apply suggestions myself.
 
 Gitar automatically applies mechanical PR and CI repairs. Use `gitar auto-apply:off` in a PR comment if you want analysis without branch changes.

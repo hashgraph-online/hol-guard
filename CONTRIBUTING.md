@@ -47,6 +47,13 @@ not copy their registration pattern to add an extension.
 Gitar does not choose command semantics, trust, claim authority, or safe variants. Contributors
 can request analysis without changes at any time with `gitar auto-apply:off`.
 
+For a PR from a personal fork, enable [Allow edits from
+maintainers](https://docs.github.com/en/pull-requests/how-tos/work-with-forks/allowing-changes-to-a-pull-request-branch-created-from-a-fork)
+if you want Gitar to commit a mechanical repair. GitHub requires the fork owner to grant that
+permission; this repository cannot enable it for the contributor. If GitHub instead offers
+**Allow edits and access to secrets by maintainers**, leave it disabled and apply Gitar's
+suggestion yourself.
+
 ## Development setup
 
 Install Git, [uv](https://docs.astral.sh/uv/getting-started/installation/), and

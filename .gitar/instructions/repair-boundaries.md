@@ -14,6 +14,18 @@ existing code, tests, and pull request.
   public attribution, or upstream references. Explain the missing decision when
   one is required.
 
+## Fork pull requests
+
+For a fork pull request whose author has not allowed maintainer edits, keep the
+review and CI analysis available but do not claim that an automatic repair was
+applied. Explain that GitHub requires the fork owner to enable **Allow edits
+from maintainers** before Gitar can commit a deterministic repair to the fork.
+
+If GitHub presents the broader **Allow edits and access to secrets by
+maintainers** option, do not ask the contributor to enable it. Leave automatic
+pushes unavailable and provide the precise repair as analysis or a suggestion.
+Never ask for a token, secret, or other credential to work around fork access.
+
 ## Declarative extension submissions
 
 When a pull request changes `contributions/command-sources/`, portable command
