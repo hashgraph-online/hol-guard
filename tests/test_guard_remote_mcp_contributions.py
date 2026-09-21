@@ -36,6 +36,7 @@ from codex_plugin_scanner.guard.runtime.mcp_protection import (
 )
 from codex_plugin_scanner.guard.runtime.mcp_server_contribution import (
     load_mcp_contribution_payloads,
+    mcp_tool_state,
     normalized_remote_mcp_url,
     validate_mcp_contribution,
 )
@@ -395,3 +396,83 @@ def test_remote_http_url_contract_rejects_multiple_trailing_root_dots() -> None:
     with pytest.raises(ValueError, match=r"schema|public HTTPS endpoint"):
         validate_mcp_contribution(_remote_payload(url))
     assert normalized_remote_mcp_url(url) is None
+
+
+def _fetchsandbox_artifact(tool_name: str, *, server_name: str = "fetchsandbox", transport: str = "http"):
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="https://fetchsandbox.com/mcp/v1",
+        args=(),
+        transport=transport,
+    )
+    return build_tool_call_artifact(
+        harness="codex",
+        server_name=server_name,
+        tool_name=tool_name,
+        source_scope="project",
+        config_path=".mcp.json",
+        transport=transport,
+        server_identity=identity,
+    )
+
+
+def test_remote_fetchsandbox_matches_exact_endpoint_even_with_custom_server_name() -> None:
+    payload = matching_mcp_contribution(_fetchsandbox_artifact("find_bugs", server_name="fs-twin"))
+    assert payload is not None
+    assert payload["id"] == "mcp.fetchsandbox"
+
+
+@pytest.mark.parametrize("tool_name", ["find_bugs", "fix_bug", "prove_fix", "import_spec"])
+def test_remote_fetchsandbox_workspace_upload_tools_strengthen_allow(tool_name: str) -> None:
+    """These package the caller's project and send it to a remote runtime."""
+    decision = apply_contributed_mcp_decision(
+        _AuthorityStore(), _fetchsandbox_artifact(tool_name), "allow"
+    )
+    assert decision is not None
+    assert decision[0] == "review"
+
+
+def test_remote_fetchsandbox_submit_proof_strengthens_allow() -> None:
+    """submit_proof publishes evidence to a receipt readable by anyone with
+    the link, which is a different risk from uploading a workspace."""
+    decision = apply_contributed_mcp_decision(
+        _AuthorityStore(), _fetchsandbox_artifact("submit_proof"), "allow"
+    )
+    assert decision is not None
+    assert decision[0] == "review"
+
+
+@pytest.mark.parametrize("tool_name", ["list_specs", "list_runs", "list_workflows", "guide"])
+def test_remote_fetchsandbox_read_only_tools_inherit(tool_name: str) -> None:
+    """Catalog and run listing send nothing and publish nothing, so they stay
+    on Guard's usual handling rather than prompting on every call."""
+    assert mcp_tool_state(
+        matching_mcp_contribution(_fetchsandbox_artifact(tool_name)) or {}, tool_name
+    ) == "inherit"
+
+
+def test_remote_fetchsandbox_cannot_declare_allow() -> None:
+    """A configured remote server name is not authority to weaken policy."""
+    payload = dict(_remote_payload("https://fetchsandbox.com/mcp/v1", state="allow"))
+    payload["id"] = "mcp.fetchsandbox-allow-probe"
+    with pytest.raises(ValueError):
+        validate_mcp_contribution(payload, filename="mcp.fetchsandbox.json")
+
+
+def test_remote_fetchsandbox_does_not_match_a_different_endpoint() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="https://not-fetchsandbox.example.com/mcp/v1",
+        args=(),
+        transport="http",
+    )
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="fetchsandbox",
+        tool_name="find_bugs",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="http",
+        server_identity=identity,
+    )
+    assert matching_mcp_contribution(artifact) is None

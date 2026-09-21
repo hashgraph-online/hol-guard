@@ -79,6 +79,7 @@
     ],
     "external": [
       "command.blitcp",
+      "command.mcp-fetchsandbox",
       "command.mcp-filesystem",
       "command.mcp-instapods",
       "command.noodle",
