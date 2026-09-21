@@ -11,14 +11,23 @@ strongest applicable policy requirement.
 
 ## Lightweight contributor handoff
 
-For a regular declarative command extension, submit only these inputs:
+For a regular declarative command extension, author these inputs:
 
 1. `contributions/command-sources/command.<name>.json`;
 2. `tests/fixtures/command-source-<slug>.v1.json`, bound to that exact source document; and
 3. the external trust-class entry in `contracts/extensions/trust-class-map.v1.json`.
 
-Do not add Python detector modules or edit generated descriptors, native programs, package
-resources, or public catalogs. After review, a maintainer runs:
+Do not add Python detector modules or hand-edit generated descriptors, native programs, package
+resources, or public catalogs. The Builder writes the deterministic projections from the reviewed
+inputs. After previewing its plan, apply it in your branch and then synchronize projections:
+
+```sh
+uv run --no-sync hol-guard extensions apply <reviewed-kit> --repo .
+uv run --no-sync hol-guard extensions apply <reviewed-kit> --repo . \
+  --write --expected-plan <printed-plan-digest>
+```
+
+For a direct source or an already-applied kit, run:
 
 ```sh
 uv run --no-sync python scripts/prepare_extension_contribution.py \
@@ -27,10 +36,31 @@ uv run --no-sync python scripts/prepare_extension_contribution.py \
 ```
 
 The command validates the exact source/fixture binding through native evaluation with zero target
-command execution and synchronizes the checked-in projections. Use `--check` to verify an already
-prepared change. Optional public credit, upstream, and claim-readiness metadata belongs in
+command execution and synchronizes the checked-in projections. Follow it with the handoff check:
+
+```sh
+uv run --no-sync hol-guard extensions handoff --repo . \
+  --source contributions/command-sources/command.<name>.json \
+  --fixture tests/fixtures/command-source-<slug>.v1.json
+```
+
+Here, `<slug>` is the extension ID without the `command.` prefix. For example,
+`command.cloud.aws` uses `command-source-cloud.aws.v1.json`.
+
+Use `--check` with the preparation command to verify an already prepared change. Optional public
+credit, upstream, and claim-readiness metadata belongs in
 `contributions/extension-listings/command.<name>.json`; it is documented in
 [publisher metadata](publisher-metadata.md). Contributor credit never grants claim authority.
+
+When a ready-for-review PR has a mechanical source, fixture, schema, or generated-projection
+problem, Gitar can apply the deterministic repair. It does not choose matcher semantics, trust
+classes, safe variants, or claimant IDs. Comment `gitar auto-apply:off` to receive analysis only.
+
+For a personal-fork PR, the fork owner must enable [Allow edits from
+maintainers](https://docs.github.com/en/pull-requests/how-tos/work-with-forks/allowing-changes-to-a-pull-request-branch-created-from-a-fork)
+before Gitar can commit a repair. The repository cannot grant that permission for the fork. If
+GitHub offers **Allow edits and access to secrets by maintainers**, leave it disabled and apply
+the suggested change manually.
 
 ## Choose the contribution type
 
@@ -121,10 +151,9 @@ it is not production authority or a replacement for native fixtures.
 
 ## Local validation
 
-Contributors validate the portable fixture and submit the three handoff inputs above. After review,
-a maintainer [prepares the repository projections](../extension-contributions.md#regenerate-repository-projections).
-For a full local verification, run new-source fixtures against their addition envelope before
-integration. After integration, use the [complete repository fixture envelope](../extension-builder/VALIDATION.md#validate-an-integrated-command-fixture);
+Contributors validate the portable fixture and submit the authored inputs with their deterministic
+projections. For a full local verification, run new-source fixtures against their addition envelope
+before integration. After integration, use the [complete repository fixture envelope](../extension-builder/VALIDATION.md#validate-an-integrated-command-fixture);
 an addition with `base: "packaged"` cannot overwrite an ID already embedded in the compiler.
 
 Build current binaries and run the native source CLI contract:
