@@ -28,7 +28,7 @@
     "@types/node": "^24.0.0",
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",
-    "@vitejs/plugin-react": "^5.0.4",
+    "@vitejs/plugin-react": "^6.1.1",
     "tailwindcss": "^4.1.4",
     "tsx": "^4.8.1",
     "typescript": "^5.9.3",
