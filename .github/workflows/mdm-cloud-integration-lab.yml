@@ -44,7 +44,7 @@ jobs:
       - name: Set up uv
         id: setup-uv-primary
         continue-on-error: true
-        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
         with:
           version: "0.9.26"
           enable-cache: true
@@ -54,7 +54,7 @@ jobs:
           save-cache: false
       - name: Retry uv setup after transient download failure
         if: steps.setup-uv-primary.outcome == 'failure'
-        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
         with:
           version: "0.9.26"
           enable-cache: true
