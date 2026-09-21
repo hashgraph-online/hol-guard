@@ -6,9 +6,11 @@
 
 # Contribution digests must match canonical Git blobs on every checkout.
 /contributions/extensions/*.json text eol=lf
+/contributions/command-sources/*.json text eol=lf
 /contributions/mcp-servers/*.json text eol=lf
 /contributions/extension-listings/*.json text eol=lf
 /docs/guard/extensions/catalog.v1.json text eol=lf
+/docs/guard/extensions/catalog.v2.json text eol=lf
 
 # Native extension program bytes are embedded and must be identical on every platform.
 /contracts/extensions/native-command-program.v1.json text eol=lf
