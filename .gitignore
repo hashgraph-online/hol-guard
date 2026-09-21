@@ -66,3 +66,6 @@ Thumbs.db
 /docs/guard/extension-builder/*.[mM][dD]
 !/docs/guard/extension-builder/README.md
 !/docs/guard/extension-builder/VALIDATION.md
+
+# Gradle build caches created by fixture runs
+tests/fixtures/tier2/*/.gradle/
