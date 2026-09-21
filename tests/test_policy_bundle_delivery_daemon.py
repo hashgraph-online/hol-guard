@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import copy
 import json
+from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
+from codex_plugin_scanner.guard import policy_bundle_parser
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.managed_controls_policy_bundle import (
     signed_cloud_extension_projection_digest,
@@ -98,6 +101,15 @@ def _fixture(store: GuardStore) -> tuple[dict[str, object], dict[str, object]]:
 
 
 def _enable(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Keep the signed fixture byte-for-byte stable while making this test
+    # deterministic after its real-world expiry date.
+    monkeypatch.setattr(
+        policy_bundle_parser,
+        "time",
+        SimpleNamespace(
+            time=lambda: datetime(2026, 9, 1, 12, 0, tzinfo=timezone.utc).timestamp()
+        ),
+    )
     for name in (
         "GUARD_EXTENSION_CATALOG_SYNC_V1",
         "GUARD_POLICY_EXTENSION_TARGETS_V1",
