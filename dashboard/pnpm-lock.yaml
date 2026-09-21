@@ -26,10 +26,10 @@ importers:
         version: 1.60.0
       '@tailwindcss/vite':
         specifier: ^4.1.4
-        version: 4.3.1(vite@7.3.6(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.22.4))
+        version: 4.3.1(vite@7.3.6(@types/node@26.6.1)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.22.4))
       '@types/node':
-        specifier: ^24.0.0
-        version: 24.13.3
+        specifier: ^26.6.1
+        version: 26.6.1
       '@types/react':
         specifier: ^19.2.2
         version: 19.2.17
@@ -38,7 +38,7 @@ importers:
         version: 19.2.3(@types/react@19.2.17)
       '@vitejs/plugin-react':
         specifier: ^5.0.4
-        version: 5.2.0(vite@7.3.6(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.22.4))
+        version: 5.2.0(vite@7.3.6(@types/node@26.6.1)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.22.4))
       tailwindcss:
         specifier: ^4.1.4
         version: 4.3.1
@@ -50,7 +50,7 @@ importers:
         version: 5.9.3
       vite:
         specifier: ^7.3.6
-        version: 7.3.6(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.22.4)
+        version: 7.3.6(@types/node@26.6.1)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.22.4)
 
 packages:
 
@@ -564,8 +564,8 @@ packages:
   '@types/estree@1.0.9':
     resolution: {integrity: sha512-GhdPgy1el4/ImP05X05Uw4cw2/M93BCUmnEvWZNStlCzEKME4Fkk+YpoA5OiHNQmoS7Cafb8Xa3Pya8m1Qrzeg==}
 
-  '@types/node@24.13.3':
-    resolution: {integrity: sha512-Dh8vAsV36ig5wa9OX4pXvMc9D3Veibfw2wix0CUwYODLD8nkj9UsLjASr49nPg+2eKzxhBV+v7L8pXvT4e639Q==}
+  '@types/node@26.6.1':
+    resolution: {integrity: sha512-VqGJBMCtdhqkBUCcBLvywI0NJ+KLuVzgNnlBUNFOQjqVxzo2lxLUNg1DSey8+u2u6ktswSAxg+s68QLzWHNOuA==}
 
   '@types/react-dom@19.2.3':
     resolution: {integrity: sha512-jp2L/eY6fn+KgVVQAOqYItbF0VY/YApe5Mz2F0aykSO8gx31bYCZyvSeYxCHKvzHG5eZjc+zyaS5BrBWya2+kQ==}
@@ -862,8 +862,8 @@ packages:
     engines: {node: '>=14.17'}
     hasBin: true
 
-  undici-types@7.18.2:
-    resolution: {integrity: sha512-AsuCzffGHJybSaRrmr5eHr81mwJU3kjw6M+uprWvCXiNeN9SOGwQ3Jn8jb8m3Z6izVgknn1R0FTCEAP2QrLY/w==}
+  undici-types@8.9.0:
+    resolution: {integrity: sha512-KTDyRTYX8sWmKXAikPHHSyc63CRPETMctyjKFupcC6OBLXT3xsN0e9aF7m+mIXutFWpUXuedtowG7iLOzp0kQg==}
 
   update-browserslist-db@1.3.3:
     resolution: {integrity: sha512-pJ2sYawQS0R/WI928Gj5GlPhTGzbMelq0+4INtSYNDV9ErKJcX6xjGWkoG/VnB3dpUm00zALaqkrUD77pO5TDQ==}
@@ -1267,12 +1267,12 @@ snapshots:
       '@tailwindcss/oxide-win32-arm64-msvc': 4.3.1
       '@tailwindcss/oxide-win32-x64-msvc': 4.3.1
 
-  '@tailwindcss/vite@4.3.1(vite@7.3.6(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.22.4))':
+  '@tailwindcss/vite@4.3.1(vite@7.3.6(@types/node@26.6.1)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.22.4))':
     dependencies:
       '@tailwindcss/node': 4.3.1
       '@tailwindcss/oxide': 4.3.1
       tailwindcss: 4.3.1
-      vite: 7.3.6(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.22.4)
+      vite: 7.3.6(@types/node@26.6.1)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.22.4)
 
   '@types/babel__core@7.20.5':
     dependencies:
@@ -1297,9 +1297,9 @@ snapshots:
 
   '@types/estree@1.0.9': {}
 
-  '@types/node@24.13.3':
+  '@types/node@26.6.1':
     dependencies:
-      undici-types: 7.18.2
+      undici-types: 8.9.0
 
   '@types/react-dom@19.2.3(@types/react@19.2.17)':
     dependencies:
@@ -1309,7 +1309,7 @@ snapshots:
     dependencies:
       csstype: 3.2.3
 
-  '@vitejs/plugin-react@5.2.0(vite@7.3.6(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.22.4))':
+  '@vitejs/plugin-react@5.2.0(vite@7.3.6(@types/node@26.6.1)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.22.4))':
     dependencies:
       '@babel/core': 7.29.7
       '@babel/plugin-transform-react-jsx-self': 7.29.7(@babel/core@7.29.7)
@@ -1317,7 +1317,7 @@ snapshots:
       '@rolldown/pluginutils': 1.0.0-rc.3
       '@types/babel__core': 7.20.5
       react-refresh: 0.18.0
-      vite: 7.3.6(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.22.4)
+      vite: 7.3.6(@types/node@26.6.1)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.22.4)
     transitivePeerDependencies:
       - supports-color
 
@@ -1573,7 +1573,7 @@ snapshots:
 
   typescript@5.9.3: {}
 
-  undici-types@7.18.2: {}
+  undici-types@8.9.0: {}
 
   update-browserslist-db@1.3.3(browserslist@4.29.0):
     dependencies:
@@ -1581,7 +1581,7 @@ snapshots:
       escalade: 3.2.0
       picocolors: 1.1.1
 
-  vite@7.3.6(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.22.4):
+  vite@7.3.6(@types/node@26.6.1)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.22.4):
     dependencies:
       esbuild: 0.28.1
       fdir: 6.5.0(picomatch@4.0.4)
@@ -1590,7 +1590,7 @@ snapshots:
       rollup: 4.61.1
       tinyglobby: 0.2.17
     optionalDependencies:
-      '@types/node': 24.13.3
+      '@types/node': 26.6.1
       fsevents: 2.3.3
       jiti: 2.7.0
       lightningcss: 1.32.0
