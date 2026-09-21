@@ -196,6 +196,7 @@ def test_non_mapping_or_unreadable_workflow_fails_closed(tmp_path: Path, text: s
             },
         ),
         ("extension-claim-notice.yml", "notify", {"contents": "read", "pull-requests": "write"}),
+        ("gitar-fork-access-notice.yml", "notify", {"pull-requests": "write"}),
         ("release-please.yml", "release-please", {"contents": "write", "pull-requests": "write"}),
         ("release-please.yml", "dispatch-stable-publish", {"actions": "write", "contents": "read"}),
         ("publish-mcp-registry.yml", "publish", {"contents": "read", "id-token": "write"}),
@@ -232,6 +233,20 @@ def test_writer_workflows_start_empty_and_preserve_needed_job_grants(
             )
         )
         assert " ".join(publish["if"].split()) == expected_guard
+
+
+def test_gitar_fork_access_notice_only_handles_trusted_push_denials() -> None:
+    """The comment-triggered writer never checks out or executes contributor code."""
+
+    workflow = (ROOT / ".github/workflows/gitar-fork-access-notice.yml").read_text(encoding="utf-8")
+    assert "permissions: {}" in workflow
+    assert "pull-requests: write" in workflow
+    assert "github.event.issue.pull_request != null" in workflow
+    assert "github.event.comment.user.login == 'gitar-bot[bot]'" in workflow
+    assert "github.event.comment.user.type == 'Bot'" in workflow
+    assert "Gitar is not allowed to push to this forked PR." in workflow
+    assert "actions/checkout" not in workflow
+    assert "github-actions[bot]" in workflow
 
 
 def test_security_gate_runs_permission_policy_on_pull_requests() -> None:

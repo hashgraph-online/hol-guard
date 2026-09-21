@@ -1,0 +1,64 @@
+name: Gitar Fork Access Notice
+
+on:
+  issue_comment:
+    types: [created]
+
+# New jobs start without a token grant; the notification job declares only its
+# own pull-request comment capability.
+permissions: {}
+
+concurrency:
+  group: gitar-fork-access-notice-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  notify:
+    if: >-
+      github.event.issue.pull_request != null &&
+      github.event.comment.user.login == 'gitar-bot[bot]' &&
+      github.event.comment.user.type == 'Bot' &&
+      contains(github.event.comment.body, 'Gitar is not allowed to push to this forked PR.')
+    permissions:
+      pull-requests: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Post one safe fork-access notice
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+          REPOSITORY: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$PR_NUMBER" in
+            0 | *[!0-9]* | "")
+              echo "PR_NUMBER must be a positive integer" >&2
+              exit 1
+              ;;
+          esac
+
+          existing_notice_ids="$(
+            gh api --paginate "repos/${REPOSITORY}/issues/${PR_NUMBER}/comments?per_page=100" \
+              --jq '.[] | select(.user.login == "github-actions[bot]" and .user.type == "Bot" and (.body | contains("<!-- hol-gitar-fork-access:v1 -->"))) | .id'
+          )"
+          if printf '%s\n' "$existing_notice_ids" | grep -Eq '^[1-9][0-9]*$'; then
+            echo "A trusted fork-access notice already exists."
+            exit 0
+          fi
+
+          gh api --method POST "repos/${REPOSITORY}/issues/${PR_NUMBER}/comments" \
+            -f body="$(cat <<'EOF'
+          <!-- hol-gitar-fork-access:v1 -->
+          Gitar found a repair, but GitHub did not allow it to push to this fork.
+
+          If you want Gitar to apply safe mechanical follow-up fixes:
+
+          1. Enable **Allow edits from maintainers** on this pull request.
+          2. If GitHub instead says **Allow edits and access to secrets by maintainers**, leave it disabled and apply Gitar's suggestion yourself.
+          3. Then comment `gitar auto-apply:on` to request another Gitar pass.
+
+          Only the fork owner can grant maintainer edits. This notice does not change access or request credentials.
+          EOF
+          )"
