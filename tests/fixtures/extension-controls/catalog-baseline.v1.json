@@ -6,7 +6,7 @@
     "canonical_diff_digest",
     "effective"
   ],
-  "catalog_digest": "884eae618561757c8d030f2a7177c6c07f2a12653cb6ed195ef4166a3390e148",
+  "catalog_digest": "648af22a5a26e1cf7557e3a2bd092d1676fb4909845fa057d4ebf87ac76fe5e0",
   "control_schema_version": "1.0.0",
   "daemon_api_schema": "guard.daemon.extension-controls.v1",
   "effective_shape": [
@@ -20,7 +20,7 @@
     "failures",
     "projection"
   ],
-  "extension_count": 71,
+  "extension_count": 72,
   "extension_ids": [
     "command.api-gateway",
     "command.backup.borg",
@@ -54,6 +54,7 @@
     "command.git",
     "command.github",
     "command.guard-self-protection",
+    "command.hashdup",
     "command.infrastructure-as-code",
     "command.kubernetes-operations",
     "command.kubernetes-secrets",
@@ -97,7 +98,7 @@
   "extension_schema_version": 2,
   "installed_browser_config": "dashboard/playwright.installed.config.ts",
   "overview_route": "/extensions",
-  "permission_count": 248,
+  "permission_count": 249,
   "permission_examples": {
     "command.api-gateway.permission.delete": "aws apigateway delete-rest-api",
     "command.backup.borg.permission.mutation": "borg delete",
@@ -232,6 +233,7 @@
     "command.github.permission.workflow-remote": "gh workflow run deploy.yml",
     "command.github.permission.write-local": "gh repo set-default owner/repo",
     "command.guard-self-protection.permission.self-authorization": "hol-guard approvals approve",
+    "command.hashdup.permission.delete": "hashdup /workspace --delete",
     "command.infrastructure-as-code.permission.destroy": "terraform destroy",
     "command.kubernetes-operations.permission.annotate-resources": "kubectl annotate deployment api owner=platform --overwrite",
     "command.kubernetes-operations.permission.apply-resources": "kubectl apply -f deployment.yaml",
@@ -578,6 +580,7 @@
     "command.github.permission.workflow-remote",
     "command.github.permission.write-local",
     "command.guard-self-protection.permission.self-authorization",
+    "command.hashdup.permission.delete",
     "command.infrastructure-as-code.permission.destroy",
     "command.kubernetes-operations.permission.annotate-resources",
     "command.kubernetes-operations.permission.apply-resources",
@@ -704,7 +707,7 @@
     "controls",
     "semantic_preview"
   ],
-  "rule_count": 234,
+  "rule_count": 235,
   "rule_ids": [
     "command.api-gateway.delete",
     "command.backup.borg.mutation",
@@ -835,6 +838,7 @@
     "command.github.mutation",
     "command.github.unknown",
     "command.guard-self-protection.self-authorization",
+    "command.hashdup.delete",
     "command.infrastructure-as-code.destroy",
     "command.kubernetes-operations.delete-resources",
     "command.kubernetes-operations.drain-node",

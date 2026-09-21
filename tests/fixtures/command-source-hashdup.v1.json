@@ -1,0 +1,122 @@
+{
+  "schema": "guard.command-extension-fixtures.v1",
+  "cases": [
+    {
+      "id": "hashdup-inactive",
+      "command": "hashdup /workspace --delete",
+      "enabled_extensions": [],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.hashdup.delete",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "hashdup-delete-trailing",
+      "command": "hashdup /workspace --delete",
+      "enabled_extensions": ["command.hashdup"],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.hashdup.delete",
+      "expected_effective_segments": [0]
+    },
+    {
+      "id": "hashdup-delete-leading",
+      "command": "hashdup --delete /workspace",
+      "enabled_extensions": ["command.hashdup"],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.hashdup.delete",
+      "expected_effective_segments": [0]
+    },
+    {
+      "id": "hashdup-short-d",
+      "command": "hashdup -d /workspace",
+      "enabled_extensions": ["command.hashdup"],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.hashdup.delete",
+      "expected_effective_segments": [0]
+    },
+    {
+      "id": "hashdup-xargs-delete",
+      "command": "xargs hashdup --delete",
+      "enabled_extensions": ["command.hashdup"],
+      "disabled_permissions": [],
+      "expected_action": "block",
+      "rule_id": "command.hashdup.delete",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "hashdup-xargs-options-delete",
+      "command": "xargs -n 1 hashdup /workspace --delete",
+      "enabled_extensions": ["command.hashdup"],
+      "disabled_permissions": [],
+      "expected_action": "block",
+      "rule_id": "command.hashdup.delete",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "hashdup-exec-delete",
+      "command": "exec hashdup /workspace --delete",
+      "enabled_extensions": ["command.hashdup"],
+      "disabled_permissions": [],
+      "expected_action": "block",
+      "rule_id": "command.hashdup.delete",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "hashdup-unknown-option-fail-secure",
+      "command": "hashdup --unknown-flag /workspace --delete",
+      "enabled_extensions": ["command.hashdup"],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.hashdup.delete",
+      "expected_effective_segments": [0]
+    },
+    {
+      "id": "hashdup-scan-read-only",
+      "command": "hashdup /workspace",
+      "enabled_extensions": ["command.hashdup"],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.hashdup.delete",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "hashdup-trash-staging-safe",
+      "command": "hashdup /workspace -t /tmp/trash",
+      "enabled_extensions": ["command.hashdup"],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.hashdup.delete",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "hashdup-help-safe",
+      "command": "hashdup --help",
+      "enabled_extensions": ["command.hashdup"],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.hashdup.delete",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "hashdup-disabled-permission",
+      "command": "hashdup /workspace --delete",
+      "enabled_extensions": ["command.hashdup"],
+      "disabled_permissions": ["command.hashdup.permission.delete"],
+      "expected_action": "block",
+      "rule_id": "command.hashdup.delete",
+      "expected_effective_segments": [0]
+    },
+    {
+      "id": "hashdup-unrelated-safe",
+      "command": "pwd",
+      "enabled_extensions": ["command.hashdup"],
+      "disabled_permissions": [],
+      "expected_action": "allow",
+      "rule_id": "command.hashdup.delete",
+      "expected_effective_segments": []
+    }
+  ]
+}
