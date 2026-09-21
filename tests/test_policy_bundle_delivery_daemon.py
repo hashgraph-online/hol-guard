@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from codex_plugin_scanner.guard import policy_bundle_parser
+from codex_plugin_scanner.guard import policy_bundle_parser, policy_bundle_v2
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.managed_controls_policy_bundle import (
     signed_cloud_extension_projection_digest,
@@ -33,6 +33,15 @@ from tests.test_guard_headless_daemon_api import (
     _request,
     _seed_guard_cloud,
 )
+
+_POLICY_BUNDLE_FIXTURE_NOW = datetime(2026, 9, 1, 12, 0, tzinfo=timezone.utc)
+
+class _PolicyBundleFixtureDatetime(datetime):
+    @classmethod
+    def now(cls, tz=None):  # type: ignore[no-untyped-def]
+        fixed = _POLICY_BUNDLE_FIXTURE_NOW
+        return fixed.replace(tzinfo=None) if tz is None else fixed.astimezone(tz)
+
 
 
 def _fixture(store: GuardStore) -> tuple[dict[str, object], dict[str, object]]:
@@ -106,10 +115,9 @@ def _enable(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         policy_bundle_parser,
         "time",
-        SimpleNamespace(
-            time=lambda: datetime(2026, 9, 1, 12, 0, tzinfo=timezone.utc).timestamp()
-        ),
+        SimpleNamespace(time=lambda: _POLICY_BUNDLE_FIXTURE_NOW.timestamp()),
     )
+    monkeypatch.setattr(policy_bundle_v2, "datetime", _PolicyBundleFixtureDatetime)
     for name in (
         "GUARD_EXTENSION_CATALOG_SYNC_V1",
         "GUARD_POLICY_EXTENSION_TARGETS_V1",
