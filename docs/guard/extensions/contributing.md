@@ -9,11 +9,34 @@ An Extension is a security boundary. Its source, behavior fixtures, trust classi
 generated projections must preserve stable IDs, bounded parsing and matching, privacy, and the
 strongest applicable policy requirement.
 
+## Lightweight contributor handoff
+
+For a regular declarative command extension, submit only these inputs:
+
+1. `contributions/command-sources/command.<name>.json`;
+2. `tests/fixtures/command-source-<slug>.v1.json`, bound to that exact source document; and
+3. the external trust-class entry in `contracts/extensions/trust-class-map.v1.json`.
+
+Do not add Python detector modules or edit generated descriptors, native programs, package
+resources, or public catalogs. After review, a maintainer runs:
+
+```sh
+uv run --no-sync python scripts/prepare_extension_contribution.py \
+  --source contributions/command-sources/command.<name>.json \
+  --fixture tests/fixtures/command-source-<slug>.v1.json
+```
+
+The command validates the exact source/fixture binding through native evaluation with zero target
+command execution and synchronizes the checked-in projections. Use `--check` to verify an already
+prepared change. Optional public credit, upstream, and claim-readiness metadata belongs in
+`contributions/extension-listings/command.<name>.json`; it is documented in
+[publisher metadata](publisher-metadata.md). Contributor credit never grants claim authority.
+
 ## Choose the contribution type
 
 | Contribution | Use it for | Expected scope |
 | --- | --- | --- |
-| New Extension | A distinct command capability with its own stable identity | Canonical JSON source, portable fixtures, external trust entry, generated projections, and docs |
+| New Extension | A distinct command capability with its own stable identity | Contributor source, portable fixture, external trust entry, and docs; maintainer-generated projections |
 | Coverage expansion | An operation owned by an existing Extension | Source matcher/rule changes and destructive/safe-counterpart fixtures |
 | False-positive fix | A safe variant that incorrectly triggers a rule | A scoped native predicate and regressions for the affected rule and independent protections |
 | New native operation | Semantics the existing matcher graph cannot express | Reviewed Rust contract, validation, lowering, evaluation, identity, and parity tests |
@@ -50,15 +73,16 @@ review kit with [Extension Builder](../extension-builder/README.md).
 | `contributions/command-sources/command.<name>.json` | Authoritative metadata, permissions, rules, safe variants, and typed native matcher trees |
 | `tests/fixtures/command-source-<slug>.v1.json` | Portable command cases, synthetic controls, expected actions, and rule/segment observations |
 | `contracts/extensions/trust-class-map.v1.json` | Separately reviewed trust classification; community contributions are external |
-| `contributions/extensions/command.<name>.json` | Generated v2 descriptor, including source identity |
-| `contracts/extensions/native-command-program.v1.json` and `command-catalog.v1.json` | Generated native program and catalog; the build also updates package resource copies |
+| `contributions/extensions/command.<name>.json` | Maintainer-generated v2 descriptor, including source identity |
+| `contracts/extensions/native-command-program.v1.json` and `command-catalog.v1.json` | Maintainer-generated native program and catalog; the build also updates package resource copies |
 | `contributions/extension-listings/<contribution-id>.json` | Optional public presentation and reviewed numeric GitHub claimant IDs |
 | `rust/crates/guard-command/` | Native source contract, lowering, matcher evaluation, and portable fixture runner |
 
 Keep the source filename stem equal to `extension.extension_id` and keep stable rule and
-permission ownership. Edit canonical inputs and regenerate their outputs together. Python
-catalog readers expose generated native metadata to the CLI and documentation; changing an old
-`command_*_extensions.py` detector does not add coverage to the production native program.
+permission ownership. Contributors edit canonical inputs; maintainers regenerate their outputs
+after review. Python catalog readers expose generated native metadata to the CLI and documentation;
+changing an old `command_*_extensions.py` detector does not add coverage to the production native
+program.
 
 Use the existing native matcher operations and combinators first. A new Rust operation needs a
 specific protection gap and an independent behavior case, as described in the
@@ -97,10 +121,10 @@ it is not production authority or a replacement for native fixtures.
 
 ## Local validation
 
-Complete the [development setup](../../../CONTRIBUTING.md#development-setup), then
-[regenerate the repository projections](../extension-contributions.md#regenerate-repository-projections).
-Run new-source fixtures against their addition envelope before integration. After integration,
-use the [complete repository fixture envelope](../extension-builder/VALIDATION.md#validate-an-integrated-command-fixture);
+Contributors validate the portable fixture and submit the three handoff inputs above. After review,
+a maintainer [prepares the repository projections](../extension-contributions.md#regenerate-repository-projections).
+For a full local verification, run new-source fixtures against their addition envelope before
+integration. After integration, use the [complete repository fixture envelope](../extension-builder/VALIDATION.md#validate-an-integrated-command-fixture);
 an addition with `base: "packaged"` cannot overwrite an ID already embedded in the compiler.
 
 Build current binaries and run the native source CLI contract:

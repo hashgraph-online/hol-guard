@@ -30,9 +30,10 @@ maintainer checks across supported AI plugin ecosystems.
 
 Command source files under `contributions/command-sources/` own extension metadata, permissions,
 rules, and typed matcher trees. Rust validates and compiles them into descriptors, the catalog,
-and the native program. Edit the source and regenerate those projections together. Existing
-Python detector modules are retained for migration or reference coverage; do not copy their
-registration pattern to add an extension.
+and the native program. Contributors submit the source, its portable fixture, and the reviewed
+trust-map entry; a maintainer prepares the deterministic projections after review. Existing Python
+detector modules are retained for migration or reference coverage; do not copy their registration
+pattern to add an extension.
 
 ## Development setup
 
@@ -91,9 +92,11 @@ cargo +1.88.0 clippy --locked --manifest-path rust/Cargo.toml --workspace --all-
 cargo +1.88.0 test --locked --manifest-path rust/Cargo.toml --workspace --all-targets
 ```
 
-Command source changes also need native fixture evaluation, generated-artifact checks, and
-catalog/directory validation. Follow the [extension validation steps](docs/guard/extensions/contributing.md#local-validation);
-a passing Python reference test alone does not establish native behavior.
+Command source changes need native fixture evaluation and generated-artifact checks. Contributors
+submit the source, its portable fixture, and the reviewed trust-map entry; maintainers run the
+documented preparation command to synchronize descriptors and public catalogs. Follow the
+[extension validation steps](docs/guard/extensions/contributing.md#local-validation); a passing
+Python reference test alone does not establish native behavior.
 
 For Python changes, run the relevant test files and the repository's quality checks:
 

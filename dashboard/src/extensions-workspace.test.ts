@@ -24,7 +24,8 @@ import {
   isCurrentExtensionPolicyDraft,
   nextExtensionPolicyRadioIndex,
 } from "./extension-policy-panel";
-import { quickApplyPermissionIds } from "./protection-center/components/pattern-search-console";
+import { quickApplyPermissionIds } from "./protection-center/components/quick-apply-toolbar";
+import { PatternSearchConsole } from "./protection-center/components/pattern-search-console";
 
 // Every authority action failure maps to plain language with a next step;
 // raw protocol codes never reach the operator.
@@ -305,6 +306,26 @@ assert.deepEqual(
   ["command.git.permission.hard-reset", "command.git.permission.managed-block"],
   "recommended clears only configurable local overrides",
 );
+// A non-protected state must be explained right in the search console, not
+// leave silently disabled controls.
+const lockedSearchMarkup = renderToStaticMarkup(createElement(PatternSearchConsole, {
+  catalog: [extension],
+  effective: { ...effective, health: "recovery-required", failures: [{ code: "fixture-state" }] },
+  query: "git",
+  onRefresh: () => undefined,
+  onOpenExtension: () => undefined,
+}));
+assert.match(lockedSearchMarkup, /role="alert"/);
+assert.match(lockedSearchMarkup, /Settings cannot be changed until Guard verifies local settings integrity\./);
+assert.match(lockedSearchMarkup, /aria-pressed="false"[^>]*disabled/, "locked quick-apply controls stay disabled while they explain why");
+const healthySearchMarkup = renderToStaticMarkup(createElement(PatternSearchConsole, {
+  catalog: [extension],
+  effective,
+  query: "git",
+  onRefresh: () => undefined,
+  onOpenExtension: () => undefined,
+}));
+assert.doesNotMatch(healthySearchMarkup, /Settings cannot be changed until Guard verifies local settings integrity/);
 const totpChangeMarkup = renderToStaticMarkup(createElement(ReviewModal, {
   change: { extension, enabled: true }, busy: false, error: null,
   approvalGate: { enabled: true, configured: true, cooldown_seconds: 0, cooldown_active: false, cooldown_expires_at: null, locked_until: null, fail_closed: true, strict_all_decisions: false, totp_enabled: true },
@@ -383,6 +404,8 @@ const policyPanelSource = readFileSync(new URL("./extension-policy-panel.tsx", i
 const policyDraftSource = readFileSync(new URL("./use-extension-policy-draft.ts", import.meta.url), "utf8");
 const workspaceHostSource = readFileSync(new URL("./protection-center/protection-center-workspace.tsx", import.meta.url), "utf8");
 const patternSearchSource = readFileSync(new URL("./protection-center/components/pattern-search-console.tsx", import.meta.url), "utf8");
+const quickApplyToolbarSource = readFileSync(new URL("./protection-center/components/quick-apply-toolbar.tsx", import.meta.url), "utf8");
+const policyEditingLocksSource = readFileSync(new URL("./protection-center/components/policy-editing-locks.tsx", import.meta.url), "utf8");
 const extensionNavigationSource = readFileSync(new URL("./protection-center/extension-navigation.ts", import.meta.url), "utf8");
 assert.match(workspaceHostSource, /data-testid="extensions-workspace"/);
 assert.match(workspaceHostSource, /pushExtensionHistory/);
@@ -393,12 +416,24 @@ assert.match(extensionNavigationSource, /export function replaceExtensionHistory
 assert.match(policyDetailSource, /id="extension-policy-tabpanel"[\s\S]*role="tabpanel"[\s\S]*aria-labelledby="extension-tab-policy"/);
 assert.match(policyDraftSource, /isCurrentExtensionPolicyDraft\(generation, draftGeneration\.current\)\) handleApiError/);
 assert.match(policyDraftSource, /isCurrentExtensionPolicyDraft\(generation, draftGeneration\.current\)[\s\S]*Guard could not rebase this draft/);
+assert.match(
+  policyDraftSource,
+  /props\.effective\.revision, props\.effective\.catalog_digest, props\.effective\.health, props\.effective\.global_lockdown/,
+  "the draft re-seeds on integrity-health and lockdown transitions, not only revision or digest changes",
+);
 assert.match(policyPanelSource, /ArrowLeft[\s\S]*ArrowRight[\s\S]*ArrowUp[\s\S]*ArrowDown/);
-assert.match(policyPanelSource, /Settings applied\. Editing stays locked/);
-assert.match(patternSearchSource, /Quick apply to/);
-assert.match(patternSearchSource, /Recommended/);
-assert.match(patternSearchSource, /Allow all/);
-assert.match(patternSearchSource, /Deny all/);
-assert.match(patternSearchSource, /Changes stay in draft until you review and approve them/);
+assert.match(policyPanelSource, /PolicyEditingLocks/);
+assert.match(
+  policyEditingLocksSource,
+  /Settings applied\. Editing stays locked/,
+  "the shared lock notices carry the post-apply reload copy",
+);
+assert.match(patternSearchSource, /QuickApplyToolbar/);
+assert.match(patternSearchSource, /PolicyEditingLocks/);
+assert.match(quickApplyToolbarSource, /Quick apply to/);
+assert.match(quickApplyToolbarSource, /Recommended/);
+assert.match(quickApplyToolbarSource, /Allow all/);
+assert.match(quickApplyToolbarSource, /Deny all/);
+assert.match(quickApplyToolbarSource, /Changes stay in draft until you review and approve them/);
 
 console.log("extensions-workspace.test.ts: all assertions passed");

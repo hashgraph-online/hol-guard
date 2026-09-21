@@ -36,7 +36,7 @@ apply.
 
 ## Source-of-truth files
 
-For a command extension, keep these files together in the same change:
+For a command extension, contributors submit these files together in the same change:
 
 1. `contributions/command-sources/command.<name>.json` with schema
    `guard.command-extension-source.v1`. It owns metadata, stable extension,
@@ -50,13 +50,27 @@ For a command extension, keep these files together in the same change:
 3. The external entry for the extension ID in
    `contracts/extensions/trust-class-map.v1.json`.
 
-The compiler derives these projections; do not edit them as independent
-inputs:
+The compiler derives these projections. Contributors do not edit or include
+them as independent inputs:
 
 - `contributions/extensions/command.<name>.json` (`guard.extension-contribution.v2`),
   including its `nativeSource` path and digest;
 - `contracts/extensions/native-command-program.v1.json`;
 - `contracts/extensions/command-catalog.v1.json`.
+
+After source review, a maintainer runs the preparation command to validate the
+exact source/fixture binding and synchronize the derived files:
+
+```sh
+uv run --no-sync python scripts/prepare_extension_contribution.py \
+  --source contributions/command-sources/command.<name>.json \
+  --fixture tests/fixtures/command-source-<slug>.v1.json
+```
+
+This is the supported route for checked-in projections. It runs native fixtures
+with `targetCommandsExecuted: 0`, rebuilds the complete catalog, and updates
+package resources and public directories deterministically. Use `--check` to
+verify an already prepared change.
 
 Source metadata cannot grant trust, activation, allow authority, or a custom
 native callback. MCP contributions remain under `contributions/mcp-servers/`
@@ -102,8 +116,9 @@ for an existing extension or an integrated contribution.
 
 ## Regenerate repository projections
 
-After adding or editing canonical sources and the trust map, generate the full
-catalog, then verify it:
+For a new or updated contributor submission, use the preparation command above.
+The full repository build is its underlying maintainer step. For an established
+source or a full maintainer regeneration, generate the catalog, then verify it:
 
 ```sh
 uv run --no-sync python scripts/build_native_command_program.py
@@ -134,8 +149,10 @@ uv run --no-sync python scripts/export_extension_directory.py --check
 uv run --no-sync python scripts/render_command_extension_directory.py --check
 ```
 
-Commit the canonical sources, reviewed trust changes, generated descriptors,
-program/catalog artifacts, and changed public directory files together.
+Maintainers commit the canonical sources, reviewed trust changes, generated
+descriptors, program/catalog artifacts, and changed public directory files
+together after preparation. Contributors need only submit the source, fixture,
+and trust-map inputs.
 Release packaging supplies the native compiler and its identity manifest from
 the platform build; an installed compiler does not fall back to a checkout.
 
