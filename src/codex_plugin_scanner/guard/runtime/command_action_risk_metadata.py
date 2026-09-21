@@ -104,11 +104,21 @@ OLLAMA_ACTION_RISK_CLASSES: Final[dict[str, tuple[str, ...]]] = {
     "ollama model removal command": ("destructive_shell",),
 }
 
+PROMPTBRANCH_ACTION_RISK_CLASSES: Final[dict[str, tuple[str, ...]]] = {
+    "promptbranch prompt publication command": ("network_egress",),
+    "promptbranch shared prompt import command": ("network_egress",),
+    "promptbranch prompt note write command": ("destructive_shell",),
+    "promptbranch prompt run report command": ("destructive_shell",),
+    "promptbranch prompt suggestion write command": ("destructive_shell",),
+    "promptbranch prompt suggestion local file read command": ("local_secret_read",),
+}
+
 COMMAND_ACTION_RISK_CLASSES: Final[dict[str, tuple[str, ...]]] = {
     **_BASE_COMMAND_ACTION_RISK_CLASSES,
     **BLITCP_ACTION_RISK_CLASSES,
     **GITHUB_ACTION_RISK_CLASSES,
     **OLLAMA_ACTION_RISK_CLASSES,
+    **PROMPTBRANCH_ACTION_RISK_CLASSES,
 }
 
 __all__ = [
@@ -116,4 +126,5 @@ __all__ = [
     "COMMAND_ACTION_RISK_CLASSES",
     "GITHUB_ACTION_RISK_CLASSES",
     "OLLAMA_ACTION_RISK_CLASSES",
+    "PROMPTBRANCH_ACTION_RISK_CLASSES",
 ]

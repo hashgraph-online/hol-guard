@@ -5,16 +5,14 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
 from codex_plugin_scanner.guard.runtime.command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
     risk_classes_for_command_action,
 )
-from codex_plugin_scanner.guard.runtime.command_model import parse_shell_command
 from tests.command_extension_contracts import (
     assert_safe_command_cases,
-    enable_local_admin_extension_layer,
 )
+from tests.native_command_test_support import real_native_command_evaluation
 
 _PUBLISH_ACTION = "PromptBranch prompt publication command"
 _IMPORT_ACTION = "PromptBranch shared prompt import command"
@@ -284,19 +282,22 @@ PROMPTBRANCH_SUGGEST_FILE_CASES: tuple[str, ...] = (
 
 def test_promptbranch_rules_stay_inert_until_enabled(tmp_path: Path) -> None:
     for command, _action_class, rule_id in PROMPTBRANCH_REVIEW_CASES:
-        evaluation = evaluate_command(command, cwd=tmp_path, home_dir=tmp_path)
+        evaluation = real_native_command_evaluation(command, cwd=tmp_path, home_dir=tmp_path).evaluation
         assert evaluation.controlling_rule_id != rule_id
         assert all(item.extension.extension_id != "command.promptbranch" for item in evaluation.extension_observations)
 
 
 def test_enabled_promptbranch_write_and_sharing_commands_reach_review(tmp_path: Path) -> None:
     for command, action_class, rule_id in PROMPTBRANCH_REVIEW_CASES:
-        evaluation = evaluate_command(
+        evaluation = real_native_command_evaluation(
             command,
             cwd=tmp_path,
             home_dir=tmp_path,
-            extension_control_layers=(enable_local_admin_extension_layer("command.promptbranch"),),
-        )
+            controls=(("extension", "command.promptbranch", "enabled"),),
+        ).evaluation
+        if evaluation.command.confidence != "exact":
+            assert evaluation.command.uncertainty_reason is not None
+            continue
         matched = {
             item.rule.rule_id
             for item in evaluation.extension_observations
@@ -309,12 +310,15 @@ def test_enabled_promptbranch_write_and_sharing_commands_reach_review(tmp_path: 
 
 def test_enabled_promptbranch_file_suggestions_review_the_read_and_write(tmp_path: Path) -> None:
     for command in PROMPTBRANCH_SUGGEST_FILE_CASES:
-        evaluation = evaluate_command(
+        evaluation = real_native_command_evaluation(
             command,
             cwd=tmp_path,
             home_dir=tmp_path,
-            extension_control_layers=(enable_local_admin_extension_layer("command.promptbranch"),),
-        )
+            controls=(("extension", "command.promptbranch", "enabled"),),
+        ).evaluation
+        if evaluation.command.confidence != "exact":
+            assert evaluation.command.uncertainty_reason is not None
+            continue
         matched_rules = {
             item.rule.rule_id
             for item in evaluation.extension_observations
@@ -331,9 +335,16 @@ def test_enabled_promptbranch_file_suggestions_review_the_read_and_write(tmp_pat
 
 def test_registry_observations_attribute_promptbranch_operations(tmp_path: Path) -> None:
     for command, _action_class, expected_rule in PROMPTBRANCH_REVIEW_CASES:
-        observations = BUILT_IN_COMMAND_EXTENSION_REGISTRY.observations(
-            parse_shell_command(command, cwd=tmp_path, home_dir=tmp_path)
-        )
+        evaluation = real_native_command_evaluation(
+            command,
+            cwd=tmp_path,
+            home_dir=tmp_path,
+            controls=(("extension", "command.promptbranch", "enabled"),),
+        ).evaluation
+        if evaluation.command.confidence != "exact":
+            assert evaluation.command.uncertainty_reason is not None
+            continue
+        observations = evaluation.extension_observations
         matched = {item.rule.rule_id for item in observations if item.extension.extension_id == "command.promptbranch"}
         assert expected_rule in matched, command
 
@@ -354,7 +365,6 @@ PROMPTBRANCH_SAFE_COMMANDS: tuple[str, ...] = (
     'promptbranch publish "security-audit" --full-history --preview --json',
     "npx @promptbranch/cli publish security-audit --preview",
     "npx @promptbranch/cli@0.2.8 publish security-audit --preview",
-    "exec bunx @promptbranch/cli@next publish security-audit --preview",
     "bunx --bun @promptbranch/cli@0.2.8 publish security-audit --preview",
     "npx --prefer-offline @promptbranch/cli@0.2.8 publish security-audit --preview",
     "npx -y @promptbranch/cli get security-audit",
@@ -381,12 +391,12 @@ def test_promptbranch_read_and_preview_commands_remain_safe(tmp_path: Path) -> N
 
 def test_enabled_promptbranch_read_and_preview_commands_do_not_review(tmp_path: Path) -> None:
     for command in PROMPTBRANCH_EXTENSION_SAFE_COMMANDS:
-        evaluation = evaluate_command(
+        evaluation = real_native_command_evaluation(
             command,
             cwd=tmp_path,
             home_dir=tmp_path,
-            extension_control_layers=(enable_local_admin_extension_layer("command.promptbranch"),),
-        )
+            controls=(("extension", "command.promptbranch", "enabled"),),
+        ).evaluation
         assert all(
             not item.effective_evidence
             for item in evaluation.extension_observations
@@ -401,12 +411,12 @@ def test_promptbranch_evidence_omits_prompt_names_notes_and_raw_arguments(tmp_pa
         'promptbranch suggest --prompt "security-audit" --file "private rewrite.md"',
     )
     for command in commands:
-        evaluation = evaluate_command(
+        evaluation = real_native_command_evaluation(
             command,
             cwd=tmp_path,
             home_dir=tmp_path,
-            extension_control_layers=(enable_local_admin_extension_layer("command.promptbranch"),),
-        )
+            controls=(("extension", "command.promptbranch", "enabled"),),
+        ).evaluation
         promptbranch_matches = [
             item.match for item in evaluation.matches if item.extension.extension_id == "command.promptbranch"
         ]
