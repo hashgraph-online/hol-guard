@@ -1,16 +1,20 @@
 {
   "extension": {
     "action_classes": [
+      "DataMan project initialization command",
       "DataMan database table scaffolding command",
       "DataMan database namespace creation command",
+      "DataMan schema migration generation command",
       "DataMan database migration execution command",
-      "DataMan programmatic API token creation command"
+      "DataMan administrative user management command",
+      "DataMan programmatic API token creation command",
+      "DataMan audit and telemetry log export command"
     ],
     "aliases": [],
     "conflicts": [],
     "delegated_protection": null,
     "dependencies": [],
-    "description": "Reviews state-mutating DataMan CLI commands that create schema tables, provision database namespaces, apply live migrations, or generate API access tokens.",
+    "description": "Reviews state-mutating DataMan CLI commands that initialize projects, scaffold tables or databases, generate/apply migrations, modify credentials, or export sensitive audit and telemetry logs.",
     "ecosystem_ids": [],
     "executables": [
       "dataman",
@@ -27,6 +31,32 @@
     "license": "MIT",
     "name": "DataMan command protection",
     "permissions": [
+      {
+        "action_classes": [
+          "DataMan project initialization command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `dataman init`, which creates project configuration files, directory structures, and environment files.",
+        "example_command": "dataman init",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "DataMan project initialization",
+        "permission_id": "command.dataman.permission.init",
+        "replacement_permission_id": null,
+        "risk_tier": "medium",
+        "safer_guidance": [
+          "Check the working directory to ensure it is the intended project root before initializing."
+        ],
+        "typed_capabilities": []
+      },
       {
         "action_classes": [
           "DataMan database table scaffolding command"
@@ -83,6 +113,32 @@
       },
       {
         "action_classes": [
+          "DataMan schema migration generation command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `dataman makemigration`, which writes new schema migration files based on model definitions.",
+        "example_command": "dataman makemigration",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "DataMan migration generation",
+        "permission_id": "command.dataman.permission.makemigration",
+        "replacement_permission_id": null,
+        "risk_tier": "medium",
+        "safer_guidance": [
+          "Inspect generated migration files before executing dataman migrate."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
           "DataMan database migration execution command"
         ],
         "baseline_floor": "review",
@@ -105,6 +161,32 @@
         "safer_guidance": [
           "Run dataman makemigration first and inspect the generated migration files.",
           "Check target database connection before executing migrations on production databases."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "DataMan administrative user management command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `dataman users create-admin` or `dataman users change-password`, which provision or modify administrative user credentials.",
+        "example_command": "dataman users create-admin",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "DataMan administrative user management",
+        "permission_id": "command.dataman.permission.user-admin",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Verify the username and use strong, unique passwords for administrative accounts."
         ],
         "typed_capabilities": []
       },
@@ -134,6 +216,32 @@
           "Set an explicit expiration duration using --expires-in."
         ],
         "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "DataMan audit and telemetry log export command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `dataman logs export-audit` and `dataman logs export-telemetry`, which extract sensitive security logs and API telemetry to output files.",
+        "example_command": "dataman logs export-audit --format csv",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "DataMan log export",
+        "permission_id": "command.dataman.permission.export-logs",
+        "replacement_permission_id": null,
+        "risk_tier": "medium",
+        "safer_guidance": [
+          "Confirm the export target path is secure and does not expose sensitive PII or telemetry data."
+        ],
+        "typed_capabilities": []
       }
     ],
     "project_markers": [
@@ -152,9 +260,45 @@
     "required": false,
     "risk_classes": [
       "database_mutation",
-      "security_credential_provisioning"
+      "security_credential_provisioning",
+      "data_export"
     ],
     "rules": [
+      {
+        "action_classes": [
+          "DataMan project initialization command"
+        ],
+        "default_mode": "review",
+        "description": "Reviews dataman init invocations.",
+        "family": null,
+        "matcher": {
+          "config": {
+            "allow_leading_options": false,
+            "executables": [
+              "dataman",
+              "dataman.exe",
+              "dataman.cmd"
+            ],
+            "fail_secure_unknown_options": false,
+            "forbidden_flags": [],
+            "interspersed_flags": [],
+            "interspersed_options_with_values": [],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [],
+            "options_with_values": [],
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": [
+              "init"
+            ]
+          },
+          "op": "executable.v1"
+        },
+        "permission_id": "command.dataman.permission.init",
+        "priority": 100,
+        "rule_id": "command.dataman.rule.init"
+      },
       {
         "action_classes": [
           "DataMan database table scaffolding command"
@@ -234,6 +378,41 @@
       },
       {
         "action_classes": [
+          "DataMan schema migration generation command"
+        ],
+        "default_mode": "review",
+        "description": "Reviews dataman makemigration invocations that write migration files.",
+        "family": null,
+        "matcher": {
+          "config": {
+            "allow_leading_options": false,
+            "executables": [
+              "dataman",
+              "dataman.exe",
+              "dataman.cmd"
+            ],
+            "fail_secure_unknown_options": false,
+            "forbidden_flags": [],
+            "interspersed_flags": [],
+            "interspersed_options_with_values": [],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [],
+            "options_with_values": [],
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": [
+              "makemigration"
+            ]
+          },
+          "op": "executable.v1"
+        },
+        "permission_id": "command.dataman.permission.makemigration",
+        "priority": 100,
+        "rule_id": "command.dataman.rule.makemigration"
+      },
+      {
+        "action_classes": [
           "DataMan database migration execution command"
         ],
         "default_mode": "review",
@@ -269,6 +448,78 @@
         "permission_id": "command.dataman.permission.migrate",
         "priority": 100,
         "rule_id": "command.dataman.rule.migrate"
+      },
+      {
+        "action_classes": [
+          "DataMan administrative user management command"
+        ],
+        "default_mode": "review",
+        "description": "Reviews dataman users create-admin invocations.",
+        "family": null,
+        "matcher": {
+          "config": {
+            "allow_leading_options": false,
+            "executables": [
+              "dataman",
+              "dataman.exe",
+              "dataman.cmd"
+            ],
+            "fail_secure_unknown_options": false,
+            "forbidden_flags": [],
+            "interspersed_flags": [],
+            "interspersed_options_with_values": [],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [],
+            "options_with_values": [],
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": [
+              "users",
+              "create-admin"
+            ]
+          },
+          "op": "executable.v1"
+        },
+        "permission_id": "command.dataman.permission.user-admin",
+        "priority": 100,
+        "rule_id": "command.dataman.rule.create-admin"
+      },
+      {
+        "action_classes": [
+          "DataMan administrative user management command"
+        ],
+        "default_mode": "review",
+        "description": "Reviews dataman users change-password invocations.",
+        "family": null,
+        "matcher": {
+          "config": {
+            "allow_leading_options": false,
+            "executables": [
+              "dataman",
+              "dataman.exe",
+              "dataman.cmd"
+            ],
+            "fail_secure_unknown_options": false,
+            "forbidden_flags": [],
+            "interspersed_flags": [],
+            "interspersed_options_with_values": [],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [],
+            "options_with_values": [],
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": [
+              "users",
+              "change-password"
+            ]
+          },
+          "op": "executable.v1"
+        },
+        "permission_id": "command.dataman.permission.user-admin",
+        "priority": 100,
+        "rule_id": "command.dataman.rule.change-password"
       },
       {
         "action_classes": [
@@ -308,6 +559,94 @@
         "permission_id": "command.dataman.permission.create-token",
         "priority": 100,
         "rule_id": "command.dataman.rule.create-token"
+      },
+      {
+        "action_classes": [
+          "DataMan audit and telemetry log export command"
+        ],
+        "default_mode": "review",
+        "description": "Reviews dataman logs export-audit invocations.",
+        "family": null,
+        "matcher": {
+          "config": {
+            "allow_leading_options": false,
+            "executables": [
+              "dataman",
+              "dataman.exe",
+              "dataman.cmd"
+            ],
+            "fail_secure_unknown_options": false,
+            "forbidden_flags": [],
+            "interspersed_flags": [],
+            "interspersed_options_with_values": [],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [],
+            "options_with_values": [
+              "--format",
+              "-f",
+              "--output",
+              "-o",
+              "--event-type",
+              "--severity",
+              "--actor",
+              "--search",
+              "--limit"
+            ],
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": [
+              "logs",
+              "export-audit"
+            ]
+          },
+          "op": "executable.v1"
+        },
+        "permission_id": "command.dataman.permission.export-logs",
+        "priority": 100,
+        "rule_id": "command.dataman.rule.export-audit"
+      },
+      {
+        "action_classes": [
+          "DataMan audit and telemetry log export command"
+        ],
+        "default_mode": "review",
+        "description": "Reviews dataman logs export-telemetry invocations.",
+        "family": null,
+        "matcher": {
+          "config": {
+            "allow_leading_options": false,
+            "executables": [
+              "dataman",
+              "dataman.exe",
+              "dataman.cmd"
+            ],
+            "fail_secure_unknown_options": false,
+            "forbidden_flags": [],
+            "interspersed_flags": [],
+            "interspersed_options_with_values": [],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [],
+            "options_with_values": [
+              "--format",
+              "-f",
+              "--output",
+              "-o",
+              "--limit"
+            ],
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": [
+              "logs",
+              "export-telemetry"
+            ]
+          },
+          "op": "executable.v1"
+        },
+        "permission_id": "command.dataman.permission.export-logs",
+        "priority": 100,
+        "rule_id": "command.dataman.rule.export-telemetry"
       }
     ]
   },
