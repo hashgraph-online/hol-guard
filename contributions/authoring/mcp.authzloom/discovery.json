@@ -1,0 +1,82 @@
+{
+  "adapter": "mcp",
+  "digest": "ddaa4139d7db8e63c5636decf29fb38d7cb61baf7486513a396a55ac816854f0",
+  "limitations": [
+    "mcp-inventory-is-snapshot",
+    "mcp-schemas-fingerprinted-not-executed",
+    "mcp-tool-annotations-untrusted",
+    "metadata-is-not-semantics"
+  ],
+  "metadata": {
+    "executable": "",
+    "homepage": "https://github.com/MrcVnz/authzloom",
+    "kind": "mcp",
+    "launcher": "uvx",
+    "name": "AuthzLoom MCP server",
+    "package": "authzloom",
+    "publisher": {
+      "displayName": "Marcus Vinicius",
+      "id": "github.mrcvnz"
+    },
+    "slug": "authzloom",
+    "upstreamVersion": "1.0.1"
+  },
+  "operations": [
+    {
+      "evidenceSha256": "7fb7d7a8c4300d33f4254097a2082cd6948926e447152f697a2d651566311de2",
+      "flags": [],
+      "hints": [
+        "read-only-hint"
+      ],
+      "id": "tool-418b066cb3a401fd",
+      "name": "authzloom_export",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "26a4d499a9423fc2f5e251d8bc3e6c69ea39b9f17b912871ae1ed89bf52ba826",
+      "flags": [],
+      "hints": [],
+      "id": "tool-db3928748425fd7a",
+      "name": "authzloom_ingest",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "41998686e85c4eaeecc5d562fc9ac2de6ba402ba09660c69f21d5d840da89bdf",
+      "flags": [],
+      "hints": [
+        "read-only-hint"
+      ],
+      "id": "tool-cae76fab9f2025d7",
+      "name": "authzloom_plan",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "9d8b137117074a2f52e6a7ef063215736e68a51540fa1a5cb5bb37883c40eec0",
+      "flags": [],
+      "hints": [
+        "destructive-hint"
+      ],
+      "id": "tool-69c3136c5e53bbf7",
+      "name": "authzloom_run",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "496ab413db94fd121c9f6b9d6882c8af8a6b82d438a6e7c6705d93dedd000dbb",
+      "flags": [],
+      "hints": [
+        "read-name",
+        "read-only-hint"
+      ],
+      "id": "tool-d0e02aa57b90cd76",
+      "name": "authzloom_status",
+      "optionsWithValues": [],
+      "path": []
+    }
+  ],
+  "schemaVersion": "guard.extension-discovery.v1",
+  "sourceSha256": "b9ca9a904f639c46f192f50130f5ea4741300bfd57aa7b3d9e61d037d9a0f8c9"
+}
