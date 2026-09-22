@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "guard.extension-listing.v1",
+  "extensionId": "command.txc",
+  "tagline": "Reviewed coverage for txc vault secret disclosure, grants, recipient changes, and deletion.",
+  "category": "other",
+  "documentationUrl": "https://github.com/vorjdux/txc#the-vault",
+  "tags": ["secrets", "vault", "password-manager", "encryption"],
+  "maintainerGithubIds": ["447714"],
+  "limitations": [
+    "Coverage is limited to the reviewed operations and the surrounding Guard policy.",
+    "A maintainer profile is not a security certification or an official upstream endorsement.",
+    "Matchers track the txc 0.7.2 vault command surface; later releases may add operations that are not yet reviewed."
+  ]
+}

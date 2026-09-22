@@ -147,6 +147,7 @@ Protection model meanings:
 | `command.ollama` | Reviews Ollama commands that publish models to a registry or remove local model data. | 2 | External opt-in |
 | `command.probe` | Reviews HTTP execution and OpenCollection workspace mutations through the Probe CLI. | 8 | External opt-in |
 | `command.repo2nb` | Reviews repo2nb commands that can overwrite an existing destination directory or silently drop untracked notebook cells. | 2 | External opt-in |
+| `command.txc` | Reviews txc vault commands that disclose a stored secret, seal one to another key, widen a vault's recipients, or delete vault contents. | 8 | External opt-in |
 
 <!-- END GENERATED EXTENSION DIRECTORY -->
 
