@@ -1,0 +1,17 @@
+{
+  "schema": "guard.command-extension-fixtures.v1",
+  "cases": [
+    {"id":"inactive","command":"xencode worktree remove ../feature-x","enabled_extensions":[],"disabled_permissions":[],"expected_action":"review","rule_id":"command.xencode.worktree-remove","expected_effective_segments":[]},
+    {"id":"worktree-remove","command":"xencode worktree remove ../feature-x","enabled_extensions":["command.xencode"],"disabled_permissions":[],"expected_action":"review","rule_id":"command.xencode.worktree-remove","expected_effective_segments":[0]},
+    {"id":"worktree-add","command":"xencode worktree add ../feature-x feature-x","enabled_extensions":["command.xencode"],"disabled_permissions":[],"expected_action":"review","rule_id":"command.xencode.worktree-add","expected_effective_segments":[0]},
+    {"id":"plugin-install","command":"xencode plugin install ./guardrails","enabled_extensions":["command.xencode"],"disabled_permissions":[],"expected_action":"review","rule_id":"command.xencode.plugin-install","expected_effective_segments":[0]},
+    {"id":"plugin-remove","command":"xencode plugin remove guardrails","enabled_extensions":["command.xencode"],"disabled_permissions":[],"expected_action":"review","rule_id":"command.xencode.plugin-remove","expected_effective_segments":[0]},
+    {"id":"worktree-list","command":"xencode worktree list","enabled_extensions":["command.xencode"],"disabled_permissions":[],"expected_action":"allow","rule_id":"command.xencode.worktree-remove","expected_effective_segments":[]},
+    {"id":"plugin-list","command":"xencode plugin list","enabled_extensions":["command.xencode"],"disabled_permissions":[],"expected_action":"allow","rule_id":"command.xencode.plugin-remove","expected_effective_segments":[]},
+    {"id":"disabled-worktree","command":"xencode worktree remove ../feature-x","enabled_extensions":["command.xencode"],"disabled_permissions":["command.xencode.permission.worktree"],"expected_action":"block","rule_id":"command.xencode.worktree-remove","expected_effective_segments":[0]},
+    {"id":"compound","command":"xencode plugin list && xencode plugin remove guardrails","enabled_extensions":["command.xencode"],"disabled_permissions":[],"expected_action":"review","rule_id":"command.xencode.plugin-remove","expected_effective_segments":[1]},
+    {"id":"quoted-path","command":"xencode worktree remove \"../feature with spaces\"","enabled_extensions":["command.xencode"],"disabled_permissions":[],"expected_action":"review","rule_id":"command.xencode.worktree-remove","expected_effective_segments":[0]},
+    {"id":"help-safe-variant","command":"xencode plugin remove --help","enabled_extensions":["command.xencode"],"disabled_permissions":[],"expected_action":"review","rule_id":"command.xencode.plugin-remove","expected_effective_segments":[]},
+    {"id":"unknown","command":"another-cli inspect","enabled_extensions":["command.xencode"],"disabled_permissions":[],"expected_action":"review","rule_id":"command.xencode.plugin-remove","expected_effective_segments":[]}
+  ]
+}

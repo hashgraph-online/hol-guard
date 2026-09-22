@@ -1,0 +1,137 @@
+{
+  "schema": "guard.command-extension-source.v1",
+  "extension": {
+    "extension_id": "command.xencode",
+    "version": "1.0.0",
+    "name": "Xencode command protection",
+    "description": "Reviews Xencode state-changing CLI operations that can mutate Git worktrees or the local Xencode plugin environment. This community coverage does not certify Xencode or every future CLI feature.",
+    "action_classes": ["Xencode worktree mutation", "Xencode plugin mutation"],
+    "risk_classes": ["destructive_shell"],
+    "safer_alternatives": [
+      "Inspect the target worktree and current repository state before changing or removing it.",
+      "Review the plugin path or name before installing or removing an Xencode plugin."
+    ],
+    "reference_urls": [
+      "https://github.com/sreevarshan-xenoz/xencode",
+      "https://github.com/sreevarshan-xenoz/xencode/blob/main/CLI_GUIDE.md"
+    ],
+    "required": false,
+    "source": "built-in",
+    "aliases": [],
+    "dependencies": [],
+    "conflicts": [],
+    "ecosystem_ids": ["xencode"],
+    "executables": ["xencode", "xencode.exe"],
+    "project_markers": [],
+    "permissions": [
+      {
+        "permission_id": "command.xencode.permission.worktree",
+        "implementation_version": "1.0.0",
+        "label": "Xencode worktree mutation",
+        "description": "Identifies Xencode worktree add and remove operations that change local Git worktree state.",
+        "risk_tier": "high",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": ["Xencode worktree mutation"],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "deprecated": false,
+        "safer_guidance": ["Inspect the target worktree and current repository state before changing or removing it."],
+        "example_command": "xencode worktree remove"
+      },
+      {
+        "permission_id": "command.xencode.permission.plugin",
+        "implementation_version": "1.0.0",
+        "label": "Xencode plugin mutation",
+        "description": "Identifies Xencode plugin install and remove operations that change the local plugin environment.",
+        "risk_tier": "high",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": ["Xencode plugin mutation"],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "deprecated": false,
+        "safer_guidance": ["Review the plugin path or name before installing or removing an Xencode plugin."],
+        "example_command": "xencode plugin install"
+      }
+    ],
+    "rules": [
+      {
+        "rule_id": "command.xencode.worktree-add",
+        "rule_version": "1.0.0",
+        "permission_id": "command.xencode.permission.worktree",
+        "title": "Xencode worktree add",
+        "description": "Identifies Xencode worktree creation operations.",
+        "severity": "high",
+        "risk_classes": ["destructive_shell"],
+        "action_classes": ["Xencode worktree mutation"],
+        "safer_alternatives": ["Inspect the target path and branch before creating the worktree."],
+        "default_mode": "review",
+        "matcher": {"op":"executable.v1","config":{"allow_leading_options":false,"executables":["xencode","xencode.exe"],"fail_secure_unknown_options":true,"forbidden_flags":[],"interspersed_flags":[],"interspersed_options_with_values":[],"inverse_flag_pairs":[],"leading_options_with_values":[],"options_with_values":[],"required_flags":[],"required_flags_in_all_arguments":false,"required_option_values":[],"subcommands":["worktree","add"]}},
+        "safe_variants": [
+          {"variant_id":"help","title":"Xencode worktree add help","matcher":{"op":"executable.v1","config":{"allow_leading_options":false,"executables":["xencode","xencode.exe"],"fail_secure_unknown_options":true,"forbidden_flags":[],"interspersed_flags":[],"interspersed_options_with_values":[],"inverse_flag_pairs":[],"leading_options_with_values":[],"options_with_values":[],"required_flags":["--help"],"required_flags_in_all_arguments":true,"required_option_values":[],"subcommands":["worktree","add"]}},
+          {"variant_id":"short-help","title":"Xencode worktree add short help","matcher":{"op":"executable.v1","config":{"allow_leading_options":false,"executables":["xencode","xencode.exe"],"fail_secure_unknown_options":true,"forbidden_flags":[],"interspersed_flags":[],"interspersed_options_with_values":[],"inverse_flag_pairs":[],"leading_options_with_values":[],"options_with_values":[],"required_flags":["-h"],"required_flags_in_all_arguments":true,"required_option_values":[],"subcommands":["worktree","add"]}}
+        ]
+      },
+      {
+        "rule_id": "command.xencode.worktree-remove",
+        "rule_version": "1.0.0",
+        "permission_id": "command.xencode.permission.worktree",
+        "title": "Xencode worktree remove",
+        "description": "Identifies Xencode worktree removal operations. The current Xencode CLI does not expose a force flag; Git retains its normal dirty-worktree refusal.",
+        "severity": "high",
+        "risk_classes": ["destructive_shell"],
+        "action_classes": ["Xencode worktree mutation"],
+        "safer_alternatives": ["Inspect the target worktree and current repository state before removing it."],
+        "default_mode": "review",
+        "matcher": {"op":"executable.v1","config":{"allow_leading_options":false,"executables":["xencode","xencode.exe"],"fail_secure_unknown_options":true,"forbidden_flags":[],"interspersed_flags":[],"interspersed_options_with_values":[],"inverse_flag_pairs":[],"leading_options_with_values":[],"options_with_values":[],"required_flags":[],"required_flags_in_all_arguments":false,"required_option_values":[],"subcommands":["worktree","remove"]}},
+        "safe_variants": [
+          {"variant_id":"help","title":"Xencode worktree remove help","matcher":{"op":"executable.v1","config":{"allow_leading_options":false,"executables":["xencode","xencode.exe"],"fail_secure_unknown_options":true,"forbidden_flags":[],"interspersed_flags":[],"interspersed_options_with_values":[],"inverse_flag_pairs":[],"leading_options_with_values":[],"options_with_values":[],"required_flags":["--help"],"required_flags_in_all_arguments":true,"required_option_values":[],"subcommands":["worktree","remove"]}},
+          {"variant_id":"short-help","title":"Xencode worktree remove short help","matcher":{"op":"executable.v1","config":{"allow_leading_options":false,"executables":["xencode","xencode.exe"],"fail_secure_unknown_options":true,"forbidden_flags":[],"interspersed_flags":[],"interspersed_options_with_values":[],"inverse_flag_pairs":[],"leading_options_with_values":[],"options_with_values":[],"required_flags":["-h"],"required_flags_in_all_arguments":true,"required_option_values":[],"subcommands":["worktree","remove"]}}
+        ]
+      },
+      {
+        "rule_id": "command.xencode.plugin-install",
+        "rule_version": "1.0.0",
+        "permission_id": "command.xencode.permission.plugin",
+        "title": "Xencode plugin install",
+        "description": "Identifies Xencode plugin installation operations that copy a plugin into the local Xencode plugin directory.",
+        "severity": "high",
+        "risk_classes": ["destructive_shell"],
+        "action_classes": ["Xencode plugin mutation"],
+        "safer_alternatives": ["Review the plugin path and its contents before installing it."],
+        "default_mode": "review",
+        "matcher": {"op":"executable.v1","config":{"allow_leading_options":false,"executables":["xencode","xencode.exe"],"fail_secure_unknown_options":true,"forbidden_flags":[],"interspersed_flags":[],"interspersed_options_with_values":[],"inverse_flag_pairs":[],"leading_options_with_values":[],"options_with_values":[],"required_flags":[],"required_flags_in_all_arguments":false,"required_option_values":[],"subcommands":["plugin","install"]}},
+        "safe_variants": [
+          {"variant_id":"help","title":"Xencode plugin install help","matcher":{"op":"executable.v1","config":{"allow_leading_options":false,"executables":["xencode","xencode.exe"],"fail_secure_unknown_options":true,"forbidden_flags":[],"interspersed_flags":[],"interspersed_options_with_values":[],"inverse_flag_pairs":[],"leading_options_with_values":[],"options_with_values":[],"required_flags":["--help"],"required_flags_in_all_arguments":true,"required_option_values":[],"subcommands":["plugin","install"]}},
+          {"variant_id":"short-help","title":"Xencode plugin install short help","matcher":{"op":"executable.v1","config":{"allow_leading_options":false,"executables":["xencode","xencode.exe"],"fail_secure_unknown_options":true,"forbidden_flags":[],"interspersed_flags":[],"interspersed_options_with_values":[],"inverse_flag_pairs":[],"leading_options_with_values":[],"options_with_values":[],"required_flags":["-h"],"required_flags_in_all_arguments":true,"required_option_values":[],"subcommands":["plugin","install"]}}
+        ]
+      },
+      {
+        "rule_id": "command.xencode.plugin-remove",
+        "rule_version": "1.0.0",
+        "permission_id": "command.xencode.permission.plugin",
+        "title": "Xencode plugin remove",
+        "description": "Identifies Xencode plugin removal operations that delete a local installed plugin.",
+        "severity": "high",
+        "risk_classes": ["destructive_shell"],
+        "action_classes": ["Xencode plugin mutation"],
+        "safer_alternatives": ["Review the exact plugin name before removing it."],
+        "default_mode": "review",
+        "matcher": {"op":"executable.v1","config":{"allow_leading_options":false,"executables":["xencode","xencode.exe"],"fail_secure_unknown_options":true,"forbidden_flags":[],"interspersed_flags":[],"interspersed_options_with_values":[],"inverse_flag_pairs":[],"leading_options_with_values":[],"options_with_values":[],"required_flags":[],"required_flags_in_all_arguments":false,"required_option_values":[],"subcommands":["plugin","remove"]}},
+        "safe_variants": [
+          {"variant_id":"help","title":"Xencode plugin remove help","matcher":{"op":"executable.v1","config":{"allow_leading_options":false,"executables":["xencode","xencode.exe"],"fail_secure_unknown_options":true,"forbidden_flags":[],"interspersed_flags":[],"interspersed_options_with_values":[],"inverse_flag_pairs":[],"leading_options_with_values":[],"options_with_values":[],"required_flags":["--help"],"required_flags_in_all_arguments":true,"required_option_values":[],"subcommands":["plugin","remove"]}},
+          {"variant_id":"short-help","title":"Xencode plugin remove short help","matcher":{"op":"executable.v1","config":{"allow_leading_options":false,"executables":["xencode","xencode.exe"],"fail_secure_unknown_options":true,"forbidden_flags":[],"interspersed_flags":[],"interspersed_options_with_values":[],"inverse_flag_pairs":[],"leading_options_with_values":[],"options_with_values":[],"required_flags":["-h"],"required_flags_in_all_arguments":true,"required_option_values":[],"subcommands":["plugin","remove"]}}
+        ]
+      }
+    ]
+  }
+}
