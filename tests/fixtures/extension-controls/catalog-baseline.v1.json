@@ -6,7 +6,7 @@
     "canonical_diff_digest",
     "effective"
   ],
-  "catalog_digest": "884eae618561757c8d030f2a7177c6c07f2a12653cb6ed195ef4166a3390e148",
+  "catalog_digest": "f85e6a206be76631de56117d2c1d15184df10168537da808f7cf4cc85081fcf0",
   "control_schema_version": "1.0.0",
   "daemon_api_schema": "guard.daemon.extension-controls.v1",
   "effective_shape": [
@@ -20,8 +20,9 @@
     "failures",
     "projection"
   ],
-  "extension_count": 71,
+  "extension_count": 72,
   "extension_ids": [
+    "command.apex",
     "command.api-gateway",
     "command.backup.borg",
     "command.backup.rclone",
@@ -97,8 +98,11 @@
   "extension_schema_version": 2,
   "installed_browser_config": "dashboard/playwright.installed.config.ts",
   "overview_route": "/extensions",
-  "permission_count": 248,
+  "permission_count": 251,
   "permission_examples": {
+    "command.apex.permission.compress": "apex compress ./src -o backup.apx",
+    "command.apex.permission.decompress": "apex extract archive.apx -d ./out",
+    "command.apex.permission.repair": "apex repair damaged.apx",
     "command.api-gateway.permission.delete": "aws apigateway delete-rest-api",
     "command.backup.borg.permission.mutation": "borg delete",
     "command.backup.rclone.permission.mutation": "rclone delete",
@@ -445,6 +449,9 @@
     "command.storage.minio.permission.mv": "minio"
   },
   "permission_ids": [
+    "command.apex.permission.compress",
+    "command.apex.permission.decompress",
+    "command.apex.permission.repair",
     "command.api-gateway.permission.delete",
     "command.backup.borg.permission.mutation",
     "command.backup.rclone.permission.mutation",
@@ -704,8 +711,12 @@
     "controls",
     "semantic_preview"
   ],
-  "rule_count": 234,
+  "program_digest": "d5ae890ec3e12ce239f4852a6f184c15b863e2057c4eee9cfec110c22908f4b4",
+  "rule_count": 237,
   "rule_ids": [
+    "command.apex.compress",
+    "command.apex.decompress",
+    "command.apex.repair",
     "command.api-gateway.delete",
     "command.backup.borg.mutation",
     "command.backup.rclone.mutation",

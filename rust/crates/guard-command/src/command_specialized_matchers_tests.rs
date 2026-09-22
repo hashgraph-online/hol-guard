@@ -394,6 +394,42 @@ fn canonical_parser_feeds_database_php_curl_and_expansion_matchers() {
             vec![],
         ),
         (
+            "apex-expansion.v1",
+            serde_json::json!({}),
+            "apex '$ACTION' ./src",
+            vec![0],
+        ),
+        (
+            "apex-expansion.v1",
+            serde_json::json!({}),
+            "apex -t 4 '$ACTION' ./src",
+            vec![0],
+        ),
+        (
+            "apex-expansion.v1",
+            serde_json::json!({}),
+            "python -m apex -t 4 '$ACTION' ./src",
+            vec![0],
+        ),
+        (
+            "apex-expansion.v1",
+            serde_json::json!({}),
+            "apexcompress -t 4 '$ACTION' ./src",
+            vec![0],
+        ),
+        (
+            "apex-expansion.v1",
+            serde_json::json!({}),
+            "apex compress ./src",
+            vec![],
+        ),
+        (
+            "apex-expansion.v1",
+            serde_json::json!({}),
+            "printf café",
+            vec![],
+        ),
+        (
             "zero-operand-flags.v1",
             serde_json::json!({"executables":["deploy"],"required_flags":["--prod"],"options_with_values":["--cwd"]}),
             "deploy --cwd project --prod",
@@ -404,4 +440,159 @@ fn canonical_parser_feeds_database_php_curl_and_expansion_matchers() {
         assert_eq!(command.confidence, "exact", "{source}");
         assert_eq!(evaluate(op, config, &command), Ok(expected), "{source}");
     }
+}
+
+#[test]
+fn apex_expansion_matches_wrappers_and_global_options() {
+    let matcher = SpecializedMatcher::from_config("apex-expansion.v1", serde_json::json!({})).unwrap();
+
+    let exec_cmd = model(
+        &[(
+            Some("exec".to_owned()),
+            vec![
+                "-a".to_owned(),
+                "proc".to_owned(),
+                "apex".to_owned(),
+                "-t".to_owned(),
+                "4".to_owned(),
+                "$ACTION".to_owned(),
+                "./src".to_owned(),
+            ],
+        )],
+        None,
+    );
+    assert_eq!(matcher.match_segments(&exec_cmd), Ok(vec![0]));
+
+    let xargs_cmd = model(
+        &[(
+            Some("xargs".to_owned()),
+            vec![
+                "-P".to_owned(),
+                "4".to_owned(),
+                "/usr/local/bin/apex.exe".to_owned(),
+                "-t".to_owned(),
+                "4".to_owned(),
+                "$ACTION".to_owned(),
+                "./src".to_owned(),
+            ],
+        )],
+        None,
+    );
+    assert_eq!(matcher.match_segments(&xargs_cmd), Ok(vec![0]));
+
+    // -p prompt flag is not a value option and does not consume the next token
+    let xargs_prompt_cmd = model(
+        &[(
+            Some("xargs".to_owned()),
+            vec![
+                "-p".to_owned(),
+                "apex".to_owned(),
+                "$ACTION".to_owned(),
+                "./src".to_owned(),
+            ],
+        )],
+        None,
+    );
+    assert_eq!(matcher.match_segments(&xargs_prompt_cmd), Ok(vec![0]));
+
+    // -d delimiter takes a value
+    let xargs_delim_cmd = model(
+        &[(
+            Some("xargs".to_owned()),
+            vec![
+                "-d".to_owned(),
+                ",".to_owned(),
+                "apex".to_owned(),
+                "$ACTION".to_owned(),
+                "./src".to_owned(),
+            ],
+        )],
+        None,
+    );
+    assert_eq!(matcher.match_segments(&xargs_delim_cmd), Ok(vec![0]));
+
+    // -E eof-str takes a value
+    let xargs_eof_cmd = model(
+        &[(
+            Some("xargs".to_owned()),
+            vec![
+                "-E".to_owned(),
+                "EOF".to_owned(),
+                "apex".to_owned(),
+                "$ACTION".to_owned(),
+                "./src".to_owned(),
+            ],
+        )],
+        None,
+    );
+    assert_eq!(matcher.match_segments(&xargs_eof_cmd), Ok(vec![0]));
+
+    // Wrapper + module launcher: exec python -m apex $ACTION
+    let exec_mod_cmd = model(
+        &[(
+            Some("exec".to_owned()),
+            vec![
+                "python".to_owned(),
+                "-m".to_owned(),
+                "apex".to_owned(),
+                "$ACTION".to_owned(),
+                "./src".to_owned(),
+            ],
+        )],
+        None,
+    );
+    assert_eq!(matcher.match_segments(&exec_mod_cmd), Ok(vec![0]));
+
+    // Wrapper + module launcher with path: exec /usr/bin/python3 -m apex $ACTION
+    let exec_mod_path_cmd = model(
+        &[(
+            Some("exec".to_owned()),
+            vec![
+                "/usr/bin/python3".to_owned(),
+                "-m".to_owned(),
+                "apex".to_owned(),
+                "-t".to_owned(),
+                "4".to_owned(),
+                "$ACTION".to_owned(),
+                "./src".to_owned(),
+            ],
+        )],
+        None,
+    );
+    assert_eq!(matcher.match_segments(&exec_mod_path_cmd), Ok(vec![0]));
+
+    // Wrapper + module launcher: xargs -P 4 python3 -m apex $ACTION
+    let xargs_mod_cmd = model(
+        &[(
+            Some("xargs".to_owned()),
+            vec![
+                "-P".to_owned(),
+                "4".to_owned(),
+                "python3".to_owned(),
+                "-m".to_owned(),
+                "apex".to_owned(),
+                "$ACTION".to_owned(),
+                "./src".to_owned(),
+            ],
+        )],
+        None,
+    );
+    assert_eq!(matcher.match_segments(&xargs_mod_cmd), Ok(vec![0]));
+
+    // Wrapper + module launcher with prompt: xargs -p python -m apex $ACTION
+    let xargs_mod_prompt_cmd = model(
+        &[(
+            Some("xargs".to_owned()),
+            vec![
+                "-p".to_owned(),
+                "python".to_owned(),
+                "-m".to_owned(),
+                "apex".to_owned(),
+                "$ACTION".to_owned(),
+                "./src".to_owned(),
+            ],
+        )],
+        None,
+    );
+    assert_eq!(matcher.match_segments(&xargs_mod_prompt_cmd), Ok(vec![0]));
 }

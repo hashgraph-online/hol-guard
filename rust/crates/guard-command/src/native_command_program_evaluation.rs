@@ -117,21 +117,47 @@ impl Evaluation<'_> {
                 .iter()
                 .map(|value| lowercase_for_ascii_comparison(value))
                 .collect();
-            let filtered = without_options(
-                &arguments,
+            let filtered_raw = without_options(
+                &segment.arguments,
                 &contract.interspersed_options_with_values,
                 &contract.interspersed_flags,
             );
-            let remaining = if contract.allow_leading_options {
+            let raw_remaining = if contract.allow_leading_options {
                 after_leading_options(
-                    &filtered,
+                    &filtered_raw,
                     &contract.leading_options_with_values,
                     &contract.interspersed_flags,
                 )
             } else {
-                filtered.as_slice()
+                filtered_raw.as_slice()
             };
-            let matched = node.paths.iter().find(|path| remaining.starts_with(path));
+            let remaining: Vec<String> = raw_remaining
+                .iter()
+                .map(|value| lowercase_for_ascii_comparison(value))
+                .collect();
+            let matched = node.paths.iter().find(|path| {
+                if remaining.starts_with(path) {
+                    return true;
+                }
+                if contract.allow_leading_options
+                    && contract
+                        .executables
+                        .iter()
+                        .any(|e| e == "exec" || e == "xargs" || e == "exec.exe" || e == "xargs.exe" || e == "exec.cmd" || e == "xargs.cmd")
+                    && remaining.len() >= path.len()
+                    && !path.is_empty()
+                {
+                    let first = remaining[0].rsplit(['/', '\\']).next().unwrap_or(&remaining[0]);
+                    let norm_first = first
+                        .strip_suffix(".exe")
+                        .or_else(|| first.strip_suffix(".cmd"))
+                        .unwrap_or(first);
+                    if norm_first == path[0] && remaining[1..path.len()] == path[1..] {
+                        return true;
+                    }
+                }
+                false
+            });
             let matched = matched.or_else(|| {
                 contract
                     .fail_secure_unknown_options
@@ -263,4 +289,83 @@ fn without_options(
         }
     }
     retained
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::CommandSpanV1;
+
+    #[test]
+    fn executable_matcher_normalizes_wrapper_path_basename() {
+        let mut contract = ExecutableFlagContract::default();
+        contract.executables.insert("exec".to_string());
+        contract.allow_leading_options = true;
+        contract.leading_options_with_values.insert("-a".to_string());
+        let node = ExecutableNode {
+            contract,
+            paths: vec![vec!["apex".to_string(), "compress".to_string()]],
+            all_value_options: BTreeSet::new(),
+            proof_known_flags: BTreeSet::new(),
+        };
+
+        let command = CanonicalCommandV1 {
+            exact_raw_text: true,
+            normalized_text: "exec /usr/local/bin/apex compress ./src".to_string(),
+            dialect: "posix".to_string(),
+            transport: "shell_string".to_string(),
+            extraction_provenance: "test".to_string(),
+            wrapper_chain: Vec::new(),
+            segments: vec![CommandSegmentV1 {
+                text: "exec /usr/local/bin/apex compress ./src".to_string(),
+                tokens: vec![
+                    "exec".to_string(),
+                    "/usr/local/bin/apex".to_string(),
+                    "compress".to_string(),
+                    "./src".to_string(),
+                ],
+                executable: Some("exec".to_string()),
+                arguments: vec![
+                    "/usr/local/bin/apex".to_string(),
+                    "compress".to_string(),
+                    "./src".to_string(),
+                ],
+                environment_names: Vec::new(),
+                wrapper_chain: Vec::new(),
+                path_overridden: false,
+                execution_context: "root".to_string(),
+                pipeline_index: 0,
+                span: CommandSpanV1 {
+                    source: "normalized".to_string(),
+                    start: 0,
+                    end: 0,
+                },
+            }],
+            confidence: "exact".to_string(),
+            uncertainty_reason: None,
+            path_overridden: false,
+            parser_profile: "test".to_string(),
+        };
+
+        let empty_program = NativeCommandProgram {
+            program_digest: String::new(),
+            catalog_digest: String::new(),
+            trust_digest: String::new(),
+            extensions: Vec::new(),
+            rules: Vec::new(),
+            nodes: Vec::new(),
+            executable_index: BTreeMap::new(),
+            keyword_index: BTreeMap::new(),
+            unindexed: Vec::new(),
+            rule_indices: BTreeMap::new(),
+        };
+        let evaluation = Evaluation {
+            program: &empty_program,
+            command: &command,
+            deadline: None,
+            memo: Vec::new(),
+        };
+        let result = evaluation.executable(&node).unwrap();
+        assert_eq!(&*result, &[0]);
+    }
 }
