@@ -404,7 +404,7 @@ def test_worker_request_fails_safe_on_invalid_json() -> None:
 
 
 def test_prewarmed_runner_handles_real_hook_and_closes(tmp_path: Path) -> None:
-    runner = HookProcessRunner(process_limit=1, timeout_seconds=2)
+    runner = HookProcessRunner(process_limit=1, timeout_seconds=2 * under_coverage_scale(3.0))
     try:
         runner.start()
         result = runner.review(

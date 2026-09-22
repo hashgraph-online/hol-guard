@@ -17,7 +17,9 @@ from .errors import BuilderError
 from .io import canonical_json, checked_path, parse_json, read_bytes
 from .models import Metadata
 
-LISTING_SCHEMA = "guard.extension-listing.v1"
+LISTING_SCHEMA_V1 = "guard.extension-listing.v1"
+LISTING_SCHEMA_V2 = "guard.extension-listing.v2"
+LISTING_SCHEMA = LISTING_SCHEMA_V2
 MAX_LISTING_BYTES = 16_384
 MAX_TAGLINE_LENGTH = 140
 CATEGORY_LABELS = {
@@ -36,9 +38,15 @@ DEFAULT_LIMITATIONS = (
 )
 
 
-@lru_cache(maxsize=1)
-def listing_schema() -> dict[str, object]:
-    payload = files("codex_plugin_scanner.guard.extension_builder").joinpath("listing.v1.schema.json")
+@lru_cache(maxsize=2)
+def listing_schema(schema_version: str = LISTING_SCHEMA) -> dict[str, object]:
+    filename = {
+        LISTING_SCHEMA_V1: "listing.v1.schema.json",
+        LISTING_SCHEMA_V2: "listing.v2.schema.json",
+    }.get(schema_version)
+    if filename is None:
+        raise BuilderError("listing_schema", "Listing uses an unsupported metadata schema version.")
+    payload = files("codex_plugin_scanner.guard.extension_builder").joinpath(filename)
     return cast(dict[str, object], json.loads(payload.read_text(encoding="utf-8")))
 
 
@@ -72,7 +80,10 @@ def _public_https(value: str) -> None:
 def validate_listing(payload: object, *, expected_id: str | None = None) -> dict[str, object]:
     """Validate bounded listing metadata without resolving links or performing a claim grant."""
 
-    validator = Draft202012Validator(listing_schema(), format_checker=FormatChecker())
+    schema_version = payload.get("schemaVersion") if isinstance(payload, dict) else None
+    if not isinstance(schema_version, str) or schema_version not in {LISTING_SCHEMA_V1, LISTING_SCHEMA_V2}:
+        raise BuilderError("listing_schema", "Listing uses an unsupported metadata schema version.")
+    validator = Draft202012Validator(listing_schema(cast(str, schema_version)), format_checker=FormatChecker())
     try:
         validator.validate(payload)
     except (ValidationError, RecursionError) as exc:
@@ -80,7 +91,15 @@ def validate_listing(payload: object, *, expected_id: str | None = None) -> dict
     row = cast(dict[str, object], payload)
     if expected_id is not None and row["extensionId"] != expected_id:
         raise BuilderError("listing_identity", "Listing identity must match its native contribution and filename.")
-    for value in [row["tagline"], *cast(list[str], row["limitations"])]:
+    text_values = [row["tagline"], *cast(list[str], row["limitations"])]
+    upstream: dict[str, object] | None = None
+    if schema_version == LISTING_SCHEMA_V2:
+        text_values.append(row["summary"])
+        raw_upstream = row["upstream"]
+        if raw_upstream is not None:
+            upstream = cast(dict[str, object], raw_upstream)
+            text_values.append(cast(str, cast(dict[str, object], upstream)["name"]))
+    for value in text_values:
         if (
             not isinstance(value, str)
             or value != value.strip()
@@ -90,6 +109,21 @@ def validate_listing(payload: object, *, expected_id: str | None = None) -> dict
     reference = row.get("documentationUrl")
     if isinstance(reference, str):
         _public_https(reference)
+    if schema_version == LISTING_SCHEMA_V2:
+        contributors = cast(list[dict[str, object]], row["contributors"])
+        if len({str(item["githubId"]) for item in contributors}) != len(contributors):
+            raise BuilderError("listing_contributors", "Contributor GitHub identities must be unique.")
+        for contributor in contributors:
+            roles = cast(list[str], contributor["roles"])
+            if len(set(roles)) != len(roles):
+                raise BuilderError("listing_contributors", "Contributor credit roles must be unique.")
+        references = cast(list[dict[str, object]], row["originalContributions"])
+        if len({str(item["url"]) for item in references}) != len(references):
+            raise BuilderError("listing_references", "Original contribution references must be unique.")
+        for item in references:
+            _public_https(cast(str, item["url"]))
+        if upstream is not None:
+            _public_https(cast(str, cast(dict[str, object], upstream)["url"]))
     if len(canonical_json(row).encode("utf-8")) > MAX_LISTING_BYTES:
         raise BuilderError("listing_limit", "Listing exceeds its byte budget.")
     return row
@@ -111,6 +145,10 @@ def listing_template(metadata: Metadata) -> str:
         "tagline": f"Reviewed operation coverage for {metadata.name}."[:MAX_TAGLINE_LENGTH].rstrip(),
         "category": "specialized-tools" if metadata.kind == "mcp" else "other",
         "limitations": list(DEFAULT_LIMITATIONS),
+        "summary": f"Reviewed operation coverage for {metadata.name} through the native Guard contract.",
+        "contributors": [],
+        "originalContributions": [],
+        "upstream": None,
     }
     try:
         _public_https(metadata.homepage)

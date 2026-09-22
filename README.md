@@ -388,6 +388,12 @@ The Rust compiler generates command descriptors, the catalog, and the native mat
 
 The **Extension Builder CLI** can create those command sources and portable fixtures from exported command metadata. It also supports MCP inventories. It works offline and reads the export without importing or running the target tool.
 
+Use the Builder's plan-and-apply flow, then run
+`scripts/prepare_extension_contribution.py --source ... --fixture ...` to synchronize deterministic
+projections. Run `hol-guard extensions handoff --repo . --source ... --fixture ...` after that
+preparation step and before opening a PR. The handoff check catches missing generated descriptors,
+catalog entries, and source bindings before CI does.
+
 **1. Propose the coverage.** Check the [Extension directory](docs/guard/extensions/README.md) for existing coverage. For a new capability, open an [Extension proposal](https://github.com/hashgraph-online/hol-guard/issues/new?template=command-extension-proposal.yml) with the proposed `command.<name>` ID, supported operations, destructive examples, safe counterparts, and upstream references. Extend an existing extension when it already owns the operation.
 
 Follow the [development setup](#development), then run the examples below from your HOL Guard checkout. `uv run --no-sync` uses that checkout's installed development version.

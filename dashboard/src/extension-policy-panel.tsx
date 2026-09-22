@@ -20,9 +20,11 @@ import {
 import { isCurrentExtensionPolicyDraft, localPermissionDraftState, type PermissionDraftState } from "./extension-policy-draft";
 import { type ExtensionPolicyRebaseConflict } from "./extension-policy-rebase";
 import { useExtensionPolicyDraft } from "./use-extension-policy-draft";
-import { controlProvenance, groupPermissionsByFamily, treatmentLabel } from "./extension-control-center-model";
+import { controlProvenance, groupPermissionsByFamily, managedPermissionState, treatmentLabel } from "./extension-control-center-model";
 import { useResolvedApprovalGate } from "./use-resolved-approval-gate";
 import { ProtectionSettingsHistory } from "./protection-center/protection-settings-history";
+import { QuickApplyToolbar } from "./protection-center/components/quick-apply-toolbar";
+import { PolicyEditingLocks } from "./protection-center/components/policy-editing-locks";
 import { AppliedPolicyToast, appliedPolicyCloudHref } from "./extension-policy-applied-toast";
 
 export const RISK_TONE: Record<string, string> = {
@@ -42,17 +44,6 @@ function Pill(props: { children: React.ReactNode; tone?: string }) {
 
 function cloneLayers(effective: EffectiveExtensionControls) {
   return effective.layers.map((layer) => ({ ...layer, controls: layer.controls.map((control) => ({ ...control })) }));
-}
-
-export function managedPermissionState(effective: EffectiveExtensionControls, permissionId: string): "enabled" | "disabled" | null {
-  const projected = effective.projection?.permissions.find((item) => item.permission_id === permissionId)?.managed_state;
-  if (projected && projected !== "inherited") return projected;
-  for (const layer of effective.layers) {
-    if (layer.kind !== "signed-cloud") continue;
-    const control = layer.controls.find((item) => item.target_kind === "permission" && item.target_id === permissionId);
-    if (control) return control.state;
-  }
-  return null;
 }
 
 export function extensionPolicyRadioTabStop(
@@ -323,7 +314,7 @@ export function ExtensionPolicyPanel(props: {
     baseEffective, dirty, preview, previewBusy, applyBusy, reviewOpen,
     error, stale, pendingRebase, refreshRequired, lastApplied, undoLastApplied,
     setReviewOpen, setPermissionState, resetDraft, runPreview, apply, rebaseDraft,
-    keepConflicts, useCurrent, applyProfile, useHistoricalDraft, permissionState,
+    keepConflicts, useCurrent, useHistoricalDraft, permissionState, setPermissionStates,
   } = draft;
   const { resolvedApprovalGate, resolveApprovalGate } = useResolvedApprovalGate(null);
 
@@ -363,24 +354,19 @@ export function ExtensionPolicyPanel(props: {
       <p className="mt-2 max-w-2xl text-sm leading-6 text-brand-dark/80">
         Recommended follows Guard defaults. Allow is available only where built-in safety and organization policy still permit it. Block is a stricter local floor.
       </p>
-      <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2">
-        <span className="text-xs font-semibold text-brand-dark/60">Apply to every pattern you can change:</span>
-        <button type="button" disabled={baseEffective.health !== "protected" || refreshRequired} onClick={() => applyProfile(policyExtension.permissions, "recommended")} className="min-h-10 px-1 text-xs font-semibold text-brand-blue disabled:opacity-40">Reset to Recommended</button>
-        <button type="button" disabled={baseEffective.health !== "protected" || refreshRequired} onClick={() => applyProfile(policyExtension.permissions, "stricter")} className="min-h-10 px-1 text-xs font-semibold text-brand-dark disabled:opacity-40">Block all changeable variants</button>
-      </div>
+      <QuickApplyToolbar
+        permissions={policyExtension.permissions}
+        effective={baseEffective}
+        permissionState={permissionState}
+        onApply={setPermissionStates}
+        disabled={refreshRequired || previewBusy || applyBusy || baseEffective.health !== "protected"}
+        subject={{ one: "changeable setting", other: "changeable settings" }}
+      />
       <div id="extension-settings-history"><ProtectionSettingsHistory catalogDigest={baseEffective.catalog_digest} disabled={baseEffective.health !== "protected" || refreshRequired} onUse={(layers) => useHistoricalDraft(layers)} /></div>
-      {baseEffective.global_lockdown ? (
-        <p role="status" className="mt-4 flex gap-2 text-sm text-brand-dark">
-          <HiMiniLockClosed className="mt-0.5 size-4 shrink-0" />
-          Emergency Lockdown remains dominant. You can prepare a local draft, but matching commands stay blocked while lockdown is active.
-        </p>
-      ) : null}
-      {baseEffective.health !== "protected" ? (
-        <p role="alert" className="mt-4 flex gap-2 text-sm text-amber-950">
-          <HiMiniExclamationTriangle className="mt-0.5 size-4 shrink-0" />
-          Settings cannot be changed until Guard verifies local settings integrity.
-        </p>
-      ) : null}
+      <PolicyEditingLocks
+        health={baseEffective.health}
+        globalLockdown={baseEffective.global_lockdown}
+      />
       {managedCount ? (
         <p className="mt-4 text-sm text-indigo-950">
           {managedCount} setting{managedCount === 1 ? " is" : "s are"} managed by your organization. This device can add stricter blocks but cannot weaken an organization block.
@@ -395,7 +381,7 @@ export function ExtensionPolicyPanel(props: {
           onViewHistory={() => { document.getElementById("extension-settings-history")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}
         />
       ) : refreshRequired ? (
-        <div role="status" className="mt-4 text-sm text-blue-950">Settings applied. Editing stays locked until Guard reloads the current protected state.</div>
+        <PolicyEditingLocks refreshRequired />
       ) : null}
 
       <div className="mt-4">

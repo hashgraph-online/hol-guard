@@ -7,7 +7,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Use this form for new command safety Extensions and material coverage expansions. Do not include secrets, private command history, local paths, or vulnerability details. Report vulnerabilities through SECURITY.md.
+        Use this form for a new command safety Extension or a material authority change. Small coverage and fixture corrections can use the Command extension pull-request template directly. Do not include secrets, private command history, local paths, or vulnerability details. Report vulnerabilities through SECURITY.md.
   - type: dropdown
     id: contribution_type
     attributes:

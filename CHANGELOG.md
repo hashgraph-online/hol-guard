@@ -5,6 +5,44 @@ All notable changes to HOL Guard will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.0](https://github.com/hashgraph-online/hol-guard/compare/v3.2.0...v3.3.0) (2026-09-21)
+
+
+### Features
+
+* **extensions:** simplify declarative contribution preparation ([b3371c6](https://github.com/hashgraph-online/hol-guard/commit/b3371c6557f6ab23ccf14861d62408fa8aaaace6))
+* **extensions:** simplify declarative contribution preparation ([ca4e5c2](https://github.com/hashgraph-online/hol-guard/commit/ca4e5c2b45688e398ffea54de587ecbefc883971))
+
+
+### Bug Fixes
+
+* **extensions:** harden contributor preparation ([f078269](https://github.com/hashgraph-online/hol-guard/commit/f0782698b76fd5cb3469bab4d6d57662888b8893))
+* **extensions:** preserve v2 catalog bytes on Windows ([b7fdf8e](https://github.com/hashgraph-online/hol-guard/commit/b7fdf8e2929dc3ab7965ca41f6b8f8ec99fee391))
+* **extensions:** satisfy listing type check ([f96cc6b](https://github.com/hashgraph-online/hol-guard/commit/f96cc6b45421fa86d6a7e39f2861277951d6fc1f))
+* **extensions:** snapshot directory exports ([a5d87e3](https://github.com/hashgraph-online/hol-guard/commit/a5d87e3cdff224d81271376d76b7b771184681db))
+* **extensions:** stabilize source digests on Windows ([e147312](https://github.com/hashgraph-online/hol-guard/commit/e147312119f01c56155bb762bb6926e083397b32))
+* **extensions:** validate listing schema types ([1db22ed](https://github.com/hashgraph-online/hol-guard/commit/1db22edf3215cf5e99a964b5f2b46dfd90f78bf9))
+* **security:** resolve Scorecard dependency findings ([#3017](https://github.com/hashgraph-online/hol-guard/issues/3017)) ([ccd22e0](https://github.com/hashgraph-online/hol-guard/commit/ccd22e0386309e5dc5b64b9b0d378128dcf974bb))
+
+
+### Dependencies
+
+* **actions:** bump actions/attest-build-provenance from 4.1.0 to 4.2.2 ([#3036](https://github.com/hashgraph-online/hol-guard/issues/3036)) ([45a3849](https://github.com/hashgraph-online/hol-guard/commit/45a38493ad5a9532a12a78213029411d9f5d8ffd))
+* **actions:** bump actions/setup-go from 6.4.0 to 7.0.0 ([#1597](https://github.com/hashgraph-online/hol-guard/issues/1597)) ([b709c12](https://github.com/hashgraph-online/hol-guard/commit/b709c120a1913e3af37f9151885c48752ed87288))
+* **actions:** bump actions/upload-artifact from 4.6.2 to 7.0.1 ([#3023](https://github.com/hashgraph-online/hol-guard/issues/3023)) ([f663f92](https://github.com/hashgraph-online/hol-guard/commit/f663f92bbf775832ee36f81b3f4ce3654b5c2fa0))
+* **actions:** bump docker/setup-buildx-action from 4.1.0 to 4.4.1 ([#3038](https://github.com/hashgraph-online/hol-guard/issues/3038)) ([d1bbb8b](https://github.com/hashgraph-online/hol-guard/commit/d1bbb8b8b2773ea3fb565a31604465de1206d8c2))
+* **actions:** bump github/codeql-action/upload-sarif ([#3037](https://github.com/hashgraph-online/hol-guard/issues/3037)) ([d72d418](https://github.com/hashgraph-online/hol-guard/commit/d72d4185dc8a2d9633e3f17428703cb7e3c0fcb1))
+* **actions:** bump ossf/scorecard-action from 2.4.3 to 2.4.4 ([#1957](https://github.com/hashgraph-online/hol-guard/issues/1957)) ([f9d29e1](https://github.com/hashgraph-online/hol-guard/commit/f9d29e1c66d04f40e380992ff73249a37c2da9f7))
+* **bun:** bump @types/node from 24.13.3 to 26.6.1 in /dashboard ([#3026](https://github.com/hashgraph-online/hol-guard/issues/3026)) ([a37878b](https://github.com/hashgraph-online/hol-guard/commit/a37878ba67fe25ea670452e82386b01c679e8560))
+* **bun:** bump typescript from 5.9.3 to 7.0.2 in /dashboard ([#3027](https://github.com/hashgraph-online/hol-guard/issues/3027)) ([1b146d4](https://github.com/hashgraph-online/hol-guard/commit/1b146d41c5c6641b2fe37593452a43fdf3d4489a))
+* **docker:** bump astral-sh/uv ([#3025](https://github.com/hashgraph-online/hol-guard/issues/3025)) ([ca33e5d](https://github.com/hashgraph-online/hol-guard/commit/ca33e5d4bb734985a0254401abea18d8ab902d82))
+* **pip:** bump the codex-lab-patch-minor group across 1 directory with 3 updates ([#3022](https://github.com/hashgraph-online/hol-guard/issues/3022)) ([8be6b27](https://github.com/hashgraph-online/hol-guard/commit/8be6b27c5d42894e4e79adf8f2317047e5b7e8b2))
+
+
+### Documentation
+
+* update Rust extension contribution workflow ([#3019](https://github.com/hashgraph-online/hol-guard/issues/3019)) ([5e6a619](https://github.com/hashgraph-online/hol-guard/commit/5e6a619ba026f512a09e87c0fbf254a6c464fbf5))
+
 ## [3.2.0](https://github.com/hashgraph-online/hol-guard/compare/v3.1.0...v3.2.0) (2026-09-21)
 
 
