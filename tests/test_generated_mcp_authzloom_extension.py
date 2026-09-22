@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
+from codex_plugin_scanner.guard.runtime.mcp_server_catalog import package_launcher_example
 from codex_plugin_scanner.guard.runtime.mcp_server_contribution import (
     mcp_payload_for_catalog_id,
     mcp_tool_state,
@@ -19,6 +20,20 @@ _TOOL_CASES = (
     ("authzloom_run", "review"),
     ("authzloom_status", "allow"),
 )
+
+
+def test_package_launcher_examples_are_runner_specific() -> None:
+    assert package_launcher_example("npx", "@modelcontextprotocol/server-filesystem") == (
+        "npx -y @modelcontextprotocol/server-filesystem"
+    )
+    assert package_launcher_example("uvx", "authzloom") == "uvx authzloom"
+    assert package_launcher_example("pipx", "authzloom") == "pipx authzloom"
+
+
+def test_generated_launch_example_omits_npm_yes_flag() -> None:
+    extension = BUILT_IN_COMMAND_EXTENSION_REGISTRY.get(_CATALOG_ID)
+    assert extension is not None
+    assert [permission.example_command for permission in extension.permissions] == ["uvx authzloom"]
 
 
 def test_generated_catalog_is_external_and_off() -> None:

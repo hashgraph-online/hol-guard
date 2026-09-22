@@ -38,6 +38,17 @@ def _action_class_for(mcp_id: str) -> str:
     return f"mcp {_encode_mcp_suffix(mcp_id.removeprefix('mcp.'))} tool"
 
 
+# npx waits for an install confirmation unless -y is set. uvx, pipx, bunx,
+# pnpm, npm, and yarn do not accept that npm flag.
+_NPM_CONFIRM_LAUNCHERS: Final[frozenset[str]] = frozenset({"npx"})
+
+
+def package_launcher_example(command: str, package: str) -> str:
+    if command in _NPM_CONFIRM_LAUNCHERS:
+        return f"{command} -y {package}"
+    return f"{command} {package}"
+
+
 def _values_for_payload(payload: Mapping[str, object]) -> CommandExtensionValues:
     mcp_id = payload.get("id")
     if not isinstance(mcp_id, str):
@@ -54,7 +65,7 @@ def _values_for_payload(payload: Mapping[str, object]) -> CommandExtensionValues
             raise ValueError(f"{mcp_id} launch command is invalid")
         if not isinstance(package, str) or not package.strip():
             raise ValueError(f"{mcp_id} launch package is invalid")
-        example = f"{command} -y {package}"
+        example = package_launcher_example(command, package)
         executables = (command,)
     elif launch_kind == "remote-http":
         remote_url = launch.get("url")

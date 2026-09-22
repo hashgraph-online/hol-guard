@@ -58,6 +58,16 @@ pub(super) struct LoweredMcp {
     pub canonical: Value,
 }
 
+fn package_launcher_example(command: &str, package: &str) -> String {
+    // npx waits for an install confirmation unless -y is set. The other
+    // allowlisted runners do not accept that npm flag.
+    if command == "npx" {
+        format!("{command} -y {package}")
+    } else {
+        format!("{command} {package}")
+    }
+}
+
 pub(super) fn lower(bytes: &[u8]) -> Result<LoweredMcp, &'static str> {
     let canonical = json::decode(bytes)?;
     if ["homepage", "license"]
@@ -104,7 +114,7 @@ pub(super) fn lower(bytes: &[u8]) -> Result<LoweredMcp, &'static str> {
             }
             (
                 vec![command.clone()],
-                format!("{command} -y {package}"),
+                package_launcher_example(command, package),
                 false,
             )
         }
@@ -276,6 +286,22 @@ pub(super) fn validate_inventory(program: &Value) -> Result<(), &'static str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn package_launcher_examples_keep_npm_yes_on_npx_only() {
+        assert_eq!(
+            package_launcher_example("npx", "@modelcontextprotocol/server-filesystem"),
+            "npx -y @modelcontextprotocol/server-filesystem"
+        );
+        assert_eq!(
+            package_launcher_example("uvx", "authzloom"),
+            "uvx authzloom"
+        );
+        assert_eq!(
+            package_launcher_example("pipx", "authzloom"),
+            "pipx authzloom"
+        );
+    }
 
     #[test]
     fn endpoint_identity_preserves_existing_alias_collision_rules() {

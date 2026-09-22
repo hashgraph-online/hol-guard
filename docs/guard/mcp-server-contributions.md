@@ -35,7 +35,7 @@ Do not declare `trusted-library` or `first-party`. The schema only allows `exter
 
 The schema is `contracts/mcp-servers/contribution.v1.schema.json`. Required metadata: id, name, description, publisher, icon, launch identity, risk classes, and tool defaults.
 
-Package-launched contributions use `launch.kind: package-launcher`, an allowlisted package command, and a package name. Launch matching uses the MCP package name, not the full argument hash, so user paths and extra flags still match.
+Package-launched contributions use `launch.kind: package-launcher`, an allowlisted package command, and a package name. Catalog examples include npm's `-y` only for `npx`; `uvx`, `pipx`, and the other allowlisted runners render as `<command> <package>`. Launch matching uses the MCP package name, not the full argument hash, so user paths and extra flags still match.
 
 Hosted MCP servers may use `launch.kind: remote-http` with the official HTTPS endpoint and one or more canonical configured server names. When Guard has exact runtime endpoint evidence, the endpoint must match. Query parameters are excluded from endpoint matching and from serialized server identity metadata, so query credentials are not emitted in Guard artifacts. Some harnesses expose only the configured server name and transport; that fallback is permitted only when no endpoint identity is available. A mismatched, malformed, or unrecognized remote endpoint stays on Guard's normal handling.
 
