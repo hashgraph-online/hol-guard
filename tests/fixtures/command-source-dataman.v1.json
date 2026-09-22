@@ -1,0 +1,167 @@
+{
+  "schema": "guard.command-extension-fixtures.v1",
+  "cases": [
+    {
+      "id": "dataman-init",
+      "command": "dataman init",
+      "enabled_extensions": ["command.dataman"],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.dataman.rule.init",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "dataman-create-table",
+      "command": "dataman create table Employee -o crud",
+      "enabled_extensions": ["command.dataman"],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.dataman.rule.create-table",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "dataman-create-table-with-db",
+      "command": "dataman create table Order --database analytics -o cr",
+      "enabled_extensions": ["command.dataman"],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.dataman.rule.create-table",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "dataman-create-database",
+      "command": "dataman create database analytics",
+      "enabled_extensions": ["command.dataman"],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.dataman.rule.create-database",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "dataman-makemigration",
+      "command": "dataman makemigration",
+      "enabled_extensions": ["command.dataman"],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.dataman.rule.makemigration",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "dataman-migrate",
+      "command": "dataman migrate",
+      "enabled_extensions": ["command.dataman"],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.dataman.rule.migrate",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "dataman-migrate-specific-db",
+      "command": "dataman migrate --database analytics",
+      "enabled_extensions": ["command.dataman"],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.dataman.rule.migrate",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "dataman-users-create-admin",
+      "command": "dataman users create-admin",
+      "enabled_extensions": ["command.dataman"],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.dataman.rule.create-admin",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "dataman-users-change-password",
+      "command": "dataman users change-password",
+      "enabled_extensions": ["command.dataman"],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.dataman.rule.change-password",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "dataman-users-create-token",
+      "command": "dataman users create-token ServiceKey --scopes \"customer:read\" --expires-in 30d",
+      "enabled_extensions": ["command.dataman"],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.dataman.rule.create-token",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "dataman-logs-export-audit",
+      "command": "dataman logs export-audit --format json --output audit.json",
+      "enabled_extensions": ["command.dataman"],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.dataman.rule.export-audit",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "dataman-logs-export-telemetry",
+      "command": "dataman logs export-telemetry --format csv -o telemetry.csv",
+      "enabled_extensions": ["command.dataman"],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.dataman.rule.export-telemetry",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "dataman-server-start-safe",
+      "command": "dataman server start",
+      "enabled_extensions": ["command.dataman"],
+      "disabled_permissions": [],
+      "expected_action": "allow",
+      "rule_id": null,
+      "expected_effective_segments": []
+    },
+    {
+      "id": "dataman-server-start-asgi-safe",
+      "command": "dataman server start --asgi --port 8000 --workers 4",
+      "enabled_extensions": ["command.dataman"],
+      "disabled_permissions": [],
+      "expected_action": "allow",
+      "rule_id": null,
+      "expected_effective_segments": []
+    },
+    {
+      "id": "dataman-help-safe",
+      "command": "dataman --help",
+      "enabled_extensions": ["command.dataman"],
+      "disabled_permissions": [],
+      "expected_action": "allow",
+      "rule_id": null,
+      "expected_effective_segments": []
+    },
+    {
+      "id": "dataman-create-help-safe",
+      "command": "dataman create --help",
+      "enabled_extensions": ["command.dataman"],
+      "disabled_permissions": [],
+      "expected_action": "allow",
+      "rule_id": null,
+      "expected_effective_segments": []
+    },
+    {
+      "id": "dataman-users-help-safe",
+      "command": "dataman users --help",
+      "enabled_extensions": ["command.dataman"],
+      "disabled_permissions": [],
+      "expected_action": "allow",
+      "rule_id": null,
+      "expected_effective_segments": []
+    },
+    {
+      "id": "dataman-logs-help-safe",
+      "command": "dataman logs --help",
+      "enabled_extensions": ["command.dataman"],
+      "disabled_permissions": [],
+      "expected_action": "allow",
+      "rule_id": null,
+      "expected_effective_segments": []
+    }
+  ]
+}
