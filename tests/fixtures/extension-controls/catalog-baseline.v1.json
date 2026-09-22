@@ -6,6 +6,7 @@
     "canonical_diff_digest",
     "effective"
   ],
+  "catalog_digest": "4393091ccef5132be9971755272494815120311af314286717935e75a50c373c",
   "catalog_digest": "884eae618561757c8d030f2a7177c6c07f2a12653cb6ed195ef4166a3390e148",
   "control_schema_version": "1.0.0",
   "daemon_api_schema": "guard.daemon.extension-controls.v1",
@@ -20,7 +21,7 @@
     "failures",
     "projection"
   ],
-  "extension_count": 71,
+  "extension_count": 72,
   "extension_ids": [
     "command.api-gateway",
     "command.backup.borg",
@@ -92,12 +93,13 @@
     "command.storage.google-cloud",
     "command.storage.minio",
     "command.system",
+    "command.tui-runner",
     "command.windows"
   ],
   "extension_schema_version": 2,
   "installed_browser_config": "dashboard/playwright.installed.config.ts",
   "overview_route": "/extensions",
-  "permission_count": 248,
+  "permission_count": 249,
   "permission_examples": {
     "command.api-gateway.permission.delete": "aws apigateway delete-rest-api",
     "command.backup.borg.permission.mutation": "borg delete",
@@ -346,6 +348,7 @@
     "command.storage.minio.permission.mirror": "mc mirror",
     "command.storage.minio.permission.mv": "mc mv",
     "command.system.permission.disk-or-power-mutation": "halt",
+    "command.tui-runner.permission.reconfigure": "tui-runner --reconfigure",
     "command.windows.permission.destructive-storage": "clear-disk"
   },
   "permission_families": {
@@ -692,6 +695,7 @@
     "command.storage.minio.permission.mirror",
     "command.storage.minio.permission.mv",
     "command.system.permission.disk-or-power-mutation",
+    "command.tui-runner.permission.reconfigure",
     "command.windows.permission.destructive-storage"
   ],
   "preview_shape": [
@@ -704,7 +708,7 @@
     "controls",
     "semantic_preview"
   ],
-  "rule_count": 234,
+  "rule_count": 235,
   "rule_ids": [
     "command.api-gateway.delete",
     "command.backup.borg.mutation",
@@ -939,6 +943,7 @@
     "command.storage.minio.cat",
     "command.storage.minio.mirror",
     "command.system.disk-or-power-mutation",
+    "command.tui-runner.reconfigure",
     "command.windows.destructive-storage"
   ],
   "schema_version": "guard.extension-control-center.baseline.v1"

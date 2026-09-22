@@ -104,6 +104,7 @@ pub(super) fn compile_node(
                 | "php-artisan-script.v1"
                 | "curl-elasticsearch-delete.v1"
                 | "repo2nb-expansion.v1"
+                | "tui-runner-expansion.v1"
                 | "reviewed-literal.v1" => {
                     Matcher::Specialized(SpecializedMatcher::from_config(operation, node.config)?)
                 }

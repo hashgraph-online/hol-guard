@@ -161,6 +161,11 @@ fn config_admission_rejects_unknown_or_invalid_semantics() {
     )
     .is_err());
     assert!(SpecializedMatcher::from_config(
+        "tui-runner-expansion.v1",
+        serde_json::json!({"launchers":[[]]})
+    )
+    .is_err());
+    assert!(SpecializedMatcher::from_config(
         "curl-elasticsearch-delete.v1",
         serde_json::json!({"service_ports":[65536]})
     )
@@ -399,9 +404,47 @@ fn canonical_parser_feeds_database_php_curl_and_expansion_matchers() {
             "deploy --cwd project --prod",
             vec![0],
         ),
+        (
+            "tui-runner-expansion.v1",
+            serde_json::json!({}),
+            "tui-runner $RECONFIG_FLAG",
+            vec![0],
+        ),
+        (
+            "tui-runner-expansion.v1",
+            serde_json::json!({}),
+            "tui-runner --reconfigure",
+            vec![],
+        ),
+        (
+            "tui-runner-expansion.v1",
+            serde_json::json!({}),
+            "printf café",
+            vec![],
+        ),
     ] {
         let command = shell(source);
         assert_eq!(command.confidence, "exact", "{source}");
         assert_eq!(evaluate(op, config, &command), Ok(expected), "{source}");
+    }
+}
+
+#[test]
+fn tui_runner_expansion_matches_wrapper_executable_name_variants_by_position() {
+    let matcher =
+        SpecializedMatcher::from_config("tui-runner-expansion.v1", serde_json::json!({})).unwrap();
+    for (executable, arguments, expected) in [
+        ("exec", vec!["tui-runner.exe", "$RECONFIG_FLAG"], vec![0]),
+        ("exec", vec!["tui-runner.cmd", "$RECONFIG_FLAG"], vec![0]),
+        ("xargs", vec!["-n", "1", "tui-runner.exe", "$RECONFIG_FLAG"], vec![0]),
+        ("exec", vec!["tui-runner", "--reconfigure"], vec![]),
+        ("exec", vec!["tui-runner.exe", "--reconfigure"], vec![]),
+    ] {
+        let command = model(&[(Some(executable.to_owned()), arguments.iter().map(|v| (*v).to_owned()).collect())], None);
+        assert_eq!(
+            matcher.match_segments(&command),
+            Ok(expected),
+            "{executable} {arguments:?}"
+        );
     }
 }

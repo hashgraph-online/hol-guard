@@ -75,12 +75,33 @@ struct CompiledLauncher {
     wrapper: bool,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct TuiRunnerExpansionConfig {
+    #[serde(default = "tui_runner_launchers")]
+    launchers: Vec<Vec<String>>,
+    #[serde(default = "wrapper_value_options")]
+    leading_options_with_values: BTreeSet<String>,
+    #[serde(default = "expansion_markers")]
+    expansion_markers: BTreeSet<String>,
+    #[serde(skip)]
+    compiled_launchers: Vec<CompiledTuiRunnerLauncher>,
+}
+
+#[derive(Debug, Clone)]
+struct CompiledTuiRunnerLauncher {
+    executables: BTreeSet<String>,
+    prefix_positions: Vec<BTreeSet<String>>,
+    wrapper: bool,
+}
+
 #[derive(Debug, Clone)]
 pub(crate) enum SpecializedMatcher {
     PhpArtisan(PhpArtisanConfig),
     ZeroOperand(ZeroOperandConfig),
     CurlElasticsearch(CurlElasticsearchConfig),
     Repo2nbExpansion(Repo2nbExpansionConfig),
+    TuiRunnerExpansion(TuiRunnerExpansionConfig),
     ReviewedLiteral(ReviewedLiteralConfig),
 }
 
@@ -142,6 +163,36 @@ impl SpecializedMatcher {
                     .collect();
                 Ok(Self::Repo2nbExpansion(config))
             }
+            "tui-runner-expansion.v1" => {
+                let mut config: TuiRunnerExpansionConfig =
+                    serde_json::from_value(config).map_err(invalid)?;
+                if config
+                    .launchers
+                    .iter()
+                    .flatten()
+                    .chain(&config.leading_options_with_values)
+                    .chain(&config.expansion_markers)
+                    .any(|value| !value.is_ascii())
+                {
+                    return Err("unsupported_specialized_unicode_config");
+                }
+                if config.launchers.iter().any(Vec::is_empty) {
+                    return Err("invalid_tui_runner_launcher");
+                }
+                config.compiled_launchers = config
+                    .launchers
+                    .iter()
+                    .map(|launcher| CompiledTuiRunnerLauncher {
+                        executables: executable_name_variants(&launcher[0]),
+                        prefix_positions: launcher[1..]
+                            .iter()
+                            .map(|token| executable_name_variants(token))
+                            .collect(),
+                        wrapper: matches!(launcher[0].as_str(), "exec" | "xargs"),
+                    })
+                    .collect();
+                Ok(Self::TuiRunnerExpansion(config))
+            }
             "reviewed-literal.v1" => {
                 let config: ReviewedLiteralConfig =
                     serde_json::from_value(config).map_err(invalid)?;
@@ -200,6 +251,7 @@ impl SpecializedMatcher {
                     )?
                 }
                 Self::Repo2nbExpansion(config) => config.matches(segment, deadline)?,
+                Self::TuiRunnerExpansion(config) => config.matches(segment, deadline)?,
                 Self::ReviewedLiteral(_) => unreachable!("handled before segment iteration"),
             };
             check_deadline(deadline)?;
@@ -281,6 +333,57 @@ impl Repo2nbExpansionConfig {
     }
 }
 
+impl TuiRunnerExpansionConfig {
+    fn matches(
+        &self,
+        segment: &CommandSegmentV1,
+        deadline: Option<Instant>,
+    ) -> Result<bool, &'static str> {
+        if segment.executable.is_none() {
+            return Ok(false);
+        }
+        let mut cached_arguments = None;
+        for launcher in &self.compiled_launchers {
+            check_deadline(deadline)?;
+            if !ascii_comparison::executable_matches(segment, &launcher.executables) {
+                continue;
+            }
+            // An unrelated executable cannot require normalization of its
+            // opaque operands. Reuse the result for this launcher's variants.
+            let arguments = cached_arguments.get_or_insert_with(|| {
+                segment
+                    .arguments
+                    .iter()
+                    .map(|argument| lowercase_for_ascii_comparison(argument))
+                    .collect::<Vec<_>>()
+            });
+            let mut candidate = arguments.as_slice();
+            if launcher.wrapper {
+                candidate = after_leading_options(candidate, &self.leading_options_with_values);
+            }
+            if candidate.len() < launcher.prefix_positions.len() {
+                continue;
+            }
+            let prefix_matches = launcher
+                .prefix_positions
+                .iter()
+                .enumerate()
+                .all(|(index, names)| names.contains(&candidate[index]));
+            if !prefix_matches {
+                continue;
+            }
+            return Ok(candidate[launcher.prefix_positions.len()..]
+                .iter()
+                .any(|argument| {
+                    self.expansion_markers
+                        .iter()
+                        .any(|marker| argument.contains(marker))
+                }));
+        }
+        Ok(false)
+    }
+}
+
 fn after_leading_options<'a>(arguments: &'a [String], options: &BTreeSet<String>) -> &'a [String] {
     let mut index = 0;
     let flags = BTreeSet::new();
@@ -313,6 +416,19 @@ fn wrapper_value_options() -> BTreeSet<String> {
 }
 fn expansion_markers() -> BTreeSet<String> {
     string_set(&["$", "`"])
+}
+fn executable_name_variants(name: &str) -> BTreeSet<String> {
+    BTreeSet::from([name.to_owned(), format!("{name}.cmd"), format!("{name}.exe")])
+}
+fn tui_runner_launchers() -> Vec<Vec<String>> {
+    [
+        vec!["tui-runner"],
+        vec!["exec", "tui-runner"],
+        vec!["xargs", "tui-runner"],
+    ]
+    .into_iter()
+    .map(|values| values.into_iter().map(str::to_owned).collect())
+    .collect()
 }
 fn repo2nb_launchers() -> Vec<Vec<String>> {
     [
