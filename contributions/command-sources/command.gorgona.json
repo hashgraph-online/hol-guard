@@ -1,0 +1,675 @@
+{
+  "extension": {
+    "action_classes": [
+      "remote command execution",
+      "cryptographic key generation",
+      "time-locked message send",
+      "time-locked message revoke"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews Gorgona time-locked messaging operations that mutate local key material, send or revoke encrypted messages, or execute decrypted messages as system commands.",
+    "ecosystem_ids": [],
+    "executables": [],
+    "extension_id": "command.gorgona",
+    "homepage": null,
+    "icon": {
+      "kind": "none"
+    },
+    "license": null,
+    "name": "Gorgona protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "cryptographic key generation"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies generation of an RSA key pair in /etc/gorgona/.",
+        "example_command": "gorgona genkeys",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "Gorgona key generation",
+        "permission_id": "command.gorgona.permission.genkeys",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Confirm the target host and key store path before generating a new key pair."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "time-locked message send"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies sending of an encrypted, time-locked message to a recipient public key.",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "Gorgona message send",
+        "permission_id": "command.gorgona.permission.send",
+        "replacement_permission_id": null,
+        "risk_tier": "medium",
+        "safer_guidance": [
+          "Verify the recipient public key and the unlock/expire window before sending."
+        ],
+        "typed_capabilities": [],
+        "example_command": "gorgona send \"2026-10-01 12:00:00\" \"2026-11-01 12:00:00\" \"hello world\" \"RWTPQzuhzBw=.pub\""
+      },
+      {
+        "action_classes": [
+          "time-locked message revoke"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies cancellation of a previously sent time-locked message, including the Dead Hand scenario.",
+        "example_command": "gorgona revoke 170119927746560 RWTPQzuhzBw=",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "Gorgona message revoke",
+        "permission_id": "command.gorgona.permission.revoke",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Confirm the alert_id and recipient hash before revoking."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "remote command execution"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies listen with -e/--exec, which executes decrypted messages as system commands. Plain listen, --help and --version stay automatic.",
+        "example_command": "gorgona -e listen new RWTPQzuhzBw=",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "Gorgona exec listen",
+        "permission_id": "command.gorgona.permission.exec-listen",
+        "replacement_permission_id": null,
+        "risk_tier": "critical",
+        "safer_guidance": [
+          "Prefer plain listen (without -e) and inspect decrypted messages before executing anything."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": null,
+    "reference_urls": [
+      "https://github.com/hashgraph-online/hol-guard"
+    ],
+    "required": false,
+    "risk_classes": [
+      "destructive_shell"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "cryptographic key generation"
+        ],
+        "default_mode": "review",
+        "description": "Identifies generation of an RSA key pair via gorgona genkeys.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "gorgona"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "genkeys"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.gorgona.permission.genkeys",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.gorgona.genkeys",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "gorgona"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "genkeys"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "gorgona"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--version"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "genkeys"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Gorgona genkeys help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Confirm the target host and key store path before generating a new key pair."
+        ],
+        "severity": "high",
+        "title": "Gorgona key generation"
+      },
+      {
+        "action_classes": [
+          "time-locked message send"
+        ],
+        "default_mode": "review",
+        "description": "Identifies sending of an encrypted time-locked message via gorgona send.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "gorgona"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "send"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.gorgona.permission.send",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.gorgona.send",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "gorgona"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "send"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "gorgona"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--version"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "send"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Gorgona send help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Verify the recipient public key and the unlock/expire window before sending."
+        ],
+        "severity": "medium",
+        "title": "Gorgona message send"
+      },
+      {
+        "action_classes": [
+          "time-locked message revoke"
+        ],
+        "default_mode": "review",
+        "description": "Identifies cancellation of a previously sent time-locked message via gorgona revoke.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "gorgona"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "revoke"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.gorgona.permission.revoke",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.gorgona.revoke",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "gorgona"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "revoke"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "gorgona"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--version"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "revoke"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Gorgona revoke help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Confirm the alert_id and recipient hash before revoking."
+        ],
+        "severity": "high",
+        "title": "Gorgona message revoke"
+      },
+      {
+        "action_classes": [
+          "remote command execution"
+        ],
+        "default_mode": "review",
+        "description": "Identifies gorgona listen with -e/--exec, which executes decrypted messages as system commands. Plain listen stays automatic because no rule matches it.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "gorgona"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "-e",
+                  "--exec"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [
+                  "-e"
+                ],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": [
+                  "listen"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "gorgona"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "-e",
+                  "--exec"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [
+                  "--exec"
+                ],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": [
+                  "listen"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.gorgona.permission.exec-listen",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.gorgona.exec-listen",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "gorgona"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "-e",
+                      "--exec"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-e",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "listen"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "gorgona"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "-e",
+                      "--exec"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--exec",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "listen"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "gorgona"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "-e",
+                      "--exec"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-e",
+                      "--version"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "listen"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "gorgona"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "-e",
+                      "--exec"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--exec",
+                      "--version"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "listen"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Gorgona exec listen help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Prefer plain listen (without -e) and inspect decrypted messages before executing anything."
+        ],
+        "severity": "critical",
+        "title": "Gorgona exec listen"
+      }
+    ],
+    "safer_alternatives": [
+      "Inspect the target host and message contents before running Gorgona operations that generate keys, send, revoke, or execute messages."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}
