@@ -134,6 +134,11 @@ from ..local_supply_chain import (
     resolve_supply_chain_audit_workspace_dir,
     sync_supply_chain_cloud_state,
 )
+from ..project_folder_picker import (
+    ProjectFolderPickerBusyError,
+    ProjectFolderPickerUnavailableError,
+    choose_project_folder,
+)
 from ..managed_controls_policy_fields import ParsedManagedControlsPolicy
 from ..models import DECISION_SCOPE_VALUES, DecisionScope, PolicyDecision, format_local_http_origin
 from ..native_mode import native_mode_requires_rust as _native_mode_requires_rust
@@ -2912,6 +2917,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             else:
                 handle_package_action()
             return
+        if parsed.path == "/v1/supply-chain/choose-folder":
+            self._handle_supply_chain_choose_folder()
+            return
         if len(path_parts) == 3 and path_parts[:2] == ["v1", "supply-chain"] and path_parts[2] in {"audit", "sync"}:
             action = path_parts[2]
             if action == "sync":
@@ -3902,6 +3910,54 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             )
         raise ValueError("unsupported_supply_chain_operation")
 
+    def _handle_supply_chain_choose_folder(self) -> None:
+        try:
+            selected = choose_project_folder()
+        except ProjectFolderPickerBusyError:
+            self._write_json(
+                {
+                    "error": "folder_picker_busy",
+                    "message": "A folder selection is already open.",
+                    "operation": "choose-folder",
+                },
+                status=409,
+            )
+            return
+        except ProjectFolderPickerUnavailableError:
+            self._write_json(
+                {
+                    "error": "folder_picker_unavailable",
+                    "message": "Folder selection is unavailable. Paste a project folder path instead.",
+                    "operation": "choose-folder",
+                },
+                status=503,
+            )
+            return
+        if selected is None:
+            self._write_json({"cancelled": True, "operation": "choose-folder", "workspace_dir": None})
+            return
+        try:
+            resolved = self._resolve_supply_chain_workspace_dir(
+                {"workspace_dir": selected},
+                reject_invalid_explicit=True,
+            )
+        except ValueError as error:
+            self._write_json(self._supply_chain_value_error_payload("choose-folder", str(error)), status=400)
+            return
+        if resolved is None:
+            self._write_json(
+                self._supply_chain_value_error_payload("choose-folder", "workspace_dir_invalid"),
+                status=400,
+            )
+            return
+        self._write_json(
+            {
+                "cancelled": False,
+                "operation": "choose-folder",
+                "workspace_dir": str(resolved),
+            }
+        )
+
     def _resolve_supply_chain_workspace_dir(
         self,
         payload: dict[str, object],
@@ -3943,9 +3999,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         error_payload: dict[str, object] = {"error": error_code, "operation": operation}
         if error_code == "workspace_dir_required":
             error_payload["message"] = (
-                "Guard needs a project folder with package manifests before it can run "
-                "the workspace audit. Open Guard from a connected app workspace or pass "
-                "workspace_dir in the audit request."
+                "Guard needs a project folder before it can run the workspace audit. "
+                "Choose a local project folder and try again."
             )
         elif error_code == "workspace_dir_invalid":
             error_payload["message"] = (

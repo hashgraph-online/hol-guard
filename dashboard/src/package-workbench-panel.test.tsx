@@ -94,6 +94,7 @@ const workspaceRecoveryMarkup = renderToStaticMarkup(
     auditWorkspaceSelectionRequired
     auditWorkspaceDir=""
     onAuditWorkspaceDirChange={() => undefined}
+    onChooseAuditWorkspace={() => undefined}
     onRunAudit={() => undefined}
   />,
 );
@@ -132,6 +133,18 @@ assert(
 assert(
   workspaceRecoveryMarkup.includes('aria-disabled="true"'),
   "PWP14: audit should stay disabled until a project folder is provided",
+);
+assert(
+  workspaceRecoveryMarkup.includes("Choose folder"),
+  "PWP14-B: workspace recovery should offer a folder picker",
+);
+assert(
+  !workspaceRecoveryMarkup.includes("<project-folder>"),
+  "PWP14-C: the folder field should not show a token placeholder",
+);
+assert(
+  workspaceRecoveryMarkup.includes("Paste a folder path"),
+  "PWP14-D: the folder field should invite a pasted path",
 );
 assert(
   selectedWorkspaceMarkup.includes('aria-disabled="false"'),

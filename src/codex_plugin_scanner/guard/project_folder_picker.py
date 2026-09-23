@@ -1,0 +1,91 @@
+"""Open a local folder dialog for workspace audit selection."""
+
+from __future__ import annotations
+
+import shutil
+import subprocess
+import sys
+import threading
+from collections.abc import Callable
+
+_PICKER_LOCK = threading.Lock()
+_PICKER_TIMEOUT_SECONDS = 180
+_PROMPT = "Choose the project folder Guard should audit"
+
+
+class ProjectFolderPickerBusyError(RuntimeError):
+    """A folder dialog is already open."""
+
+
+class ProjectFolderPickerUnavailableError(RuntimeError):
+    """This machine has no usable folder dialog."""
+
+
+def project_folder_picker_command(
+    platform_name: str,
+    *,
+    which: Callable[[str], str | None] = shutil.which,
+) -> tuple[str, ...] | None:
+    if platform_name == "darwin":
+        return (
+            "/usr/bin/osascript",
+            "-e",
+            f'POSIX path of (choose folder with prompt "{_PROMPT}")',
+        )
+    if platform_name == "win32":
+        script = (
+            "Add-Type -AssemblyName System.Windows.Forms; "
+            "$dialog = New-Object System.Windows.Forms.FolderBrowserDialog; "
+            f"$dialog.Description = '{_PROMPT}'; "
+            "if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { "
+            "Write-Output $dialog.SelectedPath }"
+        )
+        return ("powershell", "-NoProfile", "-STA", "-Command", script)
+    zenity = which("zenity")
+    if zenity:
+        return (zenity, "--file-selection", "--directory", f"--title={_PROMPT}")
+    kdialog = which("kdialog")
+    if kdialog:
+        return (kdialog, "--getexistingdirectory", ".", _PROMPT)
+    return None
+
+
+def interpret_project_folder_picker_result(*, returncode: int, stdout: str, stderr: str) -> str | None:
+    selected = stdout.strip()
+    if returncode == 0:
+        return selected or None
+    lowered = stderr.lower()
+    if "user canceled" in lowered or "user cancelled" in lowered or not stderr.strip():
+        return None
+    raise ProjectFolderPickerUnavailableError()
+
+
+def choose_project_folder(
+    *,
+    runner: Callable[..., subprocess.CompletedProcess[str]] | None = None,
+    platform_name: str | None = None,
+) -> str | None:
+    if not _PICKER_LOCK.acquire(blocking=False):
+        raise ProjectFolderPickerBusyError()
+    try:
+        command = project_folder_picker_command(platform_name or sys.platform)
+        if command is None:
+            raise ProjectFolderPickerUnavailableError()
+        run = runner or subprocess.run
+        try:
+            completed = run(
+                list(command),
+                capture_output=True,
+                text=True,
+                timeout=_PICKER_TIMEOUT_SECONDS,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as error:
+            raise ProjectFolderPickerUnavailableError() from error
+        return interpret_project_folder_picker_result(
+            returncode=int(completed.returncode),
+            stdout=completed.stdout or "",
+            stderr=completed.stderr or "",
+        )
+    finally:
+        _PICKER_LOCK.release()

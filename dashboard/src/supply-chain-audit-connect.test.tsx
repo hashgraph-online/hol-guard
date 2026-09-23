@@ -91,7 +91,7 @@ assert(
   "workspace audit errors should activate the project-folder recovery flow",
 );
 assert(
-  supplyChainAuditUserMessage(workspaceError)?.includes("Enter the project folder"),
+  supplyChainAuditUserMessage(workspaceError)?.includes("Choose a project folder"),
   "workspace audit errors should direct users to the dashboard recovery field",
 );
 assert(
