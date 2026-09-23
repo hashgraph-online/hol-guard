@@ -162,3 +162,33 @@ def test_repo2nb_extension_publishes_official_reference() -> None:
     assert extension is not None
     assert extension.reference_urls
     assert all(url.startswith("https://") for url in extension.reference_urls)
+
+
+DEARMOUR_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
+    (
+        "dearmour --overwrite",
+        "dearmour forced extraction command",
+        "command.dearmour.permission.overwrite",
+    ),
+    (
+        "dearmour -o dest --merge",
+        "dearmour forced extraction command",
+        "command.dearmour.permission.overwrite",
+    ),
+)
+
+def test_dearmour_rules_stay_inert_until_enabled(tmp_path: Path) -> None:
+    for command, _action_class, rule_id in DEARMOUR_REVIEW_CASES:
+        evaluation = real_native_command_evaluation(command, cwd=tmp_path, home_dir=tmp_path).evaluation
+        assert evaluation.controlling_rule_id != rule_id
+        assert all(item.extension.extension_id != "command.dearmour" for item in evaluation.extension_observations)
+
+DEARMOUR_SAFE_COMMANDS: tuple[str, ...] = (
+    "dearmour --detect",
+    "dearmour --fetch",
+    "dearmour --version",
+    "dearmour -o dest",
+)
+
+def test_dearmour_preview_and_help_commands_remain_safe(tmp_path: Path) -> None:
+    assert_safe_command_cases(DEARMOUR_SAFE_COMMANDS, tmp_path)
