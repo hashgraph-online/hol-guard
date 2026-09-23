@@ -38,15 +38,19 @@ class MirroredPolicyIntegritySecretStore(FallbackSecretStore):
         except Exception:
             primary_value = None
         if primary_value is not None:
-            if self.fallback.get_secret(secret_id) != primary_value:
-                self.fallback.set_secret(secret_id, primary_value)
+            with suppress(Exception):
+                if self.fallback.get_secret(secret_id) != primary_value:
+                    self.fallback.set_secret(secret_id, primary_value)
             return primary_value
-        return self.fallback.get_secret(secret_id)
+        try:
+            return self.fallback.get_secret(secret_id)
+        except Exception:
+            return None
 
     def set_secret(self, secret_id: str, value: str) -> None:
-        self.fallback.set_secret(secret_id, value)
+        self.primary.set_secret(secret_id, value)
         with suppress(Exception):
-            self.primary.set_secret(secret_id, value)
+            self.fallback.set_secret(secret_id, value)
 
 
 def build_policy_integrity_secret_store(

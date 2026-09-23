@@ -155,6 +155,46 @@ def test_linux_unavailable_legacy_keyring_does_not_replace_armed_native_key(
     assert store._policy_integrity_secret_material(create=True) == (None, None)
 
 
+def test_mirrored_policy_keyring_write_failure_keeps_existing_vault_value(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    primary = SystemKeyringSecretStore(service_name="hol-guard.test")
+    fallback = EncryptedFileSecretStore(tmp_path)
+    fallback.set_secret("integrity-key", "old")
+
+    def fail_write(_secret_id: str, _value: str) -> None:
+        raise RuntimeError("keyring unavailable")
+
+    monkeypatch.setattr(primary, "set_secret", fail_write)
+    mirrored = MirroredPolicyIntegritySecretStore(primary, fallback)
+
+    with pytest.raises(RuntimeError, match="keyring unavailable"):
+        mirrored.set_secret("integrity-key", "new")
+    assert fallback.get_secret("integrity-key") == "old"
+
+
+def test_mirrored_policy_keyring_remains_readable_when_vault_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    primary = SystemKeyringSecretStore(service_name="hol-guard.test")
+    monkeypatch.setattr(primary, "get_secret_with_timeout", lambda _secret_id, *, timeout_seconds: "keyring-value")
+
+    class FailingVault:
+        def get_secret(self, _secret_id: str) -> str | None:
+            raise RuntimeError("vault unavailable")
+
+        def set_secret(self, _secret_id: str, _value: str) -> None:
+            raise RuntimeError("vault unavailable")
+
+        def delete_secret(self, _secret_id: str) -> None:
+            raise RuntimeError("vault unavailable")
+
+    mirrored = MirroredPolicyIntegritySecretStore(primary, FailingVault())
+
+    assert mirrored.get_secret("integrity-key") == "keyring-value"
+
+
 def test_doctor_can_report_protected_after_linux_local_vault_repair(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

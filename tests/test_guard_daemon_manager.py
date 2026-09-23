@@ -763,8 +763,13 @@ def test_load_guard_daemon_url_accepts_matching_healthz_guard_home_for_in_proces
 def test_write_guard_daemon_state_hardens_permissions_on_open_descriptor(tmp_path, monkeypatch):
     guard_home = tmp_path / "guard-home"
     fchmod_calls: list[tuple[int, int]] = []
+    test_thread = threading.get_ident()
+    original_fchmod = daemon_manager_module.os.fchmod
 
     def fake_fchmod(descriptor: int, mode: int) -> None:
+        if threading.get_ident() != test_thread:
+            original_fchmod(descriptor, mode)
+            return
         fchmod_calls.append((descriptor, mode))
 
     monkeypatch.setattr(daemon_manager_module.os, "fchmod", fake_fchmod)
