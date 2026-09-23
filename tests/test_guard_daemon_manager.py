@@ -762,17 +762,19 @@ def test_load_guard_daemon_url_accepts_matching_healthz_guard_home_for_in_proces
 @pytest.mark.skipif(os.name == "nt", reason="requires POSIX os.fchmod permission semantics")
 def test_write_guard_daemon_state_hardens_permissions_on_open_descriptor(tmp_path, monkeypatch):
     guard_home = tmp_path / "guard-home"
-    fchmod_calls: list[tuple[int, int]] = []
+    fchmod_calls: list[tuple[int, int, int]] = []
 
     def fake_fchmod(descriptor: int, mode: int) -> None:
-        fchmod_calls.append((descriptor, mode))
+        metadata = daemon_manager_module.os.fstat(descriptor)
+        fchmod_calls.append((metadata.st_dev, metadata.st_ino, mode))
 
     monkeypatch.setattr(daemon_manager_module.os, "fchmod", fake_fchmod)
 
     daemon_manager_module.write_guard_daemon_state(guard_home, 4781, "secret-token")
 
-    assert len(fchmod_calls) == 3
-    assert all(mode == 0o600 for _, mode in fchmod_calls)
+    state_metadata = daemon_manager_module._state_path(guard_home).stat()
+    assert (state_metadata.st_dev, state_metadata.st_ino, 0o600) in fchmod_calls
+    assert all(mode == 0o600 for _, _, mode in fchmod_calls)
 
 
 def test_authenticated_daemon_state_rejects_post_write_tampering(tmp_path):
