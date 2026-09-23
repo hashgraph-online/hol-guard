@@ -6,7 +6,7 @@
     "canonical_diff_digest",
     "effective"
   ],
-  "catalog_digest": "884eae618561757c8d030f2a7177c6c07f2a12653cb6ed195ef4166a3390e148",
+  "catalog_digest": "da55b34141541a28dd71698059e2636ab8b0d20508ae953b4f33cedd899bcc52",
   "control_schema_version": "1.0.0",
   "daemon_api_schema": "guard.daemon.extension-controls.v1",
   "effective_shape": [
@@ -20,8 +20,9 @@
     "failures",
     "projection"
   ],
-  "extension_count": 71,
+  "extension_count": 72,
   "extension_ids": [
+    "command.ai-dev",
     "command.api-gateway",
     "command.backup.borg",
     "command.backup.rclone",
@@ -97,8 +98,13 @@
   "extension_schema_version": 2,
   "installed_browser_config": "dashboard/playwright.installed.config.ts",
   "overview_route": "/extensions",
-  "permission_count": 248,
+  "permission_count": 253,
   "permission_examples": {
+    "command.ai-dev.permission.agents-claim": "ai-dev agents claim",
+    "command.ai-dev.permission.agents-release": "ai-dev agents release",
+    "command.ai-dev.permission.index-daemon-start": "ai-dev index daemon start",
+    "command.ai-dev.permission.index-daemon-stop": "ai-dev index daemon stop",
+    "command.ai-dev.permission.integrations-install-force": "ai-dev integrations install --force",
     "command.api-gateway.permission.delete": "aws apigateway delete-rest-api",
     "command.backup.borg.permission.mutation": "borg delete",
     "command.backup.rclone.permission.mutation": "rclone delete",
@@ -445,6 +451,11 @@
     "command.storage.minio.permission.mv": "minio"
   },
   "permission_ids": [
+    "command.ai-dev.permission.agents-claim",
+    "command.ai-dev.permission.agents-release",
+    "command.ai-dev.permission.index-daemon-start",
+    "command.ai-dev.permission.index-daemon-stop",
+    "command.ai-dev.permission.integrations-install-force",
     "command.api-gateway.permission.delete",
     "command.backup.borg.permission.mutation",
     "command.backup.rclone.permission.mutation",
@@ -704,8 +715,13 @@
     "controls",
     "semantic_preview"
   ],
-  "rule_count": 234,
+  "rule_count": 239,
   "rule_ids": [
+    "command.ai-dev.integrations-install-force",
+    "command.ai-dev.index-daemon-start",
+    "command.ai-dev.index-daemon-stop",
+    "command.ai-dev.agents-claim",
+    "command.ai-dev.agents-release",
     "command.api-gateway.delete",
     "command.backup.borg.mutation",
     "command.backup.rclone.mutation",

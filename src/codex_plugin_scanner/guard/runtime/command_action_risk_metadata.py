@@ -99,6 +99,12 @@ GITHUB_ACTION_RISK_CLASSES: Final[dict[str, tuple[str, ...]]] = {
     "unverified github command capability": ("destructive_shell", "network_egress"),
 }
 
+AI_DEV_ACTION_RISK_CLASSES: Final[dict[str, tuple[str, ...]]] = {
+    "ai-dev forced integration config overwrite command": ("destructive_shell",),
+    "ai-dev index daemon lifecycle command": ("destructive_shell", "execution"),
+    "ai-dev agent coordination mutation command": ("destructive_shell",),
+}
+
 OLLAMA_ACTION_RISK_CLASSES: Final[dict[str, tuple[str, ...]]] = {
     "ollama model publication command": ("network_egress",),
     "ollama model removal command": ("destructive_shell",),
@@ -108,12 +114,15 @@ COMMAND_ACTION_RISK_CLASSES: Final[dict[str, tuple[str, ...]]] = {
     **_BASE_COMMAND_ACTION_RISK_CLASSES,
     **BLITCP_ACTION_RISK_CLASSES,
     **GITHUB_ACTION_RISK_CLASSES,
+    **AI_DEV_ACTION_RISK_CLASSES,
     **OLLAMA_ACTION_RISK_CLASSES,
 }
 
 __all__ = [
+    "AI_DEV_ACTION_RISK_CLASSES",
     "BLITCP_ACTION_RISK_CLASSES",
     "COMMAND_ACTION_RISK_CLASSES",
     "GITHUB_ACTION_RISK_CLASSES",
     "OLLAMA_ACTION_RISK_CLASSES",
 ]
+
