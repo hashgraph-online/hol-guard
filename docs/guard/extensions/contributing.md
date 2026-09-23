@@ -56,6 +56,12 @@ When a ready-for-review PR has a mechanical source, fixture, schema, or generate
 problem, Gitar can apply the deterministic repair. It does not choose matcher semantics, trust
 classes, safe variants, or claimant IDs. Comment `gitar auto-apply:off` to receive analysis only.
 
+For a personal-fork PR, the fork owner must enable [Allow edits from
+maintainers](https://docs.github.com/en/pull-requests/how-tos/work-with-forks/allowing-changes-to-a-pull-request-branch-created-from-a-fork)
+before Gitar can commit a repair. The repository cannot grant that permission for the fork. If
+GitHub offers **Allow edits and access to secrets by maintainers**, leave it disabled and apply
+the suggested change manually.
+
 ## Choose the contribution type
 
 | Contribution | Use it for | Expected scope |
