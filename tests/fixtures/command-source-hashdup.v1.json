@@ -1,0 +1,796 @@
+{
+  "schema": "guard.command-extension-fixtures.v1",
+  "cases": [
+    {
+      "id": "hashdup-inactive",
+      "command": "hashdup /workspace --delete",
+      "enabled_extensions": [],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.hashdup.delete",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "hashdup-delete-trailing",
+      "command": "hashdup /workspace --delete",
+      "enabled_extensions": [
+        "command.hashdup"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.hashdup.delete",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "hashdup-delete-leading",
+      "command": "hashdup --delete /workspace",
+      "enabled_extensions": [
+        "command.hashdup"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.hashdup.delete",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "hashdup-short-d",
+      "command": "hashdup -d /workspace",
+      "enabled_extensions": [
+        "command.hashdup"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.hashdup.delete",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "hashdup-xargs-delete",
+      "command": "xargs hashdup --delete",
+      "enabled_extensions": [
+        "command.hashdup"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "block",
+      "rule_id": "command.hashdup.delete",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "hashdup-xargs-options-delete",
+      "command": "xargs -n 1 hashdup /workspace --delete",
+      "enabled_extensions": [
+        "command.hashdup"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "block",
+      "rule_id": "command.hashdup.delete",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "hashdup-exec-delete",
+      "command": "exec hashdup /workspace --delete",
+      "enabled_extensions": [
+        "command.hashdup"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "block",
+      "rule_id": "command.hashdup.delete",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "hashdup-unknown-option-fail-secure",
+      "command": "hashdup --unknown-flag /workspace --delete",
+      "enabled_extensions": [
+        "command.hashdup"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.hashdup.delete",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "hashdup-scan-read-only",
+      "command": "hashdup /workspace",
+      "enabled_extensions": [
+        "command.hashdup"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.hashdup.delete",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "hashdup-trash-staging-safe",
+      "command": "hashdup /workspace -t /tmp/trash",
+      "enabled_extensions": [
+        "command.hashdup"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.hashdup.delete",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "hashdup-help-safe",
+      "command": "hashdup --help",
+      "enabled_extensions": [
+        "command.hashdup"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.hashdup.delete",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "hashdup-disabled-permission",
+      "command": "hashdup /workspace --delete",
+      "enabled_extensions": [
+        "command.hashdup"
+      ],
+      "disabled_permissions": [
+        "command.hashdup.permission.delete"
+      ],
+      "expected_action": "block",
+      "rule_id": "command.hashdup.delete",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "hashdup-unrelated-safe",
+      "command": "pwd",
+      "enabled_extensions": [
+        "command.hashdup"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "allow",
+      "rule_id": "command.hashdup.delete",
+      "expected_effective_segments": []
+    }
+  ],
+  "build": {
+    "schema": "guard.command-extension-build.v1",
+    "sources": [
+      {
+        "extension": {
+          "action_classes": [
+            "HashDup permanent deletion command"
+          ],
+          "aliases": [],
+          "conflicts": [],
+          "delegated_protection": null,
+          "dependencies": [],
+          "description": "Reviews HashDup duplicate finder commands, approval-gating permanent --delete operations while keeping read-only scans and --trash staging automatic.",
+          "ecosystem_ids": [],
+          "executables": [],
+          "extension_id": "command.hashdup",
+          "homepage": "https://github.com/mahdyarmonfared/hashdup-cli",
+          "icon": {
+            "background": "#DC2626",
+            "kind": "react-icon",
+            "name": "HiMiniCommandLine"
+          },
+          "license": "MIT",
+          "name": "HashDup duplicate file protection",
+          "permissions": [
+            {
+              "action_classes": [
+                "HashDup permanent deletion command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies permanent unrecoverable deletion of duplicate files via HashDup CLI.",
+              "example_command": "hashdup /workspace --delete",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "2.2.0",
+              "label": "HashDup permanent deletion",
+              "permission_id": "command.hashdup.permission.delete",
+              "replacement_permission_id": null,
+              "risk_tier": "high",
+              "safer_guidance": [
+                "Run a read-only scan first (hashdup <dir>) or use --trash <folder> to stage duplicates reversibly before considering permanent --delete."
+              ],
+              "typed_capabilities": []
+            }
+          ],
+          "project_markers": [],
+          "publisher": {
+            "display_name": "Community",
+            "id": "community.mahdyarmonfared",
+            "url": "https://github.com/mahdyarmonfared/hashdup-cli"
+          },
+          "reference_urls": [
+            "https://github.com/mahdyarmonfared/hashdup-cli"
+          ],
+          "required": false,
+          "risk_classes": [
+            "destructive_shell"
+          ],
+          "rules": [
+            {
+              "action_classes": [
+                "HashDup permanent deletion command"
+              ],
+              "default_mode": "review",
+              "description": "Identifies permanent unrecoverable deletion of duplicate files via HashDup CLI.",
+              "family": null,
+              "matcher": {
+                "config": {},
+                "matchers": [
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "hashdup",
+                        "hashdup.cmd",
+                        "hashdup.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "-d",
+                        "--delete",
+                        "--no-zero",
+                        "-h",
+                        "--help",
+                        "-V",
+                        "--version"
+                      ],
+                      "interspersed_options_with_values": [
+                        "-a",
+                        "--algo",
+                        "-t",
+                        "--trash"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "-a",
+                        "--algo",
+                        "-t",
+                        "--trash"
+                      ],
+                      "options_with_values": [
+                        "-a",
+                        "--algo",
+                        "-t",
+                        "--trash"
+                      ],
+                      "required_flags": [
+                        "--delete"
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "required_option_values": [],
+                      "subcommands": []
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "hashdup",
+                        "hashdup.cmd",
+                        "hashdup.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "-d",
+                        "--delete",
+                        "--no-zero",
+                        "-h",
+                        "--help",
+                        "-V",
+                        "--version"
+                      ],
+                      "interspersed_options_with_values": [
+                        "-a",
+                        "--algo",
+                        "-t",
+                        "--trash"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "-a",
+                        "--algo",
+                        "-t",
+                        "--trash"
+                      ],
+                      "options_with_values": [
+                        "-a",
+                        "--algo",
+                        "-t",
+                        "--trash"
+                      ],
+                      "required_flags": [
+                        "-d"
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "required_option_values": [],
+                      "subcommands": []
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "xargs",
+                        "xargs.cmd",
+                        "xargs.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "-d",
+                        "--delete",
+                        "--no-zero",
+                        "-h",
+                        "--help",
+                        "-V",
+                        "--version"
+                      ],
+                      "interspersed_options_with_values": [
+                        "-a",
+                        "--algo",
+                        "-t",
+                        "--trash"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "-n",
+                        "-P",
+                        "-I",
+                        "-i",
+                        "-L",
+                        "-s",
+                        "-d",
+                        "-E",
+                        "-a"
+                      ],
+                      "options_with_values": [
+                        "-a",
+                        "--algo",
+                        "-t",
+                        "--trash"
+                      ],
+                      "required_flags": [
+                        "--delete"
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "hashdup"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "xargs",
+                        "xargs.cmd",
+                        "xargs.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "-d",
+                        "--delete",
+                        "--no-zero",
+                        "-h",
+                        "--help",
+                        "-V",
+                        "--version"
+                      ],
+                      "interspersed_options_with_values": [
+                        "-a",
+                        "--algo",
+                        "-t",
+                        "--trash"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "-n",
+                        "-P",
+                        "-I",
+                        "-i",
+                        "-L",
+                        "-s",
+                        "-d",
+                        "-E",
+                        "-a"
+                      ],
+                      "options_with_values": [
+                        "-a",
+                        "--algo",
+                        "-t",
+                        "--trash"
+                      ],
+                      "required_flags": [
+                        "-d"
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "hashdup"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "exec",
+                        "exec.cmd",
+                        "exec.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "-d",
+                        "--delete",
+                        "--no-zero",
+                        "-h",
+                        "--help",
+                        "-V",
+                        "--version"
+                      ],
+                      "interspersed_options_with_values": [
+                        "-a",
+                        "--algo",
+                        "-t",
+                        "--trash"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "-n",
+                        "-P",
+                        "-I",
+                        "-i",
+                        "-L",
+                        "-s",
+                        "-d",
+                        "-E",
+                        "-a"
+                      ],
+                      "options_with_values": [
+                        "-a",
+                        "--algo",
+                        "-t",
+                        "--trash"
+                      ],
+                      "required_flags": [
+                        "--delete"
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "hashdup"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "exec",
+                        "exec.cmd",
+                        "exec.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "-d",
+                        "--delete",
+                        "--no-zero",
+                        "-h",
+                        "--help",
+                        "-V",
+                        "--version"
+                      ],
+                      "interspersed_options_with_values": [
+                        "-a",
+                        "--algo",
+                        "-t",
+                        "--trash"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "-n",
+                        "-P",
+                        "-I",
+                        "-i",
+                        "-L",
+                        "-s",
+                        "-d",
+                        "-E",
+                        "-a"
+                      ],
+                      "options_with_values": [
+                        "-a",
+                        "--algo",
+                        "-t",
+                        "--trash"
+                      ],
+                      "required_flags": [
+                        "-d"
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "hashdup"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  }
+                ],
+                "op": "any.v1"
+              },
+              "native_capability": null,
+              "permission_id": "command.hashdup.permission.delete",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "rule_id": "command.hashdup.delete",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "hashdup",
+                            "hashdup.cmd",
+                            "hashdup.exe"
+                          ],
+                          "fail_secure_unknown_options": false,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": []
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "hashdup",
+                            "hashdup.cmd",
+                            "hashdup.exe"
+                          ],
+                          "fail_secure_unknown_options": false,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "-h"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": []
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "xargs",
+                            "xargs.cmd",
+                            "xargs.exe"
+                          ],
+                          "fail_secure_unknown_options": false,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "-n",
+                            "-P",
+                            "-I",
+                            "-i",
+                            "-L",
+                            "-s",
+                            "-d",
+                            "-E",
+                            "-a"
+                          ],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "hashdup"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "exec",
+                            "exec.cmd",
+                            "exec.exe"
+                          ],
+                          "fail_secure_unknown_options": false,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "-n",
+                            "-P",
+                            "-I",
+                            "-i",
+                            "-L",
+                            "-s",
+                            "-d",
+                            "-E",
+                            "-a"
+                          ],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "hashdup"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      }
+                    ],
+                    "op": "any.v1"
+                  },
+                  "title": "Command help",
+                  "variant_id": "help"
+                }
+              ],
+              "safer_alternatives": [
+                "Run read-only scan with hashdup <dir> or stage duplicates safely with hashdup <dir> -t <folder> before considering permanent --delete."
+              ],
+              "severity": "high",
+              "title": "HashDup permanent deletion"
+            }
+          ],
+          "safer_alternatives": [
+            "Run read-only scan with hashdup <dir> or stage duplicates safely with hashdup <dir> -t <folder> before considering permanent --delete."
+          ],
+          "source": "built-in",
+          "version": "1.0.0"
+        },
+        "schema": "guard.command-extension-source.v1"
+      }
+    ],
+    "trust": {
+      "schemaVersion": "guard.extension-trust-class-map.v1",
+      "publishers": {
+        "hol": {
+          "id": "hol",
+          "displayName": "Hashgraph Online"
+        },
+        "hol-curated": {
+          "id": "hol-curated",
+          "displayName": "HOL curated library"
+        }
+      },
+      "classes": {
+        "first-party": [
+          "command.container-runtime",
+          "command.data-protection",
+          "command.encoded-execution",
+          "command.filesystem",
+          "command.git",
+          "command.guard-self-protection",
+          "command.kubernetes-secrets",
+          "command.package.go",
+          "command.package.jvm",
+          "command.package.node",
+          "command.package.php",
+          "command.package.python",
+          "command.package.ruby",
+          "command.package.rust",
+          "command.package.system",
+          "command.shell-mutations",
+          "command.system",
+          "command.windows"
+        ],
+        "trusted-library": [
+          "command.api-gateway",
+          "command.backup.borg",
+          "command.backup.rclone",
+          "command.backup.restic",
+          "command.backup.velero",
+          "command.cdn",
+          "command.cicd.circleci",
+          "command.cicd.github",
+          "command.cicd.gitlab",
+          "command.cloud.aws",
+          "command.cloud.azure",
+          "command.cloud.gcp",
+          "command.database.mongodb",
+          "command.database.mysql",
+          "command.database.postgresql",
+          "command.database.redis",
+          "command.database.sqlite",
+          "command.database.supabase",
+          "command.dns.aws",
+          "command.dns.azure",
+          "command.dns.gcp",
+          "command.email",
+          "command.feature-flags",
+          "command.framework.laravel",
+          "command.github",
+          "command.infrastructure-as-code",
+          "command.kubernetes-operations",
+          "command.load-balancer",
+          "command.messaging.kafka",
+          "command.messaging.nats",
+          "command.messaging.rabbitmq",
+          "command.monitoring",
+          "command.payment",
+          "command.platform.heroku",
+          "command.platform.netlify",
+          "command.platform.vercel",
+          "command.remote.rsync",
+          "command.remote.scp",
+          "command.remote.ssh",
+          "command.search.elasticsearch",
+          "command.storage.aws-s3",
+          "command.storage.azure-blob",
+          "command.storage.google-cloud",
+          "command.storage.minio"
+        ],
+        "external": [
+          "command.blitcp",
+          "command.hashdup",
+          "command.mcp-filesystem",
+          "command.mcp-instapods",
+          "command.noodle",
+          "command.ollama",
+          "command.probe",
+          "command.remote.essh",
+          "command.repo2nb",
+          "command.skill-sunset"
+        ]
+      }
+    }
+  }
+}

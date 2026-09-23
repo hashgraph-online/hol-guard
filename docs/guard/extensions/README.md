@@ -143,6 +143,7 @@ Protection model meanings:
 | :--- | :--- | ---: | :--- |
 | `command.blitcp` | Reviews blitcp copies that leave the host, elevate privileges, or skip verification. | 4 | External opt-in |
 | `command.framework.laravel` | Reviews destructive Artisan database wipes, migration resets, and queue purges. | 5 | Built in |
+| `command.hashdup` | Reviews HashDup duplicate finder commands, approval-gating permanent --delete operations while keeping read-only scans and --trash staging automatic. | 1 | External opt-in |
 | `command.noodle` | Reviews request and collection execution through the Noodle terminal REST client. | 1 | External opt-in |
 | `command.ollama` | Reviews Ollama commands that publish models to a registry or remove local model data. | 2 | External opt-in |
 | `command.probe` | Reviews HTTP execution and OpenCollection workspace mutations through the Probe CLI. | 8 | External opt-in |

@@ -164,7 +164,18 @@ def _run(command: list[str], *, input_bytes: bytes | None = None) -> bytes:
 
 def _validate_fixture(compiler: Path, path: Path) -> str:
     fixture = _load_object(path)
-    result = _run([str(compiler), "test"], input_bytes=path.read_bytes())
+    build = fixture.get("build")
+    input_bytes = path.read_bytes()
+    if isinstance(build, dict) and "base" not in build:
+        build_script = ROOT / "scripts/build_native_command_program.py"
+        if build_script.is_file():
+            import runpy
+
+            full_build = runpy.run_path(str(build_script))["build_request"]()
+            fixture_with_build = dict(fixture)
+            fixture_with_build["build"] = full_build
+            input_bytes = json.dumps(fixture_with_build).encode("utf-8")
+    result = _run([str(compiler), "test"], input_bytes=input_bytes)
     try:
         payload = json.loads(result)
     except json.JSONDecodeError as error:

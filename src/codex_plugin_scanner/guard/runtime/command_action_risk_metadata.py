@@ -72,6 +72,7 @@ _BASE_COMMAND_ACTION_RISK_CLASSES: Final[dict[str, tuple[str, ...]]] = {
     "probe request execution command": ("execution", "network_egress"),
     "probe workspace mutation command": ("destructive_shell",),
     "probe destructive command": ("destructive_shell",),
+    "hashdup permanent deletion command": ("destructive_shell",),
 }
 
 BLITCP_ACTION_RISK_CLASSES: Final[dict[str, tuple[str, ...]]] = {
