@@ -1,0 +1,39 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.reaper",
+  "version": "1.0.0",
+  "name": "ReaperMCP",
+  "description": "Reviews destructive REAPER project-editing tools: batch track deletion, track template deletion, and clearing every tempo marker. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.xdarkzx",
+    "displayName": "xDarkzx",
+    "url": "https://github.com/xDarkzx/Reaper-MCP"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniCommandLine", "background": "#0F172A" },
+  "homepage": "https://github.com/xDarkzx/Reaper-MCP",
+  "license": "Apache-2.0",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "uvx",
+    "package": "xdarkzx-reaper-mcp"
+  },
+  "riskClasses": ["external-track-deletion", "external-template-deletion", "external-tempo-map-loss"],
+  "tools": [
+    { "name": "track_delete_batch", "state": "review" },
+    { "name": "track_template_delete", "state": "review" },
+    { "name": "tempo_clear_all", "state": "review" },
+    { "name": "project_undo", "state": "inherit" },
+    { "name": "other", "state": "inherit" }
+  ],
+  "referenceUrls": [
+    "https://github.com/xDarkzx/Reaper-MCP",
+    "https://github.com/xDarkzx/Reaper-MCP/blob/main/docs/TOOLS.md",
+    "https://github.com/xDarkzx/Reaper-MCP/blob/main/docs/ARCHITECTURE.md"
+  ],
+  "saferAlternatives": [
+    "Keep track_delete_batch, track_template_delete, and tempo_clear_all on Review unless this device needs unattended batch deletes.",
+    "project_undo only reverses the most recent tracked change and needs no review gate — every ReaperMCP mutation already records its own named undo step, so undoing is how a mistake gets fixed, not how one is made."
+  ]
+}
