@@ -5,6 +5,31 @@ All notable changes to HOL Guard will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.4.1](https://github.com/hashgraph-online/hol-guard/compare/v3.4.0...v3.4.1) (2026-09-22)
+
+
+### Bug Fixes
+
+* **supply-chain:** keep local repair responsive across workspaces ([#3063](https://github.com/hashgraph-online/hol-guard/issues/3063)) ([e9139a7](https://github.com/hashgraph-online/hol-guard/commit/e9139a7407430947b6e9e573a2f0d2d238cfbc27))
+
+## [3.4.0](https://github.com/hashgraph-online/hol-guard/compare/v3.3.0...v3.4.0) (2026-09-22)
+
+
+### Features
+
+* **contributors:** support Gitar notice backfills ([#3053](https://github.com/hashgraph-online/hol-guard/issues/3053)) ([7a3932a](https://github.com/hashgraph-online/hol-guard/commit/7a3932ad277fb5f9bf12aff29ddb8e187e512cc5))
+* **extensions:** streamline contributor handoffs ([#3048](https://github.com/hashgraph-online/hol-guard/issues/3048)) ([f3d829c](https://github.com/hashgraph-online/hol-guard/commit/f3d829ce117a161c9ab6418f9b450177b799edb8))
+
+
+### Bug Fixes
+
+* **ci:** stabilize native wheel validation ([#3046](https://github.com/hashgraph-online/hol-guard/issues/3046)) ([ff4de55](https://github.com/hashgraph-online/hol-guard/commit/ff4de55fc4071c57f31f7521a32a33ce65e93911))
+* **codex:** deny tool use when the launcher cannot be authenticated ([#3061](https://github.com/hashgraph-online/hol-guard/issues/3061)) ([939517e](https://github.com/hashgraph-online/hol-guard/commit/939517e80890db5afe869bfbb79e4829b7502d83))
+* **contributors:** explain Gitar fork access ([#3050](https://github.com/hashgraph-online/hol-guard/issues/3050)) ([3a791c1](https://github.com/hashgraph-online/hol-guard/commit/3a791c1a7a5f8a88d83bc16a8e80ff009c127840))
+* **contributors:** notify blocked Gitar forks ([#3052](https://github.com/hashgraph-online/hol-guard/issues/3052)) ([ae36b89](https://github.com/hashgraph-online/hol-guard/commit/ae36b898e6515b347dcb42bd25cca3ff2fa5f05c))
+* **dashboard:** reuse quick-apply bulk controls on extension detail and explain locked search ([#3043](https://github.com/hashgraph-online/hol-guard/issues/3043)) ([7f3ee58](https://github.com/hashgraph-online/hol-guard/commit/7f3ee58bf246342f8c3438f9f9b54430b53dd2af))
+* **supply-chain:** review new hol-guard releases ([#3060](https://github.com/hashgraph-online/hol-guard/issues/3060)) ([d9ee378](https://github.com/hashgraph-online/hol-guard/commit/d9ee378da6c3643cba30b22c5e36fb35ea1b4981))
+
 ## [3.3.0](https://github.com/hashgraph-online/hol-guard/compare/v3.2.0...v3.3.0) (2026-09-21)
 
 

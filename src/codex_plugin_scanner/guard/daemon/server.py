@@ -501,6 +501,7 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
     guard_cloud_connect_state_lock: threading.Lock
     guard_cloud_browser_session_lock: threading.Lock
     package_firewall_action_rate_limiter: PackageFirewallActionRateLimiter
+    package_firewall_mutation_lock: threading.Lock
     package_firewall_session_nonces: dict[str, float]
     package_firewall_session_nonces_lock: threading.Lock
     approval_attention: ApprovalAttentionCoordinator
@@ -615,6 +616,7 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         self.guard_cloud_connect_state_lock = threading.Lock()
         self.guard_cloud_browser_session_lock = threading.Lock()
         self.package_firewall_action_rate_limiter = PackageFirewallActionRateLimiter()
+        self.package_firewall_mutation_lock = threading.Lock()
         self.package_firewall_session_nonces = {}
         self.package_firewall_session_nonces_lock = threading.Lock()
         self.daemon_discovery_challenges = {}
@@ -2868,7 +2870,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._handle_protection_repair(payload)
             return
         if parsed.path == "/v1/supply-chain/repair":
-            self._handle_supply_chain_repair(payload)
+            self._run_package_firewall_mutation("repair_all", lambda: self._handle_supply_chain_repair(payload))
             return
         if parsed.path == "/v1/insights/share":
             self._handle_insights_share_publish(payload)
@@ -2900,10 +2902,25 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             and path_parts[:3] == ["v1", "supply-chain", "package-shims"]
             and path_parts[3] in _SUPPLY_CHAIN_PACKAGE_ACTIONS
         ):
-            self._handle_supply_chain_package_firewall_action(path_parts[3], payload)
+            action = path_parts[3]
+
+            def handle_package_action() -> None:
+                self._handle_supply_chain_package_firewall_action(action, payload)
+
+            if action in {"install", "repair", "uninstall", "remove", "activate", "open-shell", "sync"}:
+                self._run_package_firewall_mutation(action, handle_package_action)
+            else:
+                handle_package_action()
             return
         if len(path_parts) == 3 and path_parts[:2] == ["v1", "supply-chain"] and path_parts[2] in {"audit", "sync"}:
-            self._handle_supply_chain_package_firewall_action(path_parts[2], payload)
+            action = path_parts[2]
+            if action == "sync":
+                self._run_package_firewall_mutation(
+                    action,
+                    lambda: self._handle_supply_chain_package_firewall_action(action, payload),
+                )
+            else:
+                self._handle_supply_chain_package_firewall_action(action, payload)
             return
         if len(path_parts) == 4 and path_parts[:2] == ["v1", "harnesses"]:
             self._handle_harness_action(path_parts[2], path_parts[3], payload)
@@ -6912,6 +6929,25 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             status=429,
         )
         return False
+
+    def _run_package_firewall_mutation(self, operation: str, action: Callable[[], None]) -> None:
+        lock = self.server.package_firewall_mutation_lock  # type: ignore[attr-defined]
+        if not lock.acquire(blocking=False):
+            self._write_json(
+                {
+                    "error": "operation_in_progress",
+                    "message": (
+                        "Guard is still finishing a package protection change. Check its status before retrying."
+                    ),
+                    "operation": operation,
+                },
+                status=409,
+            )
+            return
+        try:
+            action()
+        finally:
+            lock.release()
 
     def _consume_dashboard_session_nonce(self, nonce: str) -> bool:
         now = time.monotonic()

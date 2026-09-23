@@ -153,10 +153,28 @@ struct ArgumentsNode {
     required_arguments: BTreeSet<String>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct VersionedPackageSubcommandNode {
+    executables: BTreeSet<String>,
+    package: String,
+    #[serde(default)]
+    leading_subcommands: Vec<String>,
+    #[serde(default)]
+    subcommands: Vec<String>,
+    #[serde(default)]
+    required_flags: BTreeSet<String>,
+    #[serde(default)]
+    interspersed_options_with_values: BTreeSet<String>,
+    #[serde(default)]
+    interspersed_flags: BTreeSet<String>,
+}
+
 #[derive(Debug)]
 enum Matcher {
     Executable(ExecutableNode),
     Arguments(ArgumentsNode),
+    VersionedPackageSubcommand(VersionedPackageSubcommandNode),
     Any(Vec<usize>),
     All(Vec<usize>),
     Pipeline(usize, usize),

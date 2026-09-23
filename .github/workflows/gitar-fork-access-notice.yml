@@ -3,22 +3,31 @@ name: Gitar Fork Access Notice
 on:
   issue_comment:
     types: [created]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "Open fork pull request that already has a Gitar push-denial comment"
+        required: true
+        type: string
 
 # New jobs start without a token grant; the notification job declares only its
 # own pull-request comment capability.
 permissions: {}
 
 concurrency:
-  group: gitar-fork-access-notice-${{ github.event.issue.number }}
+  group: gitar-fork-access-notice-${{ github.event.issue.number || inputs.pr_number || github.run_id }}
   cancel-in-progress: false
 
 jobs:
   notify:
     if: >-
-      github.event.issue.pull_request != null &&
-      github.event.comment.user.login == 'gitar-bot[bot]' &&
-      github.event.comment.user.type == 'Bot' &&
-      contains(github.event.comment.body, 'Gitar is not allowed to push to this forked PR.')
+      (
+        github.event_name == 'issue_comment' &&
+        github.event.issue.pull_request != null &&
+        github.event.comment.user.login == 'gitar-bot[bot]' &&
+        github.event.comment.user.type == 'Bot' &&
+        contains(github.event.comment.body, 'Gitar is not allowed to push to this forked PR.')
+      ) || github.event_name == 'workflow_dispatch'
     permissions:
       pull-requests: write
     runs-on: ubuntu-latest
@@ -27,17 +36,42 @@ jobs:
       - name: Post one safe fork-access notice
         env:
           GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.issue.number }}
+          PR_NUMBER: ${{ github.event.issue.number || inputs.pr_number }}
           REPOSITORY: ${{ github.repository }}
         shell: bash
         run: |
           set -euo pipefail
           case "$PR_NUMBER" in
-            0 | *[!0-9]* | "")
-              echo "PR_NUMBER must be a positive integer" >&2
+            0* | *[!0-9]* | "")
+              echo "PR_NUMBER must be a canonical positive integer" >&2
               exit 1
               ;;
           esac
+
+          pr_state="$(
+            gh api "repos/${REPOSITORY}/pulls/${PR_NUMBER}" --jq '.state'
+          )"
+          if [[ "$pr_state" != "open" ]]; then
+            echo "The selected pull request is not open." >&2
+            exit 1
+          fi
+
+          head_is_fork="$(
+            gh api "repos/${REPOSITORY}/pulls/${PR_NUMBER}" --jq '.head.repo.fork // false'
+          )"
+          if [[ "$head_is_fork" != "true" ]]; then
+            echo "The selected pull request does not have a fork head repository." >&2
+            exit 1
+          fi
+
+          gitar_denial_ids="$(
+            gh api --paginate "repos/${REPOSITORY}/issues/${PR_NUMBER}/comments?per_page=100" \
+              --jq '.[] | select(.user.login == "gitar-bot[bot]" and .user.type == "Bot" and (.body | contains("Gitar is not allowed to push to this forked PR."))) | .id'
+          )"
+          if ! printf '%s\n' "$gitar_denial_ids" | grep -Eq '^[1-9][0-9]*$'; then
+            echo "No trusted Gitar fork-push denial exists for this pull request." >&2
+            exit 1
+          fi
 
           existing_notice_ids="$(
             gh api --paginate "repos/${REPOSITORY}/issues/${PR_NUMBER}/comments?per_page=100" \
@@ -48,8 +82,7 @@ jobs:
             exit 0
           fi
 
-          gh api --method POST "repos/${REPOSITORY}/issues/${PR_NUMBER}/comments" \
-            -f body="$(cat <<'EOF'
+          IFS= read -r -d '' notice_body <<'EOF' || true
           <!-- hol-gitar-fork-access:v1 -->
           Gitar found a repair, but GitHub did not allow it to push to this fork.
 
@@ -61,4 +94,6 @@ jobs:
 
           Only the fork owner can grant maintainer edits. This notice does not change access or request credentials.
           EOF
-          )"
+
+          gh api --method POST "repos/${REPOSITORY}/issues/${PR_NUMBER}/comments" \
+            -f body="$notice_body"

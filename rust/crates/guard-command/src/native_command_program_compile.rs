@@ -21,7 +21,10 @@ pub(super) fn compile_node(
 ) -> Result<Node, &'static str> {
     if matches!(
         node.op.as_str(),
-        "executable.v1" | "executable-path-set.v1" | "arguments.v1"
+        "executable.v1"
+            | "executable-path-set.v1"
+            | "arguments.v1"
+            | "versioned-package-subcommand.v1"
     ) && !ascii_configuration(&node.config)
     {
         return Err("native_command_ascii_configuration_required");
@@ -85,6 +88,9 @@ pub(super) fn compile_node(
                     serde_json::from_value(node.config)
                         .map_err(|_| "native_command_arguments_invalid")?,
                 ),
+                "versioned-package-subcommand.v1" => Matcher::VersionedPackageSubcommand(
+                    compile_versioned_package_subcommand(node.config)?,
+                ),
                 "leading-operand-count.v1"
                 | "subcommand-operand-prefix.v1"
                 | "option-value-key.v1"
@@ -124,6 +130,17 @@ pub(super) fn compile_node(
         operation: node.op,
         matcher,
     })
+}
+
+fn compile_versioned_package_subcommand(
+    config: Value,
+) -> Result<VersionedPackageSubcommandNode, &'static str> {
+    let node: VersionedPackageSubcommandNode =
+        serde_json::from_value(config).map_err(|_| "native_command_versioned_package_invalid")?;
+    if node.executables.is_empty() || node.package.is_empty() || node.package.contains('@') {
+        return Err("native_command_versioned_package_invalid");
+    }
+    Ok(node)
 }
 
 fn compile_executable(operation: &str, mut config: Value) -> Result<ExecutableNode, &'static str> {
