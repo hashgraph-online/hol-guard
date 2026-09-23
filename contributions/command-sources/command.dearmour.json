@@ -396,9 +396,28 @@
             }
           ],
           "op": "any.v1"
-        }
+        },
+        "rule_id": "command.dearmour.overwrite",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "permission_id": "command.dearmour.permission.overwrite",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "native_capability": null,
+        "safer_alternatives": [
+          "Run dearmour without --overwrite or --merge first.",
+          "Check the destination directory before extracting."
+        ],
+        "severity": "critical",
+        "title": "dearmour forced extraction"
       }
-    ]
+    ],
+    "safer_alternatives": [
+      "Extract to an empty directory first."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
   },
   "schema": "guard.command-extension-source.v1"
 }
