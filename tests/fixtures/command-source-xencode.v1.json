@@ -763,7 +763,7 @@
     },
     {
       "id": "unknown",
-      "command": "another-cli inspect",
+      "command": "xencode worktree prune",
       "enabled_extensions": [
         "command.xencode"
       ],
