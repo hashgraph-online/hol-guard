@@ -791,7 +791,6 @@
           "command.skill-sunset"
         ]
       }
-    },
-    "base": "packaged"
+    }
   }
 }
