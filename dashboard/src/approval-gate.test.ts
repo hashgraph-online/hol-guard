@@ -3,6 +3,7 @@ import type { GuardApprovalGatePublicConfig, GuardSettings } from "./guard-types
 import { approvalGateCooldownLabel, requiresApprovalPasswordPrompt } from "./approval-gate-utils";
 import { buildApprovalProofCredentials, isApprovalProofSubmitDisabled } from "./approval-proof-inline";
 import { applyApprovalGateDraft, effectiveApprovalGateCooldownSeconds, hasUnsavedChanges } from "./settings-workspace";
+import { cloudReviewConfirmationError } from "./settings/cloud-review-settings";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -319,6 +320,26 @@ function testApprovalProofFreshTotpRequiredForDisconnect(): void {
   assert(credentials.approval_totp_code === "469550", "disconnect proof must send the fresh authenticator code");
 }
 
+function testCloudReviewKeepsAuthenticatorFieldAfterRecentProof(): void {
+  const source = readFileSync(new URL("./settings/cloud-review-settings.tsx", import.meta.url), "utf8");
+  assert(
+    source.includes("requireFreshTotp={freshTotp}"),
+    "Cloud Review must show the authenticator field after a recent confirmation",
+  );
+  assert(
+    source.includes("buildApprovalProofCredentials("),
+    "Cloud Review must send the current authenticator code",
+  );
+  assert(
+    cloudReviewConfirmationError("TOTP code is required.") === "Enter the current six-digit code from your authenticator.",
+    "a missing authenticator code should name the field",
+  );
+  assert(
+    cloudReviewConfirmationError("Authenticator code was not accepted. Try again.") === "Authenticator code was not accepted. Try again.",
+    "a rejected authenticator code should stay specific",
+  );
+}
+
 function testDisconnectWaitsForApprovalSettingsBeforeConfirm(): void {
   const harnessSetupPanel = readFileSync(new URL("./apps/harness-setup-panel.tsx", import.meta.url), "utf8");
   assert(
@@ -352,6 +373,7 @@ const tests: Array<[string, () => void]> = [
   ["testApprovalProofTotpOverridesPassword", testApprovalProofTotpOverridesPassword],
   ["testApprovalProofRecentTotpSkipsCode", testApprovalProofRecentTotpSkipsCode],
   ["testApprovalProofFreshTotpRequiredForDisconnect", testApprovalProofFreshTotpRequiredForDisconnect],
+  ["testCloudReviewKeepsAuthenticatorFieldAfterRecentProof", testCloudReviewKeepsAuthenticatorFieldAfterRecentProof],
   ["testDisconnectWaitsForApprovalSettingsBeforeConfirm", testDisconnectWaitsForApprovalSettingsBeforeConfirm],
 ];
 

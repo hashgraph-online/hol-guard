@@ -1,4 +1,4 @@
-import { aa as PROTECTION_POSTURE_COPY, ab as POSTURE_OUTCOME_COLUMNS, j as jsxRuntimeExports, r as reactExports, ac as getDefaultExportFromCjs, ad as React, M as useFocusTrap, ae as HiMiniKey, S as SectionLabel, A as ActionButton, w as HiMiniShieldCheck, af as HiMiniLockClosed, ag as HiMiniBellAlert, ah as HiMiniAdjustmentsHorizontal, ai as HiMiniCircleStack, aj as TabBar, c as HiMiniChevronRight, ak as fetchCloudReviewSettings, al as isApprovalProofSubmitDisabled, K as HiMiniCloud, am as HiMiniArrowPath, C as HiMiniXMark, an as ApprovalProofFieldInputs, ao as changeCloudReviewSettings, ap as resolveProtectionLevelCopy, aq as fetchSettings, ar as fetchRuntimeSnapshot, e as updateSettings, as as clearPolicy, at as clearReviewQueue, au as revokeApprovalGateCooldown, av as disableApprovalGateTotp, aw as importSettings, ax as resetSettings, ay as enrollApprovalGateTotp, az as verifyApprovalGateTotp, aA as clearEvidence, aB as exportDiagnostics, aC as repairApprovalCenter, aD as exportSettings, aE as setupDesktopNotifications, n as EmptyState, aF as WorkspacePageHeader, W as WatchProtectionBanner, aG as HiMiniMagnifyingGlass, I as HiMiniChevronDown, s as HiMiniCheckCircle, P as HiMiniExclamationTriangle, aH as isProtectionPosture, aI as deriveProtectionPosture, aJ as Tag, aK as approvalGateCooldownLabel } from "../guard-dashboard.js";
+import { aa as PROTECTION_POSTURE_COPY, ab as POSTURE_OUTCOME_COLUMNS, j as jsxRuntimeExports, r as reactExports, ac as getDefaultExportFromCjs, ad as React, M as useFocusTrap, ae as HiMiniKey, S as SectionLabel, A as ActionButton, w as HiMiniShieldCheck, af as HiMiniLockClosed, ag as HiMiniBellAlert, ah as HiMiniAdjustmentsHorizontal, ai as HiMiniCircleStack, aj as TabBar, c as HiMiniChevronRight, ak as fetchCloudReviewSettings, al as isApprovalProofSubmitDisabled, aQ as buildApprovalProofCredentials, K as HiMiniCloud, am as HiMiniArrowPath, C as HiMiniXMark, an as ApprovalProofFieldInputs, ao as changeCloudReviewSettings, ap as resolveProtectionLevelCopy, aq as fetchSettings, ar as fetchRuntimeSnapshot, e as updateSettings, as as clearPolicy, at as clearReviewQueue, au as revokeApprovalGateCooldown, av as disableApprovalGateTotp, aw as importSettings, ax as resetSettings, ay as enrollApprovalGateTotp, az as verifyApprovalGateTotp, aA as clearEvidence, aB as exportDiagnostics, aC as repairApprovalCenter, aD as exportSettings, aE as setupDesktopNotifications, n as EmptyState, aF as WorkspacePageHeader, W as WatchProtectionBanner, aG as HiMiniMagnifyingGlass, I as HiMiniChevronDown, s as HiMiniCheckCircle, P as HiMiniExclamationTriangle, aH as isProtectionPosture, aI as deriveProtectionPosture, aJ as Tag, aK as approvalGateCooldownLabel } from "../guard-dashboard.js";
 import { f as filterSettingsBySearch, R as RISK_CONTROL_CONSEQUENCES } from "./app-catalog.js";
 import { C as ConnectGuardCloudButton } from "./connect-guard-cloud-button.js";
 const POSTURE_ORDER = ["protected", "extra_careful", "watch"];
@@ -2513,6 +2513,15 @@ function ApprovalPasswordSection(props) {
     !props.wasConfigured && props.enabled ? /* @__PURE__ */ jsxRuntimeExports.jsx(ApprovalPasswordSetupAction, { onClick: () => props.onOpenPasswordChangeModal("setup-gate") }) : null
   ] });
 }
+function cloudReviewConfirmationError(message) {
+  if (message === "TOTP code is required.") {
+    return "Enter the current six-digit code from your authenticator.";
+  }
+  if (message === "Approval password is required.") {
+    return "Enter your approval password to continue.";
+  }
+  return message;
+}
 function cloudReviewStatusCopy(status) {
   if (!status.connected) return "Connect Guard Cloud on this device to review its requests in the cloud.";
   if (!status.enabled) return "Cloud sync is connected. Cloud decisions still need this device's authorization. Confirm it here to update pending requests; you do not need to reconnect.";
@@ -2584,11 +2593,18 @@ function CloudReviewSettings() {
   }
   async function confirm() {
     if (!status || !action || pending) return;
+    const freshTotp = status.approval_gate.totp_enabled === true;
     if (status.approval_gate.enabled && isApprovalProofSubmitDisabled(
       status.approval_gate,
       { approvalPassword: password, approvalTotpCode: totp },
-      false
+      false,
+      freshTotp
     )) return;
+    const proof = status.approval_gate.enabled ? buildApprovalProofCredentials(
+      status.approval_gate,
+      { approvalPassword: password, approvalTotpCode: totp },
+      freshTotp
+    ) : {};
     revision.current += 1;
     setPending(true);
     setError(null);
@@ -2598,8 +2614,7 @@ function CloudReviewSettings() {
         workspace_id: status.workspace_id,
         source: status.source,
         include_held_requests: action === "enable" && includeHeld,
-        ...password ? { approval_password: password } : {},
-        ...totp ? { approval_totp_code: totp } : {}
+        ...proof
       });
       setStatus(result);
       setAction(null);
@@ -2613,10 +2628,12 @@ function CloudReviewSettings() {
     }
   }
   const needsRecovery = Boolean(status?.activation_error || status?.held_events || status?.delivery_state === "error");
+  const freshTotp = status?.approval_gate.totp_enabled === true;
   const disabled = pending || Boolean(status?.approval_gate.enabled && isApprovalProofSubmitDisabled(
     status.approval_gate,
     { approvalPassword: password, approvalTotpCode: totp },
-    false
+    false,
+    freshTotp
   ));
   let confirmLabel = "Turn off Cloud Review";
   if (action === "enable") confirmLabel = "Authorize this device";
@@ -2744,11 +2761,12 @@ function CloudReviewSettings() {
                   approvalGate: status.approval_gate,
                   approvalPassword: password,
                   approvalTotpCode: totp,
+                  requireFreshTotp: freshTotp,
                   onApprovalPasswordChange: (event) => setPassword(event.target.value),
                   onApprovalTotpCodeChange: (event) => setTotp(event.target.value)
                 }
               ) }) : null,
-              error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-3 text-sm text-red-700", children: error }) : null,
+              error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-3 text-sm text-red-700", children: cloudReviewConfirmationError(error) }) : null,
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 flex flex-wrap justify-end gap-2", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: close, disabled: pending, className: "min-h-10 rounded-md border border-slate-200 px-4 py-2 text-sm text-brand-dark", children: "Cancel" }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx(
