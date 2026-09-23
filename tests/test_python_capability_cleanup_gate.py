@@ -109,7 +109,8 @@ def test_cleanup_contract_covers_every_scoped_hook_capability() -> None:
 
     assert payload["schema"] == "hol-guard.python-capability-cleanup.v1"
     assert payload["status"] == "passed"
-    assert payload["scope_files"] == 99
+    # hook_launcher_recovery.py matches the existing hook control-plane scope glob.
+    assert payload["scope_files"] == 100
     assert payload["capabilities"]["legacy_python_resident_transport"] == 2
     assert payload["candidate_evidence"] == [
         {

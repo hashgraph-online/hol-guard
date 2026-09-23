@@ -124,4 +124,10 @@ assert(
   "SCSR153: audit result lists scanned lockfiles",
 );
 
+const pathRepairDetail = parsePackageFirewallActionResult("repair", {
+  result: { repaired: [], path_repair_required: ["npm"], profile: { changed: true } },
+});
+assert(pathRepairDetail !== null, "PATH repair result parses");
+assert(pathRepairDetail!.summary.includes("new shell"), "PATH repair explains shell restart");
+
 console.log("scsr-phase09-next-action.test.ts: all assertions passed");

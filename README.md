@@ -48,7 +48,7 @@ To update an existing installation:
 hol-guard update
 ```
 
-For manual setup, see the [installation guide](docs/guard/get-started.md). Release details and prereleases are on the [releases page](https://github.com/hashgraph-online/hol-guard/releases).
+For manual setup, see the [installation guide](docs/guard/get-started.md). Annotated release notes with upgrade context live at [hol.org/guard/releases](https://hol.org/guard/releases); raw releases and prereleases are on the [GitHub releases page](https://github.com/hashgraph-online/hol-guard/releases).
 
 ## What HOL Guard Protects
 
@@ -533,7 +533,9 @@ For optional Cisco coverage, use the dependency group command above. See [CONTRI
 Maintained by [Hashgraph Online](https://github.com/hashgraph-online).
 
 - [Report a bug or request a feature](https://github.com/hashgraph-online/hol-guard/issues)
-- [Browse releases](https://github.com/hashgraph-online/hol-guard/releases)
+- [Browse release notes](https://hol.org/guard/releases)
+- [See who builds Guard](https://hol.org/guard/contributors)
+- [Browse raw GitHub releases](https://github.com/hashgraph-online/hol-guard/releases)
 - [Explore the plugin security dataset](https://huggingface.co/datasets/HashgraphOnline/hol-plugin-security)
 
 ## License

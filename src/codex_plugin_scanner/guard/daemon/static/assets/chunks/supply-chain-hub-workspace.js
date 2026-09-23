@@ -735,6 +735,7 @@ function ManagerRow({
   shim,
   actions,
   anyPending,
+  repairAwaitingRefresh,
   isMine,
   isConfirmingRemove,
   onInstall,
@@ -844,7 +845,7 @@ function ManagerRow({
               label: "Fix PATH",
               icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniWrenchScrewdriver, { className: "h-4 w-4" }),
               onClick: handleRepair,
-              disabled: anyPending
+              disabled: anyPending || repairAwaitingRefresh
             }
           ),
           showTest && /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -921,6 +922,7 @@ function FirewallControlsView({
   activatingRuntime,
   data,
   pendingOp,
+  repairAwaitingRefresh,
   lastCompleted,
   lastFailed,
   confirmRemoveManager,
@@ -1044,6 +1046,7 @@ function FirewallControlsView({
           shim,
           actions: data.actions,
           anyPending,
+          repairAwaitingRefresh: repairAwaitingRefresh === manager,
           isMine: pendingOp?.manager === manager,
           isConfirmingRemove: confirmRemoveManager === manager,
           onInstall,
@@ -1161,6 +1164,7 @@ function SupplyChainManagerDrawer({
   shim,
   actions,
   anyPending,
+  repairAwaitingRefresh,
   isMine,
   actionHandlers,
   onClose
@@ -1251,7 +1255,7 @@ function SupplyChainManagerDrawer({
                   label: "Fix PATH",
                   icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniWrenchScrewdriver, { className: "h-4 w-4" }),
                   onClick: () => actionHandlers.repair?.(manager),
-                  disabled: anyPending
+                  disabled: anyPending || repairAwaitingRefresh
                 }
               ) : null,
               showTest && actionHandlers.test !== void 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -1560,8 +1564,8 @@ function LoadingSkeleton() {
     }
   );
 }
-function ErrorBanner({ message, onRetry }) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-3 px-4 py-4", children: [
+function ErrorBanner({ message, onRetry, retryLabel = "Retry" }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-3 px-4 py-4", role: "status", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(
         HiMiniExclamationTriangle,
@@ -1572,7 +1576,7 @@ function ErrorBanner({ message, onRetry }) {
       ),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-attention", children: message })
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: onRetry, children: "Retry" })
+    /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: onRetry, children: retryLabel })
   ] });
 }
 function RefreshButton({ disabled, spinning, onRefresh }) {
@@ -1612,6 +1616,10 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
   const recoveryConnectHandledRef = reactExports.useRef(false);
   const repairNeedsCloudConnectRef = reactExports.useRef(false);
   const [panelLoad, setPanelLoad] = reactExports.useState({ phase: "loading" });
+  const [refreshError, setRefreshError] = reactExports.useState(null);
+  const [sharedRefreshError, setSharedRefreshError] = reactExports.useState(null);
+  const [repairAwaitingRefresh, setRepairAwaitingRefresh] = reactExports.useState(null);
+  const statusRequestId = reactExports.useRef(0);
   const [pendingOp, setPendingOp] = reactExports.useState(null);
   const [lastCompleted, setLastCompleted] = reactExports.useState(null);
   const [lastFailed, setLastFailed] = reactExports.useState(null);
@@ -1651,11 +1659,16 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
     setAuditRecoveryError(null);
   }, []);
   const load = reactExports.useCallback(async () => {
+    const requestId = ++statusRequestId.current;
+    setRefreshError(null);
     setPanelLoad({ phase: "loading" });
     try {
       const data = await fetchPackageFirewallStatus();
+      if (requestId !== statusRequestId.current) return;
       setPanelLoad({ phase: "loaded", data });
+      setRepairAwaitingRefresh(null);
     } catch (err) {
+      if (requestId !== statusRequestId.current) return;
       const message = err instanceof Error ? err.message : "Failed to load package firewall status.";
       setPanelLoad({ phase: "error", message });
     }
@@ -1664,14 +1677,33 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
     void load();
   }, [load]);
   const refreshAfterOp = reactExports.useCallback(async () => {
+    const requestId = ++statusRequestId.current;
     try {
       const data = await fetchPackageFirewallStatus();
+      if (requestId !== statusRequestId.current) return;
       setPanelLoad({ phase: "loaded", data });
+      setRepairAwaitingRefresh(null);
+      setRefreshError(null);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to refresh package firewall status.";
-      setPanelLoad({ phase: "error", message });
+      if (requestId !== statusRequestId.current) return;
+      setRefreshError(
+        "Guard could not check the latest package status. The last known state is shown; check again before retrying a repair."
+      );
     }
   }, []);
+  const refreshSharedState = reactExports.useCallback(async () => {
+    if (onStateChanged === void 0) return;
+    try {
+      await onStateChanged(true);
+      setSharedRefreshError(null);
+    } catch {
+      setSharedRefreshError("Guard could not refresh the rest of the dashboard. Check again before relying on other views.");
+    }
+  }, [onStateChanged]);
+  const refreshInBackground = reactExports.useCallback(() => {
+    void refreshAfterOp();
+    void refreshSharedState();
+  }, [refreshAfterOp, refreshSharedState]);
   reactExports.useEffect(() => {
     if (panelLoad.phase !== "loaded") {
       return;
@@ -1910,11 +1942,10 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
       setPendingOp({ op: "fix_all", manager: null });
       try {
         const result = await repairSupplyChainProtection(credentials);
-        await refreshAfterOp();
-        await onStateChanged?.();
         const nextState = supplyChainFixAllStateFromRepair(result);
         repairNeedsCloudConnectRef.current = supplyChainFixAllNeedsCloudConnect(nextState);
         onFixAllStateChange?.(nextState);
+        refreshInBackground();
       } catch (error) {
         if (credentials === void 0 && isApprovalGateRequiredError(error)) {
           await resolveApprovalGate();
@@ -1948,9 +1979,8 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
     [
       beginFixAllConnectRecovery,
       onFixAllStateChange,
-      onStateChanged,
       panelLoad,
-      refreshAfterOp,
+      refreshInBackground,
       resolveApprovalGate
     ]
   );
@@ -2076,6 +2106,7 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
       try {
         const response = await runPackageFirewallAction(op, manager, credentials);
         setLastCompleted({ op, manager, response });
+        if (op === "repair" && manager !== null) setRepairAwaitingRefresh(manager);
         if (op === "test") {
           const proof = parseInterceptProofSnapshot(response);
           if (proof !== null) {
@@ -2083,8 +2114,7 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
             setInterceptProof(proof);
           }
         }
-        await refreshAfterOp();
-        await onStateChanged?.();
+        refreshInBackground();
       } catch (err) {
         if (credentials === void 0 && manager !== null && isApprovalGateRequiredError(err)) {
           await resolveApprovalGate();
@@ -2097,7 +2127,7 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
         setPendingOp(null);
       }
     },
-    [onStateChanged, refreshAfterOp, resolveApprovalGate]
+    [refreshInBackground, resolveApprovalGate]
   );
   const handleGlobalOp = reactExports.useCallback(
     async (op) => {
@@ -2198,14 +2228,13 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
     setActivationAssistError(null);
     try {
       await activatePackageFirewallRuntime();
-      await refreshAfterOp();
-      await onStateChanged?.();
+      refreshInBackground();
     } catch (error) {
       setActivationAssistError(error instanceof Error ? error.message : "Unable to activate package protection.");
     } finally {
       setActivatingRuntime(false);
     }
-  }, [onStateChanged, refreshAfterOp]);
+  }, [refreshInBackground]);
   const handleApprovalCancel = reactExports.useCallback(() => {
     if (pendingApprovalOp?.op === "fix_all") {
       onFixAllStateChange?.({
@@ -2286,6 +2315,8 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
     panelLoad.phase === "loading" && /* @__PURE__ */ jsxRuntimeExports.jsx(LoadingSkeleton, {}),
     panelLoad.phase === "error" && /* @__PURE__ */ jsxRuntimeExports.jsx(ErrorBanner, { message: panelLoad.message, onRetry: handleRetry }),
     panelLoad.phase === "loaded" && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+      refreshError !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(ErrorBanner, { message: refreshError, onRetry: handleRetry, retryLabel: "Check again" }),
+      sharedRefreshError !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(ErrorBanner, { message: sharedRefreshError, onRetry: () => void refreshSharedState(), retryLabel: "Check again" }),
       !panelLoad.data.entitlement.allowed && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "border-b border-slate-100", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
         EntitlementNotice,
         {
@@ -2303,6 +2334,7 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
         {
           data: panelLoad.data,
           pendingOp,
+          repairAwaitingRefresh,
           lastCompleted,
           lastFailed,
           confirmRemoveManager,
@@ -2346,6 +2378,7 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
         shim: managerDrawerShim,
         actions: panelLoad.data.actions,
         anyPending,
+        repairAwaitingRefresh: repairAwaitingRefresh === managerDrawerTarget,
         isMine: pendingOp?.manager === managerDrawerTarget,
         actionHandlers: {
           install: handleInstall,

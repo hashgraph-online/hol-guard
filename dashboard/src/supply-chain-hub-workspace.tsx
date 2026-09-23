@@ -50,7 +50,7 @@ export function SupplyChainHubWorkspace(props: {
   onOpenSettings: () => void;
   onGoHome: () => void;
   onNavigate: (pathname: string) => void;
-  onRuntimeRefresh?: () => Promise<void> | void;
+  onRuntimeRefresh?: (requireComplete?: boolean) => Promise<void> | void;
 }) {
   const tab = viewToTab(props.activeView);
   const firewallPanelRef = useRef<PackageFirewallPanelHandle>(null);
