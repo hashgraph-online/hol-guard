@@ -11,6 +11,7 @@ from .policy_integrity import POLICY_INTEGRITY_VERSION
 
 # ruff: noqa: F403,F405
 from .store_base import *
+from .store_policy_integrity_backend import MirroredPolicyIntegritySecretStore
 
 
 def _facade_store_attr(name: str, fallback: object) -> object:
@@ -275,6 +276,8 @@ class StoreSecretPolicyIntegrityMixin:
         secret_store = self._policy_integrity_secret_store
         if secret_store is None:
             return None
+        if isinstance(secret_store, MirroredPolicyIntegritySecretStore):
+            return secret_store.get_secret(secret_id)
         if isinstance(secret_store, FallbackSecretStore):
             fallback_value = self._get_secret_from_store(secret_store.fallback, secret_id)
             if fallback_value is not None:
@@ -433,6 +436,19 @@ class StoreSecretPolicyIntegrityMixin:
             return None, None
         encoded_key = self._get_policy_integrity_secret_from_store(self._policy_integrity_key_ref)
         if encoded_key is None and create:
+            from .native_command_control_authority import AUTHORITY_FILE_NAME
+            from .native_policy_snapshot_constants import (
+                NATIVE_POLICY_VERIFIER_KEY_NAME,
+                NATIVE_RUNTIME_STATE_DIRECTORY,
+            )
+
+            native_state = self.guard_home / NATIVE_RUNTIME_STATE_DIRECTORY
+            if any(
+                os.path.lexists(native_state / name) for name in (AUTHORITY_FILE_NAME, NATIVE_POLICY_VERIFIER_KEY_NAME)
+            ):
+                # A different process may have armed native controls with an
+                # inaccessible keyring key. Never mint a second signing key.
+                return None, None
             generated_key = base64.urlsafe_b64encode(os.urandom(32)).decode("ascii")
             try:
                 secret_store.set_secret(self._policy_integrity_key_ref, generated_key)
