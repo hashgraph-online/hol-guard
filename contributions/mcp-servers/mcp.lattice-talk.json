@@ -1,0 +1,48 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.lattice-talk",
+  "version": "1.0.0",
+  "name": "Lattice Talk MCP",
+  "description": "Cross-harness agent message bus over Redis — shared sessions, rooms, direct messages, and memory for AI coding agents. Direct messages, room posts, room creation, and memory writes default to review; read and discovery tools inherit. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "d4rkninja",
+    "displayName": "d4rkNinja",
+    "url": "https://github.com/d4rkNinja/lattice-talk"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniBolt", "background": "#7AA2F7" },
+  "homepage": "https://github.com/d4rkNinja/lattice-talk",
+  "license": "MIT",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "npx",
+    "package": "lattice-talk"
+  },
+  "riskClasses": ["external-agent-messaging", "external-shared-state-write"],
+  "tools": [
+    { "name": "tell_agent", "state": "review" },
+    { "name": "tell_room", "state": "review" },
+    { "name": "create_room", "state": "review" },
+    { "name": "memory_set", "state": "review" },
+    { "name": "memory_note", "state": "review" },
+    { "name": "join_session", "state": "inherit" },
+    { "name": "join_room", "state": "inherit" },
+    { "name": "leave_session", "state": "inherit" },
+    { "name": "pull_messages", "state": "inherit" },
+    { "name": "list_peers", "state": "inherit" },
+    { "name": "session_info", "state": "inherit" },
+    { "name": "memory_get", "state": "inherit" },
+    { "name": "memory_list", "state": "inherit" },
+    { "name": "memory_notes", "state": "inherit" },
+    { "name": "trace_context", "state": "inherit" },
+    { "name": "other", "state": "inherit" }
+  ],
+  "referenceUrls": [
+    "https://github.com/d4rkNinja/lattice-talk",
+    "https://www.npmjs.com/package/lattice-talk"
+  ],
+  "saferAlternatives": [
+    "Keep tell_agent, tell_room, create_room, memory_set, and memory_note on review unless agents on this device need to write to the shared bus without confirmation."
+  ]
+}

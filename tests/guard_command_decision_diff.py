@@ -405,7 +405,7 @@ def _expected_known_gaps(payload: Mapping[str, object]) -> dict[str, tuple[int, 
 
 def _source_bindings() -> dict[str, str]:
     paths = sorted({path.resolve() for path in _EVIDENCE_SOURCE_PATHS})
-    return {source_binding_id(str(path.relative_to(REPO_ROOT))): _sha256(path) for path in paths}
+    return {source_binding_id(path.relative_to(REPO_ROOT).as_posix()): _sha256(path) for path in paths}
 
 
 def _oracle_digest(records: Iterable[OracleRecord]) -> str:
@@ -444,7 +444,7 @@ def _validate_manifest_digests(report: Mapping[str, object], manifest: Mapping[s
 
 
 def _sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    return hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
 
 
 def _load_object(path: Path) -> dict[str, object]:

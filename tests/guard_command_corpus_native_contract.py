@@ -90,12 +90,12 @@ def _contract_data() -> dict[str, object]:
     if data.get("schema") != "guard.command-corpus-native-contract.v1":
         raise ValueError("native corpus contract schema mismatch")
     for relative, digest in _mapping(data.get("immutable_input_sha256"), "input identities").items():
-        if hashlib.sha256((ROOT / relative).read_bytes()).hexdigest() != digest:
+        if hashlib.sha256((ROOT / relative).read_bytes().replace(b"\r\n", b"\n")).hexdigest() != digest:
             raise ValueError(f"native corpus immutable input changed: {relative}")
     provenance = _mapping(data.get("inherited_source_identities"), "source identities")
     for relative, raw in _mapping(provenance.get("sources"), "sources").items():
         identity = _mapping(raw, "source identity")
-        if hashlib.sha256((ROOT / relative).read_bytes()).hexdigest() != identity.get("candidate_sha256"):
+        if hashlib.sha256((ROOT / relative).read_bytes().replace(b"\r\n", b"\n")).hexdigest() != identity.get("candidate_sha256"):
             raise ValueError(f"native corpus reviewed implementation changed: {relative}")
     return data
 

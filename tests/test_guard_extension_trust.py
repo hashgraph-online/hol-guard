@@ -85,6 +85,7 @@ def test_trust_map_covers_every_builtin_extension() -> None:
         "command.blitcp",
         "command.mcp-filesystem",
         "command.mcp-instapods",
+        "command.mcp-lattice-talk",
         "command.noodle",
         "command.ollama",
         "command.probe",

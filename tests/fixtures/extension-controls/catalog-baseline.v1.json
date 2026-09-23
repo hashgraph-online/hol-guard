@@ -6,7 +6,7 @@
     "canonical_diff_digest",
     "effective"
   ],
-  "catalog_digest": "bdf36e74b2ca93074e43398bbef93ef1cb0399951ab25e0657b57be832bc9f58",
+  "catalog_digest": "f2cd1e215d8dce99e1c0216e67cf16f3ba6b88833ce7919ca61f59477323ca6b",
   "control_schema_version": "1.0.0",
   "daemon_api_schema": "guard.daemon.extension-controls.v1",
   "effective_shape": [
@@ -20,7 +20,7 @@
     "failures",
     "projection"
   ],
-  "extension_count": 72,
+  "extension_count": 73,
   "extension_ids": [
     "command.api-gateway",
     "command.backup.borg",
@@ -60,6 +60,7 @@
     "command.load-balancer",
     "command.mcp-filesystem",
     "command.mcp-instapods",
+    "command.mcp-lattice-talk",
     "command.messaging.kafka",
     "command.messaging.nats",
     "command.messaging.rabbitmq",
@@ -98,7 +99,7 @@
   "extension_schema_version": 2,
   "installed_browser_config": "dashboard/playwright.installed.config.ts",
   "overview_route": "/extensions",
-  "permission_count": 253,
+  "permission_count": 254,
   "permission_examples": {
     "command.api-gateway.permission.delete": "aws apigateway delete-rest-api",
     "command.backup.borg.permission.mutation": "borg delete",
@@ -266,6 +267,7 @@
     "command.load-balancer.permission.delete": "aws elb delete-load-balancer",
     "command.mcp-filesystem.permission.mcp-filesystem-tool": "npx -y @modelcontextprotocol/server-filesystem",
     "command.mcp-instapods.permission.mcp-instapods-tool": "https://app.instapods.com/api/mcp",
+    "command.mcp-lattice-talk.permission.mcp-latticexhtalk-tool": "npx -y lattice-talk",
     "command.messaging.kafka.permission.delete": "kafka-topics --delete",
     "command.messaging.nats.permission.delete": "nats str rm ORDERS",
     "command.messaging.rabbitmq.permission.delete": "rabbitmqctl delete_queue jobs",
@@ -617,6 +619,7 @@
     "command.load-balancer.permission.delete",
     "command.mcp-filesystem.permission.mcp-filesystem-tool",
     "command.mcp-instapods.permission.mcp-instapods-tool",
+    "command.mcp-lattice-talk.permission.mcp-latticexhtalk-tool",
     "command.messaging.kafka.permission.delete",
     "command.messaging.nats.permission.delete",
     "command.messaging.rabbitmq.permission.delete",

@@ -135,6 +135,7 @@ Protection model meanings:
 | :--- | :--- | ---: | :--- |
 | `command.mcp-filesystem` | Reviews official filesystem MCP tools. Off until you turn it on. | 0 | External opt-in |
 | `command.mcp-instapods` | Reviews sensitive InstaPods pod, billing, command execution, and file-write tools for the official hosted MCP server. | 0 | External opt-in |
+| `command.mcp-lattice-talk` | Cross-harness agent message bus over Redis — shared sessions, rooms, direct messages, and memory for AI coding agents. Direct messages, room posts, room creation, and memory writes default to review; read and discovery tools inherit. Off until you turn it on. | 0 | External opt-in |
 | `command.skill-sunset` | Reviews the canonical Skill Sunset audit surface and its local report and viewer side effects. Experiment execution and npm launcher policy remain outside this extension. | 1 | External opt-in |
 
 ### Other extensions

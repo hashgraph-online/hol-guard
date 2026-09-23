@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "guard.extension-listing.v1",
+  "extensionId": "mcp.lattice-talk",
+  "tagline": "Cross-harness agent message bus — reviews agent DMs, room posts, and shared-memory writes for the lattice-talk MCP server.",
+  "category": "specialized-tools",
+  "limitations": [
+    "Coverage is limited to the reviewed lattice-talk MCP tools and the surrounding Guard policy.",
+    "Launch matching uses the lattice-talk npm package name through an allowlisted package launcher; unusual launchers or renamed binaries stay on Guard's normal handling.",
+    "A publisher profile or badge is not a security certification or an endorsement by HOL."
+  ],
+  "documentationUrl": "https://github.com/d4rkNinja/lattice-talk#readme",
+  "tags": ["mcp", "agents", "messaging", "redis", "collaboration"],
+  "maintainerGithubIds": ["107983953"]
+}

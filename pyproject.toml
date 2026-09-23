@@ -150,6 +150,7 @@ packages = ["src/codex_plugin_scanner"]
 "contracts/mcp-servers/contribution.v1.schema.json" = "codex_plugin_scanner/guard/contracts/data/mcp_servers/contribution.v1.schema.json"
 "contributions/mcp-servers/mcp.filesystem.json" = "codex_plugin_scanner/guard/contracts/data/mcp_servers/contributions/mcp.filesystem.json"
 "contributions/mcp-servers/mcp.instapods.json" = "codex_plugin_scanner/guard/contracts/data/mcp_servers/contributions/mcp.instapods.json"
+"contributions/mcp-servers/mcp.lattice-talk.json" = "codex_plugin_scanner/guard/contracts/data/mcp_servers/contributions/mcp.lattice-talk.json"
 
 [tool.hatch.build]
 artifacts = [
