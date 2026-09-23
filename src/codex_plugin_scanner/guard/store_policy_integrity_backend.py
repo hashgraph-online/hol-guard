@@ -27,14 +27,16 @@ from .store_base import (
 class MirroredPolicyIntegritySecretStore(FallbackSecretStore):
     """Prefer the system keyring and keep its key usable in a headless session."""
 
+    def _read_primary(self, secret_id: str) -> str | None:
+        if isinstance(self.primary, SystemKeyringSecretStore):
+            return self.primary.get_secret_with_timeout(
+                secret_id, timeout_seconds=_POLICY_INTEGRITY_PRIMARY_SECRET_TIMEOUT_SECONDS
+            )
+        return self.primary.get_secret(secret_id)
+
     def get_secret(self, secret_id: str) -> str | None:
         try:
-            if isinstance(self.primary, SystemKeyringSecretStore):
-                primary_value = self.primary.get_secret_with_timeout(
-                    secret_id, timeout_seconds=_POLICY_INTEGRITY_PRIMARY_SECRET_TIMEOUT_SECONDS
-                )
-            else:
-                primary_value = self.primary.get_secret(secret_id)
+            primary_value = self._read_primary(secret_id)
         except Exception:
             primary_value = None
         if primary_value is not None:
@@ -51,6 +53,18 @@ class MirroredPolicyIntegritySecretStore(FallbackSecretStore):
         self.primary.set_secret(secret_id, value)
         with suppress(Exception):
             self.fallback.set_secret(secret_id, value)
+
+    def delete_secret(self, secret_id: str) -> None:
+        self.primary.delete_secret(secret_id)
+        try:
+            remaining = self._read_primary(secret_id)
+        except Exception as error:
+            raise RuntimeError("policy integrity keyring deletion could not be verified") from error
+        if remaining is not None:
+            raise RuntimeError("policy integrity keyring deletion did not persist")
+        self.fallback.delete_secret(secret_id)
+        if self.fallback.get_secret(secret_id) is not None:
+            raise RuntimeError("policy integrity vault deletion did not persist")
 
 
 def build_policy_integrity_secret_store(

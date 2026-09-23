@@ -195,6 +195,22 @@ def test_mirrored_policy_keyring_remains_readable_when_vault_fails(
     assert mirrored.get_secret("integrity-key") == "keyring-value"
 
 
+def test_mirrored_policy_reset_rejects_stale_keyring_secret(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    primary = SystemKeyringSecretStore(service_name="hol-guard.test")
+    fallback = EncryptedFileSecretStore(tmp_path)
+    fallback.set_secret("integrity-key", "old")
+    monkeypatch.setattr(primary, "delete_secret", lambda _secret_id: None)
+    monkeypatch.setattr(primary, "get_secret_with_timeout", lambda _secret_id, *, timeout_seconds: "old")
+    mirrored = MirroredPolicyIntegritySecretStore(primary, fallback)
+
+    with pytest.raises(RuntimeError, match="keyring deletion did not persist"):
+        mirrored.delete_secret("integrity-key")
+    assert fallback.get_secret("integrity-key") == "old"
+
+
 def test_doctor_can_report_protected_after_linux_local_vault_repair(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
