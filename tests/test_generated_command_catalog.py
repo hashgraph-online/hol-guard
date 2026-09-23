@@ -23,8 +23,8 @@ def _load():
 def test_generated_catalog_is_immutable_metadata_bound_to_native_program() -> None:
     catalog = _load()
 
-    assert len(catalog.extensions) == 71
-    assert len(catalog.permissions) == 248
+    assert len(catalog.extensions) == 72
+    assert len(catalog.permissions) == 253
     assert catalog.get("command.api-gateway").name == "API gateway command protection"
     rule = catalog.get_rule("command.api-gateway.delete")
     assert rule is not None

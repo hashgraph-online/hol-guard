@@ -121,8 +121,8 @@ fn redirects_defer_to_the_authoring_path(command: &str) -> bool {
 fn packaged_program_is_admitted_once_and_exposes_explicit_coverage() {
     let first = packaged_command_program().unwrap();
     assert!(Arc::ptr_eq(&first, &packaged_command_program().unwrap()));
-    assert_eq!(first.extensions.len(), 72);
-    assert_eq!(first.rules.len(), 236);
+    assert_eq!(first.extensions.len(), 73);
+    assert_eq!(first.rules.len(), 241);
     assert_eq!(
         first
             .rules

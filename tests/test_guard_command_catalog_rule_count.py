@@ -17,4 +17,4 @@ def test_command_extension_registry_is_deterministic_and_complete() -> None:
     assert BUILT_IN_COMMAND_EXTENSION_REGISTRY.for_action_class("GitHub merge command") is not None
     assert BUILT_IN_COMMAND_EXTENSION_REGISTRY.rule_for_action_class("GitHub merge command") is not None
     assert BUILT_IN_COMMAND_EXTENSION_REGISTRY.for_action_class("Ollama model publication command") is not None
-    assert sum(extension["rule_count"] for extension in payload["extensions"]) == 236
+    assert sum(extension["rule_count"] for extension in payload["extensions"]) == 241
