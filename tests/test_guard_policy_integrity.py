@@ -60,6 +60,7 @@ from codex_plugin_scanner.guard.store import (
     GuardStore,
     SystemKeyringSecretStore,
 )
+from codex_plugin_scanner.guard.store_policy_integrity_backend import MirroredPolicyIntegritySecretStore
 from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
 
 _POLICY_BUNDLE_WORKSPACE_ID = "workspace-1"
@@ -869,7 +870,7 @@ def test_policy_integrity_status_includes_trust_status(tmp_path: Path) -> None:
 def test_guard_store_init_does_not_create_policy_integrity_keyring_material(tmp_path: Path) -> None:
     store = _store(tmp_path)
     secret_store = store._policy_integrity_secret_store
-    assert isinstance(secret_store, SystemKeyringSecretStore)
+    assert isinstance(secret_store, MirroredPolicyIntegritySecretStore)
 
     assert secret_store.get_secret(store._policy_integrity_key_ref) is None
     assert secret_store.get_secret(store._policy_integrity_control_ref) is None
@@ -1155,7 +1156,8 @@ def test_policy_integrity_status_uses_timed_keychain_reads_once_per_secret(
         "2026-06-14T00:00:00Z",
     )
     secret_store = store._policy_integrity_secret_store
-    assert isinstance(secret_store, SystemKeyringSecretStore)
+    assert isinstance(secret_store, MirroredPolicyIntegritySecretStore)
+    assert isinstance(secret_store.primary, SystemKeyringSecretStore)
     key_value = secret_store.get_secret(store._policy_integrity_key_ref)
     control_value = secret_store.get_secret(store._policy_integrity_control_ref)
     assert isinstance(key_value, str) and key_value
@@ -1179,7 +1181,7 @@ def test_policy_integrity_status_uses_timed_keychain_reads_once_per_secret(
             AssertionError("plain keyring reads should not run for policy integrity")
         ),
     )
-    monkeypatch.setattr(secret_store, "get_secret_with_timeout", _count_timed_reads)
+    monkeypatch.setattr(secret_store.primary, "get_secret_with_timeout", _count_timed_reads)
     store._clear_policy_integrity_cache()
 
     first_status = store.get_policy_integrity_status()
@@ -1196,7 +1198,7 @@ def test_policy_integrity_status_uses_timed_keychain_reads_once_per_secret(
 def test_policy_integrity_status_and_verify_do_not_create_keyring_material_on_fresh_store(tmp_path: Path) -> None:
     store = _store(tmp_path)
     secret_store = store._policy_integrity_secret_store
-    assert isinstance(secret_store, SystemKeyringSecretStore)
+    assert isinstance(secret_store, MirroredPolicyIntegritySecretStore)
     _delete_policy_integrity_key(store)
     _delete_policy_integrity_control_state(store)
     assert secret_store.get_secret(store._policy_integrity_key_ref) is None

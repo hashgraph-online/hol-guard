@@ -5,6 +5,24 @@ All notable changes to HOL Guard will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.4.2](https://github.com/hashgraph-online/hol-guard/compare/v3.4.1...v3.4.2) (2026-09-23)
+
+
+### Bug Fixes
+
+* bind uivoid portable fixtures to canonical build sources ([77adeca](https://github.com/hashgraph-online/hol-guard/commit/77adeca00df50e6df670ae285cf8aa0cf3a19fea))
+* **ci:** isolate Pi fallback probes and relax permission call count ([#3070](https://github.com/hashgraph-online/hol-guard/issues/3070)) ([035623b](https://github.com/hashgraph-online/hol-guard/commit/035623b74bcc26150806b5ea895a65af441b1433))
+* **guard:** preserve native authority across Linux keyring sessions ([#3071](https://github.com/hashgraph-online/hol-guard/issues/3071)) ([9ac28e8](https://github.com/hashgraph-online/hol-guard/commit/9ac28e8f6a6ae9596c6a074585f10ecc1341f331))
+* preserve option terminators in versioned package matching ([694d992](https://github.com/hashgraph-online/hol-guard/commit/694d9920c7b96fbbf63a5b5f861b1f83d3239eea))
+* refresh decision report bindings after native matcher update ([e81eba1](https://github.com/hashgraph-online/hol-guard/commit/e81eba13ce9f9932d56213004c127d72cc12ea7d))
+* **release-notes:** dedupe identities, credit nonconventional squashes, verify published predecessors ([830eef5](https://github.com/hashgraph-online/hol-guard/commit/830eef55a6f2b1d2c82dea8fb92fd1459ad934a6))
+
+
+### Documentation
+
+* **readme:** link the annotated release archive and contributor wall ([0655c56](https://github.com/hashgraph-online/hol-guard/commit/0655c5608f959f1e81d1ed7d6dfb6b18f5cec506))
+* **readme:** link the release archive and contributor wall ([7e29453](https://github.com/hashgraph-online/hol-guard/commit/7e294534387b8dc87ade39f23ac0249e324ff9f7))
+
 ## [3.4.1](https://github.com/hashgraph-online/hol-guard/compare/v3.4.0...v3.4.1) (2026-09-22)
 
 
