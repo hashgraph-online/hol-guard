@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import subprocess
+import threading
+import urllib.request
 from pathlib import Path
 
 import pytest
@@ -44,6 +46,44 @@ def test_folder_picker_failure_is_unavailable() -> None:
             stdout="",
             stderr="osascript is broken",
         )
+
+
+def test_macos_cancel_code_returns_none() -> None:
+    assert (
+        interpret_project_folder_picker_result(
+            returncode=1,
+            stdout="",
+            stderr="execution error: User canceled. (-128)",
+        )
+        is None
+    )
+
+
+def test_linux_dialog_cancel_ignores_gtk_warnings() -> None:
+    assert (
+        interpret_project_folder_picker_result(
+            returncode=1,
+            stdout="",
+            stderr="Gtk-Message: GtkDialog mapped without a transient parent",
+            treat_exit_one_as_cancel=True,
+        )
+        is None
+    )
+
+
+def test_windows_picker_writes_utf8() -> None:
+    command = project_folder_picker_command("win32")
+    assert command is not None
+    assert "OutputEncoding" in command[-1]
+    assert "UTF8" in command[-1]
+
+
+def test_missing_picker_executable_is_unavailable() -> None:
+    def runner(*_args, **_kwargs) -> subprocess.CompletedProcess[str]:
+        raise FileNotFoundError("powershell")
+
+    with pytest.raises(ProjectFolderPickerUnavailableError):
+        choose_project_folder(runner=runner, platform_name="win32")
 
 
 def test_choose_project_folder_uses_injected_runner() -> None:
@@ -110,3 +150,51 @@ def test_daemon_choose_folder_reports_cancel(
     assert status == 200
     assert payload["cancelled"] is True
     assert payload["workspace_dir"] is None
+
+
+def test_daemon_answers_health_while_folder_picker_is_open(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    started = threading.Event()
+    release = threading.Event()
+
+    def blocked_picker() -> None:
+        started.set()
+        assert release.wait(timeout=5)
+
+    monkeypatch.setattr(daemon_server, "choose_project_folder", blocked_picker)
+    from codex_plugin_scanner.guard.store import GuardStore
+
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_premium_entitlement(store)
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    result: dict[str, object] = {}
+
+    def choose() -> None:
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/supply-chain/choose-folder",
+                token=_dashboard_token_for(store),
+                payload={},
+            ),
+        )
+        result["status"] = status
+        result["payload"] = payload
+
+    worker = threading.Thread(target=choose)
+    worker.start()
+    try:
+        assert started.wait(timeout=5)
+        with urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/healthz", timeout=2) as response:
+            assert response.status == 200
+    finally:
+        release.set()
+        worker.join(timeout=5)
+        daemon.stop()
+
+    assert not worker.is_alive()
+    assert result["status"] == 200
+    assert result["payload"]["cancelled"] is True

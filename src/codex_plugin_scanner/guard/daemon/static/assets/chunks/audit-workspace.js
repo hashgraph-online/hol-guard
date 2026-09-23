@@ -1,6 +1,6 @@
-import { j as jsxRuntimeExports, aJ as Tag, y as formatRelativeTime, r as reactExports, A as ActionButton, cl as HiMiniChevronLeft, c as HiMiniChevronRight, bw as IconActionButton, C as HiMiniXMark, bB as GuardModalLayer, cm as HiMiniFunnel, aG as HiMiniMagnifyingGlass, cn as HiMiniArrowDown, co as HiMiniArrowUp, aV as HiMiniFolder, S as SectionLabel, am as HiMiniArrowPath, bA as HiMiniBugAnt, n as EmptyState, ah as HiMiniAdjustmentsHorizontal, bC as ConnectFlowCard, P as HiMiniExclamationTriangle, aO as useResolvedApprovalGate, cp as runAuditRemediation, R as Badge, ci as isBlockedGuardAction, bs as isSupplyChainAuditEvidence, s as HiMiniCheckCircle, a7 as HiMiniXCircle, i as harnessDisplayName, bV as HiMiniDocumentText, b2 as guardAwareHref, w as HiMiniShieldCheck } from "../guard-dashboard.js";
+import { j as jsxRuntimeExports, aK as Tag, y as formatRelativeTime, r as reactExports, A as ActionButton, cl as HiMiniChevronLeft, c as HiMiniChevronRight, bw as IconActionButton, C as HiMiniXMark, bB as GuardModalLayer, cm as HiMiniFunnel, aH as HiMiniMagnifyingGlass, cn as HiMiniArrowDown, co as HiMiniArrowUp, aV as HiMiniFolder, S as SectionLabel, al as HiMiniArrowPath, bA as HiMiniBugAnt, n as EmptyState, ah as HiMiniAdjustmentsHorizontal, bC as ConnectFlowCard, P as HiMiniExclamationTriangle, aP as useResolvedApprovalGate, cp as runAuditRemediation, R as Badge, ci as isBlockedGuardAction, bs as isSupplyChainAuditEvidence, s as HiMiniCheckCircle, a7 as HiMiniXCircle, i as harnessDisplayName, bV as HiMiniDocumentText, b2 as guardAwareHref, w as HiMiniShieldCheck } from "../guard-dashboard.js";
 import { A as ApprovalProofModal } from "./approval-proof-modal.js";
-import { p as packageWorkbenchEcosystems, f as filterPackageWorkbenchFindings, c as sortPackageWorkbenchFindings, i as isApprovalGateRequiredError, l as listSupplyChainAuditWorkspaceChoices } from "./supply-chain-hub-workspace.js";
+import { n as normalizeSupplyChainAuditWorkspaceInput, p as packageWorkbenchEcosystems, f as filterPackageWorkbenchFindings, c as sortPackageWorkbenchFindings, i as isApprovalGateRequiredError, l as listSupplyChainAuditWorkspaceChoices } from "./supply-chain-hub-workspace.js";
 import { r as resolveManagerCoverageManagers, a as resolveManagerCoverageStatus } from "./supply-chain-protection-stats.js";
 const STEPS = [
   { id: "preparing", label: "Prepare workspace" },
@@ -721,7 +721,7 @@ function PackageWorkbenchPanel({
   const findings = auditSnapshot?.findings ?? [];
   const packages = auditSnapshot?.packages ?? [];
   const showFolderField = auditWorkspaceSelectionRequired || auditSnapshot === null || Boolean(auditError) || Boolean(onChooseAuditWorkspace);
-  const workspacePathMissing = !auditWorkspaceDir.trim();
+  const workspacePathMissing = normalizeSupplyChainAuditWorkspaceInput(auditWorkspaceDir).length === 0;
   const tableSource = viewMode === "review" ? findings : packages;
   const progressActive = auditProgressActive(auditPhase, auditRunning);
   const showResults = auditSnapshot !== null && !progressActive && (auditConnectGate === null || auditConnectGate === void 0);

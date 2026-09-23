@@ -21,6 +21,7 @@ import type { AuditConnectGateViewState } from "./supply-chain-firewall-panel";
 import { FindingDetailPanel, FindingRow } from "./package-workbench-finding-detail";
 import { ActiveFilterChip, FilterModal, buildFilterSummary } from "./package-workbench-filter-modal";
 import { WorkbenchHeader, WorkbenchPagination } from "./package-workbench-common";
+import { normalizeSupplyChainAuditWorkspaceInput } from "./supply-chain-audit-workspace";
 import { WorkspaceAuditFolderField } from "./workspace-audit-folder-field";
 
 const WORKBENCH_PAGE_SIZE = 25;
@@ -158,7 +159,7 @@ export function PackageWorkbenchPanel({
   const findings = auditSnapshot?.findings ?? [];
   const packages = auditSnapshot?.packages ?? [];
   const showFolderField = auditWorkspaceSelectionRequired || auditSnapshot === null || Boolean(auditError) || Boolean(onChooseAuditWorkspace);
-  const workspacePathMissing = !auditWorkspaceDir.trim();
+  const workspacePathMissing = normalizeSupplyChainAuditWorkspaceInput(auditWorkspaceDir).length === 0;
   const tableSource = viewMode === "review" ? findings : packages;
   const progressActive = auditProgressActive(auditPhase, auditRunning);
   const showResults = auditSnapshot !== null && !progressActive && (auditConnectGate === null || auditConnectGate === undefined);

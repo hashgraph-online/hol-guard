@@ -1,5 +1,5 @@
 const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/supply-chain-workspace.js","assets/guard-dashboard.js","assets/index.css","assets/chunks/feed-health-workspace.js","assets/chunks/home-protection-module.js","assets/chunks/supply-chain-protection-stats.js","assets/chunks/approval-proof-modal.js","assets/chunks/audit-workspace.js"])))=>i.map(i=>d[i]);
-import { br as isSupplyChainAuditIncomplete, bs as isSupplyChainAuditEvidence, b4 as GuardHarnessActionError, bt as readString$1, bu as isRecord$1, r as reactExports, j as jsxRuntimeExports, s as HiMiniCheckCircle, am as HiMiniArrowPath, P as HiMiniExclamationTriangle, aJ as Tag, y as formatRelativeTime, bv as HiMiniClock, bw as IconActionButton, a7 as HiMiniXCircle, b6 as HiMiniTrash, w as HiMiniShieldCheck, a3 as HiMiniWrenchScrewdriver, bx as HiMiniBeaker, by as ActivationSummary, bz as ActionResultPanel, aG as HiMiniMagnifyingGlass, n as EmptyState, A as ActionButton, bA as HiMiniBugAnt, C as HiMiniXMark, aQ as buildApprovalProofCredentials, bB as GuardModalLayer, bC as ConnectFlowCard, bD as ApprovalProofInline, b1 as HiMiniArrowTopRightOnSquare, bE as HiMiniCloudArrowDown, aO as useResolvedApprovalGate, bF as fetchPackageFirewallStatus, bG as runPackageAudit, bH as resolveSupplyChainAuditFailure, bI as runPackageSync, bJ as startPackageFirewallConnect, a0 as openPackageFirewallAuthorizeFallback, bK as PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE, bL as repairSupplyChainProtection, bM as runPackageFirewallAction, bN as parseInterceptProofSnapshot, bO as activatePackageFirewallRuntime, S as SectionLabel, bP as EntitlementNotice, bQ as chooseSupplyChainAuditFolder, bR as fetchReceipts, aF as WorkspacePageHeader, bS as lazyWorkspace, bT as __vitePreload } from "../guard-dashboard.js";
+import { br as isSupplyChainAuditIncomplete, bs as isSupplyChainAuditEvidence, b4 as GuardHarnessActionError, bt as readString$1, bu as isRecord$1, r as reactExports, j as jsxRuntimeExports, s as HiMiniCheckCircle, al as HiMiniArrowPath, P as HiMiniExclamationTriangle, aK as Tag, y as formatRelativeTime, bv as HiMiniClock, bw as IconActionButton, a7 as HiMiniXCircle, b6 as HiMiniTrash, w as HiMiniShieldCheck, a3 as HiMiniWrenchScrewdriver, bx as HiMiniBeaker, by as ActivationSummary, bz as ActionResultPanel, aH as HiMiniMagnifyingGlass, n as EmptyState, A as ActionButton, bA as HiMiniBugAnt, C as HiMiniXMark, ao as buildApprovalProofCredentials, bB as GuardModalLayer, bC as ConnectFlowCard, bD as ApprovalProofInline, b1 as HiMiniArrowTopRightOnSquare, bE as HiMiniCloudArrowDown, aP as useResolvedApprovalGate, bF as fetchPackageFirewallStatus, bG as runPackageAudit, bH as resolveSupplyChainAuditFailure, bI as runPackageSync, bJ as startPackageFirewallConnect, a0 as openPackageFirewallAuthorizeFallback, bK as PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE, bL as repairSupplyChainProtection, bM as runPackageFirewallAction, bN as parseInterceptProofSnapshot, bO as activatePackageFirewallRuntime, S as SectionLabel, bP as EntitlementNotice, bQ as chooseSupplyChainAuditFolder, bR as fetchReceipts, aG as WorkspacePageHeader, bS as lazyWorkspace, bT as __vitePreload } from "../guard-dashboard.js";
 import { A as ApprovalProofModal } from "./approval-proof-modal.js";
 const SEVERITY_RANK = {
   critical: 4,
@@ -693,13 +693,14 @@ function normalizeSupplyChainAuditWorkspaceInput(value) {
   }
   return next.trim();
 }
+function compareManagedInstalls(left, right) {
+  if (left.active !== right.active) {
+    return left.active ? -1 : 1;
+  }
+  return right.updated_at.localeCompare(left.updated_at);
+}
 function listSupplyChainAuditWorkspaceChoices(managedInstalls) {
-  const ordered = [...managedInstalls].sort((left, right) => {
-    if (left.active !== right.active) {
-      return left.active ? -1 : 1;
-    }
-    return right.updated_at.localeCompare(left.updated_at);
-  });
+  const ordered = [...managedInstalls].sort(compareManagedInstalls);
   const seen = /* @__PURE__ */ new Set();
   const choices = [];
   for (const install of ordered) {
@@ -716,12 +717,7 @@ function listSupplyChainAuditWorkspaceChoices(managedInstalls) {
   return choices;
 }
 function resolveSupplyChainAuditWorkspaceDir(managedInstalls) {
-  const ordered = [...managedInstalls].sort((left, right) => {
-    if (left.active !== right.active) {
-      return left.active ? -1 : 1;
-    }
-    return right.updated_at.localeCompare(left.updated_at);
-  });
+  const ordered = [...managedInstalls].sort(compareManagedInstalls);
   for (const install of ordered) {
     const workspace = install.workspace?.trim();
     if (workspace) {
@@ -2757,6 +2753,7 @@ export {
   filterPackageWorkbenchFindings as f,
   isApprovalGateRequiredError as i,
   listSupplyChainAuditWorkspaceChoices as l,
+  normalizeSupplyChainAuditWorkspaceInput as n,
   packageWorkbenchEcosystems as p,
   supplyChainFixAllIsPending as s
 };

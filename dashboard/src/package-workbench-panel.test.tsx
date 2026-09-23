@@ -151,6 +151,20 @@ assert(
   "PWP15: audit should be enabled after a project folder is provided",
 );
 
+const sentinelWorkspaceMarkup = renderToStaticMarkup(
+  <PackageWorkbenchPanel
+    auditSnapshot={null}
+    auditWorkspaceSelectionRequired
+    auditWorkspaceDir="<project-folder>"
+    onAuditWorkspaceDirChange={() => undefined}
+    onRunAudit={() => undefined}
+  />,
+);
+assert(
+  sentinelWorkspaceMarkup.includes('aria-disabled="true"'),
+  "PWP15-B: the legacy folder token should not enable Run audit",
+);
+
 const singleFilter: PackageWorkbenchFilters = {
   ecosystem: "npm",
   decision: "all",

@@ -22,15 +22,17 @@ export function normalizeSupplyChainAuditWorkspaceInput(value: string | null | u
   return next.trim();
 }
 
+function compareManagedInstalls(left: GuardManagedInstall, right: GuardManagedInstall): number {
+  if (left.active !== right.active) {
+    return left.active ? -1 : 1;
+  }
+  return right.updated_at.localeCompare(left.updated_at);
+}
+
 export function listSupplyChainAuditWorkspaceChoices(
   managedInstalls: readonly GuardManagedInstall[],
 ): string[] {
-  const ordered = [...managedInstalls].sort((left, right) => {
-    if (left.active !== right.active) {
-      return left.active ? -1 : 1;
-    }
-    return right.updated_at.localeCompare(left.updated_at);
-  });
+  const ordered = [...managedInstalls].sort(compareManagedInstalls);
   const seen = new Set<string>();
   const choices: string[] = [];
   for (const install of ordered) {
@@ -50,12 +52,7 @@ export function listSupplyChainAuditWorkspaceChoices(
 export function resolveSupplyChainAuditWorkspaceDir(
   managedInstalls: readonly GuardManagedInstall[],
 ): string | null {
-  const ordered = [...managedInstalls].sort((left, right) => {
-    if (left.active !== right.active) {
-      return left.active ? -1 : 1;
-    }
-    return right.updated_at.localeCompare(left.updated_at);
-  });
+  const ordered = [...managedInstalls].sort(compareManagedInstalls);
   for (const install of ordered) {
     const workspace = install.workspace?.trim();
     if (workspace) {
