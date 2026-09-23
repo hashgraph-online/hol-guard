@@ -79,6 +79,7 @@
     ],
     "external": [
       "command.blitcp",
+      "command.ctty",
       "command.mcp-filesystem",
       "command.mcp-instapods",
       "command.noodle",
