@@ -143,6 +143,8 @@ test("a recent authenticator confirmation still shows the code field", async ({ 
   const code = dialog.getByLabel("Authenticator code");
   await expect(code).toBeVisible();
   await expect(dialog.getByRole("button", { name: "Authorize this device" })).toBeDisabled();
+  await code.fill("12345");
+  await expect(dialog.getByRole("button", { name: "Authorize this device" })).toBeDisabled();
   await code.fill("654321");
   await dialog.getByRole("button", { name: "Authorize this device" }).click();
   await expect(dialog.getByRole("alert")).toHaveText("Enter the current six-digit code from your authenticator.");

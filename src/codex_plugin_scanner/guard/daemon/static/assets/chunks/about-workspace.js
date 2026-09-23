@@ -1,4 +1,4 @@
-import { j as jsxRuntimeExports, aJ as Tag, c9 as Surface, R as Badge, r as reactExports, S as SectionLabel, b1 as HiMiniArrowTopRightOnSquare, ca as HiMiniCheckBadge } from "../guard-dashboard.js";
+import { j as jsxRuntimeExports, aK as Tag, c9 as Surface, R as Badge, r as reactExports, S as SectionLabel, b1 as HiMiniArrowTopRightOnSquare, ca as HiMiniCheckBadge } from "../guard-dashboard.js";
 const ABOUT_PARTNER_SECTION_TITLE = "Standards partner program";
 const ABOUT_PARTNER_SECTION_BODY = "Join teams building on HOL open standards. Partners get early access to protocol drafts, co-marketing, and direct engineering support.";
 const ABOUT_PARTNER_CTA = "Explore partner programs";

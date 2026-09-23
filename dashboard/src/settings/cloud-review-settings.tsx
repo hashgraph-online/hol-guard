@@ -13,6 +13,19 @@ import {
 import { useFocusTrap } from "../use-focus-trap";
 import { ConnectGuardCloudButton } from "../connect-guard-cloud-button";
 
+export function cloudReviewProofIncomplete(
+  gate: CloudReviewSettingsStatus["approval_gate"] | null | undefined,
+  password: string,
+  totp: string,
+  requireFreshTotp: boolean,
+): boolean {
+  if (!gate?.enabled) return false;
+  if (isApprovalProofSubmitDisabled(
+    gate, { approvalPassword: password, approvalTotpCode: totp }, false, requireFreshTotp,
+  )) return true;
+  return requireFreshTotp && totp.trim().length !== 6;
+}
+
 export function cloudReviewConfirmationError(message: string): string {
   if (message === "TOTP code is required.") {
     return "Enter the current six-digit code from your authenticator.";
@@ -97,13 +110,11 @@ export function CloudReviewSettings() {
 
   async function confirm() {
     if (!status || !action || pending) return;
-    const freshTotp = status.approval_gate.totp_enabled === true;
-    if (status.approval_gate.enabled && isApprovalProofSubmitDisabled(
-      status.approval_gate, { approvalPassword: password, approvalTotpCode: totp }, false, freshTotp,
-    )) return;
+    const requireFreshTotp = status.approval_gate.totp_enabled === true;
+    if (cloudReviewProofIncomplete(status.approval_gate, password, totp, requireFreshTotp)) return;
     const proof = status.approval_gate.enabled
       ? buildApprovalProofCredentials(
-        status.approval_gate, { approvalPassword: password, approvalTotpCode: totp }, freshTotp,
+        status.approval_gate, { approvalPassword: password, approvalTotpCode: totp }, requireFreshTotp,
       )
       : {};
     revision.current += 1;
@@ -128,10 +139,8 @@ export function CloudReviewSettings() {
   }
 
   const needsRecovery = Boolean(status?.activation_error || status?.held_events || status?.delivery_state === "error");
-  const freshTotp = status?.approval_gate.totp_enabled === true;
-  const disabled = pending || Boolean(status?.approval_gate.enabled && isApprovalProofSubmitDisabled(
-    status.approval_gate, { approvalPassword: password, approvalTotpCode: totp }, false, freshTotp,
-  ));
+  const requireFreshTotp = status?.approval_gate.totp_enabled === true;
+  const disabled = pending || cloudReviewProofIncomplete(status?.approval_gate, password, totp, requireFreshTotp);
   let confirmLabel = "Turn off Cloud Review";
   if (action === "enable") confirmLabel = "Authorize this device";
   if (pending) confirmLabel = "Saving...";
@@ -227,7 +236,7 @@ export function CloudReviewSettings() {
             {status.approval_gate.enabled ? (
               <div className="mt-4">
                 <ApprovalProofFieldInputs approvalGate={status.approval_gate} approvalPassword={password} approvalTotpCode={totp}
-                  requireFreshTotp={freshTotp}
+                  requireFreshTotp={requireFreshTotp}
                   onApprovalPasswordChange={(event) => setPassword(event.target.value)} onApprovalTotpCodeChange={(event) => setTotp(event.target.value)} />
               </div>
             ) : null}

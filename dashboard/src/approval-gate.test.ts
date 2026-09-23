@@ -3,7 +3,7 @@ import type { GuardApprovalGatePublicConfig, GuardSettings } from "./guard-types
 import { approvalGateCooldownLabel, requiresApprovalPasswordPrompt } from "./approval-gate-utils";
 import { buildApprovalProofCredentials, isApprovalProofSubmitDisabled } from "./approval-proof-inline";
 import { applyApprovalGateDraft, effectiveApprovalGateCooldownSeconds, hasUnsavedChanges } from "./settings-workspace";
-import { cloudReviewConfirmationError } from "./settings/cloud-review-settings";
+import { cloudReviewConfirmationError, cloudReviewProofIncomplete } from "./settings/cloud-review-settings";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -323,8 +323,29 @@ function testApprovalProofFreshTotpRequiredForDisconnect(): void {
 function testCloudReviewKeepsAuthenticatorFieldAfterRecentProof(): void {
   const source = readFileSync(new URL("./settings/cloud-review-settings.tsx", import.meta.url), "utf8");
   assert(
-    source.includes("requireFreshTotp={freshTotp}"),
+    source.includes("requireFreshTotp={requireFreshTotp}"),
     "Cloud Review must show the authenticator field after a recent confirmation",
+  );
+  const recentGate: GuardApprovalGatePublicConfig = {
+    enabled: true,
+    configured: true,
+    cooldown_seconds: 0,
+    cooldown_active: false,
+    cooldown_expires_at: null,
+    locked_until: null,
+    fail_closed: false,
+    strict_all_decisions: false,
+    totp_enabled: true,
+    totp_pending: false,
+    totp_recent_satisfied: true,
+  };
+  assert(
+    cloudReviewProofIncomplete(recentGate, "", "12345", true) === true,
+    "a partial authenticator code must not authorize Cloud Review",
+  );
+  assert(
+    cloudReviewProofIncomplete(recentGate, "", "123456", true) === false,
+    "a complete authenticator code can authorize Cloud Review",
   );
   assert(
     source.includes("buildApprovalProofCredentials("),

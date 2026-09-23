@@ -1,4 +1,4 @@
-import { aa as PROTECTION_POSTURE_COPY, ab as POSTURE_OUTCOME_COLUMNS, j as jsxRuntimeExports, r as reactExports, ac as getDefaultExportFromCjs, ad as React, M as useFocusTrap, ae as HiMiniKey, S as SectionLabel, A as ActionButton, w as HiMiniShieldCheck, af as HiMiniLockClosed, ag as HiMiniBellAlert, ah as HiMiniAdjustmentsHorizontal, ai as HiMiniCircleStack, aj as TabBar, c as HiMiniChevronRight, ak as fetchCloudReviewSettings, al as isApprovalProofSubmitDisabled, aQ as buildApprovalProofCredentials, K as HiMiniCloud, am as HiMiniArrowPath, C as HiMiniXMark, an as ApprovalProofFieldInputs, ao as changeCloudReviewSettings, ap as resolveProtectionLevelCopy, aq as fetchSettings, ar as fetchRuntimeSnapshot, e as updateSettings, as as clearPolicy, at as clearReviewQueue, au as revokeApprovalGateCooldown, av as disableApprovalGateTotp, aw as importSettings, ax as resetSettings, ay as enrollApprovalGateTotp, az as verifyApprovalGateTotp, aA as clearEvidence, aB as exportDiagnostics, aC as repairApprovalCenter, aD as exportSettings, aE as setupDesktopNotifications, n as EmptyState, aF as WorkspacePageHeader, W as WatchProtectionBanner, aG as HiMiniMagnifyingGlass, I as HiMiniChevronDown, s as HiMiniCheckCircle, P as HiMiniExclamationTriangle, aH as isProtectionPosture, aI as deriveProtectionPosture, aJ as Tag, aK as approvalGateCooldownLabel } from "../guard-dashboard.js";
+import { aa as PROTECTION_POSTURE_COPY, ab as POSTURE_OUTCOME_COLUMNS, j as jsxRuntimeExports, r as reactExports, ac as getDefaultExportFromCjs, ad as React, M as useFocusTrap, ae as HiMiniKey, S as SectionLabel, A as ActionButton, w as HiMiniShieldCheck, af as HiMiniLockClosed, ag as HiMiniBellAlert, ah as HiMiniAdjustmentsHorizontal, ai as HiMiniCircleStack, aj as TabBar, c as HiMiniChevronRight, ak as fetchCloudReviewSettings, K as HiMiniCloud, al as HiMiniArrowPath, C as HiMiniXMark, am as ApprovalProofFieldInputs, an as isApprovalProofSubmitDisabled, ao as buildApprovalProofCredentials, ap as changeCloudReviewSettings, aq as resolveProtectionLevelCopy, ar as fetchSettings, as as fetchRuntimeSnapshot, e as updateSettings, at as clearPolicy, au as clearReviewQueue, av as revokeApprovalGateCooldown, aw as disableApprovalGateTotp, ax as importSettings, ay as resetSettings, az as enrollApprovalGateTotp, aA as verifyApprovalGateTotp, aB as clearEvidence, aC as exportDiagnostics, aD as repairApprovalCenter, aE as exportSettings, aF as setupDesktopNotifications, n as EmptyState, aG as WorkspacePageHeader, W as WatchProtectionBanner, aH as HiMiniMagnifyingGlass, I as HiMiniChevronDown, s as HiMiniCheckCircle, P as HiMiniExclamationTriangle, aI as isProtectionPosture, aJ as deriveProtectionPosture, aK as Tag, aL as approvalGateCooldownLabel } from "../guard-dashboard.js";
 import { f as filterSettingsBySearch, R as RISK_CONTROL_CONSEQUENCES } from "./app-catalog.js";
 import { C as ConnectGuardCloudButton } from "./connect-guard-cloud-button.js";
 const POSTURE_ORDER = ["protected", "extra_careful", "watch"];
@@ -2513,6 +2513,16 @@ function ApprovalPasswordSection(props) {
     !props.wasConfigured && props.enabled ? /* @__PURE__ */ jsxRuntimeExports.jsx(ApprovalPasswordSetupAction, { onClick: () => props.onOpenPasswordChangeModal("setup-gate") }) : null
   ] });
 }
+function cloudReviewProofIncomplete(gate, password, totp, requireFreshTotp) {
+  if (!gate?.enabled) return false;
+  if (isApprovalProofSubmitDisabled(
+    gate,
+    { approvalPassword: password, approvalTotpCode: totp },
+    false,
+    requireFreshTotp
+  )) return true;
+  return requireFreshTotp && totp.trim().length !== 6;
+}
 function cloudReviewConfirmationError(message) {
   if (message === "TOTP code is required.") {
     return "Enter the current six-digit code from your authenticator.";
@@ -2593,17 +2603,12 @@ function CloudReviewSettings() {
   }
   async function confirm() {
     if (!status || !action || pending) return;
-    const freshTotp = status.approval_gate.totp_enabled === true;
-    if (status.approval_gate.enabled && isApprovalProofSubmitDisabled(
-      status.approval_gate,
-      { approvalPassword: password, approvalTotpCode: totp },
-      false,
-      freshTotp
-    )) return;
+    const requireFreshTotp2 = status.approval_gate.totp_enabled === true;
+    if (cloudReviewProofIncomplete(status.approval_gate, password, totp, requireFreshTotp2)) return;
     const proof = status.approval_gate.enabled ? buildApprovalProofCredentials(
       status.approval_gate,
       { approvalPassword: password, approvalTotpCode: totp },
-      freshTotp
+      requireFreshTotp2
     ) : {};
     revision.current += 1;
     setPending(true);
@@ -2628,13 +2633,8 @@ function CloudReviewSettings() {
     }
   }
   const needsRecovery = Boolean(status?.activation_error || status?.held_events || status?.delivery_state === "error");
-  const freshTotp = status?.approval_gate.totp_enabled === true;
-  const disabled = pending || Boolean(status?.approval_gate.enabled && isApprovalProofSubmitDisabled(
-    status.approval_gate,
-    { approvalPassword: password, approvalTotpCode: totp },
-    false,
-    freshTotp
-  ));
+  const requireFreshTotp = status?.approval_gate.totp_enabled === true;
+  const disabled = pending || cloudReviewProofIncomplete(status?.approval_gate, password, totp, requireFreshTotp);
   let confirmLabel = "Turn off Cloud Review";
   if (action === "enable") confirmLabel = "Authorize this device";
   if (pending) confirmLabel = "Saving...";
@@ -2761,7 +2761,7 @@ function CloudReviewSettings() {
                   approvalGate: status.approval_gate,
                   approvalPassword: password,
                   approvalTotpCode: totp,
-                  requireFreshTotp: freshTotp,
+                  requireFreshTotp,
                   onApprovalPasswordChange: (event) => setPassword(event.target.value),
                   onApprovalTotpCodeChange: (event) => setTotp(event.target.value)
                 }
