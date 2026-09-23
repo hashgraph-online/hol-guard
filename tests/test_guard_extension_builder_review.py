@@ -126,6 +126,31 @@ def test_review_cannot_drop_execution_risk(tmp_path: Path) -> None:
         load_review(payload, discovery)
 
 
+def test_mcp_review_state_compiles_to_runtime_review_default(tmp_path: Path) -> None:
+    discovery = make_discovery(tmp_path, "mcp")
+    payload = default_review(discovery).to_dict()
+    entries = payload["entries"]
+    assert isinstance(entries, dict)
+    operation = next(row for row in discovery.operations if row.name == "delete_item")
+    entry = entries[operation.operation_id]
+    assert isinstance(entry, dict)
+    entry.update(
+        {
+            "state": "review",
+            "reviewed": True,
+            "rationale": "The tool mutates remote state and requires operator review.",
+            "evidenceUrl": discovery.metadata.homepage,
+        }
+    )
+
+    review = load_review(payload, discovery)
+    contribution = json.loads(
+        build_kit(discovery, review).native_files()["contributions/mcp-servers/mcp.builder-demo.json"]
+    )
+    states = {tool["name"]: tool["state"] for tool in contribution["tools"]}
+    assert states["delete_item"] == "review"
+
+
 def test_exact_reviewed_cli_and_mcp_decisions_compile(tmp_path: Path) -> None:
     cli = make_kit(tmp_path, reviewed=True)
     mcp = make_kit(tmp_path, "mcp", reviewed=True)

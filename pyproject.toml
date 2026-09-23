@@ -130,6 +130,7 @@ line-length = 120
 packages = ["src/codex_plugin_scanner"]
 
 [tool.hatch.build.targets.wheel.force-include]
+"contributions/mcp-servers/mcp.authzloom.json" = "codex_plugin_scanner/guard/contracts/data/mcp_servers/contributions/mcp.authzloom.json"
 "contracts/extensions/native-command-program.v1.json" = "codex_plugin_scanner/guard/contracts/data/extensions/native-command-program.v1.json"
 "contracts/extensions/command-catalog.v1.json" = "codex_plugin_scanner/guard/contracts/data/extensions/command-catalog.v1.json"
 "contracts/guard-cloud-review/v2/contract.json" = "codex_plugin_scanner/guard/contracts/data/guard-cloud-review/v2/contract.json"
