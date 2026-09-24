@@ -1,0 +1,55 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.askjev",
+  "version": "1.0.0",
+  "name": "AskJev MCP",
+  "description": "Reviews AskJev browser navigation MCP tools. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "github.com/ranjan2829",
+    "displayName": "AskJev",
+    "url": "https://github.com/ranjan2829/AskJev"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniGlobeAlt",
+    "background": "#18181B"
+  },
+  "homepage": "https://github.com/ranjan2829/AskJev",
+  "license": "MIT",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "npx",
+    "package": "askjev-mcp"
+  },
+  "riskClasses": [
+    "external-browser-click",
+    "external-browser-navigate"
+  ],
+  "tools": [
+    {
+      "name": "askjev_navigate",
+      "state": "inherit"
+    },
+    {
+      "name": "askjev_read_page",
+      "state": "inherit"
+    },
+    {
+      "name": "askjev_click",
+      "state": "block"
+    },
+    {
+      "name": "other",
+      "state": "inherit"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/ranjan2829/AskJev",
+    "https://www.npmjs.com/package/askjev-mcp"
+  ],
+  "saferAlternatives": [
+    "Keep click blocked unless this device needs AskJev to drive page actions; prefer askjev_read_page and askjev_navigate for inspection."
+  ]
+}
