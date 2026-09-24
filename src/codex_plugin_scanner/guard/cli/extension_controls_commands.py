@@ -155,7 +155,8 @@ def _recover_authority(
         require_fresh_totp=command == "recover-authority",
     )
     if command == "recover-authority":
-        if public_config(guard_home).totp_enabled and (gate_input is None or not gate_input.totp_code):
+        gate = public_config(guard_home)
+        if gate.enabled and gate.totp_enabled and (gate_input is None or not gate_input.totp_code):
             raise ApprovalGateError(
                 "approval_gate_totp_required", "Enter a fresh authenticator code for authority recovery."
             )

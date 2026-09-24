@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TextIO, cast
 
@@ -106,8 +106,10 @@ def enforce_lifecycle_gate(
             use_cooldown=False,
             require_fresh_totp=require_fresh_totp,
         )
-    if require_fresh_totp and not ((gate_input.totp_code if gate_input is not None else None) or "").strip():
-        raise ApprovalGateError("approval_gate_totp_required", "TOTP code is required.")
+    if require_fresh_totp:
+        if gate_input is None or not (gate_input.totp_code or "").strip():
+            raise ApprovalGateError("approval_gate_totp_required", "TOTP code is required.")
+        gate_input = replace(gate_input, require_fresh_totp=True)
     _ = require_high_risk(
         authority_home,
         purpose="protection_lifecycle",

@@ -242,9 +242,9 @@ def test_recovery_command_quotes_custom_home_for_the_current_shell(tmp_path: Pat
         assert shlex.split(command) == arguments
 
 
-@pytest.mark.parametrize("supply_fresh_code", [False, True])
+@pytest.mark.parametrize("supplied_code", ["none", "replayed", "fresh"])
 def test_recovery_requires_explicit_totp_even_with_recent_session_approval(
-    stale_home: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], supply_fresh_code: bool
+    stale_home: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], supplied_code: str
 ) -> None:
     from datetime import datetime, timedelta, timezone
     from urllib.parse import parse_qs, urlparse
@@ -269,29 +269,29 @@ def test_recovery_requires_explicit_totp_even_with_recent_session_approval(
         approval_gate_input=ApprovalGateInput(password=PASSWORD, totp_code=enrollment_code),
         now=enrollment_time.isoformat(),
     )
-    fresh_code = totp_code_at_counter(secret=secret, counter=int(now.timestamp() // 30))
+    replayed_code = totp_code_at_counter(secret=secret, counter=int(now.timestamp() // 30))
+    next_code = totp_code_at_counter(secret=secret, counter=int(now.timestamp() // 30) + 1)
     approval_gate.require_approval_decision(
         stale_home,
         action="allow",
         scope="artifact",
         subject="prime-recent-totp",
-        approval_gate_input=ApprovalGateInput(totp_code=fresh_code),
+        approval_gate_input=ApprovalGateInput(totp_code=replayed_code),
         now=now.isoformat(),
     )
     assert approval_gate.public_config(stale_home).totp_recent_satisfied
     marker = stale_home / "native-runtime" / AUTHORITY_FILE_NAME
     before = marker.read_bytes()
     prompts: list[str] = []
-    if supply_fresh_code:
+    if supplied_code == "none":
+        monkeypatch.setattr(cli, "prompt_for_approval_gate", lambda *_args, **_kwargs: None)
+    else:
+        entered = replayed_code if supplied_code == "replayed" else next_code
         monkeypatch.setattr(cli, "prompt_for_approval_gate", approval_gate_prompt.prompt_for_approval_gate)
         monkeypatch.setattr(approval_gate_prompt.sys.stdin, "isatty", lambda: True)
-        monkeypatch.setattr(
-            approval_gate_prompt.getpass, "getpass", lambda prompt: prompts.append(prompt) or fresh_code
-        )
-    else:
-        monkeypatch.setattr(cli, "prompt_for_approval_gate", lambda *_args, **_kwargs: None)
+        monkeypatch.setattr(approval_gate_prompt.getpass, "getpass", lambda prompt: prompts.append(prompt) or entered)
     result, output = _run(stale_home, "recover-authority")
-    if supply_fresh_code:
+    if supplied_code == "fresh":
         assert result == 0
         assert '"health":"protected"' in output
         assert len(prompts) == 1
@@ -299,5 +299,9 @@ def test_recovery_requires_explicit_totp_even_with_recent_session_approval(
     else:
         assert result == 4
         assert output == ""
-        assert "fresh authenticator code" in capsys.readouterr().err
+        error = capsys.readouterr().err
+        if supplied_code == "none":
+            assert "fresh authenticator code" in error
+        else:
+            assert "authenticator code is wrong" in error
         assert marker.read_bytes() == before

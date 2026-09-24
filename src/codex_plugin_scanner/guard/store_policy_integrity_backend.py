@@ -25,6 +25,7 @@ from .store_base import (
     FallbackSecretStore,
     SecretStore,
     SystemKeyringSecretStore,
+    _store_logger,
 )
 from .store_base import (
     _build_policy_integrity_secret_store as _base_policy_integrity_secret_store,
@@ -153,7 +154,9 @@ class MirroredPolicyIntegritySecretStore(FallbackSecretStore):
                 # the fallback key and leave it paired with another identity.
                 self.fallback.set_secret(key_ref, primary_key)
         except Exception:
-            pass
+            # Mirroring is best effort; the next read re-attempts it after the
+            # verified source check, so a failed copy is never silent damage.
+            _store_logger.debug("Policy-integrity fallback mirror update failed.", exc_info=True)
         return primary_key if secret_id == key_ref else primary_control
 
     def get_secret(self, secret_id: str) -> str | None:

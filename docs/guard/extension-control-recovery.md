@@ -32,7 +32,9 @@ For a custom home, pass it before `controls`:
 hol-guard command --guard-home '/path/to/guard home' controls recover-authority
 ```
 
-Recovery requires fresh approval. It preserves verifiable controls, resumes an
+Recovery requires fresh approval. When an authenticator app is configured, the code
+must come from a newer time step than the last code accepted in this session; reusing
+that code is rejected. It preserves verifiable controls, resumes an
 interrupted authenticated transition where possible, and archives unverifiable local
 control rows before rebuilding an empty authority. It verifies the retained native
 anti-rollback floor and advances the recovery epoch when a reset is necessary. It does
