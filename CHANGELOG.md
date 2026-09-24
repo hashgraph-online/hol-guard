@@ -5,6 +5,22 @@ All notable changes to HOL Guard will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.4.3](https://github.com/hashgraph-online/hol-guard/compare/v3.4.2...v3.4.3) (2026-09-24)
+
+### Features
+
+* Add an evidence-gated harness capability report ([#3081](https://github.com/hashgraph-online/hol-guard/pull/3081)) ([f5d568f](https://github.com/hashgraph-online/hol-guard/commit/f5d568f9c60d03cf26ec8ace7ed9aa8686af7ca7))
+* Add bounded local evaluation contracts and witnesses ([#3083](https://github.com/hashgraph-online/hol-guard/pull/3083)) ([ddbe315](https://github.com/hashgraph-online/hol-guard/commit/ddbe315f62eb09dcca9ee2ef962061c172b76d9a))
+
+### Bug Fixes
+
+* Fail closed when Cline post-tool review is unavailable ([#3082](https://github.com/hashgraph-online/hol-guard/pull/3082)) ([e1472f7](https://github.com/hashgraph-online/hol-guard/commit/e1472f7d470d66bc6a2acf63ba8a55888ab4288f))
+* **audit:** choose a project folder before running a workspace audit ([#3086](https://github.com/hashgraph-online/hol-guard/issues/3086)) ([c1afee9](https://github.com/hashgraph-online/hol-guard/commit/c1afee972e0cd77c70f67ad0bd6609c8b410805a))
+* **contributors:** make extension PRs self-healing ([#3087](https://github.com/hashgraph-online/hol-guard/issues/3087)) ([b22841a](https://github.com/hashgraph-online/hol-guard/commit/b22841ac004b9d8a6deccdeee1a1be3600fddfb9))
+* **dashboard:** show the Cloud Review authenticator field ([#3085](https://github.com/hashgraph-online/hol-guard/issues/3085)) ([7166570](https://github.com/hashgraph-online/hol-guard/commit/7166570f1465bfe970d4cc94250cb7b737f10875))
+* **release:** follow the newest Release Please stable tag ([#3075](https://github.com/hashgraph-online/hol-guard/issues/3075)) ([13d2486](https://github.com/hashgraph-online/hol-guard/commit/13d24860d620b45ec3f542d5eec363ce7e121e00))
+* **release:** verify Release Please wheels against their tag ([#3078](https://github.com/hashgraph-online/hol-guard/issues/3078)) ([56faea4](https://github.com/hashgraph-online/hol-guard/commit/56faea4878649668b84f83c351d112cc279954ac))
+
 ## [3.4.2](https://github.com/hashgraph-online/hol-guard/compare/v3.4.1...v3.4.2) (2026-09-23)
 
 
