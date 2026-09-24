@@ -106,7 +106,7 @@ def _run_corpus(repo_root: Path) -> dict[str, object]:
     started = time.perf_counter()
     try:
         completed = subprocess.run(
-            [sys.executable, str(repo_root / "tests/guard_command_corpus_runner.py"), "--installed"],
+            [sys.executable, str(repo_root / "scripts/run_installed_native_corpus.py")],
             cwd=repo_root,
             env=environment,
             capture_output=True,

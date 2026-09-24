@@ -171,8 +171,12 @@ def test_matrix_proves_remote_bytes_install_origin_record_corpus_and_dashboard()
     assert 'shutil.which("bun")' in runner_text
     assert '"build",' in runner_text
     assert 'manifest["canonical_digests"]' in runner_text
-    assert "observed = decision.decision_plane.action" in runner_text
-    assert "observed = decision.minimum_action" not in runner_text
+    assert "scripts/run_installed_native_corpus.py" in runner_text
+    assert 'report.get("native_contract_equality") is not True' in runner_text
+    assert 'report.get("original_oracle_below_count") != 0' in runner_text
+    installed_native_runner_text = (ROOT / "scripts/run_installed_native_corpus.py").read_text(encoding="utf-8")
+    assert 'distribution("hol-guard").locate_file("codex_plugin_scanner")' in installed_native_runner_text
+    assert "runner._coordinator_report()" in installed_native_runner_text
     assert '"no_post_execution_proof": _no_post_execution_proof_smoke()' in runner_text
     attributes_text = (ROOT / ".gitattributes").read_text(encoding="utf-8")
     assert "/tests/guard_command_corpus*.py text eol=lf" in attributes_text
