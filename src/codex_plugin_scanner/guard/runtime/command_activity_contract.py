@@ -331,7 +331,10 @@ def _validate_activity_state(activity: CommandActivity) -> None:
     if activity.execution_status is not CommandExecutionStatus.UNPAIRED_POST and (
         activity.policy_action is None
         or activity.decision_reason_code is None
-        or (activity.parse_confidence is None and activity.decision_reason_code is not ActivityDecisionReason.POLICY)
+        or (
+            activity.parse_confidence is None
+            and activity.decision_reason_code not in {ActivityDecisionReason.POLICY, ActivityDecisionReason.CAPABILITY}
+        )
     ):
         raise ValueError("pre and confirmed activity requires complete bounded decision facts")
     if activity.match_count == 0 and activity.controlling_rule_id is not None:

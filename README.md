@@ -68,7 +68,7 @@ Guard connects through native agent hooks, managed MCP proxies, and launch integ
 
 ## Supported AI Agents
 
-Codex, Claude Code, GitHub Copilot CLI, Cursor, Cline, Gemini CLI, Grok, Hermes, Kimi Code, Pi, oh-my-pi, OpenClaw, OpenCode, Antigravity, and ZCode. [Paseo](docs/guard/paseo.md) is supported through these native provider integrations, with per-provider coverage.
+Codex, Claude Code, GitHub Copilot CLI, Cursor, Cline, Gemini CLI, Grok, Hermes, Kimi Code, Pi, oh-my-pi, OpenClaw, OpenCode, Antigravity, ZCode, and Devin. [Paseo](docs/guard/paseo.md) is supported through these native provider integrations, with per-provider coverage.
 
 For example, to set up Codex explicitly:
 
@@ -347,7 +347,7 @@ Yes. Local protection, CLI commands, approvals, and receipts work without signin
 
 ### Which AI agents does HOL Guard support?
 
-Guard includes adapters for Codex, Claude Code, GitHub Copilot CLI, Cursor, Cline, Gemini CLI, Grok, Hermes, Kimi Code, Pi, oh-my-pi, OpenClaw, OpenCode, Antigravity, and ZCode. [Paseo](docs/guard/paseo.md) is supported through these native provider integrations, with per-provider coverage. The [support matrix](docs/guard/harness-support.md) explains which events and enforcement paths each adapter supports.
+Guard includes adapters for Codex, Claude Code, GitHub Copilot CLI, Cursor, Cline, Gemini CLI, Grok, Hermes, Kimi Code, Pi, oh-my-pi, OpenClaw, OpenCode, Antigravity, ZCode, and Devin. [Paseo](docs/guard/paseo.md) is supported through these native provider integrations, with per-provider coverage. The [support matrix](docs/guard/harness-support.md) explains which events and enforcement paths each adapter supports.
 
 ### What is the difference between HOL Guard and Plugin Scanner?
 
@@ -362,6 +362,8 @@ Guard inspects MCP server configuration and reviews supported MCP tool calls thr
 The action may need approval under your active policy, or its tools or artifacts may have changed. Start with `hol-guard approvals`, inspect the command with `hol-guard command explain '<command>'`, and use `hol-guard receipts` to review the recorded decision.
 
 ## Documentation
+
+For enrollment or stale native authority errors, see [extension-control recovery](docs/guard/extension-control-recovery.md).
 
 | Guide | Contents |
 | :--- | :--- |

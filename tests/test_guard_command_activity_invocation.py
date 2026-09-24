@@ -39,6 +39,22 @@ def test_invocation_preview_redacts_secrets_and_keeps_the_command() -> None:
     assert "ghp_0123456789FORBIDDEN" not in preview
 
 
+def test_invocation_preview_omits_shell_comments_without_removing_quoted_hashes() -> None:
+    preview = build_invocation_preview('printf "# visible" # private-note\ngit status')
+    assert preview == 'printf "# visible"\ngit status'
+    private_preview = build_invocation_preview("rm -rf ./stale-lab-dir # guard-private-command-sentinel")
+    assert private_preview is not None
+    assert private_preview.startswith("rm -rf")
+    assert "guard-private-command-sentinel" not in private_preview
+    for operator in (";", "&&", "||", "|", "&", ")", "("):
+        operator_preview = build_invocation_preview(f"echo ok{operator}# private-note\ngit status")
+        assert operator_preview is not None
+        assert "private-note" not in operator_preview
+    continuation_preview = build_invocation_preview("echo ok \\\n# private-note\ngit status")
+    assert continuation_preview is not None
+    assert "private-note" not in continuation_preview
+
+
 def test_invocation_preview_redacts_colon_delimited_credentials() -> None:
     preview = build_invocation_preview(
         "tool --meta 'password: hunter2' --meta 'authorization: abc123' --meta 'access_key: xyz789'"

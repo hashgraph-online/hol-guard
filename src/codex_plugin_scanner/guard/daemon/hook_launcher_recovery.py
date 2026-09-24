@@ -29,6 +29,7 @@ _LAUNCHER_REPAIR_HARNESSES = frozenset(
         "codex",
         "copilot",
         "cursor",
+        "devin",
         "gemini",
         "grok",
         "hermes",

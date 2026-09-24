@@ -24,6 +24,7 @@ DISPLAY_NAMES = {
     "pi": "Pi",
     "omp": "Oh My Pi",
     "zcode": "ZCode",
+    "devin": "Devin",
     "paseo": "Paseo",
 }
 

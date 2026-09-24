@@ -7,7 +7,7 @@ use std::path::Path;
 
 pub(super) const MANAGED_OWNER_LOCK_FILE_NAME: &str = "managed-resident-owner.v1.lock";
 
-pub(super) struct ManagedOwnerLock {
+pub(crate) struct ManagedOwnerLock {
     pub(super) _file: File,
     pub(super) _legacy_files: Vec<File>,
     #[cfg(unix)]

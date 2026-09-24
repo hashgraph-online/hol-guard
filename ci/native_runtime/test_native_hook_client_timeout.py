@@ -5,7 +5,7 @@ import subprocess
 import time
 from pathlib import Path
 
-from ci.native_runtime.resident_test_support import process_is_alive
+from ci.native_runtime.native_process_test_support import process_is_executing
 from ci.native_runtime.test_native_hook_client import (
     _request,
     _state_files,
@@ -56,5 +56,5 @@ def test_native_hook_client_start_timeout_contains_new_managed_processes(
         b"native_client_deadline_exceeded\n",
         b"native_resident_start_timeout\n",
     }
-    assert not any(process_is_alive(process_id) for process_id in observed_process_ids)
+    assert not any(process_is_executing(process_id) for process_id in observed_process_ids)
     assert not _state_files(state_dir)

@@ -218,6 +218,8 @@ def test_exact_workflow_capability_satisfies_require_reapproval_on_normal_retry(
         metadata={
             "action_class": GITHUB_MAINTENANCE_ACTION_CLASS,
             "raw_command_text": _COMMAND,
+            "command_action_floor": "require-reapproval",
+            "command_evaluation_status": "native_unavailable",
         },
     )
     config = GuardConfig(guard_home=guard_home, workspace=workspace, default_action="require-reapproval")
@@ -314,6 +316,12 @@ def test_exact_workflow_capability_satisfies_require_reapproval_on_normal_retry(
     decision = cast(Mapping[str, object], lookup["decision"])
     assert claimed_approval_request_id(decision) == "request-github-1"
 
+    # A fresh native evaluation may change this derived decision after the
+    # approval. The signed workflow binding remains the same.
+    refreshed_metadata = dict(artifact.metadata)
+    refreshed_metadata.pop("command_evaluation_status")
+    refreshed_metadata["command_action_floor"] = "allow"
+    artifact = replace(artifact, metadata=refreshed_metadata)
     result = evaluate()
 
     assert not isinstance(result, int)

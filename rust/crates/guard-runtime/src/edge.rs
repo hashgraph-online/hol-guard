@@ -150,6 +150,7 @@ fn canonical_harness(value: &str) -> Result<String, String> {
         "pi-agent" | "pi-coding-agent" => "pi",
         "oh-my-pi" => "omp",
         "zai" | "z-code" | "zai-zcode" => "zcode",
+        "devin-cli" | "cognition-devin" => "devin",
         _ => normalized.as_str(),
     };
     if !canonical
@@ -166,6 +167,7 @@ fn canonical_harness(value: &str) -> Result<String, String> {
             | "codex"
             | "copilot"
             | "cursor"
+            | "devin"
             | "gemini"
             | "grok"
             | "hermes"
