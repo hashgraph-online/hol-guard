@@ -4030,6 +4030,35 @@ export async function runAuditRemediation(input: AuditRemediationInput): Promise
   return normalizePackageFirewallAction(payload);
 }
 
+export async function chooseSupplyChainAuditFolder(): Promise<{
+  workspaceDir: string | null;
+  cancelled: boolean;
+}> {
+  const response = await fetchGuardApi("/v1/supply-chain/choose-folder", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...guardAuthHeaders(),
+    },
+    body: "{}",
+  });
+  const payloadBody = (await response.json().catch(() => null)) as unknown;
+  if (!response.ok) {
+    throw new GuardHarnessActionError(
+      response.status,
+      isGuardHarnessActionErrorPayload(payloadBody) ? payloadBody : null,
+    );
+  }
+  const record = payloadBody !== null && typeof payloadBody === "object" ? payloadBody as Record<string, unknown> : {};
+  const workspaceDir = typeof record.workspace_dir === "string" && record.workspace_dir.trim()
+    ? record.workspace_dir.trim()
+    : null;
+  return {
+    workspaceDir,
+    cancelled: record.cancelled === true || workspaceDir === null,
+  };
+}
+
 export async function runPackageAudit(input?: {
   workspaceDir?: string | null;
 }): Promise<PackageFirewallActionResponse> {

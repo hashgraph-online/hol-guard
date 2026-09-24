@@ -1,6 +1,6 @@
-import { j as jsxRuntimeExports, aJ as Tag, y as formatRelativeTime, r as reactExports, A as ActionButton, ck as HiMiniChevronLeft, c as HiMiniChevronRight, bw as IconActionButton, C as HiMiniXMark, bB as GuardModalLayer, cl as HiMiniFunnel, aG as HiMiniMagnifyingGlass, cm as HiMiniArrowDown, cn as HiMiniArrowUp, S as SectionLabel, am as HiMiniArrowPath, bA as HiMiniBugAnt, n as EmptyState, ah as HiMiniAdjustmentsHorizontal, bC as ConnectFlowCard, P as HiMiniExclamationTriangle, aO as useResolvedApprovalGate, co as runAuditRemediation, R as Badge, ch as isBlockedGuardAction, bs as isSupplyChainAuditEvidence, s as HiMiniCheckCircle, a7 as HiMiniXCircle, i as harnessDisplayName, bU as HiMiniDocumentText, b2 as guardAwareHref, w as HiMiniShieldCheck } from "../guard-dashboard.js";
+import { j as jsxRuntimeExports, aK as Tag, y as formatRelativeTime, r as reactExports, A as ActionButton, cl as HiMiniChevronLeft, c as HiMiniChevronRight, bw as IconActionButton, C as HiMiniXMark, bB as GuardModalLayer, cm as HiMiniFunnel, aH as HiMiniMagnifyingGlass, cn as HiMiniArrowDown, co as HiMiniArrowUp, aV as HiMiniFolder, S as SectionLabel, al as HiMiniArrowPath, bA as HiMiniBugAnt, n as EmptyState, ah as HiMiniAdjustmentsHorizontal, bC as ConnectFlowCard, P as HiMiniExclamationTriangle, aP as useResolvedApprovalGate, cp as runAuditRemediation, R as Badge, ci as isBlockedGuardAction, bs as isSupplyChainAuditEvidence, s as HiMiniCheckCircle, a7 as HiMiniXCircle, i as harnessDisplayName, bV as HiMiniDocumentText, b2 as guardAwareHref, w as HiMiniShieldCheck } from "../guard-dashboard.js";
 import { A as ApprovalProofModal } from "./approval-proof-modal.js";
-import { p as packageWorkbenchEcosystems, f as filterPackageWorkbenchFindings, c as sortPackageWorkbenchFindings, i as isApprovalGateRequiredError } from "./supply-chain-hub-workspace.js";
+import { n as normalizeSupplyChainAuditWorkspaceInput, p as packageWorkbenchEcosystems, f as filterPackageWorkbenchFindings, c as sortPackageWorkbenchFindings, i as isApprovalGateRequiredError, l as listSupplyChainAuditWorkspaceChoices } from "./supply-chain-hub-workspace.js";
 import { r as resolveManagerCoverageManagers, a as resolveManagerCoverageStatus } from "./supply-chain-protection-stats.js";
 const STEPS = [
   { id: "preparing", label: "Prepare workspace" },
@@ -550,6 +550,96 @@ function buildFilterSummary(filters, sortKey, sortDirection) {
   }
   return items;
 }
+function folderParts(path) {
+  return path.replace(/[\\/]+$/, "").split(/[\\/]/).filter(Boolean);
+}
+function folderChoiceLabels(paths) {
+  const bases = paths.map((path) => folderParts(path).at(-1) ?? path);
+  const counts = /* @__PURE__ */ new Map();
+  for (const base of bases) {
+    counts.set(base, (counts.get(base) ?? 0) + 1);
+  }
+  return new Map(
+    paths.map((path, index) => {
+      const base = bases[index] ?? path;
+      if ((counts.get(base) ?? 0) < 2) {
+        return [path, base];
+      }
+      const parts = folderParts(path);
+      const parent = parts.length >= 2 ? parts[parts.length - 2] : "";
+      return [path, parent ? `${parent}/${base}` : base];
+    })
+  );
+}
+function WorkspaceAuditFolderField({
+  value,
+  choices = [],
+  choosing = false,
+  disabled = false,
+  pickerError = null,
+  onChange,
+  onChoose
+}) {
+  const controlsDisabled = disabled || choosing;
+  const choiceLabels = folderChoiceLabels(choices);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-y border-slate-100 py-4", "data-testid": "workspace-audit-folder-field", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-end justify-between gap-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 max-w-xl", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "block text-sm font-semibold text-brand-dark", htmlFor: "workspace-audit-folder", children: "Project folder" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-relaxed text-slate-600", children: "Choose the folder that contains a package manifest or lockfile, or paste its path." })
+      ] }),
+      onChoose !== void 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        ActionButton,
+        {
+          type: "button",
+          variant: "outline",
+          onClick: onChoose,
+          disabled: controlsDisabled,
+          "aria-busy": choosing,
+          "data-testid": "workspace-audit-choose-folder",
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniFolder, { className: "mr-1.5 h-4 w-4", "aria-hidden": "true" }),
+            choosing ? "Choosing folder…" : "Choose folder"
+          ]
+        }
+      ) : null
+    ] }),
+    choices.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 flex flex-wrap gap-2", role: "group", "aria-label": "Known project folders", children: choices.map((path) => {
+      const selected = value === path;
+      const label = choiceLabels.get(path) ?? path;
+      return /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          "aria-pressed": selected,
+          title: path,
+          disabled: controlsDisabled,
+          onClick: () => onChange?.(path),
+          className: `max-w-full truncate rounded-full px-3 py-1 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-brand-blue/30 disabled:opacity-50 ${selected ? "bg-brand-dark text-white" : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`,
+          children: label
+        },
+        path
+      );
+    }) }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "input",
+      {
+        id: "workspace-audit-folder",
+        "data-testid": "workspace-audit-folder-input",
+        type: "text",
+        inputMode: "text",
+        autoComplete: "off",
+        spellCheck: false,
+        value,
+        disabled: controlsDisabled,
+        onChange: (event) => onChange?.(event.target.value),
+        placeholder: "Paste a folder path",
+        className: "mt-3 block min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 font-mono text-sm text-brand-dark shadow-sm outline-none placeholder:font-sans placeholder:text-slate-400 focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20 disabled:bg-slate-50"
+      }
+    ),
+    pickerError ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-xs leading-relaxed text-brand-attention", role: "alert", children: pickerError }) : null
+  ] });
+}
 const WORKBENCH_PAGE_SIZE = 25;
 function FilterChip({ label, active, count, onSelect }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
@@ -591,27 +681,6 @@ function WorkbenchAuditErrorBanner({ message }) {
     }
   );
 }
-function WorkspaceAuditFolderField(props) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-y border-slate-100 py-4", "data-testid": "workspace-audit-folder-field", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "block text-sm font-semibold text-brand-dark", htmlFor: "workspace-audit-folder", children: "Project folder" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-relaxed text-slate-600", children: "Enter the project folder you want Guard to audit. It must contain a supported package manifest or lockfile." }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      "input",
-      {
-        id: "workspace-audit-folder",
-        "data-testid": "workspace-audit-folder-input",
-        type: "text",
-        inputMode: "text",
-        autoComplete: "off",
-        spellCheck: false,
-        value: props.value,
-        onChange: (event) => props.onChange?.(event.target.value),
-        placeholder: "<project-folder>",
-        className: "mt-3 block min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark shadow-sm outline-none placeholder:text-slate-400 focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20"
-      }
-    )
-  ] });
-}
 function WorkbenchEmptyState({ auditConnectGate }) {
   if (auditConnectGate !== null && auditConnectGate !== void 0) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -643,8 +712,12 @@ function PackageWorkbenchPanel({
   auditError = null,
   auditSnapshot,
   auditWorkspaceDir = "",
+  auditWorkspaceChoices = [],
   auditWorkspaceSelectionRequired = false,
+  folderPickerBusy = false,
+  folderPickerError = null,
   onRunAudit,
+  onChooseAuditWorkspace,
   onAuditWorkspaceDirChange,
   auditRunning = false,
   auditPhase = "idle",
@@ -664,7 +737,8 @@ function PackageWorkbenchPanel({
   const [filterModalOpen, setFilterModalOpen] = reactExports.useState(false);
   const findings = auditSnapshot?.findings ?? [];
   const packages = auditSnapshot?.packages ?? [];
-  const workspacePathMissing = auditWorkspaceSelectionRequired && !auditWorkspaceDir.trim();
+  const showFolderField = auditWorkspaceSelectionRequired || auditSnapshot === null || Boolean(auditError) || Boolean(onChooseAuditWorkspace);
+  const workspacePathMissing = normalizeSupplyChainAuditWorkspaceInput(auditWorkspaceDir).length === 0;
   const tableSource = viewMode === "review" ? findings : packages;
   const progressActive = auditProgressActive(auditPhase, auditRunning);
   const showResults = auditSnapshot !== null && !progressActive && (auditConnectGate === null || auditConnectGate === void 0);
@@ -798,11 +872,16 @@ function PackageWorkbenchPanel({
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "px-4 py-4 space-y-4", children: auditConnectGate !== null && auditConnectGate !== void 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(WorkbenchEmptyState, { auditConnectGate }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
       auditError ? /* @__PURE__ */ jsxRuntimeExports.jsx(WorkbenchAuditErrorBanner, { message: auditError }) : null,
-      auditWorkspaceSelectionRequired ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      showFolderField ? /* @__PURE__ */ jsxRuntimeExports.jsx(
         WorkspaceAuditFolderField,
         {
           value: auditWorkspaceDir,
-          onChange: onAuditWorkspaceDirChange
+          choices: auditWorkspaceChoices,
+          choosing: folderPickerBusy,
+          disabled: auditRunning,
+          pickerError: folderPickerError,
+          onChange: onAuditWorkspaceDirChange,
+          onChoose: onChooseAuditWorkspace
         }
       ) : null,
       progressActive ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-brand-blue/15 bg-brand-blue/[0.03] px-4 py-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(AuditProgressStepList, { phase: auditPhase, running: auditRunning }) }) : null,
@@ -1321,6 +1400,10 @@ function AuditWorkspace({ snapshot, receipts, approvalGate, auditSession }) {
     () => baseResults.filter((r) => !r.resolved && !resolvedIds.has(r.id)).length,
     [baseResults, resolvedIds]
   );
+  const workspaceChoices = reactExports.useMemo(
+    () => listSupplyChainAuditWorkspaceChoices(snapshot.managed_installs ?? []),
+    [snapshot.managed_installs]
+  );
   const criticalCount = reactExports.useMemo(
     () => baseResults.filter(
       (r) => (r.severity === "critical" || r.severity === "high") && !r.resolved && !resolvedIds.has(r.id)
@@ -1335,11 +1418,15 @@ function AuditWorkspace({ snapshot, receipts, approvalGate, auditSession }) {
         auditError: auditSession.auditError,
         auditSnapshot: auditSession.auditSnapshot,
         auditWorkspaceDir: auditSession.auditWorkspaceDir,
+        auditWorkspaceChoices: workspaceChoices,
         auditWorkspaceSelectionRequired: auditSession.auditWorkspaceSelectionRequired,
+        folderPickerBusy: auditSession.folderPickerBusy,
+        folderPickerError: auditSession.folderPickerError,
         auditRunning: auditSession.auditRunning,
         auditPhase: auditSession.auditPhase,
         cloudState: snapshot.cloud_state,
         onRunAudit: auditSession.handleRunAudit,
+        onChooseAuditWorkspace: auditSession.handleChooseAuditWorkspace,
         onAuditWorkspaceDirChange: auditSession.setAuditWorkspaceDir
       }
     ),
