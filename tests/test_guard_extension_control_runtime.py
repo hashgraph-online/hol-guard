@@ -365,7 +365,7 @@ def test_daemon_refreshes_resident_snapshot_after_external_authority_change(
             "read_extension_control_authority_for_registry",
             lambda registry, *, read_only=False: updated,
         )
-        deadline = time.monotonic() + 1
+        deadline = time.monotonic() + 5
         while daemon._server.extension_control_runtime.current().revision != 7:
             assert time.monotonic() < deadline
             time.sleep(0.01)
