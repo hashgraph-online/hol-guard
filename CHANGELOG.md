@@ -5,6 +5,13 @@ All notable changes to HOL Guard will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.4.4](https://github.com/hashgraph-online/hol-guard/compare/v3.4.3...v3.4.4) (2026-09-24)
+
+
+### Bug Fixes
+
+* **evidence:** preserve command context in action rows ([#3088](https://github.com/hashgraph-online/hol-guard/issues/3088)) ([2b250d9](https://github.com/hashgraph-online/hol-guard/commit/2b250d9a392880d69f46519e4ea88caab52a077d))
+
 ## [3.4.3](https://github.com/hashgraph-online/hol-guard/compare/v3.4.2...v3.4.3) (2026-09-24)
 
 ### Features
