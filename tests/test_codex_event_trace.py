@@ -87,6 +87,24 @@ def test_completed_command_still_requires_an_exit_code() -> None:
         parse_codex_event_trace(_stream(*events), _COMMAND)
 
 
+@pytest.mark.parametrize("status", ["failed", "cancelled", "interrupted"])
+def test_non_declined_command_requires_an_exit_code(status: str) -> None:
+    events = _valid_events()
+    events[5] = {**events[5], "item": {**events[5]["item"], "status": status, "exit_code": None}}
+
+    with pytest.raises(CodexEventTraceError, match="invalid exit code"):
+        parse_codex_event_trace(_stream(*events), _COMMAND)
+
+
+def test_turn_completion_allows_null_exit_code() -> None:
+    events = _valid_events()
+    events[-1] = {**events[-1], "exit_code": None}
+
+    summary = parse_codex_event_trace(_stream(*events), _COMMAND)
+
+    assert summary.turn_status == "completed"
+
+
 @pytest.mark.parametrize(
     ("name", "mutate"),
     [
@@ -175,7 +193,7 @@ def test_exported_identity_and_status_fields_cannot_contain_private_text(field: 
     "payload",
     [
         "{malformed",
-        _stream(*_valid_events()).replace('"thread-1"', '"thread-1"', 1) + "\n{",
+        _stream(*_valid_events()) + "\n{",
     ],
 )
 def test_malformed_json_is_rejected(payload: str) -> None:

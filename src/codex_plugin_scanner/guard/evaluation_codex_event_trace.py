@@ -200,7 +200,7 @@ def _validate_command_item(
     if status not in _COMPLETED_COMMAND_STATUSES:
         raise CodexEventTraceError("Codex command has an unsupported completion status")
     raw_exit = item.get("exit_code")
-    exit_code = None if raw_exit is None and status != "completed" else _validate_exit_code(raw_exit)
+    exit_code = None if raw_exit is None and status == "declined" else _validate_exit_code(raw_exit)
     return command_id, status, exit_code
 
 
@@ -274,7 +274,8 @@ def parse_codex_event_trace(payload: str | bytes, expected_command: str) -> Code
                     raise CodexEventTraceError("Codex command completed without starting")
                 if command_id in command_results:
                     raise CodexEventTraceError("Codex command completed more than once")
-                assert status is not None
+                if status is None:
+                    raise CodexEventTraceError("Codex command completion has no status")
                 command_results[command_id] = (status, exit_code)
             else:
                 if command_id in command_starts:
@@ -295,7 +296,7 @@ def parse_codex_event_trace(payload: str | bytes, expected_command: str) -> Code
                 turn_status = "completed"
             if event.get("error") is not None:
                 raise CodexEventTraceError("Codex turn contains an error")
-            if "exit_code" in event and _validate_exit_code(event["exit_code"]) != 0:
+            if event.get("exit_code") is not None and _validate_exit_code(event["exit_code"]) != 0:
                 raise CodexEventTraceError("Codex turn has a non-zero exit code")
             if not command_starts:
                 raise CodexEventTraceError("Codex trace is missing the expected command")
@@ -315,9 +316,12 @@ def parse_codex_event_trace(payload: str | bytes, expected_command: str) -> Code
     if len(command_starts) != 1 or len(command_results) != 1:
         raise CodexEventTraceError("Codex trace must contain exactly one command")
 
-    command_id = next(iter(command_starts))
+    command_id = next(iter(command_starts), None)
+    if command_id is None:
+        raise CodexEventTraceError("Codex trace is missing the expected command")
     command_status, command_exit_code = command_results[command_id]
-    assert turn_status is not None
+    if turn_status is None:
+        raise CodexEventTraceError("Codex turn completion has no status")
     return CodexEventTraceSummary(
         thread_id=thread_id,
         command_id=command_id,
