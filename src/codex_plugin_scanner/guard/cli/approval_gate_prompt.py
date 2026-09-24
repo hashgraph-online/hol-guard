@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import getpass
+import json
 import os
 import sys
 from pathlib import Path
@@ -12,6 +13,7 @@ from ..approval_gate import ApprovalGateError, ApprovalGateInput, public_config,
 _DESKTOP_CHILD_ENV = "HOL_GUARD_DESKTOP"
 _PASSWORD_ENV = "HOL_GUARD_APPROVAL_PASSWORD"
 _TOTP_ENV = "HOL_GUARD_APPROVAL_TOTP_CODE"
+_MAX_DESKTOP_PROOF_BYTES = 4 * 1024
 
 
 def _pop_env(name: str) -> str | None:
@@ -52,6 +54,40 @@ def consume_desktop_lifecycle_env(
         totp_code=None,
         use_cooldown=use_cooldown and cooldown_seconds > 0,
     )
+
+
+def consume_desktop_lifecycle_stdin(*, totp_enabled: bool) -> ApprovalGateInput | None:
+    """Read one bounded recovery proof without placing secrets in argv or env."""
+
+    raw = sys.stdin.buffer.read(_MAX_DESKTOP_PROOF_BYTES + 1)
+    if len(raw) > _MAX_DESKTOP_PROOF_BYTES:
+        raise ApprovalGateError("approval_gate_proof_too_large", "Approval proof exceeded the allowed size.")
+    try:
+        payload = json.loads(raw)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ApprovalGateError("approval_gate_proof_invalid", "Approval proof was not valid JSON.") from error
+    if not isinstance(payload, dict) or set(payload) != {"password", "totpCode"}:
+        raise ApprovalGateError("approval_gate_proof_invalid", "Approval proof fields were invalid.")
+    password = payload["password"]
+    totp_code = payload["totpCode"]
+    if password is not None and not isinstance(password, str):
+        raise ApprovalGateError("approval_gate_proof_invalid", "Approval password was invalid.")
+    if totp_code is not None and not isinstance(totp_code, str):
+        raise ApprovalGateError("approval_gate_proof_invalid", "Authenticator code was invalid.")
+    password = password if isinstance(password, str) and password else None
+    totp_code = totp_code.strip() if isinstance(totp_code, str) and totp_code.strip() else None
+    if password is not None and totp_code is not None:
+        raise ApprovalGateError(
+            "approval_gate_factor_conflict",
+            "Enter the approval password or the authenticator code, never both.",
+        )
+    if totp_enabled:
+        if totp_code is None:
+            raise ApprovalGateError("approval_gate_totp_required", "Authenticator code is required.")
+        return ApprovalGateInput(password=None, totp_code=totp_code, use_cooldown=False)
+    if password is None:
+        raise ApprovalGateError("approval_gate_password_required", "Approval password is required.")
+    return ApprovalGateInput(password=password, totp_code=None, use_cooldown=False)
 
 
 def prompt_for_approval_gate(

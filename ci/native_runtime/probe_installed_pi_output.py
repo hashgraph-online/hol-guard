@@ -292,7 +292,7 @@ if {negative!s}:
         "negative-nonzero-allow": (2, b'{{"decision":"allow"}}\\n', b"cli failed\\n"),
         "negative-observe": (0, b'{{"decision":"allow","observe_mode":true}}\\n', b""),
     }}
-    returncode, stdout, stderr = responses.get(case_id, responses["negative-malformed"])
+    returncode, stdout, stderr = responses.get(case_id, (1, b"", b""))
 else:
     child_env = dict(os.environ)
     child_env.pop("PYTHONPATH", None)

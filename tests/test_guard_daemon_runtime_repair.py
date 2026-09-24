@@ -453,10 +453,188 @@ def test_live_identity_rejects_empty_health_guard_home(
     monkeypatch.setattr(
         live_identity,
         "_proxy_disabled_health_details",
-        lambda _url, _token: {**state, "ok": True, "guard_home": ""},
+        lambda _url, _token, **_kwargs: {**state, "ok": True, "guard_home": ""},
     )
 
     assert live_identity.verified_live_guard_daemon_identity(tmp_path) is None
+
+
+def test_live_identity_rejects_health_only_when_dashboard_session_is_invalid(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state = {
+        "package_version": "3.0.34",
+        "host": "127.0.0.1",
+        "port": 5474,
+        "pid": 321,
+        "compatibility_version": manager.GUARD_DAEMON_COMPATIBILITY_VERSION,
+        "runtime_fingerprint": "fingerprint",
+    }
+    monkeypatch.setattr(live_identity, "load_authenticated_daemon_state", lambda _home: state)
+    monkeypatch.setattr(live_identity, "load_guard_daemon_auth_token", lambda _home: "private-auth-token")
+    monkeypatch.setattr(
+        live_identity,
+        "_proxy_disabled_health_details",
+        lambda _url, _token, **_kwargs: {**state, "ok": True, "guard_home": str(tmp_path)},
+    )
+    # This helper is the narrow normal-dashboard/session probe used after
+    # authenticated health details. A rejected/expired session retains the
+    # process identity for recovery while the legacy health-only helper keeps
+    # its existing behavior for runtime repair callers.
+    monkeypatch.setattr(
+        live_identity,
+        "_proxy_dashboard_session_capabilities",
+        lambda _url, _token, **_kwargs: None,
+        raising=False,
+    )
+
+    identity, reason = live_identity.probe_live_guard_daemon_identity(tmp_path)
+    assert reason == "session_invalid"
+    assert identity is not None
+    assert identity["pid"] == 321
+    assert live_identity.verified_live_guard_daemon_identity(tmp_path) is not None
+
+
+def test_live_identity_rechecks_generation_after_dashboard_session(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state_a = {
+        "package_version": "3.0.34",
+        "host": "127.0.0.1",
+        "port": 5474,
+        "pid": 321,
+        "compatibility_version": manager.GUARD_DAEMON_COMPATIBILITY_VERSION,
+        "runtime_fingerprint": "fingerprint",
+        "generation": "generation-a",
+        "user": "uid:501",
+        "start_marker": "start-a",
+        "guard_home": str(tmp_path),
+    }
+    state_b = {**state_a, "pid": 322, "generation": "generation-b", "start_marker": "start-b"}
+    states = iter((state_a, state_b))
+    details = [
+        {**state_a, "ok": True},
+        {**state_b, "ok": True},
+    ]
+    health_calls: list[str] = []
+    token_reads: list[Path] = []
+    monkeypatch.setattr(live_identity, "load_authenticated_daemon_state", lambda _home: next(states))
+    monkeypatch.setattr(
+        live_identity,
+        "load_guard_daemon_auth_token",
+        lambda home: token_reads.append(home) or "private-auth-token",
+    )
+    monkeypatch.setattr(
+        live_identity,
+        "_proxy_disabled_health_details",
+        lambda url, _token, **_kwargs: health_calls.append(url) or details.pop(0),
+    )
+    monkeypatch.setattr(
+        live_identity,
+        "_proxy_dashboard_session_capabilities",
+        lambda _url, _token, **_kwargs: {"capabilities": ["dashboard"]},
+    )
+
+    identity, reason = live_identity.probe_live_guard_daemon_identity(tmp_path)
+
+    assert reason == "identity_unverified"
+    assert identity is not None
+    assert identity["pid"] == state_a["pid"]
+    assert identity["generation"] == state_a["generation"]
+    assert health_calls == ["http://127.0.0.1:5474"]
+    assert token_reads == [tmp_path]
+
+
+def test_live_identity_rejects_markerless_refreshed_state_before_loading_token(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state = {
+        "package_version": "3.0.34",
+        "host": "127.0.0.1",
+        "port": 5474,
+        "pid": 321,
+        "compatibility_version": manager.GUARD_DAEMON_COMPATIBILITY_VERSION,
+        "runtime_fingerprint": "fingerprint",
+        "generation": "generation-a",
+        "user": "uid:501",
+        "start_marker": "start-a",
+        "guard_home": str(tmp_path),
+    }
+    markerless = {
+        key: value
+        for key, value in state.items()
+        if key not in {"runtime_fingerprint", "generation", "user", "start_marker"}
+    }
+    states = iter((state, markerless))
+    token_reads: list[Path] = []
+    health_calls: list[str] = []
+    monkeypatch.setattr(live_identity, "load_authenticated_daemon_state", lambda _home: next(states))
+    monkeypatch.setattr(
+        live_identity,
+        "load_guard_daemon_auth_token",
+        lambda home: token_reads.append(home) or "private-auth-token",
+    )
+    monkeypatch.setattr(
+        live_identity,
+        "_proxy_disabled_health_details",
+        lambda url, _token, **_kwargs: health_calls.append(url) or {**state, "ok": True},
+    )
+    monkeypatch.setattr(
+        live_identity,
+        "_proxy_dashboard_session_capabilities",
+        lambda _url, _token, **_kwargs: {"capabilities": ["dashboard"]},
+    )
+
+    identity, reason = live_identity.probe_live_guard_daemon_identity(tmp_path)
+
+    assert reason == "identity_unverified"
+    assert identity is not None and identity["generation"] == "generation-a"
+    assert token_reads == [tmp_path]
+    assert health_calls == ["http://127.0.0.1:5474"]
+
+
+@pytest.mark.parametrize("refreshed_token", ["", None])
+def test_live_identity_rejects_invalid_refreshed_token_without_second_health_probe(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    refreshed_token: object,
+) -> None:
+    state = {
+        "package_version": "3.0.34",
+        "host": "127.0.0.1",
+        "port": 5474,
+        "pid": 321,
+        "compatibility_version": manager.GUARD_DAEMON_COMPATIBILITY_VERSION,
+        "runtime_fingerprint": "fingerprint",
+        "generation": "generation-a",
+        "user": "uid:501",
+        "start_marker": "start-a",
+        "guard_home": str(tmp_path),
+    }
+    states = iter((state, state.copy()))
+    token_values = iter(("private-auth-token", refreshed_token))
+    health_calls: list[str] = []
+    monkeypatch.setattr(live_identity, "load_authenticated_daemon_state", lambda _home: next(states))
+    monkeypatch.setattr(live_identity, "load_guard_daemon_auth_token", lambda _home: next(token_values))
+    monkeypatch.setattr(
+        live_identity,
+        "_proxy_disabled_health_details",
+        lambda url, _token, **_kwargs: health_calls.append(url) or {**state, "ok": True},
+    )
+    monkeypatch.setattr(
+        live_identity,
+        "_proxy_dashboard_session_capabilities",
+        lambda _url, _token, **_kwargs: {"capabilities": ["dashboard"]},
+    )
+
+    identity, reason = live_identity.probe_live_guard_daemon_identity(tmp_path)
+
+    assert reason == "identity_unverified"
+    assert identity is not None and identity["generation"] == "generation-a"
+    assert health_calls == ["http://127.0.0.1:5474"]
 
 
 def test_live_identity_rejects_authenticated_probe_redirects() -> None:

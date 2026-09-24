@@ -14,7 +14,8 @@
     "test:e2e:installed": "playwright test --config playwright.installed.config.ts",
     "dev": "vite dev",
     "test:temporary-mcp": "tsx src/temporary-mcp-approval.test.tsx",
-    "test:local-tool": "tsx src/local-tool-approval.test.tsx"
+    "test:local-tool": "tsx src/local-tool-approval.test.tsx",
+    "test:service-recovery": "tsx src/service-recovery.test.ts"
   },
   "dependencies": {
     "react": "^19.2.7",

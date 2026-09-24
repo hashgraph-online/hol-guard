@@ -106,13 +106,19 @@ def _normalize_guard_handler_result(result: object) -> int:
     return result if isinstance(result, int) else 1
 
 
-def _invoke_guard_handler(handler: object, args: argparse.Namespace, **kwargs: object) -> int:
+def _invoke_guard_handler(
+    handler: object,
+    args: argparse.Namespace,
+    *,
+    error_output_stream: TextIO | None = None,
+    **kwargs: object,
+) -> int:
     if not callable(handler):
         return 1
     try:
         result = handler(args, **kwargs)
     except KeyboardInterrupt:
-        print("Interrupted.", file=sys.stderr)
+        print("Interrupted.", file=error_output_stream if error_output_stream is not None else sys.stderr)
         return 130
     return _normalize_guard_handler_result(result)
 
@@ -139,6 +145,7 @@ def run_guard_command(
     *,
     input_text: str | None = None,
     output_stream: TextIO | None = None,
+    error_stream: TextIO | None = None,
 ) -> int:
     "Execute a Guard subcommand."
     if args.guard_command == "extensions":
@@ -150,6 +157,7 @@ def run_guard_command(
         return _invoke_guard_handler(
             handler,
             args,
+            error_output_stream=error_stream,
             input_text=input_text,
             output_stream=output_stream,
         )
@@ -170,25 +178,39 @@ def run_guard_command(
         workspace_override_explicit=bool(getattr(args, "workspace", None)),
     )
     try:
-        enforce_lifecycle_gate(args, guard_home=guard_home)
+        lifecycle_gate_context = enforce_lifecycle_gate(
+            args,
+            guard_home=guard_home,
+            error_stream=error_stream,
+        )
+        args._lifecycle_gate_context = lifecycle_gate_context
     except ApprovalGateError as error:
         payload = approval_gate_cli_payload(error)
         if bool(getattr(args, "json", False)):
             print(json.dumps(payload, sort_keys=True), file=output_stream or sys.stdout)
         else:
-            print(f"Error: {error}", file=sys.stderr)
+            print(
+                f"Error: {error}",
+                file=error_stream if error_stream is not None else sys.stderr,
+            )
         return 4
 
     handler = _resolve_guard_handler(_PRESTORE_HANDLERS, args.guard_command)
     if callable(handler):
+        handler_kwargs: dict[str, object] = {
+            "guard_home": guard_home,
+            "workspace": workspace,
+            "context": context,
+            "input_text": input_text,
+            "output_stream": output_stream,
+        }
+        if args.guard_command == "daemon":
+            handler_kwargs["error_stream"] = error_stream
         return _invoke_guard_handler(
             handler,
             args,
-            guard_home=guard_home,
-            workspace=workspace,
-            context=context,
-            input_text=input_text,
-            output_stream=output_stream,
+            error_output_stream=error_stream,
+            **handler_kwargs,
         )
 
     source = getattr(args, "source", "default")
@@ -200,7 +222,10 @@ def run_guard_command(
             allow_system_keyring=_should_allow_system_keyring(args),
         )
     except (TimeoutError, ValueError) as error:
-        print(f"Error: {error}", file=sys.stderr)
+        print(
+            f"Error: {error}",
+            file=error_stream if error_stream is not None else sys.stderr,
+        )
         return 2
     if args.guard_command == "hook" and native_mode() in {"auto", "force"}:
         # Native hooks receive the raw envelope before any request-time
@@ -216,6 +241,7 @@ def run_guard_command(
         return _invoke_guard_handler(
             handler,
             args,
+            error_output_stream=error_stream,
             guard_home=guard_home,
             workspace=workspace,
             context=context,

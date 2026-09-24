@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TextIO
 
 if TYPE_CHECKING:
     from ..daemon import GuardDaemonHookFailureKind
@@ -320,6 +320,8 @@ def _dispatch_guard_daemon_command(
     workspace: Path | None,
     context: HarnessContext | None,
     store: GuardStore | None,
+    output_stream: TextIO | None = None,
+    error_stream: TextIO | None = None,
 ) -> int:
     if guard_home is None:
         raise RuntimeError("Guard home is required")
@@ -338,6 +340,18 @@ def _dispatch_guard_daemon_command(
             guard_home,
             home_dir=home_dir,
             failure_kind=args.failure_kind,
+        )
+    if daemon_command == "recovery":
+        from .commands_daemon_recovery import dispatch_daemon_recovery
+
+        return dispatch_daemon_recovery(
+            args,
+            guard_home=guard_home,
+            home_dir=home_dir,
+            lifecycle_authorized=True,
+            lifecycle_context=getattr(args, "_lifecycle_gate_context", None),
+            stdout=output_stream,
+            stderr=error_stream,
         )
     if daemon_command == "status":
         return _handle_daemon_status(guard_home, getattr(args, "json", False))

@@ -379,7 +379,10 @@ class HookProcessRunner(HookProcessRunnerLifecycleMixin):
         adaptive_capacity.observe_load(queue_p95_ms=queue_p95_ms, queued=queued)
         if queued > 0:
             self.notify_queued_work()
-        self._refresh_capacity_policy()
+        else:
+            # Capacity refresh samples process RSS with `ps`; keep that work off
+            # the hook response path and let the supervisor refresh in the background.
+            self._recovery_event.set()
 
     def notify_queued_work(self) -> None:
         with self._state_lock:

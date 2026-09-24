@@ -1,4 +1,4 @@
-import { g as getHeatmapLevel, j as jsxRuntimeExports, S as SectionLabel, E as EvidenceInsightsShareButton, G as GuardStatMetric, H as HomeInsightsMetrics, a as EvidenceActivityHeatmapMini, r as reactExports, h as homeCommandActivityModel, b as HiMiniCommandLine, c as HiMiniChevronRight, d as createCommandActivityClient, f as fetchCommandActivityApi, q as queueErrorIsUnauthorizedSession, u as useReceiptAnalytics, e as updateSettings, i as harnessDisplayName, k as isConnectableAppHarness, l as useProtectionPresentationState, p as protectionHealthFor, m as unavailableProtectionHealth, n as EmptyState, A as ActionButton, W as WatchProtectionBanner, o as EvidenceInsightsShareModal, s as HiMiniCheckCircle, t as GuardHero, O as OperatorHealthCard, v as formatNumber, w as HiMiniShieldCheck, D as DeviceProofCard, x as guardActionDisposition, y as formatRelativeTime, z as guardActionActivityCopy, B as HiMiniSparkles, C as HiMiniXMark, F as HiMiniChevronUp, I as HiMiniChevronDown, J as resolveCloudIntelCopy, K as HiMiniCloud, L as HiMiniQuestionMarkCircle, M as useFocusTrap, N as approvalProofRequiresPassword, P as HiMiniExclamationTriangle, Q as HiMiniBolt, R as Badge, T as HiMiniMinusCircle } from "../guard-dashboard.js";
+import { g as getHeatmapLevel, j as jsxRuntimeExports, S as SectionLabel, E as EvidenceInsightsShareButton, G as GuardStatMetric, H as HomeInsightsMetrics, a as EvidenceActivityHeatmapMini, r as reactExports, h as homeCommandActivityModel, b as HiMiniCommandLine, c as HiMiniChevronRight, d as createCommandActivityClient, f as fetchCommandActivityApi, q as queueErrorIsUnauthorizedSession, e as getRecoveryCapabilities, i as resolveRecoveryInstructions, k as HiMiniShieldExclamation, A as ActionButton, l as HiMiniArrowPath, m as HiMiniClipboardDocument, o as openRecoveryView, u as useReceiptAnalytics, n as updateSettings, p as harnessDisplayName, s as isConnectableAppHarness, t as useProtectionPresentationState, v as protectionHealthFor, w as unavailableProtectionHealth, x as EmptyState, W as WatchProtectionBanner, y as EvidenceInsightsShareModal, z as HiMiniCheckCircle, B as GuardHero, O as OperatorHealthCard, C as formatNumber, D as HiMiniShieldCheck, F as DeviceProofCard, I as guardActionDisposition, J as formatRelativeTime, K as guardActionActivityCopy, L as HiMiniSparkles, M as HiMiniXMark, N as HiMiniChevronUp, P as HiMiniChevronDown, Q as resolveCloudIntelCopy, R as HiMiniCloud, T as HiMiniQuestionMarkCircle, U as useFocusTrap, V as approvalProofRequiresPassword, X as HiMiniExclamationTriangle, Y as HiMiniBolt, Z as Badge, _ as HiMiniMinusCircle } from "../guard-dashboard.js";
 import { H as HomeProtectionModule } from "./home-protection-module.js";
 function HomeInsightsSkeleton() {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
@@ -110,10 +110,10 @@ function HomeCommandActivityCard(props) {
 }
 function buildDaemonErrorCopy() {
   return {
-    title: "Guard is not responding",
-    body: "The local Guard service is not reachable. Retry the connection, or open Settings if you need to repair protection.",
-    primaryCta: "Retry",
-    secondaryCta: "Go to Settings"
+    title: "We can't connect to Guard.",
+    body: "Retry the connection, or troubleshoot the local service without changing your protection settings.",
+    primaryCta: "Retry connection",
+    secondaryCta: "Troubleshoot"
   };
 }
 function buildHomeRuntimeErrorCopy(message) {
@@ -127,6 +127,138 @@ function buildHomeRuntimeErrorCopy(message) {
     };
   }
   return { kind: "daemon", ...buildDaemonErrorCopy() };
+}
+function fallbackMessage(capability) {
+  if (capability.reason === "unsupported_protocol") {
+    return "This Desktop version does not expose the recovery handoff. Use the local recovery steps below.";
+  }
+  if (capability.reason === "invalid_bridge") {
+    return "The recovery handoff could not be verified. Use the local recovery steps below.";
+  }
+  return "This browser tab cannot control the local service. Use the local recovery steps below.";
+}
+function ServiceRecoveryPanel(props) {
+  const capability = reactExports.useMemo(
+    () => getRecoveryCapabilities({ bridge: props.bridge, installMode: props.installMode }),
+    [props.bridge, props.installMode]
+  );
+  const instructions = reactExports.useMemo(
+    () => resolveRecoveryInstructions(capability.installMode),
+    [capability.installMode]
+  );
+  const [showInstructions, setShowInstructions] = reactExports.useState(capability.kind === "fallback");
+  const [opening, setOpening] = reactExports.useState(false);
+  const [retrying, setRetrying] = reactExports.useState(false);
+  const [handoffError, setHandoffError] = reactExports.useState(null);
+  const [handoffStatus, setHandoffStatus] = reactExports.useState(null);
+  const [copyState, setCopyState] = reactExports.useState("idle");
+  const handleOpenRecovery = async () => {
+    if (opening) return;
+    setOpening(true);
+    setHandoffError(null);
+    setHandoffStatus(null);
+    try {
+      const result = props.onOpenRecovery ? await props.onOpenRecovery() : await openRecoveryView({ bridge: capability.kind === "native" ? capability.bridge : props.bridge, installMode: capability.installMode });
+      if (result && result.kind !== "opened") {
+        setHandoffError(
+          result.kind === "failed" ? result.message : result.capability.kind === "fallback" ? fallbackMessage(result.capability) : "The trusted Recovery view is unavailable. Use the local recovery steps below."
+        );
+        setShowInstructions(true);
+        return;
+      }
+      setHandoffStatus("Recovery opened in the trusted native view. Confirm Restart Guard there; this tab did not restart the service.");
+    } catch {
+      setHandoffError("The trusted Recovery view could not be opened. Use the local recovery steps below.");
+      setShowInstructions(true);
+    } finally {
+      setOpening(false);
+    }
+  };
+  const handleRetry = async () => {
+    if (!props.onRetryConnection || retrying) return;
+    setRetrying(true);
+    try {
+      await props.onRetryConnection();
+    } catch {
+      setHandoffError("The connection retry did not complete. Use the local recovery steps below.");
+    } finally {
+      setRetrying(false);
+    }
+  };
+  const handleCopyCommand = async () => {
+    if (!instructions.command) return;
+    if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) {
+      setCopyState("failed");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(instructions.command);
+      setCopyState("copied");
+    } catch {
+      setCopyState("failed");
+    }
+  };
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "section",
+    {
+      className: "rounded-2xl border border-brand-blue/15 bg-brand-blue/[0.03] p-5 shadow-sm sm:p-6",
+      "aria-labelledby": "service-recovery-title",
+      "data-testid": "service-recovery-panel",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-blue/10 text-brand-blue", "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldExclamation, { className: "h-5 w-5" }) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-[0.12em] text-brand-blue", children: "Troubleshoot Guard" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "service-recovery-title", className: "mt-1 text-lg font-semibold tracking-tight text-brand-dark", children: props.title ?? "We can't connect to Guard." }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground", children: props.body ?? "Retry the connection, or use a trusted local recovery path." })
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 flex flex-col gap-2 sm:flex-row sm:flex-wrap", children: [
+          capability.kind === "native" ? /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: () => void handleOpenRecovery(), disabled: opening, "data-testid": "service-recovery-open", children: opening ? "Opening recovery..." : "Open recovery" }) : null,
+          props.onRetryConnection ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            ActionButton,
+            {
+              variant: "outline",
+              onClick: () => void handleRetry(),
+              disabled: retrying,
+              "data-testid": "service-recovery-retry",
+              children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: `mr-1.5 inline h-4 w-4 ${retrying ? "animate-spin" : ""}`, "aria-hidden": "true" }),
+                retrying ? "Retrying..." : "Retry connection"
+              ]
+            }
+          ) : null,
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            ActionButton,
+            {
+              variant: "outline",
+              onClick: () => setShowInstructions((visible) => !visible),
+              "data-testid": "service-recovery-steps-toggle",
+              "aria-expanded": showInstructions,
+              children: showInstructions ? "Hide restart steps" : "Show restart steps"
+            }
+          )
+        ] }),
+        capability.kind === "fallback" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 text-sm text-slate-600", role: "status", "data-testid": "service-recovery-fallback", children: fallbackMessage(capability) }) : null,
+        handoffStatus ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900", role: "status", "aria-live": "polite", children: handoffStatus }) : null,
+        handoffError ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950", role: "alert", "aria-live": "assertive", children: handoffError }) : null,
+        showInstructions ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 rounded-xl border border-slate-200 bg-white p-4", "data-testid": "service-recovery-instructions", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-sm font-semibold text-brand-dark", children: instructions.title }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-relaxed text-slate-600", children: instructions.body }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("ol", { className: "mt-3 list-decimal space-y-2 pl-5 text-sm text-slate-700", children: instructions.steps.map((step) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: step }, step)) }),
+          instructions.command ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex flex-col gap-2 sm:flex-row sm:items-center", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "min-w-0 flex-1 overflow-x-auto rounded-lg bg-slate-950 px-3 py-2 text-xs text-slate-100", "data-testid": "service-recovery-command", children: instructions.command }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { variant: "outline", onClick: () => void handleCopyCommand(), children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClipboardDocument, { className: "mr-1.5 inline h-4 w-4", "aria-hidden": "true" }),
+              "Copy command"
+            ] })
+          ] }) : null,
+          copyState === "copied" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-xs text-emerald-700", role: "status", children: "Recovery command copied." }) : null,
+          copyState === "failed" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-xs text-amber-800", role: "status", children: "Copy was unavailable. Select the command above instead." }) : null
+        ] }) : null
+      ]
+    }
+  );
 }
 const safeLocalStorage = {
   getItem(key) {
@@ -301,6 +433,18 @@ function HomeWorkspace(props) {
   }
   if (props.runtime.kind === "error") {
     const errorCopy = buildHomeRuntimeErrorCopy(props.runtime.message);
+    if (errorCopy.kind === "daemon") {
+      return /* @__PURE__ */ jsxRuntimeExports.jsx(
+        ServiceRecoveryPanel,
+        {
+          title: errorCopy.title,
+          body: errorCopy.body,
+          onRetryConnection: props.onRefreshRuntime,
+          onOpenRecovery: props.onOpenRecovery,
+          installMode: props.recoveryInstallMode
+        }
+      );
+    }
     const handlePrimary = () => {
       if (errorCopy.kind === "session") {
         void props.onReconnectSession?.();

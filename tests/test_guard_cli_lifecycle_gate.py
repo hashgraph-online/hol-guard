@@ -15,13 +15,15 @@ from codex_plugin_scanner.guard.approval_gate import (
     ApprovalGateInput,
     update_settings,
 )
-from codex_plugin_scanner.guard.cli import commands_lifecycle_gate
+from codex_plugin_scanner.guard.cli import commands_daemon_recovery, commands_lifecycle_gate
 from codex_plugin_scanner.guard.cli.commands_lifecycle_gate import (
+    LifecycleGateContext,
     enforce_lifecycle_gate,
     lifecycle_gate_requirement,
 )
 from codex_plugin_scanner.guard.cli.commands_parser import add_guard_root_parser
 from codex_plugin_scanner.guard.cli.commands_router import run_guard_command
+from codex_plugin_scanner.guard.daemon.user_recovery import AuthorizationDecision, RecoveryHooks
 
 
 @pytest.mark.parametrize(
@@ -99,6 +101,112 @@ def test_lifecycle_gate_warns_and_allows_when_protection_is_disabled(
     assert "This notice is advisory and does not block the current command." in warning
 
 
+def test_disabled_lifecycle_gate_does_not_consume_proof_input(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    error_stream = io.StringIO()
+    monkeypatch.setattr(commands_lifecycle_gate, "canonical_lifecycle_home", lambda: tmp_path)
+
+    def proof_must_not_be_read(**_kwargs: object) -> None:
+        raise AssertionError("disabled approval gate consumed proof input")
+
+    monkeypatch.setattr(commands_lifecycle_gate, "consume_desktop_lifecycle_stdin", proof_must_not_be_read)
+
+    context = enforce_lifecycle_gate(
+        argparse.Namespace(
+            guard_command="daemon",
+            daemon_command="recovery",
+            daemon_recovery_command="restart",
+            approval_proof_stdin=True,
+        ),
+        guard_home=tmp_path,
+        error_stream=error_stream,
+    )
+
+    assert context is not None
+    assert context.was_enabled is False
+    assert "This notice is advisory and does not block the current command." in error_stream.getvalue()
+
+
+def test_disabled_lifecycle_gate_does_not_validate_desktop_environment_proof(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    error_stream = io.StringIO()
+    monkeypatch.setattr(commands_lifecycle_gate, "canonical_lifecycle_home", lambda: tmp_path)
+    monkeypatch.setenv("HOL_GUARD_DESKTOP", "1")
+    monkeypatch.setenv("HOL_GUARD_APPROVAL_PASSWORD", "stale-unused-proof")
+
+    def proof_must_not_be_validated(**_kwargs: object) -> None:
+        raise AssertionError("disabled approval gate validated Desktop environment proof")
+
+    monkeypatch.setattr(commands_lifecycle_gate, "consume_desktop_lifecycle_env", proof_must_not_be_validated)
+
+    context = enforce_lifecycle_gate(
+        argparse.Namespace(guard_command="update"),
+        guard_home=tmp_path,
+        error_stream=error_stream,
+    )
+
+    assert context is not None
+    assert context.was_enabled is False
+    assert "This notice is advisory and does not block the current command." in error_stream.getvalue()
+    assert "HOL_GUARD_APPROVAL_PASSWORD" not in os.environ
+
+
+def test_cli_stdin_proof_clears_desktop_factors_before_handler_boundary(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    password = "correct horse battery staple"
+    monkeypatch.setattr(commands_lifecycle_gate, "canonical_lifecycle_home", lambda: tmp_path)
+    _ = update_settings(
+        tmp_path,
+        {"enabled": True, "new_password": password, "confirm_password": password},
+    )
+    monkeypatch.setenv("HOL_GUARD_DESKTOP", "1")
+    monkeypatch.setenv("HOL_GUARD_APPROVAL_PASSWORD", "stale desktop password")
+    monkeypatch.setenv("HOL_GUARD_APPROVAL_TOTP_CODE", "654321")
+    proof_stream = io.TextIOWrapper(
+        io.BytesIO(json.dumps({"password": password, "totpCode": None}).encode("utf-8")),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("sys.stdin", proof_stream)
+
+    from codex_plugin_scanner.guard.cli import commands_router
+
+    inherited: dict[str, str | None] = {}
+
+    def downstream_handler(*_args: object, **_kwargs: object) -> int:
+        inherited.update(
+            {
+                "password": os.environ.get("HOL_GUARD_APPROVAL_PASSWORD"),
+                "totp": os.environ.get("HOL_GUARD_APPROVAL_TOTP_CODE"),
+            }
+        )
+        return 0
+
+    monkeypatch.setattr(commands_router, "_run_guard_daemon_command", downstream_handler, raising=False)
+    parser = argparse.ArgumentParser()
+    add_guard_root_parser(parser)
+    args = parser.parse_args(
+        [
+            "daemon",
+            "recovery",
+            "restart",
+            "--guard-home",
+            str(tmp_path),
+            "--approval-proof-stdin",
+        ]
+    )
+
+    exit_code = run_guard_command(args, output_stream=io.StringIO())
+
+    assert exit_code == 0
+    assert inherited == {"password": None, "totp": None}
+
+
 def test_lifecycle_gate_requires_fresh_password_when_enabled(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -142,6 +250,115 @@ def test_lifecycle_gate_accepts_valid_password_and_binds_grant(
         argparse.Namespace(guard_command="install", harness="codex"),
         guard_home=tmp_path,
     )
+
+
+def test_daemon_recovery_revalidates_action_grant_without_reprompting(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    password = "correct horse battery staple"
+    _ = update_settings(
+        tmp_path,
+        {"enabled": True, "new_password": password, "confirm_password": password},
+    )
+    prompt_calls: list[str] = []
+
+    def prompt(_guard_home: Path, **_kwargs: object) -> ApprovalGateInput:
+        prompt_calls.append("prompt")
+        return ApprovalGateInput(password=password)
+
+    monkeypatch.setattr(commands_lifecycle_gate, "prompt_for_approval_gate", prompt)
+    observations: dict[str, AuthorizationDecision] = {}
+    original_validate = commands_daemon_recovery.validate_lifecycle_gate_context
+    validations: list[LifecycleGateContext] = []
+
+    def validate_context(context: LifecycleGateContext) -> bool:
+        validations.append(context)
+        return len(validations) == 1 and original_validate(context)
+
+    monkeypatch.setattr(commands_daemon_recovery, "validate_lifecycle_gate_context", validate_context)
+
+    class FakeCoordinator:
+        def __init__(self, home: Path, *, hooks: RecoveryHooks, **_kwargs: object) -> None:
+            self.home = home
+            self.hooks = hooks
+
+        def restart(self, *, request_id: object, emit: object = None) -> dict[str, object]:
+            del emit
+            authorize = self.hooks.authorize
+            assert authorize is not None
+            first = authorize(self.home)
+            observations["first"] = first
+            second = authorize(self.home)
+            observations["second"] = second
+            return {
+                "operationId": str(request_id),
+                "phase": "complete" if second.allowed else "awaiting_approval",
+                "service": "ready",
+                "protection": "verified",
+                "outcome": "reconnected" if second.allowed else "not_recovered",
+                "reasonCode": "healthy" if second.allowed else "approval_required",
+                "workerActive": False,
+                "retryAllowed": False,
+                "requiresHumanAction": not second.allowed,
+            }
+
+    monkeypatch.setattr(commands_daemon_recovery, "UserRecoveryCoordinator", FakeCoordinator)
+    parser = argparse.ArgumentParser()
+    add_guard_root_parser(parser)
+    args = parser.parse_args(
+        [
+            "daemon",
+            "recovery",
+            "restart",
+            "--guard-home",
+            str(tmp_path),
+            "--json",
+        ]
+    )
+    output = io.StringIO()
+
+    exit_code = run_guard_command(args, output_stream=output)
+
+    assert exit_code == 2
+    assert observations["first"].allowed is True
+    assert observations["second"].allowed is False
+    assert prompt_calls == ["prompt"]
+    assert len(validations) == 2
+    context = validations[0]
+    assert context.authority_home == tmp_path.resolve()
+    assert context.action == "daemon.restart"
+    assert context.scope == "local-protection"
+    assert context.subject == "local-daemon"
+    assert context.grant is not None
+    assert context.grant.action == "daemon.restart"
+
+
+def test_router_preserves_recovery_error_stream_on_error_path(
+    tmp_path: Path,
+) -> None:
+    parser = argparse.ArgumentParser()
+    add_guard_root_parser(parser)
+    args = parser.parse_args(
+        [
+            "daemon",
+            "recovery",
+            "status",
+            "--guard-home",
+            str(tmp_path),
+            "--operation-id",
+            "11111111-1111-4111-8111-111111111111",
+            "--json",
+        ]
+    )
+    output = io.StringIO()
+    error = io.StringIO()
+
+    exit_code = run_guard_command(args, output_stream=output, error_stream=error)
+
+    assert exit_code == 2
+    assert output.getvalue() == ""
+    assert error.getvalue().startswith("HOL Guard recovery failed:")
 
 
 @pytest.mark.parametrize("override_flag", ["--home", "--guard-home"])

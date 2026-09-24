@@ -26,6 +26,17 @@ def spawn_hook_worker(guard_home: Path | None) -> HookWorkerSlot:
         child_connection.close()
         raise
     child_connection.close()
+    if process.pid is not None:
+        try:
+            # Import lazily: manager -> daemon launch code -> server -> worker
+            # spawner is an otherwise unavoidable circular import at module load.
+            from .manager import record_guard_daemon_launch_containment_child
+
+            _ = record_guard_daemon_launch_containment_child(guard_home, pid=process.pid)
+        except Exception:
+            # A missing or unprovable launch association must leave startup
+            # unresolved; it must never turn into an unowned process signal.
+            pass
     return HookWorkerSlot(
         process=process,
         connection=parent_connection,

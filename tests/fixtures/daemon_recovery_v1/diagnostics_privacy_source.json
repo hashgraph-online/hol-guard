@@ -1,0 +1,26 @@
+{
+  "schema": "hol-guard-recovery.v1",
+  "capabilities": ["diagnostics", "inspect", "restart", "status"],
+  "operationId": "11111111-1111-4111-8111-111111111111",
+  "sequence": 4,
+  "startedAt": "2026-09-20T00:00:00+00:00",
+  "updatedAt": "2026-09-20T00:00:01+00:00",
+  "phase": "complete",
+  "activeElapsedMs": 1000,
+  "workerActive": false,
+  "retryAllowed": true,
+  "outcome": "restarted",
+  "reasonCode": "healthy",
+  "service": "ready",
+  "protection": "verified",
+  "requiresHumanAction": false,
+  "checks": [
+    {"id": "protection_health", "result": "pass", "reasonCode": "healthy", "path": "/redacted/path"}
+  ],
+  "command": "hol-guard daemon recovery restart --request-id canary",
+  "path": "/redacted/path/project",
+  "token": "gld1.private-token-canary",
+  "password": "private-password-canary",
+  "totpCode": "123456",
+  "signedUrl": "https://127.0.0.1/session?token=private-signed-url"
+}

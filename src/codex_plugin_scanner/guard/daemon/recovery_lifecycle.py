@@ -24,10 +24,10 @@ def guard_recovery_is_disabled(guard_home: Path) -> bool:
         from ..protection_posture import protection_is_off
 
         config = load_guard_config(guard_home)
-    except Exception as error:
-        # Invalid or unavailable config must not suppress a valid recovery.
-        del error
-        return False
+    except Exception:
+        # Recovery is a privileged mutation. If posture cannot be proven on,
+        # refuse the restart instead of treating unreadable state as enabled.
+        return True
     return protection_is_off(posture=config.protection_posture, mode=config.mode)
 
 

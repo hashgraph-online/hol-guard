@@ -34,6 +34,7 @@ import { runAutomaticProtectionRepair } from "./protection-repair-flow";
 import { selectNextAfterResolution } from "./queue-state";
 import { useRouteFocus } from "./use-route-focus";
 import { commitDashboardLocation, useDashboardPathname } from "./dashboard-location";
+import { openRecoveryView } from "./service-recovery";
 
 const HomeWorkspace = lazyWorkspace("home-dashboard", () => import("./home-dashboard").then((m) => ({ default: m.HomeWorkspace })));
 const FleetWorkspace = lazyWorkspace("fleet-workspace", () => import("./fleet-workspace").then((m) => ({ default: m.FleetWorkspace })));
@@ -549,6 +550,7 @@ export function App() {
   const handleOpenInsights = useCallback(() => navigate("/evidence?view=insights"), [navigate]);
   const handleOpenCommands = useCallback(() => navigate("/evidence?view=commands"), [navigate]);
   const handleOpenSettings = useCallback(() => navigate("/settings"), []);
+  const handleOpenRecovery = useCallback(() => openRecoveryView(), []);
   const handleOpenSupplyChain = useCallback(() => navigate("/supply-chain"), []);
   const handleOpenPolicy = useCallback(() => navigate("/policy"), []);
   const handleOpenHelp = useCallback(() => setHelpOpen(true), []);
@@ -968,6 +970,7 @@ export function App() {
             onOpenSettings={handleOpenSettings}
             onRefreshRuntime={async () => { await refreshStateAfterAction(); }}
             onReconnectSession={handleReconnectSession}
+            onOpenRecovery={handleOpenRecovery}
             onOpenSupplyChain={handleOpenSupplyChain}
             onClearPolicies={handleClearPolicies}
             onOpenAppDetail={handleOpenAppDetail}

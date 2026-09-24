@@ -82,7 +82,7 @@ def test_both_entrypoint_families_support_authoring_without_state(
         "--json",
     ]
     status, generated = invoke(arguments, capsys)
-    assert status == 0 and generated["generated"] is True
+    assert status == 0 and generated.get("generated") is True, (status, generated)
     assert generated["reviewedOperations"] == 0
     status, validated = invoke([*prefix, "extensions", "validate", str(output), "--json"], capsys)
     assert status == 0 and validated["validated"] is True

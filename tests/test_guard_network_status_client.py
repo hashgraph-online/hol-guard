@@ -1,13 +1,18 @@
 from __future__ import annotations
 
 import http.client
+import json
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from threading import Thread
 
 import pytest
 
 from codex_plugin_scanner.guard.daemon.client import (
+    GuardDaemonRequestError,
     GuardDaemonResponseSchemaError,
     GuardDaemonTimeoutError,
     GuardDaemonTransportError,
@@ -29,6 +34,138 @@ def test_network_status_client_uses_fast_status_deadline(
     monkeypatch.setattr(client, "_get", fake_get)
     client.network_status()
     assert observed == {"path": "/v1/network/status", "timeout": 0.25}
+
+
+def test_dashboard_session_capabilities_uses_scoped_initialize_then_read(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = GuardSurfaceDaemonClient("http://127.0.0.1:1", "private-auth-token")
+    requests: list[tuple[str, str | None, str | None, dict[str, object]]] = []
+    timeouts: list[float] = []
+    opener_handlers: list[object] = []
+
+    def fake_urlopen(request: urllib.request.Request, *, timeout: float) -> _RawResponse:
+        timeouts.append(timeout)
+        body = json.loads((request.data or b"{}").decode("utf-8"))
+        path = urllib.parse.urlsplit(request.full_url).path
+        local_token = request.headers.get("X-guard-token")
+        dashboard_token = request.headers.get("X-guard-dashboard-session")
+        requests.append((path, local_token, dashboard_token, body))
+        if path == "/v1/initialize":
+            return _RawResponse(payload=b'{"dashboard_session_token":"fresh-dashboard-session"}')
+        assert path == "/v1/capabilities"
+        return _RawResponse(payload=b'{"capabilities": ["dashboard"]}')
+
+    class FakeOpener:
+        def open(self, request: urllib.request.Request, *, timeout: float) -> _RawResponse:
+            return fake_urlopen(request, timeout=timeout)
+
+    monkeypatch.setattr(
+        urllib.request,
+        "build_opener",
+        lambda *handlers: opener_handlers.extend(handlers) or FakeOpener(),
+    )
+
+    capabilities = client.dashboard_session_capabilities(timeout=0.5)
+
+    assert capabilities == {"capabilities": ["dashboard"]}
+    assert len(requests) == 2
+    first_path, first_local_token, first_dashboard_token, first_body = requests[0]
+    assert first_path == "/v1/initialize"
+    assert first_local_token is None
+    assert first_dashboard_token is not None and first_dashboard_token.startswith("gld1.")
+    assert first_body == {
+        "client_name": "guard-dashboard-web",
+        "surface": "dashboard",
+        "supported_protocol_versions": ["1.1", "1.0"],
+    }
+    assert requests[1] == ("/v1/capabilities", None, "fresh-dashboard-session", {})
+    assert len(timeouts) == 2
+    assert all(0.0 < value <= 0.5 for value in timeouts)
+    assert timeouts[1] <= timeouts[0]
+    assert any(
+        isinstance(handler, urllib.request.ProxyHandler) and handler.proxies == {}
+        for handler in opener_handlers
+    )
+    assert any(
+        isinstance(handler, type) and issubclass(handler, urllib.request.HTTPRedirectHandler)
+        for handler in opener_handlers
+    )
+
+
+def test_dashboard_session_rejects_redirect_without_sending_session_to_target() -> None:
+    paths: list[tuple[str, str | None]] = []
+
+    class RedirectingHandler(BaseHTTPRequestHandler):
+        def do_POST(self) -> None:
+            paths.append((self.path, self.headers.get("X-Guard-Dashboard-Session")))
+            self.send_response(302)
+            self.send_header("Location", "/collect")
+            self.end_headers()
+
+        def do_GET(self) -> None:
+            paths.append((self.path, self.headers.get("X-Guard-Dashboard-Session")))
+            self.send_response(200)
+            self.end_headers()
+
+        def log_message(self, *_args: object) -> None:
+            return None
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), RedirectingHandler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        client = GuardSurfaceDaemonClient(f"http://127.0.0.1:{server.server_port}", "private-auth-token")
+        with pytest.raises(GuardDaemonRequestError):
+            client.dashboard_session_capabilities(timeout=0.5)
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=1.0)
+
+    assert len(paths) == 1
+    assert paths[0][0] == "/v1/initialize"
+    assert paths[0][1] is not None and paths[0][1].startswith("gld1.")
+
+
+def test_dashboard_session_capabilities_reports_normal_request_unauthorized(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    requests: list[tuple[str, str | None, str | None]] = []
+
+    class UnauthorizedOpener:
+        def open(self, request: urllib.request.Request, *, timeout: float) -> _RawResponse:
+            del timeout
+            path = urllib.parse.urlsplit(request.full_url).path
+            requests.append(
+                (
+                    path,
+                    request.headers.get("X-guard-token"),
+                    request.headers.get("X-guard-dashboard-session"),
+                )
+            )
+            if path == "/v1/initialize":
+                return _RawResponse(payload=b'{"dashboard_session_token":"fresh-dashboard-session"}')
+            raise urllib.error.HTTPError(
+                request.full_url,
+                401,
+                "Unauthorized",
+                {},
+                _RawResponse(payload=b'{"error":"unauthorized"}'),
+            )
+
+    monkeypatch.setattr(urllib.request, "build_opener", lambda *_handlers: UnauthorizedOpener())
+    client = GuardSurfaceDaemonClient("http://127.0.0.1:1", "private-auth-token")
+
+    with pytest.raises(GuardDaemonRequestError) as error:
+        client.dashboard_session_capabilities(timeout=0.5)
+
+    assert error.value.status == 401
+    assert len(requests) == 2
+    assert requests[0][0] == "/v1/initialize"
+    assert requests[0][1] is None
+    assert requests[0][2] is not None and requests[0][2].startswith("gld1.")
+    assert requests[1] == ("/v1/capabilities", None, "fresh-dashboard-session")
 
 
 def test_network_status_client_types_timeout_without_transport_detail(

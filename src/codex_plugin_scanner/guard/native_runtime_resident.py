@@ -74,7 +74,7 @@ from .native_runtime_resilience import (
     native_runtime_health_snapshot,
 )
 
-_START_TIMEOUT_SECONDS = 0.6
+_START_TIMEOUT_SECONDS = 1.5
 _SERVICE_LIFETIME_SECONDS = 7 * 24 * 60 * 60
 _SERVICE_OUTPUT_LIMIT = 64 * 1024
 _MAX_CLIENT_IN_FLIGHT = 16

@@ -5,6 +5,7 @@ from __future__ import annotations
 import http.client
 import io
 import json
+import math
 import socket
 import time
 import urllib.error
@@ -17,6 +18,7 @@ from threading import Timer
 from typing import Protocol, TypeGuard, cast
 from urllib.parse import urlsplit
 
+from ..local_dashboard_session import build_local_dashboard_session_token
 from .manager import (
     clear_guard_daemon_state,
     ensure_guard_daemon,
@@ -35,9 +37,17 @@ def _interrupt_health_socket(stream: socket.socket) -> None:
         stream.shutdown(socket.SHUT_RDWR)
 
 
-def read_guard_health_details(daemon_url: str, auth_token: str) -> dict[str, object] | None:
+def read_guard_health_details(
+    daemon_url: str,
+    auth_token: str,
+    *,
+    timeout: float | None = None,
+) -> dict[str, object] | None:
     """Read bounded authenticated health details over direct, non-redirecting loopback IPC."""
     try:
+        probe_timeout = _HEALTH_PROBE_DEADLINE_SECONDS if timeout is None else float(timeout)
+        if not math.isfinite(probe_timeout) or probe_timeout <= 0.0:
+            return None
         parsed = urlsplit(daemon_url)
         if (
             parsed.scheme != "http"
@@ -53,10 +63,8 @@ def read_guard_health_details(daemon_url: str, auth_token: str) -> dict[str, obj
             return None
         # HTTPConnection neither consults proxy environment variables nor follows
         # redirects. Never forward the daemon token to a redirected authority.
-        deadline = time.monotonic() + _HEALTH_PROBE_DEADLINE_SECONDS
-        with closing(
-            HTTPConnection(parsed.hostname, parsed.port, timeout=_HEALTH_PROBE_DEADLINE_SECONDS)
-        ) as connection:
+        deadline = time.monotonic() + probe_timeout
+        with closing(HTTPConnection(parsed.hostname, parsed.port, timeout=probe_timeout)) as connection:
             connection.connect()
             stream = connection.sock
             remaining = deadline - time.monotonic()
@@ -79,7 +87,7 @@ def read_guard_health_details(daemon_url: str, auth_token: str) -> dict[str, obj
             return None
         payload = json.loads(content.decode("utf-8"))
         return payload if isinstance(payload, dict) else None
-    except (OSError, ValueError, HTTPException):
+    except (OSError, TypeError, ValueError, OverflowError, HTTPException):
         return None
 
 
@@ -114,11 +122,30 @@ class GuardDaemonResponseSchemaError(GuardDaemonRequestError):
 
 _DEFAULT_REQUEST_TIMEOUT_S: float = 5.0
 _STATUS_REQUEST_TIMEOUT_S: float = 0.25
+_DASHBOARD_SESSION_TIMEOUT_S: float = 1.0
 _MAX_GET_RESPONSE_BYTES: int = 1_048_576
+_DASHBOARD_PROTOCOL_VERSIONS: tuple[str, ...] = ("1.1", "1.0")
 
 
 class _ReadableResponse(Protocol):
     def read(self, n: int = -1) -> bytes: ...
+
+
+class _ResponseContext(Protocol):
+    def __enter__(self) -> _ReadableResponse: ...
+
+    def __exit__(self, *_args: object) -> object: ...
+
+
+class _RejectRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *_args: object, **_kwargs: object) -> None:
+        return None
+
+
+def _open_dashboard_request(request: urllib.request.Request, *, timeout: float) -> _ResponseContext:
+    """Open one dashboard request without following an authority redirect."""
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _RejectRedirectHandler)
+    return cast(_ResponseContext, opener.open(request, timeout=timeout))
 
 
 def _bound_response_read(response: object, timeout: float) -> bool:
@@ -320,6 +347,90 @@ class GuardSurfaceDaemonClient:
         """
 
         return self._get("/v1/network/status", timeout=_STATUS_REQUEST_TIMEOUT_S)
+
+    def dashboard_session_capabilities(
+        self,
+        *,
+        timeout: float = _DASHBOARD_SESSION_TIMEOUT_S,
+    ) -> dict[str, object]:
+        """Establish and prove the narrow authenticated dashboard session.
+
+        Health details authenticate the daemon process, but they do not prove
+        that the normal dashboard surface can accept a session.  This follows
+        the browser's local handoff: seed a dashboard scoped token, initialize
+        the surface, then use only the refreshed session token for a normal
+        capabilities read.  Both requests share one bounded deadline.
+        """
+
+        if timeout <= 0.0:
+            raise GuardDaemonTimeoutError("Guard daemon dashboard session timed out")
+        deadline = time.monotonic() + timeout
+        seed_token = build_local_dashboard_session_token(auth_token=self.auth_token, surface="dashboard")
+        initialized = self._dashboard_session_request(
+            "/v1/initialize",
+            method="POST",
+            payload={
+                "client_name": "guard-dashboard-web",
+                "surface": "dashboard",
+                "supported_protocol_versions": list(_DASHBOARD_PROTOCOL_VERSIONS),
+            },
+            dashboard_session_token=seed_token,
+            deadline=deadline,
+        )
+        refreshed_token = initialized.get("dashboard_session_token")
+        if not isinstance(refreshed_token, str) or not refreshed_token:
+            raise GuardDaemonResponseSchemaError("Guard daemon dashboard session response is invalid")
+        return self._dashboard_session_request(
+            "/v1/capabilities",
+            method="GET",
+            payload=None,
+            dashboard_session_token=refreshed_token,
+            deadline=deadline,
+        )
+
+    def _dashboard_session_request(
+        self,
+        path: str,
+        *,
+        method: str,
+        payload: dict[str, object] | None,
+        dashboard_session_token: str,
+        deadline: float,
+    ) -> dict[str, object]:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0.0:
+            raise GuardDaemonTimeoutError("Guard daemon dashboard session timed out")
+        headers = {"X-Guard-Dashboard-Session": dashboard_session_token}
+        data = None
+        if payload is not None:
+            headers["Content-Type"] = "application/json"
+            data = json.dumps(payload).encode("utf-8")
+        request = urllib.request.Request(
+            f"{self.daemon_url}{path}",
+            data=data,
+            headers=headers,
+            method=method,
+        )
+        try:
+            with _open_dashboard_request(request, timeout=remaining) as response:
+                raw_payload = self._read_response_with_deadline(response, deadline=deadline)
+                return self._decode_json_response(raw_payload.decode("utf-8"))
+        except urllib.error.HTTPError as error:
+            raise self._http_request_error(error, deadline=deadline) from error
+        except GuardDaemonRequestError:
+            raise
+        except UnicodeDecodeError as error:
+            raise GuardDaemonResponseSchemaError("Guard daemon dashboard response schema is invalid") from error
+        except TimeoutError as error:
+            raise GuardDaemonTimeoutError("Guard daemon dashboard session timed out") from error
+        except http.client.IncompleteRead as error:
+            raise GuardDaemonTransportError("Guard daemon dashboard response was truncated") from error
+        except urllib.error.URLError as error:
+            if isinstance(error.reason, TimeoutError):
+                raise GuardDaemonTimeoutError("Guard daemon dashboard session timed out") from error
+            raise GuardDaemonTransportError("Guard daemon dashboard request failed") from error
+        except OSError as error:
+            raise GuardDaemonTransportError("Guard daemon dashboard request failed") from error
 
     def resolve_policy_decision(self, payload: dict[str, object]) -> dict[str, object]:
         return self._post("/v1/policy/resolve", payload)

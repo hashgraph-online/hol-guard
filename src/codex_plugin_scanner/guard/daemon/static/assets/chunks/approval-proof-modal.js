@@ -1,4 +1,4 @@
-import { r as reactExports, M as useFocusTrap, an as isApprovalProofSubmitDisabled, ao as buildApprovalProofCredentials, j as jsxRuntimeExports, S as SectionLabel, am as ApprovalProofFieldInputs, A as ActionButton } from "../guard-dashboard.js";
+import { r as reactExports, U as useFocusTrap, as as isApprovalProofSubmitDisabled, at as buildApprovalProofCredentials, j as jsxRuntimeExports, S as SectionLabel, ar as ApprovalProofFieldInputs, A as ActionButton } from "../guard-dashboard.js";
 function ApprovalProofModal(props) {
   const {
     title,
