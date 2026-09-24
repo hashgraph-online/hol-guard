@@ -17,6 +17,7 @@
     "codex",
     "copilot",
     "cursor",
+    "devin",
     "gemini",
     "grok",
     "hermes",
@@ -33,70 +34,23 @@
     "PostToolUse"
   ],
   "harness_routes": {
-    "antigravity": {
-      "pre_tool_use": "preflight_only",
-      "post_tool_use": "unavailable"
-    },
-    "claude-code": {
-      "pre_tool_use": "installed_canonical",
-      "post_tool_use": "installed_canonical"
-    },
-    "cline": {
-      "pre_tool_use": "installed_canonical",
-      "post_tool_use": "installed_observation_only"
-    },
-    "codex": {
-      "pre_tool_use": "installed_canonical",
-      "post_tool_use": "installed_canonical"
-    },
-    "copilot": {
-      "pre_tool_use": "installed_alias_requires_native_normalization",
-      "post_tool_use": "installed_alias_requires_native_normalization"
-    },
-    "cursor": {
-      "pre_tool_use": "installed_alias_requires_native_normalization",
-      "post_tool_use": "installed_alias_requires_native_normalization"
-    },
-    "gemini": {
-      "pre_tool_use": "detected_external_only",
-      "post_tool_use": "unavailable"
-    },
-    "grok": {
-      "pre_tool_use": "installed_cli_bridge",
-      "post_tool_use": "unavailable"
-    },
-    "hermes": {
-      "pre_tool_use": "installed_cli_bridge",
-      "post_tool_use": "unavailable"
-    },
-    "kimi": {
-      "pre_tool_use": "installed_canonical",
-      "post_tool_use": "installed_canonical"
-    },
-    "omp": {
-      "pre_tool_use": "installed_canonical",
-      "post_tool_use": "installed_canonical"
-    },
-    "openclaw": {
-      "pre_tool_use": "installed_cli_bridge",
-      "post_tool_use": "unavailable"
-    },
-    "opencode": {
-      "pre_tool_use": "installed_cli_bridge",
-      "post_tool_use": "unavailable"
-    },
-    "paseo": {
-      "pre_tool_use": "unavailable",
-      "post_tool_use": "unavailable"
-    },
-    "pi": {
-      "pre_tool_use": "installed_canonical",
-      "post_tool_use": "installed_canonical_source_ref"
-    },
-    "zcode": {
-      "pre_tool_use": "installed_canonical",
-      "post_tool_use": "normalizer_only_not_installed"
-    }
+    "antigravity": {"pre_tool_use": "preflight_only", "post_tool_use": "unavailable"},
+    "claude-code": {"pre_tool_use": "installed_canonical", "post_tool_use": "installed_canonical"},
+    "cline": {"pre_tool_use": "installed_canonical", "post_tool_use": "installed_observation_only"},
+    "codex": {"pre_tool_use": "installed_canonical", "post_tool_use": "installed_canonical"},
+    "copilot": {"pre_tool_use": "installed_alias_requires_native_normalization", "post_tool_use": "installed_alias_requires_native_normalization"},
+    "cursor": {"pre_tool_use": "installed_alias_requires_native_normalization", "post_tool_use": "installed_alias_requires_native_normalization"},
+    "devin": {"pre_tool_use": "installed_canonical", "post_tool_use": "installed_canonical"},
+    "gemini": {"pre_tool_use": "detected_external_only", "post_tool_use": "unavailable"},
+    "grok": {"pre_tool_use": "installed_cli_bridge", "post_tool_use": "unavailable"},
+    "hermes": {"pre_tool_use": "installed_cli_bridge", "post_tool_use": "unavailable"},
+    "kimi": {"pre_tool_use": "installed_canonical", "post_tool_use": "installed_canonical"},
+    "omp": {"pre_tool_use": "installed_canonical", "post_tool_use": "installed_canonical"},
+    "openclaw": {"pre_tool_use": "installed_cli_bridge", "post_tool_use": "unavailable"},
+    "opencode": {"pre_tool_use": "installed_cli_bridge", "post_tool_use": "unavailable"},
+    "paseo": {"pre_tool_use": "unavailable", "post_tool_use": "unavailable"},
+    "pi": {"pre_tool_use": "installed_canonical", "post_tool_use": "installed_canonical_source_ref"},
+    "zcode": {"pre_tool_use": "installed_canonical", "post_tool_use": "normalizer_only_not_installed"}
   },
   "production_defaults": {
     "HOL_GUARD_NATIVE": {
@@ -118,43 +72,28 @@
   "decision_critical_io": {
     "schema": "hol-guard.decision-critical-io.v1",
     "native_authority": "rust",
-    "native_modes": [
-      "auto",
-      "force"
-    ],
-    "compatibility_modes": [
-      "off",
-      "shadow"
-    ],
+    "native_modes": ["auto", "force"],
+    "compatibility_modes": ["off", "shadow"],
     "failure": "fail_closed",
     "capabilities": [
       {
         "id": "post_tool_source_read",
         "authority": "rust",
-        "rust_symbols": [
-          "guard_secure_fs::read_bounded",
-          "guard_hook_core::review_post_tool"
-        ],
+        "rust_symbols": ["guard_secure_fs::read_bounded", "guard_hook_core::review_post_tool"],
         "python_semantic_fallback": false,
         "failure": "fail_closed"
       },
       {
         "id": "sensitive_path_and_symlink_classification",
         "authority": "rust",
-        "rust_symbols": [
-          "guard_secure_fs::classify_source_path",
-          "guard_secure_fs::contains_symlink_component"
-        ],
+        "rust_symbols": ["guard_secure_fs::classify_source_path", "guard_secure_fs::contains_symlink_component"],
         "python_semantic_fallback": false,
         "failure": "fail_closed"
       },
       {
         "id": "pre_post_identity_and_equivalence",
         "authority": "rust",
-        "rust_symbols": [
-          "guard_secure_fs::FileIdentity",
-          "guard_hook_core::review_post_tool"
-        ],
+        "rust_symbols": ["guard_secure_fs::FileIdentity", "guard_hook_core::review_post_tool"],
         "python_semantic_fallback": false,
         "failure": "fail_closed"
       },
@@ -265,10 +204,10 @@
         "src/codex_plugin_scanner/guard/adapters/*resume*.py",
         "src/codex_plugin_scanner/guard/adapters/*script_template*.py",
         "src/codex_plugin_scanner/guard/adapters/*transport*.py",
-        "src/codex_plugin_scanner/guard/adapters/hook_python*.py",
-        "src/codex_plugin_scanner/guard/codex_hook_launch_runtime.py",
-        "src/codex_plugin_scanner/guard/codex_hook_process_runtime.py",
-        "src/codex_plugin_scanner/guard/codex_hook_windows_job.py"
+          "src/codex_plugin_scanner/guard/adapters/hook_python*.py",
+          "src/codex_plugin_scanner/guard/codex_hook_launch_runtime.py",
+          "src/codex_plugin_scanner/guard/codex_hook_process_runtime.py",
+          "src/codex_plugin_scanner/guard/codex_hook_windows_job.py"
       ],
       "current": "bounded stdin, daemon authentication, HTTP transport, and mechanical response projection",
       "target": "minimal launcher and mechanical serialization only"
@@ -284,6 +223,7 @@
         "src/codex_plugin_scanner/guard/adapters/codex.py",
         "src/codex_plugin_scanner/guard/adapters/contracts.py",
         "src/codex_plugin_scanner/guard/adapters/copilot.py",
+        "src/codex_plugin_scanner/guard/adapters/devin.py",
         "src/codex_plugin_scanner/guard/adapters/grok.py",
         "src/codex_plugin_scanner/guard/adapters/hermes.py",
         "src/codex_plugin_scanner/guard/adapters/hook_payloads.py",
@@ -606,21 +546,10 @@
   "route_receipts": {
     "schema": "hol-guard-native-hook-route-receipt.v1",
     "slice": "NHD-041-NHD-050",
-    "supported_routes": [
-      "native_resident",
-      "native_oneshot",
-      "native_fail_safe"
-    ],
+    "supported_routes": ["native_resident", "native_oneshot", "native_fail_safe"],
     "pre_tool_authority": "native_resident_or_fail_safe",
     "python_semantic_for_supported_pre_tool": false,
-    "payload_fields_excluded": [
-      "command",
-      "prompt",
-      "path",
-      "url",
-      "raw_payload",
-      "secret"
-    ]
+    "payload_fields_excluded": ["command", "prompt", "path", "url", "raw_payload", "secret"]
   },
   "decision_receipt": {
     "schema": "guard-native-hook-decision-receipt.v1",

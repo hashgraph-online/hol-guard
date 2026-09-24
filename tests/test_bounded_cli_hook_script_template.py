@@ -181,6 +181,7 @@ def test_generated_client_defaults_missing_policy_action_closed(tmp_path: Path) 
         ("copilot", "PreToolUse", None, 0),
         ("zcode", "PreToolUse", None, 2),
         ("kimi", "PreToolUse", None, 2),
+        ("devin", "PreToolUse", None, 2),
         ("grok", "PostToolUse", "allow", 0),
         ("copilot", "permissionRequestV2", None, 0),
     ],
@@ -201,7 +202,7 @@ def test_generated_client_unavailable_payload_matches_harness(
         assert payload["decision"] == decision
     if harness == "copilot" and event_name == "permissionRequestV2":
         assert payload["behavior"] == "deny"
-    if harness == "zcode":
+    if harness in {"zcode", "devin"}:
         assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
@@ -263,3 +264,26 @@ def test_generated_client_main_uses_unavailable_matrix(tmp_path: Path, monkeypat
     monkeypatch.setattr(module.sys, "stdout", stdout)
     assert module.main() == 0
     assert json.loads(stdout.getvalue())["decision"] == "allow"
+
+
+def test_generated_client_devin_permission_request_review_blocks(tmp_path: Path) -> None:
+    module = _load_script(tmp_path, harness="devin")
+    stdout, _stderr, code = module._to_native(
+        {"policy_action": "review", "reason": "Needs review."},
+        "PermissionRequest",
+    )
+    payload = json.loads(stdout)
+    assert code == 2
+    assert payload["decision"] == "block"
+    assert payload["reason"]
+
+
+def test_generated_client_devin_pretooluse_allow_has_no_decision(tmp_path: Path) -> None:
+    module = _load_script(tmp_path, harness="devin")
+    stdout, _stderr, code = module._to_native(
+        {"policy_action": "allow", "reason": "Allowed."},
+        "PreToolUse",
+    )
+    payload = json.loads(stdout)
+    assert code == 0
+    assert "decision" not in payload

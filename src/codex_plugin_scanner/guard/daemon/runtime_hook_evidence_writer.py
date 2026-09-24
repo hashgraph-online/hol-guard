@@ -25,7 +25,7 @@ from ..runtime.command_activity_correlation import (
     load_or_create_installation_correlation_key,
 )
 from ..runtime.command_activity_display import build_invocation_preview_from_payload
-from ..runtime.command_activity_lifecycle import build_native_pre_hook_evidence
+from ..runtime.command_activity_lifecycle import build_policy_only_pre_hook_evidence
 from ..runtime.command_activity_privacy import InstallationCorrelationKey
 from ..sqlite_tuning import sqlite_connect_timeout_override
 from ..store import GuardStore
@@ -336,7 +336,7 @@ class RuntimeHookEvidenceWriter:
                                         ).encode("utf-8")
                                     ).hexdigest()
                                     correlation = replace(correlation, digest=digest)
-                                evidence = build_native_pre_hook_evidence(
+                                evidence = build_policy_only_pre_hook_evidence(
                                     activity_id=record.record_id,
                                     occurred_at=datetime.fromisoformat(record.occurred_at),
                                     harness=record.harness,
