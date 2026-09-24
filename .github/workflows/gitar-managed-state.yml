@@ -23,7 +23,7 @@ jobs:
     if: ${{ github.event_name != 'issue_comment' || github.event.issue.pull_request != null }}
     permissions:
       issues: write
-      pull-requests: read
+      pull-requests: write
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
