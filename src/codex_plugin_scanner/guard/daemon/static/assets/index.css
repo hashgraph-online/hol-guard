@@ -1435,8 +1435,8 @@
     max-width: 28rem;
   }
 
-  .max-w-\[260px\] {
-    max-width: 260px;
+  .max-w-\[70vw\] {
+    max-width: 70vw;
   }
 
   .max-w-\[320px\] {
@@ -6293,6 +6293,10 @@
       max-width: 9rem;
     }
 
+    .sm\:max-w-\[420px\] {
+      max-width: 420px;
+    }
+
     .sm\:max-w-sm {
       max-width: var(--container-sm);
     }
@@ -6683,6 +6687,10 @@
 
     .lg\:w-60 {
       width: calc(var(--spacing) * 60);
+    }
+
+    .lg\:max-w-\[520px\] {
+      max-width: 520px;
     }
 
     .lg\:grid-cols-1 {
