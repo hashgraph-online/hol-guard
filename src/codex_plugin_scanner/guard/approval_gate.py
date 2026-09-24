@@ -1005,7 +1005,9 @@ def _verify_or_raise_locked(
     factor_set = ("password",)
     if _totp_enabled(state):
         if gate_input.totp_code is None:
-            if not _recent_totp_satisfied_locked(guard_home, state, now_epoch=now_epoch):
+            if gate_input.require_fresh_totp or not _recent_totp_satisfied_locked(
+                guard_home, state, now_epoch=now_epoch
+            ):
                 raise ApprovalGateError("approval_gate_totp_required", "TOTP code is required.")
             accepted_counter = _optional_int(state.get("totp_last_counter"))
             if accepted_counter is None:
