@@ -54,9 +54,7 @@ def project_folder_picker_command(
 
 _LINUX_DIALOG_FAILURE_MARKERS = (
     "cannot open display",
-    "no such file",
-    "not found",
-    "permission denied",
+    "failed to open display",
 )
 
 
