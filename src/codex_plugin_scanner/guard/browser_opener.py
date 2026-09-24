@@ -9,6 +9,32 @@ import webbrowser
 from collections.abc import Mapping
 
 
+def _browser_launch_suppressed_for_tests() -> bool:
+    """Keep pytest runs from opening real browser tabs on developer machines.
+
+    ``PYTEST_CURRENT_TEST`` covers the test call phase and is inherited by
+    subprocesses spawned from a test. ``HOL_GUARD_TEST_DISABLE_BROWSER_OPEN``
+    is set by ``tests/conftest.py`` at import time so session-scoped fixtures
+    and helpers spawned outside a test call stay suppressed as well. Tests
+    that exercise the real launch seams opt back in with
+    ``HOL_GUARD_TEST_ALLOW_BROWSER_OPEN``.
+    """
+
+    if os.environ.get("HOL_GUARD_TEST_ALLOW_BROWSER_OPEN", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }:
+        return False
+    if os.environ.get("PYTEST_CURRENT_TEST"):
+        return True
+    return os.environ.get("HOL_GUARD_TEST_DISABLE_BROWSER_OPEN", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+
+
 def open_browser_url(url: str) -> bool:
     """Open *url* and report whether a browser launch was accepted.
 
@@ -49,21 +75,3 @@ def _open_linux_browser_url(url: str, *, environ: Mapping[str, str] | None = Non
 
 def _has_linux_graphical_session(environ: Mapping[str, str]) -> bool:
     return bool(environ.get("DISPLAY") or environ.get("WAYLAND_DISPLAY"))
-
-
-def _browser_launch_suppressed_for_tests() -> bool:
-    """Keep pytest runs from opening real browser tabs on developer machines.
-
-    ``PYTEST_CURRENT_TEST`` covers the test call phase and is inherited by
-    subprocesses spawned from a test. ``HOL_GUARD_TEST_DISABLE_BROWSER_OPEN``
-    is set by ``tests/conftest.py`` at import time so session-scoped fixtures
-    and helpers spawned outside a test call stay suppressed as well.
-    """
-
-    if os.environ.get("PYTEST_CURRENT_TEST"):
-        return True
-    return os.environ.get("HOL_GUARD_TEST_DISABLE_BROWSER_OPEN", "").strip().lower() in {
-        "1",
-        "true",
-        "yes",
-    }

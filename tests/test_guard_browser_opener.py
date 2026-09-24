@@ -16,7 +16,7 @@ from codex_plugin_scanner.guard.cli import commands_support_hook_payload
 def real_launch_path(monkeypatch: pytest.MonkeyPatch) -> None:
     """Exercise the launch seams below the pytest suppression gate."""
 
-    monkeypatch.setattr(browser_opener, "_browser_launch_suppressed_for_tests", lambda: False)
+    monkeypatch.setenv("HOL_GUARD_TEST_ALLOW_BROWSER_OPEN", "1")
 
 
 def _fail_launch_attempt(*_args: object, **_kwargs: object) -> None:
@@ -26,6 +26,7 @@ def _fail_launch_attempt(*_args: object, **_kwargs: object) -> None:
 def test_pytest_context_suppresses_browser_launch(monkeypatch) -> None:
     monkeypatch.setenv("PYTEST_CURRENT_TEST", "tests/test_guard_browser_opener.py::test (call)")
     monkeypatch.delenv("HOL_GUARD_TEST_DISABLE_BROWSER_OPEN", raising=False)
+    monkeypatch.delenv("HOL_GUARD_TEST_ALLOW_BROWSER_OPEN", raising=False)
     monkeypatch.setattr(browser_opener.webbrowser, "open", _fail_launch_attempt)
     monkeypatch.setattr(browser_opener.subprocess, "Popen", _fail_launch_attempt)
 
@@ -33,6 +34,8 @@ def test_pytest_context_suppresses_browser_launch(monkeypatch) -> None:
 
 
 def test_disable_flag_suppresses_browser_launch_outside_test_call(monkeypatch) -> None:
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+    monkeypatch.delenv("HOL_GUARD_TEST_ALLOW_BROWSER_OPEN", raising=False)
     monkeypatch.setenv("HOL_GUARD_TEST_DISABLE_BROWSER_OPEN", "1")
     monkeypatch.setattr(browser_opener.webbrowser, "open", _fail_launch_attempt)
     monkeypatch.setattr(browser_opener.platform, "system", lambda: "Linux")
@@ -40,6 +43,21 @@ def test_disable_flag_suppresses_browser_launch_outside_test_call(monkeypatch) -
     monkeypatch.setattr(browser_opener.subprocess, "Popen", _fail_launch_attempt)
 
     assert browser_opener.open_browser_url("http://127.0.0.1:5474") is False
+
+
+def test_allow_flag_reenables_launch_path_during_pytest(monkeypatch) -> None:
+    monkeypatch.setenv("PYTEST_CURRENT_TEST", "tests/test_guard_browser_opener.py::test (call)")
+    monkeypatch.setenv("HOL_GUARD_TEST_ALLOW_BROWSER_OPEN", "1")
+    captured: dict[str, object] = {}
+
+    def fake_open(url: str) -> bool:
+        captured["url"] = url
+        return True
+
+    monkeypatch.setattr(browser_opener.webbrowser, "open", fake_open)
+
+    assert browser_opener.open_browser_url("http://127.0.0.1:5474") is True
+    assert captured["url"] == "http://127.0.0.1:5474"
 
 
 def test_linux_headless_session_skips_browser_launch(monkeypatch, real_launch_path) -> None:
