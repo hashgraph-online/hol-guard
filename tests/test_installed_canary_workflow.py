@@ -120,6 +120,7 @@ def test_matrix_proves_remote_bytes_install_origin_record_corpus_and_dashboard()
     names = [step.get("name") for step in steps]
 
     assert "Download exact TestPyPI wheel bytes" in names
+    assert "Bind compatible native canary wheel" in names
     assert "Verify PR head, version, and TestPyPI bytes" in names
     assert "Install only the verified wheel" in names
     assert "Prove the harness rejects missing evidence" in names
@@ -128,6 +129,8 @@ def test_matrix_proves_remote_bytes_install_origin_record_corpus_and_dashboard()
     workflow_text = WORKFLOW_PATH.read_text(encoding="utf-8")
     assert "verify-release --registry testpypi" in workflow_text
     assert "--download-dir verified-testpypi" in workflow_text
+    assert "scripts/select_installed_native_wheel.py" in workflow_text
+    assert "--dist-dir selected-native" in workflow_text
     assert "git rev-parse 'HEAD^{commit}'" in workflow_text
     assert "installed-canary/missing-subject.json" in workflow_text
     assert "-m scripts.run_installed_canary" in workflow_text
