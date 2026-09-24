@@ -7,9 +7,16 @@ from scripts.select_installed_native_wheel import select_native_wheel
 
 
 def _native_platform() -> str:
-    return next(
-        tag.platform for tag in sys_tags() if tag.interpreter == "py3" and tag.abi == "none" and tag.platform != "any"
+    platform = next(
+        (
+            tag.platform
+            for tag in sys_tags()
+            if tag.interpreter == "py3" and tag.abi == "none" and tag.platform != "any"
+        ),
+        None,
     )
+    assert platform is not None, "current Python has no supported native wheel platform tag"
+    return platform
 
 
 def test_selects_only_the_compatible_native_wheel(tmp_path: Path) -> None:

@@ -241,3 +241,24 @@ def test_pre_turn_configuration_error_cannot_be_treated_as_a_clean_run() -> None
 
     with pytest.raises(CodexEventTraceError):
         parse_codex_event_trace(_stream(*events), _COMMAND)
+
+
+def test_error_item_after_turn_start_is_rejected() -> None:
+    events = _valid_events()
+    events.insert(2, {"type": "item.completed", "item": {"id": "error-1", "type": "error", "message": "private"}})
+
+    with pytest.raises(CodexEventTraceError, match="error item"):
+        parse_codex_event_trace(_stream(*events), _COMMAND)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        '{"type":"thread.started","thread_id":"t","thread_id":"other"}',
+        '{"type":"thread.started","thread_id":"t","extra":NaN}',
+        b"\xff",
+    ],
+)
+def test_ambiguous_json_and_invalid_utf8_are_rejected(payload: str | bytes) -> None:
+    with pytest.raises(CodexEventTraceError):
+        parse_codex_event_trace(payload, _COMMAND)

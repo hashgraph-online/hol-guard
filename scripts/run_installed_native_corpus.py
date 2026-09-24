@@ -37,7 +37,12 @@ def _run_installed_worker(worker_index: int) -> runner.WorkerReport:
 
 
 def main() -> int:
-    # Keep the frozen corpus runner and its source-bound contract unchanged.
+    # The corpus runner is source-bound by a frozen contract. Verify its two
+    # integration points before adapting them; the canary runs the full corpus.
+    if not callable(getattr(runner, "_install_evaluator_packages", None)) or not callable(
+        getattr(runner, "_run_worker", None)
+    ):
+        raise RuntimeError("frozen corpus runner no longer exposes its installed-wheel integration points")
     runner._install_evaluator_packages = _require_installed_evaluator
     runner._run_worker = _run_installed_worker
     if len(sys.argv) == 1:

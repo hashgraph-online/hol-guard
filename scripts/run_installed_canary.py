@@ -126,23 +126,33 @@ def _run_corpus(repo_root: Path) -> dict[str, object]:
     report = cast(dict[str, object], decoded)
     raw_groups = report.get("native_contract_groups")
     if not isinstance(raw_groups, dict) or any(
-        not isinstance(values, list) or len(values) != 2 or type(values[0]) is not int for values in raw_groups.values()
+        not isinstance(values, list)
+        or len(values) != 2
+        or not isinstance(values[0], int)
+        or isinstance(values[0], bool)
+        for values in raw_groups.values()
     ):
         raise InstalledCanaryError("Installed native corpus report has invalid groups")
     groups = cast(dict[str, list[object]], raw_groups)
     count = sum(cast(int, values[0]) for values in groups.values())
+    native_rejection_count = report.get("native_rejection_count")
+    original_oracle_above_count = report.get("original_oracle_above_count")
     if (
         report.get("native_contract_equality") is not True
         or report.get("original_oracle_below_count") != 0
         or count != 51_000
+        or not isinstance(native_rejection_count, int)
+        or isinstance(native_rejection_count, bool)
+        or not isinstance(original_oracle_above_count, int)
+        or isinstance(original_oracle_above_count, bool)
     ):
         raise InstalledCanaryError("Installed evaluator differs from the frozen 51k native corpus contract")
     return {
         "case_count": count,
         "elapsed_seconds": time.perf_counter() - started,
         "native_contract_groups": len(groups),
-        "native_rejection_count": report["native_rejection_count"],
-        "original_oracle_above_count": report["original_oracle_above_count"],
+        "native_rejection_count": native_rejection_count,
+        "original_oracle_above_count": original_oracle_above_count,
         "bindings": bindings,
     }
 
