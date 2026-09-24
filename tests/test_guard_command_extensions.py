@@ -1100,3 +1100,24 @@ def test_gorgona_command_source_boundary(tmp_path: Path) -> None:
     revoke_res = inspect_command("gorgona revoke 220745621684224 4YzEYpwB9hc=", cwd=tmp_path, home_dir=tmp_path)
     assert revoke_res["status"] == "review"
     assert any(rule["rule_id"] == "command.gorgona.revoke" for rule in revoke_res["rules"])
+
+    # 5. Upstream global options and bundled flags
+    bundled_res = inspect_command("gorgona -ve listen new 4YzEYpwB9hc=", cwd=tmp_path, home_dir=tmp_path)
+    assert bundled_res["status"] == "review"
+    assert any(rule["rule_id"] == "command.gorgona.exec-listen" for rule in bundled_res["rules"])
+
+    config_exec_res = inspect_command("gorgona -c /etc/gorgona/gorgona-node2.conf -e listen new 4YzEYpwB9hc=", cwd=tmp_path, home_dir=tmp_path)
+    assert config_exec_res["status"] == "review"
+    assert any(rule["rule_id"] == "command.gorgona.exec-listen" for rule in config_exec_res["rules"])
+
+    verbose_send = inspect_command("gorgona -v send \"2026-10-01 12:00:00\" \"2026-11-01 12:00:00\" \"hello\" \"RWTPQzuhzBw=.pub\"", cwd=tmp_path, home_dir=tmp_path)
+    assert verbose_send["status"] == "review"
+    assert any(rule["rule_id"] == "command.gorgona.send" for rule in verbose_send["rules"])
+
+    config_revoke = inspect_command("gorgona -c /etc/gorgona/x.conf revoke 170119927746560 RWTPQzuhzBw=", cwd=tmp_path, home_dir=tmp_path)
+    assert config_revoke["status"] == "review"
+    assert any(rule["rule_id"] == "command.gorgona.revoke" for rule in config_revoke["rules"])
+
+    # Safe leading options with plain listen
+    assert inspect_command("gorgona -v listen new 4YzEYpwB9hc=", cwd=tmp_path, home_dir=tmp_path)["status"] == "no_match"
+    assert inspect_command("gorgona -c /etc/gorgona/x.conf listen new 4YzEYpwB9hc=", cwd=tmp_path, home_dir=tmp_path)["status"] == "no_match"

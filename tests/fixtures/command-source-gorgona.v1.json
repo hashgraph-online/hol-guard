@@ -124,6 +124,56 @@
       "expected_action": "allow",
       "rule_id": "command.gorgona.exec-listen",
       "expected_effective_segments": []
+    },
+    {
+      "actual_effective_segments": null,
+      "command": "gorgona -v send \"2026-10-01 12:00:00\" \"2026-11-01 12:00:00\" \"hello world\" \"RWTPQzuhzBw=.pub\"",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "send-leading-verbose-review",
+      "passed": null
+    },
+    {
+      "actual_effective_segments": null,
+      "command": "gorgona -c /etc/gorgona/gorgona-node2.conf revoke 170119927746560 RWTPQzuhzBw=",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "revoke-leading-config-review",
+      "passed": null
+    },
+    {
+      "actual_effective_segments": null,
+      "command": "gorgona -c /etc/gorgona/gorgona-node2.conf -e listen new RWTPQzuhzBw=",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "listen-leading-config-exec-review",
+      "passed": null
+    },
+    {
+      "actual_effective_segments": null,
+      "command": "gorgona -ve listen new RWTPQzuhzBw=",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "listen-exec-bundled-short-review",
+      "passed": null
+    },
+    {
+      "actual_effective_segments": null,
+      "command": "gorgona -v listen new RWTPQzuhzBw=",
+      "expected_effective_segments": [],
+      "id": "listen-leading-verbose-safe",
+      "passed": null
+    },
+    {
+      "actual_effective_segments": null,
+      "command": "gorgona -c /etc/gorgona/gorgona-node2.conf listen new RWTPQzuhzBw=",
+      "expected_effective_segments": [],
+      "id": "listen-leading-config-safe",
+      "passed": null
     }
   ],
   "build": {
