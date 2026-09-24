@@ -68,6 +68,25 @@ def test_nonzero_command_is_recorded_without_a_guard_decision() -> None:
     assert "decision" not in summary.to_dict()
 
 
+def test_declined_command_with_no_exit_code_is_observed_without_a_pass_claim() -> None:
+    events = _valid_events()
+    events[5] = {**events[5], "item": {**events[5]["item"], "status": "declined", "exit_code": None}}
+
+    summary = parse_codex_event_trace(_stream(*events), _COMMAND)
+
+    assert summary.command_status == "declined"
+    assert summary.command_exit_code is None
+    assert "decision" not in summary.to_dict()
+
+
+def test_completed_command_still_requires_an_exit_code() -> None:
+    events = _valid_events()
+    events[5] = {**events[5], "item": {**events[5]["item"], "exit_code": None}}
+
+    with pytest.raises(CodexEventTraceError, match="invalid exit code"):
+        parse_codex_event_trace(_stream(*events), _COMMAND)
+
+
 @pytest.mark.parametrize(
     ("name", "mutate"),
     [
