@@ -1062,21 +1062,18 @@ def test_inspection_parses_each_command_once(tmp_path: Path, monkeypatch: pytest
 
 
 def test_gorgona_command_source_boundary(tmp_path: Path) -> None:
-    # 1. Plain listen stays automatic
-    plain_listen = inspect_command("gorgona listen new 4YzEYpwB9hc=", cwd=tmp_path, home_dir=tmp_path)
-    assert plain_listen["status"] == "automatic"
+    # 1. Plain listen, help, and version flags remain automatic (no_match)
+    for cmd in (
+        "gorgona listen new 4YzEYpwB9hc=",
+        "gorgona listen last 1 4YzEYpwB9hc=",
+        "gorgona --help",
+        "gorgona --version",
+    ):
+        res = inspect_command(cmd, cwd=tmp_path, home_dir=tmp_path)
+        assert res["status"] == "no_match"
+        assert not any(r["rule_id"].startswith("command.gorgona.") for r in res["rules"])
 
-    plain_last = inspect_command("gorgona listen last 1 4YzEYpwB9hc=", cwd=tmp_path, home_dir=tmp_path)
-    assert plain_last["status"] == "automatic"
-
-    # 2. Plain help and version flags stay automatic
-    help_res = inspect_command("gorgona --help", cwd=tmp_path, home_dir=tmp_path)
-    assert help_res["status"] == "automatic"
-
-    version_res = inspect_command("gorgona --version", cwd=tmp_path, home_dir=tmp_path)
-    assert version_res["status"] == "automatic"
-
-    # 3. listen with -e / --exec requires review
+    # 2. listen with -e / --exec requires review
     exec_short = inspect_command("gorgona -e listen new 4YzEYpwB9hc=", cwd=tmp_path, home_dir=tmp_path)
     assert exec_short["status"] == "review"
     assert "command.gorgona" in {ext["extension_id"] for ext in exec_short["extensions"]}
@@ -1087,7 +1084,7 @@ def test_gorgona_command_source_boundary(tmp_path: Path) -> None:
     assert exec_long["status"] == "review"
     assert any(rule["rule_id"] == "command.gorgona.exec-listen" for rule in exec_long["rules"])
 
-    # 4. Key generation, sending, and revocation require review
+    # 3. Key generation, sending, and revocation require review
     genkeys_res = inspect_command("gorgona genkeys", cwd=tmp_path, home_dir=tmp_path)
     assert genkeys_res["status"] == "review"
     assert any(rule["rule_id"] == "command.gorgona.genkeys" for rule in genkeys_res["rules"])
