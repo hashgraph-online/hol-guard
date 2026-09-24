@@ -1059,3 +1059,47 @@ def test_inspection_parses_each_command_once(tmp_path: Path, monkeypatch: pytest
     # The native fixture supplies the one authoritative parse. Python must not
     # reconstruct a competing semantic command model on successful inspection.
     assert calls == 0
+
+
+def test_gorgona_command_source_boundary(tmp_path: Path) -> None:
+    # 1. Plain listen stays automatic
+    plain_listen = inspect_command("gorgona listen new 4YzEYpwB9hc=", cwd=tmp_path, home_dir=tmp_path)
+    assert plain_listen["status"] == "automatic"
+
+    plain_last = inspect_command("gorgona listen last 1 4YzEYpwB9hc=", cwd=tmp_path, home_dir=tmp_path)
+    assert plain_last["status"] == "automatic"
+
+    # 2. Plain help and version flags stay automatic
+    help_res = inspect_command("gorgona --help", cwd=tmp_path, home_dir=tmp_path)
+    assert help_res["status"] == "automatic"
+
+    version_res = inspect_command("gorgona --version", cwd=tmp_path, home_dir=tmp_path)
+    assert version_res["status"] == "automatic"
+
+    # 3. listen with -e / --exec requires review
+    exec_short = inspect_command("gorgona -e listen new 4YzEYpwB9hc=", cwd=tmp_path, home_dir=tmp_path)
+    assert exec_short["status"] == "review"
+    assert "command.gorgona" in {ext["extension_id"] for ext in exec_short["extensions"]}
+    assert exec_short["classification"]["action_class"] == "remote command execution"
+    assert any(rule["rule_id"] == "command.gorgona.exec-listen" for rule in exec_short["rules"])
+
+    exec_long = inspect_command("gorgona --exec listen new 4YzEYpwB9hc=", cwd=tmp_path, home_dir=tmp_path)
+    assert exec_long["status"] == "review"
+    assert any(rule["rule_id"] == "command.gorgona.exec-listen" for rule in exec_long["rules"])
+
+    # 4. Key generation, sending, and revocation require review
+    genkeys_res = inspect_command("gorgona genkeys", cwd=tmp_path, home_dir=tmp_path)
+    assert genkeys_res["status"] == "review"
+    assert any(rule["rule_id"] == "command.gorgona.genkeys" for rule in genkeys_res["rules"])
+
+    send_res = inspect_command(
+        'gorgona send "2026-09-22 16:42:30" "2026-10-22 16:42:30" "hello world" "RWTPQzuhzBw=.pub"',
+        cwd=tmp_path,
+        home_dir=tmp_path,
+    )
+    assert send_res["status"] == "review"
+    assert any(rule["rule_id"] == "command.gorgona.send" for rule in send_res["rules"])
+
+    revoke_res = inspect_command("gorgona revoke 220745621684224 4YzEYpwB9hc=", cwd=tmp_path, home_dir=tmp_path)
+    assert revoke_res["status"] == "review"
+    assert any(rule["rule_id"] == "command.gorgona.revoke" for rule in revoke_res["rules"])
