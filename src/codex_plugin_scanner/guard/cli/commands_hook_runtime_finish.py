@@ -295,6 +295,16 @@ def _finalize_runtime_artifact_hook(
                 payload=payload,
                 output_stream=output_stream,
             )
+        elif _canonical_harness_name(args.harness) == "devin":
+            from ..adapters.devin_hooks import emit_devin_hook_response
+
+            emit_devin_hook_response(
+                policy_action=policy_action,
+                reason=native_block_reason,
+                event_name=event_name,
+                payload=payload,
+                output_stream=output_stream,
+            )
         # Kimi surfaces stderr to the user as the blocking explanation.
         _emit_native_hook_block_stderr(native_block_reason)
         _record_harness_usage_for_hook(
@@ -383,6 +393,23 @@ def _finalize_runtime_artifact_hook(
             from ..adapters.zcode_hooks import emit_zcode_hook_response
 
             emit_zcode_hook_response(
+                policy_action=policy_action,
+                reason=runtime_reason,
+                event_name=event_name,
+                payload=payload,
+                output_stream=output_stream,
+            )
+            _record_harness_usage_for_hook(
+                store=store,
+                action_envelope=action_envelope,
+                payload=payload,
+                policy_action=policy_action,
+            )
+            return 0 if policy_action not in {"review", "require-reapproval", "sandbox-required", "block"} else 2
+        if canonical_harness == "devin":
+            from ..adapters.devin_hooks import emit_devin_hook_response
+
+            emit_devin_hook_response(
                 policy_action=policy_action,
                 reason=runtime_reason,
                 event_name=event_name,

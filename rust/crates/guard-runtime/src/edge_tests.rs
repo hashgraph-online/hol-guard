@@ -236,6 +236,7 @@ fn evaluates_generic_pretool_for_supported_harness_aliases() {
         ("Copilot", "copilot"),
         ("Grok", "grok"),
         ("Z-Code", "zcode"),
+        ("Devin", "devin"),
     ] {
         let mut request = envelope(
             "PreToolUse",

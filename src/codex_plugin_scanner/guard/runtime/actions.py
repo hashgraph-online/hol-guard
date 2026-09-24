@@ -500,6 +500,29 @@ def normalize_zcode_hook_payload(
     )
 
 
+def normalize_devin_hook_payload(
+    payload: Mapping[str, object],
+    *,
+    workspace: Path | str | None = None,
+    home_dir: Path | str | None = None,
+) -> GuardActionEnvelope:
+    """Normalize a Devin CLI hook payload into a typed action envelope.
+
+    Devin speaks the Claude Code wire protocol, so payloads normalize onto the
+    shared Guard shape through the Devin hook helpers.
+    """
+
+    from ..adapters.devin_hooks import prepare_devin_hook_payload
+
+    return _normalize_action_payload(
+        prepare_devin_hook_payload(payload),
+        harness="devin",
+        default_event_name=None,
+        workspace=workspace,
+        home_dir=home_dir,
+    )
+
+
 def _normalize_pi_family_payload(
     payload: Mapping[str, object],
     *,
@@ -573,6 +596,9 @@ _ACTION_PAYLOAD_NORMALIZERS = {
     "omp": normalize_omp_payload,
     "zcode": normalize_zcode_hook_payload,
     "zai": normalize_zcode_hook_payload,
+    "devin": normalize_devin_hook_payload,
+    "devin-cli": normalize_devin_hook_payload,
+    "cognition-devin": normalize_devin_hook_payload,
 }
 
 

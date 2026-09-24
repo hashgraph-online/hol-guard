@@ -525,6 +525,8 @@ export function harnessDisplayName(harness: string): string {
       return "Oh My Pi";
     case "zcode":
       return "ZCode";
+    case "devin":
+      return "Devin";
     case "guard-cli":
     case "hol-guard":
       return "Guard CLI";

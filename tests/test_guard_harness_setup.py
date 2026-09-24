@@ -31,6 +31,7 @@ SUPPORTED_HARNESSES = (
     "kimi",
     "grok",
     "pi",
+    "devin",
 )
 
 
