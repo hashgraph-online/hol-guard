@@ -195,7 +195,7 @@
           "ecosystem_ids": [],
           "executables": [],
           "extension_id": "command.gorgona",
-          "homepage": null,
+          "homepage": "https://github.com/psqlmaster/gorgona",
           "icon": {
             "kind": "none"
           },
@@ -310,7 +310,7 @@
           "project_markers": [],
           "publisher": null,
           "reference_urls": [
-            "https://github.com/hashgraph-online/hol-guard"
+            "https://github.com/psqlmaster/gorgona"
           ],
           "required": false,
           "risk_classes": [
@@ -329,16 +329,27 @@
                 "matchers": [
                   {
                     "config": {
-                      "allow_leading_options": false,
+                      "allow_leading_options": true,
                       "executables": [
                         "gorgona"
                       ],
-                      "fail_secure_unknown_options": false,
+                      "fail_secure_unknown_options": true,
                       "forbidden_flags": [],
-                      "interspersed_flags": [],
-                      "interspersed_options_with_values": [],
+                      "interspersed_flags": [
+                        "-v",
+                        "--verbose",
+                        "-d",
+                        "--daemon-exec"
+                      ],
+                      "interspersed_options_with_values": [
+                        "-c",
+                        "--conf"
+                      ],
                       "inverse_flag_pairs": [],
-                      "leading_options_with_values": [],
+                      "leading_options_with_values": [
+                        "-c",
+                        "--conf"
+                      ],
                       "options_with_values": [],
                       "required_flags": [],
                       "required_flags_in_all_arguments": false,
@@ -366,16 +377,27 @@
                     "matchers": [
                       {
                         "config": {
-                          "allow_leading_options": false,
+                          "allow_leading_options": true,
                           "executables": [
                             "gorgona"
                           ],
-                          "fail_secure_unknown_options": false,
+                          "fail_secure_unknown_options": true,
                           "forbidden_flags": [],
-                          "interspersed_flags": [],
-                          "interspersed_options_with_values": [],
+                          "interspersed_flags": [
+                            "-v",
+                            "--verbose",
+                            "-d",
+                            "--daemon-exec"
+                          ],
+                          "interspersed_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
                           "inverse_flag_pairs": [],
-                          "leading_options_with_values": [],
+                          "leading_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
                           "options_with_values": [],
                           "required_flags": [
                             "--help"
@@ -390,16 +412,27 @@
                       },
                       {
                         "config": {
-                          "allow_leading_options": false,
+                          "allow_leading_options": true,
                           "executables": [
                             "gorgona"
                           ],
-                          "fail_secure_unknown_options": false,
+                          "fail_secure_unknown_options": true,
                           "forbidden_flags": [],
-                          "interspersed_flags": [],
-                          "interspersed_options_with_values": [],
+                          "interspersed_flags": [
+                            "-v",
+                            "--verbose",
+                            "-d",
+                            "--daemon-exec"
+                          ],
+                          "interspersed_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
                           "inverse_flag_pairs": [],
-                          "leading_options_with_values": [],
+                          "leading_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
                           "options_with_values": [],
                           "required_flags": [
                             "--version"
@@ -437,16 +470,27 @@
                 "matchers": [
                   {
                     "config": {
-                      "allow_leading_options": false,
+                      "allow_leading_options": true,
                       "executables": [
                         "gorgona"
                       ],
-                      "fail_secure_unknown_options": false,
+                      "fail_secure_unknown_options": true,
                       "forbidden_flags": [],
-                      "interspersed_flags": [],
-                      "interspersed_options_with_values": [],
+                      "interspersed_flags": [
+                        "-v",
+                        "--verbose",
+                        "-d",
+                        "--daemon-exec"
+                      ],
+                      "interspersed_options_with_values": [
+                        "-c",
+                        "--conf"
+                      ],
                       "inverse_flag_pairs": [],
-                      "leading_options_with_values": [],
+                      "leading_options_with_values": [
+                        "-c",
+                        "--conf"
+                      ],
                       "options_with_values": [],
                       "required_flags": [],
                       "required_flags_in_all_arguments": false,
@@ -474,16 +518,27 @@
                     "matchers": [
                       {
                         "config": {
-                          "allow_leading_options": false,
+                          "allow_leading_options": true,
                           "executables": [
                             "gorgona"
                           ],
-                          "fail_secure_unknown_options": false,
+                          "fail_secure_unknown_options": true,
                           "forbidden_flags": [],
-                          "interspersed_flags": [],
-                          "interspersed_options_with_values": [],
+                          "interspersed_flags": [
+                            "-v",
+                            "--verbose",
+                            "-d",
+                            "--daemon-exec"
+                          ],
+                          "interspersed_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
                           "inverse_flag_pairs": [],
-                          "leading_options_with_values": [],
+                          "leading_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
                           "options_with_values": [],
                           "required_flags": [
                             "--help"
@@ -498,16 +553,27 @@
                       },
                       {
                         "config": {
-                          "allow_leading_options": false,
+                          "allow_leading_options": true,
                           "executables": [
                             "gorgona"
                           ],
-                          "fail_secure_unknown_options": false,
+                          "fail_secure_unknown_options": true,
                           "forbidden_flags": [],
-                          "interspersed_flags": [],
-                          "interspersed_options_with_values": [],
+                          "interspersed_flags": [
+                            "-v",
+                            "--verbose",
+                            "-d",
+                            "--daemon-exec"
+                          ],
+                          "interspersed_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
                           "inverse_flag_pairs": [],
-                          "leading_options_with_values": [],
+                          "leading_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
                           "options_with_values": [],
                           "required_flags": [
                             "--version"
@@ -545,16 +611,27 @@
                 "matchers": [
                   {
                     "config": {
-                      "allow_leading_options": false,
+                      "allow_leading_options": true,
                       "executables": [
                         "gorgona"
                       ],
-                      "fail_secure_unknown_options": false,
+                      "fail_secure_unknown_options": true,
                       "forbidden_flags": [],
-                      "interspersed_flags": [],
-                      "interspersed_options_with_values": [],
+                      "interspersed_flags": [
+                        "-v",
+                        "--verbose",
+                        "-d",
+                        "--daemon-exec"
+                      ],
+                      "interspersed_options_with_values": [
+                        "-c",
+                        "--conf"
+                      ],
                       "inverse_flag_pairs": [],
-                      "leading_options_with_values": [],
+                      "leading_options_with_values": [
+                        "-c",
+                        "--conf"
+                      ],
                       "options_with_values": [],
                       "required_flags": [],
                       "required_flags_in_all_arguments": false,
@@ -582,16 +659,27 @@
                     "matchers": [
                       {
                         "config": {
-                          "allow_leading_options": false,
+                          "allow_leading_options": true,
                           "executables": [
                             "gorgona"
                           ],
-                          "fail_secure_unknown_options": false,
+                          "fail_secure_unknown_options": true,
                           "forbidden_flags": [],
-                          "interspersed_flags": [],
-                          "interspersed_options_with_values": [],
+                          "interspersed_flags": [
+                            "-v",
+                            "--verbose",
+                            "-d",
+                            "--daemon-exec"
+                          ],
+                          "interspersed_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
                           "inverse_flag_pairs": [],
-                          "leading_options_with_values": [],
+                          "leading_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
                           "options_with_values": [],
                           "required_flags": [
                             "--help"
@@ -606,16 +694,27 @@
                       },
                       {
                         "config": {
-                          "allow_leading_options": false,
+                          "allow_leading_options": true,
                           "executables": [
                             "gorgona"
                           ],
-                          "fail_secure_unknown_options": false,
+                          "fail_secure_unknown_options": true,
                           "forbidden_flags": [],
-                          "interspersed_flags": [],
-                          "interspersed_options_with_values": [],
+                          "interspersed_flags": [
+                            "-v",
+                            "--verbose",
+                            "-d",
+                            "--daemon-exec"
+                          ],
+                          "interspersed_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
                           "inverse_flag_pairs": [],
-                          "leading_options_with_values": [],
+                          "leading_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
                           "options_with_values": [],
                           "required_flags": [
                             "--version"
@@ -657,15 +756,35 @@
                       "executables": [
                         "gorgona"
                       ],
-                      "fail_secure_unknown_options": false,
+                      "fail_secure_unknown_options": true,
                       "forbidden_flags": [],
                       "interspersed_flags": [
+                        "--daemon-exec",
+                        "--exec",
+                        "--verbose",
+                        "-d",
+                        "-de",
+                        "-dev",
+                        "-dve",
                         "-e",
-                        "--exec"
+                        "-ed",
+                        "-edv",
+                        "-ev",
+                        "-evd",
+                        "-v",
+                        "-vde",
+                        "-ve",
+                        "-ved"
                       ],
-                      "interspersed_options_with_values": [],
+                      "interspersed_options_with_values": [
+                        "-c",
+                        "--conf"
+                      ],
                       "inverse_flag_pairs": [],
-                      "leading_options_with_values": [],
+                      "leading_options_with_values": [
+                        "-c",
+                        "--conf"
+                      ],
                       "options_with_values": [],
                       "required_flags": [
                         "-e"
@@ -684,18 +803,508 @@
                       "executables": [
                         "gorgona"
                       ],
-                      "fail_secure_unknown_options": false,
+                      "fail_secure_unknown_options": true,
                       "forbidden_flags": [],
                       "interspersed_flags": [
+                        "--daemon-exec",
+                        "--exec",
+                        "--verbose",
+                        "-d",
+                        "-de",
+                        "-dev",
+                        "-dve",
                         "-e",
-                        "--exec"
+                        "-ed",
+                        "-edv",
+                        "-ev",
+                        "-evd",
+                        "-v",
+                        "-vde",
+                        "-ve",
+                        "-ved"
                       ],
-                      "interspersed_options_with_values": [],
+                      "interspersed_options_with_values": [
+                        "-c",
+                        "--conf"
+                      ],
                       "inverse_flag_pairs": [],
-                      "leading_options_with_values": [],
+                      "leading_options_with_values": [
+                        "-c",
+                        "--conf"
+                      ],
                       "options_with_values": [],
                       "required_flags": [
                         "--exec"
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "listen"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "gorgona"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--daemon-exec",
+                        "--exec",
+                        "--verbose",
+                        "-d",
+                        "-de",
+                        "-dev",
+                        "-dve",
+                        "-e",
+                        "-ed",
+                        "-edv",
+                        "-ev",
+                        "-evd",
+                        "-v",
+                        "-vde",
+                        "-ve",
+                        "-ved"
+                      ],
+                      "interspersed_options_with_values": [
+                        "-c",
+                        "--conf"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "-c",
+                        "--conf"
+                      ],
+                      "options_with_values": [],
+                      "required_flags": [
+                        "-ve"
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "listen"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "gorgona"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--daemon-exec",
+                        "--exec",
+                        "--verbose",
+                        "-d",
+                        "-de",
+                        "-dev",
+                        "-dve",
+                        "-e",
+                        "-ed",
+                        "-edv",
+                        "-ev",
+                        "-evd",
+                        "-v",
+                        "-vde",
+                        "-ve",
+                        "-ved"
+                      ],
+                      "interspersed_options_with_values": [
+                        "-c",
+                        "--conf"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "-c",
+                        "--conf"
+                      ],
+                      "options_with_values": [],
+                      "required_flags": [
+                        "-ev"
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "listen"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "gorgona"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--daemon-exec",
+                        "--exec",
+                        "--verbose",
+                        "-d",
+                        "-de",
+                        "-dev",
+                        "-dve",
+                        "-e",
+                        "-ed",
+                        "-edv",
+                        "-ev",
+                        "-evd",
+                        "-v",
+                        "-vde",
+                        "-ve",
+                        "-ved"
+                      ],
+                      "interspersed_options_with_values": [
+                        "-c",
+                        "--conf"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "-c",
+                        "--conf"
+                      ],
+                      "options_with_values": [],
+                      "required_flags": [
+                        "-de"
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "listen"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "gorgona"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--daemon-exec",
+                        "--exec",
+                        "--verbose",
+                        "-d",
+                        "-de",
+                        "-dev",
+                        "-dve",
+                        "-e",
+                        "-ed",
+                        "-edv",
+                        "-ev",
+                        "-evd",
+                        "-v",
+                        "-vde",
+                        "-ve",
+                        "-ved"
+                      ],
+                      "interspersed_options_with_values": [
+                        "-c",
+                        "--conf"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "-c",
+                        "--conf"
+                      ],
+                      "options_with_values": [],
+                      "required_flags": [
+                        "-ed"
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "listen"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "gorgona"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--daemon-exec",
+                        "--exec",
+                        "--verbose",
+                        "-d",
+                        "-de",
+                        "-dev",
+                        "-dve",
+                        "-e",
+                        "-ed",
+                        "-edv",
+                        "-ev",
+                        "-evd",
+                        "-v",
+                        "-vde",
+                        "-ve",
+                        "-ved"
+                      ],
+                      "interspersed_options_with_values": [
+                        "-c",
+                        "--conf"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "-c",
+                        "--conf"
+                      ],
+                      "options_with_values": [],
+                      "required_flags": [
+                        "-ved"
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "listen"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "gorgona"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--daemon-exec",
+                        "--exec",
+                        "--verbose",
+                        "-d",
+                        "-de",
+                        "-dev",
+                        "-dve",
+                        "-e",
+                        "-ed",
+                        "-edv",
+                        "-ev",
+                        "-evd",
+                        "-v",
+                        "-vde",
+                        "-ve",
+                        "-ved"
+                      ],
+                      "interspersed_options_with_values": [
+                        "-c",
+                        "--conf"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "-c",
+                        "--conf"
+                      ],
+                      "options_with_values": [],
+                      "required_flags": [
+                        "-vde"
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "listen"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "gorgona"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--daemon-exec",
+                        "--exec",
+                        "--verbose",
+                        "-d",
+                        "-de",
+                        "-dev",
+                        "-dve",
+                        "-e",
+                        "-ed",
+                        "-edv",
+                        "-ev",
+                        "-evd",
+                        "-v",
+                        "-vde",
+                        "-ve",
+                        "-ved"
+                      ],
+                      "interspersed_options_with_values": [
+                        "-c",
+                        "--conf"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "-c",
+                        "--conf"
+                      ],
+                      "options_with_values": [],
+                      "required_flags": [
+                        "-dev"
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "listen"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "gorgona"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--daemon-exec",
+                        "--exec",
+                        "--verbose",
+                        "-d",
+                        "-de",
+                        "-dev",
+                        "-dve",
+                        "-e",
+                        "-ed",
+                        "-edv",
+                        "-ev",
+                        "-evd",
+                        "-v",
+                        "-vde",
+                        "-ve",
+                        "-ved"
+                      ],
+                      "interspersed_options_with_values": [
+                        "-c",
+                        "--conf"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "-c",
+                        "--conf"
+                      ],
+                      "options_with_values": [],
+                      "required_flags": [
+                        "-dve"
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "listen"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "gorgona"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--daemon-exec",
+                        "--exec",
+                        "--verbose",
+                        "-d",
+                        "-de",
+                        "-dev",
+                        "-dve",
+                        "-e",
+                        "-ed",
+                        "-edv",
+                        "-ev",
+                        "-evd",
+                        "-v",
+                        "-vde",
+                        "-ve",
+                        "-ved"
+                      ],
+                      "interspersed_options_with_values": [
+                        "-c",
+                        "--conf"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "-c",
+                        "--conf"
+                      ],
+                      "options_with_values": [],
+                      "required_flags": [
+                        "-edv"
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "listen"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "gorgona"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--daemon-exec",
+                        "--exec",
+                        "--verbose",
+                        "-d",
+                        "-de",
+                        "-dev",
+                        "-dve",
+                        "-e",
+                        "-ed",
+                        "-edv",
+                        "-ev",
+                        "-evd",
+                        "-v",
+                        "-vde",
+                        "-ve",
+                        "-ved"
+                      ],
+                      "interspersed_options_with_values": [
+                        "-c",
+                        "--conf"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "-c",
+                        "--conf"
+                      ],
+                      "options_with_values": [],
+                      "required_flags": [
+                        "-evd"
                       ],
                       "required_flags_in_all_arguments": true,
                       "required_option_values": [],
@@ -726,46 +1335,38 @@
                           "executables": [
                             "gorgona"
                           ],
-                          "fail_secure_unknown_options": false,
+                          "fail_secure_unknown_options": true,
                           "forbidden_flags": [],
                           "interspersed_flags": [
-                            "-e",
-                            "--exec"
-                          ],
-                          "interspersed_options_with_values": [],
-                          "inverse_flag_pairs": [],
-                          "leading_options_with_values": [],
-                          "options_with_values": [],
-                          "required_flags": [
-                            "-e",
-                            "--help"
-                          ],
-                          "required_flags_in_all_arguments": true,
-                          "required_option_values": [],
-                          "subcommands": [
-                            "listen"
-                          ]
-                        },
-                        "op": "executable.v1"
-                      },
-                      {
-                        "config": {
-                          "allow_leading_options": true,
-                          "executables": [
-                            "gorgona"
-                          ],
-                          "fail_secure_unknown_options": false,
-                          "forbidden_flags": [],
-                          "interspersed_flags": [
-                            "-e",
-                            "--exec"
-                          ],
-                          "interspersed_options_with_values": [],
-                          "inverse_flag_pairs": [],
-                          "leading_options_with_values": [],
-                          "options_with_values": [],
-                          "required_flags": [
+                            "--daemon-exec",
                             "--exec",
+                            "--verbose",
+                            "-d",
+                            "-de",
+                            "-dev",
+                            "-dve",
+                            "-e",
+                            "-ed",
+                            "-edv",
+                            "-ev",
+                            "-evd",
+                            "-v",
+                            "-vde",
+                            "-ve",
+                            "-ved"
+                          ],
+                          "interspersed_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "-e",
                             "--help"
                           ],
                           "required_flags_in_all_arguments": true,
@@ -782,15 +1383,35 @@
                           "executables": [
                             "gorgona"
                           ],
-                          "fail_secure_unknown_options": false,
+                          "fail_secure_unknown_options": true,
                           "forbidden_flags": [],
                           "interspersed_flags": [
+                            "--daemon-exec",
+                            "--exec",
+                            "--verbose",
+                            "-d",
+                            "-de",
+                            "-dev",
+                            "-dve",
                             "-e",
-                            "--exec"
+                            "-ed",
+                            "-edv",
+                            "-ev",
+                            "-evd",
+                            "-v",
+                            "-vde",
+                            "-ve",
+                            "-ved"
                           ],
-                          "interspersed_options_with_values": [],
+                          "interspersed_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
                           "inverse_flag_pairs": [],
-                          "leading_options_with_values": [],
+                          "leading_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
                           "options_with_values": [],
                           "required_flags": [
                             "-e",
@@ -810,18 +1431,1046 @@
                           "executables": [
                             "gorgona"
                           ],
-                          "fail_secure_unknown_options": false,
+                          "fail_secure_unknown_options": true,
                           "forbidden_flags": [],
                           "interspersed_flags": [
+                            "--daemon-exec",
+                            "--exec",
+                            "--verbose",
+                            "-d",
+                            "-de",
+                            "-dev",
+                            "-dve",
                             "-e",
-                            "--exec"
+                            "-ed",
+                            "-edv",
+                            "-ev",
+                            "-evd",
+                            "-v",
+                            "-vde",
+                            "-ve",
+                            "-ved"
                           ],
-                          "interspersed_options_with_values": [],
+                          "interspersed_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
                           "inverse_flag_pairs": [],
-                          "leading_options_with_values": [],
+                          "leading_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
                           "options_with_values": [],
                           "required_flags": [
                             "--exec",
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "listen"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "gorgona"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--daemon-exec",
+                            "--exec",
+                            "--verbose",
+                            "-d",
+                            "-de",
+                            "-dev",
+                            "-dve",
+                            "-e",
+                            "-ed",
+                            "-edv",
+                            "-ev",
+                            "-evd",
+                            "-v",
+                            "-vde",
+                            "-ve",
+                            "-ved"
+                          ],
+                          "interspersed_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "--exec",
+                            "--version"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "listen"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "gorgona"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--daemon-exec",
+                            "--exec",
+                            "--verbose",
+                            "-d",
+                            "-de",
+                            "-dev",
+                            "-dve",
+                            "-e",
+                            "-ed",
+                            "-edv",
+                            "-ev",
+                            "-evd",
+                            "-v",
+                            "-vde",
+                            "-ve",
+                            "-ved"
+                          ],
+                          "interspersed_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "-ve",
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "listen"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "gorgona"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--daemon-exec",
+                            "--exec",
+                            "--verbose",
+                            "-d",
+                            "-de",
+                            "-dev",
+                            "-dve",
+                            "-e",
+                            "-ed",
+                            "-edv",
+                            "-ev",
+                            "-evd",
+                            "-v",
+                            "-vde",
+                            "-ve",
+                            "-ved"
+                          ],
+                          "interspersed_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "-ve",
+                            "--version"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "listen"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "gorgona"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--daemon-exec",
+                            "--exec",
+                            "--verbose",
+                            "-d",
+                            "-de",
+                            "-dev",
+                            "-dve",
+                            "-e",
+                            "-ed",
+                            "-edv",
+                            "-ev",
+                            "-evd",
+                            "-v",
+                            "-vde",
+                            "-ve",
+                            "-ved"
+                          ],
+                          "interspersed_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "-ev",
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "listen"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "gorgona"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--daemon-exec",
+                            "--exec",
+                            "--verbose",
+                            "-d",
+                            "-de",
+                            "-dev",
+                            "-dve",
+                            "-e",
+                            "-ed",
+                            "-edv",
+                            "-ev",
+                            "-evd",
+                            "-v",
+                            "-vde",
+                            "-ve",
+                            "-ved"
+                          ],
+                          "interspersed_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "-ev",
+                            "--version"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "listen"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "gorgona"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--daemon-exec",
+                            "--exec",
+                            "--verbose",
+                            "-d",
+                            "-de",
+                            "-dev",
+                            "-dve",
+                            "-e",
+                            "-ed",
+                            "-edv",
+                            "-ev",
+                            "-evd",
+                            "-v",
+                            "-vde",
+                            "-ve",
+                            "-ved"
+                          ],
+                          "interspersed_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "-de",
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "listen"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "gorgona"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--daemon-exec",
+                            "--exec",
+                            "--verbose",
+                            "-d",
+                            "-de",
+                            "-dev",
+                            "-dve",
+                            "-e",
+                            "-ed",
+                            "-edv",
+                            "-ev",
+                            "-evd",
+                            "-v",
+                            "-vde",
+                            "-ve",
+                            "-ved"
+                          ],
+                          "interspersed_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "-de",
+                            "--version"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "listen"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "gorgona"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--daemon-exec",
+                            "--exec",
+                            "--verbose",
+                            "-d",
+                            "-de",
+                            "-dev",
+                            "-dve",
+                            "-e",
+                            "-ed",
+                            "-edv",
+                            "-ev",
+                            "-evd",
+                            "-v",
+                            "-vde",
+                            "-ve",
+                            "-ved"
+                          ],
+                          "interspersed_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "-ed",
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "listen"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "gorgona"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--daemon-exec",
+                            "--exec",
+                            "--verbose",
+                            "-d",
+                            "-de",
+                            "-dev",
+                            "-dve",
+                            "-e",
+                            "-ed",
+                            "-edv",
+                            "-ev",
+                            "-evd",
+                            "-v",
+                            "-vde",
+                            "-ve",
+                            "-ved"
+                          ],
+                          "interspersed_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "-ed",
+                            "--version"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "listen"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "gorgona"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--daemon-exec",
+                            "--exec",
+                            "--verbose",
+                            "-d",
+                            "-de",
+                            "-dev",
+                            "-dve",
+                            "-e",
+                            "-ed",
+                            "-edv",
+                            "-ev",
+                            "-evd",
+                            "-v",
+                            "-vde",
+                            "-ve",
+                            "-ved"
+                          ],
+                          "interspersed_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "-ved",
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "listen"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "gorgona"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--daemon-exec",
+                            "--exec",
+                            "--verbose",
+                            "-d",
+                            "-de",
+                            "-dev",
+                            "-dve",
+                            "-e",
+                            "-ed",
+                            "-edv",
+                            "-ev",
+                            "-evd",
+                            "-v",
+                            "-vde",
+                            "-ve",
+                            "-ved"
+                          ],
+                          "interspersed_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "-ved",
+                            "--version"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "listen"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "gorgona"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--daemon-exec",
+                            "--exec",
+                            "--verbose",
+                            "-d",
+                            "-de",
+                            "-dev",
+                            "-dve",
+                            "-e",
+                            "-ed",
+                            "-edv",
+                            "-ev",
+                            "-evd",
+                            "-v",
+                            "-vde",
+                            "-ve",
+                            "-ved"
+                          ],
+                          "interspersed_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "-vde",
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "listen"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "gorgona"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--daemon-exec",
+                            "--exec",
+                            "--verbose",
+                            "-d",
+                            "-de",
+                            "-dev",
+                            "-dve",
+                            "-e",
+                            "-ed",
+                            "-edv",
+                            "-ev",
+                            "-evd",
+                            "-v",
+                            "-vde",
+                            "-ve",
+                            "-ved"
+                          ],
+                          "interspersed_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "-vde",
+                            "--version"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "listen"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "gorgona"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--daemon-exec",
+                            "--exec",
+                            "--verbose",
+                            "-d",
+                            "-de",
+                            "-dev",
+                            "-dve",
+                            "-e",
+                            "-ed",
+                            "-edv",
+                            "-ev",
+                            "-evd",
+                            "-v",
+                            "-vde",
+                            "-ve",
+                            "-ved"
+                          ],
+                          "interspersed_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "-dev",
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "listen"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "gorgona"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--daemon-exec",
+                            "--exec",
+                            "--verbose",
+                            "-d",
+                            "-de",
+                            "-dev",
+                            "-dve",
+                            "-e",
+                            "-ed",
+                            "-edv",
+                            "-ev",
+                            "-evd",
+                            "-v",
+                            "-vde",
+                            "-ve",
+                            "-ved"
+                          ],
+                          "interspersed_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "-dev",
+                            "--version"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "listen"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "gorgona"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--daemon-exec",
+                            "--exec",
+                            "--verbose",
+                            "-d",
+                            "-de",
+                            "-dev",
+                            "-dve",
+                            "-e",
+                            "-ed",
+                            "-edv",
+                            "-ev",
+                            "-evd",
+                            "-v",
+                            "-vde",
+                            "-ve",
+                            "-ved"
+                          ],
+                          "interspersed_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "-dve",
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "listen"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "gorgona"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--daemon-exec",
+                            "--exec",
+                            "--verbose",
+                            "-d",
+                            "-de",
+                            "-dev",
+                            "-dve",
+                            "-e",
+                            "-ed",
+                            "-edv",
+                            "-ev",
+                            "-evd",
+                            "-v",
+                            "-vde",
+                            "-ve",
+                            "-ved"
+                          ],
+                          "interspersed_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "-dve",
+                            "--version"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "listen"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "gorgona"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--daemon-exec",
+                            "--exec",
+                            "--verbose",
+                            "-d",
+                            "-de",
+                            "-dev",
+                            "-dve",
+                            "-e",
+                            "-ed",
+                            "-edv",
+                            "-ev",
+                            "-evd",
+                            "-v",
+                            "-vde",
+                            "-ve",
+                            "-ved"
+                          ],
+                          "interspersed_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "-edv",
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "listen"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "gorgona"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--daemon-exec",
+                            "--exec",
+                            "--verbose",
+                            "-d",
+                            "-de",
+                            "-dev",
+                            "-dve",
+                            "-e",
+                            "-ed",
+                            "-edv",
+                            "-ev",
+                            "-evd",
+                            "-v",
+                            "-vde",
+                            "-ve",
+                            "-ved"
+                          ],
+                          "interspersed_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "-edv",
+                            "--version"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "listen"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "gorgona"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--daemon-exec",
+                            "--exec",
+                            "--verbose",
+                            "-d",
+                            "-de",
+                            "-dev",
+                            "-dve",
+                            "-e",
+                            "-ed",
+                            "-edv",
+                            "-ev",
+                            "-evd",
+                            "-v",
+                            "-vde",
+                            "-ve",
+                            "-ved"
+                          ],
+                          "interspersed_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "-evd",
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "listen"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "gorgona"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--daemon-exec",
+                            "--exec",
+                            "--verbose",
+                            "-d",
+                            "-de",
+                            "-dev",
+                            "-dve",
+                            "-e",
+                            "-ed",
+                            "-edv",
+                            "-ev",
+                            "-evd",
+                            "-v",
+                            "-vde",
+                            "-ve",
+                            "-ved"
+                          ],
+                          "interspersed_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "-c",
+                            "--conf"
+                          ],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "-evd",
                             "--version"
                           ],
                           "required_flags_in_all_arguments": true,
@@ -945,7 +2594,8 @@
           "command.probe",
           "command.remote.essh",
           "command.repo2nb",
-          "command.skill-sunset"
+          "command.skill-sunset",
+          "command.uivoid"
         ]
       }
     },
