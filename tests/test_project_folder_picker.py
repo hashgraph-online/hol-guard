@@ -46,8 +46,8 @@ def test_folder_picker_reports_busy_and_missing_linux_dialog(monkeypatch: pytest
 
     assert choose_project_folder(runner=runner, platform_name="darwin") == "/workspace/app"
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.project_folder_picker.shutil.which",
-        lambda _name: None,
+        "codex_plugin_scanner.guard.project_folder_picker.project_folder_picker_command",
+        lambda *_args, **_kwargs: None,
     )
     with pytest.raises(ProjectFolderPickerUnavailableError):
         choose_project_folder(platform_name="linux")
