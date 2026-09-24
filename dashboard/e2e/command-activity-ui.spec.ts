@@ -170,7 +170,10 @@ test("Commands evidence renders with zero receipts and keeps private fields hidd
   await expect(detail).toBeFocused();
   await expect(detail.getByText("git fetch origin main")).toBeVisible();
   await expect(detail.getByText(/Guard checked this command before the app could run it/)).toBeVisible();
-  await detail.getByText("How Guard checked it").click();
+  const diagnostics = detail.getByText("How Guard checked it");
+  await diagnostics.focus();
+  await expect.poll(() => diagnostics.evaluate((element) => getComputedStyle(element).outlineStyle)).not.toBe("none");
+  await diagnostics.click();
   await expect(detail.getByText("Other recorded reason")).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(detail.getByText(/Guard checked this command before the app could run it/)).toBeVisible();

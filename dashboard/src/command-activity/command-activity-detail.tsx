@@ -170,7 +170,7 @@ export function CommandActivityDetail(props: {
       ) : null}
 
       <details className="group border-t border-slate-100 pt-4">
-        <summary className="cursor-pointer text-sm font-medium text-brand-blue">How Guard checked it</summary>
+        <summary className="cursor-pointer text-sm font-medium text-brand-blue focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue">How Guard checked it</summary>
         <dl className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1">
           <EvidenceField label="Proof source" value={commandProofLabel(props.activity.proof_level)} />
           <EvidenceField label="Interaction" value={commandInteractionLabel(props.activity)} />
