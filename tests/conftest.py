@@ -32,6 +32,7 @@ if pythonpath_prefix:
 # time so it is also inherited by helpers spawned from session-scoped fixtures,
 # and so an inherited value cannot silently re-enable launches.
 os.environ["HOL_GUARD_TEST_DISABLE_BROWSER_OPEN"] = "1"
+os.environ.pop("HOL_GUARD_TEST_ALLOW_BROWSER_OPEN", None)
 
 
 @pytest.fixture(autouse=True)

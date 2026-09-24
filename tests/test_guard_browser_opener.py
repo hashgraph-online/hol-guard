@@ -54,6 +54,8 @@ def test_allow_flag_reenables_launch_path_during_pytest(monkeypatch) -> None:
         captured["url"] = url
         return True
 
+    monkeypatch.setattr(browser_opener.platform, "system", lambda: "Darwin")
+    monkeypatch.setattr(browser_opener.subprocess, "Popen", _fail_launch_attempt)
     monkeypatch.setattr(browser_opener.webbrowser, "open", fake_open)
 
     assert browser_opener.open_browser_url("http://127.0.0.1:5474") is True
