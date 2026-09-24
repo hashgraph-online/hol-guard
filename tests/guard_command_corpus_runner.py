@@ -79,8 +79,22 @@ def linux_peak_rss_mib_from_status(status: str) -> float:
     raise ValueError("missing Linux VmHWM")
 
 
-def _install_evaluator_packages() -> None:
+def _install_evaluator_packages(*, installed: bool = False) -> None:
     """Import Guard evaluator modules without unrelated scanner package exports."""
+
+    if installed:
+        from importlib.metadata import distribution
+
+        from codex_plugin_scanner.guard.runtime import command_evaluation
+
+        package_root = Path(distribution("hol-guard").locate_file("codex_plugin_scanner")).resolve()
+        module_location = command_evaluation.__file__
+        if module_location is None:
+            raise RuntimeError("installed Guard evaluator has no module file")
+        module_path = Path(module_location).resolve()
+        if not module_path.is_relative_to(package_root):
+            raise RuntimeError("native corpus evaluator did not load from the installed Guard package")
+        return
 
     package_root = REPO_ROOT / "src" / "codex_plugin_scanner"
     packages = (
@@ -96,8 +110,8 @@ def _install_evaluator_packages() -> None:
         sys.modules[name] = importlib.util.module_from_spec(spec)
 
 
-def _worker_report(worker_index: int, worker_count: int) -> WorkerReport:
-    _install_evaluator_packages()
+def _worker_report(worker_index: int, worker_count: int, *, installed: bool = False) -> WorkerReport:
+    _install_evaluator_packages(installed=installed)
 
     from codex_plugin_scanner.guard.action_lattice import guard_action_severity
     from tests.guard_command_corpus import iter_adversarial_corpus, iter_benign_corpus
@@ -192,30 +206,35 @@ def _decode_groups(value: object) -> dict[str, list[str]]:
     return groups
 
 
-def _run_worker(worker_index: int) -> WorkerReport:
+def _run_worker(worker_index: int, *, installed: bool = False) -> WorkerReport:
+    args = [sys.executable, str(Path(__file__).resolve()), "--worker", str(worker_index)]
+    if installed:
+        args.append("--installed")
     completed = subprocess.run(
-        [sys.executable, str(Path(__file__).resolve()), "--worker", str(worker_index)],
-        check=True,
+        args,
+        check=False,
         capture_output=True,
         text=True,
         timeout=WORKER_TIMEOUT_SECONDS,
     )
+    if completed.returncode != 0:
+        raise ValueError(f"native corpus worker {worker_index} failed: {completed.stderr[-1200:]}")
     return _decode_worker(completed.stdout)
 
 
-def _iter_reports() -> Iterator[WorkerReport]:
+def _iter_reports(*, installed: bool = False) -> Iterator[WorkerReport]:
     with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_WORKERS) as executor:
-        yield from executor.map(_run_worker, range(EVALUATION_SHARD_COUNT))
+        yield from executor.map(lambda index: _run_worker(index, installed=installed), range(EVALUATION_SHARD_COUNT))
 
 
-def _coordinator_report() -> dict[str, object]:
+def _coordinator_report(*, installed: bool = False) -> dict[str, object]:
     from tests.guard_command_corpus_native_contract import expected_native_groups
 
     groups: defaultdict[str, list[str]] = defaultdict(list)
     native_contract_groups: defaultdict[str, list[str]] = defaultdict(list)
     native_error_groups: defaultdict[str, list[str]] = defaultdict(list)
     started = time.perf_counter()
-    reports = tuple(_iter_reports())
+    reports = tuple(_iter_reports(installed=installed))
     elapsed = time.perf_counter() - started
     for report in reports:
         for key, case_ids in report["groups"].items():
@@ -263,9 +282,13 @@ def _framed_ids_sha256(values: list[str]) -> str:
 
 
 if __name__ == "__main__":
-    if len(sys.argv) == 3 and sys.argv[1] == "--worker":
-        print(json.dumps(_worker_report(int(sys.argv[2]), EVALUATION_SHARD_COUNT), sort_keys=True))
-    elif len(sys.argv) == 1:
-        print(json.dumps(_coordinator_report(), sort_keys=True))
+    installed = "--installed" in sys.argv[1:]
+    arguments = [argument for argument in sys.argv[1:] if argument != "--installed"]
+    if len(arguments) == 2 and arguments[0] == "--worker":
+        print(
+            json.dumps(_worker_report(int(arguments[1]), EVALUATION_SHARD_COUNT, installed=installed), sort_keys=True)
+        )
+    elif not arguments:
+        print(json.dumps(_coordinator_report(installed=installed), sort_keys=True))
     else:
-        raise SystemExit("usage: guard_command_corpus_runner.py [--worker INDEX]")
+        raise SystemExit("usage: guard_command_corpus_runner.py [--worker INDEX] [--installed]")

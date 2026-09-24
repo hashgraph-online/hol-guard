@@ -759,6 +759,7 @@ jobs:
             CANARY_PYTHON="$RUNNER_TEMP/hol-guard-canary-venv/bin/python"
           fi
           "$CANARY_PYTHON" -m pip install --no-compile --index-url https://pypi.org/simple "$WHEEL_REQUIREMENT"
+          "$CANARY_PYTHON" -m pip install --no-compile --index-url https://pypi.org/simple pytest==9.0.3
           echo "CANARY_PYTHON=$CANARY_PYTHON" >> "$GITHUB_ENV"
       - name: Prove the harness rejects missing evidence
         shell: bash
@@ -777,7 +778,7 @@ jobs:
             exit 1
           fi
           test ! -e installed-canary/missing-proof-must-not-exist.json
-      - name: Run installed 51k corpus and dashboard smoke
+      - name: Run installed 51k native corpus and dashboard smoke
         shell: bash
         env:
           VERSION: ${{ needs.build.outputs.version }}

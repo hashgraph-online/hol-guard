@@ -5,16 +5,16 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import shutil
 import sqlite3
 import subprocess
 import sys
 import tempfile
 import time
-from collections import defaultdict
 from collections.abc import Iterable
 from contextlib import closing
-from itertools import chain
+from importlib.metadata import distribution
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
@@ -92,55 +92,57 @@ def _validate_corpus_bindings(repo_root: Path) -> dict[str, object]:
     }
 
 
-def _known_gap_baseline(repo_root: Path) -> dict[str, list[object]]:
-    path = repo_root / "tests/fixtures/guard-command-corpus/known-gaps.json"
-    payload = cast(dict[str, object], json.loads(path.read_text(encoding="utf-8")))
-    gaps = cast(list[object], payload["gaps"])
-    expected: dict[str, list[object]] = {}
-    for raw_gap in gaps:
-        gap = cast(dict[str, object], raw_gap)
-        key = "|".join(str(gap[field]) for field in ("owner", "kind", "oracle_floor", "observed_floor"))
-        expected[key] = [int(str(gap["count"])), str(gap["case_ids_digest"])]
-    return expected
-
-
 def _run_corpus(repo_root: Path) -> dict[str, object]:
-    sys.path.insert(0, str(repo_root))
-    from codex_plugin_scanner.guard.action_lattice import guard_action_severity
-    from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
-    from tests.guard_command_corpus import iter_adversarial_corpus, iter_benign_corpus
-    from tests.guard_command_corpus_oracle import iter_adversarial_oracle, iter_benign_oracle
-
     bindings = _validate_corpus_bindings(repo_root)
-    ranks = {
-        action: guard_action_severity(action)
-        for action in ("allow", "warn", "review", "require-reapproval", "sandbox-required", "block")
-    }
-    ranks["monitor"] = ranks["warn"]
-    groups: defaultdict[str, list[str]] = defaultdict(list)
-    count = 0
+    native_root = Path(distribution("hol-guard").locate_file("codex_plugin_scanner/_native"))
+    suffix = ".exe" if sys.platform == "win32" else ""
+    runtime = native_root / f"hol-guard-runtime{suffix}"
+    compiler = native_root / f"guard-command-source{suffix}"
+    if not runtime.is_file() or not compiler.is_file():
+        raise InstalledCanaryError("Installed Guard package is missing native corpus binaries")
+    environment = os.environ.copy()
+    environment["HOL_GUARD_NATIVE_BINARY"] = str(runtime)
+    environment["HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER"] = str(compiler)
     started = time.perf_counter()
-    streams = chain(
-        zip(iter_benign_corpus(), iter_benign_oracle(), strict=True),
-        zip(iter_adversarial_corpus(), iter_adversarial_oracle(), strict=True),
-    )
-    for case, oracle in streams:
-        decision = evaluate_command(case.command, cwd=repo_root / "workspace", home_dir=repo_root / "home")
-        observed = decision.decision_plane.action
-        if ranks[observed] != ranks[oracle.minimum_floor]:
-            kind = "underclassified" if ranks[observed] < ranks[oracle.minimum_floor] else "overclassified"
-            groups["|".join((oracle.owner, kind, oracle.minimum_floor, observed))].append(case.case_id)
-        count += 1
-    actual = {
-        key: [len(ids), hashlib.sha256(("\n".join(sorted(ids)) + "\n").encode()).hexdigest()]
-        for key, ids in groups.items()
-    }
-    if count != 51_000 or actual != _known_gap_baseline(repo_root):
-        raise InstalledCanaryError("Installed evaluator differs from the frozen 51k corpus baseline")
+    try:
+        completed = subprocess.run(
+            [sys.executable, str(repo_root / "tests/guard_command_corpus_runner.py"), "--installed"],
+            cwd=repo_root,
+            env=environment,
+            capture_output=True,
+            text=True,
+            timeout=240,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise InstalledCanaryError("Installed native corpus exceeded its time limit") from exc
+    if completed.returncode != 0:
+        raise InstalledCanaryError(
+            f"Installed native corpus failed (exit {completed.returncode}): {completed.stderr[-1200:]}"
+        )
+    decoded = json.loads(completed.stdout)
+    if not isinstance(decoded, dict):
+        raise InstalledCanaryError("Installed native corpus report is not an object")
+    report = cast(dict[str, object], decoded)
+    raw_groups = report.get("native_contract_groups")
+    if not isinstance(raw_groups, dict) or any(
+        not isinstance(values, list) or len(values) != 2 or type(values[0]) is not int for values in raw_groups.values()
+    ):
+        raise InstalledCanaryError("Installed native corpus report has invalid groups")
+    groups = cast(dict[str, list[object]], raw_groups)
+    count = sum(cast(int, values[0]) for values in groups.values())
+    if (
+        report.get("native_contract_equality") is not True
+        or report.get("original_oracle_below_count") != 0
+        or count != 51_000
+    ):
+        raise InstalledCanaryError("Installed evaluator differs from the frozen 51k native corpus contract")
     return {
         "case_count": count,
         "elapsed_seconds": time.perf_counter() - started,
-        "known_gap_groups": len(actual),
+        "native_contract_groups": len(groups),
+        "native_rejection_count": report["native_rejection_count"],
+        "original_oracle_above_count": report["original_oracle_above_count"],
         "bindings": bindings,
     }
 
