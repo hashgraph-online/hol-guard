@@ -73,14 +73,14 @@ the suggested change manually.
 | MCP server | A package or hosted MCP service with tool defaults | Follow the separate [MCP server guide](../mcp-server-contributions.md) |
 | Documentation or publisher listing | Examples, references, public presentation, or attribution | Docs or an optional listing sidecar, plus public directory checks |
 
-For a new Extension or a material authority change, open an
-[Extension proposal](https://github.com/hashgraph-online/hol-guard/issues/new?template=command-extension-proposal.yml)
-before implementation. Security vulnerabilities use the private process in
-[SECURITY.md](../../../SECURITY.md).
+For a new Extension or a material authority change, open a draft pull request with the
+**Command extension** template and describe the capability boundary before the implementation is
+considered complete. Maintainers review stable IDs and overlapping coverage in that PR. Security
+vulnerabilities use the private process in [SECURITY.md](../../../SECURITY.md).
 
-## Proposal quality bar
+## Scope review quality bar
 
-A reviewable proposal includes:
+A reviewable PR scope includes:
 
 1. The capability boundary and proposed `command.<domain>[.<tool>]` ID.
 2. Supported executables, dialects, transports, subcommands, and version assumptions.
@@ -90,7 +90,7 @@ A reviewable proposal includes:
 6. Overlap with existing Extensions and why a new identity is needed.
 7. Privacy and performance considerations, with authoritative CLI references.
 
-Maintainers may redirect a proposal to existing coverage. Stable IDs appear in receipts,
+Maintainers may redirect the PR scope to existing coverage. Stable IDs appear in receipts,
 remembered decisions, managed controls, and automation contracts, so naming is reviewed before merge.
 
 ## Implementation map
@@ -151,8 +151,9 @@ it is not production authority or a replacement for native fixtures.
 
 ## Local validation
 
-Contributors validate the portable fixture and submit the authored inputs with their deterministic
-projections. For a full local verification, run new-source fixtures against their addition envelope
+Contributors validate the portable fixture and submit the authored inputs. Deterministic projections
+are mechanical closure artifacts and may be synchronized by the Builder, Gitar, or maintainers after
+the capability boundary is accepted. For a full local verification, run new-source fixtures against their addition envelope
 before integration. After integration, use the [complete repository fixture envelope](../extension-builder/VALIDATION.md#validate-an-integrated-command-fixture);
 an addition with `base: "packaged"` cannot overwrite an ID already embedded in the compiler.
 

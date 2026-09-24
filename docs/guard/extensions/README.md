@@ -158,8 +158,8 @@ Start with the [Extension contribution guide](contributing.md). It covers propos
 matcher constraints, safe-counterpart tests, privacy, validation, and the review rubric. New command coverage enters
 the vetted built-in registry; Guard does not import executable detector code from workspaces or downloaded bundles.
 
-Use the [Extension proposal issue form](../../../.github/ISSUE_TEMPLATE/command-extension-proposal.yml) before a
-large implementation so maintainers can confirm scope and avoid overlapping IDs.
+For a large implementation, open a draft pull request with the **Command extension** template early so
+maintainers can confirm scope and avoid overlapping IDs before the implementation is complete.
 
 ## Architecture and authority
 

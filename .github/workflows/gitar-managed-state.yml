@@ -1,0 +1,132 @@
+name: Gitar Managed PR State
+
+on:
+  pull_request_target:
+    types: [opened, reopened, ready_for_review, synchronize, converted_to_draft, labeled, unlabeled]
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "Open pull request to reconcile"
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: gitar-managed-state-${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  reconcile:
+    if: ${{ github.event_name != 'issue_comment' || github.event.issue.pull_request != null }}
+    permissions:
+      issues: write
+      pull-requests: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Reconcile Gitar auto-apply label
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          case "$PR_NUMBER" in
+            0* | *[!0-9]* | "")
+              echo "PR_NUMBER must be a canonical positive integer" >&2
+              exit 1
+              ;;
+          esac
+
+          # All automatic triggers are pull-request scoped. For manual dispatch,
+          # an invalid/non-PR number is an operator error and should fail visibly.
+          pr_json="$(gh api "repos/${REPOSITORY}/pulls/${PR_NUMBER}")"
+
+          state="$(jq -r '.state' <<<"$pr_json")"
+          draft="$(jq -r '.draft' <<<"$pr_json")"
+          author="$(jq -r '.user.login' <<<"$pr_json")"
+          if [[ "$state" != "open" ]]; then
+            exit 0
+          fi
+
+          labels="$(jq -r '.labels[].name' <<<"$pr_json")"
+          has_label() {
+            grep -Fxq "$1" <<<"$labels"
+          }
+
+          remove_managed() {
+            if has_label "gitar-managed"; then
+              gh api --method DELETE                 "repos/${REPOSITORY}/issues/${PR_NUMBER}/labels/gitar-managed" >/dev/null
+            fi
+          }
+
+          if [[ "$draft" == "true" ]] || has_label "gitar-skip"; then
+            remove_managed
+            exit 0
+          fi
+
+          # GitHub returns issue comments oldest-first. Read every page, then
+          # honor only standalone directives from the PR author or maintainers.
+          comments="$(
+            gh api --paginate               "repos/${REPOSITORY}/issues/${PR_NUMBER}/comments?per_page=100" |
+              jq -s 'add // []'
+          )"
+          directive="$(
+            jq -r --arg author "$author" '
+              [
+                .[]
+                | select(
+                    .user.login == $author
+                    or .author_association == "OWNER"
+                    or .author_association == "MEMBER"
+                    or .author_association == "COLLABORATOR"
+                  )
+                | . as $comment
+                | (
+                    ($comment.body // "")
+                    | gsub("\r\n"; "\n")
+                    | gsub("\r"; "\n")
+                    | split("\n")
+                    | to_entries[]
+                    | select(
+                        .value
+                        | test(
+                            "^[[:space:]]*gitar[[:space:]]+auto-apply:(on|off)[[:space:]]*$";
+                            "i"
+                          )
+                      )
+                    | {
+                        created_at: $comment.created_at,
+                        comment_id: $comment.id,
+                        line_index: .key,
+                        directive: (
+                          .value
+                          | capture(
+                              "^[[:space:]]*gitar[[:space:]]+auto-apply:(?<value>on|off)[[:space:]]*$";
+                              "i"
+                            )
+                          | .value
+                          | ascii_downcase
+                        )
+                      }
+                  )
+              ]
+              | sort_by([.created_at, .comment_id, .line_index])
+              | last
+              | .directive // ""
+            ' <<<"$comments"
+          )"
+
+          if [[ "$directive" == "off" ]]; then
+            remove_managed
+            exit 0
+          fi
+
+          if ! has_label "gitar-managed"; then
+            gh api --method POST               "repos/${REPOSITORY}/issues/${PR_NUMBER}/labels"               -f 'labels[]=gitar-managed' >/dev/null
+          fi
