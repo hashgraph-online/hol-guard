@@ -117,9 +117,12 @@ export function isSupplyChainAuditWorkspaceInvalidError(error: unknown): boolean
 export function supplyChainAuditUserMessage(error: unknown): string | null {
   if (error instanceof GuardHarnessActionError) {
     if (isSupplyChainAuditWorkspaceRequiredError(error)) {
-      return "Choose a project folder below, then run the audit again.";
+      return "Choose a project folder with a package manifest or lockfile, then run the audit again.";
     }
-    if (error.payload?.error === "folder_picker_unavailable" || error.payload?.error === "folder_picker_busy") {
+    if (error.payload?.error === "folder_picker_busy") {
+      return "A folder selection is already open. Use that dialog, or paste the project folder path.";
+    }
+    if (error.payload?.error === "folder_picker_unavailable") {
       return "Folder selection is unavailable right now. Paste the project folder path instead.";
     }
     if (isSupplyChainAuditWorkspaceInvalidError(error)) {

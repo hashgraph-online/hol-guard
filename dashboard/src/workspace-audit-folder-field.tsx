@@ -1,10 +1,27 @@
 import { HiMiniFolder } from "react-icons/hi2";
 import { ActionButton } from "./approval-center-primitives";
 
-function folderLabel(path: string): string {
-  const trimmed = path.replace(/[\\/]+$/, "");
-  const parts = trimmed.split(/[\\/]/).filter(Boolean);
-  return parts[parts.length - 1] ?? trimmed;
+function folderParts(path: string): string[] {
+  return path.replace(/[\\/]+$/, "").split(/[\\/]/).filter(Boolean);
+}
+
+function folderChoiceLabels(paths: readonly string[]): Map<string, string> {
+  const bases = paths.map((path) => folderParts(path).at(-1) ?? path);
+  const counts = new Map<string, number>();
+  for (const base of bases) {
+    counts.set(base, (counts.get(base) ?? 0) + 1);
+  }
+  return new Map(
+    paths.map((path, index) => {
+      const base = bases[index] ?? path;
+      if ((counts.get(base) ?? 0) < 2) {
+        return [path, base];
+      }
+      const parts = folderParts(path);
+      const parent = parts.length >= 2 ? parts[parts.length - 2] : "";
+      return [path, parent ? `${parent}/${base}` : base];
+    }),
+  );
 }
 
 type WorkspaceAuditFolderFieldProps = {
@@ -27,6 +44,7 @@ export function WorkspaceAuditFolderField({
   onChoose,
 }: WorkspaceAuditFolderFieldProps) {
   const controlsDisabled = disabled || choosing;
+  const choiceLabels = folderChoiceLabels(choices);
   return (
     <div className="border-y border-slate-100 py-4" data-testid="workspace-audit-folder-field">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -53,14 +71,14 @@ export function WorkspaceAuditFolderField({
         ) : null}
       </div>
       {choices.length > 0 ? (
-        <div className="mt-3 flex flex-wrap gap-2" role="list" aria-label="Known project folders">
+        <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Known project folders">
           {choices.map((path) => {
             const selected = value === path;
+            const label = choiceLabels.get(path) ?? path;
             return (
               <button
                 key={path}
                 type="button"
-                role="listitem"
                 aria-pressed={selected}
                 title={path}
                 disabled={controlsDisabled}
@@ -71,7 +89,7 @@ export function WorkspaceAuditFolderField({
                     : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
                 }`}
               >
-                {folderLabel(path)}
+                {label}
               </button>
             );
           })}

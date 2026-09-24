@@ -69,6 +69,14 @@ assert(
   "audit workspace input should unwrap a quoted path",
 );
 assert(
+  normalizeSupplyChainAuditWorkspaceInput("file://localhost/workspace/project") === "/workspace/project",
+  "audit workspace input should keep a localhost file URL as a local path",
+);
+assert(
+  normalizeSupplyChainAuditWorkspaceInput("file:///workspace/project") === "/workspace/project",
+  "audit workspace input should keep a file URL path",
+);
+assert(
   listSupplyChainAuditWorkspaceChoices(installs)[0] === "workspace/active-project",
   "known audit folders should prefer the active install",
 );

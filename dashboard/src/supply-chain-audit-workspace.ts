@@ -12,7 +12,10 @@ export function normalizeSupplyChainAuditWorkspaceInput(value: string | null | u
     next = next.slice(1, -1).trim();
   }
   if (next.toLowerCase().startsWith("file://")) {
-    const raw = next.slice("file://".length);
+    let raw = next.slice("file://".length);
+    if (raw.toLowerCase().startsWith("localhost")) {
+      raw = raw.slice("localhost".length);
+    }
     try {
       next = decodeURIComponent(raw);
     } catch {

@@ -550,10 +550,26 @@ function buildFilterSummary(filters, sortKey, sortDirection) {
   }
   return items;
 }
-function folderLabel(path) {
-  const trimmed = path.replace(/[\\/]+$/, "");
-  const parts = trimmed.split(/[\\/]/).filter(Boolean);
-  return parts[parts.length - 1] ?? trimmed;
+function folderParts(path) {
+  return path.replace(/[\\/]+$/, "").split(/[\\/]/).filter(Boolean);
+}
+function folderChoiceLabels(paths) {
+  const bases = paths.map((path) => folderParts(path).at(-1) ?? path);
+  const counts = /* @__PURE__ */ new Map();
+  for (const base of bases) {
+    counts.set(base, (counts.get(base) ?? 0) + 1);
+  }
+  return new Map(
+    paths.map((path, index) => {
+      const base = bases[index] ?? path;
+      if ((counts.get(base) ?? 0) < 2) {
+        return [path, base];
+      }
+      const parts = folderParts(path);
+      const parent = parts.length >= 2 ? parts[parts.length - 2] : "";
+      return [path, parent ? `${parent}/${base}` : base];
+    })
+  );
 }
 function WorkspaceAuditFolderField({
   value,
@@ -565,6 +581,7 @@ function WorkspaceAuditFolderField({
   onChoose
 }) {
   const controlsDisabled = disabled || choosing;
+  const choiceLabels = folderChoiceLabels(choices);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-y border-slate-100 py-4", "data-testid": "workspace-audit-folder-field", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-end justify-between gap-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 max-w-xl", children: [
@@ -587,19 +604,19 @@ function WorkspaceAuditFolderField({
         }
       ) : null
     ] }),
-    choices.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 flex flex-wrap gap-2", role: "list", "aria-label": "Known project folders", children: choices.map((path) => {
+    choices.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 flex flex-wrap gap-2", role: "group", "aria-label": "Known project folders", children: choices.map((path) => {
       const selected = value === path;
+      const label = choiceLabels.get(path) ?? path;
       return /* @__PURE__ */ jsxRuntimeExports.jsx(
         "button",
         {
           type: "button",
-          role: "listitem",
           "aria-pressed": selected,
           title: path,
           disabled: controlsDisabled,
           onClick: () => onChange?.(path),
           className: `max-w-full truncate rounded-full px-3 py-1 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-brand-blue/30 disabled:opacity-50 ${selected ? "bg-brand-dark text-white" : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`,
-          children: folderLabel(path)
+          children: label
         },
         path
       );

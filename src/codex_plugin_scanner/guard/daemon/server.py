@@ -134,11 +134,6 @@ from ..local_supply_chain import (
     resolve_supply_chain_audit_workspace_dir,
     sync_supply_chain_cloud_state,
 )
-from ..project_folder_picker import (
-    ProjectFolderPickerBusyError,
-    ProjectFolderPickerUnavailableError,
-    choose_project_folder,
-)
 from ..managed_controls_policy_fields import ParsedManagedControlsPolicy
 from ..models import DECISION_SCOPE_VALUES, DecisionScope, PolicyDecision, format_local_http_origin
 from ..native_mode import native_mode_requires_rust as _native_mode_requires_rust
@@ -163,6 +158,11 @@ from ..policy_bundle_trusted_keys import (
     validate_synced_policy_bundle,
 )
 from ..policy_bundle_v2 import POLICY_BUNDLE_V2_CONTRACT
+from ..project_folder_picker import (
+    ProjectFolderPickerBusyError,
+    ProjectFolderPickerUnavailableError,
+    choose_project_folder,
+)
 from ..protection_posture import protection_is_off
 from ..receipts.manager import build_receipt
 from ..runtime.approval_attention import ApprovalAttentionCoordinator
@@ -3999,7 +3999,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         error_payload: dict[str, object] = {"error": error_code, "operation": operation}
         if error_code == "workspace_dir_required":
             error_payload["message"] = (
-                "Guard needs a project folder before it can run the workspace audit. "
+                "Guard needs a project folder with package manifests before it can run the workspace audit. "
                 "Choose a local project folder and try again."
             )
         elif error_code == "workspace_dir_invalid":

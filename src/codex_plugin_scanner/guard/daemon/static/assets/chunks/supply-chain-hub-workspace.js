@@ -660,9 +660,12 @@ function isSupplyChainAuditWorkspaceInvalidError(error) {
 function supplyChainAuditUserMessage(error) {
   if (error instanceof GuardHarnessActionError) {
     if (isSupplyChainAuditWorkspaceRequiredError(error)) {
-      return "Choose a project folder below, then run the audit again.";
+      return "Choose a project folder with a package manifest or lockfile, then run the audit again.";
     }
-    if (error.payload?.error === "folder_picker_unavailable" || error.payload?.error === "folder_picker_busy") {
+    if (error.payload?.error === "folder_picker_busy") {
+      return "A folder selection is already open. Use that dialog, or paste the project folder path.";
+    }
+    if (error.payload?.error === "folder_picker_unavailable") {
       return "Folder selection is unavailable right now. Paste the project folder path instead.";
     }
     if (isSupplyChainAuditWorkspaceInvalidError(error)) {
@@ -684,7 +687,10 @@ function normalizeSupplyChainAuditWorkspaceInput(value) {
     next = next.slice(1, -1).trim();
   }
   if (next.toLowerCase().startsWith("file://")) {
-    const raw = next.slice("file://".length);
+    let raw = next.slice("file://".length);
+    if (raw.toLowerCase().startsWith("localhost")) {
+      raw = raw.slice("localhost".length);
+    }
     try {
       next = decodeURIComponent(raw);
     } catch {
