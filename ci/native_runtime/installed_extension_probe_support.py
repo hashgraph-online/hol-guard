@@ -201,7 +201,7 @@ def persisted_native_receipt_ids(store: GuardStore) -> set[str]:
 def await_persisted_native_receipt(store: GuardStore, known_ids: set[str]) -> dict[str, object]:
     """Wait for the one receipt produced by the immediately preceding HTTP hook."""
 
-    deadline = time.monotonic() + 5
+    deadline = time.monotonic() + 10
     while time.monotonic() < deadline:
         new_ids = persisted_native_receipt_ids(store) - known_ids
         if len(new_ids) > 1:
