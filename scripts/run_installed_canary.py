@@ -143,8 +143,10 @@ def _run_corpus(repo_root: Path) -> dict[str, object]:
         or count != 51_000
         or not isinstance(native_rejection_count, int)
         or isinstance(native_rejection_count, bool)
+        or native_rejection_count != 27_084
         or not isinstance(original_oracle_above_count, int)
         or isinstance(original_oracle_above_count, bool)
+        or original_oracle_above_count != 11_558
     ):
         raise InstalledCanaryError("Installed evaluator differs from the frozen 51k native corpus contract")
     return {
