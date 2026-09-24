@@ -23,7 +23,7 @@ _SUCCESS_TURN_STATUSES = frozenset({"complete", "completed", "ok", "success", "s
 _ERROR_ITEM_TYPES = frozenset({"error", "turn_error"})
 _IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]*\Z")
 _STARTED_COMMAND_STATUSES = frozenset({"in_progress", "pending"})
-_COMPLETED_COMMAND_STATUSES = frozenset({"completed", "failed", "cancelled", "interrupted"})
+_COMPLETED_COMMAND_STATUSES = frozenset({"completed", "failed", "declined", "cancelled", "interrupted"})
 
 
 class CodexEventTraceError(ValueError):
@@ -37,7 +37,7 @@ class CodexEventTraceSummary:
     thread_id: str
     command_id: str
     command_status: str
-    command_exit_code: int
+    command_exit_code: int | None
     turn_status: str
 
     @property
@@ -47,7 +47,7 @@ class CodexEventTraceSummary:
         return self.command_status
 
     @property
-    def exit_code(self) -> int:
+    def exit_code(self) -> int | None:
         """Return the completed command exit code."""
 
         return self.command_exit_code
@@ -96,7 +96,9 @@ def _decode_events(payload: str | bytes) -> list[dict[str, object]]:
     else:
         raise CodexEventTraceError("Codex event trace must be text or UTF-8 bytes")
 
-    lines = text.splitlines()
+    lines = [line.removesuffix("\r") for line in text.split("\n")]
+    if lines and lines[-1] == "":
+        lines.pop()
     if not lines:
         raise CodexEventTraceError("Codex event trace is empty")
     if len(lines) > MAX_TRACE_EVENTS:
@@ -197,7 +199,8 @@ def _validate_command_item(
     status = _bounded_string(item.get("status"), field="command status", maximum=MAX_STATUS_CHARS)
     if status not in _COMPLETED_COMMAND_STATUSES:
         raise CodexEventTraceError("Codex command has an unsupported completion status")
-    exit_code = _validate_exit_code(item.get("exit_code"))
+    raw_exit = item.get("exit_code")
+    exit_code = None if raw_exit is None and status != "completed" else _validate_exit_code(raw_exit)
     return command_id, status, exit_code
 
 
@@ -216,7 +219,7 @@ def parse_codex_event_trace(payload: str | bytes, expected_command: str) -> Code
     turn_completed = False
     turn_status: str | None = None
     command_starts: dict[str, str] = {}
-    command_results: dict[str, tuple[str, int]] = {}
+    command_results: dict[str, tuple[str, int | None]] = {}
 
     for event_number, raw_event in enumerate(events, start=1):
         event = _mapping(raw_event, field="event")
@@ -271,7 +274,7 @@ def parse_codex_event_trace(payload: str | bytes, expected_command: str) -> Code
                     raise CodexEventTraceError("Codex command completed without starting")
                 if command_id in command_results:
                     raise CodexEventTraceError("Codex command completed more than once")
-                assert status is not None and exit_code is not None
+                assert status is not None
                 command_results[command_id] = (status, exit_code)
             else:
                 if command_id in command_starts:
