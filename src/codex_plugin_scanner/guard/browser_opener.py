@@ -9,6 +9,10 @@ import webbrowser
 from collections.abc import Mapping
 
 
+def _test_env_flag(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes"}
+
+
 def _browser_launch_suppressed_for_tests() -> bool:
     """Keep pytest runs from opening real browser tabs on developer machines.
 
@@ -20,19 +24,11 @@ def _browser_launch_suppressed_for_tests() -> bool:
     ``HOL_GUARD_TEST_ALLOW_BROWSER_OPEN``.
     """
 
-    if os.environ.get("HOL_GUARD_TEST_ALLOW_BROWSER_OPEN", "").strip().lower() in {
-        "1",
-        "true",
-        "yes",
-    }:
+    if _test_env_flag("HOL_GUARD_TEST_ALLOW_BROWSER_OPEN"):
         return False
     if os.environ.get("PYTEST_CURRENT_TEST"):
         return True
-    return os.environ.get("HOL_GUARD_TEST_DISABLE_BROWSER_OPEN", "").strip().lower() in {
-        "1",
-        "true",
-        "yes",
-    }
+    return _test_env_flag("HOL_GUARD_TEST_DISABLE_BROWSER_OPEN")
 
 
 def open_browser_url(url: str) -> bool:
