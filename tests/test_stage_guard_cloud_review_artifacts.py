@@ -53,3 +53,15 @@ def test_stage_artifacts_includes_existing_package_inits(tmp_path: Path) -> None
     staged = MODULE.stage_artifacts(tmp_path)
 
     assert extensions / "__init__.py" in staged
+
+
+def test_stage_artifacts_includes_routed_descriptor_and_source(tmp_path: Path) -> None:
+    _write_artifacts(tmp_path)
+    data_root = tmp_path / "src/codex_plugin_scanner/guard/contracts/data"
+    staged = MODULE.stage_artifacts(tmp_path)
+
+    descriptor = data_root / "extensions/contributions/command.routed.json"
+    source = data_root / "extensions/command-sources/command.routed.json"
+    assert descriptor in staged and descriptor.is_file()
+    assert source in staged and source.is_file()
+

@@ -104,11 +104,19 @@ OLLAMA_ACTION_RISK_CLASSES: Final[dict[str, tuple[str, ...]]] = {
     "ollama model removal command": ("destructive_shell",),
 }
 
+ROUTED_ACTION_RISK_CLASSES: Final[dict[str, tuple[str, ...]]] = {
+    "routed adapter mutation command": ("destructive_shell",),
+    "routed doctor reconciliation command": ("destructive_shell",),
+    "routed uninstall command": ("destructive_shell",),
+    "routed update command": ("execution", "network_egress"),
+}
+
 COMMAND_ACTION_RISK_CLASSES: Final[dict[str, tuple[str, ...]]] = {
     **_BASE_COMMAND_ACTION_RISK_CLASSES,
     **BLITCP_ACTION_RISK_CLASSES,
     **GITHUB_ACTION_RISK_CLASSES,
     **OLLAMA_ACTION_RISK_CLASSES,
+    **ROUTED_ACTION_RISK_CLASSES,
 }
 
 __all__ = [
@@ -116,4 +124,5 @@ __all__ = [
     "COMMAND_ACTION_RISK_CLASSES",
     "GITHUB_ACTION_RISK_CLASSES",
     "OLLAMA_ACTION_RISK_CLASSES",
+    "ROUTED_ACTION_RISK_CLASSES",
 ]

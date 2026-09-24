@@ -518,7 +518,7 @@ def _without_options(
     while index < len(arguments):
         argument = arguments[index]
         if argument == "--":
-            retained.extend(arguments[index + 1 :])
+            retained.extend(arguments[index:] if retained else arguments[index + 1 :])
             break
         if argument.startswith("--"):
             option_name = argument.partition("=")[0]

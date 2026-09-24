@@ -56,7 +56,7 @@ jobs:
           cache-dependency-glob: .github/workflows/security-gates.yml
           cache-suffix: semgrep
       - name: Run Semgrep
-        run: uvx --from semgrep semgrep --config p/owasp-top-ten --error src/codex_plugin_scanner/guard
+        run: uvx --from "semgrep==1.178.0" semgrep --config p/owasp-top-ten --error src/codex_plugin_scanner/guard
 
   release-scan:
     name: Trivy release scan
