@@ -26026,13 +26026,13 @@ const DECISION_LABELS = {
 const EXECUTION_LABELS = {
   attempted: "Attempt recorded",
   prevented: "Prevented before execution",
-  allowed_unconfirmed: "Allowed; execution not confirmed",
+  allowed_unconfirmed: "Result not recorded",
   confirmed_success: "Execution confirmed successful",
   confirmed_failure: "Execution confirmed failed",
   unpaired_post: "Execution observed; initial decision unavailable"
 };
 const PROOF_LABELS = {
-  pre_hook: "Pre-execution check only",
+  pre_hook: "Before-command check recorded",
   post_hook: "Post-execution proof recorded",
   unpaired_post: "Unpaired post-execution proof"
 };
@@ -26130,11 +26130,11 @@ function commandTrendPoints(analytics, limit = 14) {
 }
 function commandExecutionEvidenceCopy(harness, hasPostProof) {
   if (harness === null) {
-    return hasPostProof ? "This view includes correlated post-execution evidence on this page." : "No correlated post-execution evidence appears on this page. Allowed commands remain unconfirmed unless post-execution proof is recorded.";
+    return hasPostProof ? "Some commands on this page have a matching result recorded after Guard's decision." : "No matching run results appear on this page. For allowed commands, Guard checked them before they could run but cannot confirm what happened afterward.";
   }
   const source = harnessDisplayName(harness);
-  if (hasPostProof) return `${source} includes correlated post-execution evidence on this page.`;
-  return `No correlated post-execution evidence from ${source} appears on this page. Allowed commands remain unconfirmed unless post-execution proof is recorded.`;
+  if (hasPostProof) return `Some ${source} commands on this page have a matching result recorded after Guard's decision.`;
+  return `No matching ${source} run results appear on this page. For allowed commands, Guard checked them before they could run but cannot confirm what happened afterward.`;
 }
 function homeCommandActivityModel(analytics) {
   if (analytics.commands_checked === 0) return null;
@@ -26262,26 +26262,32 @@ function CommandActivityDetail(props) {
     /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(CommandValue, { preview: props.activity.invocation_preview }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceField, { label: "Decision", value: commandDecisionLabel(props.activity.policy_action) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceField, { label: "Execution proof", value: commandExecutionLabel(props.activity.execution_status) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceField, { label: "Proof source", value: commandProofLabel(props.activity.proof_level) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceField, { label: "Interaction", value: commandInteractionLabel(props.activity) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceField, { label: "Decision reason", value: commandReasonLabel(props.activity.decision_reason_code) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceField, { label: "Parse result", value: parseConfidenceLabel(props.activity.parse_confidence) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceField, { label: "Authorization reuse", value: approvalReuseLabel(props.activity.approval_reuse_status) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        EvidenceField,
-        {
-          label: "Containment evidence",
-          value: props.activity.decision_reason_code === "containment" ? "Recorded as controlling reason; details unavailable" : "Not recorded as controlling reason"
-        }
-      ),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        EvidenceField,
-        {
-          label: "Workflow capability",
-          value: props.activity.decision_reason_code === "capability" ? "Recorded as controlling reason; details unavailable" : "Not recorded as controlling reason"
-        }
-      )
+      /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceField, { label: "Run result", value: commandExecutionLabel(props.activity.execution_status) })
+    ] }),
+    props.activity.execution_status === "allowed_unconfirmed" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm leading-6 text-slate-600", children: "Guard checked this command before the app could run it and allowed it. No matching result was recorded, so Guard cannot tell whether the app ran the command or whether it succeeded." }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "group border-t border-slate-100 pt-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer text-sm font-medium text-brand-blue focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue", children: "How Guard checked it" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceField, { label: "Proof source", value: commandProofLabel(props.activity.proof_level) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceField, { label: "Interaction", value: commandInteractionLabel(props.activity) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceField, { label: "Decision reason", value: commandReasonLabel(props.activity.decision_reason_code) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceField, { label: "Parse result", value: parseConfidenceLabel(props.activity.parse_confidence) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceField, { label: "Authorization reuse", value: approvalReuseLabel(props.activity.approval_reuse_status) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          EvidenceField,
+          {
+            label: "Containment evidence",
+            value: props.activity.decision_reason_code === "containment" ? "Recorded as controlling reason; details unavailable" : "Not recorded as controlling reason"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          EvidenceField,
+          {
+            label: "Workflow capability",
+            value: props.activity.decision_reason_code === "capability" ? "Recorded as controlling reason; details unavailable" : "Not recorded as controlling reason"
+          }
+        )
+      ] })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Rule evidence" }),
@@ -26418,11 +26424,11 @@ function CommandActivityFiltersPanel(props) {
         /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: "All rules" }),
         rules.map((rule) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: rule.value, children: rule.label }, rule.value))
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs(SelectField, { label: "Execution proof", value: props.filters.execution_status ?? "", onChange: handleExecution, children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: "All execution states" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(SelectField, { label: "Run result", value: props.filters.execution_status ?? "", onChange: handleExecution, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: "All run results" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "attempted", children: "Attempt recorded" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "prevented", children: "Prevented" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "allowed_unconfirmed", children: "Allowed, unconfirmed" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "allowed_unconfirmed", children: "Result not recorded" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "confirmed_success", children: "Confirmed success" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "confirmed_failure", children: "Confirmed failure" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "unpaired_post", children: "Unpaired post proof" })
@@ -26698,17 +26704,17 @@ function CommandActivitySummary(props) {
       /* @__PURE__ */ jsxRuntimeExports.jsx(
         Metric,
         {
-          label: "Post-proof coverage",
+          label: "Run results recorded",
           value: globalOnly ? "Global only" : metrics.postProof,
-          detail: globalOnly ? "Not available for this filter" : `${commandProofCoveragePercent(analytics)}% of checks have correlated proof`
+          detail: globalOnly ? "Not available for this filter" : `${commandProofCoveragePercent(analytics)}% of checks have matching results`
         }
       ),
       /* @__PURE__ */ jsxRuntimeExports.jsx(
         Metric,
         {
-          label: "Allowed, unconfirmed",
+          label: "Allowed; result not recorded",
           value: globalOnly ? "Global only" : metrics.unconfirmed,
-          detail: globalOnly ? "Not available for this filter" : "Execution not confirmed"
+          detail: globalOnly ? "Not available for this filter" : "No matching result was recorded"
         }
       )
     ] }),
@@ -26774,7 +26780,7 @@ function CommandActivityTable(props) {
         /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-3 py-2.5", children: "Command" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-3 py-2.5", children: "App" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-3 py-2.5", children: "Decision" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-3 py-2.5", children: "Execution proof" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-3 py-2.5", children: "Run result" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-3 py-2.5", children: "Rule evidence" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-3 py-2.5", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Open detail" }) })
       ] }) }),
