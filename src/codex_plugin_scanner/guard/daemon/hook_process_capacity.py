@@ -142,20 +142,65 @@ def process_cpu_ratio() -> float | None:
     return max(0.0, load / processors)
 
 
+def _linux_process_tree_rss_bytes(root_process_ids: set[int]) -> int | None:
+    proc_root = Path("/proc")
+    if not proc_root.is_dir():
+        return None
+    try:
+        page_size = os.sysconf("SC_PAGE_SIZE")
+        process_rows: list[tuple[int, int, int]] = []
+        for process_path in proc_root.iterdir():
+            if not process_path.name.isdecimal():
+                continue
+            try:
+                stat = (process_path / "stat").read_text(encoding="ascii")
+                closing_parenthesis = stat.rfind(")")
+                if closing_parenthesis < 0:
+                    continue
+                fields = stat[closing_parenthesis + 1 :].split()
+                if len(fields) <= 21:
+                    continue
+                process_rows.append((int(process_path.name), int(fields[1]), int(fields[21])))
+            except (OSError, ValueError):
+                continue
+    except (OSError, ValueError):
+        return None
+    if page_size <= 0:
+        return None
+    observed_process_ids = {process_id for process_id, _parent_process_id, _rss_pages in process_rows}
+    if not root_process_ids.issubset(observed_process_ids):
+        return None
+    included_process_ids = set(root_process_ids)
+    while True:
+        descendants = {
+            process_id
+            for process_id, parent_process_id, _rss_pages in process_rows
+            if parent_process_id in included_process_ids
+        }
+        expanded = included_process_ids | descendants
+        if expanded == included_process_ids:
+            break
+        included_process_ids = expanded
+    rss_pages = sum(
+        rss_pages for process_id, _parent_process_id, rss_pages in process_rows if process_id in included_process_ids
+    )
+    return rss_pages * page_size
+
+
 def process_tree_rss_bytes(process_ids: tuple[int, ...]) -> int | None:
     root_process_ids = {process_id for process_id in process_ids if process_id > 0}
     if not root_process_ids or os.name == "nt":
         return None
     located_ps = shutil.which("ps")
     if located_ps is None:
-        return None
+        return _linux_process_tree_rss_bytes(root_process_ids)
     ps_path = Path(located_ps)
     if not ps_path.is_absolute() or not is_trusted_absolute_command_path(
         ps_path,
         cwd=Path.cwd(),
         home_dir=Path.home(),
     ):
-        return None
+        return _linux_process_tree_rss_bytes(root_process_ids)
     try:
         result = subprocess.run(
             [ps_path, "-axo", "pid=,ppid=,rss="],
@@ -165,9 +210,9 @@ def process_tree_rss_bytes(process_ids: tuple[int, ...]) -> int | None:
             timeout=0.2,
         )
     except (OSError, subprocess.TimeoutExpired):
-        return None
+        return _linux_process_tree_rss_bytes(root_process_ids)
     if result.returncode != 0:
-        return None
+        return _linux_process_tree_rss_bytes(root_process_ids)
     process_rows: list[tuple[int, int, int]] = []
     for line in result.stdout.splitlines():
         fields = line.split()
