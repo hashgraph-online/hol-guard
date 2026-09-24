@@ -123,7 +123,7 @@ def test_matrix_proves_remote_bytes_install_origin_record_corpus_and_dashboard()
     assert "Verify PR head, version, and TestPyPI bytes" in names
     assert "Install only the verified wheel" in names
     assert "Prove the harness rejects missing evidence" in names
-    assert "Run installed 51k native corpus and dashboard smoke" in names
+    assert "Run installed 51k corpus and dashboard smoke" in names
     assert "Upload installed canary evidence" in names
     workflow_text = WORKFLOW_PATH.read_text(encoding="utf-8")
     assert "verify-release --registry testpypi" in workflow_text
