@@ -74,7 +74,7 @@ def test_linux_dialog_cancel_ignores_gtk_warnings() -> None:
         interpret_project_folder_picker_result(
             returncode=1,
             stdout="",
-            stderr="Gtk-Message: GtkDialog mapped without a transient parent",
+            stderr="(zenity:1234): Gtk-WARNING **: 12:00:00.000: GtkDialog mapped without a transient parent",
             treat_exit_one_as_cancel=True,
         )
         is None

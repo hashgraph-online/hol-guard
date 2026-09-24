@@ -52,9 +52,17 @@ def project_folder_picker_command(
     return None
 
 
+_LINUX_DIALOG_FAILURE_MARKERS = (
+    "cannot open display",
+    "no such file",
+    "not found",
+    "permission denied",
+)
+
+
 def _linux_dialog_stderr_is_cancel_noise(stderr: str) -> bool:
-    lines = [line.strip() for line in stderr.splitlines() if line.strip()]
-    return all(line.lower().startswith(("gtk-message:", "gtk-warning:")) for line in lines)
+    lowered = stderr.lower()
+    return not any(marker in lowered for marker in _LINUX_DIALOG_FAILURE_MARKERS)
 
 
 def interpret_project_folder_picker_result(
