@@ -52,6 +52,11 @@ def project_folder_picker_command(
     return None
 
 
+def _linux_dialog_stderr_is_cancel_noise(stderr: str) -> bool:
+    lines = [line.strip() for line in stderr.splitlines() if line.strip()]
+    return all(line.lower().startswith(("gtk-message:", "gtk-warning:")) for line in lines)
+
+
 def interpret_project_folder_picker_result(
     *,
     returncode: int,
@@ -62,15 +67,10 @@ def interpret_project_folder_picker_result(
     selected = stdout.strip()
     if returncode == 0:
         return selected or None
-    if treat_exit_one_as_cancel and returncode == 1 and not selected:
+    if treat_exit_one_as_cancel and returncode == 1 and not selected and _linux_dialog_stderr_is_cancel_noise(stderr):
         return None
     lowered = stderr.lower()
-    if (
-        "user canceled" in lowered
-        or "user cancelled" in lowered
-        or "(-128)" in lowered
-        or not stderr.strip()
-    ):
+    if "user canceled" in lowered or "user cancelled" in lowered or "(-128)" in lowered or not stderr.strip():
         return None
     raise ProjectFolderPickerUnavailableError()
 

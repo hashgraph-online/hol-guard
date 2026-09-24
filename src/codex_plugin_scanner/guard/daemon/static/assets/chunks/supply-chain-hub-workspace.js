@@ -688,7 +688,7 @@ function normalizeSupplyChainAuditWorkspaceInput(value) {
   }
   if (next.toLowerCase().startsWith("file://")) {
     let raw = next.slice("file://".length);
-    if (raw.toLowerCase().startsWith("localhost")) {
+    if (/^localhost(?=\/|$)/i.test(raw)) {
       raw = raw.slice("localhost".length);
     }
     try {

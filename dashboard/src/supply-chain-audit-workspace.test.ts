@@ -77,6 +77,10 @@ assert(
   "audit workspace input should keep a file URL path",
 );
 assert(
+  normalizeSupplyChainAuditWorkspaceInput("file://localhost-dev/share/app") === "localhost-dev/share/app",
+  "audit workspace input should not strip a host that only starts with localhost",
+);
+assert(
   listSupplyChainAuditWorkspaceChoices(installs)[0] === "workspace/active-project",
   "known audit folders should prefer the active install",
 );

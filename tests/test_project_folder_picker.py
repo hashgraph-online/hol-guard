@@ -59,6 +59,16 @@ def test_macos_cancel_code_returns_none() -> None:
     )
 
 
+def test_linux_dialog_display_failure_is_unavailable() -> None:
+    with pytest.raises(ProjectFolderPickerUnavailableError):
+        interpret_project_folder_picker_result(
+            returncode=1,
+            stdout="",
+            stderr="cannot open display",
+            treat_exit_one_as_cancel=True,
+        )
+
+
 def test_linux_dialog_cancel_ignores_gtk_warnings() -> None:
     assert (
         interpret_project_folder_picker_result(
