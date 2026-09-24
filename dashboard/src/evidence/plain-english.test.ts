@@ -1,6 +1,13 @@
-import { plainEnglishRequestTitle, whyPaused, humanFileName } from "./plain-english";
-import type { GuardApprovalRequest, GuardActionEnvelope } from "../guard-types";
-import { assert } from "node:console";
+import {
+  plainEnglishRequestTitle,
+  resolveActionSubtitle,
+  resolveActionTitle,
+  resolveActionTitleTooltip,
+  whyPaused,
+  humanFileName,
+} from "./plain-english";
+import type { GuardApprovalRequest, GuardActionEnvelope, GuardReceipt } from "../guard-types";
+import assert from "node:assert/strict";
 
 function buildShellRequest(overrides: Partial<GuardApprovalRequest> = {}): GuardApprovalRequest {
   return {
@@ -26,6 +33,107 @@ function buildShellRequest(overrides: Partial<GuardApprovalRequest> = {}): Guard
     resolved_at: null,
     ...overrides,
   } as unknown as GuardApprovalRequest;
+}
+
+function buildShellReceipt(overrides: Partial<GuardReceipt> = {}): GuardReceipt {
+  return {
+    receipt_id: "receipt-1",
+    harness: "codex",
+    artifact_id: "artifact-1",
+    artifact_hash: "hash-1",
+    policy_decision: "review",
+    capabilities_summary: "",
+    changed_capabilities: [],
+    provenance_summary: "",
+    user_override: null,
+    artifact_name: "bun",
+    source_scope: null,
+    timestamp: new Date().toISOString(),
+    action_envelope_json: {
+      action_type: "package_script",
+      package_name: "bun",
+    } as unknown as GuardActionEnvelope,
+    ...overrides,
+  };
+}
+
+// T12: a command-like receipt with no typed command uses the retained raw command.
+{
+  const receipt = buildShellReceipt({
+    capabilities_summary: "bun custom",
+    raw_command_text: "bun custom",
+  });
+  assert(resolveActionTitle(receipt) === "bun custom", "T12: raw command should replace the executable-only title");
+  assert(resolveActionSubtitle(receipt) === null, "T12: duplicate command metadata should not become the subtitle");
+  assert(resolveActionTitleTooltip(receipt) === "bun custom", "T12: short raw command remains available to assistive text");
+
+  const longCommand = `bun custom ${"--flag ".repeat(20)}`.trim();
+  const longReceipt = buildShellReceipt({ raw_command_text: longCommand });
+  assert(resolveActionTitle(longReceipt).endsWith("…"), "T12: long raw command remains compact in the visible title");
+  assert(resolveActionTitleTooltip(longReceipt) === longCommand, "T12: hover and assistive text retain the full command");
+}
+
+// T13: an envelope command still wins, and risk signal titles stay authoritative.
+{
+  const receipt = buildShellReceipt({
+    raw_command_text: "bun custom",
+    action_envelope_json: {
+      action_type: "shell_command",
+      command: "bun run check",
+    } as unknown as GuardActionEnvelope,
+  });
+  assert(resolveActionTitle(receipt) === "bun run check", "T13: typed envelope command should remain preferred");
+  assert(resolveActionTitleTooltip(receipt) === "bun run check", "T13: typed command remains available to assistive text");
+
+  const differentCommands = buildShellReceipt({
+    raw_command_text: `bun custom ${"--raw ".repeat(20)}`,
+    action_envelope_json: {
+      action_type: "package_script",
+      command: "bun run check",
+      package_name: "bun",
+    } as unknown as GuardActionEnvelope,
+  });
+  assert(resolveActionTitleTooltip(differentCommands) === differentCommands.raw_command_text?.trim(),
+    "T13: package tooltip follows the raw command used by its title");
+
+  const longTypedCommand = `bun run check ${"--typed ".repeat(20)}`.trim();
+  const longTypedReceipt = buildShellReceipt({
+    capabilities_summary: longTypedCommand,
+    raw_command_text: "bun custom",
+    action_envelope_json: {
+      action_type: "shell_command",
+      command: longTypedCommand,
+    } as unknown as GuardActionEnvelope,
+  });
+  assert(resolveActionTitleTooltip(longTypedReceipt) === longTypedCommand,
+    "T13: shell tooltip retains the full typed command");
+  assert(resolveActionSubtitle(longTypedReceipt) === null,
+    "T13: full typed command is not repeated in the subtitle");
+
+  const riskyReceipt = buildShellReceipt({
+    raw_command_text: "bun custom",
+    scanner_evidence: [{
+      signal_id: "signal-1",
+      category: "execution",
+      severity: "high",
+      confidence: "strong",
+      detector: "test",
+      title: "Runs an untrusted custom command",
+      plain_reason: "This command is not trusted.",
+      technical_detail: null,
+      evidence_ref: null,
+      redaction_level: "none",
+      false_positive_hint: null,
+      advisory_id: null,
+    }],
+  });
+  assert(resolveActionTitle(riskyReceipt) === "Runs an untrusted custom command", "T13: scanner title should remain preferred");
+}
+
+// T14: absent or blank raw command falls back to the normal artifact title.
+{
+  assert(resolveActionTitle(buildShellReceipt()) === "bun", "T14: missing raw command should preserve artifact fallback");
+  assert(resolveActionTitle(buildShellReceipt({ raw_command_text: "  " })) === "bun", "T14: blank raw command should preserve artifact fallback");
 }
 
 // T1: shell command title should not include raw artifact name

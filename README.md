@@ -388,13 +388,13 @@ The Rust compiler generates command descriptors, the catalog, and the native mat
 
 The **Extension Builder CLI** can create those command sources and portable fixtures from exported command metadata. It also supports MCP inventories. It works offline and reads the export without importing or running the target tool.
 
-Use the Builder's plan-and-apply flow, then run
+Use the Builder's plan-and-apply flow to create the canonical source and fixture. Open a draft
+PR early for scope review. Before marking that PR ready for review, run
 `scripts/prepare_extension_contribution.py --source ... --fixture ...` to synchronize deterministic
-projections. Run `hol-guard extensions handoff --repo . --source ... --fixture ...` after that
-preparation step and before opening a PR. The handoff check catches missing generated descriptors,
-catalog entries, and source bindings before CI does.
+projections, then run `hol-guard extensions handoff --repo . --source ... --fixture ...`. The handoff
+check catches missing generated descriptors, catalog entries, and source bindings before final review.
 
-**1. Propose the coverage.** Check the [Extension directory](docs/guard/extensions/README.md) for existing coverage. For a new capability, open an [Extension proposal](https://github.com/hashgraph-online/hol-guard/issues/new?template=command-extension-proposal.yml) with the proposed `command.<name>` ID, supported operations, destructive examples, safe counterparts, and upstream references. Extend an existing extension when it already owns the operation.
+**1. Define the coverage in the PR.** Check the [Extension directory](docs/guard/extensions/README.md) and current [open pull requests](https://github.com/hashgraph-online/hol-guard/pulls) for existing or overlapping coverage. For a new capability, open a draft PR with the **Command extension** template and include the proposed `command.<name>` ID, supported operations, destructive examples, safe counterparts, and upstream references. Scope review happens on the PR; a separate issue is not required. Extend an existing extension when it already owns the operation.
 
 Follow the [development setup](#development), then run the examples below from your HOL Guard checkout. `uv run --no-sync` uses that checkout's installed development version.
 
@@ -473,7 +473,7 @@ uv run --no-sync python scripts/render_command_extension_directory.py --check
 git diff --check
 ```
 
-Add fixture cases for destructive operations, safe previews, aliases, reordered flags, quoting, malformed input, and compound commands. Run the Rust checks when changing native semantics and the relevant Python checks when changing tooling. Inspect the final diff, commit the canonical inputs, generated projections, fixtures, and authoring records, and open a PR against `main` linking the proposal and test results. Keep scratch kit directories and raw upstream exports out of the PR.
+Add fixture cases for destructive operations, safe previews, aliases, reordered flags, quoting, malformed input, and compound commands. Run the Rust checks when changing native semantics and the relevant Python checks when changing tooling. Inspect the final diff, commit the canonical inputs, generated projections, fixtures, and authoring records, and update the existing draft PR against `main` with the test results. Mark it ready for review after the handoff check passes. Keep scratch kit directories and raw upstream exports out of the PR.
 
 **Community contributions remain External and off by default.** Tests must prove they are inert until a local administrator enables them. Generating, applying, or merging a contribution does not activate it, and its rules cannot weaken Guard's required protections.
 

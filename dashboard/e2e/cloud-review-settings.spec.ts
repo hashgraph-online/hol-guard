@@ -1,15 +1,16 @@
 import { expect, test, type Page } from "@playwright/test";
 import { defaultSettingsPayload, emptyInventoryPayload, emptyPoliciesPayload, emptyReceiptsPayload, freeStateSnapshot } from "./fixture-states";
 
-async function fixture(page: Page, held = 0) {
+async function fixture(page: Page, held = 0, gatePatch: Record<string, unknown> = {}) {
   let enabled = false;
-  let reject = false;
+  let rejectMessage: string | null = null;
   let lastSyncedAt: string | null = null;
   const writes: Record<string, unknown>[] = [];
   const gate = {
     enabled: true, configured: true, cooldown_seconds: 0, cooldown_active: false,
     cooldown_expires_at: null, locked_until: null, fail_closed: false,
     strict_all_decisions: false, totp_enabled: true, totp_pending: false,
+    ...gatePatch,
   };
   await page.route("**/v1/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
@@ -25,8 +26,8 @@ async function fixture(page: Page, held = 0) {
       if (route.request().method() === "POST") {
         const input = route.request().postDataJSON();
         writes.push(input);
-        if (reject) {
-          await route.fulfill({ status: 403, json: { message: "Authenticator code was not accepted. Try again." } });
+        if (rejectMessage) {
+          await route.fulfill({ status: 403, json: { message: rejectMessage } });
           return;
         }
         enabled = input.action === "enable";
@@ -44,7 +45,8 @@ async function fixture(page: Page, held = 0) {
   await page.goto("/settings?guardDaemon=http://127.0.0.1:4175");
   return {
     writes,
-    reject: () => { reject = true; },
+    reject: () => { rejectMessage = "Authenticator code was not accepted. Try again."; },
+    rejectWith: (message: string) => { rejectMessage = message; },
     updateDevice: (authorized: boolean, deliveredAt: string | null) => {
       enabled = authorized;
       lastSyncedAt = deliveredAt;
@@ -130,4 +132,23 @@ test("an older background failure cannot dismiss an open authorization dialog", 
   await expect(dialog).toBeVisible();
   await expect(dialog.getByLabel("Authenticator code")).toHaveValue("123456");
   expect(state.writes).toEqual([]);
+});
+
+test("a recent authenticator confirmation still shows the code field", async ({ page }) => {
+  const state = await fixture(page, 0, { totp_recent_satisfied: true });
+  state.rejectWith("TOTP code is required.");
+  await page.getByRole("button", { name: "Enable Cloud Review" }).click();
+  const dialog = page.getByRole("dialog", { name: "Authorize Cloud Review" });
+  await expect(dialog.getByText("A new code is not needed yet")).toHaveCount(0);
+  const code = dialog.getByLabel("Authenticator code");
+  await expect(code).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Authorize this device" })).toBeDisabled();
+  await code.fill("12345");
+  await expect(dialog.getByRole("button", { name: "Authorize this device" })).toBeDisabled();
+  await code.fill("654321");
+  await dialog.getByRole("button", { name: "Authorize this device" }).click();
+  await expect(dialog.getByRole("alert")).toHaveText("Enter the current six-digit code from your authenticator.");
+  await expect(code).toBeVisible();
+  await expect(code).toHaveValue("");
+  expect(state.writes[0]).toMatchObject({ approval_totp_code: "654321" });
 });
