@@ -183,3 +183,166 @@ def test_frozen_mcp_payloads_fail_closed_without_package_data(tmp_path: Path, mo
     monkeypatch.setattr(mcp_module.resources, "files", missing_package)
     with pytest.raises(FileNotFoundError, match="contributions"):
         mcp_module._load_packaged_payloads()
+
+
+_QUIDLI_CONNECT = Path(__file__).resolve().parents[1] / "contributions/mcp-servers/mcp.quidli-connect.json"
+_QUIDLI_CONNECT_URL = "https://mcp.connect.quid.li"
+_QUIDLI_CONNECT_ID = "command.mcp-quidli-connect"
+_QUIDLI_REVIEW_TOOLS = ("connect_drop", "connect_trust_create", "connect_trust_revoke", "connect_lookup_exposed")
+_QUIDLI_INHERIT_TOOLS = (
+    "connect_trust_check",
+    "connect_trust_graph",
+    "connect_drop_balance",
+    "connect_lookup",
+    "connect_me",
+    "connect_get_price",
+)
+
+
+def _quidli_payload() -> dict[str, object]:
+    payload = json.loads(_QUIDLI_CONNECT.read_text(encoding="utf-8"))
+    assert isinstance(payload, dict)
+    return payload
+
+
+class _QuidliAuthorityStore:
+    def __init__(self, *, enabled: bool) -> None:
+        self._enabled = enabled
+
+    def read_extension_control_authority_for_registry(self, registry: object):
+        from codex_plugin_scanner.guard.runtime.extension_control_authority import (
+            AuthorityHealth,
+            ExtensionControlAuthorityView,
+        )
+        from codex_plugin_scanner.guard.runtime.extension_control_contract import (
+            CONTROL_SCHEMA_VERSION,
+            ControlLayerKind,
+            ControlState,
+            ControlTarget,
+            ControlTargetKind,
+            ExtensionControl,
+            ExtensionControlLayer,
+        )
+
+        digest = getattr(registry, "catalog_digest", "0" * 64)
+        assert isinstance(digest, str)
+        controls = (
+            (
+                ExtensionControl(
+                    target=ControlTarget(ControlTargetKind.EXTENSION, _QUIDLI_CONNECT_ID),
+                    state=ControlState.ENABLED,
+                ),
+            )
+            if self._enabled
+            else ()
+        )
+        layer = ExtensionControlLayer(
+            schema_version=CONTROL_SCHEMA_VERSION,
+            kind=ControlLayerKind.LOCAL_ADMIN,
+            catalog_digest=digest,
+            global_lockdown=False,
+            controls=controls,
+        )
+        return ExtensionControlAuthorityView(
+            health=AuthorityHealth.PROTECTED,
+            revision=1,
+            catalog_digest=digest,
+            layers=(layer,),
+        )
+
+
+def _quidli_artifact(tool_name: str, *, server_name: str = "quidli-connect", url: str = _QUIDLI_CONNECT_URL):
+    from codex_plugin_scanner.guard.mcp_tool_calls import build_tool_call_artifact
+    from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
+
+    identity = build_mcp_server_identity(config_path=".mcp.json", command=url, args=(), transport="http")
+    return build_tool_call_artifact(
+        harness="codex",
+        server_name=server_name,
+        tool_name=tool_name,
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="http",
+        server_identity=identity,
+    )
+
+
+def test_quidli_connect_contribution_is_valid_remote_http_external_opt_in() -> None:
+    payload = _quidli_payload()
+    validate_mcp_contribution(payload, filename="mcp.quidli-connect.json")
+    assert payload["trustClass"] == "external"
+    assert payload["activation"] == "opt-in"
+    launch = payload["launch"]
+    assert isinstance(launch, dict)
+    assert launch["kind"] == "remote-http"
+    assert launch["url"] == _QUIDLI_CONNECT_URL
+    tools = payload["tools"]
+    assert isinstance(tools, list)
+    assert all(isinstance(tool, dict) and tool["state"] != "allow" for tool in tools)
+
+
+def test_quidli_connect_catalog_item_is_external_and_off_by_default() -> None:
+    extension = BUILT_IN_COMMAND_EXTENSION_REGISTRY.get(_QUIDLI_CONNECT_ID)
+    assert extension is not None
+    item = extension.to_dict()
+    assert item["enabled"] is False
+    assert item["trust_class"] == "external"
+    assert item["activation"] == "opt-in"
+    assert item["surface"] == "mcp"
+    assert trust_class_for(_QUIDLI_CONNECT_ID) == "external"
+    assert _QUIDLI_CONNECT_ID in ids_for_class("external")
+
+
+def test_quidli_connect_tool_defaults_review_writes_and_inherit_reads() -> None:
+    payload = _quidli_payload()
+    for tool in _QUIDLI_REVIEW_TOOLS:
+        assert mcp_tool_state(payload, tool) == "review", tool
+    for tool in _QUIDLI_INHERIT_TOOLS:
+        assert mcp_tool_state(payload, tool) == "inherit", tool
+    assert mcp_tool_state(payload, "connect_future_tool") == "inherit"
+
+
+def test_quidli_connect_is_inert_until_local_admin_enable() -> None:
+    from codex_plugin_scanner.guard.runtime.mcp_server_grants import (
+        apply_contributed_mcp_decision,
+        matching_mcp_contribution,
+    )
+
+    artifact = _quidli_artifact("connect_drop")
+    matched = matching_mcp_contribution(artifact)
+    assert matched is not None
+    assert matched["id"] == "mcp.quidli-connect"
+    assert apply_contributed_mcp_decision(_QuidliAuthorityStore(enabled=False), artifact, "allow") is None
+
+
+@pytest.mark.parametrize("tool", _QUIDLI_REVIEW_TOOLS)
+def test_quidli_connect_enabled_review_strengthens_allow(tool: str) -> None:
+    from codex_plugin_scanner.guard.runtime.mcp_server_grants import apply_contributed_mcp_decision
+
+    decision = apply_contributed_mcp_decision(_QuidliAuthorityStore(enabled=True), _quidli_artifact(tool), "allow")
+    assert decision is not None
+    assert decision[0] == "review"
+    assert decision[1] == "catalog-mcp-extension"
+
+
+@pytest.mark.parametrize("tool", ("connect_trust_check", "connect_trust_graph", "connect_drop_balance"))
+def test_quidli_connect_enabled_reads_inherit(tool: str) -> None:
+    from codex_plugin_scanner.guard.runtime.mcp_server_grants import apply_contributed_mcp_decision
+
+    assert apply_contributed_mcp_decision(_QuidliAuthorityStore(enabled=True), _quidli_artifact(tool), "allow") is None
+
+
+def test_quidli_connect_does_not_match_wrong_endpoint() -> None:
+    from codex_plugin_scanner.guard.runtime.mcp_server_grants import matching_mcp_contribution
+
+    artifact = _quidli_artifact("connect_drop", url="https://mcp.connect.quid.li.evil.example/")
+    assert matching_mcp_contribution(artifact) is None
+
+
+def test_quidli_connect_enabled_review_cannot_weaken_block() -> None:
+    from codex_plugin_scanner.guard.runtime.mcp_server_grants import apply_contributed_mcp_decision
+
+    decision = apply_contributed_mcp_decision(
+        _QuidliAuthorityStore(enabled=True), _quidli_artifact("connect_drop"), "block"
+    )
+    assert decision is None or decision[0] == "block"

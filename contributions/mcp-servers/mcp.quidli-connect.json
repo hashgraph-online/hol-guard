@@ -1,0 +1,39 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.quidli-connect",
+  "version": "1.0.0",
+  "name": "Quidli Connect MCP",
+  "description": "Reviews value-moving, paid, and onchain trust-write tools for the official hosted Quidli Connect MCP server.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "quid.li",
+    "displayName": "Quidli",
+    "url": "https://connect.quid.li"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniCloud", "background": "#111827" },
+  "homepage": "https://connect.quid.li",
+  "launch": {
+    "kind": "remote-http",
+    "url": "https://mcp.connect.quid.li",
+    "serverNames": ["quidli-connect", "quidli"]
+  },
+  "riskClasses": ["external-funds-transfer", "external-paid-lookup", "external-onchain-attestation-write"],
+  "tools": [
+    { "name": "connect_drop", "state": "review" },
+    { "name": "connect_trust_create", "state": "review" },
+    { "name": "connect_trust_revoke", "state": "review" },
+    { "name": "connect_lookup_exposed", "state": "review" },
+    { "name": "connect_trust_check", "state": "inherit" },
+    { "name": "connect_trust_graph", "state": "inherit" },
+    { "name": "other", "state": "inherit" }
+  ],
+  "referenceUrls": [
+    "https://connect.quid.li",
+    "https://mcp.connect.quid.li"
+  ],
+  "saferAlternatives": [
+    "Use connect_drop_balance, connect_trust_check, and connect_trust_graph to inspect state before sending funds or writing trust attestations.",
+    "Use a connect_drop trustFilter with mode require so payouts only reach identities already in the sender trust graph."
+  ]
+}
