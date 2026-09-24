@@ -1,0 +1,423 @@
+{
+  "extension": {
+    "action_classes": [
+      "dearmour forced extraction command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews dearmour commands that can overwrite or merge into an existing destination directory.",
+    "ecosystem_ids": [],
+    "executables": [],
+    "extension_id": "command.dearmour",
+    "homepage": null,
+    "icon": {
+      "background": "#4338CA",
+      "kind": "react-icon",
+      "name": "HiMiniFolder"
+    },
+    "license": "MIT",
+    "name": "dearmour command protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "dearmour forced extraction command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies dearmour extraction with --overwrite or --merge, which can modify existing files.",
+        "example_command": "dearmour --overwrite",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "dearmour forced extraction",
+        "permission_id": "command.dearmour.permission.overwrite",
+        "replacement_permission_id": null,
+        "risk_tier": "critical",
+        "safer_guidance": [
+          "Run dearmour without --overwrite or --merge first.",
+          "Check the destination directory before extracting."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": {
+      "display_name": "Community",
+      "id": "community.dearmour",
+      "url": null
+    },
+    "reference_urls": [],
+    "required": false,
+    "risk_classes": [
+      "destructive_shell"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "dearmour forced extraction command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies dearmour extraction with --overwrite or --merge.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "dearmour",
+                  "dearmour.cmd",
+                  "dearmour.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--output",
+                  "-o",
+                  "--directory",
+                  "-d"
+                ],
+                "required_flags": [
+                  "--overwrite"
+                ],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": []
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "dearmour",
+                  "dearmour.cmd",
+                  "dearmour.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--output",
+                  "-o",
+                  "--directory",
+                  "-d"
+                ],
+                "required_flags": [
+                  "--merge"
+                ],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": []
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "python",
+                  "python.cmd",
+                  "python.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--output",
+                  "-o",
+                  "--directory",
+                  "-d"
+                ],
+                "required_flags": [
+                  "--overwrite"
+                ],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": [
+                  "-m",
+                  "dearmour"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "python",
+                  "python.cmd",
+                  "python.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--output",
+                  "-o",
+                  "--directory",
+                  "-d"
+                ],
+                "required_flags": [
+                  "--merge"
+                ],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": [
+                  "-m",
+                  "dearmour"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "python3",
+                  "python3.cmd",
+                  "python3.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--output",
+                  "-o",
+                  "--directory",
+                  "-d"
+                ],
+                "required_flags": [
+                  "--overwrite"
+                ],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": [
+                  "-m",
+                  "dearmour"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "python3",
+                  "python3.cmd",
+                  "python3.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--output",
+                  "-o",
+                  "--directory",
+                  "-d"
+                ],
+                "required_flags": [
+                  "--merge"
+                ],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": [
+                  "-m",
+                  "dearmour"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "py",
+                  "py.cmd",
+                  "py.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--output",
+                  "-o",
+                  "--directory",
+                  "-d"
+                ],
+                "required_flags": [
+                  "--overwrite"
+                ],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": [
+                  "-m",
+                  "dearmour"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "py",
+                  "py.cmd",
+                  "py.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--output",
+                  "-o",
+                  "--directory",
+                  "-d"
+                ],
+                "required_flags": [
+                  "--merge"
+                ],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": [
+                  "-m",
+                  "dearmour"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "exec",
+                  "exec.cmd",
+                  "exec.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-i",
+                  "-l",
+                  "-n",
+                  "-p",
+                  "-s"
+                ],
+                "options_with_values": [
+                  "--output",
+                  "-o",
+                  "--directory",
+                  "-d"
+                ],
+                "required_flags": [
+                  "--overwrite"
+                ],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": [
+                  "dearmour"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "exec",
+                  "exec.cmd",
+                  "exec.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-i",
+                  "-l",
+                  "-n",
+                  "-p",
+                  "-s"
+                ],
+                "options_with_values": [
+                  "--output",
+                  "-o",
+                  "--directory",
+                  "-d"
+                ],
+                "required_flags": [
+                  "--merge"
+                ],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": [
+                  "dearmour"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "rule_id": "command.dearmour.overwrite",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "permission_id": "command.dearmour.permission.overwrite",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "native_capability": null,
+        "safer_alternatives": [
+          "Run dearmour without --overwrite or --merge first.",
+          "Check the destination directory before extracting."
+        ],
+        "severity": "critical",
+        "title": "dearmour forced extraction"
+      }
+    ],
+    "safer_alternatives": [
+      "Extract to an empty directory first."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}
