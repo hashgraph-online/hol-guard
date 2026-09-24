@@ -16002,6 +16002,7 @@
           "command.blitcp",
           "command.mcp-filesystem",
           "command.mcp-instapods",
+          "command.mcp-quidli-connect",
           "command.noodle",
           "command.ollama",
           "command.probe",
