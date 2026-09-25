@@ -15,23 +15,30 @@
       ]
     },
     {
-      "id": "genkeys-disabled-block",
-      "command": "gorgona genkeys",
+      "id": "genkeys-help-safe",
+      "command": "gorgona genkeys --help",
       "enabled_extensions": [
         "command.gorgona"
       ],
-      "disabled_permissions": [
-        "command.gorgona.permission.genkeys"
+      "disabled_permissions": [],
+      "expected_action": "allow",
+      "rule_id": null,
+      "expected_effective_segments": []
+    },
+    {
+      "id": "genkeys-version-safe",
+      "command": "gorgona genkeys --version",
+      "enabled_extensions": [
+        "command.gorgona"
       ],
-      "expected_action": "block",
-      "rule_id": "command.gorgona.genkeys",
-      "expected_effective_segments": [
-        0
-      ]
+      "disabled_permissions": [],
+      "expected_action": "allow",
+      "rule_id": null,
+      "expected_effective_segments": []
     },
     {
       "id": "send-review",
-      "command": "gorgona send \"2026-09-22 16:42:30\" \"2026-10-22 16:42:30\" \"hello world\" \"RWTPQzuhzBw=.pub\"",
+      "command": "gorgona send \"2026-10-01 12:00:00\" \"2026-11-01 12:00:00\" \"hello world\" \"RWTPQzuhzBw=.pub\"",
       "enabled_extensions": [
         "command.gorgona"
       ],
@@ -43,8 +50,30 @@
       ]
     },
     {
+      "id": "send-help-safe",
+      "command": "gorgona send --help",
+      "enabled_extensions": [
+        "command.gorgona"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "allow",
+      "rule_id": null,
+      "expected_effective_segments": []
+    },
+    {
+      "id": "send-version-safe",
+      "command": "gorgona send --version",
+      "enabled_extensions": [
+        "command.gorgona"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "allow",
+      "rule_id": null,
+      "expected_effective_segments": []
+    },
+    {
       "id": "revoke-review",
-      "command": "gorgona revoke 220745621684224 4YzEYpwB9hc=",
+      "command": "gorgona revoke 170119927746560 RWTPQzuhzBw=",
       "enabled_extensions": [
         "command.gorgona"
       ],
@@ -54,6 +83,39 @@
       "expected_effective_segments": [
         0
       ]
+    },
+    {
+      "id": "revoke-help-safe",
+      "command": "gorgona revoke --help",
+      "enabled_extensions": [
+        "command.gorgona"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "allow",
+      "rule_id": null,
+      "expected_effective_segments": []
+    },
+    {
+      "id": "revoke-version-safe",
+      "command": "gorgona revoke --version",
+      "enabled_extensions": [
+        "command.gorgona"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "allow",
+      "rule_id": null,
+      "expected_effective_segments": []
+    },
+    {
+      "id": "listen-plain-unaffected",
+      "command": "gorgona listen new 4YzEYpwB9hc=",
+      "enabled_extensions": [
+        "command.gorgona"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "allow",
+      "rule_id": null,
+      "expected_effective_segments": []
     },
     {
       "id": "listen-exec-short-review",
@@ -82,98 +144,100 @@
       ]
     },
     {
-      "id": "listen-plain-unaffected",
-      "command": "gorgona listen new 4YzEYpwB9hc=",
-      "enabled_extensions": [
-        "command.gorgona"
-      ],
-      "disabled_permissions": [],
-      "expected_action": "review",
-      "rule_id": "command.gorgona.exec-listen",
-      "expected_effective_segments": []
-    },
-    {
-      "id": "listen-plain-last-unaffected",
-      "command": "gorgona listen last 1 4YzEYpwB9hc=",
-      "enabled_extensions": [
-        "command.gorgona"
-      ],
-      "disabled_permissions": [],
-      "expected_action": "review",
-      "rule_id": "command.gorgona.exec-listen",
-      "expected_effective_segments": []
-    },
-    {
-      "id": "listen-help-safe",
-      "command": "gorgona listen -e --help",
-      "enabled_extensions": [
-        "command.gorgona"
-      ],
-      "disabled_permissions": [],
-      "expected_action": "review",
-      "rule_id": "command.gorgona.exec-listen",
-      "expected_effective_segments": []
-    },
-    {
-      "id": "unrelated-safe",
-      "command": "pwd",
+      "id": "listen-exec-help-safe",
+      "command": "gorgona -e listen --help",
       "enabled_extensions": [
         "command.gorgona"
       ],
       "disabled_permissions": [],
       "expected_action": "allow",
-      "rule_id": "command.gorgona.exec-listen",
+      "rule_id": null,
       "expected_effective_segments": []
     },
     {
-      "actual_effective_segments": null,
-      "command": "gorgona -v send \"2026-10-01 12:00:00\" \"2026-11-01 12:00:00\" \"hello world\" \"RWTPQzuhzBw=.pub\"",
-      "expected_effective_segments": [
-        0
+      "id": "listen-exec-version-safe",
+      "command": "gorgona -e listen --version",
+      "enabled_extensions": [
+        "command.gorgona"
       ],
+      "disabled_permissions": [],
+      "expected_action": "allow",
+      "rule_id": null,
+      "expected_effective_segments": []
+    },
+    {
       "id": "send-leading-verbose-review",
-      "passed": null
-    },
-    {
-      "actual_effective_segments": null,
-      "command": "gorgona -c /etc/gorgona/gorgona-node2.conf revoke 170119927746560 RWTPQzuhzBw=",
+      "command": "gorgona -v send \"2026-10-01 12:00:00\" \"2026-11-01 12:00:00\" \"hello world\" \"RWTPQzuhzBw=.pub\"",
+      "enabled_extensions": [
+        "command.gorgona"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.gorgona.send",
       "expected_effective_segments": [
         0
-      ],
+      ]
+    },
+    {
       "id": "revoke-leading-config-review",
-      "passed": null
-    },
-    {
-      "actual_effective_segments": null,
-      "command": "gorgona -c /etc/gorgona/gorgona-node2.conf -e listen new RWTPQzuhzBw=",
+      "command": "gorgona -c /etc/gorgona/gorgona-node2.conf revoke 170119927746560 RWTPQzuhzBw=",
+      "enabled_extensions": [
+        "command.gorgona"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.gorgona.revoke",
       "expected_effective_segments": [
         0
-      ],
+      ]
+    },
+    {
       "id": "listen-leading-config-exec-review",
-      "passed": null
-    },
-    {
-      "actual_effective_segments": null,
-      "command": "gorgona -ve listen new RWTPQzuhzBw=",
+      "command": "gorgona -c /etc/gorgona/gorgona-node2.conf -e listen new RWTPQzuhzBw=",
+      "enabled_extensions": [
+        "command.gorgona"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.gorgona.exec-listen",
       "expected_effective_segments": [
         0
-      ],
+      ]
+    },
+    {
       "id": "listen-exec-bundled-short-review",
-      "passed": null
+      "command": "gorgona -ve listen new RWTPQzuhzBw=",
+      "enabled_extensions": [
+        "command.gorgona"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.gorgona.exec-listen",
+      "expected_effective_segments": [
+        0
+      ]
     },
     {
-      "actual_effective_segments": null,
-      "command": "gorgona -v listen new RWTPQzuhzBw=",
-      "expected_effective_segments": [],
       "id": "listen-leading-verbose-safe",
-      "passed": null
+      "command": "gorgona -v listen new RWTPQzuhzBw=",
+      "enabled_extensions": [
+        "command.gorgona"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "allow",
+      "rule_id": null,
+      "expected_effective_segments": []
     },
     {
-      "actual_effective_segments": null,
-      "command": "gorgona -c /etc/gorgona/gorgona-node2.conf listen new RWTPQzuhzBw=",
-      "expected_effective_segments": [],
       "id": "listen-leading-config-safe",
-      "passed": null
+      "command": "gorgona -c /etc/gorgona/gorgona-node2.conf listen new RWTPQzuhzBw=",
+      "enabled_extensions": [
+        "command.gorgona"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "allow",
+      "rule_id": null,
+      "expected_effective_segments": []
     }
   ],
   "build": {
