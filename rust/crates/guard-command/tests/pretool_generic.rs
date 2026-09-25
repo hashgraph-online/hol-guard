@@ -187,6 +187,10 @@ fn allows_one_non_sensitive_file_read() {
     assert!(!secret.explicitly_benign);
     let system = generic(json!({"toolName": "read_file", "path": "/etc/passwd"}));
     assert_eq!(system.minimum_action, "review");
+    let credentials = generic(json!({"toolName": "read_file", "path": ".aws/credentials"}));
+    assert_eq!(credentials.minimum_action, "review");
+    let aliased = generic(json!({"toolName": "read_file", "path": "/./proc/self/environ"}));
+    assert_eq!(aliased.minimum_action, "review");
 }
 
 #[test]

@@ -17,21 +17,52 @@ pub(super) fn safe_date_arguments(arguments: &[String]) -> bool {
 }
 
 pub(super) fn safe_read_target(argument: &str) -> bool {
-    let lowered = argument.to_ascii_lowercase();
-    ![
-        "/etc/",
-        "/dev/",
-        "/proc/",
-        "/sys/",
-        "/var/",
-        "/private/etc/",
-        "~",
-    ]
-    .iter()
-    .any(|prefix| lowered.starts_with(prefix))
-        && !argument.split(['/', '\\']).any(|part| part == "..")
-        && !lowered.contains("%2e")
-        && !lowered.contains("%2f")
+    let Some(normalized) = lexical_read_path(argument) else {
+        return false;
+    };
+    let lowered = normalized.to_ascii_lowercase();
+    const ROOTS: [&str; 6] = ["/etc", "/dev", "/proc", "/sys", "/var", "/private/etc"];
+    if ROOTS
+        .iter()
+        .any(|prefix| lowered == *prefix || lowered.starts_with(&format!("{prefix}/")))
+        || lowered.starts_with('~')
+        || super::sensitive_command(argument)
+        || super::sensitive_command(&normalized)
+        || guard_secure_fs::sensitive_path_family(std::path::Path::new(
+            normalized.trim_start_matches("./"),
+        ))
+        .is_some()
+    {
+        return false;
+    }
+    true
+}
+
+fn lexical_read_path(value: &str) -> Option<String> {
+    if value.is_empty() || value.contains(['\0', '\n', '\r', '%']) {
+        return None;
+    }
+    let unified = value.replace('\\', "/");
+    let absolute = unified.starts_with('/');
+    let mut parts = Vec::new();
+    for part in unified.split('/') {
+        if part.is_empty() || part == "." {
+            continue;
+        }
+        if part == ".." || part.starts_with('~') {
+            return None;
+        }
+        parts.push(part);
+    }
+    if parts.is_empty() {
+        return None;
+    }
+    let mut normalized = String::new();
+    if absolute {
+        normalized.push('/');
+    }
+    normalized.push_str(&parts.join("/"));
+    Some(normalized)
 }
 
 pub(super) fn safe_listing_arguments(arguments: &[String]) -> bool {

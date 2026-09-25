@@ -450,6 +450,8 @@ mod tests {
             "tail -f README.md",
             "cat -",
             "cat /etc/passwd",
+            "cat .aws/credentials",
+            "cat /./proc/self/environ",
             "ls -R /",
             "ls --recursive src",
             "head -1000000 README.md",
