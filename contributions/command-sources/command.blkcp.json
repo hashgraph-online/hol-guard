@@ -1,0 +1,470 @@
+{
+  "extension": {
+    "action_classes": ["blkcp forced execution command", "blkcp raw block device write command"],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews blkcp commands that write directly to raw block devices or bypass safety guards with --force.",
+    "ecosystem_ids": [],
+    "executables": ["blkcp"],
+    "extension_id": "command.blkcp",
+    "homepage": "https://github.com/Meik1982/blkcp",
+    "icon": {
+      "background": "#0F172A",
+      "kind": "react-icon",
+      "name": "HiMiniCommandLine"
+    },
+    "license": "GPL-3.0-or-later",
+    "name": "blkcp command protection",
+    "permissions": [
+      {
+        "action_classes": ["blkcp forced execution command"],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `blkcp --force` or `blkcp -f`, which bypasses the Target Safety Guard to overwrite mounted system partitions or active swap space.",
+        "example_command": "blkcp image.raw /dev/sda --force",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "blkcp forced execution",
+        "permission_id": "command.blkcp.permission.force",
+        "replacement_permission_id": null,
+        "risk_tier": "critical",
+        "safer_guidance": [
+          "Run blkcp without --force first and let the Target Safety Guard verify target mount and swap states.", 
+          "Double check source and destination paths before bypassing the Target Safety Guard." 
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": ["blkcp raw block device write command"],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `blkcp <src> /dev/*`, which writes directly to raw block devices.",
+        "example_command": "blkcp image.raw /dev/sdb",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "blkcp raw block device write",
+        "permission_id": "command.blkcp.permission.device-write",
+        "replacement_permission_id": null,
+        "risk_tier": "critical",
+        "safer_guidance": [
+          "Confirm the target block device (/dev/...) is the intended external target and does not host root, boot, or active data partitions.", 
+          "Use standard files as output targets whenever direct raw block access is not strictly required." 
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": {
+      "display_name": "Community",
+      "id": "community.blkcp",
+      "url": "https://github.com/Meik1982/blkcp"
+    },
+    "reference_urls": ["https://github.com/Meik1982/blkcp"],
+    "required": false,
+    "risk_classes": ["destructive_shell"],
+    "rules": [
+      {
+        "action_classes": ["blkcp forced execution command"],
+        "default_mode": "review",
+        "description": "Identifies `blkcp --force` or `blkcp -f`, which bypasses the Target Safety Guard to overwrite mounted system partitions or active swap space.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": ["blkcp", "blkcp.cmd", "blkcp.exe"],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "-p", "--progress", "-q", "--quiet", "--direct", "--nocache", "--hash", 
+                  "--sha256", "--json", "--autotune", "--swab", "--sync", "--sparse" 
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "-i", "--input", "-o", "--output", "-b", "--block-size", "-c", 
+                  "--count", "-l", "--limit", "-s", "--size", "-e", "--engine", "--skip", 
+                  "--seek", "--queue-depth" 
+                ],
+                "required_flags": ["--force"],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": []
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": ["blkcp", "blkcp.cmd", "blkcp.exe"],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "-p", "--progress", "-q", "--quiet", "--direct", "--nocache", "--hash", 
+                  "--sha256", "--json", "--autotune", "--swab", "--sync", "--sparse" 
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "-i", "--input", "-o", "--output", "-b", "--block-size", "-c", 
+                  "--count", "-l", "--limit", "-s", "--size", "-e", "--engine", "--skip", 
+                  "--seek", "--queue-depth" 
+                ],
+                "required_flags": ["-f"],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": []
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": ["exec", "exec.cmd", "exec.exe"],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "-p", "--progress", "-q", "--quiet", "--direct", "--nocache", "--hash", 
+                  "--sha256", "--json", "--autotune", "--swab", "--sync", "--sparse" 
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": ["-i", "-l", "-n", "-p", "-s"],
+                "options_with_values": [
+                  "-i", "--input", "-o", "--output", "-b", "--block-size", "-c", 
+                  "--count", "-l", "--limit", "-s", "--size", "-e", "--engine", "--skip", 
+                  "--seek", "--queue-depth" 
+                ],
+                "required_flags": ["--force"],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": ["blkcp"]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": ["exec", "exec.cmd", "exec.exe"],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "-p", "--progress", "-q", "--quiet", "--direct", "--nocache", "--hash", 
+                  "--sha256", "--json", "--autotune", "--swab", "--sync", "--sparse" 
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": ["-i", "-l", "-n", "-p", "-s"],
+                "options_with_values": [
+                  "-i", "--input", "-o", "--output", "-b", "--block-size", "-c", 
+                  "--count", "-l", "--limit", "-s", "--size", "-e", "--engine", "--skip", 
+                  "--seek", "--queue-depth" 
+                ],
+                "required_flags": ["-f"],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": ["blkcp"]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": ["xargs", "xargs.cmd", "xargs.exe"],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "-p", "--progress", "-q", "--quiet", "--direct", "--nocache", "--hash", 
+                  "--sha256", "--json", "--autotune", "--swab", "--sync", "--sparse" 
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": ["-i", "-l", "-n", "-p", "-s"],
+                "options_with_values": [
+                  "-i", "--input", "-o", "--output", "-b", "--block-size", "-c", 
+                  "--count", "-l", "--limit", "-s", "--size", "-e", "--engine", "--skip", 
+                  "--seek", "--queue-depth" 
+                ],
+                "required_flags": ["--force"],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": ["blkcp"]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": ["xargs", "xargs.cmd", "xargs.exe"],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "-p", "--progress", "-q", "--quiet", "--direct", "--nocache", "--hash", 
+                  "--sha256", "--json", "--autotune", "--swab", "--sync", "--sparse" 
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": ["-i", "-l", "-n", "-p", "-s"],
+                "options_with_values": [
+                  "-i", "--input", "-o", "--output", "-b", "--block-size", "-c", 
+                  "--count", "-l", "--limit", "-s", "--size", "-e", "--engine", "--skip", 
+                  "--seek", "--queue-depth" 
+                ],
+                "required_flags": ["-f"],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": ["blkcp"]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.blkcp.permission.force",
+        "risk_classes": ["destructive_shell"],
+        "rule_id": "command.blkcp.force",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": ["blkcp", "blkcp.cmd", "blkcp.exe"],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": ["--help"],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": []
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": ["blkcp", "blkcp.cmd", "blkcp.exe"],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": ["-h"],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": []
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": ["blkcp", "blkcp.cmd", "blkcp.exe"],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": ["--version"],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": []
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": ["blkcp", "blkcp.cmd", "blkcp.exe"],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": ["-v"],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": []
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "blkcp command help and version",
+            "variant_id": "help-and-version"
+          }
+        ],
+        "safer_alternatives": [
+          "Run blkcp without --force first and let the Target Safety Guard verify target mount and swap states." 
+        ],
+        "severity": "critical",
+        "title": "blkcp forced execution"
+      },
+      {
+        "action_classes": ["blkcp raw block device write command"],
+        "default_mode": "review",
+        "description": "Identifies `blkcp <src> /dev/*`, which writes directly to raw block devices.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "excluded_first_arguments": [],
+                "executables": ["blkcp", "blkcp.cmd", "blkcp.exe"],
+                "forbidden_flags": ["--help", "-h", "--version", "-v"],
+                "minimum_operands": 2,
+                "operand_prefixes": ["/dev/"],
+                "options_with_values": [
+                  "-i", "--input", "-o", "--output", "-b", "--block-size", "-c", 
+                  "--count", "-l", "--limit", "-s", "--size", "-e", "--engine", "--skip", 
+                  "--seek", "--queue-depth" 
+                ],
+                "required_flags": []
+              },
+              "op": "trailing-operand-prefix.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.blkcp.permission.device-write",
+        "risk_classes": ["destructive_shell"],
+        "rule_id": "command.blkcp.device-write",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": ["blkcp", "blkcp.cmd", "blkcp.exe"],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": ["--help"],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": []
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": ["blkcp", "blkcp.cmd", "blkcp.exe"],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": ["-h"],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": []
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": ["blkcp", "blkcp.cmd", "blkcp.exe"],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": ["--version"],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": []
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": ["blkcp", "blkcp.cmd", "blkcp.exe"],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": ["-v"],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": []
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "blkcp command help and version",
+            "variant_id": "help-and-version"
+          }
+        ],
+        "safer_alternatives": [
+          "Confirm the target block device (/dev/...) is the intended external target.", 
+          "Use standard files as output targets whenever direct raw block access is not strictly required." 
+        ],
+        "severity": "critical",
+        "title": "blkcp raw block device write"
+      }
+    ],
+    "safer_alternatives": [
+      "Run blkcp with normal files instead of raw block devices (/dev/*).", 
+      "Avoid --force to allow the Target Safety Guard to prevent filesystem overwrites." 
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}
