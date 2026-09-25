@@ -110,7 +110,10 @@ fn load_scope_states(
     let mut paths = state_paths(&scope)?;
     paths.sort_by_key(|path| std::cmp::Reverse(generation_number(path).unwrap_or(0)));
     let mut states = Vec::new();
-    for path in paths {
+    for (attempted, path) in paths.into_iter().enumerate() {
+        if attempted >= MAX_STATE_FILES * 4 || states.len() == MAX_STATE_FILES {
+            break;
+        }
         let Ok(state) = read_state_file_raw(&path, private_root) else {
             continue;
         };
@@ -123,9 +126,6 @@ fn load_scope_states(
             continue;
         }
         states.push((scope.clone(), digest, state));
-        if states.len() == MAX_STATE_FILES {
-            break;
-        }
     }
     Ok(states)
 }
