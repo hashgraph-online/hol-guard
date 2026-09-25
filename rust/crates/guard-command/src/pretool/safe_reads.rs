@@ -61,7 +61,7 @@ pub(super) fn safe_read_target(argument: &str) -> bool {
     };
     let lowered = normalized.to_ascii_lowercase();
     const ROOTS: [&str; 6] = ["/etc", "/dev", "/proc", "/sys", "/var", "/private/etc"];
-    if lowered == "/"
+    if lowered.starts_with('/')
         || ROOTS
             .iter()
             .any(|prefix| lowered == *prefix || lowered.starts_with(&format!("{prefix}/")))
