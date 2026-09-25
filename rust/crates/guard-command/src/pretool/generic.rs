@@ -480,7 +480,7 @@ fn bounded_workspace_read_path(value: &str) -> bool {
     if path.is_empty() || path.len() > 4096 {
         return false;
     }
-    if path.contains(['$', '`', '|', ';', '&', '<', '>', '\n', '\r', '\0', '*']) {
+    if path.contains(['$', '`', '|', ';', '&', '<', '>', '\n', '\r', '\0', '*', '?', '[', ']', '{', '}']) {
         return false;
     }
     if path.split(['/', '\\']).any(|part| part == "..") {

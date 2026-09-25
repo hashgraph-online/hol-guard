@@ -77,6 +77,8 @@ fn allows_bounded_exact_commands() {
         "date -R",
         "date -I",
         "date -d @0",
+        "date --rfc-2822",
+        "date --rfc-3339=seconds",
         "pwd; date +%H:%M:%S",
         "ls",
         "ls -la src",

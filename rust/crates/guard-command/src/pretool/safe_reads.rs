@@ -15,8 +15,11 @@ pub(super) fn safe_date_arguments(arguments: &[String]) -> bool {
         }
         if matches!(
             argument.as_str(),
-            "-u" | "--utc" | "--universal" | "-R" | "--rfc-email" | "-I" | "--iso-8601"
-        ) || argument.starts_with("--iso-8601=")
+            "-u" | "--utc" | "--universal" | "-R" | "--rfc-email" | "--rfc-2822" | "-I"
+                | "--iso-8601" | "--rfc-3339"
+        ) || ((argument.starts_with("--iso-8601=") || argument.starts_with("--rfc-3339="))
+            && argument.len() <= 40
+            && !argument.contains('\n'))
         {
             continue;
         }
@@ -52,7 +55,8 @@ pub(super) fn safe_read_target(argument: &str) -> bool {
     };
     let lowered = normalized.to_ascii_lowercase();
     const ROOTS: [&str; 6] = ["/etc", "/dev", "/proc", "/sys", "/var", "/private/etc"];
-    if ROOTS
+    if lowered == "/"
+        || ROOTS
         .iter()
         .any(|prefix| lowered == *prefix || lowered.starts_with(&format!("{prefix}/")))
         || lowered.starts_with('~')
