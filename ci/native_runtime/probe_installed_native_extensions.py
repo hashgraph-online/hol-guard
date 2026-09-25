@@ -46,6 +46,8 @@ from codex_plugin_scanner.guard.runtime.extension_control_proof import (
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_base import EncryptedFileSecretStore
 
+_RECEIPT_PERSISTENCE_TIMEOUT_SECONDS = 20.0
+
 _ACTION_RANK = {
     "allow": 0,
     "warn": 1,
@@ -75,6 +77,7 @@ def installed_probe_support():
 _support = installed_probe_support()
 prove_installed_data_only_authoring = _support.prove_installed_data_only_authoring
 persisted_native_receipt_ids = _support.persisted_native_receipt_ids
+receipt_processed_count = _support.receipt_processed_count
 await_persisted_native_receipt = _support.await_persisted_native_receipt
 receipt_binding_diagnostic = _support.receipt_binding_diagnostic
 policy_readiness_diagnostic = _support.policy_readiness_diagnostic
@@ -280,14 +283,9 @@ def exercise(root: Path) -> dict[str, object]:
         require(result["decision"] == "deny", f"{label}:unsafe_allow")
         known_receipt_ids = persisted_native_receipt_ids(store)
         receipt_writer = daemon._server.runtime_hook_evidence_writer
-        writer_stats = receipt_writer.stats()
-        receipt_processed_before = writer_stats["receipt_processed"]
-        require(
-            isinstance(receipt_processed_before, int)
-            and not isinstance(receipt_processed_before, bool)
-            and receipt_processed_before >= 0,
-            f"{label}:receipt_writer_stats",
-        )
+        receipt_processed_value = receipt_processed_count(receipt_writer)
+        require(receipt_processed_value is not None, f"{label}:receipt_writer_stats")
+        receipt_processed_before = receipt_processed_value if receipt_processed_value is not None else 0
         response = request(daemon, home, workspace, "claude-code", "PreToolUse", payload)
         require(isinstance(response, dict), f"{label}:http_missing")
         # Compatibility hooks execute in the isolated hook process. Its receipt
@@ -300,7 +298,7 @@ def exercise(root: Path) -> dict[str, object]:
             known_receipt_ids,
             writer=receipt_writer,
             receipt_processed_before=receipt_processed_before,
-            timeout_seconds=20.0,
+            timeout_seconds=_RECEIPT_PERSISTENCE_TIMEOUT_SECONDS,
         )
         require(receipt.get("authority") == "rust", f"{label}:receipt_missing")
         if receipt.get("command_extensions") != extensions["binding"]:
