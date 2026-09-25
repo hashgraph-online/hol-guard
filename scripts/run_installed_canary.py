@@ -95,16 +95,13 @@ def _validate_corpus_bindings(repo_root: Path) -> dict[str, object]:
     }
 
 
-def _known_gap_baseline(repo_root: Path) -> dict[str, list[object]]:
-    path = repo_root / "tests/fixtures/guard-command-corpus/known-gaps.json"
-    payload = cast(dict[str, object], json.loads(path.read_text(encoding="utf-8")))
-    gaps = cast(list[object], payload["gaps"])
-    expected: dict[str, list[object]] = {}
-    for raw_gap in gaps:
-        gap = cast(dict[str, object], raw_gap)
-        key = "|".join(str(gap[field]) for field in ("owner", "kind", "oracle_floor", "observed_floor"))
-        expected[key] = [int(str(gap["count"])), str(gap["case_ids_digest"])]
-    return expected
+def _framed_case_ids(case_ids: list[str]) -> str:
+    digest = hashlib.sha256()
+    for case_id in sorted(case_ids):
+        encoded = case_id.encode("ascii")
+        digest.update(len(encoded).to_bytes(8, "big"))
+        digest.update(encoded)
+    return digest.hexdigest()
 
 
 def _native_executable_names() -> tuple[str, str]:
@@ -232,6 +229,7 @@ def _run_corpus(repo_root: Path) -> dict[str, object]:
         evaluate_native_corpus_batch,
         pin_neutral_attribution,
     )
+    from tests.guard_command_corpus_native_contract import expected_native_groups, validate_native_case
     from tests.guard_command_corpus_oracle import iter_adversarial_oracle, iter_benign_oracle
 
     pin_neutral_attribution()
@@ -241,7 +239,7 @@ def _run_corpus(repo_root: Path) -> dict[str, object]:
         for action in ("allow", "warn", "review", "require-reapproval", "sandbox-required", "block")
     }
     ranks["monitor"] = ranks["warn"]
-    groups: defaultdict[str, list[str]] = defaultdict(list)
+    contract_groups: defaultdict[str, list[str]] = defaultdict(list)
     count = 0
     started = time.perf_counter()
     streams = chain(
@@ -255,21 +253,24 @@ def _run_corpus(repo_root: Path) -> dict[str, object]:
         for (case, oracle), reviewed in zip(batch, evaluations, strict=True):
             decision = reviewed.evaluation
             observed = decision.decision_plane.action
-            if ranks[observed] != ranks[oracle.minimum_floor]:
-                kind = "underclassified" if ranks[observed] < ranks[oracle.minimum_floor] else "overclassified"
-                groups["|".join((oracle.owner, kind, oracle.minimum_floor, observed))].append(case.case_id)
+            if ranks[observed] < ranks[oracle.minimum_floor]:
+                raise InstalledCanaryError("Installed evaluator is below the frozen corpus oracle")
+            try:
+                group_id = validate_native_case(case, oracle, reviewed)
+            except ValueError as error:
+                raise InstalledCanaryError(str(error)) from error
+            contract_groups[group_id].append(case.case_id)
             count += 1
         del evaluations
-    actual = {
-        key: [len(ids), hashlib.sha256(("\n".join(sorted(ids)) + "\n").encode()).hexdigest()]
-        for key, ids in groups.items()
+    observed_contract = {
+        key: (len(ids), _framed_case_ids(ids)) for key, ids in contract_groups.items()
     }
-    if count != 51_000 or actual != _known_gap_baseline(repo_root):
-        raise InstalledCanaryError("Installed evaluator differs from the frozen 51k corpus baseline")
+    if count != 51_000 or observed_contract != expected_native_groups():
+        raise InstalledCanaryError("Installed evaluator differs from the frozen native corpus contract")
     return {
         "case_count": count,
         "elapsed_seconds": time.perf_counter() - started,
-        "known_gap_groups": len(actual),
+        "known_gap_groups": len(observed_contract),
         "bindings": bindings,
     }
 
