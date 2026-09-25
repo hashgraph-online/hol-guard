@@ -6,8 +6,14 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.command_extension_matchers import safe_option_variant, with_required_flag
+from codex_plugin_scanner.guard.runtime.command_extension_matchers import (
+    executable_path_set_matcher,
+    safe_flag_variant,
+    safe_option_variant,
+    with_required_flag,
+)
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
+from codex_plugin_scanner.guard.runtime.command_path_set_matcher import ExecutablePathSetMatcher
 from codex_plugin_scanner.guard.runtime.command_rules import AnyMatcher, ExecutableMatcher
 from tests.command_extension_contracts import assert_reviewed_command_cases, assert_safe_command_cases
 from tests.native_command_test_support import (
@@ -311,3 +317,44 @@ def test_cloud_safe_option_variant_requires_allowed_values() -> None:
             option="--generate-cli-skeleton",
             allowed_values=frozenset(),
         )
+
+
+def test_cloud_safe_variants_clone_path_set_matcher_constraints() -> None:
+    matcher = AnyMatcher(
+        matchers=(
+            executable_path_set_matcher(
+                "kubectl",
+                (("delete", "pod"),),
+                global_options_with_values=frozenset({"--context"}),
+                global_flags=frozenset({"--quiet"}),
+                fail_secure_unknown_options=True,
+            ),
+        )
+    )
+    flag_variant = safe_flag_variant(
+        matcher,
+        variant_id="dry-run",
+        title="Dry run",
+        flag="--dry-run",
+        inverse_flag="--no-dry-run",
+    )
+    option_variant = safe_option_variant(
+        flag_variant.matcher,
+        variant_id="output-name",
+        title="Output name",
+        option="--output",
+        allowed_values=frozenset({"name"}),
+    )
+
+    cloned, = option_variant.matcher.matchers
+
+    assert isinstance(cloned, ExecutablePathSetMatcher)
+    assert cloned.paths == frozenset({("delete", "pod")})
+    assert cloned.required_flags == frozenset({"--dry-run"})
+    assert cloned.inverse_flag_pairs == frozenset({("--dry-run", "--no-dry-run")})
+    assert cloned.interspersed_options_with_values == frozenset({"--context"})
+    assert cloned.interspersed_flags == frozenset({"--quiet"})
+    assert cloned.options_with_values == frozenset({"--output"})
+    assert cloned.required_option_values == (("--output", frozenset({"name"})),)
+    assert cloned.required_flags_in_all_arguments is True
+    assert cloned.fail_secure_unknown_options is True

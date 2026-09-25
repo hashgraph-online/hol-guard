@@ -8,8 +8,6 @@ from dataclasses import dataclass, replace
 from itertools import islice
 from pathlib import Path
 
-import pytest
-
 from codex_plugin_scanner.guard.native_command_model import _canonical_command_from_native
 from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
@@ -62,6 +60,10 @@ def _native_binaries() -> tuple[Path, Path]:
     if runtime is None:
         missing.append(_NATIVE_RUNTIME_ENV)
     message = "offline native test binaries are not available (missing " + ", ".join(missing) + ")"
+    try:
+        import pytest
+    except ModuleNotFoundError:
+        raise RuntimeError(message) from None
     if os.environ.get(_NATIVE_REGRESSION_ENV, "").strip().lower() in {"1", "true", "yes"}:
         pytest.fail(message)
     pytest.skip(message)
