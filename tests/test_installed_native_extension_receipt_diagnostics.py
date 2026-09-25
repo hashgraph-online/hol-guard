@@ -88,6 +88,45 @@ def test_persisted_receipt_correlation_waits_for_a_receipt_persisted_after_polli
     assert receipt == {"decision_id": "current", "authority": "rust"}
 
 
+def test_persisted_receipt_correlation_waits_for_writer_progress_before_reading_sqlite(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _ReceiptStore(tmp_path / "receipts.sqlite3", ("prior",))
+    original = probe._support.persisted_native_receipt_ids
+    receipt_id_reads = 0
+
+    def counted_receipt_ids(target: _ReceiptStore) -> set[str]:
+        nonlocal receipt_id_reads
+        receipt_id_reads += 1
+        return original(target)
+
+    monkeypatch.setattr(probe._support, "persisted_native_receipt_ids", counted_receipt_ids)
+
+    class _Writer:
+        def __init__(self) -> None:
+            self.calls = 0
+            self.processed = 0
+
+        def stats(self) -> dict[str, int]:
+            self.calls += 1
+            if self.calls == 3:
+                store.insert("current")
+                self.processed = 1
+            return {"receipt_processed": self.processed}
+
+    receipt = probe.await_persisted_native_receipt(
+        store,
+        {"prior"},
+        writer=_Writer(),
+        receipt_processed_before=0,
+        timeout_seconds=1.0,
+    )
+
+    assert receipt == {"decision_id": "current", "authority": "rust"}
+    assert receipt_id_reads == 1
+
+
 def test_persisted_receipt_correlation_rejects_multiple_unattributed_rows(tmp_path: Path) -> None:
     store = _ReceiptStore(tmp_path / "receipts.sqlite3", ("first", "second"))
 
