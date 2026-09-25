@@ -11,9 +11,11 @@ import pytest
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.cli import extension_controls_commands
 from codex_plugin_scanner.guard.cli.extension_controls_commands import (
+    GuardDaemonRequestError,
     _mutation_payload,
     run_extension_controls_command,
 )
+from codex_plugin_scanner.guard.daemon import manager as daemon_manager
 
 
 def _effective() -> dict[str, object]:
@@ -104,7 +106,7 @@ def test_controls_help_is_available_from_every_installed_alias(
     ("command", "expected_calls"),
     (
         ("recover-authority", ("prompt", "require", "consume", "recover", "refresh")),
-        ("acknowledge-degraded", ("prompt", "acknowledge")),
+        ("acknowledge-degraded", ("prompt", "ensure", "acknowledge")),
     ),
 )
 def test_authority_recovery_requires_and_consumes_fresh_local_approval(
@@ -157,6 +159,11 @@ def test_authority_recovery_requires_and_consumes_fresh_local_approval(
     monkeypatch.setattr(extension_controls_commands, "GuardStore", FakeStore)
     monkeypatch.setattr(extension_controls_commands, "_client", lambda _guard_home: FakeClient())
     monkeypatch.setattr(
+        daemon_manager,
+        "ensure_guard_daemon",
+        lambda *_args, **_kwargs: calls.append("ensure"),
+    )
+    monkeypatch.setattr(
         extension_controls_commands,
         "prompt_for_approval_gate",
         lambda *_args, **_kwargs: calls.append("prompt") or SimpleNamespace(password="password", totp_code="123456"),
@@ -181,6 +188,47 @@ def test_authority_recovery_requires_and_consumes_fresh_local_approval(
 
     assert exit_code == 0
     assert calls == list(expected_calls)
+
+
+def test_degraded_acknowledgement_reports_daemon_startup_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    view = SimpleNamespace(health=SimpleNamespace(value="degraded"), revision=0)
+
+    class FakeStore:
+        def read_extension_control_authority_for_registry(self, registry: object) -> object:
+            assert registry
+            return view
+
+    monkeypatch.setattr(extension_controls_commands, "GuardStore", lambda _guard_home: FakeStore())
+    monkeypatch.setattr(
+        extension_controls_commands,
+        "prompt_for_approval_gate",
+        lambda *_args, **_kwargs: SimpleNamespace(password="password", totp_code="123456"),
+    )
+
+    def fail_startup(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("daemon failed")
+
+    monkeypatch.setattr(daemon_manager, "ensure_guard_daemon", fail_startup)
+
+    with pytest.raises(GuardDaemonRequestError, match="daemon failed"):
+        extension_controls_commands._recover_authority(
+            tmp_path,
+            command="acknowledge-degraded",
+            output_stream=io.StringIO(),
+        )
+
+    exit_code = run_extension_controls_command(
+        argparse.Namespace(controls_command="patterns"),
+        guard_home=tmp_path,
+        output_stream=io.StringIO(),
+    )
+
+    assert exit_code == 2
+    assert "daemon failed" in capsys.readouterr().err
 
 
 def test_recommended_state_removes_explicit_local_control() -> None:

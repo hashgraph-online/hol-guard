@@ -13,6 +13,7 @@ import json
 import math
 import os
 import stat
+import sys
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -298,6 +299,41 @@ def _restore_bundled_runtime_execute_bit(path: Path) -> None:
         return
 
 
+def _windows_native_dll_directories() -> list[str]:
+    """Trusted directories for the Windows native runtime's CRT search.
+
+    The published runtime links the Visual C++ CRT dynamically. Windows finds
+    those DLLs in System32 when the redistributable is installed machine-wide.
+    An x64 wheel on ARM, or a per-user Python install, often has the CRT only
+    beside the base interpreter. The isolated environment cannot inherit the
+    user PATH, so the loader otherwise fails with STATUS_DLL_NOT_FOUND.
+    """
+
+    roots: list[str] = []
+    system_root = os.environ.get("SYSTEMROOT") or os.environ.get("WINDIR")
+    if system_root:
+        roots.append(os.path.join(system_root, "System32"))
+    base_prefix = getattr(sys, "base_prefix", "")
+    if (
+        isinstance(base_prefix, str)
+        and base_prefix
+        and any(os.path.isfile(os.path.join(base_prefix, name)) for name in ("vcruntime140.dll", "vcruntime140_1.dll"))
+    ):
+        roots.append(base_prefix)
+    runtime_dir = _bundled_runtime_candidate().parent
+    if runtime_dir.is_dir():
+        roots.append(str(runtime_dir))
+    unique: list[str] = []
+    seen: set[str] = set()
+    for root in roots:
+        key = root.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(root)
+    return unique
+
+
 def _isolated_environment() -> dict[str, str]:
     allowed = {
         "COMSPEC",
@@ -311,7 +347,14 @@ def _isolated_environment() -> dict[str, str]:
         "USERPROFILE",
         "WINDIR",
     }
-    return {key: value for key, value in os.environ.items() if key.upper() in allowed or key.upper().startswith("LC_")}
+    environment = {
+        key: value for key, value in os.environ.items() if key.upper() in allowed or key.upper().startswith("LC_")
+    }
+    if os.name == "nt":
+        dll_path = os.pathsep.join(_windows_native_dll_directories())
+        if dll_path:
+            environment["PATH"] = dll_path
+    return environment
 
 
 def _run_native_process(

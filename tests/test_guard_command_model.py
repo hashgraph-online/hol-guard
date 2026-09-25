@@ -12,6 +12,22 @@ from codex_plugin_scanner.guard.runtime.command_rules import (
 )
 
 
+def test_windows_parse_keeps_backslash_path_separators(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard.runtime import command_tokens
+
+    monkeypatch.setattr(command_tokens.os, "name", "nt")
+    parsed = parse_shell_command(r"cmd /c echo C:\Work\file.txt")
+
+    assert parsed.confidence == "exact"
+    assert parsed.segments[0].executable == "cmd"
+    assert parsed.segments[0].arguments[-1] == r"C:\Work\file.txt"
+    quoted = command_tokens.shell_tokens('echo "a\\"b" "a\\q" \'x y\'')
+    assert quoted == (("echo", 'a"b', r"a\q", "x y"), True)
+    assert command_tokens.shell_tokens("echo\ta\r\nb") == (("echo", "a", "b"), True)
+    assert command_tokens.shell_tokens('echo "unterminated')[1] is False
+    assert command_tokens.shell_tokens('echo "a\\')[1] is False
+
+
 def test_parse_shell_command_preserves_compound_suffix_and_path_override() -> None:
     parsed = parse_shell_command("PATH=/usr/bin:/bin npx vitest run && git reset --hard HEAD~1")
 

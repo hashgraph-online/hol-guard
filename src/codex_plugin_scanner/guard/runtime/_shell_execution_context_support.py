@@ -151,6 +151,9 @@ def split_shell_tokens(command_text: str) -> tuple[str, ...]:
     )
     lexer.whitespace_split = True
     lexer.commenters = ""
+    if os.name == "nt":
+        # cmd and PowerShell keep backslash as a path separator.
+        lexer.escape = "\x00"
     tokens: list[str] = []
     for token in lexer:
         if token == _NEWLINE_SENTINEL:
