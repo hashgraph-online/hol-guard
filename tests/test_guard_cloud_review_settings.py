@@ -16,6 +16,7 @@ from codex_plugin_scanner.guard.daemon.cloud_review_settings import (
     change_cloud_review_settings,
     cloud_review_settings_status,
 )
+from codex_plugin_scanner.guard.daemon.server import _guard_cloud_connect_required_for_insights
 from codex_plugin_scanner.guard.review_contracts import build_local_review_request_claim
 from codex_plugin_scanner.guard.runtime.exact_cloud_review import _oauth_metadata
 from codex_plugin_scanner.guard.store import GuardStore
@@ -74,6 +75,77 @@ def test_status_counts_only_current_binding_and_uses_source_sync_state(tmp_path:
     assert result["last_synced_at"] is None
     assert result["delivery_state"] == "error"
     assert result["pending_uploads"] == 0
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        {"last_error_code": "cloud_auth_expired"},
+        {"last_error": "Guard authorization expired. Run `hol-guard connect` to sign in again."},
+        {"last_error": "HTTP Error 401: Unauthorized"},
+    ],
+)
+def test_expired_cloud_sign_in_needs_reconnect_not_new_review_consent(tmp_path: Path, error: dict[str, str]) -> None:
+    store = connected_exact_review_store(tmp_path)
+    change_cloud_review_settings(store, _payload(), refresh_workers=_refresh)
+    now = datetime.now(timezone.utc).isoformat()
+    store.set_sync_payload("guard_cloud_review_sync_state", {"state": "error", **error}, now)
+
+    status = cloud_review_settings_status(store)
+    assert status["connected"] is True
+    assert status["enabled"] is True
+    assert status["reconnect_required"] is True
+    assert _guard_cloud_connect_required_for_insights(store) is True
+    assert not any(secret in repr(status) for secret in ("refresh-token", "dpop_private_key", "access_token"))
+
+    store.set_sync_payload("guard_cloud_review_sync_state", {"state": "idle", "last_error": None}, now)
+    assert cloud_review_settings_status(store)["reconnect_required"] is False
+    assert _guard_cloud_connect_required_for_insights(store) is False
+
+
+def test_completed_sign_in_clears_stale_cloud_auth_error_without_losing_delivery_history(tmp_path: Path) -> None:
+    store = connected_exact_review_store(tmp_path)
+    now = datetime.now(timezone.utc).isoformat()
+    binding = store.get_review_event_oauth_binding()
+    assert binding is not None
+    delivery_binding = {key: value for key, value in binding.items() if key != "oauth_source"}
+    store.set_sync_payload(
+        "guard_cloud_review_sync_state",
+        {
+            "state": "error",
+            "last_error_code": "cloud_auth_expired",
+            "last_error": "Guard authorization expired.",
+            "last_delivery_at": now,
+            "last_delivery_binding": delivery_binding,
+        },
+        now,
+    )
+    assert cloud_review_settings_status(store)["reconnect_required"] is True
+
+    store.clear_cloud_sync_state_for_reconnect(now=now)
+
+    status = cloud_review_settings_status(store)
+    assert status["reconnect_required"] is False
+    assert status["delivery_state"] == "idle"
+    assert status["last_synced_at"] == now
+    assert _guard_cloud_connect_required_for_insights(store) is False
+
+
+def test_delivery_error_does_not_demand_new_cloud_sign_in(tmp_path: Path) -> None:
+    store = connected_exact_review_store(tmp_path)
+    store.set_sync_payload(
+        "guard_cloud_review_sync_state",
+        {"state": "error", "last_error": "ConnectionError", "last_error_code": "cloud_transport_error"},
+        datetime.now(timezone.utc).isoformat(),
+    )
+
+    status = cloud_review_settings_status(store)
+    assert status["delivery_state"] == "error"
+    assert status["reconnect_required"] is False
+    assert _guard_cloud_connect_required_for_insights(store) is False
+
+    store.clear_cloud_sync_state_for_reconnect()
+    assert cloud_review_settings_status(store)["delivery_state"] == "error"
 
 
 def test_reauthorization_refreshes_existing_pending_request(tmp_path: Path) -> None:

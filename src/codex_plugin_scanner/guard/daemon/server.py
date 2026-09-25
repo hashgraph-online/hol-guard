@@ -237,6 +237,7 @@ from ..store_storage_maintenance import DEFAULT_GUARD_EVENT_LIMIT, DEFAULT_RECEI
 from ..supply_chain_repair import coordinate_supply_chain_repair, repair_sync_intelligence
 from .aibom_inventory_persist import persist_aibom_inventory_context
 from .bounded_http import BoundedThreadingHTTPServer
+from .cloud_review_settings import cloud_review_reconnect_required
 from .command_activity_api import (
     handle_command_activity_analytics,
     handle_command_activity_diagnostics,
@@ -1748,7 +1749,9 @@ def _guard_cloud_connect_repair_mode_from_health(oauth_health: dict[str, object]
 
 
 def _guard_cloud_connect_repair_mode(store: GuardStore) -> bool:
-    return _guard_cloud_connect_repair_mode_from_health(store.get_oauth_local_credential_health())
+    return _guard_cloud_connect_repair_mode_from_health(store.get_oauth_local_credential_health()) or (
+        store.get_cloud_sync_profile() is not None and cloud_review_reconnect_required(store)
+    )
 
 
 def _guard_cloud_connect_required_for_insights(store: GuardStore) -> bool:
@@ -1756,7 +1759,7 @@ def _guard_cloud_connect_required_for_insights(store: GuardStore) -> bool:
     if _guard_cloud_connect_repair_mode_from_health(oauth_health):
         return True
     if bool(oauth_health.get("configured")) and str(oauth_health.get("state") or "") == "healthy":
-        return store.get_cloud_sync_profile() is None
+        return store.get_cloud_sync_profile() is None or cloud_review_reconnect_required(store)
     return True
 
 

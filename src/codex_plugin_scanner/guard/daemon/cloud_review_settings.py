@@ -24,6 +24,31 @@ class CloudReviewSettingsError(ValueError):
         self.code: str = code
 
 
+def cloud_review_reconnect_required(store: GuardStore, sync: dict[str, object] | None = None) -> bool:
+    health = store.get_oauth_local_credential_health()
+    if health.get("state") != "healthy":
+        return True
+    if sync is None:
+        sync_key = "guard_cloud_review_sync_state"
+        if store.guard_source != "default":
+            sync_key += f":{store.guard_source}"
+        state = store.get_sync_payload(sync_key)
+        sync = state if isinstance(state, dict) else {}
+    if sync.get("state") != "error":
+        return False
+    error_code = sync.get("last_error_code")
+    if isinstance(error_code, str):
+        return error_code in {"cloud_auth_expired", "cloud_connect_required"}
+    error = sync.get("last_error")
+    return isinstance(error, str) and error.startswith(
+        (
+            "Guard authorization expired.",
+            "Guard Cloud sign-in on this device is no longer valid.",
+            "HTTP Error 401:",
+        )
+    )
+
+
 def cloud_review_settings_status(store: GuardStore) -> dict[str, object]:
     status = exact_cloud_review_status(store)
     binding = store.get_review_event_oauth_binding()
@@ -40,9 +65,11 @@ def cloud_review_settings_status(store: GuardStore) -> dict[str, object]:
     sync = sync if isinstance(sync, dict) else {}
     recovery = store.get_sync_payload(_RECOVERY_KEY)
     recovery = recovery if isinstance(recovery, dict) and recovery.get("binding") == binding else {}
+    connected = profile is not None and binding is not None
     return {
         "enabled": status.get("enabled") is True,
-        "connected": profile is not None and binding is not None,
+        "connected": connected,
+        "reconnect_required": connected and cloud_review_reconnect_required(store, sync),
         "reason": status.get("reason"),
         "expires_at": status.get("expires_at"),
         "workspace_id": binding["workspace_id"] if binding else None,

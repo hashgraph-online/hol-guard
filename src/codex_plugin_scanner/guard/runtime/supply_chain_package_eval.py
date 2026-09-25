@@ -1596,6 +1596,11 @@ def _cloud_fail_closed_evaluation(
     bundle_meta: dict[str, str] | None,
     fail_closed_decision: str,
 ) -> PackageRequestEvaluation:
+    if code == "cloud_auth_error" and fail_closed_decision == "block":
+        message = message.replace(
+            "this package request needs review.",
+            "the install stays blocked until Guard Cloud sign-in is restored.",
+        )
     reason = _cloud_fallback_reason(code=code, message=message)
     decision = "block" if fail_closed_decision == "block" else "ask"
     severity = "critical" if decision == "block" else "high"
