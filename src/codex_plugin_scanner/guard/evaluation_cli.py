@@ -123,11 +123,13 @@ def _load_profile(path: Path) -> EvaluationProfile:
         raise _CliError("profile_invalid", "evaluation profile is invalid") from None
 
 
-def _path_argument(args: argparse.Namespace, positional: str, option: str, label: str) -> Path:
+def _path_argument(
+    args: argparse.Namespace, positional: str, option: str, label: str, *, code: str
+) -> Path:
     positional_value = cast(str | None, getattr(args, positional, None))
     option_value = cast(str | None, getattr(args, option, None))
     if (positional_value is None) == (option_value is None):
-        raise _CliError("profile_argument_required", f"provide exactly one {label} path")
+        raise _CliError(code, f"provide exactly one {label} path")
     value = positional_value if positional_value is not None else option_value
     assert value is not None
     try:
@@ -316,7 +318,9 @@ def _remove_recovery_token(token_path: Path, *, expected_parent: Path) -> None:
 
 def _run_preflight(args: argparse.Namespace) -> int:
     try:
-        profile_path = _path_argument(args, "profile_path", "profile_option", "evaluation profile")
+        profile_path = _path_argument(
+            args, "profile_path", "profile_option", "evaluation profile", code="profile_argument_required"
+        )
         profile = _load_profile(profile_path)
         artifacts = _artifact_paths(cast(list[str], args.artifact), profile)
         if args.setup:
@@ -354,7 +358,13 @@ def _run_preflight(args: argparse.Namespace) -> int:
 
 def _run_verify_evidence(args: argparse.Namespace) -> int:
     try:
-        package_path = _path_argument(args, "package_path", "package_option", "evidence package")
+        package_path = _path_argument(
+            args,
+            "package_path",
+            "package_option",
+            "evidence package",
+            code="evidence_package_argument_required",
+        )
         data = _read_bounded(
             package_path,
             _MAX_EVIDENCE_BYTES,
@@ -381,8 +391,12 @@ def _run_verify_evidence(args: argparse.Namespace) -> int:
 
 def _run_cleanup(args: argparse.Namespace) -> int:
     try:
-        profile_path = _path_argument(args, "profile_path", "profile_option", "evaluation profile")
-        root_path = _path_argument(args, "owned_root_path", "owned_root_option", "owned setup")
+        profile_path = _path_argument(
+            args, "profile_path", "profile_option", "evaluation profile", code="profile_argument_required"
+        )
+        root_path = _path_argument(
+            args, "owned_root_path", "owned_root_option", "owned setup", code="owned_root_argument_required"
+        )
         profile = _load_profile(profile_path)
         target_scope = cast(Mapping[str, object], profile.data["targetScope"])
         declared_parent = Path(cast(str, target_scope["rootPath"]))
@@ -398,8 +412,7 @@ def _run_cleanup(args: argparse.Namespace) -> int:
             error = _CliError("cleanup_rejected", str(exc), status="blocked_environment")
             _emit(_result("cleanup", error.status, error=error))
             return _exit_code(error.status)
-        if removed:
-            _remove_recovery_token(token_path, expected_parent=declared_parent)
+        _remove_recovery_token(token_path, expected_parent=declared_parent)
         status = "passed" if removed else "not_run"
         cleanup: dict[str, object] = {"removed": removed}
         if not removed:
