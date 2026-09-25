@@ -347,7 +347,8 @@ jobs:
           end = text.index("\n\n[project.urls]")
           scripts = "[project.scripts]\n" \
               'hol-guard = "codex_plugin_scanner.cli:main"\n' \
-              'plugin-guard = "codex_plugin_scanner.cli:main"'
+              'plugin-guard = "codex_plugin_scanner.cli:main"\n' \
+              'hol-guard-eval = "codex_plugin_scanner.guard.evaluation_cli:main"'
           text = text[:start] + scripts + text[end:]
           path.write_text(text, encoding="utf-8")
           PY
@@ -383,7 +384,34 @@ jobs:
           uv run --no-sync python -m build
           mv pyproject.toml.bak pyproject.toml
       - name: Verify distributions
-        run: uv run --no-sync twine check dist/*
+        run: |
+          uv run --no-sync twine check dist/*
+          python3 - <<'PY'
+          from configparser import ConfigParser
+          from pathlib import Path
+          from zipfile import ZipFile
+
+          wheels = list(Path("dist").glob("hol_guard-*.whl"))
+          if len(wheels) != 1:
+              raise RuntimeError(f"Expected one Guard wheel, found {len(wheels)}")
+          with ZipFile(wheels[0]) as wheel:
+              metadata = [
+                  name for name in wheel.namelist()
+                  if name.endswith(".dist-info/entry_points.txt")
+              ]
+              if len(metadata) != 1:
+                  raise RuntimeError("Expected one Guard entry_points.txt")
+              scripts = ConfigParser()
+              scripts.read_string(wheel.read(metadata[0]).decode("utf-8"))
+          expected = {
+              "hol-guard": "codex_plugin_scanner.cli:main",
+              "plugin-guard": "codex_plugin_scanner.cli:main",
+              "hol-guard-eval": "codex_plugin_scanner.guard.evaluation_cli:main",
+          }
+          actual = dict(scripts.items("console_scripts"))
+          if actual != expected:
+              raise RuntimeError(f"Guard wheel scripts differ: {actual!r}")
+          PY
       - name: Record immutable distribution hashes
         run: |
           find dist -maxdepth 1 -type f -print0 | sort -z | xargs -0 sha256sum > distribution-sha256.txt
