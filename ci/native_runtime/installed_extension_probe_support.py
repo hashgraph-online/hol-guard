@@ -198,18 +198,64 @@ def persisted_native_receipt_ids(store: GuardStore) -> set[str]:
     return {row["decision_id"] for row in rows if isinstance(row["decision_id"], str)}
 
 
-def await_persisted_native_receipt(store: GuardStore, known_ids: set[str]) -> dict[str, object]:
-    """Wait for the one receipt produced by the immediately preceding HTTP hook."""
+def _receipt_processed_count(writer: object) -> int | None:
+    """Read the bounded in-memory native-receipt progress counter when available."""
 
-    deadline = time.monotonic() + 10
+    stats = getattr(writer, "stats", None)
+    if not callable(stats):
+        return None
+    try:
+        snapshot = stats()
+    except Exception:
+        return None
+    if not isinstance(snapshot, Mapping):
+        return None
+    value = snapshot.get("receipt_processed")
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return None
+    return value
+
+
+def await_persisted_native_receipt(
+    store: GuardStore,
+    known_ids: set[str],
+    *,
+    writer: object | None = None,
+    receipt_processed_before: int | None = None,
+    timeout_seconds: float = 10.0,
+) -> dict[str, object]:
+    """Wait for one new durable receipt without starving the async SQLite writer.
+
+    The installed daemon persists native receipts on its evidence-writer thread.
+    When that writer is available, wait for its in-memory processed counter to
+    advance before opening a competing SQLite reader. This matters on Windows,
+    where aggressive reader polling can repeatedly consume the writer's short
+    lock-acquisition budget. The durable row remains the source of truth: writer
+    progress only decides when to query it.
+    """
+
+    deadline = time.monotonic() + max(0.0, timeout_seconds)
+    processed_mark = receipt_processed_before
+    writer_progress_available = writer is not None and processed_mark is not None
     while time.monotonic() < deadline:
-        new_ids = persisted_native_receipt_ids(store) - known_ids
-        if len(new_ids) > 1:
-            raise RuntimeError("installed_native_extensions_failed:receipt_persistence_ambiguous")
-        if new_ids:
-            receipt = store.get_native_decision_receipt(next(iter(new_ids)))
-            if receipt is not None:
-                return receipt
+        should_read = not writer_progress_available
+        if writer_progress_available:
+            assert writer is not None
+            processed = _receipt_processed_count(writer)
+            if processed is None:
+                writer_progress_available = False
+                should_read = True
+            elif processed > processed_mark:
+                processed_mark = processed
+                should_read = True
+        if should_read:
+            new_ids = persisted_native_receipt_ids(store) - known_ids
+            if len(new_ids) > 1:
+                raise RuntimeError("installed_native_extensions_failed:receipt_persistence_ambiguous")
+            if new_ids:
+                receipt = store.get_native_decision_receipt(next(iter(new_ids)))
+                if receipt is not None:
+                    return receipt
         time.sleep(0.02)
     raise RuntimeError("installed_native_extensions_failed:receipt_persistence_missing")
 
