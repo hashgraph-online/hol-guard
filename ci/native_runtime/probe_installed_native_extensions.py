@@ -285,7 +285,7 @@ def exercise(root: Path) -> dict[str, object]:
         receipt_writer = daemon._server.runtime_hook_evidence_writer
         receipt_processed_value = receipt_processed_count(receipt_writer)
         require(receipt_processed_value is not None, f"{label}:receipt_writer_stats")
-        receipt_processed_before = receipt_processed_value if receipt_processed_value is not None else 0
+        receipt_processed_before = receipt_processed_value
         response = request(daemon, home, workspace, "claude-code", "PreToolUse", payload)
         require(isinstance(response, dict), f"{label}:http_missing")
         # Compatibility hooks execute in the isolated hook process. Its receipt
