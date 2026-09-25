@@ -5,6 +5,15 @@ All notable changes to HOL Guard will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.1](https://github.com/hashgraph-online/hol-guard/compare/v3.5.0...v3.5.1) (2026-09-25)
+
+
+### Bug Fixes
+
+* **dashboard:** replace window.confirm with an in-app confirmation dialog ([#3108](https://github.com/hashgraph-online/hol-guard/issues/3108)) ([2e62aab](https://github.com/hashgraph-online/hol-guard/commit/2e62aab4b914cbd3df8f83708edcacdfb04dbcc3))
+* **guard:** keep Windows command paths and daemon startup ([#3101](https://github.com/hashgraph-online/hol-guard/issues/3101)) ([3415ade](https://github.com/hashgraph-online/hol-guard/commit/3415adeb2dc171b81a0a7185a573f5a4ee313c86))
+* **runtime:** keep native policy prep working when old resident scopes pile up ([#3106](https://github.com/hashgraph-online/hol-guard/issues/3106)) ([0986515](https://github.com/hashgraph-online/hol-guard/commit/0986515e7969d9dd5b14bb3554b58fc1523309da))
+
 ## [3.5.0](https://github.com/hashgraph-online/hol-guard/compare/v3.4.5...v3.5.0) (2026-09-24)
 
 
