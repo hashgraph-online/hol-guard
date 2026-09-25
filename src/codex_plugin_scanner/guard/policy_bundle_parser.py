@@ -16,6 +16,7 @@ from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
 
 from ..version import __version__
+from . import policy_bundle_rollout
 from .cloud_exceptions import policy_bundle_cloud_exceptions_are_valid
 from .config import VALID_RECEIPT_REDACTION_LEVELS
 from .policy_bundle_trusted_keys import (
@@ -55,7 +56,6 @@ _POLICY_BUNDLE_RULE_ACTIONS = frozenset({"allow", "block", "review", "ignore"})
 _POLICY_BUNDLE_ROLLOUT_STATES = frozenset(
     {"draft", "simulated", "pending_approval", "enforcing", "enforced", "rollback_available"}
 )
-_POLICY_BUNDLE_ENFORCEABLE_ROLLOUT_STATES = frozenset({"enforcing", "enforced", "rollback_available"})
 _POLICY_BUNDLE_BROWSER_SCOPE_KEYS = frozenset(
     {
         "browserIntent",
@@ -333,14 +333,6 @@ def policy_bundle_daemon_version_supported(policy_bundle: dict[str, object]) -> 
     current = _version_tuple(__version__)
     minimum = _version_tuple(min_daemon_version)
     return current is not None and minimum is not None and current >= minimum
-
-
-def policy_bundle_is_enforceable(policy_bundle: dict[str, object]) -> bool:
-    """Return whether an authenticated rollout is intended as live authority."""
-
-    if policy_bundle.get("contractVersion") == "guard-policy-bundle.v2":
-        return True
-    return policy_bundle.get("rolloutState") in _POLICY_BUNDLE_ENFORCEABLE_ROLLOUT_STATES
 
 
 def policy_bundle_acceptance_checkpoint(policy_bundle: dict[str, object]) -> dict[str, object]:
@@ -698,3 +690,6 @@ POLICY_BUNDLE_DEFAULT_ENVIRONMENTS = _POLICY_BUNDLE_DEFAULT_ENVIRONMENTS
 POLICY_BUNDLE_RULE_ACTIONS = _POLICY_BUNDLE_RULE_ACTIONS
 POLICY_BUNDLE_RULE_MATCHER_FAMILIES = _POLICY_BUNDLE_RULE_MATCHER_FAMILIES
 POLICY_BUNDLE_BROWSER_SCOPE_KEYS = _POLICY_BUNDLE_BROWSER_SCOPE_KEYS
+POLICY_BUNDLE_ENFORCEABLE_ROLLOUT_STATES = policy_bundle_rollout.POLICY_BUNDLE_ENFORCEABLE_ROLLOUT_STATES
+policy_bundle_is_enforceable = policy_bundle_rollout.policy_bundle_is_enforceable
+policy_bundle_rollout_state = policy_bundle_rollout.policy_bundle_rollout_state
