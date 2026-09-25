@@ -230,9 +230,17 @@ fn safe_listing_arguments(arguments: &[String]) -> bool {
 
 fn safe_read_target(argument: &str) -> bool {
     let lowered = argument.to_ascii_lowercase();
-    !["/etc/", "/dev/", "/proc/", "/sys/", "/var/", "/private/etc/", "~"]
-        .iter()
-        .any(|prefix| lowered.starts_with(prefix))
+    ![
+        "/etc/",
+        "/dev/",
+        "/proc/",
+        "/sys/",
+        "/var/",
+        "/private/etc/",
+        "~",
+    ]
+    .iter()
+    .any(|prefix| lowered.starts_with(prefix))
         && !argument.split(['/', '\\']).any(|part| part == "..")
 }
 
