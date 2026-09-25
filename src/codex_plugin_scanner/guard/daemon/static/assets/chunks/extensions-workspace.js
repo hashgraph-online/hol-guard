@@ -5992,6 +5992,10 @@ function DeveloperModuleDetails(props) {
 function ProtectionModuleDetail(props) {
   const [policyDirty, setPolicyDirty] = reactExports.useState(false);
   const { confirm: requestConfirmation, dialog: confirmDialog } = useConfirmDialog();
+  const urlStateRef = reactExports.useRef(props.urlState);
+  urlStateRef.current = props.urlState;
+  const onUrlStateRef = reactExports.useRef(props.onUrlState);
+  onUrlStateRef.current = props.onUrlState;
   reactExports.useEffect(() => {
     let highlightTimer = 0;
     let highlighted = null;
@@ -6048,7 +6052,8 @@ function ProtectionModuleDetail(props) {
   const cloudControlsUrl = props.runtime?.dashboard_url?.trim() || props.runtime?.connect_url?.trim() || void 0;
   const setActiveTab = reactExports.useCallback(async (tab) => {
     if (!props.onUrlState) return false;
-    if (tab !== activeTab && policyDirty && !await requestConfirmation({
+    const needsConfirmation = tab !== activeTab && policyDirty;
+    if (needsConfirmation && !await requestConfirmation({
       title: "Discard unreviewed changes?",
       description: DRAFT_EXIT_MESSAGE,
       confirmLabel: "Discard changes",
@@ -6057,8 +6062,14 @@ function ProtectionModuleDetail(props) {
     })) {
       return false;
     }
-    props.onUrlState({
-      ...props.urlState ?? {
+    const latestUrlState = urlStateRef.current;
+    const latestOnUrlState = onUrlStateRef.current;
+    if (!latestOnUrlState) return false;
+    if (needsConfirmation && canonicalProtectionDetailTab(latestUrlState?.tab ?? "overview") === tab) {
+      return false;
+    }
+    latestOnUrlState({
+      ...latestUrlState ?? {
         tab: "overview",
         query: "",
         risk: "all",
@@ -6074,7 +6085,7 @@ function ProtectionModuleDetail(props) {
       ruleId: null
     });
     return true;
-  }, [activeTab, policyDirty, props.onUrlState, props.urlState, requestConfirmation]);
+  }, [activeTab, policyDirty, props.onUrlState, requestConfirmation]);
   const handleTabKeyDown = async (event, tab) => {
     if (!event.key.startsWith("Arrow") && event.key !== "Home" && event.key !== "End") return;
     const index = DETAIL_TABS.findIndex((item) => item.id === tab);

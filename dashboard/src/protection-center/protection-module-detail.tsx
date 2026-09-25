@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { HiMiniArrowLeft, HiMiniArrowTopRightOnSquare, HiMiniLockClosed } from "react-icons/hi2";
 
 import {
@@ -157,6 +157,10 @@ export function ProtectionModuleDetail(props: {
 }) {
   const [policyDirty, setPolicyDirty] = useState(false);
   const { confirm: requestConfirmation, dialog: confirmDialog } = useConfirmDialog();
+  const urlStateRef = useRef(props.urlState);
+  urlStateRef.current = props.urlState;
+  const onUrlStateRef = useRef(props.onUrlState);
+  onUrlStateRef.current = props.onUrlState;
   useEffect(() => {
     let highlightTimer = 0;
     let highlighted: HTMLElement | null = null;
@@ -213,9 +217,9 @@ export function ProtectionModuleDetail(props: {
   const cloudControlsUrl = props.runtime?.dashboard_url?.trim() || props.runtime?.connect_url?.trim() || undefined;
   const setActiveTab = useCallback(async (tab: ProtectionDetailTab): Promise<boolean> => {
     if (!props.onUrlState) return false;
+    const needsConfirmation = tab !== activeTab && policyDirty;
     if (
-      tab !== activeTab
-      && policyDirty
+      needsConfirmation
       && !(await requestConfirmation({
         title: "Discard unreviewed changes?",
         description: DRAFT_EXIT_MESSAGE,
@@ -226,8 +230,14 @@ export function ProtectionModuleDetail(props: {
     ) {
       return false;
     }
-    props.onUrlState({
-      ...(props.urlState ?? {
+    const latestUrlState = urlStateRef.current;
+    const latestOnUrlState = onUrlStateRef.current;
+    if (!latestOnUrlState) return false;
+    if (needsConfirmation && canonicalProtectionDetailTab(latestUrlState?.tab ?? "overview") === tab) {
+      return false;
+    }
+    latestOnUrlState({
+      ...(latestUrlState ?? {
         tab: "overview",
         query: "",
         risk: "all",
@@ -243,7 +253,7 @@ export function ProtectionModuleDetail(props: {
       ruleId: null,
     });
     return true;
-  }, [activeTab, policyDirty, props.onUrlState, props.urlState, requestConfirmation]);
+  }, [activeTab, policyDirty, props.onUrlState, requestConfirmation]);
   const handleTabKeyDown = async (event: KeyboardEvent<HTMLButtonElement>, tab: ProtectionDetailTab) => {
     if (!event.key.startsWith("Arrow") && event.key !== "Home" && event.key !== "End") return;
     const index = DETAIL_TABS.findIndex((item) => item.id === tab);

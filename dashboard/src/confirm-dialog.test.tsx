@@ -37,6 +37,7 @@ const markup = renderToStaticMarkup(
     confirmLabel="Clear evidence"
     cancelLabel="Keep editing"
     tone="destructive"
+    descriptionId="confirm-desc"
     onConfirm={noop}
     onCancel={noop}
   />,
@@ -47,7 +48,8 @@ assert(markup.includes("Local audit history on this machine is deleted."), "pane
 assert(markup.includes("Clear evidence"), "panel renders the confirm label");
 assert(markup.includes("Keep editing"), "panel renders the cancel label");
 assert(/<button[^>]*type="button"[^>]*>Clear evidence<\/button>/.test(markup), "confirm is a type=button button");
-assert(markup.includes('aria-describedby="confirm-dialog-description"'), "panel points at its description");
+assert(markup.includes('id="confirm-desc"'), "panel renders the description id it was given");
+assert(!markup.includes("aria-describedby"), "aria-describedby lives on the dialog layer, not the panel");
 
 const defaultMarkup = renderToStaticMarkup(
   <ConfirmDialogPanel

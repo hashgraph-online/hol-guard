@@ -1,5 +1,4 @@
 import { r as reactExports, j as jsxRuntimeExports, b3 as GuardModalLayer, P as HiMiniExclamationTriangle, a3 as HiMiniWrenchScrewdriver } from "../guard-dashboard.js";
-const CONFIRM_DIALOG_DESCRIPTION_ID = "confirm-dialog-description";
 function ConfirmDialogPanel(props) {
   const tone = props.tone ?? "default";
   const destructive = tone === "destructive";
@@ -28,7 +27,6 @@ function ConfirmDialogPanel(props) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
     "div",
     {
-      "aria-describedby": CONFIRM_DIALOG_DESCRIPTION_ID,
       className: `rounded-2xl border bg-white p-6 shadow-xl ${destructive ? "border-brand-attention/15" : "border-brand-blue/15"}`,
       children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
@@ -47,7 +45,7 @@ function ConfirmDialogPanel(props) {
           ),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-base font-semibold text-brand-dark", children: props.title }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { id: CONFIRM_DIALOG_DESCRIPTION_ID, className: "mt-2 text-sm text-slate-500", children: props.description })
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { id: props.descriptionId, className: "mt-2 text-sm text-slate-500", children: props.description })
           ] })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-6 flex flex-wrap gap-2", children: destructive ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
@@ -62,13 +60,15 @@ function ConfirmDialogPanel(props) {
   );
 }
 function ConfirmDialog(props) {
+  const descriptionId = reactExports.useId();
   return /* @__PURE__ */ jsxRuntimeExports.jsx(
     GuardModalLayer,
     {
       ariaLabel: props.title,
+      ariaDescribedBy: descriptionId,
       onClose: props.onCancel,
       panelClassName: "w-full max-w-sm",
-      children: /* @__PURE__ */ jsxRuntimeExports.jsx(ConfirmDialogPanel, { ...props })
+      children: /* @__PURE__ */ jsxRuntimeExports.jsx(ConfirmDialogPanel, { ...props, descriptionId })
     }
   );
 }
@@ -77,15 +77,12 @@ function useConfirmDialog() {
   const pendingRef = reactExports.useRef(null);
   pendingRef.current = pending;
   const confirm = reactExports.useCallback((options) => {
-    let resolvePromise = () => void 0;
-    const promise = new Promise((resolve) => {
-      resolvePromise = resolve;
+    return new Promise((resolve) => {
+      setPending((previous) => {
+        previous?.resolve(false);
+        return { options, resolve };
+      });
     });
-    setPending((previous) => {
-      previous?.resolve(false);
-      return { options, resolve: resolvePromise };
-    });
-    return promise;
   }, []);
   const settle = reactExports.useCallback((value) => {
     setPending((current) => {

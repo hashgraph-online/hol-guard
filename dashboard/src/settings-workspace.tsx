@@ -1300,7 +1300,10 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
     setActionMessage(null);
     try {
       const result = await repairApprovalCenter();
-      setActionMessage(resolveRepairApprovalCenterMessage(result.cleared ?? []));
+      const cleared = Array.isArray(result?.cleared)
+        ? result.cleared.filter((code): code is string => typeof code === "string")
+        : [];
+      setActionMessage(resolveRepairApprovalCenterMessage(cleared));
       setActionMessageKind("success");
     } catch (error) {
       setActionMessage(error instanceof Error ? error.message : "Unable to repair approval center.");

@@ -20259,6 +20259,7 @@ function useFocusTrap(active, containerRef) {
 }
 function GuardModalLayer({
   ariaLabel,
+  ariaDescribedBy,
   children,
   onClose,
   panelClassName = "w-full max-w-2xl"
@@ -20317,6 +20318,7 @@ function GuardModalLayer({
         role: "dialog",
         "aria-modal": "true",
         "aria-label": ariaLabel,
+        "aria-describedby": ariaDescribedBy,
         children: /* @__PURE__ */ jsxRuntimeExports.jsx(
           "div",
           {

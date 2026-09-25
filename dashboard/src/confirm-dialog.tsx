@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { HiMiniExclamationTriangle, HiMiniWrenchScrewdriver } from "react-icons/hi2";
 
 import { GuardModalLayer } from "./guard-modal-layer";
@@ -13,10 +13,12 @@ export interface ConfirmDialogOptions {
   tone?: ConfirmDialogTone;
 }
 
-const CONFIRM_DIALOG_DESCRIPTION_ID = "confirm-dialog-description";
-
 export function ConfirmDialogPanel(
-  props: ConfirmDialogOptions & { onConfirm: () => void; onCancel: () => void },
+  props: ConfirmDialogOptions & {
+    onConfirm: () => void;
+    onCancel: () => void;
+    descriptionId?: string;
+  },
 ) {
   const tone = props.tone ?? "default";
   const destructive = tone === "destructive";
@@ -50,7 +52,6 @@ export function ConfirmDialogPanel(
 
   return (
     <div
-      aria-describedby={CONFIRM_DIALOG_DESCRIPTION_ID}
       className={`rounded-2xl border bg-white p-6 shadow-xl ${
         destructive ? "border-brand-attention/15" : "border-brand-blue/15"
       }`}
@@ -68,7 +69,7 @@ export function ConfirmDialogPanel(
         </span>
         <div>
           <h3 className="text-base font-semibold text-brand-dark">{props.title}</h3>
-          <p id={CONFIRM_DIALOG_DESCRIPTION_ID} className="mt-2 text-sm text-slate-500">
+          <p id={props.descriptionId} className="mt-2 text-sm text-slate-500">
             {props.description}
           </p>
         </div>
@@ -93,13 +94,15 @@ export function ConfirmDialogPanel(
 export function ConfirmDialog(
   props: ConfirmDialogOptions & { onConfirm: () => void; onCancel: () => void },
 ) {
+  const descriptionId = useId();
   return (
     <GuardModalLayer
       ariaLabel={props.title}
+      ariaDescribedBy={descriptionId}
       onClose={props.onCancel}
       panelClassName="w-full max-w-sm"
     >
-      <ConfirmDialogPanel {...props} />
+      <ConfirmDialogPanel {...props} descriptionId={descriptionId} />
     </GuardModalLayer>
   );
 }
@@ -118,15 +121,12 @@ export function useConfirmDialog(): {
   pendingRef.current = pending;
 
   const confirm = useCallback((options: ConfirmDialogOptions): Promise<boolean> => {
-    let resolvePromise: (value: boolean) => void = () => undefined;
-    const promise = new Promise<boolean>((resolve) => {
-      resolvePromise = resolve;
+    return new Promise<boolean>((resolve) => {
+      setPending((previous) => {
+        previous?.resolve(false);
+        return { options, resolve };
+      });
     });
-    setPending((previous) => {
-      previous?.resolve(false);
-      return { options, resolve: resolvePromise };
-    });
-    return promise;
   }, []);
 
   const settle = useCallback((value: boolean) => {
