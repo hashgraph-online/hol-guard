@@ -289,7 +289,7 @@ def _attach_native_review_approval_aliases(
 
 def _native_review_permission_decision(harness: str) -> str:
     canonical = _canonical_hook_harness(harness)
-    if canonical in {"codex", "kimi", "grok", "zcode", "hermes"}:
+    if canonical in {"codex", "kimi", "grok", "zcode", "hermes", "devin"}:
         return "deny"
     return "ask"
 

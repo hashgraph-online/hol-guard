@@ -210,7 +210,7 @@ def _native_hook_permission_decision(policy_action: str, *, harness: str) -> str
     if policy_action in {"block", "sandbox-required"}:
         return "deny"
     if policy_action in {"review", "require-reapproval"}:
-        if canonical in {"codex", "kimi", "grok", "zcode"}:
+        if canonical in {"codex", "kimi", "grok", "zcode", "devin"}:
             return "deny"
         return "ask"
     if canonical == "codex":
@@ -477,7 +477,7 @@ def _approval_surface_policy_for_flow(config_policy: str, approval_flow: dict[st
 _ACTION_ENVELOPE_HARNESSES = frozenset(
     {
         "codex", "cline", "claude-code", "opencode", "copilot", "gemini", "hermes",
-        "openclaw", "cursor", "grok", "kimi", "pi", "omp", "zcode",
+        "openclaw", "cursor", "grok", "kimi", "pi", "omp", "zcode", "devin",
     }
 )
 

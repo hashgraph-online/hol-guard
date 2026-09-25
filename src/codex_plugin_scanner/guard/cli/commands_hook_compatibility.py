@@ -32,6 +32,7 @@ def prepare_compatibility_hook_payload(payload: dict[str, object], *, harness: s
 
     from ..adapters.cline_hook_payload import prepare_cline_hook_payload
     from ..adapters.cursor_hooks import prepare_cursor_hook_payload
+    from ..adapters.devin_hooks import prepare_devin_hook_payload
     from ..adapters.grok_hooks import prepare_grok_hook_payload
     from ..adapters.zcode_hooks import prepare_zcode_hook_payload
     from .commands_support_runtime_resolution import _canonical_harness_name
@@ -40,6 +41,7 @@ def prepare_compatibility_hook_payload(payload: dict[str, object], *, harness: s
     preparers = {
         "cline": prepare_cline_hook_payload,
         "cursor": prepare_cursor_hook_payload,
+        "devin": prepare_devin_hook_payload,
         "grok": prepare_grok_hook_payload,
         "zcode": prepare_zcode_hook_payload,
     }

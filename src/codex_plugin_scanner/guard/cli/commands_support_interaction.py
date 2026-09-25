@@ -295,7 +295,7 @@ def _should_emit_copilot_hook_response(args: argparse.Namespace) -> bool:
 
 def _should_emit_native_hook_response(args: argparse.Namespace) -> bool:
     harness = _canonical_harness_name(args.harness)
-    natives = {"claude-code", "codex", "kimi", "grok", "pi", "omp", "zcode"}
+    natives = {"claude-code", "codex", "kimi", "grok", "pi", "omp", "zcode", "devin"}
     return harness == "hermes" or (harness in natives and not getattr(args, "json", False))
 
 def _should_emit_claude_native_pretooluse_notice(
@@ -336,7 +336,7 @@ def _should_emit_native_hook_exit_block(args: argparse.Namespace, *, event_name:
     canonical = _canonical_harness_name(args.harness)
     compact_event = event_name.replace("_", "").replace("-", "").lower()
     blocking = compact_event in {"pretooluse", "userpromptsubmit", "pretoolcall"}
-    if canonical in {"kimi", "grok", "hermes", "pi", "omp", "zcode"} and blocking:
+    if canonical in {"kimi", "grok", "hermes", "pi", "omp", "zcode", "devin"} and blocking:
         return policy_action in {"review", "require-reapproval", "sandbox-required", "block"}
     return False
 

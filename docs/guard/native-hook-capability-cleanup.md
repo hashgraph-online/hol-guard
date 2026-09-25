@@ -1,5 +1,12 @@
 # Python hook capability cleanup (NHD-091–095)
 
+> September 24, 2026: RMN-009 physically retires `native_runtime_resident.py`
+> and its unused `native_runtime_resident_transport.py` helper. Neither is a
+> retained reference implementation or a package-exclusion-only candidate now.
+> The 17 named hook-oracle files below are still pending their own caller and
+> behavior cutovers. See ADR 0013 and the runtime retirement ledger.
+
+
 Status: accepted for this cleanup slice. The machine-readable ownership
 contract is `docs/guard/contracts/python-capability-ownership.v1.json`, and
 the always-selected Rust authority workflow runs
