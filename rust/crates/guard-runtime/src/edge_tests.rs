@@ -205,7 +205,7 @@ fn evaluates_complete_cursor_file_envelope_as_native_generic_result() {
     assert_eq!(result.result["schema"], "guard-pre-tool-result.v1");
     assert_eq!(result.result["authority"], "rust");
     assert_eq!(result.result["action"]["action_type"], "file_read");
-    assert_eq!(result.result["minimum_action"], "review");
+    assert_eq!(result.result["minimum_action"], "allow");
     assert!(result.result.get("raw_payload").is_none());
 }
 
@@ -252,7 +252,7 @@ fn evaluates_generic_pretool_for_supported_harness_aliases() {
         assert_eq!(result.harness, expected);
         assert_eq!(result.result["action"]["harness"], expected);
         assert_eq!(result.result["action"]["action_type"], "file_read");
-        assert_eq!(result.result["minimum_action"], "review");
+        assert_eq!(result.result["minimum_action"], "allow");
     }
 }
 

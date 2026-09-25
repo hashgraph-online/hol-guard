@@ -375,13 +375,11 @@ def evaluate_command(
             and (evidence.identity.rule_id not in explicitly_enabled_rule_ids or evidence.uncertainty_reasons)
         )
     )
-    # Keep read floors whenever the native result is non-benign or execution
-    # still needs a separate filesystem/launch proof.
-    read_factors = (
-        ()
-        if native_host_floor_exempt
-        else shell_read_floor_factors(command_text, command.security_identity, cwd=cwd, home_dir=home_dir)
-    )
+    # A native benign proof cannot establish the resolved target of a file
+    # read, so secret-read floors remain active even for proven benign commands.
+    read_factors = shell_read_floor_factors(command_text, command.security_identity, cwd=cwd, home_dir=home_dir)
+    if native_host_floor_exempt:
+        read_factors = tuple(factor for factor in read_factors if factor.reason_code == "critical.local-secret-read")
     if authorization_evidence is not None:
         # Claimed workflow proof already covers exact GitHub CLI execution.
         # Keep secret-read floors; do not let a script-shaped interpreter
