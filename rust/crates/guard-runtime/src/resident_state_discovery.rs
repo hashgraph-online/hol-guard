@@ -3,7 +3,8 @@ use std::path::{Path, PathBuf};
 
 use super::{
     ensure_private_directory_under, private_root_for_state_base, read_state_file_raw,
-    validate_state, ResidentState, MAX_STATE_FILES, STATE_FILE_PREFIX, STATE_FILE_SUFFIX,
+    validate_package_process_identity, validate_state, ResidentState, MAX_STATE_FILES,
+    STATE_FILE_PREFIX, STATE_FILE_SUFFIX,
 };
 
 const MAX_SCOPES: usize = 16;
@@ -56,9 +57,7 @@ pub(crate) fn discover_home_states_prefer(
             preferred_candidate = Some(candidate);
             continue;
         }
-        if fallback_candidates.len() < MAX_SCOPES {
-            fallback_candidates.push(candidate);
-        }
+        fallback_candidates.push(candidate);
     }
     if truncated && preferred_candidate.is_none() {
         return Err("native_resident_state_list_failed".to_owned());
@@ -77,9 +76,14 @@ pub(crate) fn discover_home_states_prefer(
     if let Some((path, digest_prefix)) = preferred_candidate {
         states.extend(load_scope_states(&path, &digest_prefix, &private_root)?);
     }
-    if states.is_empty() {
+    let preferred_live = states.iter().any(|(_, _, state)| {
+        validate_package_process_identity(state.process_id, &state.process_start_marker).is_ok()
+    });
+    if !preferred_live {
         for (path, digest_prefix) in fallback_candidates {
-            states.extend(load_scope_states(&path, &digest_prefix, &private_root)?);
+            if let Ok(found) = load_scope_states(&path, &digest_prefix, &private_root) {
+                states.extend(found);
+            }
         }
     }
     states.sort_unstable_by(|left, right| {
