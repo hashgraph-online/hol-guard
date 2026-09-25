@@ -24,6 +24,7 @@ from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import (
 )
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.guard_cli_facade_isolation import isolate_terminal_block_patches, restore_cli_facade_approval_hooks
+from tests.guard_signed_approval_fixtures import write_synthetic_daemon_auth_token
 
 
 @pytest.fixture(autouse=True)
@@ -504,6 +505,7 @@ def test_guard_hook_ask_package_direct_hook_caps_browser_approval_wait(
         ),
         "2026-05-19T00:00:00Z",
     )
+    write_synthetic_daemon_auth_token(home_dir)
     (home_dir / "config.toml").write_text("approval_wait_timeout_seconds = 120\n", encoding="utf-8")
     observed_timeouts: list[int] = []
     monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
@@ -546,6 +548,7 @@ def test_guard_hook_ask_package_direct_hook_caps_browser_approval_wait(
     assert observed_timeouts == [8]
     reason = payload["hookSpecificOutput"]["permissionDecisionReason"]
     assert "/requests/" in reason
+    assert "guard-token=gld1." in reason
     assert "retry the same Codex action" in reason
     assert "waiting for approval in your browser" in captured.err
 

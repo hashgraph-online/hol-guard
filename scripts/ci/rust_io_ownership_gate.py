@@ -72,9 +72,21 @@ _TRANSPORT_IDENTITY_PATHS: Final = frozenset(
     {
         "src/codex_plugin_scanner/guard/native_runtime.py",
         "src/codex_plugin_scanner/guard/native_resident_client.py",
-        "src/codex_plugin_scanner/guard/native_runtime_resident.py",
         "src/codex_plugin_scanner/guard/native_runtime_resilience.py",
         "src/codex_plugin_scanner/guard/codex_hook_launch_runtime.py",
+    }
+)
+_TRANSPORT_INTEGRITY_PATHS: Final = frozenset(
+    {
+        "src/codex_plugin_scanner/guard/native_decision_receipt.py",
+        "src/codex_plugin_scanner/guard/native_command_observations.py",
+        "src/codex_plugin_scanner/guard/daemon/hook_native_review_approval.py",
+    }
+)
+_TRANSPORT_AUTHORITY_PATHS: Final = frozenset(
+    {
+        # Strict owner-checked native command-control lock and marker transport.
+        "src/codex_plugin_scanner/guard/native_command_control_authority_io.py",
     }
 )
 _TRANSPORT_DECODE_PATHS: Final = frozenset(
@@ -96,6 +108,8 @@ _ASYNC_POLICY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_policy_snapshot_publisher_inputs.py",
         "src/codex_plugin_scanner/guard/native_policy_snapshot_storage.py",
         "src/codex_plugin_scanner/guard/config.py",
+        "src/codex_plugin_scanner/guard/config_file_io.py",
+        "src/codex_plugin_scanner/guard/directory_path_authority.py",
         "src/codex_plugin_scanner/guard/runtime/command_activity_correlation.py",
     }
 )
@@ -247,8 +261,10 @@ def _category(path: str, kind: str) -> str:
         return "transport_identity"
     if path in _TRANSPORT_DECODE_PATHS and kind == "decode":
         return "transport_decode"
-    if path == "src/codex_plugin_scanner/guard/native_decision_receipt.py" and kind == "hash":
+    if path in _TRANSPORT_INTEGRITY_PATHS and kind == "hash":
         return "transport_integrity"
+    if path in _TRANSPORT_AUTHORITY_PATHS and kind == "filesystem":
+        return "transport_authority"
     if path in _ASYNC_POLICY_PATHS:
         return "asynchronous_policy"
     if path.startswith(_PERSISTENCE_PATH_PREFIXES):

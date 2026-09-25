@@ -11,6 +11,7 @@ import hmac
 import json
 import os
 import shlex
+import signal
 import subprocess
 import sys
 import threading
@@ -45,6 +46,47 @@ def _request_timeout(deadline_monotonic: float, preferred_seconds: float) -> flo
     if remaining <= 0:
         return None
     return min(preferred_seconds, remaining)
+
+
+def _run_contained_cli(
+    argv: list[str],
+    *,
+    input_text: str,
+    env: Mapping[str, str],
+    timeout_seconds: float,
+) -> subprocess.CompletedProcess[str]:
+    popen_kwargs: dict[str, object] = {
+        "cwd": GUARD_HOME,
+        "env": dict(env),
+        "stdin": subprocess.PIPE,
+        "stdout": subprocess.PIPE,
+        "stderr": subprocess.PIPE,
+        "text": True,
+    }
+    if os.name != "nt":
+        popen_kwargs["start_new_session"] = True
+    proc = subprocess.Popen(argv, **popen_kwargs)
+    try:
+        out, err = proc.communicate(input=input_text, timeout=timeout_seconds)
+    except subprocess.TimeoutExpired:
+        if os.name != "nt":
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except OSError:
+                proc.kill()
+        else:
+            proc.kill()
+        try:
+            proc.communicate()
+        except Exception:
+            pass
+        raise
+    return subprocess.CompletedProcess(
+        argv,
+        proc.returncode if proc.returncode is not None else 1,
+        stdout=out or "",
+        stderr=err or "",
+    )
 
 
 def _hook_process_env() -> dict[str, str]:
@@ -264,7 +306,12 @@ def _run_guard_fallback(
         if remaining <= 0:
             raise subprocess.TimeoutExpired([*_resolved_guard_cli(), *guard_argv], GUARD_HOOK_TIMEOUT_SECONDS)
         if run_isolated_hook_process is None:
-            raise RuntimeError("HOL Guard isolated hook runtime is unavailable")
+            return _run_contained_cli(
+                [*_resolved_guard_cli(), *guard_argv],
+                input_text=payload_json,
+                env=guard_env,
+                timeout_seconds=remaining,
+            )
         result = run_isolated_hook_process(
             [*_resolved_guard_cli(), *guard_argv],
             cwd=GUARD_HOME,
@@ -297,6 +344,15 @@ def _run_guard_recovery(
         if remaining <= 0:
             return
         if run_isolated_hook_process is None:
+            try:
+                _run_contained_cli(
+                    [*GUARD_RECOVERY_COMMAND, failure_kind],
+                    input_text="",
+                    env=guard_env,
+                    timeout_seconds=remaining,
+                )
+            except (OSError, ValueError, subprocess.TimeoutExpired):
+                return
             return
         _ = run_isolated_hook_process(
             [*GUARD_RECOVERY_COMMAND, failure_kind],

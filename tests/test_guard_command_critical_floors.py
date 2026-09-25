@@ -5,7 +5,44 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.models import GuardAction
+from codex_plugin_scanner.guard.native_command_model import _canonical_command_from_native, _request_payload
+from codex_plugin_scanner.guard.runtime.command_critical_floors import command_critical_floor_factors
 from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
+from codex_plugin_scanner.guard.runtime.command_model import parse_shell_command
+from codex_plugin_scanner.guard.runtime.effect_decision import EffectDecisionRequest, evaluate_effect_decision
+from tests.native_command_test_support import real_native_review_fixture
+
+
+def _native_action(command: str) -> tuple[GuardAction, str | None]:
+    fixture = real_native_review_fixture(command, cwd=Path("workspace"), home_dir=Path("home"))
+    evidence = fixture.payload["command_extensions"]
+    assert isinstance(evidence, dict)
+    error = evidence["evaluation_error"]
+    if error is not None:
+        assert error == "native_command_evaluation_failed"
+        assert evidence["observations"] == []
+        assert evidence["permission_observations"] == []
+        assert evidence["binding"]["observation_count"] == 0
+        assert fixture.payload["minimum_action"] == "block"
+        return "block", error
+    canonical = _canonical_command_from_native(command, fixture.payload["command_model"])
+    assert canonical is not None
+    evaluation = evaluate_command(
+        command,
+        canonical_command=canonical,
+        cwd=Path("workspace"),
+        home_dir=Path("home"),
+        extension_control_snapshot=fixture.snapshot,
+        native_extension_evidence=fixture.payload,
+    )
+    return evaluation.decision_plane.action, None
+
+
+def _critical_factor_action(command: str) -> GuardAction:
+    canonical = parse_shell_command(command, cwd=Path("workspace"), home_dir=Path("home"))
+    factors = command_critical_floor_factors(canonical)
+    return evaluate_effect_decision(EffectDecisionRequest(factors=factors)).action
+
 
 CRITICAL_COMMAND_FLOORS: tuple[tuple[str, GuardAction], ...] = (
     ("aws route53 delete-hosted-zone --id zone --output json", "block"),
@@ -157,14 +194,54 @@ CRITICAL_COMMAND_FLOORS: tuple[tuple[str, GuardAction], ...] = (
 
 @pytest.mark.parametrize(("command", "expected"), CRITICAL_COMMAND_FLOORS)
 def test_security_critical_commands_retain_exact_floors(command: str, expected: GuardAction) -> None:
-    evaluation = evaluate_command(command, cwd=Path("workspace"), home_dir=Path("home"))
-    assert evaluation.decision_plane.action == expected
+    assert _critical_factor_action(command) == expected
 
 
 def test_launcher_ambiguity_fanout_fails_closed() -> None:
     options = " ".join(f"--unknown value-{index}" for index in range(300))
-    evaluation = evaluate_command(f"parallel {options} printf safe", cwd=Path("workspace"), home_dir=Path("home"))
-    assert evaluation.decision_plane.action == "block"
+    assert _critical_factor_action(f"parallel {options} printf safe") == "block"
+
+
+def test_native_command_model_rejects_input_above_transport_budget() -> None:
+    assert (
+        _request_payload(
+            "x" * (64 * 1024),
+            dialect="posix",
+            transport="shell_string",
+            extraction_provenance="guard-shell",
+        )
+        is None
+    )
+
+
+# Frozen native baseline dispositions that are intentionally stricter than the
+# independent host factor. These preserve the pre-migration Rust behavior.
+NATIVE_STRICTER_CRITICAL_COMMANDS = frozenset(
+    {
+        "xargs gh pr merge 17 --repo example/repo --squash",
+        "sh -c 'gh pr merge 17 --repo example/repo --squash'",
+        "bash -lc 'gh pr merge 17 --repo example/repo --squash'",
+        "PATH=scratch/bin:$PATH hol-guard status",
+        "printf '%s' \"$(cat workspace/sensitive)\"",
+        "docker compose ps",
+        "docker inspect container --format '{{.State.Status}}'",
+        (
+            "gh api graphql -f query='mutation($threadId:ID!){resolveReviewThread"
+            "(input:{threadId:$threadId}){thread{id}}}' -f threadId=T"
+        ),
+    }
+)
+
+
+@pytest.mark.parametrize(("command", "factor_floor"), CRITICAL_COMMAND_FLOORS)
+def test_real_native_critical_floor_matches_frozen_baseline(
+    command: str, factor_floor: GuardAction
+) -> None:
+    action, error = _native_action(command)
+    expected = "block" if command in NATIVE_STRICTER_CRITICAL_COMMANDS else factor_floor
+    assert action == expected
+    if error is not None:
+        assert action == "block"
 
 
 CRITICAL_NEAR_MISS_COMMANDS: tuple[str, ...] = (
@@ -205,8 +282,30 @@ CRITICAL_NEAR_MISS_COMMANDS: tuple[str, ...] = (
     "not-gh.exe pr merge 17 --repo example/repo --squash",
 )
 
+NATIVE_STRICTER_NEAR_MISSES = frozenset(
+    {
+        "rm -r workspace/cache",
+        "rm -rf ./build",
+        "rm --recursive --force ./dist ./coverage",
+        "docker compose version",
+        "rm -- -rf",
+        "rm -f -- -r",
+        "rm -r -- -f",
+        "gh api graphql -f query='mutation{updateIssue(input:{title:\"do not delete\"}){issue{id}}}'",
+        "gh api graphql -f query='mutation($removeLabel:String!){updateIssue(input:{title:$removeLabel}){issue{id}}}'",
+    }
+)
+
 
 @pytest.mark.parametrize("command", CRITICAL_NEAR_MISS_COMMANDS)
 def test_security_floors_do_not_widen_near_misses_to_block(command: str) -> None:
-    evaluation = evaluate_command(command, cwd=Path("workspace"), home_dir=Path("home"))
-    assert evaluation.decision_plane.action != "block"
+    assert _critical_factor_action(command) != "block"
+
+
+@pytest.mark.parametrize("command", CRITICAL_NEAR_MISS_COMMANDS)
+def test_real_native_near_miss_matches_frozen_baseline(command: str) -> None:
+    action, error = _native_action(command)
+    if command in NATIVE_STRICTER_NEAR_MISSES or error is not None:
+        assert action == "block"
+    else:
+        assert action != "block"

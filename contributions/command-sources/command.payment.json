@@ -1,0 +1,422 @@
+{
+  "extension": {
+    "action_classes": [
+      "Payment destructive command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews product, coupon, customer, and webhook endpoint deletion through Stripe CLI.",
+    "ecosystem_ids": [],
+    "executables": [],
+    "extension_id": "command.payment",
+    "homepage": null,
+    "icon": {
+      "kind": "none"
+    },
+    "license": null,
+    "name": "Payment service command protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "Payment destructive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies documented payment service resource deletion operations through supported command-line tools.",
+        "example_command": "stripe coupons delete",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Payment service resource deletion",
+        "permission_id": "command.payment.permission.delete",
+        "replacement_permission_id": null,
+        "risk_tier": "critical",
+        "safer_guidance": [
+          "Inspect dependent resources and prefer archival where the service supports it."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": null,
+    "reference_urls": [
+      "https://docs.stripe.com/stripe-cli/use-cli",
+      "https://docs.stripe.com/api/products/delete",
+      "https://docs.stripe.com/api/customers/delete",
+      "https://docs.stripe.com/api/coupons/delete",
+      "https://docs.stripe.com/api/webhook_endpoints/delete"
+    ],
+    "required": false,
+    "risk_classes": [
+      "destructive_shell",
+      "network_egress"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "Payment destructive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies documented payment service resource deletion operations through supported command-line tools.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "stripe",
+                  "stripe.cmd",
+                  "stripe.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--latest",
+                  "--live",
+                  "--skip-verify"
+                ],
+                "interspersed_options_with_values": [
+                  "--api-key",
+                  "--color",
+                  "--config",
+                  "--device-name",
+                  "--log-level",
+                  "--project-name",
+                  "--stripe-account",
+                  "--stripe-version"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "coupons",
+                  "delete"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "stripe",
+                  "stripe.cmd",
+                  "stripe.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--latest",
+                  "--live",
+                  "--skip-verify"
+                ],
+                "interspersed_options_with_values": [
+                  "--api-key",
+                  "--color",
+                  "--config",
+                  "--device-name",
+                  "--log-level",
+                  "--project-name",
+                  "--stripe-account",
+                  "--stripe-version"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "customers",
+                  "delete"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "stripe",
+                  "stripe.cmd",
+                  "stripe.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--latest",
+                  "--live",
+                  "--skip-verify"
+                ],
+                "interspersed_options_with_values": [
+                  "--api-key",
+                  "--color",
+                  "--config",
+                  "--device-name",
+                  "--log-level",
+                  "--project-name",
+                  "--stripe-account",
+                  "--stripe-version"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "products",
+                  "delete"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "stripe",
+                  "stripe.cmd",
+                  "stripe.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--latest",
+                  "--live",
+                  "--skip-verify"
+                ],
+                "interspersed_options_with_values": [
+                  "--api-key",
+                  "--color",
+                  "--config",
+                  "--device-name",
+                  "--log-level",
+                  "--project-name",
+                  "--stripe-account",
+                  "--stripe-version"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "webhook_endpoints",
+                  "delete"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.payment.permission.delete",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.payment.delete",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "stripe",
+                      "stripe.cmd",
+                      "stripe.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--latest",
+                      "--live",
+                      "--skip-verify"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--api-key",
+                      "--color",
+                      "--config",
+                      "--device-name",
+                      "--log-level",
+                      "--project-name",
+                      "--stripe-account",
+                      "--stripe-version"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "coupons",
+                      "delete"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "stripe",
+                      "stripe.cmd",
+                      "stripe.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--latest",
+                      "--live",
+                      "--skip-verify"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--api-key",
+                      "--color",
+                      "--config",
+                      "--device-name",
+                      "--log-level",
+                      "--project-name",
+                      "--stripe-account",
+                      "--stripe-version"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "customers",
+                      "delete"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "stripe",
+                      "stripe.cmd",
+                      "stripe.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--latest",
+                      "--live",
+                      "--skip-verify"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--api-key",
+                      "--color",
+                      "--config",
+                      "--device-name",
+                      "--log-level",
+                      "--project-name",
+                      "--stripe-account",
+                      "--stripe-version"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "products",
+                      "delete"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "stripe",
+                      "stripe.cmd",
+                      "stripe.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--latest",
+                      "--live",
+                      "--skip-verify"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--api-key",
+                      "--color",
+                      "--config",
+                      "--device-name",
+                      "--log-level",
+                      "--project-name",
+                      "--stripe-account",
+                      "--stripe-version"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "webhook_endpoints",
+                      "delete"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Inspect dependent resources and prefer archival where the service supports it."
+        ],
+        "severity": "critical",
+        "title": "Payment service resource deletion"
+      }
+    ],
+    "safer_alternatives": [
+      "Inspect dependent resources and prefer archival where supported."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

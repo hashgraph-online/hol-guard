@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import cast
 
-from ..runtime.command_evaluation import evaluate_command
 from ..runtime.command_extensions import CommandSafetyExtensionRegistry
 from ..runtime.extension_control_runtime import ExtensionControlRuntime
+from ..runtime.native_command_evaluation import evaluate_command_native
 from .extension_control_errors import ExtensionControlApiError
 
 _TEST_SCHEMA = "guard.daemon.extension-control-test.v1"
@@ -35,6 +36,7 @@ def evaluate_extension_control_test(
     registry: CommandSafetyExtensionRegistry,
     runtime: ExtensionControlRuntime,
     payload: dict[str, object],
+    guard_home: Path | None = None,
 ) -> dict[str, object]:
     """Evaluate a command without executing it, persisting it, or returning it."""
 
@@ -58,11 +60,28 @@ def evaluate_extension_control_test(
             raise ExtensionControlApiError(404, "unknown_extension")
         extension_id = extension.extension_id
 
-    evaluation = evaluate_command(
+    snapshot = runtime.current()
+    evaluation = evaluate_command_native(
         command,
-        registry=registry,
-        extension_control_snapshot=runtime.current(),
+        guard_home=guard_home or Path.home(),
+        extension_control_snapshot=snapshot,
     )
+    if evaluation is None:
+        return {
+            "schema_version": _TEST_SCHEMA,
+            "status": "native_unavailable",
+            "decision": "ask-first",
+            "minimum_action": "review",
+            "matched": False,
+            "module_matched": False,
+            "other_protection_matched": False,
+            "explanation": "Native command evaluation is unavailable under the current local protection state.",
+            "matches": [],
+            "safer_alternatives": [],
+            "authority_health": snapshot.health.value,
+            "revision": snapshot.revision,
+            "catalog_digest": snapshot.catalog_digest,
+        }
     relevant = [
         owned for owned in evaluation.matches if extension_id is None or owned.extension.extension_id == extension_id
     ][:_MAX_TEST_MATCHES]

@@ -62,6 +62,10 @@ def test_install_generates_guard_managed_overlay_and_pretool_files(
     monkeypatch: pytest.MonkeyPatch,
 ):
     monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge.isolated_cursor_hook_python",
+        lambda: None,
+    )
     _write(
         tmp_path / ".hermes" / "config.yaml",
         (

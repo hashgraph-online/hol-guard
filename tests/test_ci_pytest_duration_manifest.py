@@ -63,3 +63,58 @@ def test_manifest_rejects_non_finite_durations(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="invalid duration"):
         duration_manifest.load_duration_report(output)
+
+
+@pytest.mark.parametrize("newer_filename", ["committed.json.gz", "trusted-artifact.json.gz"])
+@pytest.mark.parametrize("reverse", [False, True])
+def test_latest_manifest_uses_observation_time_independent_of_path_order(
+    tmp_path: Path, newer_filename: str, reverse: bool
+) -> None:
+    now = datetime(2026, 9, 20, 16, 10, tzinfo=timezone.utc)
+    paths = [tmp_path / "committed.json.gz", tmp_path / "trusted-artifact.json.gz"]
+    for path in paths:
+        newer = path.name == newer_filename
+        duration_manifest.write_duration_manifest(
+            path,
+            {"tests/test_a.py::test_a": 3.0 if newer else 20.0},
+            now - timedelta(hours=1 if newer else 24),
+        )
+
+    durations, selected = duration_manifest.load_latest_duration_manifest(
+        reversed(paths) if reverse else paths, now=now, max_age=timedelta(days=28)
+    )
+
+    assert selected == tmp_path / newer_filename
+    assert durations == {duration_manifest.node_id_digest("tests/test_a.py::test_a"): 3.0}
+
+
+@pytest.mark.parametrize("invalid_kind", ["missing", "corrupt", "truncated", "stale", "future"])
+def test_latest_manifest_falls_back_when_an_optional_source_is_invalid(tmp_path: Path, invalid_kind: str) -> None:
+    now = datetime(2026, 9, 20, 16, 10, tzinfo=timezone.utc)
+    valid = tmp_path / "committed.json.gz"
+    invalid = tmp_path / "optional.json.gz"
+    duration_manifest.write_duration_manifest(valid, {"tests/test_a.py::test_a": 4.0}, now - timedelta(hours=1))
+    if invalid_kind == "corrupt":
+        invalid.write_bytes(b"not a gzip stream")
+    elif invalid_kind == "truncated":
+        invalid.write_bytes(valid.read_bytes()[:10])
+    elif invalid_kind in {"stale", "future"}:
+        observed_at = now - timedelta(days=29) if invalid_kind == "stale" else now + timedelta(seconds=1)
+        duration_manifest.write_duration_manifest(invalid, {"tests/test_a.py::test_a": 99.0}, observed_at)
+
+    durations, selected = duration_manifest.load_latest_duration_manifest(
+        [valid, invalid], now=now, max_age=timedelta(days=28)
+    )
+
+    assert selected == valid
+    assert durations == {duration_manifest.node_id_digest("tests/test_a.py::test_a"): 4.0}
+
+
+def test_latest_manifest_rejects_all_invalid_candidates(tmp_path: Path) -> None:
+    now = datetime(2026, 9, 20, 16, 10, tzinfo=timezone.utc)
+    stale = tmp_path / "stale.json.gz"
+    missing = tmp_path / "missing.json.gz"
+    duration_manifest.write_duration_manifest(stale, {"tests/test_a.py::test_a": 4.0}, now - timedelta(days=29))
+
+    with pytest.raises(ValueError, match="no current pytest duration manifest"):
+        duration_manifest.load_latest_duration_manifest([stale, missing], now=now, max_age=timedelta(days=28))

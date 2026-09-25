@@ -7,8 +7,12 @@ export async function assertProofArtifactsPrivate(proofDir: string, session: str
     if (extname(relative) === ".zip") throw new Error("trace archive retained in installed dashboard proof");
     const artifact = Bun.file(`${proofDir}/${relative}`);
     const content = await artifact.text();
-    if (content.includes(session) || content.includes(SENTINEL)) {
-      throw new Error("private value retained in installed dashboard proof");
+    const hasSession = session.length > 0 && content.includes(session);
+    const hasCommand = content.includes(SENTINEL);
+    if (hasSession || hasCommand) {
+      throw new Error(
+        `private value retained in installed dashboard proof: ${relative} (session=${hasSession}, command=${hasCommand})`,
+      );
     }
   }
 }

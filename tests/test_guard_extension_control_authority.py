@@ -12,14 +12,17 @@ from typing import cast
 import pytest
 
 from codex_plugin_scanner.guard import store_extension_control_authority_schema as authority_schema
+from codex_plugin_scanner.guard import store_policy_integrity_backend as policy_integrity_backend_module
 from codex_plugin_scanner.guard.approval_gate import ApprovalGateInput, update_settings
 from codex_plugin_scanner.guard.config import load_guard_config, update_guard_settings
 from codex_plugin_scanner.guard.extension_control_events import extension_control_change_payload
+from codex_plugin_scanner.guard.native_command_control_authority import AUTHORITY_FILE_NAME, encode_authority
+from codex_plugin_scanner.guard.native_command_control_authority_io import write_private_state
+from codex_plugin_scanner.guard.native_command_control_authority_store import _key as native_authority_key
 from codex_plugin_scanner.guard.runtime.command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
     CommandSafetyExtensionRegistry,
 )
-from codex_plugin_scanner.guard.runtime.command_rules import AnyMatcher, ExecutableMatcher
 from codex_plugin_scanner.guard.runtime.extension_control_authority import (
     AuthorityHealth,
     AuthorityPhase,
@@ -265,6 +268,41 @@ def _enroll(
     )
 
 
+def test_linux_enrollment_uses_daemon_native_authority_after_keyring_session_changes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    keyring_values: dict[str, str] = {}
+    monkeypatch.setattr(policy_integrity_backend_module.sys, "platform", "linux", raising=False)
+    monkeypatch.setattr(SystemKeyringSecretStore, "_backend_is_available", classmethod(lambda cls: True))
+    monkeypatch.setattr(SystemKeyringSecretStore, "get_secret", lambda self, secret_id: keyring_values.get(secret_id))
+    monkeypatch.setattr(
+        SystemKeyringSecretStore,
+        "set_secret",
+        lambda self, secret_id, value: keyring_values.__setitem__(secret_id, value),
+    )
+    secrets = MemorySecretStore()
+    daemon_store = _store(tmp_path, secrets, enroll=False)
+    marker = {
+        "schema": "guard.native-command-control-authority.v1",
+        "epoch": 1,
+        "mutation_revision": 1,
+        "authority_key_id": "0" * 64,
+        "phase": "closed",
+        "effective_digest": None,
+        "recovery": None,
+    }
+    write_private_state(
+        tmp_path, AUTHORITY_FILE_NAME, encode_authority(marker, native_authority_key(daemon_store)), 4096
+    )
+
+    monkeypatch.setattr(SystemKeyringSecretStore, "_backend_is_available", classmethod(lambda cls: False))
+    terminal_store = GuardStore(tmp_path, prime_policy_integrity=False)
+    terminal_store._extension_control_authority_secret_store = secrets
+
+    assert _enroll(terminal_store).health is AuthorityHealth.PROTECTED
+
+
 def _disabled_layer() -> ExtensionControlLayer:
     extension = BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions[0]
     return ExtensionControlLayer(
@@ -322,23 +360,10 @@ def _matcher_contract_registry() -> tuple[CommandSafetyExtensionRegistry, str]:
     rule_index = next(
         index
         for index, rule in enumerate(extension.rules)
-        if rule.rule_id.endswith("compose-destructive-cleanup") and isinstance(rule.matcher, AnyMatcher)
+        if rule.rule_id.endswith("compose-destructive-cleanup")
     )
     rule = extension.rules[rule_index]
-    assert isinstance(rule.matcher, AnyMatcher)
-    leaf_index = next(
-        index
-        for index, matcher in enumerate(rule.matcher.matchers)
-        if isinstance(matcher, ExecutableMatcher) and matcher.required_option_values
-    )
-    leaf = rule.matcher.matchers[leaf_index]
-    assert isinstance(leaf, ExecutableMatcher)
-    changed_leaf = replace(leaf, required_flags=leaf.required_flags | {"--catalog-migration-identity"})
-    changed_matcher = replace(
-        rule.matcher,
-        matchers=(*rule.matcher.matchers[:leaf_index], changed_leaf, *rule.matcher.matchers[leaf_index + 1 :]),
-    )
-    changed_rule = replace(rule, matcher=changed_matcher)
+    changed_rule = replace(rule, matcher_contract_digest="0" * 64)
     changed_extension = replace(
         extension,
         rules=(*extension.rules[:rule_index], changed_rule, *extension.rules[rule_index + 1 :]),

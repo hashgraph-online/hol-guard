@@ -11,12 +11,15 @@ from pathlib import Path
 from ...models import GuardArtifact
 from ...redaction import redact_text
 from ..command_decision_adapter import effect_decision_to_dict
-from ..command_evaluation import evaluate_command
-from ..command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
+from ..command_evaluation import CompositeCommandEvaluation, evaluate_command
+from ..command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY, risk_classes_for_command_action
+from ..command_model import parse_shell_command
 from ..direct_vitest import direct_local_typescript_execution_context
+from ..effect_contract import UncertaintyKind
+from ..effect_decision import EffectDecisionRequest, evaluate_effect_decision
 from ..extension_control_contract import ControlSurface, ExtensionControlLayer
 from ..extension_control_resolver import resolve_extension_controls
-from ..extension_control_runtime import current_extension_control_snapshot
+from ..extension_control_runtime import ExtensionControlRuntimeSnapshot, current_extension_control_snapshot
 from ..github_actions_read_workflow import is_nonexecuting_github_actions_read_workflow
 from ..github_capability_contract import GitHubCommandAssessment
 from ..github_capability_interaction import github_capability_requires_confirmation
@@ -368,18 +371,62 @@ def build_tool_action_request_artifact(
     config_path: str,
     source_scope: str,
     extension_control_layers: tuple[ExtensionControlLayer, ...] | None = None,
+    extension_control_snapshot: ExtensionControlRuntimeSnapshot | None = None,
+    native_extension_evidence: object | None = None,
+    native_evaluation: CompositeCommandEvaluation | None = None,
 ) -> GuardArtifact:
     """Build a Guard artifact for a sensitive native tool action request."""
 
     policy_command = request.raw_command_text or request.command_text
-    evaluation = evaluate_command(
-        policy_command,
-        canonical_command=(request.canonical_command if request.raw_command_text is None else None),
-        compatibility_action_class=request.action_class,
-        compatibility_reason=request.reason,
-        extension_control_layers=extension_control_layers,
-    )
-    wrapper_chain = tuple(dict.fromkeys((*evaluation.command.wrapper_chain, *request.wrapper_chain)))
+    evidence_available = native_extension_evidence is not None and extension_control_snapshot is not None
+    if evidence_available:
+        evaluation = native_evaluation
+        if evaluation is None:
+            evaluation = evaluate_command(
+                policy_command,
+                canonical_command=request.canonical_command,
+                compatibility_action_class=request.action_class,
+                compatibility_reason=request.reason,
+                extension_control_snapshot=extension_control_snapshot,
+                native_extension_evidence=native_extension_evidence,
+            )
+        command = evaluation.command
+        decision_plane = evaluation.decision_plane
+        control_resolution = {
+            "blocked": evaluation.control_resolution.blocked,
+            "failures": [failure.code.value for failure in evaluation.control_resolution.failures],
+            **(
+                {
+                    "explicitly_enabled_permission_ids": list(
+                        evaluation.control_resolution.explicitly_enabled_permission_ids
+                    )
+                }
+                if evaluation.control_resolution.explicitly_enabled_permission_ids
+                else {}
+            ),
+        }
+        command_rule_matches = [owned.to_dict() for owned in evaluation.matches]
+        risk_classes = list(evaluation.risk_classes)
+    else:
+        # Artifact discovery can run before the authenticated resident result is
+        # available. Preserve the sensitive request and an explicit review
+        # floor without reconstructing matcher semantics or claiming controls
+        # were evaluated.
+        command = (
+            request.canonical_command
+            if request.raw_command_text is None and request.canonical_command is not None
+            else parse_shell_command(policy_command)
+        )
+        decision_plane = evaluate_effect_decision(
+            EffectDecisionRequest(
+                factors=(),
+                uncertainties=(UncertaintyKind.UNSUPPORTED_INPUT,),
+            )
+        )
+        control_resolution = {"blocked": True, "failures": ["native-evidence-unavailable"]}
+        command_rule_matches = []
+        risk_classes = list(risk_classes_for_command_action(request.action_class))
+    wrapper_chain = tuple(dict.fromkeys((*command.wrapper_chain, *request.wrapper_chain)))
     fingerprint_payload = {
         "harness": harness,
         "tool_name": request.normalized_tool_name,
@@ -440,26 +487,15 @@ def build_tool_action_request_artifact(
             "runtime_request_reason": runtime_reason,
             "raw_command_text": display_raw_command_text,
             "wrapper_chain": list(wrapper_chain),
-            "command_security_identity": evaluation.command.security_identity,
-            "command_action_floor": evaluation.decision_plane.action,
-            "command_decision_plane": effect_decision_to_dict(evaluation.decision_plane),
-            "extension_control_resolution": {
-                "blocked": evaluation.control_resolution.blocked,
-                "failures": [failure.code.value for failure in evaluation.control_resolution.failures],
-                **(
-                    {
-                        "explicitly_enabled_permission_ids": list(
-                            evaluation.control_resolution.explicitly_enabled_permission_ids
-                        )
-                    }
-                    if evaluation.control_resolution.explicitly_enabled_permission_ids
-                    else {}
-                ),
-            },
-            "command_rule_matches": [owned.to_dict() for owned in evaluation.matches],
-            "risk_classes": list(evaluation.risk_classes),
-            "command_parse_confidence": evaluation.command.confidence,
-            "command_uncertainty_reason": evaluation.command.uncertainty_reason,
+            "command_security_identity": command.security_identity,
+            "command_action_floor": decision_plane.action,
+            "command_decision_plane": effect_decision_to_dict(decision_plane),
+            "extension_control_resolution": control_resolution,
+            "command_rule_matches": command_rule_matches,
+            "risk_classes": risk_classes,
+            "command_parse_confidence": command.confidence,
+            "command_uncertainty_reason": command.uncertainty_reason,
+            "native_extension_evidence": "bound" if evidence_available else "unavailable",
             "interpreter_executable_identities": [
                 dict(identity) for identity in request.interpreter_executable_identities
             ],

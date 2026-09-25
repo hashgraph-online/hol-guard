@@ -1,0 +1,135 @@
+{
+  "schema": "guard.command-projection-compatibility.v1",
+  "entries": [
+    {
+      "command": "git reset --hard HEAD~1",
+      "legacy_python_action_class": "destructive shell command",
+      "generated_action_class": "git destructive command",
+      "rule_id": "command.git.hard-reset",
+      "risk_classes": [
+        "destructive_shell"
+      ],
+      "frozen_native_baseline": {
+        "minimum_action": "review",
+        "observed_rule_ids": [
+          "command.git.hard-reset"
+        ],
+        "action_class": null
+      },
+      "generated_native_candidate": {
+        "minimum_action": "review",
+        "observed_rule_ids": [
+          "command.git.hard-reset"
+        ],
+        "action_class": null
+      },
+      "disposition": "Use the canonical generated rule action class. Preserve the shared destructive_shell risk class."
+    },
+    {
+      "command": "git push origin main --force --no-dry-run --dry-run",
+      "legacy_python_projection": "no_match",
+      "generated_native_projection": "review",
+      "rule_ids": [
+        "command.git.force-push",
+        "command.git.push"
+      ],
+      "frozen_native_baseline": {
+        "minimum_action": "review",
+        "observed_rule_ids": [
+          "command.git.force-push",
+          "command.git.push"
+        ],
+        "matched_variants": null
+      },
+      "generated_native_candidate": {
+        "minimum_action": "review",
+        "observed_rule_ids": [
+          "command.git.force-push",
+          "command.git.push"
+        ],
+        "matched_variants": null
+      },
+      "disposition": "Preserve the inherited native review floor. The retired Python option projection returned no_match; frozen and generated native programs both review. This evidence does not execute Git or determine Git option-order semantics."
+    },
+    {
+      "command": "docker rm --help",
+      "legacy_python_projection": "no_match",
+      "generated_native_projection": "block",
+      "frozen_native_baseline": {
+        "minimum_action": "block",
+        "observations": [
+          {
+            "rule_id": "command.container-runtime.docker-sensitive",
+            "match_class": "uncertainty",
+            "uncertainty_reasons": [
+              "matcher-failure"
+            ],
+            "safe_variants": []
+          },
+          {
+            "rule_id": "command.container-runtime.container-removal",
+            "match_class": "unsafe",
+            "uncertainty_reasons": [],
+            "safe_variants": [
+              "help"
+            ]
+          }
+        ]
+      },
+      "generated_native_candidate": {
+        "minimum_action": "block",
+        "observations": [
+          {
+            "rule_id": "command.container-runtime.docker-sensitive",
+            "match_class": "uncertainty",
+            "uncertainty_reasons": [
+              "matcher-failure"
+            ],
+            "safe_variants": []
+          },
+          {
+            "rule_id": "command.container-runtime.container-removal",
+            "match_class": "unsafe",
+            "uncertainty_reasons": [],
+            "safe_variants": [
+              "help"
+            ]
+          }
+        ]
+      },
+      "disposition": "Frozen and generated native programs both block because the broad Docker observation has matcher-failure uncertainty even though the removal observation has a help safe variant."
+    },
+    {
+      "command": "kubectl get pods -A",
+      "legacy_python_projection": "no_match",
+      "generated_native_projection": "block",
+      "frozen_native_baseline": {
+        "minimum_action": "block",
+        "observations": [
+          {
+            "rule_id": "command.kubernetes-secrets.secret-read",
+            "match_class": "uncertainty",
+            "uncertainty_reasons": [
+              "matcher-failure"
+            ],
+            "safe_variants": []
+          }
+        ]
+      },
+      "generated_native_candidate": {
+        "minimum_action": "block",
+        "observations": [
+          {
+            "rule_id": "command.kubernetes-secrets.secret-read",
+            "match_class": "uncertainty",
+            "uncertainty_reasons": [
+              "matcher-failure"
+            ],
+            "safe_variants": []
+          }
+        ]
+      },
+      "disposition": "Frozen and generated native programs both block because the Kubernetes secret-read observation has matcher-failure uncertainty."
+    }
+  ]
+}

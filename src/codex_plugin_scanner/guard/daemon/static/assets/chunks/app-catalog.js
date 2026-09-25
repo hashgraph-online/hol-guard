@@ -9,9 +9,10 @@ const SUPPORTED_APP_SLUGS = [
   "hermes",
   "openclaw",
   "kimi",
-  "grok"
+  "grok",
+  "devin"
 ];
-const SUPPORTED_APPS_BRIEF = "Guard works with Codex, Claude Code, OpenCode, Copilot, Cursor, Cline, Gemini, Hermes, OpenClaw, Kimi, and Grok.";
+const SUPPORTED_APPS_BRIEF = "Guard works with Codex, Claude Code, OpenCode, Copilot, Cursor, Cline, Gemini, Hermes, OpenClaw, Kimi, Grok, and Devin.";
 function defaultConnectHarness(repairHarness, visibleHarnesses = []) {
   return repairHarness ?? visibleHarnesses[0] ?? SUPPORTED_APP_SLUGS[0];
 }

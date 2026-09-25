@@ -42,6 +42,13 @@ class GitHubFixture:
         self.run = copy.deepcopy(RUN)
         self.workflow = copy.deepcopy(WORKFLOW)
         self.comparison = {"status": "ahead", "base_commit": {"sha": SHA}, "merge_base_commit": {"sha": SHA}}
+        self.jobs = {
+            "total_count": 2,
+            "jobs": [
+                {"name": name, "run_id": RUN["id"], "head_sha": SHA, "status": "completed", "conclusion": "success"}
+                for name in sorted(verifier._PUBLICATION_JOBS["main"])
+            ],
+        }
         self.calls: list[str] = []
 
     def fetch(self, path: str) -> object:
@@ -52,6 +59,8 @@ class GitHubFixture:
             return self.workflow
         if path == f"{prefix}/actions/runs/12345":
             return self.run
+        if path == f"{prefix}/actions/runs/12345/attempts/1/jobs?per_page=100&page=1":
+            return self.jobs
         if path.startswith(f"{prefix}/compare/{SHA}...refs%2Fheads%2F"):
             return self.comparison
         raise AssertionError(f"Unexpected API request: {path}")
@@ -205,6 +214,62 @@ def test_verified_outputs_are_safe_for_actions(tmp_path: Path, monkeypatch: pyte
     monkeypatch.setattr(verifier, "github_json", fixture.fetch)
     assert verifier.main() == 0
     assert output_path.read_text() == f"sha={SHA}\nbranch=main\n"
+
+
+@pytest.mark.parametrize("branch", ["main", "release/3.0"])
+@pytest.mark.parametrize("conclusion,published", [("success", True), ("skipped", False)])
+def test_publication_requires_completed_package_and_release_jobs(branch: str, conclusion: str, published: bool) -> None:
+    """A green build-only run does not authorize downstream publishing or tag polling."""
+    fixture = GitHubFixture()
+    for job, name in zip(fixture.jobs["jobs"], sorted(verifier._PUBLICATION_JOBS[branch]), strict=True):
+        job.update(name=name, conclusion=conclusion)
+    assert (
+        verifier.publication_completed(
+            fixture.event, repository=REPOSITORY, sha=SHA, branch=branch, fetch_json=fixture.fetch
+        )
+        is published
+    )
+    assert fixture.calls == [f"/repos/{REPOSITORY}/actions/runs/12345/attempts/1/jobs?per_page=100&page=1"]
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("conclusion", "skipped"),
+        ("conclusion", "failure"),
+        ("conclusion", None),
+        ("status", "in_progress"),
+        ("head_sha", OTHER_SHA),
+        ("run_id", 999),
+        ("name", "Other publishing job"),
+        ("name", {}),
+    ],
+)
+def test_incomplete_or_mismatched_publication_fails_closed(field: str, value: object) -> None:
+    """A partial release, unrelated job, or malformed API response cannot authorize writes."""
+    fixture = GitHubFixture()
+    fixture.jobs["jobs"][0][field] = value
+    with pytest.raises(ValueError):
+        verifier.publication_completed(
+            fixture.event, repository=REPOSITORY, sha=SHA, branch="main", fetch_json=fixture.fetch
+        )
+
+
+def test_build_only_run_emits_no_checkout_outputs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Legitimate skipped publication succeeds promptly without starting privileged consumers."""
+    fixture = GitHubFixture()
+    for job in fixture.jobs["jobs"]:
+        job["conclusion"] = "skipped"
+    event_path = tmp_path / "event.json"
+    output_path = tmp_path / "output"
+    event_path.write_text(json.dumps(fixture.event))
+    monkeypatch.setenv("GITHUB_EVENT_PATH", str(event_path))
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "workflow_run")
+    monkeypatch.setenv("GITHUB_REPOSITORY", REPOSITORY)
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output_path))
+    monkeypatch.setattr(verifier, "github_json", fixture.fetch)
+    assert verifier.main() == 0
+    assert not output_path.exists()
 
 
 def test_gate_executes_only_trusted_default_branch_verification_code() -> None:

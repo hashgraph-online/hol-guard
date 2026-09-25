@@ -11,7 +11,8 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts/notify_merged_extension_claimants.py"
 WORKFLOW = ROOT / ".github/workflows/extension-claim-notice.yml"
-SCHEMA = ROOT / "contracts/extensions/listing.v1.schema.json"
+SCHEMA_V1 = ROOT / "contracts/extensions/listing.v1.schema.json"
+SCHEMA_V2 = ROOT / "contracts/extensions/listing.v2.schema.json"
 SPEC = importlib.util.spec_from_file_location("guard_extension_claim_notice", SCRIPT)
 assert SPEC is not None and SPEC.loader is not None
 MODULE = importlib.util.module_from_spec(SPEC)
@@ -31,6 +32,22 @@ def listing(extension_id: str, ids: list[str]) -> dict[str, Any]:
         "limitations": ["Coverage is limited to the reviewed operations and the surrounding Guard policy."],
         "maintainerGithubIds": ids,
     }
+
+
+def listing_v2(extension_id: str, ids: list[str]) -> dict[str, Any]:
+    result = listing(extension_id, ids)
+    result.update(
+        {
+            "schemaVersion": "guard.extension-listing.v2",
+            "summary": "Bounded public credit for the reviewed declarative extension contribution.",
+            "contributors": [{"githubId": "900", "githubLogin": "credit-author", "roles": ["author"]}],
+            "originalContributions": [
+                {"kind": "pull-request", "url": "https://github.com/hashgraph-online/hol-guard/pull/3020"}
+            ],
+            "upstream": {"name": "Example upstream", "url": "https://github.com/example/project"},
+        }
+    )
+    return result
 
 
 class FakeGitHub:
@@ -86,7 +103,13 @@ class FakeGitHub:
         self.posted.append((number, body))
 
 
-def configure_new_contribution(client: FakeGitHub, extension_id: str, ids: list[str]) -> None:
+def configure_new_contribution(
+    client: FakeGitHub,
+    extension_id: str,
+    ids: list[str],
+    *,
+    tip_ids: list[str] | None = None,
+) -> None:
     contribution_path = f"contributions/extensions/{extension_id}.json"
     listing_path = f"contributions/extension-listings/{extension_id}.json"
     client.files = [
@@ -95,6 +118,10 @@ def configure_new_contribution(client: FakeGitHub, extension_id: str, ids: list[
     ]
     client.file_payloads[(MERGE_SHA, contribution_path)] = {"schemaVersion": "v1"}
     client.file_payloads[(MERGE_SHA, listing_path)] = listing(extension_id, ids)
+    # Current canonical state used by the delayed/backfill revalidation pass.
+    client.file_payloads[(client.default_branch, listing_path)] = listing(
+        extension_id, ids if tip_ids is None else tip_ids
+    )
 
 
 def test_new_contribution_notifies_only_reviewed_numeric_ids() -> None:
@@ -109,7 +136,9 @@ def test_new_contribution_notifies_only_reviewed_numeric_ids() -> None:
     assert MODULE.MARKER in body
     assert "@second-maintainer" in body
     assert "@first-maintainer" in body
-    assert "extension=command.example" in body
+    assert "claim=command.example" in body
+    assert "source_surface=github_claim_notice" in body
+    assert "extension=command.example" not in body
     assert "PR author" not in body
     assert "runtime trust" in body
 
@@ -134,6 +163,7 @@ def test_listing_change_notifies_only_newly_accepted_ids() -> None:
     client.file_payloads[(BEFORE_SHA, contribution_path)] = {"schemaVersion": "v1"}
     client.file_payloads[(MERGE_SHA, listing_path)] = listing(extension_id, ["100", "200"])
     client.file_payloads[(BEFORE_SHA, listing_path)] = listing(extension_id, ["100"])
+    client.file_payloads[(client.default_branch, listing_path)] = listing(extension_id, ["100", "200"])
     client.logins = {"100": "old-maintainer", "200": "new-maintainer"}
 
     assert MODULE.process(client, 8, MODULE.DEFAULT_STUDIO_URL) == 0
@@ -191,6 +221,7 @@ def test_renamed_contributions_require_explicit_maintainer_backfill() -> None:
     client.file_payloads[(BEFORE_SHA, old_listing)] = listing(old_id, ["700"])
     client.file_payloads[(MERGE_SHA, new_contribution)] = {"schemaVersion": "v1"}
     client.file_payloads[(MERGE_SHA, new_listing)] = listing(new_id, ["700"])
+    client.file_payloads[(client.default_branch, new_listing)] = listing(new_id, ["700"])
     client.logins = {"700": "renamed-maintainer"}
 
     assert MODULE.process(client, 15, MODULE.DEFAULT_STUDIO_URL) == 0
@@ -241,14 +272,30 @@ def test_non_ascii_and_duplicate_github_ids_fail_closed() -> None:
         MODULE.accepted_github_ids(listing(extension_id, ["600", "600"]), extension_id)
 
 
+def test_v2_credit_never_becomes_claim_authority() -> None:
+    extension_id = "command.v2-credit"
+    v2 = listing_v2(extension_id, [])
+    assert MODULE.accepted_github_ids(v2, extension_id) == ()
+    v2["maintainerGithubIds"] = ["500"]
+    assert MODULE.accepted_github_ids(v2, extension_id) == ("500",)
+
+
+def test_v2_credit_contract_fails_closed() -> None:
+    v2 = listing_v2("command.invalid-v2-credit", ["500"])
+    v2["contributors"] = [{"githubId": "900", "githubLogin": "credit-author", "roles": ["owner"]}]
+    with pytest.raises(MODULE.ClaimNoticeError, match="contributor roles are invalid"):
+        MODULE.accepted_github_ids(v2, "command.invalid-v2-credit")
+
+
 def test_worker_authority_constants_match_public_schema() -> None:
-    schema = json.loads(SCHEMA.read_text(encoding="utf-8"))
-    required = frozenset(schema["required"])
-    allowed = frozenset(schema["properties"])
-    categories = frozenset(schema["properties"]["category"]["enum"])
-    github_id_pattern = schema["properties"]["maintainerGithubIds"]["items"]["pattern"]
-    assert required == MODULE.LISTING_REQUIRED_KEYS
-    assert allowed == MODULE.LISTING_ALLOWED_KEYS
+    v1 = json.loads(SCHEMA_V1.read_text(encoding="utf-8"))
+    v2 = json.loads(SCHEMA_V2.read_text(encoding="utf-8"))
+    categories = frozenset(v1["properties"]["category"]["enum"])
+    github_id_pattern = v1["properties"]["maintainerGithubIds"]["items"]["pattern"]
+    assert frozenset(v1["required"]) == MODULE.LISTING_REQUIRED_KEYS
+    assert frozenset(v1["properties"]) == MODULE.LISTING_ALLOWED_KEYS
+    assert frozenset(v2["required"]) == MODULE.LISTING_V2_REQUIRED_KEYS
+    assert frozenset(v2["properties"]) == MODULE.LISTING_V2_ALLOWED_KEYS
     assert categories == MODULE.LISTING_CATEGORIES
     assert github_id_pattern == MODULE.GITHUB_ID_RE.pattern
 
@@ -296,10 +343,269 @@ def test_workflow_is_merge_only_and_supports_reviewed_rename_backfill() -> None:
     assert "workflow_dispatch:" in text
     assert "pr_number:" in text
     assert "allow_renames:" in text
+    assert "dry_run:" in text
     assert "contributions/extension-listings/**" in text
     assert "pull-requests: write" in text
     assert "issues: write" not in text
     assert "persist-credentials: false" in text
     assert "--allow-renames" in text
+    assert "--dry-run" in text
     assert "notify_merged_extension_claimants.py" in text
     assert "https://hol.org/guard/extension-studio" in text
+
+
+def test_delayed_backfill_never_reinvites_identity_removed_from_current_main() -> None:
+    """A11: an old merged sidecar must not re-invite a since-removed identity."""
+
+    client = FakeGitHub()
+    configure_new_contribution(client, "command.revoked", ["100", "200"], tip_ids=["100"])
+    client.logins = {"100": "remaining-maintainer", "200": "withdrawn-maintainer"}
+
+    assert MODULE.process(client, 21, MODULE.DEFAULT_STUDIO_URL) == 0
+
+    assert len(client.posted) == 1
+    body = client.posted[0][1]
+    assert "@remaining-maintainer" in body
+    assert "@withdrawn-maintainer" not in body
+
+
+def test_delayed_backfill_skips_when_whole_accepted_set_was_withdrawn() -> None:
+    client = FakeGitHub()
+    configure_new_contribution(client, "command.fully-revoked", ["300"], tip_ids=[])
+
+    assert MODULE.process(client, 22, MODULE.DEFAULT_STUDIO_URL) == 0
+    assert client.posted == []
+    report = MODULE.readiness_report(client, 22)
+    assert report["prStatus"] == "source_not_current"
+    assert report["entries"] == [
+        {"extensionId": "command.fully-revoked", "status": "source_not_current", "notifiedIds": []}
+    ]
+
+
+def test_delayed_backfill_skips_when_listing_absent_from_current_main() -> None:
+    client = FakeGitHub()
+    configure_new_contribution(client, "command.delisted", ["400"])
+    listing_path = "contributions/extension-listings/command.delisted.json"
+    del client.file_payloads[(client.default_branch, listing_path)]
+
+    assert MODULE.process(client, 23, MODULE.DEFAULT_STUDIO_URL) == 0
+    assert client.posted == []
+    report = MODULE.readiness_report(client, 23)
+    assert report["entries"][0]["status"] == "source_not_current"
+
+
+def test_invalid_current_listing_reports_source_not_current_instead_of_posting() -> None:
+    client = FakeGitHub()
+    configure_new_contribution(client, "command.corrupted-tip", ["500"])
+    listing_path = "contributions/extension-listings/command.corrupted-tip.json"
+    corrupted = listing("command.corrupted-tip", ["500"])
+    corrupted["maintainerGithubIds"] = "not-a-list"
+    client.file_payloads[(client.default_branch, listing_path)] = corrupted
+
+    assert MODULE.process(client, 24, MODULE.DEFAULT_STUDIO_URL) == 0
+    assert client.posted == []
+    report = MODULE.readiness_report(client, 24)
+    assert report["entries"][0]["status"] == "source_not_current"
+
+
+def test_readiness_report_types_not_merged_and_no_mapping() -> None:
+    client = FakeGitHub()
+    client.merged = False
+    report = MODULE.readiness_report(client, 31)
+    assert report["prStatus"] == "not_merged"
+    assert report["entries"] == []
+
+    client.merged = True
+    client.files = [{"status": "added", "filename": "contributions/extensions/command.unmapped.json"}]
+    client.file_payloads[(MERGE_SHA, "contributions/extensions/command.unmapped.json")] = {"schemaVersion": "v1"}
+    report = MODULE.readiness_report(client, 31)
+    assert report["prStatus"] == "no_mapping"
+    assert report["entries"] == [{"extensionId": "command.unmapped", "status": "no_mapping", "notifiedIds": []}]
+
+
+def test_readiness_report_types_empty_mapping_as_no_mapping() -> None:
+    client = FakeGitHub()
+    configure_new_contribution(client, "command.empty-authority", [])
+    report = MODULE.readiness_report(client, 32)
+    assert report["entries"] == [{"extensionId": "command.empty-authority", "status": "no_mapping", "notifiedIds": []}]
+
+
+def test_readiness_report_reports_eligible_entry_and_portal_gate(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = FakeGitHub()
+    configure_new_contribution(client, "command.ready", ["600"])
+    client.logins = {"600": "ready-maintainer"}
+
+    # Portal endpoint unconfigured: neither the entry nor the PR may claim ready.
+    report = MODULE.readiness_report(client, 33)
+    assert report["portalStatus"] == "not_configured"
+    assert report["entries"][0]["status"] == "portal_not_ready"
+    assert report["prStatus"] == "portal_not_ready"
+
+    def ok(url: str) -> tuple[str, str]:
+        return "ok", "portal reports ready"
+
+    monkeypatch.setattr(MODULE, "portal_readiness", ok)
+    report = MODULE.readiness_report(client, 33, portal_readiness_url="https://portal.example/ready")
+    assert report["portalStatus"] == "ok"
+    assert report["prStatus"] == "eligible_for_notice"
+    assert report["entries"][0]["status"] == "eligible_for_notice"
+    assert report["entries"][0]["notifiedIds"] == ["600"]
+
+
+def test_readiness_report_fails_closed_when_portal_is_unreachable(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = FakeGitHub()
+    configure_new_contribution(client, "command.portal-down", ["700"])
+
+    def unreachable(url: str) -> tuple[str, str]:
+        return "provider_unavailable", "portal unreachable: connection refused"
+
+    monkeypatch.setattr(MODULE, "portal_readiness", unreachable)
+    report = MODULE.readiness_report(client, 34, portal_readiness_url="https://portal.example/ready")
+    assert report["prStatus"] == "provider_unavailable"
+    assert report["entries"][0]["status"] == "provider_unavailable"
+
+    def lagging(url: str) -> tuple[str, str]:
+        return "portal_not_ready", "portal did not affirm readiness"
+
+    monkeypatch.setattr(MODULE, "portal_readiness", lagging)
+    report = MODULE.readiness_report(client, 34, portal_readiness_url="https://portal.example/ready")
+    assert report["prStatus"] == "portal_not_ready"
+    assert report["entries"][0]["status"] == "portal_not_ready"
+
+
+def test_process_never_posts_when_configured_portal_is_not_ready(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = FakeGitHub()
+    configure_new_contribution(client, "command.gated", ["800"])
+    client.logins = {"800": "gated-maintainer"}
+
+    def not_ready(url: str) -> tuple[str, str]:
+        return "portal_not_ready", "projection is stale"
+
+    monkeypatch.setattr(MODULE, "portal_readiness", not_ready)
+    assert (
+        MODULE.process(
+            client,
+            35,
+            MODULE.DEFAULT_STUDIO_URL,
+            portal_readiness_url="https://portal.example/ready",
+        )
+        == 0
+    )
+    assert client.posted == []
+
+
+def test_trusted_marker_marks_readiness_already_notified() -> None:
+    client = FakeGitHub()
+    configure_new_contribution(client, "command.duplicate", ["900"])
+    client.logins = {"900": "dup-maintainer"}
+    client.comment_rows = [
+        {
+            "body": f"{MODULE.MARKER}\nEarlier notice",
+            "user": {"id": MODULE.TRUSTED_NOTICE_ACTOR_ID, "type": "Bot"},
+        }
+    ]
+
+    report = MODULE.readiness_report(client, 36)
+    assert report["prStatus"] == "already_notified"
+    assert report["entries"][0]["status"] == "already_notified"
+    assert MODULE.process(client, 36, MODULE.DEFAULT_STUDIO_URL) == 0
+    assert client.posted == []
+
+
+def test_report_only_mode_prints_readiness_json_without_posting(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    client = FakeGitHub()
+    configure_new_contribution(client, "command.report-only", ["950"])
+
+    def ok(url: str) -> tuple[str, str]:
+        return "ok", "portal reports ready"
+
+    monkeypatch.setattr(MODULE, "portal_readiness", ok)
+    assert (
+        MODULE.process(
+            client,
+            37,
+            MODULE.DEFAULT_STUDIO_URL,
+            report_only=True,
+            portal_readiness_url="https://portal.example/ready",
+        )
+        == 0
+    )
+    assert client.posted == []
+    import json as jsonlib
+
+    payload = jsonlib.loads(capsys.readouterr().out)
+    assert payload["schemaVersion"] == "guard.extension-claim-notice-readiness.v1"
+    assert payload["entries"][0]["status"] == "eligible_for_notice"
+
+
+def test_portal_readiness_maps_transport_failures_without_claiming_ready(monkeypatch: pytest.MonkeyPatch) -> None:
+    import urllib.error
+
+    class Response:
+        def __init__(self, payload: bytes, status: int = 200) -> None:
+            self._payload = payload
+            self.status = status
+
+        def read(self, limit: int) -> bytes:
+            return self._payload
+
+        def __enter__(self) -> Response:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+    def ok(req: object, timeout: float) -> Response:
+        return Response(b'{"ok": true}')
+
+    monkeypatch.setattr(MODULE.urllib.request, "urlopen", ok)
+    assert MODULE.portal_readiness("https://portal.example/ready") == ("ok", "portal reports ready")
+
+    def ready_only_flag(req: object, timeout: float) -> Response:
+        return Response(b'{"ready": true, "entries": 69}')
+
+    monkeypatch.setattr(MODULE.urllib.request, "urlopen", ready_only_flag)
+    assert MODULE.portal_readiness("https://portal.example/ready")[0] == "portal_not_ready"
+
+    def not_affirming(req: object, timeout: float) -> Response:
+        return Response(b'{"ok": false}')
+
+    monkeypatch.setattr(MODULE.urllib.request, "urlopen", not_affirming)
+    assert MODULE.portal_readiness("https://portal.example/ready")[0] == "portal_not_ready"
+
+    def http_error(req: object, timeout: float) -> Response:
+        raise urllib.error.HTTPError(req.url if hasattr(req, "url") else "x", 503, "unavailable", None, None)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(MODULE.urllib.request, "urlopen", http_error)
+    assert MODULE.portal_readiness("https://portal.example/ready")[0] == "provider_unavailable"
+
+    def os_error(req: object, timeout: float) -> Response:
+        raise OSError("connection refused")
+
+    monkeypatch.setattr(MODULE.urllib.request, "urlopen", os_error)
+    assert MODULE.portal_readiness("https://portal.example/ready")[0] == "provider_unavailable"
+
+    def not_json(req: object, timeout: float) -> Response:
+        return Response(b"<html>maintenance</html>")
+
+    monkeypatch.setattr(MODULE.urllib.request, "urlopen", not_json)
+    assert MODULE.portal_readiness("https://portal.example/ready")[0] == "portal_not_ready"
+
+
+def test_readyness_reasons_constant_covers_the_reviewed_vocabulary() -> None:
+    assert (
+        frozenset(
+            {
+                "no_mapping",
+                "not_merged",
+                "source_not_current",
+                "portal_not_ready",
+                "already_notified",
+                "eligible_for_notice",
+                "provider_unavailable",
+            }
+        )
+        == MODULE.READYNESS_REASONS
+    )

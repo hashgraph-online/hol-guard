@@ -14,6 +14,7 @@ if __package__:
     from ..codex_hook_bridge_runtime import bridge_config_from_argv as _parse_bridge_config
     from ..config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS
     from ..daemon.hook_availability_policy import hook_event_is_permission_request
+    from ..daemon.hook_launcher_recovery import hook_action_is_launcher_recovery_safe
     from ..live_process_identity import (
         CODEX_BROWSER_WAIT_PROCESS_KEY,
         CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY,
@@ -43,6 +44,9 @@ else:  # pragma: no cover - exercised by subprocess integration tests
     from codex_plugin_scanner.guard.config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS
     from codex_plugin_scanner.guard.daemon.hook_availability_policy import (
         hook_event_is_permission_request,
+    )
+    from codex_plugin_scanner.guard.daemon.hook_launcher_recovery import (
+        hook_action_is_launcher_recovery_safe,
     )
     from codex_plugin_scanner.guard.live_process_identity import (
         CODEX_BROWSER_WAIT_PROCESS_KEY,
@@ -140,11 +144,8 @@ def _unavailable_response(
     if event_name == "PreToolUse":
         return {
             "continue": True,
-            "hookSpecificOutput": {
-                "hookEventName": event_name,
-                "permissionDecision": "allow",
-                "permissionDecisionReason": reason,
-            },
+            "systemMessage": reason,
+            "hookSpecificOutput": {"hookEventName": event_name},
         }
     return {
         "continue": True,
@@ -168,6 +169,26 @@ def _codex_hook_response(response: Mapping[str, object], *, event_name: str) -> 
         else:
             post_tool_keys = {"hookEventName", "additionalContext", "updatedMCPToolOutput"}
             filtered["hookSpecificOutput"] = {key: value for key, value in hook_output.items() if key in post_tool_keys}
+        return filtered
+    if event_name == "PreToolUse" and "hookSpecificOutput" in filtered:
+        cleaned: dict[str, object] = {"hookEventName": event_name}
+        if isinstance(hook_output, Mapping):
+            decision = hook_output.get("permissionDecision")
+            normalized = decision.strip().lower() if isinstance(decision, str) else ""
+            reason = hook_output.get("permissionDecisionReason")
+            if normalized in {"deny", "ask"}:
+                cleaned["permissionDecision"] = normalized
+                if isinstance(reason, str) and reason:
+                    cleaned["permissionDecisionReason"] = reason
+            elif normalized == "allow":
+                if (
+                    response.get("policy_action") == "warn"
+                    and isinstance(reason, str)
+                    and reason.strip()
+                    and not filtered.get("systemMessage")
+                ):
+                    filtered["systemMessage"] = reason
+        filtered["hookSpecificOutput"] = cleaned
     return filtered
 
 
@@ -215,7 +236,7 @@ def main(
         )
         if response is None:
             if launch_integrity_failed:
-                response = _fail_closed(event_name, _LAUNCH_INTEGRITY_REASON)
+                response = _launcher_integrity_response(event_name, data)
             else:
                 failure_reason = _OVERLOAD_REASON if daemon_overloaded else _FAIL_CLOSED_REASON
                 response = _unavailable_response(event_name, failure_reason, data)
@@ -229,6 +250,17 @@ def main(
             )
         )
     return 0
+
+
+def _launcher_integrity_response(event_name: str, data: str) -> dict[str, object]:
+    """Keep a bad launcher from approving work, without locking out its repair."""
+
+    payload = _json_object(data)
+    if event_name == "PreToolUse" and payload is not None and hook_action_is_launcher_recovery_safe(payload):
+        return _unavailable_response(event_name, _LAUNCH_INTEGRITY_REASON, data)
+    if event_name in {"PreToolUse", "PermissionRequest"}:
+        return _fail_closed(event_name, _LAUNCH_INTEGRITY_REASON)
+    return _unavailable_response(event_name, _LAUNCH_INTEGRITY_REASON, data)
 
 
 def _bridge_output(

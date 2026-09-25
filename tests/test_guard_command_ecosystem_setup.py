@@ -16,9 +16,9 @@ from codex_plugin_scanner.guard.runtime.command_ecosystem_detection import (
 )
 from codex_plugin_scanner.guard.runtime.command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
-    CommandSafetyExtension,
     CommandSafetyExtensionRegistry,
 )
+from tests.generated_command_catalog_test_support import generated_extension
 
 
 def test_package_extensions_delegate_to_existing_package_firewall() -> None:
@@ -50,7 +50,7 @@ def test_package_extensions_delegate_to_existing_package_firewall() -> None:
 
 
 def test_registry_rejects_incomplete_or_rule_owning_delegated_extensions() -> None:
-    incomplete = CommandSafetyExtension(
+    incomplete = generated_extension(
         extension_id="command.package.incomplete",
         version="1.0.0",
         name="Incomplete",
@@ -63,7 +63,7 @@ def test_registry_rejects_incomplete_or_rule_owning_delegated_extensions() -> No
     with pytest.raises(ValueError, match="requires ecosystem and executable metadata"):
         _ = CommandSafetyExtensionRegistry((incomplete,))
 
-    owning = CommandSafetyExtension(
+    owning = generated_extension(
         extension_id="command.package.owning",
         version="1.0.0",
         name="Owning",
@@ -92,7 +92,7 @@ def test_registry_rejects_path_bearing_detection_metadata(
     project_markers: tuple[str, ...],
     message: str,
 ) -> None:
-    extension = CommandSafetyExtension(
+    extension = generated_extension(
         extension_id="command.package.unsafe",
         version="1.0.0",
         name="Unsafe",

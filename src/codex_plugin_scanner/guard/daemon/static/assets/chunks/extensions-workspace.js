@@ -1,5 +1,6 @@
-import { aL as fetchLocalCliApi, r as reactExports, aM as fetchExtensionControlApi, j as jsxRuntimeExports, aN as useResolvedApprovalGate, af as HiMiniLockClosed, P as HiMiniExclamationTriangle, am as HiMiniArrowPath, w as HiMiniShieldCheck, aO as HiMiniInformationCircle, al as isApprovalProofSubmitDisabled, C as HiMiniXMark, an as ApprovalProofFieldInputs, aP as buildApprovalProofCredentials, aQ as GenIcon, Q as HiMiniBolt, aR as HiMiniGlobeAlt, aS as HiMiniCube, K as HiMiniCloud, aT as HiMiniServerStack, b as HiMiniCommandLine, aU as HiMiniFolder, aV as FaWindows, aW as FaAws, s as HiMiniCheckCircle, c as HiMiniChevronRight, I as HiMiniChevronDown, aX as approvalProofRecentlySatisfied, aY as HiMiniArrowLeft, aZ as HiMiniPlus, a8 as HiMiniClipboardDocumentCheck, a9 as HiMiniClipboard, ah as HiMiniAdjustmentsHorizontal, a_ as HiMiniCheck, aG as HiMiniMagnifyingGlass, B as HiMiniSparkles, a$ as HiMiniNoSymbol, b0 as startGuardCloudConnect, b1 as HiMiniArrowTopRightOnSquare, aF as WorkspacePageHeader, b2 as guardAwareHref } from "../guard-dashboard.js";
+import { aN as fetchLocalCliApi, r as reactExports, aO as fetchExtensionControlApi, j as jsxRuntimeExports, B as HiMiniSparkles, s as HiMiniCheckCircle, aP as HiMiniNoSymbol, af as HiMiniLockClosed, P as HiMiniExclamationTriangle, aQ as useResolvedApprovalGate, al as HiMiniArrowPath, w as HiMiniShieldCheck, aR as HiMiniInformationCircle, an as isApprovalProofSubmitDisabled, C as HiMiniXMark, am as ApprovalProofFieldInputs, ao as buildApprovalProofCredentials, aS as GenIcon, Q as HiMiniBolt, aT as HiMiniGlobeAlt, aU as HiMiniCube, K as HiMiniCloud, aV as HiMiniServerStack, b as HiMiniCommandLine, aW as HiMiniFolder, aX as FaWindows, aY as FaAws, c as HiMiniChevronRight, I as HiMiniChevronDown, aZ as approvalProofRecentlySatisfied, a_ as HiMiniArrowLeft, a$ as HiMiniPlus, a8 as HiMiniClipboardDocumentCheck, a9 as HiMiniClipboard, ah as HiMiniAdjustmentsHorizontal, b0 as HiMiniCheck, aH as HiMiniMagnifyingGlass, b1 as startGuardCloudConnect, b2 as HiMiniArrowTopRightOnSquare, aG as WorkspacePageHeader, b3 as guardAwareHref } from "../guard-dashboard.js";
 import { A as ApprovalProofModal } from "./approval-proof-modal.js";
+import { u as useConfirmDialog } from "./confirm-dialog.js";
 const EXTENSION_ID_PATTERN = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
 const RULE_ID_PATTERN = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
 const DEFAULT_EXTENSION_DETAIL_URL_STATE = {
@@ -85,7 +86,7 @@ function explicitControlState(effective, kind, targetId2) {
   )?.state ?? null;
 }
 function managedExplicitControlState(effective, kind, targetId2) {
-  const projected = effective.projection?.extensions.find((item) => item.extension_id === targetId2)?.managed_state;
+  const projected = kind === "extension" ? effective.projection?.extensions.find((item) => item.extension_id === targetId2)?.managed_state : effective.projection?.permissions.find((item) => item.permission_id === targetId2)?.managed_state;
   if (projected) return projected === "inherited" ? null : projected;
   for (const layer of effective.layers) {
     if (layer.kind !== "signed-cloud") continue;
@@ -93,6 +94,9 @@ function managedExplicitControlState(effective, kind, targetId2) {
     if (control) return control.state;
   }
   return null;
+}
+function managedPermissionState(effective, permissionId) {
+  return managedExplicitControlState(effective, "permission", permissionId);
 }
 function extensionEffectiveState(effective, extension2) {
   const projected = effective.projection?.extensions.find((item) => item.extension_id === extension2.extension_id);
@@ -958,17 +962,25 @@ function permission(value, extensionId, label) {
 }
 function mcpLaunch(value, label) {
   const item = record$2(value, label);
+  const kind = enumValue(item.kind, `${label}.kind`, ["package-launcher", "remote-http"]);
+  if (kind === "package-launcher") {
+    return {
+      kind,
+      command: string$1(item.command, `${label}.command`),
+      package: string$1(item.package, `${label}.package`)
+    };
+  }
   return {
-    kind: enumValue(item.kind, `${label}.kind`, ["package-launcher"]),
-    command: string$1(item.command, `${label}.command`),
-    package: string$1(item.package, `${label}.package`)
+    kind,
+    url: string$1(item.url, `${label}.url`),
+    serverNames: stringList$1(item.serverNames, `${label}.serverNames`, 8)
   };
 }
 function mcpTool(value, label) {
   const item = record$2(value, label);
   return {
     name: string$1(item.name, `${label}.name`),
-    state: enumValue(item.state, `${label}.state`, ["inherit", "allow", "block"])
+    state: enumValue(item.state, `${label}.state`, ["inherit", "allow", "review", "block"])
   };
 }
 function mcpCatalogFields(item, label) {
@@ -1521,7 +1533,7 @@ function useExtensionPolicyDraft(props) {
     setError(null);
     setStale(false);
     setPendingRebase(null);
-  }, [props.effective.revision, props.effective.catalog_digest]);
+  }, [props.effective.revision, props.effective.catalog_digest, props.effective.health, props.effective.global_lockdown]);
   const changeCountFor = reactExports.useCallback((permissionIds) => {
     return permissionIds.filter(
       (permissionId) => localPermissionDraftState(baseEffective.layers, permissionId) !== localPermissionDraftState(draftLayers, permissionId)
@@ -1828,6 +1840,102 @@ function ProtectionSettingsHistory(props) {
     ] }, item.revision)) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-xs text-brand-dark/70", children: "No earlier authenticated device settings are available yet." })
   ] });
 }
+const QUICK_APPLY_CHOICES = [
+  {
+    state: "inherit",
+    label: "Recommended",
+    detail: "Use Guard defaults for every matching capability.",
+    icon: HiMiniSparkles
+  },
+  {
+    state: "allow",
+    label: "Allow all",
+    detail: "Allow every matching capability that organization policy permits.",
+    icon: HiMiniCheckCircle
+  },
+  {
+    state: "block",
+    label: "Deny all",
+    detail: "Add a local block to every matching capability.",
+    icon: HiMiniNoSymbol
+  }
+];
+const DEFAULT_QUICK_APPLY_SUBJECT = {
+  one: "matching capability",
+  other: "matching capabilities"
+};
+function quickApplyPermissionIds(permissions, effective, state) {
+  return permissions.filter((permission2) => permission2.configurable).filter((permission2) => state !== "allow" || managedPermissionState(effective, permission2.permission_id) !== "disabled").map((permission2) => permission2.permission_id);
+}
+function QuickApplyToolbar(props) {
+  const subject = props.subject ?? DEFAULT_QUICK_APPLY_SUBJECT;
+  const configurableCount = props.permissions.filter((permission2) => permission2.configurable).length;
+  const managedBlockCount = props.permissions.filter(
+    (permission2) => permission2.configurable && managedPermissionState(props.effective, permission2.permission_id) === "disabled"
+  ).length;
+  let managedBlockCopy = "";
+  if (managedBlockCount) {
+    const blockCopy = managedBlockCount === 1 ? "block stays" : "blocks stay";
+    managedBlockCopy = ` ${managedBlockCount} organization ${blockCopy} enforced.`;
+  }
+  if (!configurableCount) return null;
+  const heading = `Quick apply to ${configurableCount} ${configurableCount === 1 ? subject.one : subject.other}`;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex flex-col gap-3 border-y border-[rgba(63,65,116,0.12)] bg-[rgba(85,153,254,0.045)] px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: heading }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-0.5 text-xs leading-5 text-brand-dark/65", children: [
+        "Changes stay in draft until you review and approve them.",
+        managedBlockCopy
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { role: "group", "aria-label": `Quick apply to ${configurableCount} ${subject.other}`, className: "flex flex-wrap gap-2", children: QUICK_APPLY_CHOICES.map((choice) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+      QuickApplyButton,
+      {
+        choice,
+        permissionIds: quickApplyPermissionIds(props.permissions, props.effective, choice.state),
+        disabled: props.disabled,
+        permissionState: props.permissionState,
+        onApply: props.onApply
+      },
+      choice.state
+    )) })
+  ] });
+}
+function QuickApplyButton(props) {
+  const active = props.permissionIds.length > 0 && props.permissionIds.every((permissionId) => props.permissionState(permissionId) === props.choice.state);
+  const handleClick = reactExports.useCallback(() => {
+    props.onApply(props.permissionIds, props.choice.state);
+  }, [props.choice.state, props.onApply, props.permissionIds]);
+  const Icon = props.choice.icon;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "button",
+    {
+      type: "button",
+      "aria-pressed": active,
+      title: props.choice.detail,
+      disabled: props.disabled || props.permissionIds.length === 0,
+      onClick: handleClick,
+      className: "inline-flex min-h-10 items-center gap-2 rounded-lg border border-[rgba(63,65,116,0.18)] bg-white px-3 text-xs font-semibold text-brand-dark shadow-sm transition-colors hover:border-brand-blue hover:text-brand-blue disabled:cursor-not-allowed disabled:opacity-45 aria-pressed:border-brand-blue aria-pressed:bg-brand-blue aria-pressed:text-white",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { className: "size-4", "aria-hidden": "true" }),
+        props.choice.label
+      ]
+    }
+  );
+}
+function PolicyEditingLocks(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+    props.globalLockdown ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { role: "status", className: "mt-4 flex gap-2 text-sm text-brand-dark", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniLockClosed, { className: "mt-0.5 size-4 shrink-0" }),
+      "Emergency Lockdown remains dominant. You can prepare a local draft, but matching commands stay blocked while lockdown is active."
+    ] }) : null,
+    props.health !== void 0 && props.health !== "protected" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { role: "alert", className: "mt-4 flex gap-2 text-sm text-amber-950", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 size-4 shrink-0" }),
+      "Settings cannot be changed until Guard verifies local settings integrity."
+    ] }) : null,
+    props.refreshRequired ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mt-4 text-sm text-blue-950", children: "Settings applied. Editing stays locked until Guard reloads the current protected state." }) : null
+  ] });
+}
 function managedControlsHref(input) {
   if (!input.cloudControlsUrl) {
     return null;
@@ -1956,16 +2064,6 @@ const RISK_TONE = {
 };
 function Pill(props) {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${props.tone ?? "border-[rgba(63,65,116,0.16)] text-brand-dark"}`, children: props.children });
-}
-function managedPermissionState(effective, permissionId) {
-  const projected = effective.projection?.permissions.find((item) => item.permission_id === permissionId)?.managed_state;
-  if (projected && projected !== "inherited") return projected;
-  for (const layer of effective.layers) {
-    if (layer.kind !== "signed-cloud") continue;
-    const control = layer.controls.find((item) => item.target_kind === "permission" && item.target_id === permissionId);
-    if (control) return control.state;
-  }
-  return null;
 }
 function extensionPolicyRadioTabStop(choices, state, groupDisabled) {
   if (groupDisabled) return -1;
@@ -2232,9 +2330,9 @@ function ExtensionPolicyPanel(props) {
     rebaseDraft,
     keepConflicts,
     useCurrent,
-    applyProfile,
     useHistoricalDraft,
-    permissionState
+    permissionState,
+    setPermissionStates
   } = draft;
   const { resolvedApprovalGate, resolveApprovalGate } = useResolvedApprovalGate(null);
   reactExports.useEffect(() => {
@@ -2269,20 +2367,25 @@ function ExtensionPolicyPanel(props) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { id: "extension-policy-editor", "aria-labelledby": "extension-policy-heading", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "extension-policy-heading", className: "text-lg font-semibold text-brand-dark", children: "Protection settings" }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 max-w-2xl text-sm leading-6 text-brand-dark/80", children: "Recommended follows Guard defaults. Allow is available only where built-in safety and organization policy still permit it. Block is a stricter local floor." }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex flex-wrap items-center gap-x-3 gap-y-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-semibold text-brand-dark/60", children: "Apply to every pattern you can change:" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: baseEffective.health !== "protected" || refreshRequired, onClick: () => applyProfile(policyExtension.permissions, "recommended"), className: "min-h-10 px-1 text-xs font-semibold text-brand-blue disabled:opacity-40", children: "Reset to Recommended" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: baseEffective.health !== "protected" || refreshRequired, onClick: () => applyProfile(policyExtension.permissions, "stricter"), className: "min-h-10 px-1 text-xs font-semibold text-brand-dark disabled:opacity-40", children: "Block all changeable variants" })
-    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      QuickApplyToolbar,
+      {
+        permissions: policyExtension.permissions,
+        effective: baseEffective,
+        permissionState,
+        onApply: setPermissionStates,
+        disabled: refreshRequired || previewBusy || applyBusy || baseEffective.health !== "protected",
+        subject: { one: "changeable setting", other: "changeable settings" }
+      }
+    ),
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { id: "extension-settings-history", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ProtectionSettingsHistory, { catalogDigest: baseEffective.catalog_digest, disabled: baseEffective.health !== "protected" || refreshRequired, onUse: (layers) => useHistoricalDraft(layers) }) }),
-    baseEffective.global_lockdown ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { role: "status", className: "mt-4 flex gap-2 text-sm text-brand-dark", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniLockClosed, { className: "mt-0.5 size-4 shrink-0" }),
-      "Emergency Lockdown remains dominant. You can prepare a local draft, but matching commands stay blocked while lockdown is active."
-    ] }) : null,
-    baseEffective.health !== "protected" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { role: "alert", className: "mt-4 flex gap-2 text-sm text-amber-950", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 size-4 shrink-0" }),
-      "Settings cannot be changed until Guard verifies local settings integrity."
-    ] }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      PolicyEditingLocks,
+      {
+        health: baseEffective.health,
+        globalLockdown: baseEffective.global_lockdown
+      }
+    ),
     managedCount ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-4 text-sm text-indigo-950", children: [
       managedCount,
       " setting",
@@ -2301,7 +2404,7 @@ function ExtensionPolicyPanel(props) {
           document.getElementById("extension-settings-history")?.scrollIntoView({ behavior: "smooth", block: "start" });
         }
       }
-    ) : refreshRequired ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { role: "status", className: "mt-4 text-sm text-blue-950", children: "Settings applied. Editing stays locked until Guard reloads the current protected state." }) : null,
+    ) : refreshRequired ? /* @__PURE__ */ jsxRuntimeExports.jsx(PolicyEditingLocks, { refreshRequired: true }) : null,
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: (() => {
       const { ungrouped, families } = groupPermissionsByFamily(policyExtension.permissions);
       const renderRow = (permission2) => /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -4883,29 +4986,6 @@ function searchCommandPatterns(extensions, rawQuery, limit = COMMAND_PATTERN_DIS
     (left, right) => right.permission.risk_tier.localeCompare(left.permission.risk_tier) || left.permission.label.localeCompare(right.permission.label) || left.extension.name.localeCompare(right.extension.name)
   ).slice(0, limit);
 }
-const QUICK_APPLY_CHOICES = [
-  {
-    state: "inherit",
-    label: "Recommended",
-    detail: "Use Guard defaults for every matching capability.",
-    icon: HiMiniSparkles
-  },
-  {
-    state: "allow",
-    label: "Allow all",
-    detail: "Allow every matching capability that organization policy permits.",
-    icon: HiMiniCheckCircle
-  },
-  {
-    state: "block",
-    label: "Deny all",
-    detail: "Add a local block to every matching capability.",
-    icon: HiMiniNoSymbol
-  }
-];
-function quickApplyPermissionIds(permissions, effective, state) {
-  return permissions.filter((permission2) => permission2.configurable).filter((permission2) => state !== "allow" || managedPermissionState(effective, permission2.permission_id) !== "disabled").map((permission2) => permission2.permission_id);
-}
 function CatalogSearchRow(props) {
   const handleOpen = reactExports.useCallback(() => {
     props.onOpen(props.extension);
@@ -4923,65 +5003,6 @@ function CatalogSearchRow(props) {
       executables: props.extension.executables,
       ecosystemIds: props.extension.ecosystem_ids,
       onOpen: handleOpen
-    }
-  );
-}
-function QuickApplyToolbar(props) {
-  const configurableCount = props.permissions.filter((permission2) => permission2.configurable).length;
-  const managedBlockCount = props.permissions.filter(
-    (permission2) => permission2.configurable && managedPermissionState(props.effective, permission2.permission_id) === "disabled"
-  ).length;
-  let managedBlockCopy = "";
-  if (managedBlockCount) {
-    const subject = managedBlockCount === 1 ? "block stays" : "blocks stay";
-    managedBlockCopy = ` ${managedBlockCount} organization ${subject} enforced.`;
-  }
-  if (!configurableCount) return null;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex flex-col gap-3 border-y border-[rgba(63,65,116,0.12)] bg-[rgba(85,153,254,0.045)] px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm font-semibold text-brand-dark", children: [
-        "Quick apply to ",
-        configurableCount,
-        " matching ",
-        configurableCount === 1 ? "capability" : "capabilities"
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-0.5 text-xs leading-5 text-brand-dark/65", children: [
-        "Changes stay in draft until you review and approve them.",
-        managedBlockCopy
-      ] })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { role: "group", "aria-label": `Quick apply to ${configurableCount} matching capabilities`, className: "flex flex-wrap gap-2", children: QUICK_APPLY_CHOICES.map((choice) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-      QuickApplyButton,
-      {
-        choice,
-        permissionIds: quickApplyPermissionIds(props.permissions, props.effective, choice.state),
-        disabled: props.disabled,
-        permissionState: props.permissionState,
-        onApply: props.onApply
-      },
-      choice.state
-    )) })
-  ] });
-}
-function QuickApplyButton(props) {
-  const active = props.permissionIds.length > 0 && props.permissionIds.every((permissionId) => props.permissionState(permissionId) === props.choice.state);
-  const handleClick = reactExports.useCallback(() => {
-    props.onApply(props.permissionIds, props.choice.state);
-  }, [props.choice.state, props.onApply, props.permissionIds]);
-  const Icon = props.choice.icon;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-    "button",
-    {
-      type: "button",
-      "aria-pressed": active,
-      title: props.choice.detail,
-      disabled: props.disabled || props.permissionIds.length === 0,
-      onClick: handleClick,
-      className: "inline-flex min-h-10 items-center gap-2 rounded-lg border border-[rgba(63,65,116,0.18)] bg-white px-3 text-xs font-semibold text-brand-dark shadow-sm transition-colors hover:border-brand-blue hover:text-brand-blue disabled:cursor-not-allowed disabled:opacity-45 aria-pressed:border-brand-blue aria-pressed:bg-brand-blue aria-pressed:text-white",
-      children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { className: "size-4", "aria-hidden": "true" }),
-        props.choice.label
-      ]
     }
   );
 }
@@ -5100,6 +5121,14 @@ function PatternSearchConsole(props) {
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { id: "pattern-search-hint", className: `mt-2 text-xs text-brand-dark/60 ${focused || showResults ? "" : "sr-only"}`, children: "Matches patterns across every tool. Press / to focus search from anywhere on this page." }),
     props.actionSlot ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: props.actionSlot }) : null,
+    showResults ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      PolicyEditingLocks,
+      {
+        health: baseEffective.health,
+        globalLockdown: baseEffective.global_lockdown,
+        refreshRequired
+      }
+    ) : null,
     showResults ? matches.length || toolMatches.length ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3", children: [
       matches.length ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -5647,6 +5676,7 @@ function ExtensionActivity(props) {
 }
 function toolStateLabel(state) {
   if (state === "allow") return "Allow";
+  if (state === "review") return "Review";
   if (state === "block") return "Block";
   return "Recommended";
 }
@@ -5654,19 +5684,30 @@ function McpServerDefaults({ extension: extension2 }) {
   if (extension2.surface !== "mcp") return null;
   const launch = extension2.mcp_launch;
   const tools = extension2.mcp_tools ?? [];
+  const remoteLaunch = launch?.kind === "remote-http" ? launch : null;
+  const packageLaunch = launch?.kind === "package-launcher" ? launch : null;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "rounded-3xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2", "data-testid": "mcp-server-defaults", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-lg font-semibold text-brand-dark", children: "MCP server defaults" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-brand-dark/75", children: "Matching launches use this package name. Defaults apply only after you turn the server on. A custom extension on this device still wins." }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "mt-5 grid gap-4 sm:grid-cols-2", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-brand-dark/75", children: remoteLaunch ? "Matching hosted endpoints use these defaults after you turn the server on. A custom extension on this device still wins." : "Matching launches use this package name. Defaults apply only after you turn the server on. A custom extension on this device still wins." }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("dl", { className: "mt-5 grid gap-4 sm:grid-cols-2", children: remoteLaunch ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Endpoint" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 break-all font-mono text-sm text-brand-dark", children: remoteLaunch.url })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Server names" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 text-sm text-brand-dark", children: remoteLaunch.serverNames.join(", ") })
+      ] })
+    ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Launcher" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 text-sm text-brand-dark", children: launch?.command ?? "Package launcher" })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 text-sm text-brand-dark", children: packageLaunch?.command ?? "Package launcher" })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Package" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 break-all font-mono text-sm text-brand-dark", children: launch?.package ?? "Unknown package" })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 break-all font-mono text-sm text-brand-dark", children: packageLaunch?.package ?? "Unknown package" })
       ] })
-    ] }),
+    ] }) }),
     tools.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5 overflow-x-auto", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("table", { className: "min-w-full text-left text-sm", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("thead", { className: "text-xs uppercase tracking-wide text-brand-dark/55", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "pb-2 pr-4 font-semibold", children: "Tool" }),
@@ -5856,6 +5897,7 @@ function ProtectionTestLab({ extension: extension2 }) {
     ] }) : null
   ] });
 }
+const DRAFT_EXIT_MESSAGE = "Discard your unreviewed protection setting changes?";
 const DETAIL_TABS = [
   { id: "overview", label: "Overview" },
   { id: "permissions", label: "Permissions" },
@@ -5949,6 +5991,11 @@ function DeveloperModuleDetails(props) {
 }
 function ProtectionModuleDetail(props) {
   const [policyDirty, setPolicyDirty] = reactExports.useState(false);
+  const { confirm: requestConfirmation, dialog: confirmDialog } = useConfirmDialog();
+  const urlStateRef = reactExports.useRef(props.urlState);
+  urlStateRef.current = props.urlState;
+  const onUrlStateRef = reactExports.useRef(props.onUrlState);
+  onUrlStateRef.current = props.onUrlState;
   reactExports.useEffect(() => {
     let highlightTimer = 0;
     let highlighted = null;
@@ -6003,13 +6050,26 @@ function ProtectionModuleDetail(props) {
     (source) => source === "Synced from Guard Cloud" || source.startsWith("Managed by ")
   );
   const cloudControlsUrl = props.runtime?.dashboard_url?.trim() || props.runtime?.connect_url?.trim() || void 0;
-  const setActiveTab = reactExports.useCallback((tab) => {
+  const setActiveTab = reactExports.useCallback(async (tab) => {
     if (!props.onUrlState) return false;
-    if (tab !== activeTab && policyDirty && !window.confirm("Discard your unreviewed protection setting changes?")) {
+    const needsConfirmation = tab !== activeTab && policyDirty;
+    if (needsConfirmation && !await requestConfirmation({
+      title: "Discard unreviewed changes?",
+      description: DRAFT_EXIT_MESSAGE,
+      confirmLabel: "Discard changes",
+      cancelLabel: "Keep editing",
+      tone: "destructive"
+    })) {
       return false;
     }
-    props.onUrlState({
-      ...props.urlState ?? {
+    const latestUrlState = urlStateRef.current;
+    const latestOnUrlState = onUrlStateRef.current;
+    if (!latestOnUrlState) return false;
+    if (needsConfirmation && canonicalProtectionDetailTab(latestUrlState?.tab ?? "overview") !== activeTab) {
+      return false;
+    }
+    latestOnUrlState({
+      ...latestUrlState ?? {
         tab: "overview",
         query: "",
         risk: "all",
@@ -6025,8 +6085,8 @@ function ProtectionModuleDetail(props) {
       ruleId: null
     });
     return true;
-  }, [activeTab, policyDirty, props.onUrlState, props.urlState]);
-  const handleTabKeyDown = (event, tab) => {
+  }, [activeTab, policyDirty, props.onUrlState, requestConfirmation]);
+  const handleTabKeyDown = async (event, tab) => {
     if (!event.key.startsWith("Arrow") && event.key !== "Home" && event.key !== "End") return;
     const index = DETAIL_TABS.findIndex((item) => item.id === tab);
     let nextIndex = index;
@@ -6038,15 +6098,21 @@ function ProtectionModuleDetail(props) {
     event.preventDefault();
     const next = DETAIL_TABS[nextIndex];
     if (!next) return;
-    if (!setActiveTab(next.id)) return;
+    if (!await setActiveTab(next.id)) return;
     window.requestAnimationFrame(() => document.getElementById(`protection-tab-${next.id}`)?.focus());
   };
-  const handleBack = () => {
-    if (policyDirty && !window.confirm("Discard your unreviewed protection setting changes?")) return;
+  const handleBack = async () => {
+    if (policyDirty && !await requestConfirmation({
+      title: "Discard unreviewed changes?",
+      description: DRAFT_EXIT_MESSAGE,
+      confirmLabel: "Discard changes",
+      cancelLabel: "Keep editing",
+      tone: "destructive"
+    })) return;
     props.onBack();
   };
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { "data-testid": "protection-module-detail", className: "w-full", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", onClick: handleBack, className: "inline-flex min-h-11 items-center gap-2 rounded-lg px-1 text-sm font-semibold text-brand-dark/80 hover:text-brand-dark", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", onClick: () => void handleBack(), className: "inline-flex min-h-11 items-center gap-2 rounded-lg px-1 text-sm font-semibold text-brand-dark/80 hover:text-brand-dark", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowLeft, { className: "size-4", "aria-hidden": "true" }),
       "Extensions"
     ] }),
@@ -6104,8 +6170,8 @@ function ProtectionModuleDetail(props) {
         "aria-selected": activeTab === tab.id,
         "aria-controls": `protection-panel-${tab.id}`,
         tabIndex: activeTab === tab.id ? 0 : -1,
-        onClick: () => setActiveTab(tab.id),
-        onKeyDown: (event) => handleTabKeyDown(event, tab.id),
+        onClick: () => void setActiveTab(tab.id),
+        onKeyDown: (event) => void handleTabKeyDown(event, tab.id),
         className: `-mb-px min-h-11 shrink-0 whitespace-nowrap border-b-2 px-1 pb-3 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue ${activeTab === tab.id ? "border-brand-blue text-brand-blue" : "border-transparent text-brand-dark/60 hover:text-brand-dark"}`,
         children: tab.label
       },
@@ -6194,7 +6260,8 @@ function ProtectionModuleDetail(props) {
       /* @__PURE__ */ jsxRuntimeExports.jsx(ExtensionActivity, { extension: props.extension, receipts: props.runtime?.latest_receipts ?? [] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(ProtectionTestLab, { extension: props.extension })
     ] }) : null,
-    activeTab === "technical" ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { id: "protection-panel-technical", role: "tabpanel", "aria-labelledby": "protection-tab-technical", className: "mt-6", children: /* @__PURE__ */ jsxRuntimeExports.jsx(DeveloperModuleDetails, { extension: props.extension, effective: props.effective, catalogDigest: props.catalogDigest }) }) : null
+    activeTab === "technical" ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { id: "protection-panel-technical", role: "tabpanel", "aria-labelledby": "protection-tab-technical", className: "mt-6", children: /* @__PURE__ */ jsxRuntimeExports.jsx(DeveloperModuleDetails, { extension: props.extension, effective: props.effective, catalogDigest: props.catalogDigest }) }) : null,
+    confirmDialog
   ] });
 }
 function ExtensionsLoadingState(props) {

@@ -1,0 +1,49 @@
+name: Set up cached Rust workspace
+description: Install the pinned toolchain and reuse trusted CI compilation outputs.
+
+inputs:
+  toolchain:
+    description: Exact Rust toolchain version.
+    default: "1.88.0"
+  components:
+    description: Optional space-separated components, such as rustfmt clippy.
+    default: ""
+  targets:
+    description: Optional space-separated compilation targets.
+    default: ""
+  cache-key:
+    description: Cache family; publishing must use its own trusted build cache.
+    default: native-wheel
+
+runs:
+  using: composite
+  steps:
+    - name: Install pinned Rust toolchain
+      shell: bash
+      env:
+        RUST_TOOLCHAIN: ${{ inputs.toolchain }}
+        RUST_COMPONENTS: ${{ inputs.components }}
+        RUST_TARGETS: ${{ inputs.targets }}
+      run: |
+        args=(--profile minimal)
+        for component in $RUST_COMPONENTS; do
+          args+=(--component "$component")
+        done
+        for target in $RUST_TARGETS; do
+          args+=(--target "$target")
+        done
+        rustup toolchain install "$RUST_TOOLCHAIN" "${args[@]}"
+        rustup default "$RUST_TOOLCHAIN"
+    - name: Cache Rust compilation
+      uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+      with:
+        # Keep the existing trusted host cache usable during this migration.
+        # Changing this prefix strands the macOS dependency builds on cold CI.
+        prefix-key: v0-rust
+        workspaces: rust
+        shared-key: ${{ inputs.targets && format('{0}-{1}', inputs.cache-key, inputs.targets) || inputs.cache-key }}
+        cache-workspace-crates: true
+        # Cache paths also determine Actions' archive version. Preserve the
+        # old path set so the trusted pre-migration cache can actually restore.
+        cache-bin: true
+        save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}

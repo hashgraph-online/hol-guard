@@ -1,14 +1,15 @@
 #![forbid(unsafe_code)]
 
+use crate::policy_enforcement::AdmittedPolicySnapshot;
 use guard_contracts::{
     GuardHookEdgeResultV2, GuardHookEnvelopeV2, GuardHookPayloadKindV2, HookOutputSummaryV1,
     HookSourceFileRefV1, NativeHookRequestV1, PreToolResultV1, GUARD_HOOK_EDGE_RESULT_V2_SCHEMA,
     GUARD_HOOK_ENVELOPE_V2_SCHEMA, MAX_NATIVE_REQUEST_BYTES, NATIVE_PROTOCOL_VERSION,
 };
 use guard_hook_core::review_post_tool;
-use guard_policy_snapshot::PolicySnapshotV3;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
+use std::time::{Duration, Instant};
 
 use crate::native_hook_receipt::{receipt_from_post_tool, receipt_from_pre_tool};
 
@@ -149,6 +150,7 @@ fn canonical_harness(value: &str) -> Result<String, String> {
         "pi-agent" | "pi-coding-agent" => "pi",
         "oh-my-pi" => "omp",
         "zai" | "z-code" | "zai-zcode" => "zcode",
+        "devin-cli" | "cognition-devin" => "devin",
         _ => normalized.as_str(),
     };
     if !canonical
@@ -165,6 +167,7 @@ fn canonical_harness(value: &str) -> Result<String, String> {
             | "codex"
             | "copilot"
             | "cursor"
+            | "devin"
             | "gemini"
             | "grok"
             | "hermes"
@@ -303,7 +306,7 @@ fn validate_pre_tool_result(result: &Value) -> Result<(), String> {
 
 fn evaluate_validated_envelope(
     envelope: GuardHookEnvelopeV2,
-    policy_snapshot: Option<&PolicySnapshotV3>,
+    policy_snapshot: Option<&AdmittedPolicySnapshot>,
 ) -> Result<Vec<u8>, String> {
     let harness = canonical_harness(&envelope.harness)?;
     let event_name = authoritative_event(&envelope)?;
@@ -314,10 +317,17 @@ fn evaluate_validated_envelope(
     }
     let (result, receipt) = match event_name.as_str() {
         "PreToolUse" => {
-            let native = guard_command::pretool::evaluate_pre_tool_envelope(
+            let native = guard_command::pretool::evaluate_pre_tool_envelope_with_extensions(
                 &harness,
                 &event_name,
                 &envelope.raw_payload,
+                policy_snapshot.and_then(|snapshot| snapshot.command_extensions.as_ref()),
+                Some(
+                    Instant::now()
+                        + Duration::from_millis(
+                            envelope.deadline_budget_ms.unwrap_or(9_000).min(9_000),
+                        ),
+                ),
             );
             let evaluated = if let Some(snapshot) = policy_snapshot {
                 crate::policy_enforcement::apply_pre_tool_policy(
@@ -335,7 +345,7 @@ fn evaluate_validated_envelope(
                 .map_err(|_| "native_hook_pre_tool_result_invalid".to_owned())?;
             let receipt = receipt_from_pre_tool(
                 &envelope,
-                policy_snapshot,
+                policy_snapshot.map(AdmittedPolicySnapshot::snapshot),
                 &request_id,
                 &request_digest,
                 &harness,
@@ -376,7 +386,7 @@ fn evaluate_validated_envelope(
             };
             let receipt = receipt_from_post_tool(
                 &envelope,
-                policy_snapshot,
+                policy_snapshot.map(AdmittedPolicySnapshot::snapshot),
                 &request_id,
                 &request_digest,
                 &harness,
@@ -413,6 +423,7 @@ pub(crate) fn evaluate_envelope_with_store(
         &envelope.source.guard_home,
         envelope.policy_generation,
     )?;
+    let _command_lease = policy_store.command_authority_lease(snapshot.snapshot())?;
     evaluate_validated_envelope(envelope, Some(snapshot.as_ref()))
 }
 
@@ -421,7 +432,7 @@ pub(crate) fn evaluate_envelope_with_store(
 /// snapshot, and derived bindings describe one coherent state.
 pub(crate) fn evaluate_envelope_with_snapshot(
     envelope: GuardHookEnvelopeV2,
-    snapshot: &PolicySnapshotV3,
+    snapshot: &AdmittedPolicySnapshot,
 ) -> Result<Vec<u8>, String> {
     validate_envelope_shape(&envelope)?;
     evaluate_validated_envelope(envelope, Some(snapshot))

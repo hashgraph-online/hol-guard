@@ -324,7 +324,11 @@ def _installed_hook_corpus(root: Path) -> dict[str, object]:
         )
         writer = daemon._server.runtime_hook_evidence_writer
         mode_invariants = _exercise_mode_invariants(daemon, guard_home, workspace)
-        evidence_stats = wait_for_receipt_corpus(writer, expected=len(route_receipts))
+        evidence_stats = wait_for_receipt_corpus(
+            writer,
+            expected=len(route_receipts),
+            timeout_seconds=15.0 if os.name == "nt" else 5.0,
+        )
     finally:
         daemon.stop()
     if not isinstance(worker_stats, Mapping) or not isinstance(evidence_stats, Mapping):
@@ -335,7 +339,7 @@ def _installed_hook_corpus(root: Path) -> dict[str, object]:
         raise RuntimeError(f"native_default_auto_probe_failed: invalid route metrics: {worker_stats}")
     observed_routes = cast(dict[str, int], observed_routes_raw)
     _require(expected > 0, "installed hook corpus is empty")
-    _require(expected == 21, {"expected": expected, "routes": routes})
+    _require(expected == 23, {"expected": expected, "routes": routes})
     _require(sum(observed_routes.values()) == expected, worker_stats)
     _require(observed_routes.get("native_resident") == expected, worker_stats)
     _require(receipt_corpus_is_complete(evidence_stats, expected=expected), evidence_stats)

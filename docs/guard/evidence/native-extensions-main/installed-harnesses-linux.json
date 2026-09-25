@@ -1,0 +1,145 @@
+{
+  "corpus_decisions": 21,
+  "corpus_scope": "normalized_daemon_ingress",
+  "default_mode": "auto",
+  "fail_safe_decisions": 0,
+  "fast_path": "enabled",
+  "mode_invariants": {
+    "off": {
+      "decision": null,
+      "python_oracle": false,
+      "reason_code": "native_hook_disabled"
+    },
+    "shadow": {
+      "decision": null,
+      "python_oracle": false,
+      "reason_code": "native_shadow_diagnostic_disabled"
+    }
+  },
+  "oneshot_decisions": 0,
+  "python_semantic_decisions": 0,
+  "reason_code_counts": {
+    "native_policy_warning": 15
+  },
+  "receipt_metrics": {
+    "accepted": 21,
+    "deduped": 0,
+    "dropped": 0,
+    "durable_pending": 0,
+    "failures": 0,
+    "processed": 21
+  },
+  "resident_decisions": 21,
+  "resident_share": 1.0,
+  "rollback": "off",
+  "route_receipts": [
+    {
+      "event": "PreToolUse",
+      "harness": "claude-code",
+      "route": "native_resident"
+    },
+    {
+      "event": "PostToolUse",
+      "harness": "claude-code",
+      "route": "native_resident"
+    },
+    {
+      "event": "PreToolUse",
+      "harness": "cline",
+      "route": "native_resident"
+    },
+    {
+      "event": "PostToolUse",
+      "harness": "cline",
+      "route": "native_resident"
+    },
+    {
+      "event": "PreToolUse",
+      "harness": "codex",
+      "route": "native_resident"
+    },
+    {
+      "event": "PostToolUse",
+      "harness": "codex",
+      "route": "native_resident"
+    },
+    {
+      "event": "PreToolUse",
+      "harness": "copilot",
+      "route": "native_resident"
+    },
+    {
+      "event": "PostToolUse",
+      "harness": "copilot",
+      "route": "native_resident"
+    },
+    {
+      "event": "PreToolUse",
+      "harness": "cursor",
+      "route": "native_resident"
+    },
+    {
+      "event": "PostToolUse",
+      "harness": "cursor",
+      "route": "native_resident"
+    },
+    {
+      "event": "PreToolUse",
+      "harness": "grok",
+      "route": "native_resident"
+    },
+    {
+      "event": "PreToolUse",
+      "harness": "hermes",
+      "route": "native_resident"
+    },
+    {
+      "event": "PreToolUse",
+      "harness": "kimi",
+      "route": "native_resident"
+    },
+    {
+      "event": "PostToolUse",
+      "harness": "kimi",
+      "route": "native_resident"
+    },
+    {
+      "event": "PreToolUse",
+      "harness": "omp",
+      "route": "native_resident"
+    },
+    {
+      "event": "PostToolUse",
+      "harness": "omp",
+      "route": "native_resident"
+    },
+    {
+      "event": "PreToolUse",
+      "harness": "openclaw",
+      "route": "native_resident"
+    },
+    {
+      "event": "PreToolUse",
+      "harness": "opencode",
+      "route": "native_resident"
+    },
+    {
+      "event": "PreToolUse",
+      "harness": "pi",
+      "route": "native_resident"
+    },
+    {
+      "event": "PostToolUse",
+      "harness": "pi",
+      "route": "native_resident"
+    },
+    {
+      "event": "PreToolUse",
+      "harness": "zcode",
+      "route": "native_resident"
+    }
+  ],
+  "runtime_reason": "native_ready",
+  "schema": "hol-guard.native-default-installed-receipt.v1",
+  "target": "x86_64-linux"
+}

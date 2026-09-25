@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "hol-guard"
-version = "3.0.1"
+version = "3.6.0"
 description = "Open-source antivirus and runtime protection for AI agents, tools, MCP servers, plugins, skills, and package installs."
 readme = "README.md"
 license = "Apache-2.0"
@@ -88,6 +88,7 @@ dev = [
 [tool.uv]
 override-dependencies = [
     "aiohttp==3.14.3",
+    "anyio==4.14.2",
     "click==8.4.1",
     "cisco-ai-skill-scanner==2.0.12",
     "fastapi==0.137.1",
@@ -106,6 +107,7 @@ override-dependencies = [
 
 [project.scripts]
 hol-guard = "codex_plugin_scanner.cli:main"
+hol-guard-eval = "codex_plugin_scanner.guard.evaluation_cli:main"
 hol-guard-secrets = "codex_plugin_scanner.guard.secrets.cli:main"
 plugin-scanner = "codex_plugin_scanner.cli:main"
 plugin-guard = "codex_plugin_scanner.cli:main"
@@ -129,12 +131,15 @@ line-length = 120
 packages = ["src/codex_plugin_scanner"]
 
 [tool.hatch.build.targets.wheel.force-include]
+"contracts/extensions/native-command-program.v1.json" = "codex_plugin_scanner/guard/contracts/data/extensions/native-command-program.v1.json"
+"contracts/extensions/command-catalog.v1.json" = "codex_plugin_scanner/guard/contracts/data/extensions/command-catalog.v1.json"
 "contracts/guard-cloud-review/v2/contract.json" = "codex_plugin_scanner/guard/contracts/data/guard-cloud-review/v2/contract.json"
 "contracts/guard-cloud-review/v2/command-result.json" = "codex_plugin_scanner/guard/contracts/data/guard-cloud-review/v2/command-result.json"
 "contracts/guard-cloud-review/v2/fixtures.json" = "codex_plugin_scanner/guard/contracts/data/guard-cloud-review/v2/fixtures.json"
 "docs/guard/contracts/guard-cloud-review.md" = "codex_plugin_scanner/guard/contracts/data/guard-cloud-review/guard-cloud-review.md"
 "contracts/extensions/trust-class-map.v1.json" = "codex_plugin_scanner/guard/contracts/data/extensions/trust-class-map.v1.json"
 "contracts/extensions/contribution.v1.schema.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contribution.v1.schema.json"
+"contracts/extensions/contribution.v2.schema.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contribution.v2.schema.json"
 "contributions/extensions/command.blitcp.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contributions/command.blitcp.json"
 "contributions/extensions/command.keibidrop.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contributions/command.keibidrop.json"
 "contributions/extensions/command.noodle.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contributions/command.noodle.json"
@@ -143,8 +148,10 @@ packages = ["src/codex_plugin_scanner"]
 "contributions/extensions/command.remote.essh.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contributions/command.remote.essh.json"
 "contributions/extensions/command.repo2nb.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contributions/command.repo2nb.json"
 "contributions/extensions/command.skill-sunset.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contributions/command.skill-sunset.json"
+"contributions/extensions/command.uivoid.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contributions/command.uivoid.json"
 "contracts/mcp-servers/contribution.v1.schema.json" = "codex_plugin_scanner/guard/contracts/data/mcp_servers/contribution.v1.schema.json"
 "contributions/mcp-servers/mcp.filesystem.json" = "codex_plugin_scanner/guard/contracts/data/mcp_servers/contributions/mcp.filesystem.json"
+"contributions/mcp-servers/mcp.instapods.json" = "codex_plugin_scanner/guard/contracts/data/mcp_servers/contributions/mcp.instapods.json"
 
 [tool.hatch.build]
 artifacts = [
@@ -152,6 +159,11 @@ artifacts = [
     "src/codex_plugin_scanner/guard/schemas/**",
 ]
 exclude = [
+    "src/codex_plugin_scanner/_native/guard-command-source",
+    "src/codex_plugin_scanner/_native/source-compiler-manifest.json",
+    "src/codex_plugin_scanner/guard/contracts/data/extensions/native-command-program.v1.json",
+    "src/codex_plugin_scanner/guard/contracts/data/extensions/command-catalog.v1.json",
+    "src/codex_plugin_scanner/guard/contracts/data/extensions/trust-class-map.v1.json",
     ".guard-live/**",
     ".guard-package-venv/**",
     ".guard-e2e/**",
@@ -162,7 +174,6 @@ exclude = [
     ".venv/**",
     ".venv-*/**",
     "dashboard/node_modules/**",
-    "src/codex_plugin_scanner/guard/native_runtime_resident.py",
 ]
 
 [tool.ruff.lint]

@@ -2,53 +2,123 @@
 
 ## Status and scope
 
-This document defines the target contract for Guard command safety extensions. The schema-v2 registry and canonical command model currently preserve compatibility with existing action and risk classes while rule-level evaluation migrates behind them. Extensions detect and explain command facts; Guard's existing policy, approval, memory, and receipt systems retain decision authority.
+Command extensions are authored as bounded JSON under
+`contributions/command-sources/` and compiled by Rust in `guard-command`.
+Rust owns source validation, matcher semantics, native admission, and semantic
+identities. The Python registry exposes generated metadata to inspection,
+controls, and the dashboard; it does not construct runtime matchers.
+Extensions contribute command facts to Guard's policy, approval, memory, and
+receipt systems. Source metadata and matcher output cannot grant authority.
+
+For a contribution, start with the [contributor guide](extensions/contributing.md)
+and the [native source workflow](extension-contributions.md). The
+[Extension Builder](extension-builder/README.md) turns exported CLI metadata
+into the same canonical source format. Most contributions compose existing
+operations and require no new Rust code.
+
+## Source and generated artifact ownership
+
+| Artifact | Owner and purpose |
+| --- | --- |
+| `contributions/command-sources/command.<name>.json` | Author-edited metadata, stable IDs, permissions, rules, and inline native matcher trees |
+| `contracts/extensions/trust-class-map.v1.json` | Separately reviewed trust classification and activation defaults |
+| `tests/fixtures/command-source-<slug>.v1.json` | Portable command and synthetic-control cases evaluated by Rust |
+| `contributions/extensions/command.<name>.json` | Generated v2 contribution descriptor |
+| `contracts/extensions/native-command-program.v1.json` | Generated admitted graph, rule coverage, candidate indexes, and program identity |
+| `contracts/extensions/command-catalog.v1.json` | Generated descriptive catalog and relationships used by product callers and documentation |
+
+`scripts/build_native_command_program.py` reads the canonical sources and trust
+map, invokes the Rust compiler, and writes the generated projections and their
+package mirrors. It performs no Python matcher compilation. The complete build
+is required for repository publication; `base: "packaged"` is an offline
+addition build that cannot replace existing extensions.
+
+MCP profiles remain canonical JSON under `contributions/mcp-servers/`. Their
+server identity and tool policy are admitted into the catalog alongside
+command sources, using the [MCP contribution contract](mcp-server-contributions.md).
+Package operations retain their Package Firewall delegation. Neither surface
+becomes an arbitrary shell matcher or an alternative policy authority.
 
 ## Parse-once command model
 
-Each harness adapter extracts a command and declares its input boundary before parsing:
+The harness boundary supplies command text, dialect, transport, and extraction
+provenance. The Rust parser produces `CanonicalCommandV1` with normalized text,
+parse confidence, uncertainty, wrapper chain, and ordered segments. Segments
+carry tokens, executable, arguments, environment names, path-override state,
+pipeline position, execution context, and source spans.
 
-- **Dialect:** `posix`, `powershell`, `cmd`, `argv`, or `unknown`.
-- **Transport:** shell string, argument vector, or embedded script.
-- **Provenance:** harness, event, extraction method, workspace/source scope, and whether text was direct or reconstructed.
+Native matchers consume this model instead of retokenizing raw shell text.
+The current native parser supports its bounded `posix`/`shell_string` profile;
+other dialects and transports produce `unsupported_dialect_or_transport`.
+Supported wrappers and compound forms are defined by the parser and the
+[native corpus contract](native-command-corpus-contract.md). The source
+compiler does not broaden shell grammar support.
 
-The parser boundary produces one immutable `CanonicalCommand` per request. The complete contract carries normalized text, cwd and platform context, security-relevant command-local environment overrides, parse confidence, wrapper chain, source spans, embedded scripts, and ordered segments. Segments preserve separators, pipeline position, executable/path source, subcommands, flags, operands, redirects, and execution-versus-data context.
-
-Consumers receive this model; they do not retokenize raw text. Dialects never share quoting rules, parsing never expands or executes shell content, and compound-command suffixes are retained. Unsupported dialects, malformed input, and exceeded limits return typed uncertainty rather than a partial success that can imply safety.
-
-```text
-harness request
-  -> adapter extraction with dialect, transport, and provenance
-  -> canonical parser (once)
-  -> context classification and executable/keyword index
-  -> all applicable extension matchers
-  -> composite evidence artifact
-  -> existing policy and memory evaluation
-  -> one response, approval item, and receipt
-```
+Parsing never expands or executes shell content. Unsupported syntax, malformed
+input, and exceeded limits retain native uncertainty. Python consumers project
+the native model and observations; they must not reparse or unwrap uncertain
+text to invent safer evidence. Native evaluation feeds policy resolution and
+the authoritative pre-execution decision and receipt.
 
 ## Matcher boundary
 
-A `CommandMatcher` is side-effect-free and evaluates the canonical invocation or one of its segments. It returns zero or more `RuleMatch` values. Matchers use structured executable, subcommand, flag, operand, path, redirect, pipeline, data-flow, platform, and embedded-script fields. Compound matchers expose explicit `all`, `any`, and `not` semantics.
+An author supplies an inline tree of versioned native operations. The compiler
+lowers that tree into content-addressed nodes and validates it through the
+same native operation contracts used at runtime. Existing operations cover
+executable paths, arguments, structured options and operands, pipelines, and
+reviewed domain-specific behavior. `all.v1` and `any.v1` take child matchers;
+`pipeline.v1` takes a producer and consumer. The closed operation set lives in
+`rust/crates/guard-command/src/native_command_program_compile.rs`.
 
-Safe variants are positive, rule-local predicates such as a verified dry run, preview, read-only operation, or bounded target. A safe variant cannot suppress another rule. Regex is a bounded fallback for trusted definitions: compile it at registry construction, validate complexity, constrain input and match count, and evaluate it behind a hard interruption boundary when linear behavior is not guaranteed. Timeout or budget exhaustion produces uncertainty.
+Unknown operations, unsupported configuration, callbacks, imports, and
+contributor-supplied candidate indexes are rejected. There is no arbitrary
+Python detector or regex callback extension point. A genuine semantic gap
+requires a reviewed Rust operation with validation, lowering, evaluation,
+identity updates, and independent regression cases.
 
-Every match carries stable extension and rule IDs, extension version, severity, risk classes, matched segment and source-span references, redaction-safe evidence, confidence, safe-variant results, safer alternatives, and evaluation time. Matchers emit evidence only; they never emit `allow`, approve a request, write memory, or execute commands.
+Each rule belongs to one permission. A safe variant is a positive matcher
+attached to that rule; it clears the owning rule's effective segments while
+retaining the observation. It cannot suppress another rule or an independent native floor.
+Native observations retain stable extension/rule IDs, versions, segment
+evidence, safe-variant results, and uncertainty, bound to program/catalog and
+effective-control identities. Generated metadata supplies descriptions, risk
+classes, and safer alternatives. Matchers emit evidence only: they cannot
+approve requests, write memory, or execute commands.
 
 ## Registry boundary
 
-The injected registry is the sole source for runtime hooks, command inspection, dashboard APIs, and generated reference documentation. Construction validates:
+The native program is the semantic authority. Its generated catalog is the
+shared metadata source for command inspection, dashboard APIs, controls, and
+the extension directory. `runtime/command_extensions.py` loads that catalog;
+legacy `command_*_extensions.py` modules are not the authoring path for new
+coverage. Rust compilation and program admission validate:
 
 - schema and semantic versions; unique extension and rule IDs; deterministic ordering;
-- required status, source authority, dependencies, conflicts, aliases, and category ownership;
-- declared action/risk compatibility during migration;
-- matcher type, complexity, count, and time budgets;
-- source attribution as built-in, local-admin, or signed managed configuration;
-- rollback protection and the rule that external definitions cannot shadow built-ins.
+- required status, declared source kind, dependencies, conflicts, aliases, and capability ownership;
+- declared action/risk compatibility;
+- matcher operations, graph depth, configuration, and resource budgets;
+- separately supplied trust-map structure, reserved publisher attribution, and external opt-in defaults;
+- rejection of duplicate IDs and replacement of packaged extensions in addition builds.
 
-The registry indexes executable and bounded keywords so unrelated extensions are not evaluated. It imports no code from workspace or externally supplied definitions. Declarative external rules remain constrained by the matcher schema and protected configuration authority.
+The source's `built-in`, `local-admin`, or `signed-cloud` label is metadata
+validated against the source contract, not proof of a signature or enrolled
+authority. Protected runtime controls own authentication, managed-policy
+delivery, activation, rollback protection, and control-state recovery.
+Compilation neither signs a managed configuration nor changes installed
+authority.
 
-Schema v2 makes leaf extensions own rules. Existing extension IDs, action classes, and risk classes remain available through a single compatibility translator until all consumers migrate. Stored extension settings require an explicit, versioned migration; unknown versions fail closed to a non-weaker state.
+The compiler derives executable and bounded keyword indexes from admitted
+semantics; indexes select candidates and cannot invent rule evidence. Runtime
+evaluation imports no code from workspace or externally supplied definitions.
+Declarative external rules remain constrained by the source schema, native
+validators, and protected configuration authority.
+
+The generated registry retains schema-v2 metadata and stable extension IDs,
+action classes, and risk classes. Existing compatibility protections use closed
+native capabilities bound to their owning extension, rule, permission, and
+executable. Those capabilities are not author-selected native functions.
+Stored settings require explicit, versioned migrations; unknown versions must
+not weaken the existing state.
 
 ## Evidence and policy authority
 
@@ -73,11 +143,21 @@ A versioned truth table covering source authority, required status, extension mo
 The accepted registry and minimum-action truth table is documented in
 [`command-extension-precedence.md`](command-extension-precedence.md) and enforced by the command extension tests.
 
-## Memory migration
+## Identity and remembered decisions
 
-The new security identity hashes the complete canonical command semantics, not a prefix or display label. It binds dialect, transport, normalized segments and suffixes, wrappers, aliases and executable path source, security-relevant environment overrides including `PATH`, cwd scope, workspace/source scope, parser confidence, and controlling rule ID plus semantic version.
+The compiler binds canonical source identity separately from the native
+implementation identity. The admitted program binds catalog, trust, graph,
+and coverage records; the installed compiler manifest also binds package,
+source, binary, and base-program identities. Generated hashes are outputs,
+not author-selected approval tokens.
 
-New memory writes use only the versioned identity. Legacy exact-command and pattern memory may be read during a bounded migration window only when every security-relevant field can be proven equivalent. Missing context, changed rule semantics, uncertainty, or broader legacy scope yields `require-reapproval`; it never falls back to a weaker pattern. Migration records the old and new identity versions without persisting newly exposed raw command material.
+Changes to source or Rust semantics may change these identities while public
+extension and permission IDs stay stable. Control upgrades and remembered
+decisions must preserve that distinction. Retain full command and authority
+bindings, including scope, path context, native uncertainty, and relevant
+versions. Never fabricate an old digest, clear enrollment, or reuse approval
+across changed authority to preserve apparent compatibility. Verify affected
+approval and authenticated-control migration tests when changing semantics.
 
 ## Redaction and persistence
 
@@ -87,24 +167,40 @@ Existing receipt redaction policy controls any authorized raw-command retention.
 
 ## Limits and performance
 
-The parser enforces independent byte, token, segment, wrapper-depth, nesting, embedded-payload, and total-time limits. The evaluator enforces per-rule, per-extension, match-count, regex, and total-request budgets. Every limit failure is typed, observable in explain output, and non-allowing for potentially destructive input.
+The source compiler bounds JSON size and work, graph depth, node count,
+extension/rule counts, and safe variants. The runtime separately bounds
+command bytes, tokens, segments, wrappers, and evaluation work. Unsupported or
+excessive input must preserve uncertainty or a restrictive result.
 
-Evaluation targets are p95 below 5 ms through 1 KiB and below 20 ms through 32 KiB on supported development hardware, with no more than 10% regression in benign hook p95 from the recorded baseline. Timing is available in debug and explain output, not normal hook output.
+Use the current native corpus, installed runtime, and performance contracts as
+the gates for a change. The [validation reference](extension-builder/VALIDATION.md)
+links the workflows; `scripts/native_slo_contract.py` defines installed SLO
+thresholds. A portable fixture pass does not establish installed latency,
+concurrency, receipt persistence, or soak performance.
 
-## Rollout gates
+## Contribution and release gates
 
-1. **Contract gate:** approve models, schemas, monotonic truth table, threat model, capability matrix, and latency/false-positive baselines.
-2. **Parity gate:** ship parser, matcher library, registry v2, and compatibility translator with the existing extension set; remove no legacy path until behavior parity passes.
-3. **Required-core gate:** add critical filesystem, Git, system, self-protection, platform, and embedded-script rules only after bypass and false-positive suites pass.
-4. **Domain gate:** add infrastructure, container, package, cloud, storage, and data domains in review or monitor mode until corpus and performance evidence supports stronger enforcement.
-5. **External-definition gate:** enable declarative local-admin and signed managed definitions only after signature, rollback, authority, corpus, and resource-budget controls pass.
+1. Review the capability boundary, ownership, authoritative upstream examples,
+   positive safe variants, and independent protection floors.
+2. Validate canonical source with Rust, run portable fixtures, regenerate the
+   complete program/catalog/descriptors, rebuild native binaries, and verify
+   generated identities.
+3. Run focused native regression and source-bound decision evidence checks;
+   cover overlapping rules, enabled/disabled controls, uncertainty, and compound
+   commands. A Python reference-suite pass alone is insufficient.
+4. Keep new external contributions opt-in until enabled through authenticated
+   controls. Publisher metadata, compilation, and repository integration do not
+   activate protection or grant authority.
+5. Complete the applicable installed-wheel, performance, review, and release
+   checks. Report the tested source and artifact identities and any platform or
+   workload not evaluated.
 
 ## Acceptance tests
 
-- Assert exactly one parser invocation per harness request and the same injected registry across runtime, CLI, dashboard, and generated docs.
+- Verify native parse-once evaluation and consistent native program/catalog identities across runtime, CLI, dashboard, and generated docs.
 - Cover each dialect/transport independently, wrappers, aliases, cwd, `PATH`, separators, suffixes, pipelines, redirects, heredocs, substitutions, malformed input, and every limit.
 - For every rule, test destructive examples, safe counterparts, explicit safe variants, reordered flags, quoted search/print examples, paths with spaces, and platform syntax.
-- Assert deterministic registry output; reject duplicate IDs, invalid dependencies, shadowing, rollback, unknown schemas, and unsafe matcher complexity.
+- Assert deterministic compiler output; reject duplicate IDs, invalid dependencies, packaged-base replacement, unknown schemas, and excessive matcher complexity. Test rollback protection at the authenticated runtime boundary.
 - Execute the monotonic truth table, cross-extension overlap, required-rule, safe-variant isolation, uncertainty, and remembered-allow cases.
 - Prove one composite artifact, decision, approval item, and receipt while retaining all ordered evidence.
 - Verify legacy policy/action compatibility and require reapproval for any non-equivalent memory migration.

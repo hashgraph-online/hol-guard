@@ -5,8 +5,10 @@ from __future__ import annotations
 import stat
 from pathlib import Path
 from threading import Condition
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
+from .native_command_control_authority import AUTHORITY_FILE_NAME
+from .native_command_control_binding import read_native_command_control_binding
 from .native_policy_snapshot_codec import _digest_v3
 from .native_policy_snapshot_constants import (
     NATIVE_POLICY_VERIFIER_KEY_NAME,
@@ -15,16 +17,22 @@ from .native_policy_snapshot_constants import (
 )
 from .native_policy_snapshot_policy import _merge_effective_native_policies, effective_native_policy_v3
 
+if TYPE_CHECKING:
+    from .runtime.extension_control_runtime import ExtensionControlRuntime
+    from .store import GuardStore
+
 
 class NativePolicySnapshotPublisherInputs:
     """Mixin containing filesystem observation outside synchronous hooks."""
 
+    store: GuardStore  # pyright: ignore[reportUninitializedInstanceVariable]
+    _command_control_runtime: ExtensionControlRuntime | None = None
     guard_home: Path  # pyright: ignore[reportUninitializedInstanceVariable]
     _condition: Condition  # pyright: ignore[reportUninitializedInstanceVariable]
     _acked: bool  # pyright: ignore[reportUninitializedInstanceVariable]
     _workspace_paths: set[Path]  # pyright: ignore[reportUninitializedInstanceVariable]
-    _published_policy_fingerprint: tuple[str, str] | None  # pyright: ignore[reportUninitializedInstanceVariable]
-    _observed_policy_fingerprint: tuple[str, str] | None  # pyright: ignore[reportUninitializedInstanceVariable]
+    _published_policy_fingerprint: tuple[str, str, str] | None  # pyright: ignore[reportUninitializedInstanceVariable]
+    _observed_policy_fingerprint: tuple[str, str, str] | None  # pyright: ignore[reportUninitializedInstanceVariable]
 
     def _current_input_fingerprint(
         self,
@@ -40,6 +48,7 @@ class NativePolicySnapshotPublisherInputs:
             self.guard_home / "guard.db-shm",
             self.guard_home / "guard.db-journal",
             self.guard_home / NATIVE_RUNTIME_STATE_DIRECTORY / NATIVE_POLICY_VERIFIER_KEY_NAME,
+            self.guard_home / NATIVE_RUNTIME_STATE_DIRECTORY / AUTHORITY_FILE_NAME,
             *self._external_policy_paths(),
             *self._workspace_policy_paths(),
         )
@@ -187,6 +196,17 @@ class NativePolicySnapshotPublisherInputs:
             tuple(effective_native_policy_v3(config) | {"mode": config.mode} for config in configs)
         )
 
+    def _compiled_command_extensions(self) -> dict[str, object]:
+        try:
+            binding, runtime = read_native_command_control_binding(self.store, self._command_control_runtime)
+            self._command_control_runtime = runtime
+            return binding
+        except (OSError, NativePolicySnapshotError, TypeError, ValueError, RuntimeError):
+            with self._condition:
+                self._acked = False
+                self._condition.notify_all()
+            raise
+
     @staticmethod
     def _external_policy_paths() -> tuple[Path, ...]:
         try:
@@ -207,8 +227,12 @@ class NativePolicySnapshotPublisherInputs:
             database_paths = {
                 str(self.guard_home / name) for name in ("guard.db", "guard.db-wal", "guard.db-shm", "guard.db-journal")
             }
-            database_only_change = all(path in database_paths for path in changed_paths)
-            if not database_only_change:
+            # The publisher's own authenticated marker commit is only a hint.
+            # Always verify its bytes below, but do not revoke an unchanged ACK
+            # merely because its inode was atomically replaced during publication.
+            control_marker = str(self.guard_home / NATIVE_RUNTIME_STATE_DIRECTORY / AUTHORITY_FILE_NAME)
+            hint_only_change = all(path in database_paths or path == control_marker for path in changed_paths)
+            if not hint_only_change:
                 # Guard config, workspace overrides, MDM policy files, and
                 # verifier state are effective-input boundaries. Republish before the
                 # resident is used even when this Python projection cannot
@@ -231,9 +255,10 @@ class NativePolicySnapshotPublisherInputs:
             current_fingerprint = (
                 cast(str, _digest_v3(policy_for_digest)),
                 cast(str, effective_policy["mode"]),
+                _digest_v3(self._compiled_command_extensions()),
             )
         except (OSError, NativePolicySnapshotError, TypeError, ValueError, RuntimeError):
-            current_fingerprint = ("unavailable", "")
+            current_fingerprint = ("unavailable", "", "")
         # Observation is independent of acknowledgment: unchanged inputs must
         # not reset a failed publication's retry backoff on every database write.
         previous_fingerprint = (
@@ -242,7 +267,15 @@ class NativePolicySnapshotPublisherInputs:
             else self._published_policy_fingerprint
         )
         self._observed_policy_fingerprint = current_fingerprint
-        return force_republish or previous_fingerprint != current_fingerprint
+        changed = force_republish or previous_fingerprint != current_fingerprint
+        if changed or current_fingerprint[0] == "unavailable":
+            # A verified state change invalidates the previous ACK immediately,
+            # including WAL-only mutations. Do not leave a readiness window
+            # between observation and the publisher's next push attempt.
+            with self._condition:
+                self._acked = False
+                self._condition.notify_all()
+        return changed
 
     @staticmethod
     def _resolved_workspace(workspace: Path) -> Path:

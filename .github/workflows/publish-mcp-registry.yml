@@ -45,7 +45,7 @@ jobs:
       contains(fromJSON('["main", "release/3.0"]'), github.event.workflow_run.head_branch) &&
       !contains(github.event.workflow_run.head_commit.message || '', '[skip release publish]')
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 5
     steps:
       - name: Check out verified immutable release source
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
@@ -54,67 +54,55 @@ jobs:
           ref: ${{ needs.verify.outputs.sha }}
           persist-credentials: false
 
-      - name: Wait for the canonical release tag
-        timeout-minutes: 35
+      - name: Resolve the completed release tag
         id: release
         env:
           SOURCE_SHA: ${{ needs.verify.outputs.sha }}
           SOURCE_REF: refs/heads/${{ needs.verify.outputs.branch }}
         run: |
           set -euo pipefail
-          tag=""
-          for attempt in $(seq 1 180); do
-            git fetch --force --tags origin
-            if [[ "$SOURCE_REF" == "refs/heads/release/3.0" ]]; then
-              tag=$(git tag --points-at "$SOURCE_SHA" --list 'alpha/v3.0.1a*' | sort -V | tail -n 1)
-            elif [[ "$SOURCE_REF" == "refs/heads/main" ]]; then
-              tag=$(git tag --points-at "$SOURCE_SHA" --list 'v*' | sort -V | tail -n 1)
-            else
-              echo "Unsupported release ref: $SOURCE_REF" >&2
-              exit 1
-            fi
-            if [[ -n "$tag" ]]; then
-              break
-            fi
-            if [[ "$attempt" == "180" ]]; then
-              echo "No canonical release tag appeared for $SOURCE_SHA" >&2
-              exit 1
-            fi
-            sleep 10
-          done
-
+          # The trusted verifier proved both PyPI and GitHub release jobs completed.
+          # A missing tag is an integrity error, not a reason to occupy a runner for 30 minutes.
+          git fetch --force --tags origin
+          if [[ "$SOURCE_REF" == "refs/heads/release/3.0" ]]; then
+            tag=$(git tag --points-at "$SOURCE_SHA" --list 'alpha/v3.0.1a*' | sort -V | tail -n 1)
+          elif [[ "$SOURCE_REF" == "refs/heads/main" ]]; then
+            tag=$(git tag --points-at "$SOURCE_SHA" --list 'v*' | sort -V | tail -n 1)
+          else
+            echo "Unsupported release ref: $SOURCE_REF" >&2
+            exit 1
+          fi
+          if [[ -z "$tag" ]]; then
+            echo "Completed release has no canonical tag for $SOURCE_SHA" >&2
+            exit 1
+          fi
           if [[ "$tag" == alpha/v* ]]; then
             version="${tag#alpha/v}"
           else
             version="${tag#v}"
           fi
-          if [[ -z "$version" || "$version" == "$tag" ]]; then
-            echo "Could not derive package version from tag: $tag" >&2
-            exit 1
-          fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "Resolved MCP Registry version $version from $tag"
 
       - name: Wait for the exact PyPI package
-        timeout-minutes: 15
+        timeout-minutes: 2
         env:
           VERSION: ${{ steps.release.outputs.version }}
         run: |
           set -euo pipefail
-          for attempt in $(seq 1 60); do
-            if curl --fail --silent --show-error \
+          for attempt in $(seq 1 6); do
+            if curl --fail --silent --show-error --connect-timeout 5 --max-time 10 \
               --proto '=https' --tlsv1.2 \
               "https://pypi.org/pypi/hol-guard/${VERSION}/json" \
               --output /tmp/hol-guard-pypi.json; then
               jq -e --arg version "$VERSION" '.info.version == $version' /tmp/hol-guard-pypi.json >/dev/null
               exit 0
             fi
-            if [[ "$attempt" == "60" ]]; then
+            if [[ "$attempt" == "6" ]]; then
               echo "hol-guard ${VERSION} did not become available on PyPI" >&2
               exit 1
             fi
-            sleep 10
+            sleep 5
           done
 
       - name: Stamp and verify Registry manifest

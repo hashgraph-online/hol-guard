@@ -84,6 +84,7 @@ export type FirewallControlsViewProps = {
   activatingRuntime: boolean;
   data: PackageFirewallStatusResponse;
   pendingOp: FirewallPendingOp | null;
+  repairAwaitingRefresh: string | null;
   lastCompleted: CompletedOp | null;
   lastFailed: FirewallFailedOp | null;
   confirmRemoveManager: string | null;
@@ -111,6 +112,7 @@ export function FirewallControlsView({
   activatingRuntime,
   data,
   pendingOp,
+  repairAwaitingRefresh,
   lastCompleted,
   lastFailed,
   confirmRemoveManager,
@@ -263,6 +265,7 @@ export function FirewallControlsView({
                 shim={shim}
                 actions={data.actions}
                 anyPending={anyPending}
+                repairAwaitingRefresh={repairAwaitingRefresh === manager}
                 isMine={pendingOp?.manager === manager}
                 isConfirmingRemove={confirmRemoveManager === manager}
                 onInstall={onInstall}

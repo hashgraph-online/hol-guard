@@ -149,6 +149,10 @@ def _shell_token_escapes_root(token: str, *, cwd: Path, root: Path) -> bool:
         candidate = root / stripped[2:]
     elif stripped.startswith("~"):
         return True
+    elif candidate.anchor and not candidate.is_absolute():
+        # Windows rooted paths and drive-relative paths depend on ambient
+        # drive state. They cannot establish containment inside this root.
+        return True
     elif not candidate.is_absolute():
         if ".." not in candidate.parts:
             return False

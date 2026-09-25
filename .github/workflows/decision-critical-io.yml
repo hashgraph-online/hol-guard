@@ -31,6 +31,10 @@ jobs:
           version: "0.9.26"
           enable-cache: true
       - run: uv sync --frozen --extra dev --python 3.12
+      - name: Install cached Rust toolchain
+        uses: ./.github/actions/setup-rust
+        with:
+          components: rustfmt
       - name: Enforce always-selected ownership manifest coverage
         env:
           OWNERSHIP_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
@@ -58,7 +62,7 @@ jobs:
             tests/test_hook_enrichment_queue.py \
             tests/test_guard_runtime_hook_evidence_writer.py \
             --tb=short
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
           name: decision-critical-io-evidence

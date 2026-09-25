@@ -37,6 +37,7 @@ import {
   revokeApprovalGateCooldown,
 } from "./guard-api";
 import { approvalGateCooldownLabel } from "./approval-gate-utils";
+import { humanizeList } from "./approval-center-utils";
 import { resolveProtectionLevelCopy } from "./runtime-overview";
 import { RISK_CONTROL_CONSEQUENCES, filterSettingsBySearch } from "./apps/app-catalog";
 import { WorkspacePageHeader } from "./workspace-page-header";
@@ -49,6 +50,7 @@ import {
   type ProtectionPosture,
 } from "./protection-posture-copy";
 import { useFocusTrap } from "./use-focus-trap";
+import { useConfirmDialog } from "./confirm-dialog";
 export {
   buildTotpQrImageOptions,
   formatTotpEnrollmentExpiry,
@@ -125,6 +127,21 @@ export function resolveFineTuningSectionDescription(
 
 export function isFineTuningEditable(securityLevel: GuardSettings["security_level"]): boolean {
   return securityLevel === "custom";
+}
+
+const REPAIR_APPROVAL_CENTER_LABELS: Record<string, string> = {
+  locator: "stale approval link",
+  daemon_state: "stale service record",
+  daemon_process: "unresponsive background service",
+  daemon_discovery_key: "invalid discovery key",
+};
+
+export function resolveRepairApprovalCenterMessage(cleared: string[]): string {
+  if (cleared.length === 0) {
+    return "Nothing needed repair. The approval center is already reachable from this dashboard.";
+  }
+  const labels = cleared.map((code) => REPAIR_APPROVAL_CENTER_LABELS[code] ?? code);
+  return `Approval center repaired: cleared ${humanizeList(labels)}. Approval links reconnect the next time a hook reaches Guard.`;
 }
 
 export function buildClearPolicyPayload(all: boolean): { harness?: string; all?: boolean } {
@@ -473,6 +490,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
   const [approvalGateTotpDeviceLabel, setApprovalGateTotpDeviceLabel] = useState("local-device");
   const [approvalGateStrictAllDecisions, setApprovalGateStrictAllDecisions] = useState(false);
   const [approvalGateCooldown, setApprovalGateCooldown] = useState(0);
+  const { confirm: requestConfirmation, dialog: confirmDialog } = useConfirmDialog();
   const [totpEnrollment, setTotpEnrollment] = useState<GuardApprovalGateTotpEnrollment | null>(null);
   const [totpSetupOpen, setTotpSetupOpen] = useState(false);
   const [totpSetupStep, setTotpSetupStep] = useState<TotpSetupStep>("confirm");
@@ -1166,8 +1184,13 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
     handleRequestDisableTotp();
   }, [handleRequestDisableTotp]);
 
-  const handleClearApprovals = useCallback(() => {
-    if (!window.confirm("Clear all saved approvals? Guard will ask again for previously approved actions.")) {
+  const handleClearApprovals = useCallback(async () => {
+    if (!(await requestConfirmation({
+      title: "Clear all saved approvals?",
+      description: "Guard will ask again for every action it previously approved. Pending reviews and evidence are kept.",
+      confirmLabel: "Clear approvals",
+      tone: "destructive",
+    }))) {
       return;
     }
     const savedGateEnabled = savedSettingsRef.current?.approval_gate?.enabled === true;
@@ -1189,10 +1212,15 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
       .finally(() => {
         setClearingApprovals(false);
       });
-  }, [openProofModal]);
+  }, [openProofModal, requestConfirmation]);
 
-  const handleClearReviewQueue = useCallback(() => {
-    if (!window.confirm("Clear the pending review queue? Guard will remove waiting items without creating allow or block decisions.")) {
+  const handleClearReviewQueue = useCallback(async () => {
+    if (!(await requestConfirmation({
+      title: "Clear the pending review queue?",
+      description: "Waiting items are removed without recording an allow or block decision.",
+      confirmLabel: "Clear review queue",
+      tone: "destructive",
+    }))) {
       return;
     }
     const savedGateEnabled = savedSettingsRef.current?.approval_gate?.enabled === true;
@@ -1214,10 +1242,15 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
       .finally(() => {
         setClearingReviewQueue(false);
       });
-  }, [openProofModal]);
+  }, [openProofModal, requestConfirmation]);
 
   const handleClearEvidence = useCallback(async () => {
-    if (!window.confirm("Clear the evidence log permanently? This cannot be undone.")) return;
+    if (!(await requestConfirmation({
+      title: "Clear the evidence log permanently?",
+      description: "Local audit history on this machine is deleted. This cannot be undone.",
+      confirmLabel: "Clear evidence",
+      tone: "destructive",
+    }))) return;
     setClearingEvidence(true);
     setActionMessage(null);
     try {
@@ -1230,7 +1263,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
     } finally {
       setClearingEvidence(false);
     }
-  }, []);
+  }, [requestConfirmation]);
 
   const handleExportDiagnostics = useCallback(async () => {
     setExporting(true);
@@ -1256,12 +1289,19 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
   }, []);
 
   const handleRepairApprovalCenter = useCallback(async () => {
-    if (!window.confirm("Reset the approval center locator? The daemon will be reachable again after Guard restarts. Pending approvals are preserved.")) return;
+    if (!(await requestConfirmation({
+      title: "Repair the approval center?",
+      description: "Guard clears stale approval-center discovery state so approval links resolve again. A healthy background service and pending approvals are preserved.",
+      confirmLabel: "Repair",
+    }))) return;
     setRepairing(true);
     setActionMessage(null);
     try {
-      await repairApprovalCenter();
-      setActionMessage("Approval center repaired. Restart Guard to reconnect.");
+      const result = await repairApprovalCenter();
+      const cleared = Array.isArray(result?.cleared)
+        ? result.cleared.filter((code): code is string => typeof code === "string")
+        : [];
+      setActionMessage(resolveRepairApprovalCenterMessage(cleared));
       setActionMessageKind("success");
     } catch (error) {
       setActionMessage(error instanceof Error ? error.message : "Unable to repair approval center.");
@@ -1269,7 +1309,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
     } finally {
       setRepairing(false);
     }
-  }, []);
+  }, [requestConfirmation]);
 
   const handleExportSettings = useCallback(async () => {
     setExportingSettings(true);
@@ -1324,7 +1364,12 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
   }, [executeImportSettings, openProofModal]);
 
   const handleResetSettings = useCallback(async () => {
-    if (!window.confirm("Reset all local Guard settings to defaults? This cannot be undone.")) return;
+    if (!(await requestConfirmation({
+      title: "Reset all local Guard settings to defaults?",
+      description: "Protection rules, notifications, and approval-gate preferences return to factory values on this machine. This cannot be undone.",
+      confirmLabel: "Reset settings",
+      tone: "destructive",
+    }))) return;
     const savedGateEnabled = savedSettingsRef.current?.approval_gate?.enabled === true;
     if (savedGateEnabled) {
       openProofModal("maintenance", { kind: "maintenance", action: "reset-settings" });
@@ -1335,7 +1380,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
     } catch {
       // executeResetSettings already surfaces the error message.
     }
-  }, [executeResetSettings, openProofModal]);
+  }, [executeResetSettings, openProofModal, requestConfirmation]);
 
   const handleSetupNotifications = useCallback(async () => {
     setSettingUpNotifications(true);
@@ -1863,6 +1908,8 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
           onConfirm={handleProofModalConfirm}
         />
       ) : null}
+
+      {confirmDialog}
 
       {(pendingMode === "observe" || pendingPosture === "watch") && (
         <div className="guard-fade-in fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm">

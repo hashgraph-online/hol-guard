@@ -9,6 +9,10 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
+from .native_command_control_binding import (
+    capture_native_command_control_binding,
+    validate_native_command_control_binding,
+)
 from .native_policy_snapshot_codec import (
     _canonical_json_bytes_v3,
     _digest_v3,
@@ -21,6 +25,7 @@ from .native_policy_snapshot_constants import (
     _INTEGRITY_FIELDS,
     _MAX_U16,
     _MAX_U64,
+    _OPTIONAL_SNAPSHOT_FIELDS,
     _PUBLISH_TIMEOUT_SECONDS,
     _PUSH_ENVELOPE_FIELDS,
     _PUSH_REQUEST_FIELDS,
@@ -64,19 +69,21 @@ def _snapshot_policy_digest_v3(
     rule_digest: str,
     runtime_identity: str,
     scope_digest: str,
+    command_extensions: Mapping[str, object] | None = None,
 ) -> str:
-    return _digest_v3(
-        {
-            "config_digest": config_digest,
-            "effective_policy_digest": _digest_v3(effective_policy),
-            "mode": mode,
-            "protocol_version": POLICY_SNAPSHOT_PROTOCOL_VERSION,
-            "rule_digest": rule_digest,
-            "runtime_identity": runtime_identity,
-            "scope_digest": scope_digest,
-            "version": POLICY_SNAPSHOT_V3_VERSION,
-        }
-    )
+    value: dict[str, object] = {
+        "config_digest": config_digest,
+        "effective_policy_digest": _digest_v3(effective_policy),
+        "mode": mode,
+        "protocol_version": POLICY_SNAPSHOT_PROTOCOL_VERSION,
+        "rule_digest": rule_digest,
+        "runtime_identity": runtime_identity,
+        "scope_digest": scope_digest,
+        "version": POLICY_SNAPSHOT_V3_VERSION,
+    }
+    if command_extensions is not None:
+        value["command_extensions_digest"] = _digest_v3(command_extensions)
+    return _digest_v3(value)
 
 
 def _require_snapshot_mapping_fields_v3(value: object, fields: frozenset[str]) -> Mapping[str, object]:
@@ -204,6 +211,7 @@ def _verify_snapshot_digests_v3(
         rule_digest=cast(str, root["rule_digest"]),
         runtime_identity=cast(str, root["runtime_identity"]),
         scope_digest=cast(str, scope["scope_digest"]),
+        command_extensions=cast(Mapping[str, object] | None, root.get("command_extensions")),
     )
     if root.get("policy_digest") != expected_policy_digest:
         raise NativePolicySnapshotError("native_policy_snapshot_digest_mismatch")
@@ -218,10 +226,13 @@ def _validate_snapshot_v3(
     """Apply the resident's typed v3 validation before signing or transport."""
 
     _validate_json_limits_v3(snapshot)
-    root = _require_snapshot_mapping_fields_v3(snapshot, _SNAPSHOT_FIELDS)
+    optional_fields = snapshot.keys() & _OPTIONAL_SNAPSHOT_FIELDS if isinstance(snapshot, Mapping) else frozenset()
+    root = _require_snapshot_mapping_fields_v3(snapshot, _SNAPSHOT_FIELDS | optional_fields)
     mode = _validate_snapshot_metadata_v3(root)
     scope = _validate_snapshot_scope_v3(root)
     effective = _validate_snapshot_policy_v3(root)
+    if "command_extensions" in root:
+        validate_native_command_control_binding(root["command_extensions"])
     _validate_snapshot_integrity_v3(root, allow_empty_mac=allow_empty_mac)
     if verify_digests:
         _verify_snapshot_digests_v3(root, effective, mode, scope)
@@ -252,6 +263,7 @@ def build_policy_snapshot_v3(
     generation: int,
     issued_at_ms: int | None = None,
     expires_at_ms: int | None = None,
+    command_extensions: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
     """Build and authenticate one Rust ``PolicySnapshotV3`` value."""
 
@@ -266,6 +278,7 @@ def build_policy_snapshot_v3(
     if not isinstance(verifier_key, bytes) or len(verifier_key) != _VERIFIER_KEY_BYTES:
         raise NativePolicySnapshotError("native_policy_verifier_key_invalid")
     effective_policy = effective_native_policy_v3(config)
+    binding = capture_native_command_control_binding(command_extensions) if command_extensions is not None else None
     raw_mode = _config_value(config, "mode", "prompt")
     if not isinstance(raw_mode, str) or raw_mode not in _VALID_INPUT_MODES:
         raise NativePolicySnapshotError("native_policy_snapshot_mode_invalid")
@@ -279,6 +292,7 @@ def build_policy_snapshot_v3(
         rule_digest=rule_digest,
         runtime_identity=runtime_identity,
         scope_digest=scope_digest,
+        command_extensions=binding,
     )
     issued = int(time.time() * 1_000) if issued_at_ms is None else issued_at_ms
     expires = issued + POLICY_SNAPSHOT_MAX_EXPIRY_MS if expires_at_ms is None else expires_at_ms
@@ -316,6 +330,8 @@ def build_policy_snapshot_v3(
             "mac": "",
         },
     }
+    if binding is not None:
+        snapshot["command_extensions"] = binding
     _validate_snapshot_v3(snapshot, allow_empty_mac=True)
     integrity = cast(dict[str, object], snapshot["integrity"])
     # The MAC is a fixed-size lowercase hex string. Validate the complete

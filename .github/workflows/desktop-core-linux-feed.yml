@@ -48,7 +48,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
           go-version: "1.24.2"
           cache: false
@@ -94,7 +94,7 @@ jobs:
           test -z "$(git status --porcelain)"
       - name: Verify runner architecture
         run: test "$(uname -m)" = "x86_64"
-      - name: Discover newest published stable Core 3.x release
+      - name: Discover newest published stable Core release
         id: release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -112,7 +112,7 @@ jobs:
           python3 -I scripts/release/desktop_core_alpha_feed.py discover-release "${ARGS[@]}" >> "$GITHUB_OUTPUT"
       - name: Stop when no stable Core release is published
         if: steps.release.outputs.available != 'true'
-        run: echo "No published stable HOL Guard Core 3.x release is available yet."
+        run: echo "No published stable HOL Guard Core release is available yet."
       - name: Authorize exact Core source with release provenance
         if: steps.release.outputs.available == 'true'
         id: source
@@ -155,14 +155,21 @@ jobs:
           test -f "$WHEEL"
           BUNDLE="$TRUST_ASSETS/hol-guard-v${CORE_VERSION}.intoto.jsonl"
           test -s "$BUNDLE"
-          gh attestation verify "$WHEEL" \
-            --repo "$GITHUB_REPOSITORY" \
-            --bundle "$BUNDLE" \
-            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/publish.yml" \
-            --signer-digest "$SOURCE_SHA" \
-            --source-digest "$SOURCE_SHA" \
-            --source-ref "refs/heads/${RELEASE_BRANCH}" \
-            --deny-self-hosted-runners >/dev/null
+          verify_published_wheel() {
+            local source_ref="$1"
+            gh attestation verify "$WHEEL" \
+              --repo "$GITHUB_REPOSITORY" \
+              --bundle "$BUNDLE" \
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/publish.yml" \
+              --signer-digest "$SOURCE_SHA" \
+              --source-digest "$SOURCE_SHA" \
+              --source-ref "$source_ref" \
+              --deny-self-hosted-runners >/dev/null
+          }
+          # Release Please attests the tag. A manual stable dispatch attests main.
+          if ! verify_published_wheel "refs/tags/${CORE_TAG}"; then
+            verify_published_wheel "refs/heads/${RELEASE_BRANCH}"
+          fi
           cp "$WHEEL" "$RUNNER_TEMP/attested-linux-x64.whl"
           test -f "$RUNNER_TEMP/attested-linux-x64.whl"
           echo "sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
@@ -367,7 +374,7 @@ jobs:
           python3 -I scripts/release/verify_desktop_core_attestation.py --binary "$BASE" --manifest "$BASE.json" --marker "$BASE.attested.json" --version "$CORE_VERSION" --source-commit "$SOURCE_SHA" --source-tag "$CORE_TAG" --target "$RELEASE_TARGET" --team-id "" --output "$RUNNER_TEMP/desktop-core-evidence.json"
       - name: Attest complete hardened Core asset set
         if: steps.release.outputs.available == 'true' && steps.existing.outputs.mode == 'build'
-        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8
         with:
           subject-path: |
             ${{ runner.temp }}/dist/hol-guard-core-${{ steps.release.outputs.version }}-${{ env.RELEASE_TARGET }}

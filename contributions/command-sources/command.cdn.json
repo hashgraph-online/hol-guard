@@ -1,0 +1,706 @@
+{
+  "extension": {
+    "action_classes": [
+      "CDN destructive command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews distribution, VPC origin, key-value-store, profile, and endpoint deletion through supported cloud CLIs.",
+    "ecosystem_ids": [],
+    "executables": [],
+    "extension_id": "command.cdn",
+    "homepage": null,
+    "icon": {
+      "kind": "none"
+    },
+    "license": null,
+    "name": "CDN command protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "CDN destructive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies documented cdn resource deletion operations through supported command-line tools.",
+        "example_command": "aws cloudfront delete-distribution",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "CDN resource deletion",
+        "permission_id": "command.cdn.permission.delete",
+        "replacement_permission_id": null,
+        "risk_tier": "critical",
+        "safer_guidance": [
+          "Inspect active domains, origins, and traffic before deleting the resource."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": null,
+    "reference_urls": [
+      "https://docs.aws.amazon.com/cli/latest/reference/cloudfront/delete-distribution.html",
+      "https://learn.microsoft.com/cli/azure/cdn/profile#az-cdn-profile-delete",
+      "https://learn.microsoft.com/cli/azure/cdn/endpoint#az-cdn-endpoint-delete"
+    ],
+    "required": false,
+    "risk_classes": [
+      "destructive_shell",
+      "network_egress"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "CDN destructive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies documented cdn resource deletion operations through supported command-line tools.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "aws",
+                  "aws.cmd",
+                  "aws.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--cli-auto-prompt",
+                  "--debug",
+                  "--no-cli-auto-prompt",
+                  "--no-cli-pager",
+                  "--no-color",
+                  "--no-paginate",
+                  "--no-sign-request",
+                  "--no-verify-ssl"
+                ],
+                "interspersed_options_with_values": [
+                  "--ca-bundle",
+                  "--cli-binary-format",
+                  "--cli-connect-timeout",
+                  "--cli-read-timeout",
+                  "--color",
+                  "--endpoint-url",
+                  "--output",
+                  "--profile",
+                  "--query",
+                  "--region"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "cloudfront",
+                  "delete-distribution"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "aws",
+                  "aws.cmd",
+                  "aws.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--cli-auto-prompt",
+                  "--debug",
+                  "--no-cli-auto-prompt",
+                  "--no-cli-pager",
+                  "--no-color",
+                  "--no-paginate",
+                  "--no-sign-request",
+                  "--no-verify-ssl"
+                ],
+                "interspersed_options_with_values": [
+                  "--ca-bundle",
+                  "--cli-binary-format",
+                  "--cli-connect-timeout",
+                  "--cli-read-timeout",
+                  "--color",
+                  "--endpoint-url",
+                  "--output",
+                  "--profile",
+                  "--query",
+                  "--region"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "cloudfront",
+                  "delete-key-value-store"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "aws",
+                  "aws.cmd",
+                  "aws.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--cli-auto-prompt",
+                  "--debug",
+                  "--no-cli-auto-prompt",
+                  "--no-cli-pager",
+                  "--no-color",
+                  "--no-paginate",
+                  "--no-sign-request",
+                  "--no-verify-ssl"
+                ],
+                "interspersed_options_with_values": [
+                  "--ca-bundle",
+                  "--cli-binary-format",
+                  "--cli-connect-timeout",
+                  "--cli-read-timeout",
+                  "--color",
+                  "--endpoint-url",
+                  "--output",
+                  "--profile",
+                  "--query",
+                  "--region"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "cloudfront",
+                  "delete-vpc-origin"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "az",
+                  "az.cmd",
+                  "az.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--only-show-errors",
+                  "--verbose"
+                ],
+                "interspersed_options_with_values": [
+                  "--output",
+                  "--query",
+                  "--subscription",
+                  "-o"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "cdn",
+                  "profile",
+                  "delete"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "az",
+                  "az.cmd",
+                  "az.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--only-show-errors",
+                  "--verbose"
+                ],
+                "interspersed_options_with_values": [
+                  "--output",
+                  "--query",
+                  "--subscription",
+                  "-o"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "cdn",
+                  "endpoint",
+                  "delete"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.cdn.permission.delete",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.cdn.delete",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "aws",
+                      "aws.cmd",
+                      "aws.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--cli-auto-prompt",
+                      "--debug",
+                      "--no-cli-auto-prompt",
+                      "--no-cli-pager",
+                      "--no-color",
+                      "--no-paginate",
+                      "--no-sign-request",
+                      "--no-verify-ssl"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--ca-bundle",
+                      "--cli-binary-format",
+                      "--cli-connect-timeout",
+                      "--cli-read-timeout",
+                      "--color",
+                      "--endpoint-url",
+                      "--output",
+                      "--profile",
+                      "--query",
+                      "--region"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "cloudfront",
+                      "delete-distribution"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "aws",
+                      "aws.cmd",
+                      "aws.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--cli-auto-prompt",
+                      "--debug",
+                      "--no-cli-auto-prompt",
+                      "--no-cli-pager",
+                      "--no-color",
+                      "--no-paginate",
+                      "--no-sign-request",
+                      "--no-verify-ssl"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--ca-bundle",
+                      "--cli-binary-format",
+                      "--cli-connect-timeout",
+                      "--cli-read-timeout",
+                      "--color",
+                      "--endpoint-url",
+                      "--output",
+                      "--profile",
+                      "--query",
+                      "--region"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "cloudfront",
+                      "delete-key-value-store"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "aws",
+                      "aws.cmd",
+                      "aws.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--cli-auto-prompt",
+                      "--debug",
+                      "--no-cli-auto-prompt",
+                      "--no-cli-pager",
+                      "--no-color",
+                      "--no-paginate",
+                      "--no-sign-request",
+                      "--no-verify-ssl"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--ca-bundle",
+                      "--cli-binary-format",
+                      "--cli-connect-timeout",
+                      "--cli-read-timeout",
+                      "--color",
+                      "--endpoint-url",
+                      "--output",
+                      "--profile",
+                      "--query",
+                      "--region"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "cloudfront",
+                      "delete-vpc-origin"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "az",
+                      "az.cmd",
+                      "az.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--only-show-errors",
+                      "--verbose"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--output",
+                      "--query",
+                      "--subscription",
+                      "-o"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "cdn",
+                      "profile",
+                      "delete"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "az",
+                      "az.cmd",
+                      "az.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--only-show-errors",
+                      "--verbose"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--output",
+                      "--query",
+                      "--subscription",
+                      "-o"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "cdn",
+                      "endpoint",
+                      "delete"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "aws",
+                      "aws.cmd",
+                      "aws.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--cli-auto-prompt",
+                      "--debug",
+                      "--no-cli-auto-prompt",
+                      "--no-cli-pager",
+                      "--no-color",
+                      "--no-paginate",
+                      "--no-sign-request",
+                      "--no-verify-ssl"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--ca-bundle",
+                      "--cli-binary-format",
+                      "--cli-connect-timeout",
+                      "--cli-read-timeout",
+                      "--color",
+                      "--endpoint-url",
+                      "--output",
+                      "--profile",
+                      "--query",
+                      "--region"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--generate-cli-skeleton"
+                    ],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [
+                      [
+                        "--generate-cli-skeleton",
+                        [
+                          "input",
+                          "output",
+                          "yaml-input"
+                        ]
+                      ]
+                    ],
+                    "subcommands": [
+                      "cloudfront",
+                      "delete-distribution"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "aws",
+                      "aws.cmd",
+                      "aws.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--cli-auto-prompt",
+                      "--debug",
+                      "--no-cli-auto-prompt",
+                      "--no-cli-pager",
+                      "--no-color",
+                      "--no-paginate",
+                      "--no-sign-request",
+                      "--no-verify-ssl"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--ca-bundle",
+                      "--cli-binary-format",
+                      "--cli-connect-timeout",
+                      "--cli-read-timeout",
+                      "--color",
+                      "--endpoint-url",
+                      "--output",
+                      "--profile",
+                      "--query",
+                      "--region"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--generate-cli-skeleton"
+                    ],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [
+                      [
+                        "--generate-cli-skeleton",
+                        [
+                          "input",
+                          "output",
+                          "yaml-input"
+                        ]
+                      ]
+                    ],
+                    "subcommands": [
+                      "cloudfront",
+                      "delete-key-value-store"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "aws",
+                      "aws.cmd",
+                      "aws.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--cli-auto-prompt",
+                      "--debug",
+                      "--no-cli-auto-prompt",
+                      "--no-cli-pager",
+                      "--no-color",
+                      "--no-paginate",
+                      "--no-sign-request",
+                      "--no-verify-ssl"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--ca-bundle",
+                      "--cli-binary-format",
+                      "--cli-connect-timeout",
+                      "--cli-read-timeout",
+                      "--color",
+                      "--endpoint-url",
+                      "--output",
+                      "--profile",
+                      "--query",
+                      "--region"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--generate-cli-skeleton"
+                    ],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [
+                      [
+                        "--generate-cli-skeleton",
+                        [
+                          "input",
+                          "output",
+                          "yaml-input"
+                        ]
+                      ]
+                    ],
+                    "subcommands": [
+                      "cloudfront",
+                      "delete-vpc-origin"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "AWS request skeleton",
+            "variant_id": "generate-cli-skeleton"
+          }
+        ],
+        "safer_alternatives": [
+          "Inspect active domains, origins, and traffic before deleting the resource."
+        ],
+        "severity": "critical",
+        "title": "CDN resource deletion"
+      }
+    ],
+    "safer_alternatives": [
+      "Inspect active domains, origins, and traffic before deletion."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

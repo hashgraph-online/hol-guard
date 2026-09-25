@@ -109,12 +109,15 @@ _PYTHON_EXECUTABLES = {"py", "python", "python3", "python3.11", "python3.12", "p
 _PACKAGE_SOURCE_ENV_NAMES = frozenset(
     {
         "PIP_EXTRA_INDEX_URL",
-        "PIP_INDEX_URL",
         "PIP_FIND_LINKS",
+        "PIP_INDEX_URL",
+        "PIP_NO_INDEX",
         "UV_DEFAULT_INDEX",
         "UV_EXTRA_INDEX_URL",
+        "UV_FIND_LINKS",
         "UV_INDEX",
         "UV_INDEX_URL",
+        "UV_NO_INDEX",
         "NPM_CONFIG_REGISTRY",
         "YARN_NPM_REGISTRY_SERVER",
     }

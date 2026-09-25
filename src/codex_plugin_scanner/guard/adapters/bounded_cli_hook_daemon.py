@@ -104,11 +104,10 @@ def _policy_action_from_daemon(daemon_response: Mapping[str, object]) -> str:
 def _should_exit_block(harness: str, event_name: str, policy_action: str) -> bool:
     canonical = harness.strip().lower().replace("_", "-")
     compact = event_name.replace("_", "").replace("-", "").lower()
-    if canonical in {"kimi", "grok", "hermes", "pi", "omp", "zcode"} and compact in {
-        "pretooluse",
-        "userpromptsubmit",
-        "pretoolcall",
-    }:
+    blocking_events = {"pretooluse", "userpromptsubmit", "pretoolcall"}
+    if canonical == "devin":
+        blocking_events.add("permissionrequest")
+    if canonical in {"kimi", "grok", "hermes", "pi", "omp", "zcode", "devin"} and compact in blocking_events:
         return policy_action in {"review", "require-reapproval", "sandbox-required", "block"}
     return False
 
@@ -228,16 +227,20 @@ def _daemon_response_to_native(
             harness=harness,
             event_name=event_name,
         )
-        stdout = json.dumps(native_response, ensure_ascii=True, separators=(",", ":"))
         hook_specific = native_response.get("hookSpecificOutput")
         exit_code = 2 if _should_exit_block(harness, event_name, policy_action_for_exit) else 0
         stderr = ""
-        if exit_code == 2 and canonical == "kimi":
+        if exit_code == 2 and canonical in {"kimi", "devin"}:
             reason = native_response.get("reason")
             if (not isinstance(reason, str) or not reason) and isinstance(hook_specific, dict):
                 reason = hook_specific.get("permissionDecisionReason")
             if isinstance(reason, str) and reason:
                 stderr = reason
+        if exit_code == 2 and canonical == "devin":
+            native_response["decision"] = "block"
+            if not native_response.get("reason"):
+                native_response["reason"] = stderr or f"HOL Guard blocked this action ({policy_action_for_exit})"
+        stdout = json.dumps(native_response, ensure_ascii=True, separators=(",", ":"))
         return stdout, stderr, exit_code
 
     policy_action = _policy_action_from_daemon(daemon_response)
@@ -285,9 +288,13 @@ def _daemon_response_to_native(
                 if value is not None:
                     payload[key] = value
 
-    stdout = json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
     exit_code = 2 if _should_exit_block(harness, event_name, policy_action) else 0
-    stderr = reason if exit_code == 2 and canonical == "kimi" else ""
+    if canonical == "devin" and exit_code == 2:
+        payload["decision"] = "block"
+        if not payload.get("reason"):
+            payload["reason"] = reason or f"HOL Guard blocked this action ({policy_action})"
+    stdout = json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
+    stderr = reason if exit_code == 2 and canonical in {"kimi", "devin"} else ""
     return stdout, stderr, exit_code
 
 

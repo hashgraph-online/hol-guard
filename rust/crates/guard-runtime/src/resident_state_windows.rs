@@ -1,5 +1,7 @@
+use std::ffi::OsString;
 use std::fs::File;
 use std::io;
+use std::os::windows::ffi::{OsStrExt, OsStringExt};
 use std::os::windows::io::AsRawHandle;
 use std::path::{Path, PathBuf};
 use windows_permissions::constants::{
@@ -306,10 +308,41 @@ pub(super) fn repair_windows_handle<H: AsRawHandle>(
     verify_windows_handle(handle, owner)
 }
 
+fn windows_acl_path(path: &Path) -> PathBuf {
+    const EXTENDED_PREFIX: &[u16] = &[92, 92, 63, 92];
+    const DEVICE_PREFIX: &[u16] = &[92, 92, 46, 92];
+    let wide = path.as_os_str().encode_wide().collect::<Vec<_>>();
+    if wide.starts_with(EXTENDED_PREFIX)
+        || wide.starts_with(DEVICE_PREFIX)
+        || wide.len() < 260
+        || !path.is_absolute()
+    {
+        return path.to_path_buf();
+    }
+
+    // Adding the verbatim prefix disables Win32's slash conversion. Preserve
+    // UTF-16 code units while normalizing ordinary absolute-path separators.
+    let wide = wide
+        .into_iter()
+        .map(|unit| if unit == 47 { 92 } else { unit })
+        .collect::<Vec<_>>();
+
+    let mut extended = Vec::with_capacity(wide.len() + EXTENDED_PREFIX.len() + 4);
+    if wide.starts_with(&[92, 92]) {
+        extended.extend_from_slice(&[92, 92, 63, 92, 85, 78, 67, 92]);
+        extended.extend_from_slice(&wide[2..]);
+    } else {
+        extended.extend_from_slice(EXTENDED_PREFIX);
+        extended.extend_from_slice(&wide);
+    }
+    PathBuf::from(OsString::from_wide(&extended))
+}
+
 pub(super) fn protect_windows_path(path: &Path, directory: bool) -> Result<(), String> {
     let owner =
         current_process_sid().map_err(|_| "native_resident_windows_owner_sid_failed".to_owned())?;
-    verify_windows_path_owner(path, &owner)?;
+    let path = windows_acl_path(path);
+    verify_windows_path_owner(&path, &owner)?;
     let descriptor = private_descriptor(directory)?;
     let dacl = descriptor
         .dacl()
@@ -325,10 +358,11 @@ pub(super) fn protect_windows_path(path: &Path, directory: bool) -> Result<(), S
     )
     .map_err(|_| "native_resident_windows_acl_apply_failed".to_owned())?;
 
-    verify_windows_path(path, &owner)
+    verify_windows_path(&path, &owner)
 }
 
 fn verify_windows_path_owner(path: &Path, owner: &Sid) -> Result<(), String> {
+    let path = windows_acl_path(path);
     let applied = GetNamedSecurityInfo(
         path.as_os_str(),
         SeObjectType::SE_FILE_OBJECT,
@@ -349,6 +383,7 @@ fn verify_windows_handle_owner<H: AsRawHandle>(handle: &H, owner: &Sid) -> Resul
 }
 
 pub(super) fn verify_windows_path(path: &Path, owner: &Sid) -> Result<(), String> {
+    let path = windows_acl_path(path);
     let applied = GetNamedSecurityInfo(
         path.as_os_str(),
         SeObjectType::SE_FILE_OBJECT,

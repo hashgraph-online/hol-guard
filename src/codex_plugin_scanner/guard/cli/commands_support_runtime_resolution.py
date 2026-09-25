@@ -18,6 +18,7 @@ from ._commands_shared import *
 from .commands_parser_helpers import *
 from ..runtime.approval_context import build_runtime_launch_identity
 from ..runtime.mcp_protection import McpServerIdentity, build_mcp_server_identity
+from ..runtime.mcp_server_contribution import normalized_remote_mcp_url
 from ..synced_policy import synced_policy_payload as _synced_policy_payload
 
 def _redact_codex_prompt_secret_assignments(value: str) -> str:
@@ -366,7 +367,8 @@ def _copilot_runtime_server_identity(
     launch_identity["server_config_sha256"] = config_sha256
     launch_identity["transport"] = transport
     remote_url = server_config.get("url") if server_config is not None else None
-    has_remote_url = isinstance(remote_url, str) and bool(remote_url.strip())
+    normalized_remote_url = normalized_remote_mcp_url(remote_url)
+    has_remote_url = normalized_remote_url is not None
     if server_config is None or (command is None and not has_remote_url) or config_sha256 is None:
         launch_identity["reuse_nonce"] = secrets.token_hex(16)
         launch_identity["status"] = (
@@ -381,7 +383,7 @@ def _copilot_runtime_server_identity(
 
     server_identity = build_mcp_server_identity(
         config_path=server.config_path,
-        command=command or ("<remote>" if has_remote_url else "<unresolved>"),
+        command=normalized_remote_url if has_remote_url else command or "<unresolved>",
         args=launch_args,
         transport=transport,
         env=configured_env,

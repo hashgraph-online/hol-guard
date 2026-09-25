@@ -1,0 +1,216 @@
+{
+  "cases": [
+    {
+      "case": "external-off",
+      "control_revision": 0,
+      "decision": "deny",
+      "minimum_action": "review",
+      "observations": 0,
+      "permission_ids": [],
+      "rule_ids": []
+    },
+    {
+      "case": "external-enabled",
+      "control_revision": 1,
+      "decision": "deny",
+      "minimum_action": "review",
+      "observations": 1,
+      "permission_ids": [],
+      "rule_ids": [
+        "command.ollama.rm"
+      ]
+    },
+    {
+      "case": "owned-help",
+      "control_revision": 1,
+      "decision": "deny",
+      "minimum_action": "review",
+      "observations": 1,
+      "permission_ids": [],
+      "rule_ids": [
+        "command.ollama.rm"
+      ]
+    },
+    {
+      "case": "safe-does-not-weaken-floor",
+      "control_revision": 1,
+      "decision": "deny",
+      "minimum_action": "block",
+      "observations": 3,
+      "permission_ids": [],
+      "rule_ids": [
+        "command.filesystem.recursive-delete",
+        "command.ollama.rm",
+        "command.shell-mutations.destructive-shell"
+      ]
+    },
+    {
+      "case": "permission-disabled",
+      "control_revision": 2,
+      "decision": "deny",
+      "minimum_action": "block",
+      "observations": 1,
+      "permission_ids": [],
+      "rule_ids": [
+        "command.ollama.rm"
+      ]
+    },
+    {
+      "case": "external-disabled",
+      "control_revision": 3,
+      "decision": "deny",
+      "minimum_action": "review",
+      "observations": 0,
+      "permission_ids": [],
+      "rule_ids": []
+    },
+    {
+      "case": "external-reenabled",
+      "control_revision": 4,
+      "decision": "deny",
+      "minimum_action": "review",
+      "observations": 1,
+      "permission_ids": [],
+      "rule_ids": [
+        "command.ollama.push"
+      ]
+    },
+    {
+      "case": "restart-retains-controls",
+      "control_revision": 4,
+      "decision": "deny",
+      "minimum_action": "review",
+      "observations": 1,
+      "permission_ids": [],
+      "rule_ids": [
+        "command.ollama.rm"
+      ]
+    },
+    {
+      "case": "command.package.go",
+      "control_revision": 5,
+      "decision": "deny",
+      "minimum_action": "block",
+      "observations": 1,
+      "permission_ids": [
+        "command.package.go.permission.package-protection"
+      ],
+      "rule_ids": []
+    },
+    {
+      "case": "command.package.jvm",
+      "control_revision": 6,
+      "decision": "deny",
+      "minimum_action": "block",
+      "observations": 1,
+      "permission_ids": [
+        "command.package.jvm.permission.package-protection"
+      ],
+      "rule_ids": []
+    },
+    {
+      "case": "command.package.node",
+      "control_revision": 7,
+      "decision": "deny",
+      "minimum_action": "block",
+      "observations": 1,
+      "permission_ids": [
+        "command.package.node.permission.package-protection"
+      ],
+      "rule_ids": []
+    },
+    {
+      "case": "command.package.php",
+      "control_revision": 8,
+      "decision": "deny",
+      "minimum_action": "block",
+      "observations": 1,
+      "permission_ids": [
+        "command.package.php.permission.package-protection"
+      ],
+      "rule_ids": []
+    },
+    {
+      "case": "command.package.python",
+      "control_revision": 9,
+      "decision": "deny",
+      "minimum_action": "block",
+      "observations": 1,
+      "permission_ids": [
+        "command.package.python.permission.package-protection"
+      ],
+      "rule_ids": []
+    },
+    {
+      "case": "command.package.ruby",
+      "control_revision": 10,
+      "decision": "deny",
+      "minimum_action": "block",
+      "observations": 1,
+      "permission_ids": [
+        "command.package.ruby.permission.package-protection"
+      ],
+      "rule_ids": []
+    },
+    {
+      "case": "command.package.rust",
+      "control_revision": 11,
+      "decision": "deny",
+      "minimum_action": "block",
+      "observations": 1,
+      "permission_ids": [
+        "command.package.rust.permission.package-protection"
+      ],
+      "rule_ids": []
+    },
+    {
+      "case": "command.package.system",
+      "control_revision": 12,
+      "decision": "deny",
+      "minimum_action": "block",
+      "observations": 1,
+      "permission_ids": [
+        "command.package.system.permission.package-protection"
+      ],
+      "rule_ids": []
+    },
+    {
+      "case": "mcp-write-blocked",
+      "control_revision": 13,
+      "decision": "deny",
+      "minimum_action": "block",
+      "observations": 1,
+      "permission_ids": [
+        "command.mcp-filesystem.permission.mcp-filesystem-tool"
+      ],
+      "rule_ids": []
+    },
+    {
+      "case": "mcp-read-inherits",
+      "control_revision": 13,
+      "decision": "deny",
+      "minimum_action": "require-reapproval",
+      "observations": 1,
+      "permission_ids": [
+        "command.mcp-filesystem.permission.mcp-filesystem-tool"
+      ],
+      "rule_ids": []
+    },
+    {
+      "case": "mcp-off",
+      "control_revision": 14,
+      "decision": "deny",
+      "minimum_action": "require-reapproval",
+      "observations": 0,
+      "permission_ids": [],
+      "rule_ids": []
+    }
+  ],
+  "interactive_enrollment_exercised": false,
+  "marker_tamper_rejected": true,
+  "persisted_receipts": 19,
+  "rule_digest": "496e624e67ef3a62288254c81d7db39e344c480d50dc2f4eff627892a12c4a42",
+  "schema": "guard.installed-native-extensions.v1",
+  "source_sha": "5362aec0bf667966fc031e8233e517d7adf6f5d9",
+  "target_commands_executed": 0
+}

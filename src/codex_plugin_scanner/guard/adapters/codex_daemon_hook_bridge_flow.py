@@ -17,6 +17,8 @@ from .codex_daemon_hook_auth import _DaemonResponseError
 from .codex_daemon_hook_transport import _daemon_response_once, _DaemonGenerationChangedError
 
 _DAEMON_START_TIMEOUT_SECONDS = 8
+_DAEMON_RPC_TIMEOUT_SECONDS = 4.0
+_FALLBACK_TIMEOUT_SECONDS = 4.0
 _MINIMUM_OPERATION_SECONDS = 0.01
 _OVERLOAD_RESERVE_MS = 100
 
@@ -42,7 +44,7 @@ def bridge_review_response(
             state_path=state_path,
             query=query,
             data=data,
-            timeout_seconds=_remaining_seconds(deadline),
+            timeout_seconds=min(_remaining_seconds(deadline), _DAEMON_RPC_TIMEOUT_SECONDS),
         )
 
     try:
@@ -199,14 +201,18 @@ def _fallback_response(
         fallback_stdout = trusted_launch.run_fallback(
             fallback_command,
             data=data,
-            timeout_seconds=_remaining_seconds(deadline),
+            timeout_seconds=_remaining_seconds(deadline, cap=_FALLBACK_TIMEOUT_SECONDS),
         )
         if fallback_stdout is None:
             return None
         return _json_object(fallback_stdout.strip()) if fallback_stdout.strip() else {}
     if launch_integrity_failed:
         return None
-    return _run_local_fallback(fallback_command, data=data, timeout_seconds=_remaining_seconds(deadline))
+    return _run_local_fallback(
+        fallback_command,
+        data=data,
+        timeout_seconds=_remaining_seconds(deadline, cap=_FALLBACK_TIMEOUT_SECONDS),
+    )
 
 
 def _run_daemon_start(

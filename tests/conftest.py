@@ -28,6 +28,12 @@ pythonpath_prefix = [str(path) for path in (SUPPORT_PATH, SRC_PATH) if str(path)
 if pythonpath_prefix:
     os.environ["PYTHONPATH"] = os.pathsep.join([*pythonpath_prefix, *pythonpath_entries])
 
+# Unit tests must never open real browser tabs. The flag is assigned at import
+# time so it is also inherited by helpers spawned from session-scoped fixtures,
+# and so an inherited value cannot silently re-enable launches.
+os.environ["HOL_GUARD_TEST_DISABLE_BROWSER_OPEN"] = "1"
+os.environ.pop("HOL_GUARD_TEST_ALLOW_BROWSER_OPEN", None)
+
 
 @pytest.fixture(autouse=True)
 def _default_unit_tests_to_python_rollback(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -84,6 +90,22 @@ def _explicit_python_differential_oracle(monkeypatch: pytest.MonkeyPatch) -> Non
 
     monkeypatch.setattr(HookWorker, "_test_python_oracle_factory", worker_oracle)
     monkeypatch.setattr(commands_hook_source_ref, "_test_source_ref_oracle", source_ref_oracle)
+
+
+@pytest.fixture
+def native_command_artifact_reviews(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Supply actual native command evidence to legacy hook orchestration tests."""
+    from codex_plugin_scanner.guard.cli import commands_support_runtime_artifacts
+    from tests.native_command_test_support import real_native_command_evaluation
+
+    def review(command: str, *, guard_home: Path, cwd: Path | None = None, home_dir: Path | None = None):
+        del guard_home
+        try:
+            return real_native_command_evaluation(command, cwd=cwd, home_dir=home_dir)
+        except Exception as exc:
+            pytest.fail(f"Native command artifact fixture failed: {type(exc).__name__}: {exc}")
+
+    monkeypatch.setattr(commands_support_runtime_artifacts, "review_command_native", review)
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:

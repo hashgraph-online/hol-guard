@@ -48,7 +48,7 @@ To update an existing installation:
 hol-guard update
 ```
 
-For manual setup, see the [installation guide](docs/guard/get-started.md). Release details and prereleases are on the [releases page](https://github.com/hashgraph-online/hol-guard/releases).
+For manual setup, see the [installation guide](docs/guard/get-started.md). Annotated release notes with upgrade context live at [hol.org/guard/releases](https://hol.org/guard/releases); raw releases and prereleases are on the [GitHub releases page](https://github.com/hashgraph-online/hol-guard/releases).
 
 ## What HOL Guard Protects
 
@@ -65,7 +65,7 @@ Guard connects through native agent hooks, managed MCP proxies, and launch integ
 
 ## Supported AI Agents
 
-Codex, Claude Code, GitHub Copilot CLI, Cursor, Cline, Gemini CLI, Grok, Hermes, Kimi Code, Pi, oh-my-pi, OpenClaw, OpenCode, Antigravity, and ZCode. [Paseo](docs/guard/paseo.md) is supported through these native provider integrations, with per-provider coverage.
+Codex, Claude Code, GitHub Copilot CLI, Cursor, Cline, Gemini CLI, Grok, Hermes, Kimi Code, Pi, oh-my-pi, OpenClaw, OpenCode, Antigravity, ZCode, and Devin. [Paseo](docs/guard/paseo.md) is supported through these native provider integrations, with per-provider coverage.
 
 For example, to set up Codex explicitly:
 
@@ -111,7 +111,7 @@ hol-guard command extensions command.git --json
 
 `command test` and `command explain` inspect the command without executing it or creating an approval. Use `hol-guard approvals` to resolve a pending request and `hol-guard receipts` to review the recorded decision.
 
-The [Extension directory](docs/guard/extensions/README.md) lists command coverage generated from the runtime registry. External contributions require explicit opt-in; required core protections remain enabled. To add coverage, follow the [Extension contribution guide](docs/guard/extensions/contributing.md).
+The [Extension directory](docs/guard/extensions/README.md) lists command coverage generated from the Rust-compiled catalog. External contributions require explicit opt-in; required core protections remain enabled. To add coverage, follow the [Extension contribution guide](docs/guard/extensions/contributing.md).
 
 ### Check a package
 
@@ -344,7 +344,7 @@ Yes. Local protection, CLI commands, approvals, and receipts work without signin
 
 ### Which AI agents does HOL Guard support?
 
-Guard includes adapters for Codex, Claude Code, GitHub Copilot CLI, Cursor, Cline, Gemini CLI, Grok, Hermes, Kimi Code, Pi, oh-my-pi, OpenClaw, OpenCode, Antigravity, and ZCode. [Paseo](docs/guard/paseo.md) is supported through these native provider integrations, with per-provider coverage. The [support matrix](docs/guard/harness-support.md) explains which events and enforcement paths each adapter supports.
+Guard includes adapters for Codex, Claude Code, GitHub Copilot CLI, Cursor, Cline, Gemini CLI, Grok, Hermes, Kimi Code, Pi, oh-my-pi, OpenClaw, OpenCode, Antigravity, ZCode, and Devin. [Paseo](docs/guard/paseo.md) is supported through these native provider integrations, with per-provider coverage. The [support matrix](docs/guard/harness-support.md) explains which events and enforcement paths each adapter supports.
 
 ### What is the difference between HOL Guard and Plugin Scanner?
 
@@ -360,6 +360,8 @@ The action may need approval under your active policy, or its tools or artifacts
 
 ## Documentation
 
+For enrollment or stale native authority errors, see [extension-control recovery](docs/guard/extension-control-recovery.md).
+
 | Guide | Contents |
 | :--- | :--- |
 | [Get started](docs/guard/get-started.md) | Installation, manual setup, package protection, and common commands. |
@@ -368,6 +370,7 @@ The action may need approval under your active policy, or its tools or artifacts
 | [Policy specification](spec/guard-policy/v1alpha1/README.md) | GuardPolicy document format. |
 | [Policy recipes](docs/guard/policy-recipes.md) | Configuration examples for common workflows. |
 | [Extensions](docs/guard/extensions/README.md) | Built-in command rules and contribution guidance. |
+| [Native extension authoring](docs/guard/extension-builder/README.md) | Canonical JSON sources, the Rust compiler, portable fixtures, and review kits. |
 | [Contribute an extension](#contribute-a-new-extension) | Generate, review, integrate, and test a new extension with the CLI. |
 | [Local vs. cloud](docs/guard/local-vs-cloud.md) | Local capabilities and optional cloud services. |
 | [Troubleshooting](docs/guard/troubleshooting.md) | Diagnosis and recovery. |
@@ -375,9 +378,25 @@ The action may need approval under your active policy, or its tools or artifacts
 
 ## Contribute a New Extension
 
-Use the **Extension Builder CLI** to turn exported command metadata or an MCP tool inventory into contribution files and tests. It works offline: it reads the export without importing or running the target tool.
+Command extensions are authored as **declarative JSON compiled and evaluated by Rust**. Add metadata, permissions, matcher trees, and safe variants in `contributions/command-sources/command.<name>.json`, then verify behavior with portable JSON fixtures. Most extensions compose existing native operations; a new Rust operation is needed only when the existing matcher contracts cannot express the behavior.
 
-**1. Propose the coverage.** Check the [Extension directory](docs/guard/extensions/README.md) for existing coverage. For a new capability, open an [Extension proposal](https://github.com/hashgraph-online/hol-guard/issues/new?template=command-extension-proposal.yml) with the proposed `command.<name>` ID, supported operations, destructive examples, safe counterparts, and upstream references. Extend an existing extension when it already owns the operation.
+| Contribution | Authoring input | Verification |
+| :--- | :--- | :--- |
+| Command coverage | `contributions/command-sources/command.<name>.json` | Portable fixtures evaluated by `guard-command-source test`. |
+| MCP server knowledge | `contributions/mcp-servers/<id>.json` | MCP contribution tests and native catalog validation. |
+| New matcher semantics | Reviewed Rust changes in `rust/crates/guard-command/` | Native contract, admission, evaluation, and regression tests. |
+
+The Rust compiler generates command descriptors, the catalog, and the native matcher program. Python remains part of the CLI, build orchestration, and tests; new command coverage does not require a Python detector or registry registration. See the [authoring guide](docs/guard/extension-builder/README.md) for direct source authoring and the [architecture](docs/guard/command-extension-architecture.md) for the runtime boundary.
+
+The **Extension Builder CLI** can create those command sources and portable fixtures from exported command metadata. It also supports MCP inventories. It works offline and reads the export without importing or running the target tool.
+
+Use the Builder's plan-and-apply flow to create the canonical source and fixture. Open a draft
+PR early for scope review. Before marking that PR ready for review, run
+`scripts/prepare_extension_contribution.py --source ... --fixture ...` to synchronize deterministic
+projections, then run `hol-guard extensions handoff --repo . --source ... --fixture ...`. The handoff
+check catches missing generated descriptors, catalog entries, and source bindings before final review.
+
+**1. Define the coverage in the PR.** Check the [Extension directory](docs/guard/extensions/README.md) and current [open pull requests](https://github.com/hashgraph-online/hol-guard/pulls) for existing or overlapping coverage. For a new capability, open a draft PR with the **Command extension** template and include the proposed `command.<name>` ID, supported operations, destructive examples, safe counterparts, and upstream references. Scope review happens on the PR; a separate issue is not required. Extend an existing extension when it already owns the operation.
 
 Follow the [development setup](#development), then run the examples below from your HOL Guard checkout. `uv run --no-sync` uses that checkout's installed development version.
 
@@ -394,7 +413,7 @@ uv run --no-sync hol-guard extensions generate --from cli \
 uv run --no-sync hol-guard extensions validate samplectl-kit
 ```
 
-The output directory must be new, with an existing parent directory. The kit includes `discovery.json`, `review.json`, `report.json`, contribution metadata, a native detector, generated tests, and a file manifest.
+The output directory must be new, with an existing parent directory. A command kit includes `discovery.json`, `review.json`, `report.json`, the canonical JSON source, a portable native fixture, a generated descriptor, and a file manifest. MCP kits contain their contribution metadata and generated Python tests.
 
 Other inputs: `--from help` reads saved command help; `--from click` reads a Click `Context.to_info_dict()` export; `--from oclif` reads `oclif.manifest.json`; `--from mcp` reads a complete exported `tools/list` result; and `--from snapshot` replays `discovery.json`. The `cli` example above uses normalized `guard.cli-surface.v1` JSON.
 
@@ -408,7 +427,7 @@ cp samplectl-kit/review.json samplectl-review.json
 
 Edit `samplectl-review.json`, keeping its discovery binding and operation IDs intact. CLI operations use `review` or `block`; the root operation stays `review`. Set `reviewed: true` for entries you have assessed, with rationale and a public HTTPS evidence reference. Add `safeArgv` only for exact, verified safe invocations. The [review format](docs/guard/extension-builder/README.md#review-and-recompile) includes a complete entry example.
 
-Recompile from the saved snapshot rather than editing generated detectors or manifests:
+Recompile the saved snapshot after reviewing it:
 
 ```bash
 uv run --no-sync hol-guard extensions generate --from snapshot \
@@ -417,9 +436,12 @@ uv run --no-sync hol-guard extensions generate --from snapshot \
 
 uv run --no-sync hol-guard extensions validate samplectl-reviewed
 uv run --no-sync hol-guard extensions diff samplectl-kit samplectl-reviewed
+
+"$HOL_GUARD_NATIVE_SOURCE_COMPILER" test \
+  < samplectl-reviewed/artifacts/tests/fixtures/command-source-samplectl.v1.json
 ```
 
-`diff` exits `0` for equal kits and `1` when valid kits differ. If the upstream export changes, generate and review a new snapshot.
+`diff` exits `0` for equal kits and `1` when valid kits differ. The Rust fixture runner evaluates command text without executing it. If the upstream export changes, generate and review a new snapshot.
 
 **4. Preview and apply the integration.** On your contribution branch, preview the changes to the current checkout:
 
@@ -435,25 +457,27 @@ uv run --no-sync hol-guard extensions apply samplectl-reviewed --repo . \
   --write
 ```
 
-The write applies the reviewed plan to contribution files, the external trust map, catalog registration, packaging, and authoring ownership records. Existing IDs or conflicting files stop integration for review.
+The write integrates the canonical source, fixture, generated contribution descriptor, external trust map, packaging, and authoring ownership records. Regenerate the complete program and catalog in the next step. Existing IDs or conflicting files stop integration for review.
 
-**5. Test and submit a pull request.** For the `samplectl` example:
+**5. Test and submit a pull request.** Follow the [native validation sequence](docs/guard/extension-builder/VALIDATION.md) to regenerate the complete catalog, rebuild the compiler and runtime against that program, and run the contribution's fixtures against the integrated sources. This also covers updating an existing extension, where an addition to the packaged baseline would conflict with the existing ID. Then run the contribution checks and regenerate the public directory:
 
 ```bash
 uv run --no-sync python scripts/release/stage_guard_cloud_review_artifacts.py
-uv run --no-sync pytest -q tests/test_generated_cli_samplectl_extension.py
 uv run --no-sync pytest -q \
   tests/test_guard_extension_contribution.py \
   tests/test_guard_extension_trust.py \
+  tests/test_native_source_program.py \
   tests/test_guard_command_extension_registry.py
+uv run --no-sync python scripts/export_extension_directory.py
+uv run --no-sync python scripts/export_extension_directory.py --check
 uv run --no-sync python scripts/render_command_extension_directory.py
 uv run --no-sync python scripts/render_command_extension_directory.py --check
 git diff --check
 ```
 
-Use your generated test filename for a different slug. Add cases for destructive operations, safe previews, aliases, reordered flags, quoting, malformed input, and compound commands. Run lint and formatting checks on changed Python files. Inspect the final diff, commit the integration and regenerated directory, and open a PR against `main` linking the proposal and test results. Include the generated authoring records; keep scratch kit directories and raw upstream exports out of the PR.
+Add fixture cases for destructive operations, safe previews, aliases, reordered flags, quoting, malformed input, and compound commands. Run the Rust checks when changing native semantics and the relevant Python checks when changing tooling. Inspect the final diff, commit the canonical inputs, generated projections, fixtures, and authoring records, and update the existing draft PR against `main` with the test results. Mark it ready for review after the handoff check passes. Keep scratch kit directories and raw upstream exports out of the PR.
 
-**Community contributions remain External and off by default.** Tests must prove they are inert until a local administrator enables them. Generating, applying, or merging a contribution does not activate it, and its detector cannot weaken Guard's required protections.
+**Community contributions remain External and off by default.** Tests must prove they are inert until a local administrator enables them. Generating, applying, or merging a contribution does not activate it, and its rules cannot weaken Guard's required protections.
 
 [Full builder reference](docs/guard/extension-builder/README.md) · [Contribution review requirements](docs/guard/extensions/contributing.md) · [External extension contract](docs/guard/extension-contributions.md) · [Builder validation](docs/guard/extension-builder/VALIDATION.md)
 
@@ -461,15 +485,35 @@ Use your generated test filename for a different slug. Add cases for destructive
 
 ## Development
 
-Clone the repository and install the development dependencies with uv:
+The development toolchain includes Python 3.10 or newer, [uv](https://docs.astral.sh/uv/), and Rust 1.88.0, pinned in [`rust/rust-toolchain.toml`](rust/rust-toolchain.toml). Rust builds the native runtime and extension compiler; Python supplies the CLI and development tooling. The commands below use a POSIX shell from the repository root. See [CONTRIBUTING.md](CONTRIBUTING.md) for Windows setup and the checks for each kind of change.
 
 ```bash
 git clone https://github.com/hashgraph-online/hol-guard.git
 cd hol-guard
-uv sync --extra dev
-uv run ruff check src tests
-uv run ruff format --check src tests
-uv run pytest --tb=short
+uv sync --frozen --extra dev
+rustup toolchain install 1.88.0 --profile minimal --component rustfmt --component clippy
+cargo +1.88.0 build --locked --release --manifest-path rust/Cargo.toml \
+  -p guard-command --bin guard-command-source
+cargo +1.88.0 build --locked --release --manifest-path rust/Cargo.toml \
+  -p hol-guard-runtime
+
+export HOL_GUARD_NATIVE_SOURCE_COMPILER="$PWD/rust/target/release/guard-command-source"
+export HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER="$HOL_GUARD_NATIVE_SOURCE_COMPILER"
+export HOL_GUARD_NATIVE_BINARY="$PWD/rust/target/release/hol-guard-runtime"
+
+uv run --no-sync python scripts/build_native_command_program.py \
+  --compiler "$HOL_GUARD_NATIVE_SOURCE_COMPILER" --check
+uv run --no-sync pytest tests/test_guard_extension_builder_public_docs.py \
+  tests/test_native_source_program.py --tb=short
+```
+
+Those compiler overrides are for an editable checkout. Installed native wheels use their bundled compiler and verify its manifest. After changing canonical sources or Rust semantics, regenerate the projections and rebuild as described in the [validation guide](docs/guard/extension-builder/VALIDATION.md).
+
+For Python tooling and package changes:
+
+```bash
+uv run --no-sync ruff check src tests
+uv run --no-sync ruff format --check src tests
 uv build
 ```
 
@@ -491,7 +535,9 @@ For optional Cisco coverage, use the dependency group command above. See [CONTRI
 Maintained by [Hashgraph Online](https://github.com/hashgraph-online).
 
 - [Report a bug or request a feature](https://github.com/hashgraph-online/hol-guard/issues)
-- [Browse releases](https://github.com/hashgraph-online/hol-guard/releases)
+- [Browse release notes](https://hol.org/guard/releases)
+- [See who builds Guard](https://hol.org/guard/contributors)
+- [Browse raw GitHub releases](https://github.com/hashgraph-online/hol-guard/releases)
 - [Explore the plugin security dataset](https://huggingface.co/datasets/HashgraphOnline/hol-plugin-security)
 
 ## License

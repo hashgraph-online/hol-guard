@@ -9,6 +9,7 @@ import os
 import subprocess
 import sys
 import tarfile
+from collections.abc import Sequence
 from hashlib import sha256
 from pathlib import Path
 from typing import Final
@@ -25,6 +26,9 @@ if str(_REPO_ROOT) not in sys.path:
 
 from scripts.ci.python_capability_cleanup_analysis import (  # noqa: E402
     DynamicImport as _DynamicImport,
+)
+from scripts.ci.python_capability_cleanup_analysis import (  # noqa: E402
+    ImportGraphAnalysis as _ImportGraphAnalysis,
 )
 from scripts.ci.python_capability_cleanup_analysis import (  # noqa: E402
     _analyze_import_graph as _analyze_import_graph,
@@ -44,6 +48,8 @@ from scripts.ci.python_capability_cleanup_analysis import (  # noqa: E402
 from scripts.ci.python_capability_cleanup_analysis import (  # noqa: E402
     reachable as _reachable,
 )
+from scripts.ci.python_runtime_retirement import validate_retired_modules  # noqa: E402
+from scripts.ci.runtime_retirement_ledger import validate_retirement_ledger  # noqa: E402
 
 SCHEMA: Final = "hol-guard.python-capability-cleanup.v1"
 CONTRACT: Final = "docs/guard/contracts/python-capability-ownership.v1.json"
@@ -169,7 +175,7 @@ def _validate_fixture(root: Path, relative: str) -> dict[str, object]:
     return {"case_count": len(cases), "sha256": sha256((root / relative).read_bytes()).hexdigest()}
 
 
-def _verify_import_surface(root: Path, oracle_modules: list[str], candidate_module: str) -> None:
+def _verify_import_surface(root: Path, oracle_modules: list[str], candidate_modules: list[str]) -> None:
     source = root / "src"
     clean_env = os.environ.copy()
     for key in (
@@ -184,7 +190,7 @@ def _verify_import_surface(root: Path, oracle_modules: list[str], candidate_modu
         "import sys; "
         "import codex_plugin_scanner.guard.cli.commands_support; "
         "loaded = set(sys.modules); "
-        f"forbidden = {oracle_modules!r} + [{candidate_module!r}]; "
+        f"forbidden = {oracle_modules!r} + {candidate_modules!r}; "
         "assert not (loaded & set(forbidden)), sorted(loaded & set(forbidden))"
     )
     completed = subprocess.run(
@@ -206,6 +212,8 @@ def _candidate_evidence(
     owners: dict[str, str],
     capability_classes: dict[str, str],
     exclusions: list[str],
+    *,
+    import_analysis: _ImportGraphAnalysis | None = None,
 ) -> tuple[str, dict[str, object]]:
     path = root / candidate
     if not path.is_file():
@@ -216,7 +224,7 @@ def _candidate_evidence(
     if candidate not in exclusions:
         raise RuntimeError(f"dead candidate is not excluded from Hatch builds: {candidate}")
     module = _module_name(root, path)
-    importers = _production_importers(root, module)
+    importers = _production_importers(root, module, analysis=import_analysis)
     if importers:
         raise RuntimeError(f"dead candidate still has source import reachability: {candidate}: {importers}")
     return module, {
@@ -248,14 +256,12 @@ def _run_inputs(
     excluded_candidates = contract.get("package_excluded_candidates")
     deletion_candidates = contract.get("deletion_candidates")
     oracle_tests = contract.get("oracle_tests")
-    if (
-        not isinstance(excluded_candidates, list)
-        or not excluded_candidates
-        or not all(isinstance(item, str) for item in excluded_candidates)
-    ):
-        raise RuntimeError("package_excluded_candidates must be a non-empty list")
-    if not isinstance(deletion_candidates, list) or not deletion_candidates:
-        raise RuntimeError("deletion candidates must be recorded")
+    if not isinstance(excluded_candidates, list) or not all(isinstance(item, str) for item in excluded_candidates):
+        raise RuntimeError("package_excluded_candidates must be a list of strings")
+    if not isinstance(deletion_candidates, list):
+        raise RuntimeError("deletion_candidates must be a list")
+    if not excluded_candidates and not contract.get("retired_modules"):
+        raise RuntimeError("cleanup requires a non-empty exclusion or retirement record")
     if not isinstance(oracle_tests, list) or not all(isinstance(item, str) for item in oracle_tests):
         raise RuntimeError("oracle_tests must be a list")
     missing_tests = [path for path in oracle_tests if not (root / path).is_file()]
@@ -273,11 +279,14 @@ def _candidate_records(
     owners: dict[str, str],
     capability_classes: dict[str, str],
     exclusions: list[str],
+    import_analysis: _ImportGraphAnalysis,
 ) -> tuple[list[str], list[dict[str, object]]]:
     modules: list[str] = []
     evidence: list[dict[str, object]] = []
     for candidate in candidates:
-        module, item = _candidate_evidence(root, candidate, owners, capability_classes, exclusions)
+        module, item = _candidate_evidence(
+            root, candidate, owners, capability_classes, exclusions, import_analysis=import_analysis
+        )
         modules.append(module)
         evidence.append(item)
     return modules, evidence
@@ -295,13 +304,14 @@ def _validate_artifact_exclusions(root: Path, wheel: Path | None, candidates: li
 def _source_analysis(
     root: Path,
     owners: dict[str, str],
+    import_analysis: _ImportGraphAnalysis,
 ) -> tuple[dict[str, int], int, list[_DynamicImport], list[str]]:
     source_loc: dict[str, int] = {}
     for path, capability_id in owners.items():
         source_loc[capability_id] = source_loc.get(capability_id, 0) + len(
             (root / path).read_text(encoding="utf-8").splitlines()
         )
-    import_graph, _dynamic, dynamic_imports, dynamic_unbounded = _analyze_import_graph(root)
+    import_graph, _dynamic, dynamic_imports, dynamic_unbounded = import_analysis
     if dynamic_unbounded:
         raise RuntimeError(
             "dynamic import destination is not literal or statically bounded: " + ", ".join(sorted(dynamic_unbounded))
@@ -321,25 +331,35 @@ def _dynamic_import_evidence(dynamic_imports: list[_DynamicImport]) -> list[dict
     ]
 
 
-def run(root: Path, wheel: Path | None = None) -> dict[str, object]:
+def run(root: Path, wheel: Path | None = None, *, artifacts: Sequence[Path] = ()) -> dict[str, object]:
     root = root.resolve()
     contract, owners, scope = _validate_contract(root)
     capability_classes = _capability_classes(contract)
     excluded_candidates, _deletion_candidates, _oracle_tests, fixture_relative, exclusions = _run_inputs(root, contract)
     fixture = _validate_fixture(root, fixture_relative)
+    checked_artifacts = ([wheel] if wheel is not None else []) + list(artifacts)
+    for artifact in checked_artifacts:
+        _validate_artifact_exclusions(root, artifact, excluded_candidates)
+    # Every source/candidate check sees the same freshly parsed source snapshot.
+    # Do not persist this analysis across runs: source changes must be revalidated.
+    import_analysis = _analyze_import_graph(root)
     candidate_modules, candidate_evidence = _candidate_records(
         root,
         excluded_candidates,
         owners,
         capability_classes,
         exclusions,
+        import_analysis,
     )
     oracle_modules = contract.get("lazy_oracle_modules", [])
     if not isinstance(oracle_modules, list) or not all(isinstance(item, str) for item in oracle_modules):
         raise RuntimeError("lazy_oracle_modules must be a list")
-    _verify_import_surface(root, oracle_modules, candidate_modules[0])
-    _validate_artifact_exclusions(root, wheel, excluded_candidates)
-    source_loc, reached, dynamic_imports, dynamic_unbounded = _source_analysis(root, owners)
+    retired_evidence = validate_retired_modules(root, contract, analysis=import_analysis, artifacts=checked_artifacts)
+    if contract.get("retired_modules"):
+        validate_retirement_ledger(root, contract)
+    retired_modules = [str(record["module"]) for record in retired_evidence]
+    _verify_import_surface(root, oracle_modules, candidate_modules + retired_modules)
+    source_loc, reached, dynamic_imports, dynamic_unbounded = _source_analysis(root, owners, import_analysis)
     return {
         "schema": SCHEMA,
         "status": "passed",
@@ -355,7 +375,9 @@ def run(root: Path, wheel: Path | None = None) -> dict[str, object]:
         "lazy_oracle_modules": oracle_modules,
         "fixture": fixture,
         "candidate_evidence": candidate_evidence,
+        "retired_evidence": retired_evidence,
         "package_exclusions": [candidate for candidate in excluded_candidates if candidate in exclusions],
+        "checked_artifacts": [str(artifact) for artifact in checked_artifacts],
         "dependency_delta": contract.get("dependency_delta"),
         "dynamic_import_count": len(dynamic_imports),
         "dynamic_import_destinations_checked": True,
@@ -367,11 +389,19 @@ def run(root: Path, wheel: Path | None = None) -> dict[str, object]:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=Path.cwd())
-    parser.add_argument("--wheel", "--artifact", dest="artifact", type=Path)
+    parser.add_argument(
+        "--wheel",
+        "--artifact",
+        dest="artifacts",
+        type=Path,
+        action="append",
+        default=[],
+        help="wheel or sdist to check; repeat to validate multiple artifacts with one source analysis",
+    )
     parser.add_argument("--json", type=Path)
     args = parser.parse_args()
     try:
-        payload = run(args.root, args.artifact)
+        payload = run(args.root, artifacts=args.artifacts)
     except (OSError, RuntimeError, tomllib.TOMLDecodeError) as error:
         print(str(error), file=sys.stderr)
         raise SystemExit(1) from error

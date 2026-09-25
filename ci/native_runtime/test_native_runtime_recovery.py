@@ -11,20 +11,26 @@ import pytest
 
 import codex_plugin_scanner.guard.native_runtime as native_runtime
 from ci.native_runtime.native_hook_client_support import _push_snapshot
-from ci.native_runtime.resident_test_support import process_is_alive
+from ci.native_runtime.native_process_test_support import process_is_alive
 from ci.native_runtime.test_native_hook_client import (
     _request as _native_request,
 )
 from ci.native_runtime.test_native_hook_client import _state_files
 from codex_plugin_scanner.guard.native_policy_test_support import native_policy_snapshot
+from codex_plugin_scanner.guard.native_resident_client import close_native_residents
 from codex_plugin_scanner.guard.native_runtime import native_runtime_status, review_post_tool_native
-from codex_plugin_scanner.guard.native_runtime_resident import close_resident_native_runtimes
 from codex_plugin_scanner.guard.runtime.hook_review_types import HookReviewRequest
 
 _NATIVE_BINARY = os.environ.get("HOL_GUARD_NATIVE_BINARY")
 
 
-def _request(workspace: Path, *, guard_home: Path, request_id: str) -> HookReviewRequest:
+def _request(
+    workspace: Path,
+    *,
+    guard_home: Path,
+    request_id: str,
+    deadline_monotonic: float | None = None,
+) -> HookReviewRequest:
     return HookReviewRequest(
         harness="claude-code",
         event_name="PostToolUse",
@@ -39,6 +45,7 @@ def _request(workspace: Path, *, guard_home: Path, request_id: str) -> HookRevie
         home_dir=workspace,
         guard_home=guard_home,
         source_scope="project",
+        deadline_monotonic=deadline_monotonic,
         request_id=request_id,
     )
 
@@ -126,7 +133,7 @@ def test_poisoned_socket_symlink_falls_back_without_touching_target(tmp_path: Pa
             assert victim.read_text(encoding="utf-8") == "keep"
             assert socket_path.is_symlink()
         finally:
-            close_resident_native_runtimes()
+            close_native_residents()
             socket_path.unlink(missing_ok=True)
 
 
@@ -144,17 +151,22 @@ def test_resident_runtime_restarts_after_contained_shutdown(tmp_path: Path) -> N
             with native_policy_snapshot(guard_home) as snapshot:
                 first = review_post_tool_native(first_request, observe_mode=False, policy_snapshot=snapshot)
                 assert first is not None and first.decision == "allow"
-                close_resident_native_runtimes()
+                close_native_residents()
 
+                # This test proves functional cold-restart recovery. Production
+                # adapter recovery latency is enforced separately by the installed
+                # native SLO suite, so do not conflate that SLO with the default
+                # 750 ms interactive request budget used by warm hook traffic.
                 second_request = _request(
                     tmp_path,
                     guard_home=guard_home,
                     request_id="after-shutdown",
+                    deadline_monotonic=time.monotonic() + 3.0,
                 )
                 second = review_post_tool_native(second_request, observe_mode=False, policy_snapshot=snapshot)
                 assert second is not None and second.decision == "allow"
         finally:
-            close_resident_native_runtimes()
+            close_native_residents()
 
 
 @pytest.mark.skipif(not _NATIVE_BINARY or os.name == "nt", reason="compiled POSIX resident runtime is required")

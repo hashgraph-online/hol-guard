@@ -1,5 +1,6 @@
-import { aa as PROTECTION_POSTURE_COPY, ab as POSTURE_OUTCOME_COLUMNS, j as jsxRuntimeExports, r as reactExports, ac as getDefaultExportFromCjs, ad as React, M as useFocusTrap, ae as HiMiniKey, S as SectionLabel, A as ActionButton, w as HiMiniShieldCheck, af as HiMiniLockClosed, ag as HiMiniBellAlert, ah as HiMiniAdjustmentsHorizontal, ai as HiMiniCircleStack, aj as TabBar, c as HiMiniChevronRight, ak as fetchCloudReviewSettings, al as isApprovalProofSubmitDisabled, K as HiMiniCloud, am as HiMiniArrowPath, C as HiMiniXMark, an as ApprovalProofFieldInputs, ao as changeCloudReviewSettings, ap as resolveProtectionLevelCopy, aq as fetchSettings, ar as fetchRuntimeSnapshot, e as updateSettings, as as clearPolicy, at as clearReviewQueue, au as revokeApprovalGateCooldown, av as disableApprovalGateTotp, aw as importSettings, ax as resetSettings, ay as enrollApprovalGateTotp, az as verifyApprovalGateTotp, aA as clearEvidence, aB as exportDiagnostics, aC as repairApprovalCenter, aD as exportSettings, aE as setupDesktopNotifications, n as EmptyState, aF as WorkspacePageHeader, W as WatchProtectionBanner, aG as HiMiniMagnifyingGlass, I as HiMiniChevronDown, s as HiMiniCheckCircle, P as HiMiniExclamationTriangle, aH as isProtectionPosture, aI as deriveProtectionPosture, aJ as Tag, aK as approvalGateCooldownLabel } from "../guard-dashboard.js";
+import { aa as PROTECTION_POSTURE_COPY, ab as POSTURE_OUTCOME_COLUMNS, j as jsxRuntimeExports, r as reactExports, ac as getDefaultExportFromCjs, ad as React, M as useFocusTrap, ae as HiMiniKey, S as SectionLabel, A as ActionButton, w as HiMiniShieldCheck, af as HiMiniLockClosed, ag as HiMiniBellAlert, ah as HiMiniAdjustmentsHorizontal, ai as HiMiniCircleStack, aj as TabBar, c as HiMiniChevronRight, ak as fetchCloudReviewSettings, K as HiMiniCloud, al as HiMiniArrowPath, C as HiMiniXMark, am as ApprovalProofFieldInputs, an as isApprovalProofSubmitDisabled, ao as buildApprovalProofCredentials, ap as changeCloudReviewSettings, aq as resolveProtectionLevelCopy, ar as fetchSettings, as as fetchRuntimeSnapshot, e as updateSettings, at as clearPolicy, au as clearReviewQueue, av as revokeApprovalGateCooldown, aw as disableApprovalGateTotp, ax as importSettings, ay as resetSettings, az as enrollApprovalGateTotp, aA as verifyApprovalGateTotp, aB as clearEvidence, aC as exportDiagnostics, aD as repairApprovalCenter, aE as exportSettings, aF as setupDesktopNotifications, n as EmptyState, aG as WorkspacePageHeader, W as WatchProtectionBanner, aH as HiMiniMagnifyingGlass, I as HiMiniChevronDown, s as HiMiniCheckCircle, P as HiMiniExclamationTriangle, aI as humanizeList, aJ as isProtectionPosture, aK as deriveProtectionPosture, aL as Tag, aM as approvalGateCooldownLabel } from "../guard-dashboard.js";
 import { f as filterSettingsBySearch, R as RISK_CONTROL_CONSEQUENCES } from "./app-catalog.js";
+import { u as useConfirmDialog } from "./confirm-dialog.js";
 import { C as ConnectGuardCloudButton } from "./connect-guard-cloud-button.js";
 const POSTURE_ORDER = ["protected", "extra_careful", "watch"];
 function ProtectionPosturePanel(props) {
@@ -2513,6 +2514,25 @@ function ApprovalPasswordSection(props) {
     !props.wasConfigured && props.enabled ? /* @__PURE__ */ jsxRuntimeExports.jsx(ApprovalPasswordSetupAction, { onClick: () => props.onOpenPasswordChangeModal("setup-gate") }) : null
   ] });
 }
+function cloudReviewProofIncomplete(gate, password, totp, requireFreshTotp) {
+  if (!gate?.enabled) return false;
+  if (isApprovalProofSubmitDisabled(
+    gate,
+    { approvalPassword: password, approvalTotpCode: totp },
+    false,
+    requireFreshTotp
+  )) return true;
+  return requireFreshTotp && totp.trim().length !== 6;
+}
+function cloudReviewConfirmationError(message) {
+  if (message === "TOTP code is required.") {
+    return "Enter the current six-digit code from your authenticator.";
+  }
+  if (message === "Approval password is required.") {
+    return "Enter your approval password to continue.";
+  }
+  return message;
+}
 function cloudReviewStatusCopy(status) {
   if (!status.connected) return "Connect Guard Cloud on this device to review its requests in the cloud.";
   if (!status.enabled) return "Cloud sync is connected. Cloud decisions still need this device's authorization. Confirm it here to update pending requests; you do not need to reconnect.";
@@ -2584,11 +2604,13 @@ function CloudReviewSettings() {
   }
   async function confirm() {
     if (!status || !action || pending) return;
-    if (status.approval_gate.enabled && isApprovalProofSubmitDisabled(
+    const requireFreshTotp2 = status.approval_gate.totp_enabled === true;
+    if (cloudReviewProofIncomplete(status.approval_gate, password, totp, requireFreshTotp2)) return;
+    const proof = status.approval_gate.enabled ? buildApprovalProofCredentials(
       status.approval_gate,
       { approvalPassword: password, approvalTotpCode: totp },
-      false
-    )) return;
+      requireFreshTotp2
+    ) : {};
     revision.current += 1;
     setPending(true);
     setError(null);
@@ -2598,8 +2620,7 @@ function CloudReviewSettings() {
         workspace_id: status.workspace_id,
         source: status.source,
         include_held_requests: action === "enable" && includeHeld,
-        ...password ? { approval_password: password } : {},
-        ...totp ? { approval_totp_code: totp } : {}
+        ...proof
       });
       setStatus(result);
       setAction(null);
@@ -2613,11 +2634,8 @@ function CloudReviewSettings() {
     }
   }
   const needsRecovery = Boolean(status?.activation_error || status?.held_events || status?.delivery_state === "error");
-  const disabled = pending || Boolean(status?.approval_gate.enabled && isApprovalProofSubmitDisabled(
-    status.approval_gate,
-    { approvalPassword: password, approvalTotpCode: totp },
-    false
-  ));
+  const requireFreshTotp = status?.approval_gate.totp_enabled === true;
+  const disabled = pending || cloudReviewProofIncomplete(status?.approval_gate, password, totp, requireFreshTotp);
   let confirmLabel = "Turn off Cloud Review";
   if (action === "enable") confirmLabel = "Authorize this device";
   if (pending) confirmLabel = "Saving...";
@@ -2744,11 +2762,12 @@ function CloudReviewSettings() {
                   approvalGate: status.approval_gate,
                   approvalPassword: password,
                   approvalTotpCode: totp,
+                  requireFreshTotp,
                   onApprovalPasswordChange: (event) => setPassword(event.target.value),
                   onApprovalTotpCodeChange: (event) => setTotp(event.target.value)
                 }
               ) }) : null,
-              error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-3 text-sm text-red-700", children: error }) : null,
+              error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-3 text-sm text-red-700", children: cloudReviewConfirmationError(error) }) : null,
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 flex flex-wrap justify-end gap-2", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: close, disabled: pending, className: "min-h-10 rounded-md border border-slate-200 px-4 py-2 text-sm text-brand-dark", children: "Cancel" }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -2973,6 +2992,19 @@ function resolveFineTuningSectionDescription(securityLevel) {
 }
 function isFineTuningEditable(securityLevel) {
   return securityLevel === "custom";
+}
+const REPAIR_APPROVAL_CENTER_LABELS = {
+  locator: "stale approval link",
+  daemon_state: "stale service record",
+  daemon_process: "unresponsive background service",
+  daemon_discovery_key: "invalid discovery key"
+};
+function resolveRepairApprovalCenterMessage(cleared) {
+  if (cleared.length === 0) {
+    return "Nothing needed repair. The approval center is already reachable from this dashboard.";
+  }
+  const labels = cleared.map((code) => REPAIR_APPROVAL_CENTER_LABELS[code] ?? code);
+  return `Approval center repaired: cleared ${humanizeList(labels)}. Approval links reconnect the next time a hook reaches Guard.`;
 }
 function buildClearPolicyPayload(all) {
   return { all };
@@ -3246,6 +3278,7 @@ function SettingsWorkspace({ onApprovalGateChange }) {
   const [approvalGateTotpDeviceLabel, setApprovalGateTotpDeviceLabel] = reactExports.useState("local-device");
   const [approvalGateStrictAllDecisions, setApprovalGateStrictAllDecisions] = reactExports.useState(false);
   const [approvalGateCooldown, setApprovalGateCooldown] = reactExports.useState(0);
+  const { confirm: requestConfirmation, dialog: confirmDialog } = useConfirmDialog();
   const [totpEnrollment, setTotpEnrollment] = reactExports.useState(null);
   const [totpSetupOpen, setTotpSetupOpen] = reactExports.useState(false);
   const [totpSetupStep, setTotpSetupStep] = reactExports.useState("confirm");
@@ -3862,8 +3895,13 @@ function SettingsWorkspace({ onApprovalGateChange }) {
   const handleDisableTotp = reactExports.useCallback(async () => {
     handleRequestDisableTotp();
   }, [handleRequestDisableTotp]);
-  const handleClearApprovals = reactExports.useCallback(() => {
-    if (!window.confirm("Clear all saved approvals? Guard will ask again for previously approved actions.")) {
+  const handleClearApprovals = reactExports.useCallback(async () => {
+    if (!await requestConfirmation({
+      title: "Clear all saved approvals?",
+      description: "Guard will ask again for every action it previously approved. Pending reviews and evidence are kept.",
+      confirmLabel: "Clear approvals",
+      tone: "destructive"
+    })) {
       return;
     }
     const savedGateEnabled = savedSettingsRef.current?.approval_gate?.enabled === true;
@@ -3882,9 +3920,14 @@ function SettingsWorkspace({ onApprovalGateChange }) {
     }).finally(() => {
       setClearingApprovals(false);
     });
-  }, [openProofModal]);
-  const handleClearReviewQueue = reactExports.useCallback(() => {
-    if (!window.confirm("Clear the pending review queue? Guard will remove waiting items without creating allow or block decisions.")) {
+  }, [openProofModal, requestConfirmation]);
+  const handleClearReviewQueue = reactExports.useCallback(async () => {
+    if (!await requestConfirmation({
+      title: "Clear the pending review queue?",
+      description: "Waiting items are removed without recording an allow or block decision.",
+      confirmLabel: "Clear review queue",
+      tone: "destructive"
+    })) {
       return;
     }
     const savedGateEnabled = savedSettingsRef.current?.approval_gate?.enabled === true;
@@ -3903,9 +3946,14 @@ function SettingsWorkspace({ onApprovalGateChange }) {
     }).finally(() => {
       setClearingReviewQueue(false);
     });
-  }, [openProofModal]);
+  }, [openProofModal, requestConfirmation]);
   const handleClearEvidence = reactExports.useCallback(async () => {
-    if (!window.confirm("Clear the evidence log permanently? This cannot be undone.")) return;
+    if (!await requestConfirmation({
+      title: "Clear the evidence log permanently?",
+      description: "Local audit history on this machine is deleted. This cannot be undone.",
+      confirmLabel: "Clear evidence",
+      tone: "destructive"
+    })) return;
     setClearingEvidence(true);
     setActionMessage(null);
     try {
@@ -3918,7 +3966,7 @@ function SettingsWorkspace({ onApprovalGateChange }) {
     } finally {
       setClearingEvidence(false);
     }
-  }, []);
+  }, [requestConfirmation]);
   const handleExportDiagnostics = reactExports.useCallback(async () => {
     setExporting(true);
     setActionMessage(null);
@@ -3942,12 +3990,17 @@ function SettingsWorkspace({ onApprovalGateChange }) {
     }
   }, []);
   const handleRepairApprovalCenter = reactExports.useCallback(async () => {
-    if (!window.confirm("Reset the approval center locator? The daemon will be reachable again after Guard restarts. Pending approvals are preserved.")) return;
+    if (!await requestConfirmation({
+      title: "Repair the approval center?",
+      description: "Guard clears stale approval-center discovery state so approval links resolve again. A healthy background service and pending approvals are preserved.",
+      confirmLabel: "Repair"
+    })) return;
     setRepairing(true);
     setActionMessage(null);
     try {
-      await repairApprovalCenter();
-      setActionMessage("Approval center repaired. Restart Guard to reconnect.");
+      const result = await repairApprovalCenter();
+      const cleared = Array.isArray(result?.cleared) ? result.cleared.filter((code) => typeof code === "string") : [];
+      setActionMessage(resolveRepairApprovalCenterMessage(cleared));
       setActionMessageKind("success");
     } catch (error) {
       setActionMessage(error instanceof Error ? error.message : "Unable to repair approval center.");
@@ -3955,7 +4008,7 @@ function SettingsWorkspace({ onApprovalGateChange }) {
     } finally {
       setRepairing(false);
     }
-  }, []);
+  }, [requestConfirmation]);
   const handleExportSettings = reactExports.useCallback(async () => {
     setExportingSettings(true);
     setActionMessage(null);
@@ -4006,7 +4059,12 @@ function SettingsWorkspace({ onApprovalGateChange }) {
     }
   }, [executeImportSettings, openProofModal]);
   const handleResetSettings = reactExports.useCallback(async () => {
-    if (!window.confirm("Reset all local Guard settings to defaults? This cannot be undone.")) return;
+    if (!await requestConfirmation({
+      title: "Reset all local Guard settings to defaults?",
+      description: "Protection rules, notifications, and approval-gate preferences return to factory values on this machine. This cannot be undone.",
+      confirmLabel: "Reset settings",
+      tone: "destructive"
+    })) return;
     const savedGateEnabled = savedSettingsRef.current?.approval_gate?.enabled === true;
     if (savedGateEnabled) {
       openProofModal("maintenance", { kind: "maintenance", action: "reset-settings" });
@@ -4016,7 +4074,7 @@ function SettingsWorkspace({ onApprovalGateChange }) {
       await executeResetSettings();
     } catch {
     }
-  }, [executeResetSettings, openProofModal]);
+  }, [executeResetSettings, openProofModal, requestConfirmation]);
   const handleSetupNotifications = reactExports.useCallback(async () => {
     setSettingUpNotifications(true);
     setActionMessage(null);
@@ -4474,6 +4532,7 @@ function SettingsWorkspace({ onApprovalGateChange }) {
         onConfirm: handleProofModalConfirm
       }
     ) : null,
+    confirmDialog,
     (pendingMode === "observe" || pendingPosture === "watch") && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-fade-in fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "w-full max-w-sm rounded-2xl border border-brand-attention/15 bg-white p-6 shadow-xl", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-attention/10", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "h-5 w-5 text-brand-attention", "aria-hidden": "true" }) }),
@@ -4937,6 +4996,7 @@ export {
   resolveApprovalPasswordSectionCopy,
   resolveFineTuningSectionDescription,
   resolveInitialSettingsTab,
+  resolveRepairApprovalCenterMessage,
   resolveSecurityLevelCardDescription,
   resolveSecurityLevelDescription,
   resolveSettingsPresentation,

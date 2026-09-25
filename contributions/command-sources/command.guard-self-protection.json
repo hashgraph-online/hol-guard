@@ -1,0 +1,108 @@
+{
+  "extension": {
+    "action_classes": [
+      "Guard approval self-authorization command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Prevents commands from authorizing their own Guard approval or weakening protected Guard state.",
+    "ecosystem_ids": [],
+    "executables": [],
+    "extension_id": "command.guard-self-protection",
+    "homepage": null,
+    "icon": {
+      "kind": "none"
+    },
+    "license": null,
+    "name": "Guard self-protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "Guard approval self-authorization command"
+        ],
+        "baseline_floor": "review",
+        "configurable": false,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies commands that attempt to approve or weaken their own Guard decision.",
+        "example_command": "hol-guard approvals approve",
+        "family": null,
+        "fixed_reason": "This safety permission is immutable.",
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Guard self-authorization",
+        "permission_id": "command.guard-self-protection.permission.self-authorization",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Approve the request through Guard's authenticated approval surface."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": null,
+    "reference_urls": [],
+    "required": true,
+    "risk_classes": [
+      "policy_bypass"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "Guard approval self-authorization command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies commands that attempt to approve or weaken their own Guard decision.",
+        "family": null,
+        "matcher": {
+          "config": {
+            "allow_leading_options": false,
+            "executables": [
+              "hol-guard"
+            ],
+            "fail_secure_unknown_options": false,
+            "forbidden_flags": [],
+            "interspersed_flags": [],
+            "interspersed_options_with_values": [],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [],
+            "options_with_values": [],
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": [
+              "approvals",
+              "approve"
+            ]
+          },
+          "op": "executable.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.guard-self-protection.permission.self-authorization",
+        "risk_classes": [
+          "policy_bypass"
+        ],
+        "rule_id": "command.guard-self-protection.self-authorization",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Approve the request through Guard's authenticated approval surface."
+        ],
+        "severity": "high",
+        "title": "Guard self-authorization"
+      }
+    ],
+    "safer_alternatives": [
+      "Approve the pending request through Guard's authenticated approval surface."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

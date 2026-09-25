@@ -5,20 +5,24 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.extension_builder.repository_edits import (
-    CATALOG_PATH,
     PYPROJECT_PATH,
     STAGING_PATH,
     TRUST_PATH,
 )
 from codex_plugin_scanner.guard.extension_builder.repository_write import apply_kit
-from tests.extension_builder_support import make_kit, repository_fixture
+from tests.extension_builder_support import make_kit, repository_fixture, use_built_native_source_compiler
+
+
+@pytest.fixture(autouse=True)
+def _native_source_compiler(monkeypatch: pytest.MonkeyPatch) -> None:
+    use_built_native_source_compiler(monkeypatch)
 
 
 @pytest.mark.parametrize("kind", ["cli", "mcp"])
 def test_crlf_checkout_preserves_shared_newlines_and_replays(tmp_path: Path, kind: str) -> None:
     kit = make_kit(tmp_path, kind, reviewed=True)
     repository = repository_fixture(tmp_path)
-    shared = (PYPROJECT_PATH, TRUST_PATH, STAGING_PATH, CATALOG_PATH)
+    shared = (PYPROJECT_PATH, TRUST_PATH, STAGING_PATH)
     for name in shared:
         path = repository / name
         path.write_bytes(path.read_bytes().replace(b"\r\n", b"\n").replace(b"\n", b"\r\n"))

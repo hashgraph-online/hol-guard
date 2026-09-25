@@ -12,6 +12,9 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from mcp.server.fastmcp import Context
+from mcp.server.session import ServerSession
+
 from .registry import (
     ToolDefinition,
     build_tool_registry,
@@ -214,9 +217,6 @@ class GuardMCPServer:
                 return execute_validate_policy(store, {"policyYaml": policyYaml, "mode": mode})
 
         elif td.name == "create_policy":
-            from mcp.server.fastmcp import Context
-            from mcp.server.session import ServerSession
-
             from .policy_tools import execute_create_policy
 
             approval_url_builder = self._build_approval_url_builder()

@@ -385,8 +385,13 @@ def _worker_failures(root: Path) -> list[str]:
     )
     failures.extend(required_tokens(native_hook, ("native_pre_tool_unavailable",)))
     native_edge_review = function_node(native_hook, "_review_native_edge", class_name="HookWorkerNativeMixin")
-    if "_review_raw_hook_native" not in function_calls(native_edge_review):
-        failures.append("HookWorkerNativeMixin._review_native_edge does not invoke the native hook edge")
+    if "_review_native_edge_with_snapshot" not in function_calls(native_edge_review):
+        failures.append("HookWorkerNativeMixin._review_native_edge does not enter the snapshot-bound native edge")
+    native_edge_snapshot = function_node(
+        native_hook, "_review_native_edge_with_snapshot", class_name="HookWorkerNativeMixin"
+    )
+    if "_review_raw_hook_native" not in function_calls(native_edge_snapshot):
+        failures.append("HookWorkerNativeMixin._review_native_edge_with_snapshot does not invoke the native hook edge")
     raw_edge_review = function_node(hook_worker, "_review_raw_hook_native", class_name="HookWorker")
     if "review_raw_hook_native" not in function_calls(raw_edge_review):
         failures.append("HookWorker._review_raw_hook_native does not invoke review_raw_hook_native")

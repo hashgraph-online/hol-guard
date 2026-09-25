@@ -81,12 +81,14 @@
       "command.blitcp",
       "command.keibidrop",
       "command.mcp-filesystem",
+      "command.mcp-instapods",
       "command.noodle",
       "command.ollama",
       "command.probe",
       "command.remote.essh",
       "command.repo2nb",
-      "command.skill-sunset"
+      "command.skill-sunset",
+      "command.uivoid"
     ]
   }
 }

@@ -42,7 +42,7 @@ pub fn config_digest(effective_policy: &EffectiveNativePolicyV3) -> Result<Strin
 }
 
 pub fn policy_digest(snapshot: &PolicySnapshotV3) -> Result<String, SnapshotError> {
-    let value = serde_json::json!({
+    let mut value = serde_json::json!({
         "config_digest": snapshot.config_digest,
         "effective_policy_digest": config_digest(&snapshot.effective_policy)?,
         "mode": snapshot.mode,
@@ -52,6 +52,12 @@ pub fn policy_digest(snapshot: &PolicySnapshotV3) -> Result<String, SnapshotErro
         "scope_digest": snapshot.scope_contract.scope_digest,
         "version": snapshot.version,
     });
+    if let Some(binding) = &snapshot.command_extensions {
+        value["command_extensions_digest"] =
+            serde_json::Value::String(digest_bytes(&canonical_json_bytes(
+                &serde_json::to_value(binding).map_err(|_| SnapshotError::Serialization)?,
+            )?));
+    }
     Ok(digest_bytes(&canonical_json_bytes(&value)?))
 }
 

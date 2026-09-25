@@ -13,14 +13,19 @@ on:
       - contracts/mcp-servers/**
       - contributions/extensions/**
       - contributions/mcp-servers/**
+      - contributions/command-sources/**
       - contributions/extension-listings/**
       - docs/guard/extensions/**
       - scripts/export_extension_directory.py
+      - scripts/prepare_extension_contribution.py
       - scripts/render_command_extension_directory.py
       - scripts/notify_merged_extension_claimants.py
       - tests/test_guard_extension_directory*.py
       - tests/test_guard_extension_claim_notice.py
       - tests/fixtures/extension-listings/**
+      - tests/fixtures/command-source-*.v1.json
+      - docs/guard/extension-contributions.md
+      - CONTRIBUTING.md
       - docs/guard/extension-builder/**
       - tests/*extension_builder*.py
       - tests/test_guard_extension_contribution.py
@@ -68,6 +73,7 @@ jobs:
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
+          fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
@@ -80,19 +86,36 @@ jobs:
           cache-dependency-glob: uv.lock
       - name: Install the locked development environment
         run: uv sync --frozen --extra dev --python "${{ matrix.python }}"
+      - name: Build native command evaluators
+        run: |
+          cargo build --manifest-path rust/Cargo.toml --locked --release -p guard-command --bin guard-command-source
+          cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime
+          compiler="$GITHUB_WORKSPACE/rust/target/release/guard-command-source"
+          runtime="$GITHUB_WORKSPACE/rust/target/release/hol-guard-runtime"
+          if [[ "$RUNNER_OS" == "Windows" ]]; then compiler="${compiler}.exe"; fi
+          if [[ "$RUNNER_OS" == "Windows" ]]; then runtime="${runtime}.exe"; fi
+          echo "HOL_GUARD_NATIVE_SOURCE_COMPILER=$compiler" >> "$GITHUB_ENV"
+          echo "HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER=$compiler" >> "$GITHUB_ENV"
+          echo "HOL_GUARD_NATIVE_BINARY=$runtime" >> "$GITHUB_ENV"
+          echo "HOL_GUARD_NATIVE_REGRESSION=1" >> "$GITHUB_ENV"
       - name: Run builder and contribution trust tests
         run: |
           mkdir -p builder-evidence
           uv run --no-sync pytest tests/test_guard_extension_builder_*.py \
             tests/test_guard_extension_directory*.py \
             tests/test_guard_extension_claim_notice.py \
+            tests/test_prepare_extension_contribution.py \
             tests/test_guard_extension_contribution.py \
             tests/test_guard_extension_trust.py \
             tests/test_guard_mcp_server_contribution.py \
             --junitxml=builder-evidence/tests.xml --tb=short
       - name: Verify native public directory projections
         run: |
-          uv run --no-sync python scripts/export_extension_directory.py --check
+          arguments=(--check --compiler "$HOL_GUARD_NATIVE_SOURCE_COMPILER")
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            arguments+=(--changed-from "${{ github.event.pull_request.base.sha }}")
+          fi
+          uv run --no-sync python scripts/prepare_extension_contribution.py "${arguments[@]}"
           uv run --no-sync python scripts/render_command_extension_directory.py --check
       - name: Build and install a wheel outside the checkout
         run: |
@@ -140,15 +163,19 @@ jobs:
             src/codex_plugin_scanner/guard/cli/extension_builder_commands.py \
             src/codex_plugin_scanner/guard/runtime/command_reviewed_literal_matcher.py \
             scripts/ci/verify_extension_builder_install.py \
+            scripts/prepare_extension_contribution.py \
             scripts/notify_merged_extension_claimants.py \
-            tests/test_guard_extension_claim_notice.py
+            tests/test_guard_extension_claim_notice.py \
+            tests/test_prepare_extension_contribution.py
           uv run --no-sync ruff format --check \
             src/codex_plugin_scanner/guard/extension_builder \
             src/codex_plugin_scanner/guard/cli/extension_builder_commands.py \
             src/codex_plugin_scanner/guard/runtime/command_reviewed_literal_matcher.py \
             scripts/ci/verify_extension_builder_install.py \
+            scripts/prepare_extension_contribution.py \
             scripts/notify_merged_extension_claimants.py \
-            tests/test_guard_extension_claim_notice.py
+            tests/test_guard_extension_claim_notice.py \
+            tests/test_prepare_extension_contribution.py
       - name: Preserve authoring verification evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a

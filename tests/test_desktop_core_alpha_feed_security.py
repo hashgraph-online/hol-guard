@@ -49,31 +49,31 @@ def linux_publish_job() -> dict[str, object]:
     return publish_job("publish-linux-x64", linux=True)
 
 
-def test_feed_is_stable_3_0_only_and_wakes_after_main_publisher() -> None:
+def test_feed_follows_the_newest_stable_release_and_wakes_after_main_publisher() -> None:
     text = workflow_text()
-    namespace = runpy.run_path(str(TOOL))
     trusted_push = """push:
     branches: [main]
     paths:
       - .github/workflows/desktop-core-alpha-feed.yml
       - scripts/release/desktop_core_alpha_feed.py"""
-    assert namespace["SUPPORTED_TRAINS"] == {"3.0"}
     assert trusted_push in text
     assert "branches: [main]" in text
     assert 'workflows: ["Publish to PyPI"]' in text
     assert "workflow_run.conclusion == 'success'" in text
 
 
-def test_release_discovery_ignores_prereleases_and_3_1(tmp_path: Path, capsys) -> None:
+def test_release_discovery_selects_the_newest_stable_release(tmp_path: Path, capsys) -> None:
     tags = tmp_path / "tags.txt"
-    tags.write_text("alpha/v3.0.7a1\nv3.1.0\nv3.0.6\nv3.0.7\n", encoding="utf-8")
+    tags.write_text("alpha/v3.0.7a1\nv04.2.0\nv4٤.2.0\nv4.1.0\nv3.0.193\n", encoding="utf-8")
     namespace = runpy.run_path(str(TOOL))
     namespace["discover_release"](tags)
     output = capsys.readouterr().out
-    assert "version=3.0.7" in output
-    assert "tag=v3.0.7" in output
+    assert "version=4.1.0" in output
+    assert "tag=v4.1.0" in output
+    assert "train=4.1" in output
+    assert "04.2.0" not in output
     assert "branch=main" in output
-    assert "3.1" not in output
+    assert "alpha" not in output
 
 
 def test_release_discovery_can_backfill_an_exact_stable_version(tmp_path: Path, capsys) -> None:
@@ -96,17 +96,27 @@ def test_release_discovery_rejects_unpublished_or_prerelease_backfill(tmp_path: 
 
 def test_privileged_feed_is_main_bound_and_pins_candidate_provenance() -> None:
     text = workflow_text()
+    provenance = (ROOT / "scripts/release/authorize_macos_core_source.sh").read_text(encoding="utf-8")
     job = publish_job()
     assert job["permissions"] == {"contents": "write", "id-token": "write", "attestations": "write"}
     assert 'test "$GITHUB_REF" = "refs/heads/main"' in text
     assert "ref: ${{ github.sha }}" in text
     assert "persist-credentials: false" in text
-    assert "refs/tags/${CORE_TAG}^{commit}" in text
-    assert "refs/remotes/origin/${RELEASE_BRANCH}" in text
-    assert "merge-base --is-ancestor" in text
-    assert '--signer-workflow "$GITHUB_REPOSITORY/.github/workflows/publish.yml"' in text
-    assert '--signer-digest "$SOURCE_SHA"' in text
-    assert '--source-ref "refs/heads/${RELEASE_BRANCH}"' in text
+    assert "bash scripts/release/authorize_macos_core_source.sh" in text
+    assert "refs/tags/${CORE_TAG}^{commit}" in provenance
+    assert "refs/remotes/origin/${RELEASE_BRANCH}" in provenance
+    assert "merge-base --is-ancestor" in provenance
+    assert '--signer-workflow "$GITHUB_REPOSITORY/.github/workflows/publish.yml"' in provenance
+    assert '--signer-digest "$SOURCE_SHA"' in provenance
+    assert '--source-ref "$source_ref"' in provenance
+    assert 'verify_published_wheel "refs/tags/${CORE_TAG}"' in provenance
+    assert 'verify_published_wheel "refs/heads/${RELEASE_BRANCH}"' in provenance
+    linux = linux_workflow_text()
+    assert '--source-ref "$source_ref"' in linux
+    assert 'verify_published_wheel "refs/tags/${CORE_TAG}"' in linux
+    assert 'verify_published_wheel "refs/heads/${RELEASE_BRANCH}"' in linux
+    assert "merge-base --is-ancestor" in linux
+    assert "--deny-self-hosted-runners" in provenance
 
 
 def test_feed_uses_apple_trust_and_no_redundant_manifest_key() -> None:
@@ -157,7 +167,9 @@ def test_feed_builds_core_with_multiprocessing_safe_entrypoint() -> None:
 
 
 def test_macos_feed_avoids_bash4_only_builtins_and_binds_mode() -> None:
-    text = workflow_text()
+    text = workflow_text() + (ROOT / "scripts/release/authorize_macos_core_source.sh").read_text(
+        encoding="utf-8"
+    )
     job = publish_job()
     assert "mapfile " not in text
     assert "readarray " not in text
@@ -179,7 +191,9 @@ def test_frozen_sidecar_stages_cloud_review_package_data() -> None:
 
 
 def test_frozen_sidecar_stages_attested_native_runtime() -> None:
-    text = workflow_text()
+    text = workflow_text() + (ROOT / "scripts/release/authorize_macos_core_source.sh").read_text(
+        encoding="utf-8"
+    )
     build = next(step for step in publish_job()["steps"] if step.get("name") == "Build standalone Core executable")
     run = build["run"]
     assert isinstance(run, str)

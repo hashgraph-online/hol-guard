@@ -20,9 +20,13 @@ if TYPE_CHECKING:
 
 
 from ..package_shim_status import PACKAGE_SHIM_STATUS_FD_ENV_VAR
+from . import protect_output as _protect_output
 from ._commands_shared import *
 from .commands_parser_helpers import *
 from .network_status_command import load_network_status_payload
+
+_EPHEMERAL_SIGNED_APPROVAL_PLACEHOLDER = _protect_output._EPHEMERAL_SIGNED_APPROVAL_PLACEHOLDER
+_protect_payload_for_human_output = _protect_output._protect_payload_for_human_output
 
 _PACKAGE_SHIM_PENDING_APPROVAL_STATUS = "HOL Guard: package approval pending; review it in Guard Inbox."
 
@@ -113,7 +117,9 @@ def _run_guard_command_inspection_command(
 
         guard_home = resolve_guard_home(getattr(args, "guard_home", None) or getattr(args, "home", None))
         return run_extension_controls_command(args, guard_home=guard_home, output_stream=output_stream)
-    from ..runtime.command_inspection import command_extensions_payload, inspect_command
+    from ..daemon.client import GuardDaemonRequestError
+    from ..runtime.command_inspection import command_extensions_payload, unavailable_command_inspection
+    from .extension_controls_commands import _client
 
     command_command = str(getattr(args, "command_command", ""))
     try:
@@ -134,13 +140,34 @@ def _run_guard_command_inspection_command(
         if command_command not in {"test", "explain"}:
             print("Choose command test, command explain, command extensions, or command setup.", file=sys.stderr)
             return 2
-        payload = inspect_command(str(getattr(args, "command_text", "")), cwd=Path.cwd(), home_dir=Path.home())
+        command_text = str(getattr(args, "command_text", "")).strip()
+        if not command_text:
+            raise ValueError("Command text cannot be empty")
+        guard_home = resolve_guard_home(getattr(args, "guard_home", None) or getattr(args, "home", None))
+        workspace, home = Path.cwd(), Path.home()
+        try:
+            from ..daemon.manager import ensure_guard_daemon
+
+            try:
+                payload = _client(guard_home).inspect_command({
+                    "command": command_text, "cwd": str(workspace), "home_dir": str(home),
+                })
+            except GuardDaemonRequestError:
+                try:
+                    ensure_guard_daemon(guard_home, home_dir=home)
+                except RuntimeError as error:
+                    raise GuardDaemonRequestError(str(error)) from error
+                payload = _client(guard_home).inspect_command({
+                    "command": command_text, "cwd": str(workspace), "home_dir": str(home),
+                })
+        except GuardDaemonRequestError:
+            payload = unavailable_command_inspection(command_text, cwd=workspace, home_dir=home)
     except ValueError as error:
         print(f"Error: {error}", file=sys.stderr)
         return 2
     payload["mode"] = command_command
     _emit("command-inspection", payload, bool(getattr(args, "json", False)))
-    return 0
+    return 2 if payload.get("status") == "native_unavailable" else 0
 
 def _run_guard_scan_command(
     args: argparse.Namespace,
@@ -367,7 +394,9 @@ def _run_guard_protect_command(
                     fresh_payload["approval_wait"] = wait_result
                     payload, exit_code = fresh_payload, 0
     if not _suppress_package_shim_allow_output(args, payload):
-        _emit("protect", payload, getattr(args, "json", False))
+        as_json = bool(getattr(args, "json", False))
+        output_payload = payload if as_json else _protect_payload_for_human_output(payload, guard_home=guard_home)
+        _emit("protect", output_payload, as_json)
     return exit_code
 
 

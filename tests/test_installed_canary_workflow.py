@@ -85,7 +85,7 @@ def test_same_repo_post_publish_matrix_covers_all_supported_operating_systems() 
     assert _mapping(bun["with"])["bun-version"] == "1.3.14"
 
 
-def test_dynamic_native_wheel_checkout_cannot_write_dependency_cache() -> None:
+def test_pr_native_wheel_checkout_cannot_write_release_compilation_cache() -> None:
     steps = _steps(_job("build-native-guard-wheels"))
     checkout = _action_step(steps, "actions/checkout")
     setup_python = _action_step(steps, "actions/setup-python")
@@ -95,7 +95,19 @@ def test_dynamic_native_wheel_checkout_cannot_write_dependency_cache() -> None:
     assert "github.sha" in checkout_ref
     assert not any(str(step.get("uses", "")).startswith("astral-sh/setup-uv") for step in steps)
     assert steps.index(setup_python) < steps.index(checkout)
-    assert not any("cache" in str(step.get("uses", "")) for step in steps)
+    caches = [step for step in steps if "cache" in str(step.get("uses", ""))]
+    assert len(caches) == 1
+    cache = caches[0]
+    assert cache["uses"] == "Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6"
+    cache_inputs = _mapping(cache["with"])
+    assert cache_inputs["prefix-key"] == "release-native-v1"
+    assert cache_inputs["shared-key"] == "release-${{ matrix.target }}"
+    assert cache_inputs["cache-bin"] is False
+    assert cache_inputs["save-if"] == (
+        "${{ github.event_name != 'pull_request' && "
+        "(github.ref == 'refs/heads/main' || github.ref == 'refs/heads/release/3.0') }}"
+    )
+    assert not cache.get("env")
     setup_python_inputs = _mapping(setup_python["with"])
     assert not {"cache", "cache-dependency-path", "pip-install"} & setup_python_inputs.keys()
     commands = "\n".join(str(step.get("run", "")) for step in steps)
@@ -108,6 +120,7 @@ def test_matrix_proves_remote_bytes_install_origin_record_corpus_and_dashboard()
     names = [step.get("name") for step in steps]
 
     assert "Download exact TestPyPI wheel bytes" in names
+    assert "Bind compatible native canary wheel" in names
     assert "Verify PR head, version, and TestPyPI bytes" in names
     assert "Install only the verified wheel" in names
     assert "Prove the harness rejects missing evidence" in names
@@ -116,6 +129,8 @@ def test_matrix_proves_remote_bytes_install_origin_record_corpus_and_dashboard()
     workflow_text = WORKFLOW_PATH.read_text(encoding="utf-8")
     assert "verify-release --registry testpypi" in workflow_text
     assert "--download-dir verified-testpypi" in workflow_text
+    assert "scripts/select_installed_native_wheel.py" in workflow_text
+    assert "--dist-dir selected-native" in workflow_text
     assert "git rev-parse 'HEAD^{commit}'" in workflow_text
     assert "installed-canary/missing-subject.json" in workflow_text
     assert "-m scripts.run_installed_canary" in workflow_text
@@ -159,12 +174,18 @@ def test_matrix_proves_remote_bytes_install_origin_record_corpus_and_dashboard()
     assert 'shutil.which("bun")' in runner_text
     assert '"build",' in runner_text
     assert 'manifest["canonical_digests"]' in runner_text
-    assert "observed = decision.decision_plane.action" in runner_text
-    assert "observed = decision.minimum_action" not in runner_text
+    assert "scripts/run_installed_native_corpus.py" in runner_text
+    assert 'report.get("native_contract_equality") is not True' in runner_text
+    assert 'report.get("original_oracle_below_count") != 0' in runner_text
+    installed_native_runner_text = (ROOT / "scripts/run_installed_native_corpus.py").read_text(encoding="utf-8")
+    assert 'distribution("hol-guard").locate_file("codex_plugin_scanner")' in installed_native_runner_text
+    assert "runner._coordinator_report()" in installed_native_runner_text
     assert '"no_post_execution_proof": _no_post_execution_proof_smoke()' in runner_text
     attributes_text = (ROOT / ".gitattributes").read_text(encoding="utf-8")
     assert "/tests/guard_command_corpus*.py text eol=lf" in attributes_text
     assert "/tests/fixtures/guard-command-corpus/*.json text eol=lf" in attributes_text
+    assert "/rust/crates/guard-command/src/*.rs text eol=lf" in attributes_text
+    assert "/rust/crates/guard-command/src/command_compatibility/*.rs text eol=lf" in attributes_text
     assert "/src/codex_plugin_scanner/guard/daemon/static/index.html text eol=lf" in attributes_text
     assert '"$CANARY_PYTHON" -m pip install --no-compile' in workflow_text
     assert 'python -m venv "$RUNNER_TEMP/hol-guard-canary-venv"' in workflow_text

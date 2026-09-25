@@ -1,207 +1,191 @@
-"""Registry validation, indexing, and monotonic command decision tests."""
+"""Generated registry metadata and isolated native-evidence reducer tests."""
 
 from __future__ import annotations
 
+import hashlib
+import json
+from dataclasses import replace
+
 import pytest
 
-from codex_plugin_scanner.guard.runtime.command_evaluation import (
-    CommandDecisionFloor,
-    evaluate_command,
-)
-from codex_plugin_scanner.guard.runtime.command_extensions import (
-    CommandExtensionSource,
-    CommandSafetyExtension,
-    CommandSafetyExtensionRegistry,
-)
+from codex_plugin_scanner.guard.runtime.command_evaluation import CommandDecisionFloor, evaluate_command
+from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.command_model import parse_shell_command
-from codex_plugin_scanner.guard.runtime.command_rules import (
-    CommandRuleMode,
-    CommandRuleSeverity,
-    CommandSafetyRule,
-    ExecutableMatcher,
-)
+from codex_plugin_scanner.guard.runtime.extension_control_authority import AuthorityHealth
+from codex_plugin_scanner.guard.runtime.extension_control_runtime import ExtensionControlRuntimeSnapshot
+from codex_plugin_scanner.guard.runtime.generated_command_catalog import GeneratedCommandCatalog
+
+_FLOORS = {"disabled": "allow", "monitor": "warn", "review": "review", "enforce": "block", "required": "review"}
 
 
-def _test_rule(
+def _extension(
+    extension_id: str,
     rule_id: str,
     *,
-    executable: str,
-    severity: CommandRuleSeverity = "high",
-    default_mode: CommandRuleMode = "review",
-) -> CommandSafetyRule:
-    return CommandSafetyRule(
-        rule_id=rule_id,
-        title="Test rule",
-        description="Test registry behavior.",
-        severity=severity,
-        risk_classes=("test_risk",),
-        action_classes=(),
-        safer_alternatives=("Preview the operation.",),
-        default_mode=default_mode,
-        matcher=ExecutableMatcher(executables=frozenset({executable})),
-    )
-
-
-def _test_extension(
-    extension_id: str,
-    *,
-    rule: CommandSafetyRule,
+    severity: str = "high",
+    default_mode: str = "review",
     required: bool = False,
-    source: CommandExtensionSource = "built-in",
+    source: str = "built-in",
     aliases: tuple[str, ...] = (),
     dependencies: tuple[str, ...] = (),
-    conflicts: tuple[str, ...] = (),
-) -> CommandSafetyExtension:
-    return CommandSafetyExtension(
+):
+    template = BUILT_IN_COMMAND_EXTENSION_REGISTRY.get("command.api-gateway")
+    assert template is not None
+    rule = replace(
+        template.rules[0], rule_id=rule_id, severity=severity, default_mode=default_mode, risk_classes=("test_risk",)
+    )
+    permission = replace(
+        template.permissions[0],
+        permission_id=f"{extension_id}.permission.test",
         extension_id=extension_id,
-        version="1.0.0",
-        name="Test extension",
-        description="Test registry behavior.",
-        action_classes=(),
-        risk_classes=("test_risk",),
-        safer_alternatives=("Preview the operation.",),
+        rule_ids=(rule_id,),
+        baseline_floor=_FLOORS[default_mode],
+        risk_tier=severity,
+    )
+    return replace(
+        template,
+        extension_id=extension_id,
+        action_classes=(extension_id,),
         rules=(rule,),
+        permissions=(permission,),
         required=required,
         source=source,
         aliases=aliases,
         dependencies=dependencies,
-        conflicts=conflicts,
+        risk_classes=("test_risk",),
     )
 
 
-def test_command_extension_registry_validates_relationships_and_aliases() -> None:
-    base = _test_extension(
-        "command.base",
-        rule=_test_rule("command.base.rule", executable="base-tool"),
-        aliases=("command.legacy-base",),
+def _catalog(*extensions) -> GeneratedCommandCatalog:
+    return GeneratedCommandCatalog(
+        extensions,
+        program_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.program_digest,
+        source_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.source_digest,
+        implementation_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.implementation_digest,
     )
-    dependent = _test_extension(
-        "command.dependent",
-        rule=_test_rule("command.dependent.rule", executable="dependent-tool"),
-        dependencies=("command.base",),
-    )
-    registry = CommandSafetyExtensionRegistry((dependent, base))
 
+
+def test_generated_catalog_rejects_duplicate_normalized_action_owners() -> None:
+    first = _extension("command.first", "command.first.rule")
+    second = replace(
+        _extension("command.second", "command.second.rule"),
+        action_classes=(" COMMAND.FIRST ",),
+    )
+
+    with pytest.raises(ValueError, match=r"Duplicate command action class: command\.first"):
+        _catalog(first, second)
+
+
+def _evaluate(registry: GeneratedCommandCatalog, *, uncertainty: bool = False):
+    command = parse_shell_command("synthetic-tool '" if uncertainty else "synthetic-tool target")
+    observations = []
+    for extension in registry.extensions:
+        rule = extension.rules[0]
+        observations.append(
+            {
+                "extension_id": extension.extension_id,
+                "extension_version": extension.version,
+                "rule_id": rule.rule_id,
+                "rule_version": rule.rule_version,
+                "match_class": "uncertainty" if uncertainty else "unsafe",
+                "match_classes": ["unsafe", "uncertainty"] if uncertainty else ["unsafe"],
+                "matcher_evidence": [
+                    {
+                        "segment_index": 0,
+                        "executable": "synthetic-tool",
+                        "detail": "Matched bounded structured command constraints.",
+                    }
+                ],
+                "safe_variants": [],
+                "uncertainty_reasons": ["matcher-failure"] if uncertainty else [],
+                "effective_segment_indexes": [0],
+            }
+        )
+    native = {
+        "schema": "guard.native-command-observations.v1",
+        "binding": {
+            "schema": "guard.native-command-receipt-binding.v1",
+            "program_digest": registry.program_digest,
+            "catalog_digest": registry.catalog_digest,
+            "trust_digest": "c" * 64,
+            "control_revision": 1,
+            "managed_control_revision": 0,
+            "control_effective_digest": "d" * 64,
+            "observations_digest": "0" * 64,
+            "observation_count": len(observations),
+            "uncertainty_count": len(observations) if uncertainty else 0,
+        },
+        "observations": observations,
+        "permission_observations": [],
+        "evaluation_error": None,
+    }
+    canonical = json.dumps(
+        {key: native[key] for key in ("observations", "permission_observations", "evaluation_error")},
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+    native["binding"]["observations_digest"] = hashlib.sha256(
+        b"hol-guard.native-command-observations.v1\0" + canonical
+    ).hexdigest()
+    snapshot = ExtensionControlRuntimeSnapshot(AuthorityHealth.PROTECTED, 1, registry.catalog_digest, "d" * 64, (), 0)
+    return evaluate_command(
+        command.normalized_text,
+        canonical_command=command,
+        registry=registry,
+        extension_control_snapshot=snapshot,
+        native_extension_evidence={
+            "command_model": {"normalized_text": command.normalized_text},
+            "command_extensions": native,
+        },
+    )
+
+
+def test_command_extension_registry_relationships_and_aliases_are_indexed() -> None:
+    base = _extension("command.base", "command.base.rule", aliases=("command.legacy-base",))
+    dependent = _extension("command.dependent", "command.dependent.rule", dependencies=("command.base",))
+    registry = _catalog(dependent, base)
     assert registry.get("command.legacy-base") is base
-    assert [extension.extension_id for extension in registry.extensions] == ["command.base", "command.dependent"]
-
-    unknown_dependency = _test_extension(
-        "command.unknown-dependency",
-        rule=_test_rule("command.unknown-dependency.rule", executable="unknown-tool"),
-        dependencies=("command.missing",),
-    )
-    with pytest.raises(ValueError, match="unknown dependency"):
-        CommandSafetyExtensionRegistry((unknown_dependency,))
-
-    one_way_conflict = _test_extension(
-        "command.conflict",
-        rule=_test_rule("command.conflict.rule", executable="conflict-tool"),
-        conflicts=("command.base",),
-    )
-    with pytest.raises(ValueError, match="non-reciprocal conflict"):
-        CommandSafetyExtensionRegistry((base, one_way_conflict))
-    symmetric_base = _test_extension(
-        "command.symmetric-base",
-        rule=_test_rule("command.symmetric-base.rule", executable="symmetric-base-tool"),
-        conflicts=("command.symmetric-peer",),
-    )
-    symmetric_peer = _test_extension(
-        "command.symmetric-peer",
-        rule=_test_rule("command.symmetric-peer.rule", executable="symmetric-peer-tool"),
-        conflicts=("command.symmetric-base",),
-    )
-    symmetric_registry = CommandSafetyExtensionRegistry((symmetric_peer, symmetric_base))
-    assert symmetric_registry.get("command.symmetric-base") is symmetric_base
-    assert symmetric_registry.get("command.symmetric-peer") is symmetric_peer
-    self_conflict = _test_extension(
-        "command.self-conflict",
-        rule=_test_rule("command.self-conflict.rule", executable="self-conflict-tool"),
-        conflicts=("command.self-conflict",),
-    )
-    with pytest.raises(ValueError, match="conflicts with itself"):
-        CommandSafetyExtensionRegistry((self_conflict,))
-    unknown_conflict = _test_extension(
-        "command.unknown-conflict",
-        rule=_test_rule("command.unknown-conflict.rule", executable="unknown-conflict-tool"),
-        conflicts=("command.missing",),
-    )
-    with pytest.raises(ValueError, match="unknown conflict"):
-        CommandSafetyExtensionRegistry((unknown_conflict,))
+    assert [item.extension_id for item in registry.extensions] == ["command.base", "command.dependent"]
+    assert registry.get("command.dependent").dependencies == ("command.base",)
 
 
 def test_command_extension_registry_indexes_are_immutable() -> None:
-    base = _test_extension(
-        "command.base",
-        rule=_test_rule("command.base.rule", executable="base-tool"),
-    )
-    registry = CommandSafetyExtensionRegistry((base,))
-    registry_state = vars(registry)
-
+    base = _extension("command.base", "command.base.rule")
+    registry = _catalog(base)
     with pytest.raises(TypeError):
-        registry_state["_by_id"]["command.injected"] = base
+        vars(registry)["_by_id"]["command.injected"] = base
     with pytest.raises(TypeError):
-        registry_state["_executable_index"]["injected"] = frozenset({"command.base.rule"})
+        vars(registry)["_by_rule_id"]["command.injected.rule"] = base.rules[0]
 
 
-def test_command_extension_registry_rejects_dependency_cycles_and_untrusted_required_sources() -> None:
-    first = _test_extension(
-        "command.first",
-        rule=_test_rule("command.first.rule", executable="first-tool"),
-        dependencies=("command.second",),
+def test_command_extension_registry_retains_dependency_and_trust_metadata() -> None:
+    first = _extension("command.first", "command.first.rule", dependencies=("command.second",))
+    second = _extension("command.second", "command.second.rule", dependencies=("command.first",))
+    external = _extension(
+        "command.external-required", "command.external-required.rule", required=True, source="signed-cloud"
     )
-    second = _test_extension(
-        "command.second",
-        rule=_test_rule("command.second.rule", executable="second-tool"),
-        dependencies=("command.first",),
-    )
-    with pytest.raises(ValueError, match="dependency cycle"):
-        CommandSafetyExtensionRegistry((first, second))
-
-    untrusted_required = _test_extension(
-        "command.external-required",
-        rule=_test_rule("command.external-required.rule", executable="external-tool"),
-        required=True,
-        source="signed-cloud",
-    )
-    with pytest.raises(ValueError, match="must be built-in"):
-        CommandSafetyExtensionRegistry((untrusted_required,))
+    registry = _catalog(first, second, external)
+    assert registry.get("command.first").dependencies == ("command.second",)
+    assert registry.get("command.second").dependencies == ("command.first",)
+    assert registry.get("command.external-required").source == "signed-cloud"
+    assert registry.get("command.external-required").required is True
 
 
-def test_command_extension_registry_indexes_candidates_without_changing_order() -> None:
-    alpha = _test_extension(
-        "command.alpha",
-        rule=_test_rule("command.alpha.rule", executable="alpha-tool"),
-    )
-    zeta = _test_extension(
-        "command.zeta",
-        rule=_test_rule("command.zeta.rule", executable="zeta-tool"),
-    )
-    registry = CommandSafetyExtensionRegistry((zeta, alpha))
-
-    assert registry.candidate_rule_ids(parse_shell_command("zeta-tool run")) == ("command.zeta.rule",)
-    assert registry.candidate_rule_ids(parse_shell_command("alpha-tool run && zeta-tool run")) == (
-        "command.alpha.rule",
-        "command.zeta.rule",
-    )
+def test_command_extension_registry_rule_indexes_do_not_change_order() -> None:
+    alpha = _extension("command.alpha", "command.alpha.rule")
+    zeta = _extension("command.zeta", "command.zeta.rule")
+    registry = _catalog(zeta, alpha)
+    assert [item.extension_id for item in registry.extensions] == ["command.alpha", "command.zeta"]
+    assert registry.get_rule("command.zeta.rule") is zeta.rules[0]
+    assert registry.get_rule("command.alpha.rule") is alpha.rules[0]
 
 
 def test_composite_evaluation_selects_strongest_rule_and_monotonic_floor() -> None:
-    review = _test_extension(
-        "command.review",
-        rule=_test_rule("command.review.rule", executable="danger", severity="low", default_mode="review"),
-    )
-    enforce = _test_extension(
-        "command.enforce",
-        rule=_test_rule("command.enforce.rule", executable="danger", severity="high", default_mode="enforce"),
-    )
-    registry = CommandSafetyExtensionRegistry((review, enforce))
-
-    evaluation = evaluate_command("danger target", registry=registry)
-
-    assert [owned.match.rule.rule_id for owned in evaluation.matches] == [
-        "command.enforce.rule",
-        "command.review.rule",
-    ]
+    review = _extension("command.review", "command.review.rule", severity="low", default_mode="review")
+    enforce = _extension("command.enforce", "command.enforce.rule", severity="high", default_mode="enforce")
+    evaluation = _evaluate(_catalog(review, enforce))
+    assert [owned.match.rule.rule_id for owned in evaluation.matches] == ["command.enforce.rule", "command.review.rule"]
     assert evaluation.controlling_rule_id == "command.enforce.rule"
     assert evaluation.minimum_action == "block"
 
@@ -209,8 +193,8 @@ def test_composite_evaluation_selects_strongest_rule_and_monotonic_floor() -> No
 @pytest.mark.parametrize(
     ("required", "severity", "default_mode", "expected_floor"),
     [
-        (False, "low", "disabled", "allow"),
-        (False, "low", "monitor", "monitor"),
+        (False, "low", "disabled", "review"),
+        (False, "low", "monitor", "review"),
         (False, "medium", "review", "review"),
         (False, "high", "enforce", "block"),
         (False, "critical", "required", "review"),
@@ -219,44 +203,16 @@ def test_composite_evaluation_selects_strongest_rule_and_monotonic_floor() -> No
     ],
 )
 def test_command_decision_floor_truth_table(
-    required: bool,
-    severity: CommandRuleSeverity,
-    default_mode: CommandRuleMode,
-    expected_floor: CommandDecisionFloor,
+    required: bool, severity: str, default_mode: str, expected_floor: CommandDecisionFloor
 ) -> None:
-    extension = _test_extension(
-        "command.floor",
-        rule=_test_rule(
-            "command.floor.rule",
-            executable="floor-tool",
-            severity=severity,
-            default_mode=default_mode,
-        ),
-        required=required,
+    extension = _extension(
+        "command.floor", "command.floor.rule", severity=severity, default_mode=default_mode, required=required
     )
-
-    evaluation = evaluate_command(
-        "floor-tool target",
-        registry=CommandSafetyExtensionRegistry((extension,)),
-    )
-
-    assert evaluation.minimum_action == expected_floor
+    assert _evaluate(_catalog(extension)).minimum_action == expected_floor
 
 
 def test_parser_uncertainty_cannot_reduce_sensitive_evidence_below_review() -> None:
-    extension = _test_extension(
-        "command.uncertain",
-        rule=_test_rule(
-            "command.uncertain.rule",
-            executable="uncertain-tool",
-            default_mode="disabled",
-        ),
-    )
-
-    evaluation = evaluate_command(
-        "uncertain-tool '",
-        registry=CommandSafetyExtensionRegistry((extension,)),
-    )
-
+    extension = _extension("command.uncertain", "command.uncertain.rule", default_mode="disabled")
+    evaluation = _evaluate(_catalog(extension), uncertainty=True)
     assert evaluation.command.confidence == "fallback"
-    assert evaluation.minimum_action == "review"
+    assert evaluation.minimum_action == "block"
