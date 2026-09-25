@@ -15,7 +15,7 @@ def _translate(payload: dict[str, object], *, harness: str = "grok", event: str 
 
 @pytest.mark.parametrize(
     ("harness", "expected_code"),
-    [("grok", 2), ("openclaw", 0), ("kimi", 2), ("pi", 2), ("zcode", 2)],
+    [("grok", 2), ("openclaw", 0), ("kimi", 2), ("pi", 2), ("zcode", 2), ("devin", 2)],
 )
 def test_policy_block_cannot_be_weakened_by_native_allow(harness: str, expected_code: int) -> None:
     payload, _stderr, code = _translate(
@@ -33,7 +33,7 @@ def test_policy_block_cannot_be_weakened_by_native_allow(harness: str, expected_
     )
 
     assert code == expected_code
-    assert payload["decision"] == "deny"
+    assert payload["decision"] == ("block" if harness == "devin" else "deny")
     assert payload["policy_action"] == "block"
     assert payload["reason"] == "Blocked by policy."
     assert payload["hookSpecificOutput"] == {
@@ -322,3 +322,25 @@ def test_restrictive_prompt_policy_materializes_top_level_block(policy_action: s
         "decision": "block",
     }
     assert code == 2
+
+
+def test_devin_permission_request_review_blocks_with_top_level_decision() -> None:
+    payload, stderr, code = _translate(
+        {"policy_action": "review", "reason": "Needs review."},
+        harness="devin",
+        event="PermissionRequest",
+    )
+    assert code == 2
+    assert payload["decision"] == "block"
+    assert payload["reason"] == "Needs review."
+    assert stderr == "Needs review."
+
+
+def test_devin_pretooluse_allow_has_no_decision_key() -> None:
+    payload, _stderr, code = _translate(
+        {"policy_action": "allow", "reason": "Allowed."},
+        harness="devin",
+        event="PreToolUse",
+    )
+    assert code == 0
+    assert "decision" not in payload

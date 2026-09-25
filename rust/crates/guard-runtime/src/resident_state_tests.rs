@@ -50,6 +50,7 @@ fn state_mac_rejects_endpoint_mutation() {
         runtime_sha256: digest,
         transport: "loopback".to_owned(),
         endpoint: "127.0.0.1:1234".to_owned(),
+        unix_endpoint_identity: None,
         token_hex: hex_bytes(&token),
         created_ms: 1,
         state_mac: String::new(),
@@ -426,11 +427,96 @@ fn verify_windows_private_directory_accepts_the_configured_root() {
 
 #[cfg(windows)]
 #[test]
+fn windows_private_file_acl_roundtrip_supports_long_paths_without_changing_bytes() {
+    use std::os::windows::ffi::OsStrExt;
+    let root = test_scope("long-file-acl");
+    let nested = root.join("private-segment-".repeat(8));
+    ensure_private_directory_under(&nested, &root, true).unwrap();
+    let path = nested.join(format!("{}.json", "state-file-".repeat(10)));
+    assert!(path.as_os_str().encode_wide().count() > 260);
+    fs::write(&path, b"preserve-original-content").unwrap();
+    assert!(verify_windows_private_path(&path, false, &root).is_err());
+    protect_windows_private_path(&path, false, &root).unwrap();
+    verify_windows_private_path(&path, false, &root).unwrap();
+    assert_eq!(fs::read(&path).unwrap(), b"preserve-original-content");
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[cfg(windows)]
+#[test]
+fn windows_private_file_acl_operations_reject_a_foreign_root() {
+    let root = test_scope("file-acl-root");
+    let foreign = test_scope("file-acl-foreign");
+    let path = foreign.join("state.json");
+    fixture_file(&path, b"unchanged");
+    assert!(protect_windows_private_path(&path, false, &root).is_err());
+    assert!(verify_windows_private_path(&path, false, &root).is_err());
+    assert_eq!(fs::read(&path).unwrap(), b"unchanged");
+    verify_windows_private_path(&path, false, &foreign).unwrap();
+    fs::remove_dir_all(root).unwrap();
+    fs::remove_dir_all(foreign).unwrap();
+}
+
+#[cfg(windows)]
+#[test]
+fn windows_private_file_acl_supports_long_mixed_separator_paths() {
+    use std::ffi::OsString;
+    use std::os::windows::ffi::{OsStrExt, OsStringExt};
+
+    let root = test_scope("mixed-separator-acl");
+    let nested = root.join("private-segment-".repeat(8));
+    ensure_private_directory_under(&nested, &root, true).unwrap();
+    let path = nested.join(format!("{}.json", "state-file-".repeat(10)));
+    fs::write(&path, b"preserve-original-content").unwrap();
+    let mut wide = path.as_os_str().encode_wide().collect::<Vec<_>>();
+    assert!(wide.len() > 260);
+    let separator = wide.iter().rposition(|unit| *unit == 92).unwrap();
+    wide[separator] = 47;
+    assert!(wide.contains(&92) && wide.contains(&47));
+    let mixed = PathBuf::from(OsString::from_wide(&wide));
+    assert!(mixed.is_absolute());
+
+    assert!(verify_windows_private_path(&mixed, false, &root).is_err());
+    protect_windows_private_path(&mixed, false, &root).unwrap();
+    verify_windows_private_path(&mixed, false, &root).unwrap();
+    verify_windows_private_path(&path, false, &root).unwrap();
+    assert_eq!(fs::read(&path).unwrap(), b"preserve-original-content");
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[cfg(windows)]
+#[test]
 fn already_private_directory_allows_overlapping_binds() {
     let scope = test_scope("private-directory-overlap");
     drop((
         bind_windows_existing_directory(&scope, &scope).unwrap(),
         bind_windows_existing_directory(&scope, &scope).unwrap(),
     ));
+    fs::remove_dir_all(scope).unwrap();
+}
+
+#[test]
+fn endpoint_identity_is_authenticated_with_generation_state() {
+    let scope = test_scope("endpoint-auth");
+    let digest = runtime_digest().unwrap();
+    let token = [7u8; crate::AUTH_TOKEN_BYTES];
+    let state = publish_state(
+        &scope,
+        1,
+        std::process::id(),
+        &digest,
+        "loopback",
+        "127.0.0.1:1".to_owned(),
+        &token,
+    )
+    .unwrap();
+    let mut changed = state.clone();
+    changed.unix_endpoint_identity = Some(crate::resident_endpoint::UnixEndpointIdentity {
+        device: 1,
+        inode: 2,
+        owner: 3,
+    });
+    assert_ne!(state_mac(&state, &token), state_mac(&changed, &token));
+    assert!(validate_state(&scope, &changed, &digest).is_err());
     fs::remove_dir_all(scope).unwrap();
 }

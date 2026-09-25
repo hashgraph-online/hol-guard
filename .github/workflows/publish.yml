@@ -711,10 +711,6 @@ jobs:
         with:
           name: distributions-native
           path: dist/
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          name: installed-canary-subject
-          path: installed-canary/
       - name: Download exact TestPyPI wheel bytes
         shell: bash
         env:
@@ -736,6 +732,17 @@ jobs:
             fi
             sleep 10
           done
+      - name: Bind compatible native canary wheel
+        shell: bash
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+          SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
+        run: |
+          uv run --no-project --with packaging==25.0 python scripts/select_installed_native_wheel.py \
+            --dist-dir dist --version "$VERSION" --output-dir selected-native
+          uv run --no-project --with packaging==25.0 python scripts/installed_canary_proof.py write-subject \
+            --dist-dir selected-native --version "$VERSION" --source-sha "$SOURCE_SHA" \
+            --output installed-canary/installed-canary-subject.json
       - name: Verify PR head, version, and TestPyPI bytes
         shell: bash
         env:
@@ -759,6 +766,7 @@ jobs:
             CANARY_PYTHON="$RUNNER_TEMP/hol-guard-canary-venv/bin/python"
           fi
           "$CANARY_PYTHON" -m pip install --no-compile --index-url https://pypi.org/simple "$WHEEL_REQUIREMENT"
+          "$CANARY_PYTHON" -m pip install --no-compile --index-url https://pypi.org/simple -r scripts/installed_canary_test_requirements.txt
           echo "CANARY_PYTHON=$CANARY_PYTHON" >> "$GITHUB_ENV"
       - name: Prove the harness rejects missing evidence
         shell: bash

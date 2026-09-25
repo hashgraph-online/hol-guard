@@ -28,12 +28,12 @@
       "Verify the claim independently and keep the original --run-id; updates must identify the finding with --id in that run."
     ],
     "reference_urls": [
-      "https://github.com/vgflutter/GiviLoop/blob/5d2e78588fc5db17941cb32cdd20941b577dc001/src/cli.ts",
-      "https://github.com/vgflutter/GiviLoop/blob/5d2e78588fc5db17941cb32cdd20941b577dc001/src/workflow-commands.ts",
-      "https://github.com/vgflutter/GiviLoop/blob/5d2e78588fc5db17941cb32cdd20941b577dc001/src/auto-review.ts",
-      "https://github.com/vgflutter/GiviLoop/blob/5d2e78588fc5db17941cb32cdd20941b577dc001/src/review-evidence.ts",
-      "https://github.com/vgflutter/GiviLoop/blob/5d2e78588fc5db17941cb32cdd20941b577dc001/src/review-report.ts",
-      "https://github.com/vgflutter/GiviLoop/blob/5d2e78588fc5db17941cb32cdd20941b577dc001/package.json"
+      "https://github.com/vgflutter/GiviLoop/blob/322deef43597e32c60f09aa24df25e7c6cd947a1/src/cli.ts",
+      "https://github.com/vgflutter/GiviLoop/blob/322deef43597e32c60f09aa24df25e7c6cd947a1/src/workflow-commands.ts",
+      "https://github.com/vgflutter/GiviLoop/blob/322deef43597e32c60f09aa24df25e7c6cd947a1/src/auto-review.ts",
+      "https://github.com/vgflutter/GiviLoop/blob/322deef43597e32c60f09aa24df25e7c6cd947a1/src/review-evidence.ts",
+      "https://github.com/vgflutter/GiviLoop/blob/322deef43597e32c60f09aa24df25e7c6cd947a1/src/review-report.ts",
+      "https://github.com/vgflutter/GiviLoop/blob/322deef43597e32c60f09aa24df25e7c6cd947a1/package.json"
     ],
     "required": false,
     "source": "built-in",
@@ -150,7 +150,9 @@
               "--checks",
               "--file",
               "--run-id",
-              "--client"
+              "--client",
+              "--repositoryPath",
+              "-f"
             ],
             "forbidden_flags": [
               "--repo",
@@ -162,7 +164,9 @@
               "--version",
               "--help",
               "-h",
-              "--json"
+              "--json",
+              "--repositoryPath",
+              "-f"
             ],
             "interleaved_options_with_values": [
               "--repo",
@@ -170,7 +174,9 @@
               "--checks",
               "--file",
               "--run-id",
-              "--client"
+              "--client",
+              "--repositoryPath",
+              "-f"
             ]
           }
         },
@@ -195,7 +201,9 @@
                   "--checks",
                   "--file",
                   "--run-id",
-                  "--client"
+                  "--client",
+                  "--repositoryPath",
+                  "-f"
                 ],
                 "interspersed_flags": [
                   "--help",
@@ -229,7 +237,9 @@
                   "--checks",
                   "--file",
                   "--run-id",
-                  "--client"
+                  "--client",
+                  "--repositoryPath",
+                  "-f"
                 ],
                 "interspersed_flags": [
                   "--help",
@@ -278,7 +288,9 @@
               "--checks",
               "--file",
               "--run-id",
-              "--client"
+              "--client",
+              "--repositoryPath",
+              "-f"
             ],
             "forbidden_flags": [
               "--repo",
@@ -290,7 +302,9 @@
               "--version",
               "--help",
               "-h",
-              "--json"
+              "--json",
+              "--repositoryPath",
+              "-f"
             ],
             "interleaved_options_with_values": [
               "--repo",
@@ -298,7 +312,9 @@
               "--checks",
               "--file",
               "--run-id",
-              "--client"
+              "--client",
+              "--repositoryPath",
+              "-f"
             ]
           }
         },
@@ -323,7 +339,9 @@
                   "--checks",
                   "--file",
                   "--run-id",
-                  "--client"
+                  "--client",
+                  "--repositoryPath",
+                  "-f"
                 ],
                 "interspersed_flags": [
                   "--help",
@@ -357,7 +375,9 @@
                   "--checks",
                   "--file",
                   "--run-id",
-                  "--client"
+                  "--client",
+                  "--repositoryPath",
+                  "-f"
                 ],
                 "interspersed_flags": [
                   "--help",
@@ -406,7 +426,9 @@
               "--checks",
               "--file",
               "--run-id",
-              "--client"
+              "--client",
+              "--repositoryPath",
+              "-f"
             ],
             "forbidden_flags": [
               "--repo",
@@ -418,7 +440,9 @@
               "--version",
               "--help",
               "-h",
-              "--json"
+              "--json",
+              "--repositoryPath",
+              "-f"
             ],
             "interleaved_options_with_values": [
               "--repo",
@@ -426,7 +450,9 @@
               "--checks",
               "--file",
               "--run-id",
-              "--client"
+              "--client",
+              "--repositoryPath",
+              "-f"
             ]
           }
         },
@@ -451,7 +477,9 @@
                   "--checks",
                   "--file",
                   "--run-id",
-                  "--client"
+                  "--client",
+                  "--repositoryPath",
+                  "-f"
                 ],
                 "interspersed_flags": [
                   "--help",
@@ -485,7 +513,9 @@
                   "--checks",
                   "--file",
                   "--run-id",
-                  "--client"
+                  "--client",
+                  "--repositoryPath",
+                  "-f"
                 ],
                 "interspersed_flags": [
                   "--help",
@@ -534,7 +564,9 @@
               "--checks",
               "--file",
               "--run-id",
-              "--client"
+              "--client",
+              "--repositoryPath",
+              "-f"
             ],
             "forbidden_flags": [
               "--repo",
@@ -546,7 +578,9 @@
               "--version",
               "--help",
               "-h",
-              "--json"
+              "--json",
+              "--repositoryPath",
+              "-f"
             ],
             "interleaved_options_with_values": [
               "--repo",
@@ -554,7 +588,9 @@
               "--checks",
               "--file",
               "--run-id",
-              "--client"
+              "--client",
+              "--repositoryPath",
+              "-f"
             ]
           }
         },
@@ -579,7 +615,9 @@
                   "--checks",
                   "--file",
                   "--run-id",
-                  "--client"
+                  "--client",
+                  "--repositoryPath",
+                  "-f"
                 ],
                 "interspersed_flags": [
                   "--help",
@@ -613,7 +651,9 @@
                   "--checks",
                   "--file",
                   "--run-id",
-                  "--client"
+                  "--client",
+                  "--repositoryPath",
+                  "-f"
                 ],
                 "interspersed_flags": [
                   "--help",
@@ -669,7 +709,9 @@
                   "--status",
                   "--reason",
                   "--evidence",
-                  "--file"
+                  "--file",
+                  "--repositoryPath",
+                  "-f"
                 ],
                 "forbidden_flags": [
                   "--repo",
@@ -684,7 +726,9 @@
                   "--version",
                   "--help",
                   "-h",
-                  "--json"
+                  "--json",
+                  "--repositoryPath",
+                  "-f"
                 ],
                 "interleaved_options_with_values": [
                   "--repo",
@@ -695,7 +739,9 @@
                   "--status",
                   "--reason",
                   "--evidence",
-                  "--file"
+                  "--file",
+                  "--repositoryPath",
+                  "-f"
                 ]
               }
             },
@@ -719,7 +765,9 @@
                   "--status",
                   "--reason",
                   "--evidence",
-                  "--file"
+                  "--file",
+                  "--repositoryPath",
+                  "-f"
                 ],
                 "forbidden_flags": [
                   "--repo",
@@ -734,7 +782,9 @@
                   "--version",
                   "--help",
                   "-h",
-                  "--json"
+                  "--json",
+                  "--repositoryPath",
+                  "-f"
                 ],
                 "interleaved_options_with_values": [
                   "--repo",
@@ -745,7 +795,9 @@
                   "--status",
                   "--reason",
                   "--evidence",
-                  "--file"
+                  "--file",
+                  "--repositoryPath",
+                  "-f"
                 ]
               }
             }
@@ -775,7 +827,9 @@
                   "--status",
                   "--reason",
                   "--evidence",
-                  "--file"
+                  "--file",
+                  "--repositoryPath",
+                  "-f"
                 ],
                 "interspersed_flags": [
                   "--help",
@@ -813,7 +867,9 @@
                   "--status",
                   "--reason",
                   "--evidence",
-                  "--file"
+                  "--file",
+                  "--repositoryPath",
+                  "-f"
                 ],
                 "interspersed_flags": [
                   "--help",
@@ -870,7 +926,9 @@
                   "--status",
                   "--reason",
                   "--evidence",
-                  "--file"
+                  "--file",
+                  "--repositoryPath",
+                  "-f"
                 ],
                 "forbidden_flags": [
                   "--repo",
@@ -885,7 +943,9 @@
                   "--version",
                   "--help",
                   "-h",
-                  "--json"
+                  "--json",
+                  "--repositoryPath",
+                  "-f"
                 ],
                 "interleaved_options_with_values": [
                   "--repo",
@@ -896,7 +956,9 @@
                   "--status",
                   "--reason",
                   "--evidence",
-                  "--file"
+                  "--file",
+                  "--repositoryPath",
+                  "-f"
                 ]
               }
             },
@@ -920,7 +982,9 @@
                   "--status",
                   "--reason",
                   "--evidence",
-                  "--file"
+                  "--file",
+                  "--repositoryPath",
+                  "-f"
                 ],
                 "forbidden_flags": [
                   "--repo",
@@ -935,7 +999,9 @@
                   "--version",
                   "--help",
                   "-h",
-                  "--json"
+                  "--json",
+                  "--repositoryPath",
+                  "-f"
                 ],
                 "interleaved_options_with_values": [
                   "--repo",
@@ -946,7 +1012,9 @@
                   "--status",
                   "--reason",
                   "--evidence",
-                  "--file"
+                  "--file",
+                  "--repositoryPath",
+                  "-f"
                 ]
               }
             }
@@ -976,7 +1044,9 @@
                   "--status",
                   "--reason",
                   "--evidence",
-                  "--file"
+                  "--file",
+                  "--repositoryPath",
+                  "-f"
                 ],
                 "interspersed_flags": [
                   "--help",
@@ -1014,7 +1084,9 @@
                   "--status",
                   "--reason",
                   "--evidence",
-                  "--file"
+                  "--file",
+                  "--repositoryPath",
+                  "-f"
                 ],
                 "interspersed_flags": [
                   "--help",

@@ -103,17 +103,22 @@ def test_native_warm_uses_persistent_authenticated_resident_ipc(
         request = benchmark.json.loads(payload)
         assert isinstance(request, dict)
         requests.append(request)
-        return b'{"authority":"rust","decision":"allow"}'
+        return b'{"schema":"guard-hook-edge-result.v2","authority":"rust","result":{"decision":"allow"}}'
 
-    monkeypatch.setattr(benchmark, "resident_native_request", fake_resident_request)
+    monkeypatch.setattr(benchmark, "native_resident_client_request", fake_resident_request)
+    snapshot = {"generation": 7, "policy_digest": "b" * 64, "runtime_identity": "a" * 64}
     values = benchmark._bench_native_warm(
         workspace=tmp_path,
         guard_home=tmp_path / "guard-home",
         iterations=2,
+        policy_snapshot=snapshot,
     )
 
     assert len(values) == 2
     assert [request["request_id"] for request in requests] == ["native-warm-0", "native-warm-1"]
+    assert all(request["schema"] == "guard-hook-envelope.v2" for request in requests)
+    assert all(request["policy_snapshot"] == snapshot for request in requests)
+    assert all(request["policy_generation"] == 7 for request in requests)
 
 
 def test_native_production_warm_requires_resident_route(

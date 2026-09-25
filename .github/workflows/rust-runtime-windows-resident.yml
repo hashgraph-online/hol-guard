@@ -5,10 +5,10 @@ on:
     paths:
       - "rust/**"
       - "src/codex_plugin_scanner/guard/native_runtime.py"
-      - "src/codex_plugin_scanner/guard/native_runtime_resident.py"
+      - "src/codex_plugin_scanner/guard/native_resident_client.py"
+      - "src/codex_plugin_scanner/guard/native_resident_stream.py"
       - "src/codex_plugin_scanner/guard/native_command_model.py"
-      - "ci/native_runtime/test_guard_native_runtime_windows_resident.py"
-      - "ci/native_runtime/test_guard_native_runtime_resident.py"
+      - "ci/native_runtime/**"
       - ".github/workflows/rust-runtime-windows-resident.yml"
       - ".github/actions/setup-rust/**"
   push:
@@ -16,10 +16,10 @@ on:
     paths:
       - "rust/**"
       - "src/codex_plugin_scanner/guard/native_runtime.py"
-      - "src/codex_plugin_scanner/guard/native_runtime_resident.py"
+      - "src/codex_plugin_scanner/guard/native_resident_client.py"
+      - "src/codex_plugin_scanner/guard/native_resident_stream.py"
       - "src/codex_plugin_scanner/guard/native_command_model.py"
-      - "ci/native_runtime/test_guard_native_runtime_windows_resident.py"
-      - "ci/native_runtime/test_guard_native_runtime_resident.py"
+      - "ci/native_runtime/**"
       - ".github/workflows/rust-runtime-windows-resident.yml"
       - ".github/actions/setup-rust/**"
   workflow_dispatch:
@@ -78,9 +78,9 @@ jobs:
       - name: Check Python transport boundary
         shell: pwsh
         run: |
-          uv run --no-sync python -m ruff format --check src/codex_plugin_scanner/guard/native_runtime_resident.py ci/native_runtime/test_guard_native_runtime_windows_resident.py
+          uv run --no-sync python -m ruff format --check src/codex_plugin_scanner/guard/native_resident_client.py ci/native_runtime/test_native_managed_resident.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          uv run --no-sync python -m ruff check src/codex_plugin_scanner/guard/native_runtime_resident.py ci/native_runtime/test_guard_native_runtime_windows_resident.py
+          uv run --no-sync python -m ruff check src/codex_plugin_scanner/guard/native_resident_client.py ci/native_runtime/test_native_managed_resident.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Build version-matched Windows runtime
         shell: pwsh
@@ -98,7 +98,14 @@ jobs:
         env:
           HOL_GUARD_NATIVE: force
           HOL_GUARD_NATIVE_BINARY: ${{ github.workspace }}\rust\target\release\hol-guard-runtime.exe
-        run: uv run --no-sync pytest ci/native_runtime/test_guard_native_runtime_windows_resident.py --tb=short
+        run: >-
+          uv run --no-sync pytest
+          ci/native_runtime/test_native_managed_resident.py
+          ci/native_runtime/test_native_managed_resident_cross_process.py
+          ci/native_runtime/test_native_hook_client.py
+          ci/native_runtime/test_native_hook_client_timeout.py
+          ci/native_runtime/test_native_hook_client_transport.py
+          --tb=short
 
   unix-regression:
     runs-on: ubuntu-latest
@@ -126,8 +133,8 @@ jobs:
           cargo test --manifest-path rust/Cargo.toml --locked --workspace --all-targets
       - name: Check Python transport boundary
         run: |
-          uv run --no-sync python -m ruff format --check src/codex_plugin_scanner/guard/native_runtime_resident.py ci/native_runtime/test_guard_native_runtime_windows_resident.py
-          uv run --no-sync python -m ruff check src/codex_plugin_scanner/guard/native_runtime_resident.py ci/native_runtime/test_guard_native_runtime_windows_resident.py
+          uv run --no-sync python -m ruff format --check src/codex_plugin_scanner/guard/native_resident_client.py ci/native_runtime/test_native_managed_resident.py
+          uv run --no-sync python -m ruff check src/codex_plugin_scanner/guard/native_resident_client.py ci/native_runtime/test_native_managed_resident.py
       - name: Build version-matched Unix runtime
         env:
           HOL_GUARD_BUILD_SHA: ${{ github.sha }}
@@ -142,6 +149,10 @@ jobs:
           HOL_GUARD_NATIVE_BINARY: ${{ github.workspace }}/rust/target/release/hol-guard-runtime
         run: >-
           uv run --no-sync pytest
-          ci/native_runtime/test_guard_native_runtime_windows_resident.py
-          ci/native_runtime/test_guard_native_runtime_resident.py
+          ci/native_runtime/test_native_managed_resident.py
+          ci/native_runtime/test_native_hook_worker_modes.py
+          ci/native_runtime/test_native_managed_resident_cross_process.py
+          ci/native_runtime/test_native_hook_client.py
+          ci/native_runtime/test_native_hook_client_timeout.py
+          ci/native_runtime/test_native_hook_client_transport.py
           --tb=short

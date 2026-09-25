@@ -120,6 +120,7 @@ def test_matrix_proves_remote_bytes_install_origin_record_corpus_and_dashboard()
     names = [step.get("name") for step in steps]
 
     assert "Download exact TestPyPI wheel bytes" in names
+    assert "Bind compatible native canary wheel" in names
     assert "Verify PR head, version, and TestPyPI bytes" in names
     assert "Install only the verified wheel" in names
     assert "Prove the harness rejects missing evidence" in names
@@ -128,6 +129,8 @@ def test_matrix_proves_remote_bytes_install_origin_record_corpus_and_dashboard()
     workflow_text = WORKFLOW_PATH.read_text(encoding="utf-8")
     assert "verify-release --registry testpypi" in workflow_text
     assert "--download-dir verified-testpypi" in workflow_text
+    assert "scripts/select_installed_native_wheel.py" in workflow_text
+    assert "--dist-dir selected-native" in workflow_text
     assert "git rev-parse 'HEAD^{commit}'" in workflow_text
     assert "installed-canary/missing-subject.json" in workflow_text
     assert "-m scripts.run_installed_canary" in workflow_text
@@ -171,12 +174,18 @@ def test_matrix_proves_remote_bytes_install_origin_record_corpus_and_dashboard()
     assert 'shutil.which("bun")' in runner_text
     assert '"build",' in runner_text
     assert 'manifest["canonical_digests"]' in runner_text
-    assert "observed = decision.decision_plane.action" in runner_text
-    assert "observed = decision.minimum_action" not in runner_text
+    assert "scripts/run_installed_native_corpus.py" in runner_text
+    assert 'report.get("native_contract_equality") is not True' in runner_text
+    assert 'report.get("original_oracle_below_count") != 0' in runner_text
+    installed_native_runner_text = (ROOT / "scripts/run_installed_native_corpus.py").read_text(encoding="utf-8")
+    assert 'distribution("hol-guard").locate_file("codex_plugin_scanner")' in installed_native_runner_text
+    assert "runner._coordinator_report()" in installed_native_runner_text
     assert '"no_post_execution_proof": _no_post_execution_proof_smoke()' in runner_text
     attributes_text = (ROOT / ".gitattributes").read_text(encoding="utf-8")
     assert "/tests/guard_command_corpus*.py text eol=lf" in attributes_text
     assert "/tests/fixtures/guard-command-corpus/*.json text eol=lf" in attributes_text
+    assert "/rust/crates/guard-command/src/*.rs text eol=lf" in attributes_text
+    assert "/rust/crates/guard-command/src/command_compatibility/*.rs text eol=lf" in attributes_text
     assert "/src/codex_plugin_scanner/guard/daemon/static/index.html text eol=lf" in attributes_text
     assert '"$CANARY_PYTHON" -m pip install --no-compile' in workflow_text
     assert 'python -m venv "$RUNNER_TEMP/hol-guard-canary-venv"' in workflow_text

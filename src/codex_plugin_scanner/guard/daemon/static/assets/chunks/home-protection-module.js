@@ -1,4 +1,4 @@
-import { r as reactExports, j as jsxRuntimeExports, w as HiMiniShieldCheck, aQ as HiMiniInformationCircle, P as HiMiniExclamationTriangle, S as SectionLabel, A as ActionButton, c1 as HiMiniArrowRight, aK as Tag, y as formatRelativeTime, F as HiMiniChevronUp, I as HiMiniChevronDown, s as HiMiniCheckCircle, a7 as HiMiniXCircle } from "../guard-dashboard.js";
+import { r as reactExports, j as jsxRuntimeExports, w as HiMiniShieldCheck, aR as HiMiniInformationCircle, P as HiMiniExclamationTriangle, S as SectionLabel, A as ActionButton, c2 as HiMiniArrowRight, aL as Tag, y as formatRelativeTime, F as HiMiniChevronUp, I as HiMiniChevronDown, s as HiMiniCheckCircle, a7 as HiMiniXCircle } from "../guard-dashboard.js";
 function resolveHomeProtectionStatus(snapshot) {
   const protection = snapshot.supply_chain?.package_manager_protection;
   if (!protection) return "unknown";

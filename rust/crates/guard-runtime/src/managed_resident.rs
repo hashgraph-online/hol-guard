@@ -23,6 +23,7 @@ mod managed_resident_transport;
 mod managed_resident_windows;
 #[path = "managed_resident_owner_lock.rs"]
 mod owner_lock;
+pub(crate) use owner_lock::ManagedOwnerLock;
 #[path = "resident_state_retirement.rs"]
 mod resident_state_retirement;
 #[path = "resident_restart_budget.rs"]
@@ -60,7 +61,9 @@ const MANAGED_IDLE_TIMEOUT: Duration = Duration::from_secs(60 * 60);
 const MANAGED_STOP_TIMEOUT: Duration = Duration::from_secs(2);
 static MANAGED_SHUTDOWN_REQUESTED: AtomicBool = AtomicBool::new(false);
 
-fn acquire_managed_owner_lock(scope: &Path) -> Result<owner_lock::ManagedOwnerLock, String> {
+pub(crate) fn acquire_managed_owner_lock(
+    scope: &Path,
+) -> Result<owner_lock::ManagedOwnerLock, String> {
     owner_lock::acquire(scope)
 }
 
@@ -332,7 +335,7 @@ pub(crate) fn serve_managed(
     let owner_alive = combine_liveness(state_base, owner_process_id, owner_start_marker);
     if cfg!(unix) {
         managed_resident_transport::serve_unix_managed(
-            &scope,
+            (&scope, &_owner_lock),
             policy_store,
             generation,
             owner_process_id,

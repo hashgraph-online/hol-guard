@@ -1,5 +1,6 @@
-import { aM as fetchLocalCliApi, r as reactExports, aN as fetchExtensionControlApi, j as jsxRuntimeExports, B as HiMiniSparkles, s as HiMiniCheckCircle, aO as HiMiniNoSymbol, af as HiMiniLockClosed, P as HiMiniExclamationTriangle, aP as useResolvedApprovalGate, al as HiMiniArrowPath, w as HiMiniShieldCheck, aQ as HiMiniInformationCircle, an as isApprovalProofSubmitDisabled, C as HiMiniXMark, am as ApprovalProofFieldInputs, ao as buildApprovalProofCredentials, aR as GenIcon, Q as HiMiniBolt, aS as HiMiniGlobeAlt, aT as HiMiniCube, K as HiMiniCloud, aU as HiMiniServerStack, b as HiMiniCommandLine, aV as HiMiniFolder, aW as FaWindows, aX as FaAws, c as HiMiniChevronRight, I as HiMiniChevronDown, aY as approvalProofRecentlySatisfied, aZ as HiMiniArrowLeft, a_ as HiMiniPlus, a8 as HiMiniClipboardDocumentCheck, a9 as HiMiniClipboard, ah as HiMiniAdjustmentsHorizontal, a$ as HiMiniCheck, aH as HiMiniMagnifyingGlass, b0 as startGuardCloudConnect, b1 as HiMiniArrowTopRightOnSquare, aG as WorkspacePageHeader, b2 as guardAwareHref } from "../guard-dashboard.js";
+import { aN as fetchLocalCliApi, r as reactExports, aO as fetchExtensionControlApi, j as jsxRuntimeExports, B as HiMiniSparkles, s as HiMiniCheckCircle, aP as HiMiniNoSymbol, af as HiMiniLockClosed, P as HiMiniExclamationTriangle, aQ as useResolvedApprovalGate, al as HiMiniArrowPath, w as HiMiniShieldCheck, aR as HiMiniInformationCircle, an as isApprovalProofSubmitDisabled, C as HiMiniXMark, am as ApprovalProofFieldInputs, ao as buildApprovalProofCredentials, aS as GenIcon, Q as HiMiniBolt, aT as HiMiniGlobeAlt, aU as HiMiniCube, K as HiMiniCloud, aV as HiMiniServerStack, b as HiMiniCommandLine, aW as HiMiniFolder, aX as FaWindows, aY as FaAws, c as HiMiniChevronRight, I as HiMiniChevronDown, aZ as approvalProofRecentlySatisfied, a_ as HiMiniArrowLeft, a$ as HiMiniPlus, a8 as HiMiniClipboardDocumentCheck, a9 as HiMiniClipboard, ah as HiMiniAdjustmentsHorizontal, b0 as HiMiniCheck, aH as HiMiniMagnifyingGlass, b1 as startGuardCloudConnect, b2 as HiMiniArrowTopRightOnSquare, aG as WorkspacePageHeader, b3 as guardAwareHref } from "../guard-dashboard.js";
 import { A as ApprovalProofModal } from "./approval-proof-modal.js";
+import { u as useConfirmDialog } from "./confirm-dialog.js";
 const EXTENSION_ID_PATTERN = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
 const RULE_ID_PATTERN = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
 const DEFAULT_EXTENSION_DETAIL_URL_STATE = {
@@ -5896,6 +5897,7 @@ function ProtectionTestLab({ extension: extension2 }) {
     ] }) : null
   ] });
 }
+const DRAFT_EXIT_MESSAGE = "Discard your unreviewed protection setting changes?";
 const DETAIL_TABS = [
   { id: "overview", label: "Overview" },
   { id: "permissions", label: "Permissions" },
@@ -5989,6 +5991,11 @@ function DeveloperModuleDetails(props) {
 }
 function ProtectionModuleDetail(props) {
   const [policyDirty, setPolicyDirty] = reactExports.useState(false);
+  const { confirm: requestConfirmation, dialog: confirmDialog } = useConfirmDialog();
+  const urlStateRef = reactExports.useRef(props.urlState);
+  urlStateRef.current = props.urlState;
+  const onUrlStateRef = reactExports.useRef(props.onUrlState);
+  onUrlStateRef.current = props.onUrlState;
   reactExports.useEffect(() => {
     let highlightTimer = 0;
     let highlighted = null;
@@ -6043,13 +6050,26 @@ function ProtectionModuleDetail(props) {
     (source) => source === "Synced from Guard Cloud" || source.startsWith("Managed by ")
   );
   const cloudControlsUrl = props.runtime?.dashboard_url?.trim() || props.runtime?.connect_url?.trim() || void 0;
-  const setActiveTab = reactExports.useCallback((tab) => {
+  const setActiveTab = reactExports.useCallback(async (tab) => {
     if (!props.onUrlState) return false;
-    if (tab !== activeTab && policyDirty && !window.confirm("Discard your unreviewed protection setting changes?")) {
+    const needsConfirmation = tab !== activeTab && policyDirty;
+    if (needsConfirmation && !await requestConfirmation({
+      title: "Discard unreviewed changes?",
+      description: DRAFT_EXIT_MESSAGE,
+      confirmLabel: "Discard changes",
+      cancelLabel: "Keep editing",
+      tone: "destructive"
+    })) {
       return false;
     }
-    props.onUrlState({
-      ...props.urlState ?? {
+    const latestUrlState = urlStateRef.current;
+    const latestOnUrlState = onUrlStateRef.current;
+    if (!latestOnUrlState) return false;
+    if (needsConfirmation && canonicalProtectionDetailTab(latestUrlState?.tab ?? "overview") !== activeTab) {
+      return false;
+    }
+    latestOnUrlState({
+      ...latestUrlState ?? {
         tab: "overview",
         query: "",
         risk: "all",
@@ -6065,8 +6085,8 @@ function ProtectionModuleDetail(props) {
       ruleId: null
     });
     return true;
-  }, [activeTab, policyDirty, props.onUrlState, props.urlState]);
-  const handleTabKeyDown = (event, tab) => {
+  }, [activeTab, policyDirty, props.onUrlState, requestConfirmation]);
+  const handleTabKeyDown = async (event, tab) => {
     if (!event.key.startsWith("Arrow") && event.key !== "Home" && event.key !== "End") return;
     const index = DETAIL_TABS.findIndex((item) => item.id === tab);
     let nextIndex = index;
@@ -6078,15 +6098,21 @@ function ProtectionModuleDetail(props) {
     event.preventDefault();
     const next = DETAIL_TABS[nextIndex];
     if (!next) return;
-    if (!setActiveTab(next.id)) return;
+    if (!await setActiveTab(next.id)) return;
     window.requestAnimationFrame(() => document.getElementById(`protection-tab-${next.id}`)?.focus());
   };
-  const handleBack = () => {
-    if (policyDirty && !window.confirm("Discard your unreviewed protection setting changes?")) return;
+  const handleBack = async () => {
+    if (policyDirty && !await requestConfirmation({
+      title: "Discard unreviewed changes?",
+      description: DRAFT_EXIT_MESSAGE,
+      confirmLabel: "Discard changes",
+      cancelLabel: "Keep editing",
+      tone: "destructive"
+    })) return;
     props.onBack();
   };
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { "data-testid": "protection-module-detail", className: "w-full", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", onClick: handleBack, className: "inline-flex min-h-11 items-center gap-2 rounded-lg px-1 text-sm font-semibold text-brand-dark/80 hover:text-brand-dark", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", onClick: () => void handleBack(), className: "inline-flex min-h-11 items-center gap-2 rounded-lg px-1 text-sm font-semibold text-brand-dark/80 hover:text-brand-dark", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowLeft, { className: "size-4", "aria-hidden": "true" }),
       "Extensions"
     ] }),
@@ -6144,8 +6170,8 @@ function ProtectionModuleDetail(props) {
         "aria-selected": activeTab === tab.id,
         "aria-controls": `protection-panel-${tab.id}`,
         tabIndex: activeTab === tab.id ? 0 : -1,
-        onClick: () => setActiveTab(tab.id),
-        onKeyDown: (event) => handleTabKeyDown(event, tab.id),
+        onClick: () => void setActiveTab(tab.id),
+        onKeyDown: (event) => void handleTabKeyDown(event, tab.id),
         className: `-mb-px min-h-11 shrink-0 whitespace-nowrap border-b-2 px-1 pb-3 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue ${activeTab === tab.id ? "border-brand-blue text-brand-blue" : "border-transparent text-brand-dark/60 hover:text-brand-dark"}`,
         children: tab.label
       },
@@ -6234,7 +6260,8 @@ function ProtectionModuleDetail(props) {
       /* @__PURE__ */ jsxRuntimeExports.jsx(ExtensionActivity, { extension: props.extension, receipts: props.runtime?.latest_receipts ?? [] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(ProtectionTestLab, { extension: props.extension })
     ] }) : null,
-    activeTab === "technical" ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { id: "protection-panel-technical", role: "tabpanel", "aria-labelledby": "protection-tab-technical", className: "mt-6", children: /* @__PURE__ */ jsxRuntimeExports.jsx(DeveloperModuleDetails, { extension: props.extension, effective: props.effective, catalogDigest: props.catalogDigest }) }) : null
+    activeTab === "technical" ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { id: "protection-panel-technical", role: "tabpanel", "aria-labelledby": "protection-tab-technical", className: "mt-6", children: /* @__PURE__ */ jsxRuntimeExports.jsx(DeveloperModuleDetails, { extension: props.extension, effective: props.effective, catalogDigest: props.catalogDigest }) }) : null,
+    confirmDialog
   ] });
 }
 function ExtensionsLoadingState(props) {

@@ -5,9 +5,10 @@ on:
     paths:
       - "rust/**"
       - "src/codex_plugin_scanner/guard/native_runtime.py"
-      - "src/codex_plugin_scanner/guard/native_runtime_resident.py"
+      - "src/codex_plugin_scanner/guard/native_resident_client.py"
+      - "src/codex_plugin_scanner/guard/native_resident_stream.py"
       - "src/codex_plugin_scanner/guard/runtime/hook_*.py"
-      - "ci/native_runtime/test_guard_native_runtime_mutation_differential.py"
+      - "ci/native_runtime/**"
       - ".github/workflows/rust-runtime-mutation-differential.yml"
       - ".github/actions/setup-rust/**"
   push:
@@ -15,9 +16,10 @@ on:
     paths:
       - "rust/**"
       - "src/codex_plugin_scanner/guard/native_runtime.py"
-      - "src/codex_plugin_scanner/guard/native_runtime_resident.py"
+      - "src/codex_plugin_scanner/guard/native_resident_client.py"
+      - "src/codex_plugin_scanner/guard/native_resident_stream.py"
       - "src/codex_plugin_scanner/guard/runtime/hook_*.py"
-      - "ci/native_runtime/test_guard_native_runtime_mutation_differential.py"
+      - "ci/native_runtime/**"
       - ".github/workflows/rust-runtime-mutation-differential.yml"
       - ".github/actions/setup-rust/**"
   workflow_dispatch:

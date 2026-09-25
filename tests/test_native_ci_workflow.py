@@ -206,7 +206,26 @@ def test_parallel_windows_workspace_checks_remain_required(name: str, integratio
     integration_commands = "\n".join(step.get("run", "") for step in integration["steps"])
     assert "cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime" in integration_commands
     if name == "rust-runtime-windows-resident.yml":
-        assert "test_guard_native_runtime_windows_resident.py" in integration_commands
+        assert "test_native_managed_resident.py" in integration_commands
     else:
         assert "test_native_hook_client.py" in integration_commands
         assert "test_native_hook_client_transport.py" in integration_commands
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "rust-runtime-differential.yml",
+        "rust-runtime-mutation-differential.yml",
+        "rust-runtime-recovery.yml",
+        "rust-runtime-windows-resident.yml",
+        "rust-command-shadow.yml",
+        "rust-runtime.yml",
+        "rust-runtime-performance.yml",
+    ],
+)
+@pytest.mark.parametrize("event", ["pull_request", "push"])
+def test_production_resident_stream_selects_runtime_qualification(name: str, event: str) -> None:
+    # BaseLoader preserves the YAML `on` key rather than interpreting it as a boolean.
+    workflow = yaml.load((ROOT / ".github/workflows" / name).read_text(encoding="utf-8"), Loader=yaml.BaseLoader)
+    assert "src/codex_plugin_scanner/guard/native_resident_stream.py" in workflow["on"][event]["paths"]

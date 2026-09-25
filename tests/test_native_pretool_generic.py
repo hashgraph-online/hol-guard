@@ -102,7 +102,7 @@ def _sync_receipt(edge: dict[str, object]) -> None:
     receipt["decision_id"] = hashlib.sha256(canonical_receipt_bytes(receipt)).hexdigest()
 
 
-@pytest.mark.parametrize("harness", ("claude-code", "codex", "cline", "cursor", "copilot", "grok", "zcode"))
+@pytest.mark.parametrize("harness", ("claude-code", "codex", "cline", "cursor", "copilot", "grok", "zcode", "devin"))
 def test_generic_result_decoder_accepts_supported_harnesses(harness: str) -> None:
     edge = _edge(harness, "PreToolUse", "unknown")
     assert _decode_edge(edge) == edge
