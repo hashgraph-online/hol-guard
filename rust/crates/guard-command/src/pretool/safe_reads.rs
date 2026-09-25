@@ -1,7 +1,37 @@
 pub(super) fn safe_date_arguments(arguments: &[String]) -> bool {
     let mut saw_format = false;
+    let mut expect_epoch = false;
     for argument in arguments {
-        if matches!(argument.as_str(), "-u" | "--utc" | "--universal") {
+        if expect_epoch {
+            if !(argument.starts_with('@')
+                && argument.len() > 1
+                && argument.len() <= 21
+                && argument.bytes().skip(1).all(|byte| byte.is_ascii_digit()))
+            {
+                return false;
+            }
+            expect_epoch = false;
+            continue;
+        }
+        if matches!(
+            argument.as_str(),
+            "-u" | "--utc" | "--universal" | "-R" | "--rfc-email" | "-I" | "--iso-8601"
+        ) || argument.starts_with("--iso-8601=")
+        {
+            continue;
+        }
+        if matches!(argument.as_str(), "-d" | "--date") {
+            expect_epoch = true;
+            continue;
+        }
+        if let Some(value) = argument.strip_prefix("--date=") {
+            if !(value.starts_with('@')
+                && value.len() > 1
+                && value.len() <= 21
+                && value.bytes().skip(1).all(|byte| byte.is_ascii_digit()))
+            {
+                return false;
+            }
             continue;
         }
         if argument.starts_with('+') && argument.len() <= 256 && !argument.contains('\n') {
@@ -13,7 +43,7 @@ pub(super) fn safe_date_arguments(arguments: &[String]) -> bool {
         }
         return false;
     }
-    true
+    !expect_epoch
 }
 
 pub(super) fn safe_read_target(argument: &str) -> bool {
