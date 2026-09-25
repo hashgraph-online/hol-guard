@@ -97,15 +97,18 @@ impl Evaluation<'_> {
                 if fed.is_empty() && here_strings.is_empty() {
                     return Ok(Arc::from(Vec::new()));
                 }
-                // Bare `cat` forwards stdin unchanged, so consent survives it.
-                // Visiting in pipeline order lets a chain of them carry it.
+                // `cat` forwards stdin unchanged, so consent survives it. A file
+                // operand makes it read that file instead, and only `-` still
+                // names stdin. Visiting in pipeline order lets a chain carry it.
                 let mut forwarders: Vec<&CommandSegmentV1> = self.command.segments.iter().collect();
                 forwarders.sort_by_key(|segment| segment.pipeline_index);
                 for segment in forwarders {
                     let Some(name) = executable_name(segment) else {
                         continue;
                     };
-                    if !node.forwarders.contains(name.as_str()) || !segment.arguments.is_empty() {
+                    if !node.forwarders.contains(name.as_str())
+                        || !segment.arguments.iter().all(|argument| argument == "-")
+                    {
                         continue;
                     }
                     let previous = segment.pipeline_index.checked_sub(1);
@@ -418,6 +421,12 @@ fn feeds_affirmative_input(
 /// A here-string reaches the same prompt with no feeding stage at all. The
 /// parser keeps it in the segment arguments, split (`<<<`, `y`) or joined
 /// (`<<<y`), and an explicit descriptor may prefix the operator.
+///
+/// Out of scope, because the consent text is not in the arguments: a file
+/// redirect (`< consent.txt`) and a here-document body (`<< EOF`), whose
+/// content this matcher cannot read, exactly as an unknown `cat notes |` feed
+/// is not treated as consent. Both leave the command uncertain in this parser
+/// today, so neither can be reported safe on the strength of this rule.
 fn reads_affirmative_here_string(arguments: &[String], values: &BTreeSet<String>) -> bool {
     for (index, argument) in arguments.iter().enumerate() {
         let operator = argument.trim_start_matches(|character: char| character.is_ascii_digit());
@@ -439,6 +448,9 @@ fn reads_affirmative_here_string(arguments: &[String], values: &BTreeSet<String>
     false
 }
 
+/// Consent is compared case-insensitively: the prompt accepts `Y` and `YES`
+/// as readily as `y`, so folding case widens what counts as an unattended run
+/// rather than narrowing it.
 fn trimmed_value(value: &str) -> String {
     value
         .trim()

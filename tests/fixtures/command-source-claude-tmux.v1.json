@@ -11412,6 +11412,58 @@
    ],
    "id": "teardown-permission-disabled",
    "rule_id": "command.claude-tmux.session-teardown"
+  },
+  {
+   "command": "yes | cat - | ctc --all",
+   "disabled_permissions": [],
+   "enabled_extensions": [
+    "command.claude-tmux"
+   ],
+   "expected_action": "review",
+   "expected_effective_segments": [
+    2
+   ],
+   "id": "teardown-piped-through-cat-dash",
+   "rule_id": "command.claude-tmux.session-teardown"
+  },
+  {
+   "command": "echo yes | ctc --all",
+   "disabled_permissions": [],
+   "enabled_extensions": [
+    "command.claude-tmux"
+   ],
+   "expected_action": "review",
+   "expected_effective_segments": [
+    1
+   ],
+   "id": "teardown-piped-echo-yes",
+   "rule_id": "command.claude-tmux.session-teardown"
+  },
+  {
+   "command": "yes | ctc",
+   "disabled_permissions": [],
+   "enabled_extensions": [
+    "command.claude-tmux"
+   ],
+   "expected_action": "review",
+   "expected_effective_segments": [
+    1
+   ],
+   "id": "teardown-piped-minimal-sweep",
+   "rule_id": "command.claude-tmux.session-teardown"
+  },
+  {
+   "command": "yes | ctc --prune",
+   "disabled_permissions": [],
+   "enabled_extensions": [
+    "command.claude-tmux"
+   ],
+   "expected_action": "review",
+   "expected_effective_segments": [
+    1
+   ],
+   "id": "prune-piped-minimal",
+   "rule_id": "command.claude-tmux.process-prune"
   }
  ],
  "schema": "guard.command-extension-fixtures.v1"

@@ -88,6 +88,12 @@ fn fed_confirmation_is_read_natively_the_same_way_the_authoring_matcher_reads_it
     assert!(teardown("yes | ctc --all"));
     assert!(teardown("printf 'y\\n' | ctc api"));
     assert!(teardown("yes | cat | ctc --all"));
+    assert!(teardown("yes | cat - | ctc --all"));
+    assert!(teardown("echo yes | ctc --all"));
+    // The minimal forms: with no selection flag the run is the interactive
+    // sweep, and fed consent answers its prompt for every session.
+    assert!(teardown("yes | ctc"));
+    assert!(prune("yes | ctc --prune"));
     assert!(prune("yes | ctc --all --prune"));
 
     // A here-string carries the same consent, and the authoring matcher reads

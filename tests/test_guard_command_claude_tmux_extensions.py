@@ -42,6 +42,12 @@ CLAUDE_TMUX_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
     ("yes | ctc --all --prune", _PRUNE_ACTION, _PRUNE_RULE),
     ("echo y | ctc api", _TEARDOWN_ACTION, _TEARDOWN_RULE),
     ("yes | cat | ctc --all", _TEARDOWN_ACTION, _TEARDOWN_RULE),
+    ("yes | cat - | ctc --all", _TEARDOWN_ACTION, _TEARDOWN_RULE),
+    ("echo yes | ctc --all", _TEARDOWN_ACTION, _TEARDOWN_RULE),
+    # The minimal forms: with no selection flag the run is the interactive
+    # sweep, and fed consent answers its prompt for every session.
+    ("yes | ctc", _TEARDOWN_ACTION, _TEARDOWN_RULE),
+    ("yes | ctc --prune", _PRUNE_ACTION, _PRUNE_RULE),
 )
 
 
