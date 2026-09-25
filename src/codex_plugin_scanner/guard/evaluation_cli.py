@@ -123,9 +123,7 @@ def _load_profile(path: Path) -> EvaluationProfile:
         raise _CliError("profile_invalid", "evaluation profile is invalid") from None
 
 
-def _path_argument(
-    args: argparse.Namespace, positional: str, option: str, label: str, *, code: str
-) -> Path:
+def _path_argument(args: argparse.Namespace, positional: str, option: str, label: str, *, code: str) -> Path:
     positional_value = cast(str | None, getattr(args, positional, None))
     option_value = cast(str | None, getattr(args, option, None))
     if (positional_value is None) == (option_value is None):
@@ -241,9 +239,11 @@ def _write_recovery_token(setup: EvaluationSetup) -> None:
         descriptor = os.open(os.fspath(token_path), flags, 0o600)
         created = True
         details = os.fstat(descriptor)
-        if not stat.S_ISREG(details.st_mode) or (
-            hasattr(os, "getuid") and details.st_uid != os.getuid()
-        ) or stat.S_IMODE(details.st_mode) != 0o600:
+        if (
+            not stat.S_ISREG(details.st_mode)
+            or (hasattr(os, "getuid") and details.st_uid != os.getuid())
+            or stat.S_IMODE(details.st_mode) != 0o600
+        ):
             raise OSError("recovery token file ownership or mode is unsafe")
         with os.fdopen(descriptor, "wb") as stream:
             descriptor = None
