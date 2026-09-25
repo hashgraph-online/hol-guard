@@ -7,9 +7,17 @@ import platform
 from hashlib import sha256
 from pathlib import Path
 
-from codex_plugin_scanner.guard.evaluation_cli import main
+import pytest
+
+from codex_plugin_scanner.guard.evaluation_cli import (
+    _read_recovery_token,
+    _remove_recovery_token,
+    _write_recovery_token,
+    main,
+)
 from codex_plugin_scanner.guard.evaluation_contracts import EVALUATION_PROFILE_SCHEMA_VERSION
 from codex_plugin_scanner.guard.evaluation_evidence_package import build_evaluation_evidence_package
+from codex_plugin_scanner.guard.evaluation_preflight import EvaluationPreflightReport, EvaluationSetup
 
 
 def _host_os() -> str:
@@ -170,6 +178,50 @@ def test_setup_and_cleanup_keep_marker_token_out_of_json(tmp_path: Path, capsys)
         "status": "passed",
     }
     assert not owned_root.exists()
+    assert not token_path.exists()
+
+
+def test_cleanup_accepts_equivalent_owned_root_path(tmp_path: Path, capsys) -> None:
+    profile_path, _, _ = _write_profile(tmp_path)
+    status = main(
+        [
+            "preflight",
+            str(profile_path),
+            "--artifact",
+            f"core-fixture={tmp_path / 'core-fixture.bin'}",
+            "--allow-host-execution",
+            "--setup",
+        ]
+    )
+    setup_payload = _payload(capsys)
+    assert status == 0
+    owned_root = Path(setup_payload["report"]["scope"]["ownedRoot"])  # type: ignore[index]
+    token_path = owned_root.parent / f".hol-guard-evaluation-recovery-{owned_root.name}.token"
+    alias = tmp_path / "alias"
+    alias.mkdir()
+    equivalent_root = alias / ".." / owned_root.name
+
+    cleanup_status = main(["cleanup", str(profile_path), str(equivalent_root)])
+    cleanup_payload = _payload(capsys)
+    assert cleanup_status == 0
+    assert cleanup_payload["status"] == "passed"
+    assert not owned_root.exists()
+    assert not token_path.exists()
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows filesystem access semantics")
+def test_windows_recovery_token_round_trip(tmp_path: Path) -> None:
+    owned_root = tmp_path / "hol-guard-eval-windows-test"
+    owned_root.mkdir()
+    setup = EvaluationSetup(
+        report=EvaluationPreflightReport(status="passed", phase="setup", profile_id="test", checks=()),
+        root_path=owned_root,
+        marker_token="a" * 32,
+    )
+    _write_recovery_token(setup)
+    token_path = tmp_path / f".hol-guard-evaluation-recovery-{owned_root.name}.token"
+    assert _read_recovery_token(owned_root, declared_parent=tmp_path) == "a" * 32
+    _remove_recovery_token(token_path, expected_parent=tmp_path)
     assert not token_path.exists()
 
 

@@ -167,9 +167,9 @@ def _private_recovery_parent(path: Path) -> bool:
         details = path.stat()
         if not stat.S_ISDIR(details.st_mode):
             return False
-        if hasattr(os, "getuid") and details.st_uid != os.getuid():
-            return False
-        return stat.S_IMODE(details.st_mode) & 0o077 == 0
+        if os.name == "nt":
+            return os.access(path, os.R_OK | os.W_OK | os.X_OK)
+        return details.st_uid == os.getuid() and stat.S_IMODE(details.st_mode) & 0o077 == 0
     except (OSError, RuntimeError, ValueError):
         return False
 
@@ -197,7 +197,14 @@ def _recovery_token_path(owned_root: Path, *, declared_parent: Path | None = Non
             "evaluation recovery parent is not a private directory",
             status="blocked_environment",
         )
-    return parent / f"{_RECOVERY_TOKEN_PREFIX}{owned_root.name}{_RECOVERY_TOKEN_SUFFIX}"
+    canonical_parent = Path(os.path.realpath(parent))
+    if not _private_recovery_parent(canonical_parent):
+        raise _CliError(
+            "recovery_path_invalid",
+            "evaluation recovery parent is not a private directory",
+            status="blocked_environment",
+        )
+    return canonical_parent / f"{_RECOVERY_TOKEN_PREFIX}{owned_root.name}{_RECOVERY_TOKEN_SUFFIX}"
 
 
 def _validate_recovery_token_file(token_path: Path, *, expected_parent: Path) -> None:
@@ -211,11 +218,11 @@ def _validate_recovery_token_file(token_path: Path, *, expected_parent: Path) ->
             raise _CliError(
                 "recovery_token_invalid", "evaluation recovery token is invalid", status="blocked_environment"
             )
-        if hasattr(os, "getuid") and details.st_uid != os.getuid():
-            raise _CliError(
-                "recovery_token_invalid", "evaluation recovery token is invalid", status="blocked_environment"
-            )
-        if stat.S_IMODE(details.st_mode) != 0o600:
+        if os.name == "nt":
+            valid_access = os.access(token_path, os.R_OK | os.W_OK)
+        else:
+            valid_access = details.st_uid == os.getuid() and stat.S_IMODE(details.st_mode) == 0o600
+        if not valid_access:
             raise _CliError(
                 "recovery_token_invalid", "evaluation recovery token is invalid", status="blocked_environment"
             )
@@ -239,10 +246,8 @@ def _write_recovery_token(setup: EvaluationSetup) -> None:
         descriptor = os.open(os.fspath(token_path), flags, 0o600)
         created = True
         details = os.fstat(descriptor)
-        if (
-            not stat.S_ISREG(details.st_mode)
-            or (hasattr(os, "getuid") and details.st_uid != os.getuid())
-            or stat.S_IMODE(details.st_mode) != 0o600
+        if not stat.S_ISREG(details.st_mode) or (
+            os.name != "nt" and (details.st_uid != os.getuid() or stat.S_IMODE(details.st_mode) != 0o600)
         ):
             raise OSError("recovery token file ownership or mode is unsafe")
         with os.fdopen(descriptor, "wb") as stream:
@@ -250,6 +255,7 @@ def _write_recovery_token(setup: EvaluationSetup) -> None:
             stream.write(setup.marker_token.encode("ascii"))
             stream.flush()
             os.fsync(stream.fileno())
+        _validate_recovery_token_file(token_path, expected_parent=token_path.parent)
         completed = True
     except (OSError, UnicodeError, ValueError):
         raise _CliError("cleanup_token_unavailable", "unable to retain the private cleanup token") from None
@@ -269,7 +275,7 @@ def _read_recovery_token(owned_root: Path, *, declared_parent: Path) -> str:
             raise _CliError(
                 "recovery_token_missing", "evaluation recovery token is missing", status="blocked_environment"
             )
-        _validate_recovery_token_file(token_path, expected_parent=owned_root.parent)
+        _validate_recovery_token_file(token_path, expected_parent=token_path.parent)
         descriptor = os.open(os.fspath(token_path), os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
     except _CliError:
         raise
@@ -412,7 +418,7 @@ def _run_cleanup(args: argparse.Namespace) -> int:
             error = _CliError("cleanup_rejected", str(exc), status="blocked_environment")
             _emit(_result("cleanup", error.status, error=error))
             return _exit_code(error.status)
-        _remove_recovery_token(token_path, expected_parent=declared_parent)
+        _remove_recovery_token(token_path, expected_parent=token_path.parent)
         status = "passed" if removed else "not_run"
         cleanup: dict[str, object] = {"removed": removed}
         if not removed:
