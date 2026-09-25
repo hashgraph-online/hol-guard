@@ -237,22 +237,22 @@ def await_persisted_native_receipt(
     """
 
     deadline = time.monotonic() + max(0.0, timeout_seconds)
-    processed_mark = receipt_processed_before
-    writer_progress_available = writer is not None and processed_mark is not None
+    writer_progress = (
+        (writer, receipt_processed_before)
+        if writer is not None and receipt_processed_before is not None
+        else None
+    )
     while time.monotonic() < deadline:
-        should_read = not writer_progress_available
-        if writer_progress_available:
-            if writer is None or processed_mark is None:
-                writer_progress_available = False
+        should_read = writer_progress is None
+        if writer_progress is not None:
+            progress_writer, processed_mark = writer_progress
+            processed = receipt_processed_count(progress_writer)
+            if processed is None:
+                writer_progress = None
                 should_read = True
-            else:
-                processed = receipt_processed_count(writer)
-                if processed is None:
-                    writer_progress_available = False
-                    should_read = True
-                elif processed > processed_mark:
-                    processed_mark = processed
-                    should_read = True
+            elif processed > processed_mark:
+                writer_progress = (progress_writer, processed)
+                should_read = True
         if should_read:
             new_ids = persisted_native_receipt_ids(store) - known_ids
             if len(new_ids) > 1:
