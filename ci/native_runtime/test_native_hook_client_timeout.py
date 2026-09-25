@@ -33,7 +33,10 @@ def test_native_hook_client_start_timeout_contains_new_managed_processes(
     deadline = time.monotonic() + 3
     while process.poll() is None and time.monotonic() < deadline:
         for path in _state_files(state_dir):
-            state = json.loads(path.read_text(encoding="utf-8"))
+            try:
+                state = json.loads(path.read_text(encoding="utf-8"))
+            except FileNotFoundError:
+                continue
             for key in ("process_id", "owner_process_id"):
                 process_id = state.get(key)
                 if isinstance(process_id, int) and process_id > 0:
