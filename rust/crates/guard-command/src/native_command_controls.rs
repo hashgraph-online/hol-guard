@@ -326,20 +326,15 @@ impl CompiledNativeCommandControls {
             evaluation_error: batch.evaluation_error,
         });
         let proven_benign = result.explicitly_benign && result.minimum_action == "allow";
-        let unmatched = result
-            .command_extensions
-            .as_ref()
-            .is_some_and(|extensions| {
-                extensions
-                    .observations
-                    .iter()
-                    .all(|observation| observation.effective_segment_indexes.is_empty())
-                    && extensions.permission_observations.is_empty()
-            });
-        // A deadline while scanning extensions is not a matched rule. Keep a
-        // command the authority already proved benign. Tampered control state
-        // still fail-closes, including for those commands.
-        if !(proven_benign && unmatched && evaluation_error.is_some() && !self.global_block) {
+        if evaluation_error.is_some()
+            && !self.global_block
+            && !proven_benign
+            && rank(floor) < rank("block")
+        {
+            floor = "block";
+            reason = "native_command_extension_evaluation_failed";
+        }
+        if !(proven_benign && evaluation_error.is_some() && !self.global_block) {
             strengthen(&mut result, floor, reason);
         }
         result

@@ -228,12 +228,20 @@ fn safe_listing_arguments(arguments: &[String]) -> bool {
     arguments.iter().all(|argument| argument != "-")
 }
 
+fn safe_read_target(argument: &str) -> bool {
+    let lowered = argument.to_ascii_lowercase();
+    !["/etc/", "/dev/", "/proc/", "/sys/", "/var/", "/private/etc/", "~"]
+        .iter()
+        .any(|prefix| lowered.starts_with(prefix))
+        && !argument.split(['/', '\\']).any(|part| part == "..")
+}
+
 fn safe_plain_file_arguments(arguments: &[String]) -> bool {
     let mut saw_target = false;
     let mut after_options = false;
     for argument in arguments {
         if after_options {
-            if argument == "-" {
+            if argument == "-" || !safe_read_target(argument) {
                 return false;
             }
             saw_target = true;
@@ -254,6 +262,9 @@ fn safe_plain_file_arguments(arguments: &[String]) -> bool {
             {
                 continue;
             }
+            return false;
+        }
+        if !safe_read_target(argument) {
             return false;
         }
         saw_target = true;
@@ -277,7 +288,7 @@ fn safe_head_tail_arguments(arguments: &[String]) -> bool {
             continue;
         }
         if after_options {
-            if argument == "-" {
+            if argument == "-" || !safe_read_target(argument) {
                 return false;
             }
             saw_target = true;
@@ -310,6 +321,9 @@ fn safe_head_tail_arguments(arguments: &[String]) -> bool {
             continue;
         }
         if argument.starts_with('-') {
+            return false;
+        }
+        if !safe_read_target(argument) {
             return false;
         }
         saw_target = true;
