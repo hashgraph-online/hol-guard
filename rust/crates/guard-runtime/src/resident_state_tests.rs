@@ -208,6 +208,57 @@ fn home_state_discovery_ignores_extra_unreadable_state_files() {
 }
 
 #[test]
+fn malformed_state_names_do_not_hide_a_live_generation() {
+    let base = test_scope("malformed-state-names");
+    let digest = runtime_digest().unwrap();
+    let scope =
+        ensure_private_directory(&base.join(format!("resident-v3-{}", &digest[..16])), true)
+            .unwrap();
+    let token = [7u8; crate::AUTH_TOKEN_BYTES];
+    publish_state(
+        &scope,
+        3,
+        std::process::id(),
+        &digest,
+        "loopback",
+        "127.0.0.1:1".to_owned(),
+        &token,
+    )
+    .unwrap();
+    for index in 0..80 {
+        fixture_file(
+            &scope.join(format!("generation-zzzzzzzzzzzzzzzzzzzz-{index}.json")),
+            b"{}",
+        );
+    }
+
+    let states = discover_home_states_prefer(&base, Some(&digest)).unwrap();
+    assert_eq!(states.len(), 1);
+    assert_eq!(states[0].2.generation, 3);
+    fs::remove_dir_all(base).unwrap();
+}
+
+#[test]
+fn truncated_scope_listing_fails_closed() {
+    let base = test_scope("truncated-scope-listing");
+    let digest = runtime_digest().unwrap();
+    let scope =
+        ensure_private_directory(&base.join(format!("resident-v3-{}", &digest[..16])), true)
+            .unwrap();
+    fixture_file(&scope.join("generation-00000000000000000001.json"), b"{}");
+    // One past MAX_DIRECTORY_ENTRIES so the scan cannot prove it saw every file.
+    for index in 0..4096 {
+        fixture_file(&scope.join(format!("unrelated-{index:05}")), b"x");
+    }
+
+    assert_eq!(
+        discover_home_states_prefer(&base, Some(&digest)).unwrap_err(),
+        "native_resident_state_list_failed"
+    );
+    fs::remove_dir_all(base).unwrap();
+}
+
+#[test]
 fn publishing_ignores_unrelated_scope_entries() {
     let scope = test_scope("state-prune-entry-overflow");
     let digest = runtime_digest().unwrap();

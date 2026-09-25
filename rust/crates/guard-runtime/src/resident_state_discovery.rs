@@ -103,7 +103,7 @@ fn load_scope_states(
 ) -> Result<Vec<(PathBuf, String, ResidentState)>, String> {
     let scope = ensure_private_directory_under(scope, private_root, true)?;
     let mut paths = state_paths(&scope)?;
-    paths.sort();
+    paths.sort_by_key(|path| generation_number(path).unwrap_or(0));
     if paths.len() > MAX_STATE_FILES {
         let skip = paths.len() - MAX_STATE_FILES;
         paths.drain(0..skip);
@@ -141,12 +141,29 @@ pub(super) fn state_paths(scope: &Path) -> Result<Vec<PathBuf>, String> {
         };
         let name = entry.file_name();
         let name = name.to_string_lossy();
-        if name.starts_with(STATE_FILE_PREFIX) && name.ends_with(STATE_FILE_SUFFIX) {
+        if canonical_generation(&name).is_some() {
             paths.push(entry.path());
         }
     }
-    if truncated && paths.is_empty() {
+    // A scan that stopped early can hide a later live state file.
+    if truncated {
         return Err("native_resident_state_list_failed".to_owned());
     }
     Ok(paths)
+}
+
+fn canonical_generation(name: &str) -> Option<u64> {
+    let rest = name
+        .strip_prefix(STATE_FILE_PREFIX)?
+        .strip_suffix(STATE_FILE_SUFFIX)?;
+    if rest.len() != 20 || !rest.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    rest.parse().ok()
+}
+
+fn generation_number(path: &Path) -> Option<u64> {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .and_then(canonical_generation)
 }
