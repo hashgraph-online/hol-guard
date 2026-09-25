@@ -486,12 +486,5 @@ fn bounded_workspace_read_path(value: &str) -> bool {
     if path.split(['/', '\\']).any(|part| part == "..") {
         return false;
     }
-    let lowered = path.to_ascii_lowercase();
-    !(lowered.starts_with("/etc/")
-        || lowered.starts_with("/dev/")
-        || lowered.starts_with("/proc/")
-        || lowered.starts_with("/sys/")
-        || lowered.starts_with("/private/etc/")
-        || lowered.starts_with("/var/")
-        || lowered.starts_with('~'))
+    super::safe_reads::safe_read_target(path)
 }

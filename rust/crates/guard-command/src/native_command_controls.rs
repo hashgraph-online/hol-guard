@@ -201,17 +201,30 @@ impl CompiledNativeCommandControls {
                 .observe(command, &self.active_extensions, deadline),
             None => Ok(NativeCommandObservationBatchV1::default()),
         };
+        let mut deadline_limited = false;
+        let mut matched_rule = false;
         let mut batch = match observed {
-            Ok(batch) => batch,
-            Err(_) => NativeCommandObservationBatchV1 {
-                evaluation_error: Some("native_command_evaluation_failed".to_owned()),
-                ..Default::default()
-            },
+            Ok(batch) => {
+                matched_rule = batch
+                    .observations
+                    .iter()
+                    .any(|observation| !observation.effective_segment_indexes.is_empty())
+                    || !batch.permission_observations.is_empty();
+                batch
+            }
+            Err(error) => {
+                deadline_limited = error.contains("deadline");
+                NativeCommandObservationBatchV1 {
+                    evaluation_error: Some("native_command_evaluation_failed".to_owned()),
+                    ..Default::default()
+                }
+            }
         };
         let delegated_floor = if batch.evaluation_error.is_none() {
             match self.delegated_observations(command, tool, packages, &mut batch, deadline) {
                 Ok(action) => action,
-                Err(_) => {
+                Err(error) => {
+                    deadline_limited = error.contains("deadline");
                     batch = NativeCommandObservationBatchV1 {
                         evaluation_error: Some("native_command_evaluation_failed".into()),
                         ..Default::default()
@@ -325,7 +338,20 @@ impl CompiledNativeCommandControls {
             permission_observations: batch.permission_observations,
             evaluation_error: batch.evaluation_error,
         });
-        let proven_benign = result.explicitly_benign && result.minimum_action == "allow";
+        let observed_benign = command.is_some_and(|command| {
+            crate::pretool::evaluate_pre_tool(&crate::CommandModelRequestV1 {
+                command: command.normalized_text.clone(),
+                dialect: "posix".to_owned(),
+                transport: "shell_string".to_owned(),
+                extraction_provenance: "guard-shell".to_owned(),
+            })
+            .ok()
+            .is_some_and(|decision| {
+                decision.explicitly_benign && decision.minimum_action == "allow"
+            })
+        });
+        let proven_benign =
+            observed_benign && result.explicitly_benign && result.minimum_action == "allow";
         if evaluation_error.is_some()
             && !self.global_block
             && !proven_benign
@@ -334,7 +360,12 @@ impl CompiledNativeCommandControls {
             floor = "block";
             reason = "native_command_extension_evaluation_failed";
         }
-        if !(proven_benign && evaluation_error.is_some() && !self.global_block) {
+        if !(proven_benign
+            && deadline_limited
+            && !matched_rule
+            && evaluation_error.is_some()
+            && !self.global_block)
+        {
             strengthen(&mut result, floor, reason);
         }
         result
