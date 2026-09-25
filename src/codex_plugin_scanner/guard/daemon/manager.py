@@ -3125,13 +3125,66 @@ def _guard_daemon_recovery_lock(guard_home: Path, *, timeout_seconds: float | No
         thread_lock.release()
 
 
+def _same_daemon_invocation(left: str, right: str) -> bool:
+    """Return whether two command lines are the same Guard daemon serve invocation."""
+
+    left_parts = _split_process_command(left)
+    right_parts = _split_process_command(right)
+    if left_parts is None or right_parts is None:
+        return False
+    if not _guard_daemon_command_parts_match(left_parts) or not _guard_daemon_command_parts_match(right_parts):
+        return False
+    left_home = _guard_home_from_command_parts(left_parts)
+    right_home = _guard_home_from_command_parts(right_parts)
+    left_port = _guard_daemon_port_from_command(left)
+    right_port = _guard_daemon_port_from_command(right)
+    if left_home is None or right_home is None or left_port is None or right_port is None:
+        return False
+    try:
+        homes_match = left_home.resolve() == right_home.resolve()
+    except (OSError, NotImplementedError, RuntimeError, ValueError):
+        homes_match = os.path.normcase(str(left_home)) == os.path.normcase(str(right_home))
+    return homes_match and left_port == right_port
+
+
+def _windows_venv_launcher_parent_pid() -> int | None:
+    """Ignore the Windows venv redirector that stays alive beside the real interpreter.
+
+    ``Scripts\\python.exe`` keeps the daemon command line and spawns the base
+    interpreter with the same arguments. That parent is not a second daemon.
+    A competing daemon is still rejected, and the owner file lock still
+    serializes the slot when the parent really holds it.
+    """
+
+    if os.name != "nt":
+        return None
+    parent_pid = os.getppid()
+    if parent_pid <= 0 or parent_pid == os.getpid():
+        return None
+    parent_command = windows_processes.windows_process_command_line(parent_pid)
+    own_command = windows_processes.windows_process_command_line(os.getpid())
+    if parent_command is None or own_command is None:
+        return None
+    if not _same_daemon_invocation(parent_command, own_command):
+        return None
+    return parent_pid
+
+
+def _inventory_has_competing_daemon(inventory: list[tuple[int, int]]) -> bool:
+    ignored = {os.getpid()}
+    launcher_parent = _windows_venv_launcher_parent_pid()
+    if launcher_parent is not None:
+        ignored.add(launcher_parent)
+    return any(pid not in ignored for pid, _port in inventory)
+
+
 def acquire_guard_daemon_owner_lock(guard_home: Path) -> BinaryIO:
     """Claim the single daemon slot before any background worker can read secrets."""
 
     inventory = _guard_daemon_process_inventory_for_guard_home(guard_home)
     if inventory is None:
         raise RuntimeError("Guard could not verify that the daemon slot is available.")
-    if any(pid != os.getpid() for pid, _port in inventory):
+    if _inventory_has_competing_daemon(inventory):
         raise RuntimeError("A Guard daemon is already active for this Guard home.")
     lock_path = guard_home / _GUARD_DAEMON_OWNER_LOCK_FILE
     lock_path.parent.mkdir(parents=True, exist_ok=True)
@@ -3140,7 +3193,7 @@ def acquire_guard_daemon_owner_lock(guard_home: Path) -> BinaryIO:
         handle.close()
         raise RuntimeError("A Guard daemon is already active for this Guard home.")
     inventory = _guard_daemon_process_inventory_for_guard_home(guard_home)
-    if inventory is None or any(pid != os.getpid() for pid, _port in inventory):
+    if inventory is None or _inventory_has_competing_daemon(inventory):
         _unlock_daemon_start_file(handle)
         handle.close()
         raise RuntimeError("A Guard daemon is already active for this Guard home.")
