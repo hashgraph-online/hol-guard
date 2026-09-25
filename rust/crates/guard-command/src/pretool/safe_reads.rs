@@ -73,7 +73,9 @@ pub(super) fn safe_read_target(argument: &str) -> bool {
 }
 
 fn lexical_read_path(value: &str) -> Option<String> {
-    if value.is_empty() || value.contains(['\0', '\n', '\r', '%']) {
+    if value.is_empty()
+        || value.contains(['\0', '\n', '\r', '%', '*', '?', '[', ']', '{', '}'])
+    {
         return None;
     }
     let unified = value.replace('\\', "/");
