@@ -149,35 +149,46 @@ fn home_state_discovery_allows_nonmatching_entries_within_bound() {
 }
 
 #[test]
-fn home_state_discovery_fails_closed_on_total_entry_overflow() {
+fn home_state_discovery_ignores_unrelated_entries() {
     let base = test_scope("scope-entry-overflow");
-    for index in 0..=64 {
+    for index in 0..200 {
         fixture_directory(&base.join(format!("unrelated-{index:03}")));
     }
 
-    assert_eq!(
-        discover_home_states(&base).unwrap_err(),
-        "native_resident_state_list_failed"
-    );
+    assert!(discover_home_states(&base).unwrap().is_empty());
     fs::remove_dir_all(base).unwrap();
 }
 
 #[test]
-fn home_state_discovery_rejects_seventeenth_matching_scope() {
+fn home_state_discovery_keeps_current_runtime_among_stale_scopes() {
     let base = test_scope("matching-scope-overflow");
-    for index in 0..=16 {
+    let digest = runtime_digest().unwrap();
+    for index in 0..24 {
         ensure_private_directory(&base.join(format!("resident-v3-{index:016x}")), true).unwrap();
     }
+    let preferred_scope =
+        ensure_private_directory(&base.join(format!("resident-v3-{}", &digest[..16])), true)
+            .unwrap();
+    let token = [7u8; crate::AUTH_TOKEN_BYTES];
+    publish_state(
+        &preferred_scope,
+        4,
+        std::process::id(),
+        &digest,
+        "loopback",
+        "127.0.0.1:1".to_owned(),
+        &token,
+    )
+    .unwrap();
 
-    assert_eq!(
-        discover_home_states(&base).unwrap_err(),
-        "native_resident_state_list_failed"
-    );
+    let states = discover_home_states_prefer(&base, Some(&digest)).unwrap();
+    assert_eq!(states.len(), 1);
+    assert_eq!(states[0].1, digest);
     fs::remove_dir_all(base).unwrap();
 }
 
 #[test]
-fn home_state_discovery_fails_closed_on_many_state_entries() {
+fn home_state_discovery_ignores_extra_unreadable_state_files() {
     let base = test_scope("state-entry-overflow");
     let digest = runtime_digest().unwrap();
     let scope =
@@ -190,15 +201,14 @@ fn home_state_discovery_fails_closed_on_many_state_entries() {
         );
     }
 
-    assert_eq!(
-        discover_home_states(&base).unwrap_err(),
-        "native_resident_state_list_failed"
-    );
+    assert!(discover_home_states_prefer(&base, Some(&digest))
+        .unwrap()
+        .is_empty());
     fs::remove_dir_all(base).unwrap();
 }
 
 #[test]
-fn publishing_fails_closed_when_scope_entry_bound_is_exceeded() {
+fn publishing_ignores_unrelated_scope_entries() {
     let scope = test_scope("state-prune-entry-overflow");
     let digest = runtime_digest().unwrap();
     for index in 0..64 {
@@ -206,19 +216,17 @@ fn publishing_fails_closed_when_scope_entry_bound_is_exceeded() {
     }
 
     let token = [7u8; crate::AUTH_TOKEN_BYTES];
-    assert_eq!(
-        publish_state(
-            &scope,
-            1,
-            std::process::id(),
-            &digest,
-            "loopback",
-            "127.0.0.1:1".to_owned(),
-            &token,
-        )
-        .unwrap_err(),
-        "native_resident_state_list_failed"
-    );
+    let state = publish_state(
+        &scope,
+        1,
+        std::process::id(),
+        &digest,
+        "loopback",
+        "127.0.0.1:1".to_owned(),
+        &token,
+    )
+    .unwrap();
+    assert_eq!(state.generation, 1);
     fs::remove_dir_all(scope).unwrap();
 }
 
