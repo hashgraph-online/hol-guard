@@ -458,6 +458,40 @@ fn evaluate_signals(
             );
         }
     }
+    if action_type == PreToolActionTypeV1::FileRead
+        && !signals.sensitive_target
+        && signals.url_values.is_empty()
+        && signals.path_values.len() == 1
+        && bounded_workspace_read_path(&signals.path_values[0])
+    {
+        return generic_result(
+            action,
+            "allow",
+            "native_exact_safe_file_read",
+            "The Rust command authority proved this bounded file read explicitly benign.",
+        );
+    }
     let (reason_code, reason) = review_reason(action_type);
     generic_result(action, "review", reason_code, reason)
+}
+
+fn bounded_workspace_read_path(value: &str) -> bool {
+    let path = value.trim();
+    if path.is_empty() || path.len() > 4096 {
+        return false;
+    }
+    if path.contains(['$', '`', '|', ';', '&', '<', '>', '\n', '\r', '\0', '*']) {
+        return false;
+    }
+    if path.split(['/', '\\']).any(|part| part == "..") {
+        return false;
+    }
+    let lowered = path.to_ascii_lowercase();
+    !(lowered.starts_with("/etc/")
+        || lowered.starts_with("/dev/")
+        || lowered.starts_with("/proc/")
+        || lowered.starts_with("/sys/")
+        || lowered.starts_with("/private/etc/")
+        || lowered.starts_with("/var/")
+        || lowered.starts_with('~'))
 }

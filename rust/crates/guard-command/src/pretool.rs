@@ -206,6 +206,117 @@ fn exfiltration_command(value: &str) -> bool {
         && upload.iter().any(|needle| lowered.contains(needle))
 }
 
+fn safe_date_arguments(arguments: &[String]) -> bool {
+    let mut saw_format = false;
+    for argument in arguments {
+        if matches!(argument.as_str(), "-u" | "--utc" | "--universal") {
+            continue;
+        }
+        if argument.starts_with('+') && argument.len() <= 256 && !argument.contains('\n') {
+            if saw_format {
+                return false;
+            }
+            saw_format = true;
+            continue;
+        }
+        return false;
+    }
+    true
+}
+
+fn safe_listing_arguments(arguments: &[String]) -> bool {
+    arguments.iter().all(|argument| argument != "-")
+}
+
+fn safe_plain_file_arguments(arguments: &[String]) -> bool {
+    let mut saw_target = false;
+    let mut after_options = false;
+    for argument in arguments {
+        if after_options {
+            if argument == "-" {
+                return false;
+            }
+            saw_target = true;
+            continue;
+        }
+        if argument == "--" {
+            after_options = true;
+            continue;
+        }
+        if argument == "-" || argument.starts_with("--") {
+            return false;
+        }
+        if argument.starts_with('-') {
+            if argument
+                .bytes()
+                .skip(1)
+                .all(|byte| matches!(byte, b'A' | b'b' | b'E' | b'n' | b's' | b'T' | b'v'))
+            {
+                continue;
+            }
+            return false;
+        }
+        saw_target = true;
+    }
+    saw_target
+}
+
+fn safe_head_tail_arguments(arguments: &[String]) -> bool {
+    let mut saw_target = false;
+    let mut expect_count = false;
+    let mut after_options = false;
+    for argument in arguments {
+        if expect_count {
+            if !argument.bytes().all(|byte| byte.is_ascii_digit())
+                || argument.is_empty()
+                || argument.len() > 6
+            {
+                return false;
+            }
+            expect_count = false;
+            continue;
+        }
+        if after_options {
+            if argument == "-" {
+                return false;
+            }
+            saw_target = true;
+            continue;
+        }
+        if argument == "--" {
+            after_options = true;
+            continue;
+        }
+        if matches!(argument.as_str(), "-n" | "--lines" | "-c" | "--bytes") {
+            expect_count = true;
+            continue;
+        }
+        if let Some(value) = argument
+            .strip_prefix("--lines=")
+            .or_else(|| argument.strip_prefix("--bytes="))
+        {
+            if value.is_empty()
+                || value.len() > 6
+                || !value.bytes().all(|byte| byte.is_ascii_digit())
+            {
+                return false;
+            }
+            continue;
+        }
+        if argument.starts_with('-')
+            && argument.len() > 1
+            && argument.bytes().skip(1).all(|byte| byte.is_ascii_digit())
+        {
+            continue;
+        }
+        if argument.starts_with('-') {
+            return false;
+        }
+        saw_target = true;
+    }
+    saw_target && !expect_count
+}
+
 fn exact_safe_command(model: &CanonicalCommandV1, allow_git_helper_context: bool) -> bool {
     if model.confidence != "exact"
         || model.path_overridden
@@ -232,6 +343,10 @@ fn exact_safe_command(model: &CanonicalCommandV1, allow_git_helper_context: bool
         }
         match basename {
             "pwd" | "true" | "echo" | "printf" | "which" | "whoami" | "uname" | "stat" => true,
+            "date" => safe_date_arguments(&segment.arguments),
+            "ls" => safe_listing_arguments(&segment.arguments),
+            "cat" => safe_plain_file_arguments(&segment.arguments),
+            "head" | "tail" => safe_head_tail_arguments(&segment.arguments),
             "git" => safe_git_arguments(&segment.arguments, allow_git_helper_context),
             "rg" | "grep" => safe_search_arguments(basename, &segment.arguments),
             _ => false,
@@ -408,6 +523,15 @@ mod tests {
             "grep -e 'terraform.tfvars' README.md",
             "grep -d skip authority README.md",
             "stat README.md",
+            "date",
+            "date -u +%Y-%m-%dT%H:%M:00Z",
+            "date --utc +%s",
+            "pwd; date +%H:%M:%S",
+            "ls",
+            "ls -la src",
+            "cat README.md",
+            "head -n 20 README.md",
+            "tail -n 5 README.md",
         ] {
             let decision = evaluate_pre_tool(&request(command)).unwrap();
             assert_eq!(decision.decision, "allow", "{command}");
@@ -421,6 +545,24 @@ mod tests {
             let decision = evaluate_pre_tool(&request(command)).unwrap();
             assert_eq!(decision.decision, "allow", "{command}");
             assert!(decision.explicitly_benign, "{command}");
+        }
+    }
+
+    #[test]
+    fn reviews_date_mutations_and_unbounded_file_reads() {
+        for command in [
+            "date -s tomorrow",
+            "date --set=tomorrow",
+            "date +%s +%N",
+            "date -f timestamps.txt",
+            "cat .env",
+            "head -f README.md",
+            "tail -f README.md",
+            "cat -",
+        ] {
+            let decision = evaluate_pre_tool(&request(command)).unwrap();
+            assert_eq!(decision.minimum_action, "review", "{command}");
+            assert!(!decision.explicitly_benign, "{command}");
         }
     }
 
