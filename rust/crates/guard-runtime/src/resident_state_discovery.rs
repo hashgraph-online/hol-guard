@@ -12,6 +12,7 @@ const MAX_SCOPES: usize = 16;
 // fail-closes when a flooded directory might have hidden the caller's runtime
 // before that scope was seen.
 const MAX_DIRECTORY_ENTRIES: usize = 4096;
+const MAX_STATE_READ_ATTEMPTS: usize = MAX_STATE_FILES * 4;
 
 #[allow(dead_code)]
 pub(crate) fn discover_home_states(
@@ -34,6 +35,7 @@ pub(crate) fn discover_home_states_prefer(
     let mut scanned = 0usize;
     let mut truncated = false;
     for entry in fs::read_dir(&base).map_err(|_| "native_resident_state_list_failed".to_owned())? {
+        // Count every entry so unrelated names cannot hide a later file.
         scanned += 1;
         if scanned > MAX_DIRECTORY_ENTRIES {
             truncated = true;
@@ -71,8 +73,8 @@ pub(crate) fn discover_home_states_prefer(
     let caller_digest = preferred_digest
         .filter(|digest| digest.len() == 64 && digest.bytes().all(|byte| byte.is_ascii_hexdigit()));
     // Read older versions only when the current scope has no live state.
-    // An incomplete listing of that scope still fail-closes. A broken older
-    // directory must not fail every hook.
+    // A file listing that stops early inside that scope still fail-closes.
+    // One broken older directory must not fail every hook.
     let mut states = Vec::new();
     if let Some((path, digest_prefix)) = preferred_candidate {
         match load_scope_states(&path, &digest_prefix, &private_root) {
@@ -111,7 +113,7 @@ fn load_scope_states(
     paths.sort_by_key(|path| std::cmp::Reverse(generation_number(path).unwrap_or(0)));
     let mut states = Vec::new();
     for (attempted, path) in paths.into_iter().enumerate() {
-        if attempted >= MAX_STATE_FILES * 4 || states.len() == MAX_STATE_FILES {
+        if attempted >= MAX_STATE_READ_ATTEMPTS || states.len() == MAX_STATE_FILES {
             break;
         }
         let Ok(state) = read_state_file_raw(&path, private_root) else {
@@ -135,6 +137,8 @@ pub(super) fn state_paths(scope: &Path) -> Result<Vec<PathBuf>, String> {
     let mut scanned = 0usize;
     let mut truncated = false;
     for entry in fs::read_dir(scope).map_err(|_| "native_resident_state_list_failed".to_owned())? {
+        // Count every entry so unrelated names cannot hide a later state file.
+        // Count every entry so unrelated names cannot hide a later file.
         scanned += 1;
         if scanned > MAX_DIRECTORY_ENTRIES {
             truncated = true;
