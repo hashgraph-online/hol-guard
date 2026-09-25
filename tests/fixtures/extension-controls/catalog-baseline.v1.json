@@ -6,7 +6,7 @@
     "canonical_diff_digest",
     "effective"
   ],
-  "catalog_digest": "bdf36e74b2ca93074e43398bbef93ef1cb0399951ab25e0657b57be832bc9f58",
+  "catalog_digest": "3c449b1509985763b3f6522129a45b4bc5d3b39f40d8b3793b5a3640961613fd",
   "control_schema_version": "1.0.0",
   "daemon_api_schema": "guard.daemon.extension-controls.v1",
   "effective_shape": [
@@ -20,7 +20,7 @@
     "failures",
     "projection"
   ],
-  "extension_count": 72,
+  "extension_count": 73,
   "extension_ids": [
     "command.api-gateway",
     "command.backup.borg",
@@ -53,6 +53,7 @@
     "command.framework.laravel",
     "command.git",
     "command.github",
+    "command.givi",
     "command.guard-self-protection",
     "command.infrastructure-as-code",
     "command.kubernetes-operations",
@@ -98,7 +99,7 @@
   "extension_schema_version": 2,
   "installed_browser_config": "dashboard/playwright.installed.config.ts",
   "overview_route": "/extensions",
-  "permission_count": 253,
+  "permission_count": 256,
   "permission_examples": {
     "command.api-gateway.permission.delete": "aws apigateway delete-rest-api",
     "command.backup.borg.permission.mutation": "borg delete",
@@ -232,6 +233,9 @@
     "command.github.permission.unknown": "gh extension run custom-tool",
     "command.github.permission.workflow-remote": "gh workflow run deploy.yml",
     "command.github.permission.write-local": "gh repo set-default owner/repo",
+    "command.givi.permission.auto-review-config": "givi auto-review enable",
+    "command.givi.permission.auto-review-run": "givi auto-review run --task-id task-1 --checks passed",
+    "command.givi.permission.findings-write": "givi findings update --run-id RUN --id F-ID --status unverified",
     "command.guard-self-protection.permission.self-authorization": "hol-guard approvals approve",
     "command.infrastructure-as-code.permission.destroy": "terraform destroy",
     "command.kubernetes-operations.permission.annotate-resources": "kubectl annotate deployment api owner=platform --overwrite",
@@ -583,6 +587,9 @@
     "command.github.permission.unknown",
     "command.github.permission.workflow-remote",
     "command.github.permission.write-local",
+    "command.givi.permission.auto-review-config",
+    "command.givi.permission.auto-review-run",
+    "command.givi.permission.findings-write",
     "command.guard-self-protection.permission.self-authorization",
     "command.infrastructure-as-code.permission.destroy",
     "command.kubernetes-operations.permission.annotate-resources",
@@ -715,7 +722,7 @@
     "controls",
     "semantic_preview"
   ],
-  "rule_count": 239,
+  "rule_count": 245,
   "rule_ids": [
     "command.api-gateway.delete",
     "command.backup.borg.mutation",
@@ -845,6 +852,12 @@
     "command.github.access",
     "command.github.mutation",
     "command.github.unknown",
+    "command.givi.auto-review-enable",
+    "command.givi.auto-review-disable",
+    "command.givi.auto-review-acknowledge",
+    "command.givi.auto-review-run",
+    "command.givi.findings-add",
+    "command.givi.findings-update",
     "command.guard-self-protection.self-authorization",
     "command.infrastructure-as-code.destroy",
     "command.kubernetes-operations.delete-resources",
