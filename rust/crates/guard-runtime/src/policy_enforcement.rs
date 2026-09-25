@@ -172,6 +172,7 @@ fn canonical_harness(value: &str) -> Option<&str> {
         "pi-agent" | "pi-coding-agent" => Some("pi"),
         "oh-my-pi" => Some("omp"),
         "zai" | "z-code" | "zai-zcode" => Some("zcode"),
+        "devin-cli" | "cognition-devin" => Some("devin"),
         _ => None,
     }
 }

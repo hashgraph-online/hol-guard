@@ -5,7 +5,7 @@ import { protectionHealthFor } from "./protection-health";
 import { guardActionPresentation } from "./guard-action";
 import type { GuardActionPresentation } from "./guard-action";
 
-const WATCHED_HARNESSES = ["codex", "claude-code", "opencode", "copilot", "gemini", "cursor", "hermes", "openclaw", "kimi", "grok"] as const;
+const WATCHED_HARNESSES = ["codex", "claude-code", "opencode", "copilot", "gemini", "cursor", "hermes", "openclaw", "kimi", "grok", "devin"] as const;
 
 type WatchedHarnessName = (typeof WATCHED_HARNESSES)[number];
 

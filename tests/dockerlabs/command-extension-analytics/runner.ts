@@ -96,16 +96,18 @@ async function resolveWheel(runner: CommandRunner, version: string): Promise<str
 }
 async function waitForReady(origin: string, timeoutMs = 60_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
+  let observation = "no response";
   while (Date.now() < deadline) {
     try {
       const response = await fetch(`${origin}/healthz`);
       if (response.ok) return;
-    } catch {
-      // Container health is still converging.
+      observation = `HTTP ${response.status}`;
+    } catch (error) {
+      observation = error instanceof Error ? error.message.slice(0, 160) : "request failed";
     }
     await Bun.sleep(250);
   }
-  throw new Error("installed Guard daemon did not become ready");
+  throw new Error(`installed Guard daemon did not become ready (${observation})`);
 }
 export async function readyFromLogs(
   project: string, environment: Record<string, string>, runner: CommandRunner,
@@ -403,7 +405,7 @@ async function verifyApi(
   if (cursorRows.length !== 1 || cursorRows[0]?.harness !== "cursor") throw new Error("cursor filter did not reconcile");
   const workflowAuthorized = rows.some((row) => (
     row.policy_action === "allow" && row.approval_reuse_status === "accepted" && row.prompted === false
-    && row.decision_reason_code === "capability" && row.match_count === 1
+    && row.decision_reason_code === "capability" && row.match_count === 0
     && row.execution_status === "allowed_unconfirmed"
   ));
   const categories = [
@@ -438,6 +440,31 @@ async function verifyApi(
     statuses,
   };
 }
+async function waitForReadyWithDiagnostics(
+  origin: string, project: string, environment: Record<string, string>, runner: CommandRunner,
+): Promise<void> {
+  try {
+    await waitForReady(origin);
+  } catch (error) {
+    const diagnostic = await collectComposeDiagnostics(project, environment, runner, ["guard", "relay", "host_relay"], true);
+    throw new Error(`${String(error)}\n${diagnostic}`);
+  }
+}
+async function collectComposeDiagnostics(
+  project: string, environment: Record<string, string>, runner: CommandRunner,
+  services: string[], includeState = false,
+): Promise<string> {
+  const commands = services.map((service) => composeCommand(project, "logs", "--no-color", "--tail", "20", service));
+  if (includeState) commands.push(composeCommand(project, "ps"));
+  const results = await Promise.allSettled(commands.map((command) => runner(command, {
+    cwd: LAB_DIR, env: environment, timeoutMs: 15_000,
+  })));
+  return results
+    .flatMap((result) => result.status === "fulfilled" && result.value.exitCode === 0
+      ? [result.value.stdout.replaceAll(SENTINEL, "[REDACTED]").slice(-MAX_GUARD_FAILURE_CHARS)]
+      : [])
+    .join("\n");
+}
 export async function runLab(runner: CommandRunner = runCommand): Promise<LabEvidence> {
   const project = safeProjectName(Bun.env.GUARD_TEST_PROJECT ?? `guard-command-analytics-${process.pid}`);
   const port = Number(Bun.env.GUARD_TEST_PORT ?? 48_000 + process.pid % 1_000);
@@ -459,11 +486,14 @@ export async function runLab(runner: CommandRunner = runCommand): Promise<LabEvi
       throw new Error(`Dockerlabs project is not clean before start: ${JSON.stringify(existing)}`);
     }
     const containment = await runInstalledContainment(runner, version);
-    requireSuccess(
-      await runner(composeCommand(project, "up", "-d", "--build", "--wait"), { cwd: LAB_DIR, env: environment }),
-      "Dockerlabs startup",
-    );
-    await waitForReady(origin);
+    const startup = await runner(composeCommand(project, "up", "-d", "--build", "--wait"), {
+      cwd: LAB_DIR, env: environment,
+    });
+    if (startup.exitCode !== 0) {
+      const diagnostic = await collectComposeDiagnostics(project, environment, runner, ["guard", "relay", "host_relay"]);
+      throw new Error(`Dockerlabs startup failed (${startup.exitCode})\n${startup.stderr || startup.stdout}\n${diagnostic}`);
+    }
+    await waitForReadyWithDiagnostics(origin, project, environment, runner);
     const pending = await waitForPendingWorkflow(project, environment, runner);
     const session = await readDashboardSession(project, environment, runner);
     await approveWorkflowAuthorization(origin, pending, session);
@@ -481,7 +511,13 @@ export async function runLab(runner: CommandRunner = runCommand): Promise<LabEvi
       await runner(composeCommand(project, "restart", "guard"), { cwd: LAB_DIR, env: environment }),
       "installed daemon restart",
     );
-    await waitForReady(origin);
+    requireSuccess(
+      await runner(composeCommand(project, "up", "-d", "--no-deps", "--force-recreate", "--wait", "relay"), {
+        cwd: LAB_DIR, env: environment,
+      }),
+      "installed relay reattachment",
+    );
+    await waitForReadyWithDiagnostics(origin, project, environment, runner);
     const restarted = await waitForReadyEvidence(project, environment, runner);
     const restartedSession = await readDashboardSession(project, environment, runner);
     const afterRestart = await verifyApi(

@@ -6,18 +6,15 @@ import argparse
 import hashlib
 import json
 import os
-import platform
 import shutil
 import sqlite3
 import subprocess
 import sys
 import tempfile
 import time
-import zipfile
-from collections import defaultdict
 from collections.abc import Iterable
 from contextlib import closing
-from itertools import chain, islice
+from importlib.metadata import distribution
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
@@ -27,6 +24,10 @@ if TYPE_CHECKING:
     from tests.guard_command_corpus_oracle_types import OracleRecord
 
 _FROZEN_MANIFEST_SHA256 = "9cb33472d122058e8ede6ede57d55d0ebf29b832f8b4eb5321a2309862cf3728"
+# These counts belong to the source-bound 51k corpus validated by the manifest above.
+_FROZEN_CORPUS_CASE_COUNT = 51_000
+_FROZEN_NATIVE_REJECTION_COUNT = 27_084
+_FROZEN_ORACLE_ABOVE_COUNT = 11_558
 
 
 def _sha256(path: Path) -> str:
@@ -95,182 +96,72 @@ def _validate_corpus_bindings(repo_root: Path) -> dict[str, object]:
     }
 
 
-def _framed_case_ids(case_ids: list[str]) -> str:
-    digest = hashlib.sha256()
-    for case_id in sorted(case_ids):
-        encoded = case_id.encode("ascii")
-        digest.update(len(encoded).to_bytes(8, "big"))
-        digest.update(encoded)
-    return digest.hexdigest()
-
-
-def _native_executable_names() -> tuple[str, str]:
-    if os.name == "nt":
-        return "guard-command-source.exe", "hol-guard-runtime.exe"
-    return "guard-command-source", "hol-guard-runtime"
-
-
-def _platform_wheel_markers() -> tuple[str, ...]:
-    machine = platform.machine().lower()
-    if sys.platform == "win32":
-        return ("win_amd64",)
-    if sys.platform == "darwin":
-        if machine in {"arm64", "aarch64"}:
-            return ("macosx_11_0_arm64",)
-        return ("macosx_13_0_x86_64",)
-    return ("manylinux_2_17_x86_64",)
-
-
-def _packaged_native_binaries() -> tuple[Path, Path] | None:
-    try:
-        from codex_plugin_scanner.guard.extension_builder.native_source_compiler import (
-            NativeSourceCompilerError,
-            find_packaged_source_compiler,
-        )
-    except ImportError:
-        return None
-    try:
-        compiler = find_packaged_source_compiler()
-    except NativeSourceCompilerError:
-        return None
-    runtime = compiler.parent / _native_executable_names()[1]
-    if compiler.is_file() and runtime.is_file():
-        return compiler, runtime
-    return None
-
-
-def _checkout_native_binaries(repo_root: Path) -> tuple[Path, Path] | None:
-    compiler_name, runtime_name = _native_executable_names()
-    for profile in ("release", "debug"):
-        directory = repo_root / "rust" / "target" / profile
-        compiler = directory / compiler_name
-        runtime = directory / runtime_name
-        if compiler.is_file() and runtime.is_file():
-            return compiler, runtime
-    return None
-
-
-def _extract_native_binary(archive: zipfile.ZipFile, member: str, destination: Path) -> None:
-    info = archive.getinfo(member)
-    if info.is_dir() or info.file_size <= 0 or info.file_size > 128 * 1024 * 1024:
-        raise InstalledCanaryError("Installed canary native compiler payload is invalid")
-    payload = archive.read(info)
-    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
-    descriptor = os.open(destination, flags, 0o700)
-    try:
-        with os.fdopen(descriptor, "wb") as handle:
-            descriptor = -1
-            handle.write(payload)
-            handle.flush()
-    finally:
-        if descriptor >= 0:
-            os.close(descriptor)
-    if os.name != "nt":
-        destination.chmod(0o700)
-
-
-def _extract_native_binaries(dist_dir: Path) -> tuple[Path, Path] | None:
-    if not dist_dir.is_dir():
-        return None
-    compiler_name, runtime_name = _native_executable_names()
-    members = (
-        f"codex_plugin_scanner/_native/{compiler_name}",
-        f"codex_plugin_scanner/_native/{runtime_name}",
-    )
-    markers = _platform_wheel_markers()
-    for wheel in sorted(dist_dir.glob("hol_guard-*.whl")):
-        if wheel.is_symlink() or not any(marker in wheel.name for marker in markers):
-            continue
-        with zipfile.ZipFile(wheel) as archive:
-            names = set(archive.namelist())
-            if not set(members) <= names:
-                continue
-            destination = Path(tempfile.mkdtemp(prefix="hol-guard-canary-native-"))
-            _extract_native_binary(archive, members[0], destination / compiler_name)
-            _extract_native_binary(archive, members[1], destination / runtime_name)
-            return destination / compiler_name, destination / runtime_name
-    return None
-
-
-def _pin_installed_native_binaries(repo_root: Path) -> None:
-    compiler_env = "HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER"
-    runtime_env = "HOL_GUARD_NATIVE_BINARY"
-    packaged = _packaged_native_binaries()
-    if packaged is not None:
-        os.environ[compiler_env], os.environ[runtime_env] = (str(packaged[0]), str(packaged[1]))
-        return
-    extracted = _extract_native_binaries(repo_root / "dist")
-    if extracted is not None:
-        os.environ[compiler_env], os.environ[runtime_env] = (str(extracted[0]), str(extracted[1]))
-        return
-    configured_compiler = os.environ.get(compiler_env)
-    configured_runtime = os.environ.get(runtime_env)
-    if (
-        configured_compiler
-        and configured_runtime
-        and Path(configured_compiler).is_file()
-        and Path(configured_runtime).is_file()
-    ):
-        return
-    checkout = _checkout_native_binaries(repo_root)
-    if checkout is not None:
-        os.environ[compiler_env], os.environ[runtime_env] = (str(checkout[0]), str(checkout[1]))
-        return
-    raise InstalledCanaryError("Installed canary native compiler is unavailable")
-
-
 def _run_corpus(repo_root: Path) -> dict[str, object]:
-    sys.path.insert(0, str(repo_root))
-    _pin_installed_native_binaries(repo_root)
-    from codex_plugin_scanner.guard.action_lattice import guard_action_severity
-    from tests.guard_command_corpus import iter_adversarial_corpus, iter_benign_corpus
-    from tests.guard_command_corpus_native import (
-        NATIVE_CORPUS_BATCH_SIZE,
-        evaluate_native_corpus_batch,
-        pin_neutral_attribution,
-    )
-    from tests.guard_command_corpus_native_contract import expected_native_groups, validate_native_case
-    from tests.guard_command_corpus_oracle import iter_adversarial_oracle, iter_benign_oracle
-
-    pin_neutral_attribution()
     bindings = _validate_corpus_bindings(repo_root)
-    ranks = {
-        action: guard_action_severity(action)
-        for action in ("allow", "warn", "review", "require-reapproval", "sandbox-required", "block")
-    }
-    ranks["monitor"] = ranks["warn"]
-    contract_groups: defaultdict[str, list[str]] = defaultdict(list)
-    count = 0
+    native_root = Path(distribution("hol-guard").locate_file("codex_plugin_scanner/_native"))
+    suffix = ".exe" if sys.platform == "win32" else ""
+    runtime = native_root / f"hol-guard-runtime{suffix}"
+    compiler = native_root / f"guard-command-source{suffix}"
+    if not runtime.is_file() or not compiler.is_file():
+        raise InstalledCanaryError("Installed Guard package is missing native corpus binaries")
+    environment = os.environ.copy()
+    environment["HOL_GUARD_NATIVE_BINARY"] = str(runtime)
+    environment["HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER"] = str(compiler)
     started = time.perf_counter()
-    streams = chain(
-        zip(iter_benign_corpus(), iter_benign_oracle(), strict=True),
-        zip(iter_adversarial_corpus(), iter_adversarial_oracle(), strict=True),
-    )
-    cwd = repo_root / "workspace"
-    home_dir = repo_root / "home"
-    while batch := tuple(islice(streams, NATIVE_CORPUS_BATCH_SIZE)):
-        evaluations = evaluate_native_corpus_batch([case for case, _oracle in batch], cwd=cwd, home_dir=home_dir)
-        for (case, oracle), reviewed in zip(batch, evaluations, strict=True):
-            decision = reviewed.evaluation
-            observed = decision.decision_plane.action
-            if ranks[observed] < ranks[oracle.minimum_floor]:
-                raise InstalledCanaryError("Installed evaluator is below the frozen corpus oracle")
-            try:
-                group_id = validate_native_case(case, oracle, reviewed)
-            except ValueError as error:
-                raise InstalledCanaryError(str(error)) from error
-            contract_groups[group_id].append(case.case_id)
-            count += 1
-        del evaluations
-    observed_contract = {
-        key: (len(ids), _framed_case_ids(ids)) for key, ids in contract_groups.items()
-    }
-    if count != 51_000 or observed_contract != expected_native_groups():
-        raise InstalledCanaryError("Installed evaluator differs from the frozen native corpus contract")
+    try:
+        completed = subprocess.run(
+            [sys.executable, str(repo_root / "scripts/run_installed_native_corpus.py")],
+            cwd=repo_root,
+            env=environment,
+            capture_output=True,
+            text=True,
+            timeout=240,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise InstalledCanaryError("Installed native corpus exceeded its time limit") from exc
+    if completed.returncode != 0:
+        raise InstalledCanaryError(
+            f"Installed native corpus failed (exit {completed.returncode}): {completed.stderr[-1200:]}"
+        )
+    try:
+        decoded = json.loads(completed.stdout)
+    except json.JSONDecodeError as exc:
+        raise InstalledCanaryError("Installed native corpus report is not valid JSON") from exc
+    if not isinstance(decoded, dict):
+        raise InstalledCanaryError("Installed native corpus report is not an object")
+    report = cast(dict[str, object], decoded)
+    raw_groups = report.get("native_contract_groups")
+    if not isinstance(raw_groups, dict) or any(
+        not isinstance(values, list)
+        or len(values) != 2
+        or not isinstance(values[0], int)
+        or isinstance(values[0], bool)
+        for values in raw_groups.values()
+    ):
+        raise InstalledCanaryError("Installed native corpus report has invalid groups")
+    groups = cast(dict[str, list[object]], raw_groups)
+    count = sum(cast(int, values[0]) for values in groups.values())
+    native_rejection_count = report.get("native_rejection_count")
+    original_oracle_above_count = report.get("original_oracle_above_count")
+    if (
+        report.get("native_contract_equality") is not True
+        or report.get("original_oracle_below_count") != 0
+        or count != _FROZEN_CORPUS_CASE_COUNT
+        or not isinstance(native_rejection_count, int)
+        or isinstance(native_rejection_count, bool)
+        or native_rejection_count != _FROZEN_NATIVE_REJECTION_COUNT
+        or not isinstance(original_oracle_above_count, int)
+        or isinstance(original_oracle_above_count, bool)
+        or original_oracle_above_count != _FROZEN_ORACLE_ABOVE_COUNT
+    ):
+        raise InstalledCanaryError("Installed evaluator differs from the frozen 51k native corpus contract")
     return {
         "case_count": count,
         "elapsed_seconds": time.perf_counter() - started,
-        "known_gap_groups": len(observed_contract),
+        "native_contract_groups": len(groups),
+        "native_rejection_count": native_rejection_count,
+        "original_oracle_above_count": original_oracle_above_count,
         "bindings": bindings,
     }
 

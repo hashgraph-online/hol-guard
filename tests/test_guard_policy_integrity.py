@@ -1146,7 +1146,7 @@ def test_upsert_policy_uses_single_integrity_key_lookup_per_write(
     assert state["key_id"] is None
 
 
-def test_policy_integrity_status_uses_timed_keychain_reads_once_per_secret(
+def test_policy_integrity_status_caches_bounded_identity_verified_keychain_reads(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1189,7 +1189,10 @@ def test_policy_integrity_status_uses_timed_keychain_reads_once_per_secret(
 
     assert first_status["mode"] == "protected"
     assert second_status["mode"] == "protected"
+    # Control metadata must be selected with its signing-key identity before
+    # the normal key lookup. Subsequent status calls use the material cache.
     assert timed_reads == [
+        store._policy_integrity_key_ref,
         store._policy_integrity_control_ref,
         store._policy_integrity_key_ref,
     ]

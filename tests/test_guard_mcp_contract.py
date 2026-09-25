@@ -44,6 +44,17 @@ class TestMCPModuleImport:
         assert HarnessName.OMP.value == "omp"
         assert "omp" in VALID_HARNESSES
 
+    def test_devin_is_an_allowed_harness(self):
+        from codex_plugin_scanner.guard.mcp.sanitizers import sanitize_search_result
+        from codex_plugin_scanner.guard.mcp.schemas import VALID_HARNESSES, HarnessName
+
+        assert HarnessName.DEVIN.value == "devin"
+        assert "devin" in VALID_HARNESSES
+        result = sanitize_search_result(
+            {"id": "r1", "title": "t", "kind": "receipt", "harness": "devin", "decision": "allow"}
+        )
+        assert result["harness"] == "devin"
+
 
 class TestMCPServerInitialization:
     """Verify the MCP server initializes correctly."""

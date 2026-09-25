@@ -12,6 +12,7 @@ import {
   hasApprovalGateSettingsChanged,
   resolveTotpSetupModalTitle,
   resolveInitialSettingsTab,
+  resolveRepairApprovalCenterMessage,
 } from "./settings-workspace";
 import { resolveApprovalPasswordSectionCopy } from "./settings/approval-password-copy";
 import { repairApprovalCenter, setupDesktopNotifications } from "./guard-api";
@@ -166,4 +167,21 @@ assert(
 assert(
   resolveTotpSetupModalTitle(true) === "Confirm your approval password",
   "totp-modal: confirm step title",
+);
+assert(
+  resolveRepairApprovalCenterMessage([]) === "Nothing needed repair. The approval center is already reachable from this dashboard.",
+  "repair: empty cleared list reports nothing needed repair",
+);
+assert(
+  resolveRepairApprovalCenterMessage(["locator"]).includes("stale approval link"),
+  "repair: single code maps to a human label",
+);
+const repairListMessage = resolveRepairApprovalCenterMessage(["locator", "daemon_state", "daemon_discovery_key"]);
+assert(
+  repairListMessage.includes("stale approval link, stale service record, and invalid discovery key"),
+  "repair: multiple codes join with commas and 'and'",
+);
+assert(
+  repairListMessage.startsWith("Approval center repaired:"),
+  "repair: cleared list reports a repaired approval center",
 );
