@@ -135,6 +135,7 @@ class ApprovalGateInput:
     totp_code: str | None = None
     use_cooldown: bool | None = None
     revoke_cooldown: bool = False
+    require_fresh_totp: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -1004,7 +1005,9 @@ def _verify_or_raise_locked(
     factor_set = ("password",)
     if _totp_enabled(state):
         if gate_input.totp_code is None:
-            if not _recent_totp_satisfied_locked(guard_home, state, now_epoch=now_epoch):
+            if gate_input.require_fresh_totp or not _recent_totp_satisfied_locked(
+                guard_home, state, now_epoch=now_epoch
+            ):
                 raise ApprovalGateError("approval_gate_totp_required", "TOTP code is required.")
             accepted_counter = _optional_int(state.get("totp_last_counter"))
             if accepted_counter is None:
@@ -1015,6 +1018,7 @@ def _verify_or_raise_locked(
                 state,
                 code=gate_input.totp_code,
                 now_epoch=now_epoch,
+                allow_reused_counter=not gate_input.require_fresh_totp,
             )
             state["totp_last_counter"] = accepted_counter
             _record_recent_totp_satisfaction(
@@ -1176,6 +1180,7 @@ def _verify_totp_or_raise(
     *,
     code: str,
     now_epoch: float,
+    allow_reused_counter: bool = True,
 ) -> int:
     secret = _validate_totp_state_or_raise(guard_home, state)
     accepted_counter = verify_totp_code(
@@ -1184,7 +1189,8 @@ def _verify_totp_or_raise(
         now_epoch=now_epoch,
         skew_steps=APPROVAL_GATE_TOTP_SKEW_STEPS,
         last_accepted_counter=_optional_int(state.get("totp_last_counter")),
-        allow_last_counter=_recent_totp_satisfied_locked(guard_home, state, now_epoch=now_epoch),
+        allow_last_counter=allow_reused_counter
+        and _recent_totp_satisfied_locked(guard_home, state, now_epoch=now_epoch),
     )
     if accepted_counter is None:
         _record_failed_attempt(guard_home, state, factor="totp", now=_iso_from_epoch(now_epoch))

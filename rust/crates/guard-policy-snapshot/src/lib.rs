@@ -366,6 +366,7 @@ fn normalized_harness_selector(value: &str) -> Option<String> {
         "pi-agent" | "pi-coding-agent" => "pi",
         "oh-my-pi" => "omp",
         "zai" | "z-code" | "zai-zcode" => "zcode",
+        "devin-cli" | "cognition-devin" => "devin",
         _ => normalized.as_str(),
     };
     Some(canonical.to_owned())

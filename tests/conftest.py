@@ -28,6 +28,12 @@ pythonpath_prefix = [str(path) for path in (SUPPORT_PATH, SRC_PATH) if str(path)
 if pythonpath_prefix:
     os.environ["PYTHONPATH"] = os.pathsep.join([*pythonpath_prefix, *pythonpath_entries])
 
+# Unit tests must never open real browser tabs. The flag is assigned at import
+# time so it is also inherited by helpers spawned from session-scoped fixtures,
+# and so an inherited value cannot silently re-enable launches.
+os.environ["HOL_GUARD_TEST_DISABLE_BROWSER_OPEN"] = "1"
+os.environ.pop("HOL_GUARD_TEST_ALLOW_BROWSER_OPEN", None)
+
 
 @pytest.fixture(autouse=True)
 def _default_unit_tests_to_python_rollback(monkeypatch: pytest.MonkeyPatch) -> None:
