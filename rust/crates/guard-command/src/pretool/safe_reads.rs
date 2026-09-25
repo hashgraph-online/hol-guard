@@ -15,8 +15,14 @@ pub(super) fn safe_date_arguments(arguments: &[String]) -> bool {
         }
         if matches!(
             argument.as_str(),
-            "-u" | "--utc" | "--universal" | "-R" | "--rfc-email" | "--rfc-2822" | "-I"
-                | "--iso-8601" | "--rfc-3339"
+            "-u" | "--utc"
+                | "--universal"
+                | "-R"
+                | "--rfc-email"
+                | "--rfc-2822"
+                | "-I"
+                | "--iso-8601"
+                | "--rfc-3339"
         ) || ((argument.starts_with("--iso-8601=") || argument.starts_with("--rfc-3339="))
             && argument.len() <= 40
             && !argument.contains('\n'))
@@ -73,9 +79,7 @@ pub(super) fn safe_read_target(argument: &str) -> bool {
 }
 
 fn lexical_read_path(value: &str) -> Option<String> {
-    if value.is_empty()
-        || value.contains(['\0', '\n', '\r', '%', '*', '?', '[', ']', '{', '}'])
-    {
+    if value.is_empty() || value.contains(['\0', '\n', '\r', '%', '*', '?', '[', ']', '{', '}']) {
         return None;
     }
     let unified = value.replace('\\', "/");
