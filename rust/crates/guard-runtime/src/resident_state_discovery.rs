@@ -39,9 +39,10 @@ pub(crate) fn discover_home_states_prefer(
             truncated = true;
             break;
         }
-        // One unreadable leftover must not fail every hook after a crash.
+        // An iterator error ends the listing, so later entries are unseen.
         let Ok(entry) = entry else {
-            continue;
+            truncated = true;
+            break;
         };
         let name = entry.file_name();
         let name = name.to_string_lossy();
@@ -62,19 +63,23 @@ pub(crate) fn discover_home_states_prefer(
     if truncated && preferred_candidate.is_none() {
         return Err("native_resident_state_list_failed".to_owned());
     }
-    // A newer runtime can be hidden behind an arbitrary number of stale
-    // per-digest scopes. Sort the caller's exact digest prefix first, then
-    // keep the existing global cap for bounded inspection of fallback state.
+    // Keep a bounded, ordered set of older scopes. The caller's scope is
+    // tracked separately and is not part of this sort.
     fallback_candidates
         .sort_unstable_by(|left, right| left.1.cmp(&right.1).then_with(|| left.0.cmp(&right.0)));
     fallback_candidates.truncate(MAX_SCOPES - usize::from(preferred_candidate.is_some()));
-    let preferred_digest = preferred_digest
+    let caller_digest = preferred_digest
         .filter(|digest| digest.len() == 64 && digest.bytes().all(|byte| byte.is_ascii_hexdigit()));
-    // The live runtime is one scope. Read fallback versions only when that
-    // scope has no usable state, so hook traffic does not stat every old install.
+    // Read older versions only when the current scope has no live state.
+    // An incomplete listing of that scope still fail-closes. A broken older
+    // directory must not fail every hook.
     let mut states = Vec::new();
     if let Some((path, digest_prefix)) = preferred_candidate {
-        states.extend(load_scope_states(&path, &digest_prefix, &private_root)?);
+        match load_scope_states(&path, &digest_prefix, &private_root) {
+            Ok(found) => states.extend(found),
+            Err(error) if error == "native_resident_state_list_failed" => return Err(error),
+            Err(_) => {}
+        }
     }
     let preferred_live = states.iter().any(|(_, _, state)| {
         validate_package_process_identity(state.process_id, &state.process_start_marker).is_ok()
@@ -87,8 +92,8 @@ pub(crate) fn discover_home_states_prefer(
         }
     }
     states.sort_unstable_by(|left, right| {
-        let left_preferred = preferred_digest.is_some_and(|digest| left.1 == digest);
-        let right_preferred = preferred_digest.is_some_and(|digest| right.1 == digest);
+        let left_preferred = caller_digest.is_some_and(|digest| left.1 == digest);
+        let right_preferred = caller_digest.is_some_and(|digest| right.1 == digest);
         right_preferred
             .cmp(&left_preferred)
             .then_with(|| right.2.generation.cmp(&left.2.generation))
@@ -103,11 +108,7 @@ fn load_scope_states(
 ) -> Result<Vec<(PathBuf, String, ResidentState)>, String> {
     let scope = ensure_private_directory_under(scope, private_root, true)?;
     let mut paths = state_paths(&scope)?;
-    paths.sort_by_key(|path| generation_number(path).unwrap_or(0));
-    if paths.len() > MAX_STATE_FILES {
-        let skip = paths.len() - MAX_STATE_FILES;
-        paths.drain(0..skip);
-    }
+    paths.sort_by_key(|path| std::cmp::Reverse(generation_number(path).unwrap_or(0)));
     let mut states = Vec::new();
     for path in paths {
         let Ok(state) = read_state_file_raw(&path, private_root) else {
@@ -122,6 +123,9 @@ fn load_scope_states(
             continue;
         }
         states.push((scope.clone(), digest, state));
+        if states.len() == MAX_STATE_FILES {
+            break;
+        }
     }
     Ok(states)
 }
@@ -137,7 +141,8 @@ pub(super) fn state_paths(scope: &Path) -> Result<Vec<PathBuf>, String> {
             break;
         }
         let Ok(entry) = entry else {
-            continue;
+            truncated = true;
+            break;
         };
         let name = entry.file_name();
         let name = name.to_string_lossy();

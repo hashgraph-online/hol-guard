@@ -239,6 +239,37 @@ fn malformed_state_names_do_not_hide_a_live_generation() {
 }
 
 #[test]
+fn newer_unreadable_generations_do_not_hide_an_older_valid_state() {
+    let base = test_scope("newer-unreadable-generations");
+    let digest = runtime_digest().unwrap();
+    let scope =
+        ensure_private_directory(&base.join(format!("resident-v3-{}", &digest[..16])), true)
+            .unwrap();
+    let token = [7u8; crate::AUTH_TOKEN_BYTES];
+    publish_state(
+        &scope,
+        1,
+        std::process::id(),
+        &digest,
+        "loopback",
+        "127.0.0.1:1".to_owned(),
+        &token,
+    )
+    .unwrap();
+    for generation in 2..80 {
+        fixture_file(
+            &scope.join(format!("generation-{generation:020}.json")),
+            b"{}",
+        );
+    }
+
+    let states = discover_home_states_prefer(&base, Some(&digest)).unwrap();
+    assert_eq!(states.len(), 1);
+    assert_eq!(states[0].2.generation, 1);
+    fs::remove_dir_all(base).unwrap();
+}
+
+#[test]
 fn truncated_scope_listing_fails_closed() {
     let base = test_scope("truncated-scope-listing");
     let digest = runtime_digest().unwrap();
