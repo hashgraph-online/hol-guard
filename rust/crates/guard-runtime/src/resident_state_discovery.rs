@@ -12,6 +12,8 @@ const MAX_SCOPES: usize = 16;
 // fail-closes when a flooded directory might have hidden the caller's runtime
 // before that scope was seen.
 const MAX_DIRECTORY_ENTRIES: usize = 4096;
+// Malformed names can sort ahead of a real generation. Reading four times
+// the retained set still reaches a valid state without letting junk hide it.
 const MAX_STATE_READ_ATTEMPTS: usize = MAX_STATE_FILES * 4;
 
 #[allow(dead_code)]
@@ -62,19 +64,22 @@ pub(crate) fn discover_home_states_prefer(
         }
         fallback_candidates.push(candidate);
     }
+    // Fail closed only when the caller's scope was never seen. A cap hit
+    // after that scope is found can omit later fallbacks; those are read
+    // only when the caller's scope has no live process.
     if truncated && preferred_candidate.is_none() {
         return Err("native_resident_state_list_failed".to_owned());
     }
-    // Keep a bounded, ordered set of older scopes. The caller's scope is
-    // tracked separately and is not part of this sort.
+    // Order fallback scopes by digest prefix, then path, and keep a bounded
+    // set. The caller's scope is tracked separately and is not part of this sort.
     fallback_candidates
         .sort_unstable_by(|left, right| left.1.cmp(&right.1).then_with(|| left.0.cmp(&right.0)));
     fallback_candidates.truncate(MAX_SCOPES - usize::from(preferred_candidate.is_some()));
-    let caller_digest = preferred_digest
+    let validated_preferred_digest = preferred_digest
         .filter(|digest| digest.len() == 64 && digest.bytes().all(|byte| byte.is_ascii_hexdigit()));
-    // Read older versions only when the current scope has no live state.
-    // A file listing that stops early inside that scope still fail-closes.
-    // One broken older directory must not fail every hook.
+    // A preferred-scope listing failure still fail-closes. Other preferred
+    // errors fall through so an older runtime can answer. One broken older
+    // directory must not fail every hook.
     let mut states = Vec::new();
     if let Some((path, digest_prefix)) = preferred_candidate {
         match load_scope_states(&path, &digest_prefix, &private_root) {
@@ -94,8 +99,8 @@ pub(crate) fn discover_home_states_prefer(
         }
     }
     states.sort_unstable_by(|left, right| {
-        let left_preferred = caller_digest.is_some_and(|digest| left.1 == digest);
-        let right_preferred = caller_digest.is_some_and(|digest| right.1 == digest);
+        let left_preferred = validated_preferred_digest.is_some_and(|digest| left.1 == digest);
+        let right_preferred = validated_preferred_digest.is_some_and(|digest| right.1 == digest);
         right_preferred
             .cmp(&left_preferred)
             .then_with(|| right.2.generation.cmp(&left.2.generation))
@@ -138,7 +143,6 @@ pub(super) fn state_paths(scope: &Path) -> Result<Vec<PathBuf>, String> {
     let mut truncated = false;
     for entry in fs::read_dir(scope).map_err(|_| "native_resident_state_list_failed".to_owned())? {
         // Count every entry so unrelated names cannot hide a later state file.
-        // Count every entry so unrelated names cannot hide a later file.
         scanned += 1;
         if scanned > MAX_DIRECTORY_ENTRIES {
             truncated = true;
@@ -154,7 +158,8 @@ pub(super) fn state_paths(scope: &Path) -> Result<Vec<PathBuf>, String> {
             paths.push(entry.path());
         }
     }
-    // A scan that stopped early can hide a later live state file.
+    // Unlike the home scan, a truncated scope listing always fail-closes.
+    // A later generation file in this directory may be the live state.
     if truncated {
         return Err("native_resident_state_list_failed".to_owned());
     }
