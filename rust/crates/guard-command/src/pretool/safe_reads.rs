@@ -57,8 +57,8 @@ pub(super) fn safe_read_target(argument: &str) -> bool {
     const ROOTS: [&str; 6] = ["/etc", "/dev", "/proc", "/sys", "/var", "/private/etc"];
     if lowered == "/"
         || ROOTS
-        .iter()
-        .any(|prefix| lowered == *prefix || lowered.starts_with(&format!("{prefix}/")))
+            .iter()
+            .any(|prefix| lowered == *prefix || lowered.starts_with(&format!("{prefix}/")))
         || lowered.starts_with('~')
         || super::sensitive_command(argument)
         || super::sensitive_command(&normalized)
