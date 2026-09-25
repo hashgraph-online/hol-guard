@@ -270,6 +270,64 @@ fn newer_unreadable_generations_do_not_hide_an_older_valid_state() {
 }
 
 #[test]
+fn dead_preferred_scope_still_returns_a_live_fallback() {
+    let base = test_scope("dead-preferred-live-fallback");
+    let digest = runtime_digest().unwrap();
+    let preferred =
+        ensure_private_directory(&base.join(format!("resident-v3-{}", &digest[..16])), true)
+            .unwrap();
+    let token = [9u8; crate::AUTH_TOKEN_BYTES];
+    let mut dead = ResidentState {
+        schema: STATE_SCHEMA.to_owned(),
+        generation: 2,
+        process_id: u32::MAX,
+        process_start_marker: "dead".to_owned(),
+        owner_process_id: u32::MAX,
+        owner_process_start_marker: "dead".to_owned(),
+        runtime_sha256: digest.clone(),
+        transport: "loopback".to_owned(),
+        endpoint: "127.0.0.1:9".to_owned(),
+        unix_endpoint_identity: None,
+        token_hex: hex_bytes(&token),
+        created_ms: 1,
+        state_mac: String::new(),
+    };
+    dead.state_mac = state_mac(&dead, &token);
+    let encoded = serde_json::to_vec(&dead).unwrap();
+    let private_root = private_root_for_scope(&preferred).unwrap();
+    let mut file = private_file(
+        &preferred.join("generation-00000000000000000002.json"),
+        true,
+        &private_root,
+    )
+    .unwrap();
+    use std::io::Write;
+    file.write_all(&encoded).unwrap();
+    assert!(validate_package_process_identity(u32::MAX, "dead").is_err());
+
+    let fallback_digest = "ab".repeat(32);
+    let fallback = ensure_private_directory(
+        &base.join(format!("resident-v3-{}", &fallback_digest[..16])),
+        true,
+    )
+    .unwrap();
+    publish_state(
+        &fallback,
+        1,
+        std::process::id(),
+        &fallback_digest,
+        "loopback",
+        "127.0.0.1:1".to_owned(),
+        &token,
+    )
+    .unwrap();
+
+    let states = discover_home_states_prefer(&base, Some(&digest)).unwrap();
+    assert!(states.iter().any(|(_, found, _)| found == &fallback_digest));
+    fs::remove_dir_all(base).unwrap();
+}
+
+#[test]
 fn truncated_scope_listing_fails_closed() {
     let base = test_scope("truncated-scope-listing");
     let digest = runtime_digest().unwrap();
