@@ -4,14 +4,14 @@ import copy
 import json
 import os
 import platform
+import shutil
 from hashlib import sha256
 from pathlib import Path
 
 import pytest
 
 from codex_plugin_scanner.guard.evaluation_cli import (
-    _read_recovery_token,
-    _remove_recovery_token,
+    _CliError,
     _write_recovery_token,
     main,
 )
@@ -49,9 +49,7 @@ def _profile(tmp_path: Path, executable: Path) -> dict[str, object]:
             "os": _host_os(),
             "architecture": _host_architecture(),
             "runtimeLocation": "local",
-            "requiredPrivilege": (
-                "administrator" if hasattr(os, "geteuid") and os.geteuid() == 0 else "standard_user"
-            ),
+            "requiredPrivilege": ("administrator" if hasattr(os, "geteuid") and os.geteuid() == 0 else "standard_user"),
             "executable": str(executable),
         },
         "installedArtifacts": [
@@ -137,6 +135,7 @@ def test_preflight_is_json_and_does_not_run_host_by_default(tmp_path: Path, caps
     assert not marker.exists()
 
 
+@pytest.mark.skipif(os.name == "nt", reason="CLI recovery storage requires POSIX ownership checks")
 def test_setup_and_cleanup_keep_marker_token_out_of_json(tmp_path: Path, capsys) -> None:
     profile_path, _, _ = _write_profile(tmp_path)
     artifact = tmp_path / "core-fixture.bin"
@@ -181,6 +180,7 @@ def test_setup_and_cleanup_keep_marker_token_out_of_json(tmp_path: Path, capsys)
     assert not token_path.exists()
 
 
+@pytest.mark.skipif(os.name == "nt", reason="CLI recovery storage requires POSIX ownership checks")
 def test_cleanup_accepts_equivalent_owned_root_path(tmp_path: Path, capsys) -> None:
     profile_path, _, _ = _write_profile(tmp_path)
     status = main(
@@ -209,8 +209,86 @@ def test_cleanup_accepts_equivalent_owned_root_path(tmp_path: Path, capsys) -> N
     assert not token_path.exists()
 
 
+@pytest.mark.skipif(os.name == "nt", reason="CLI recovery storage requires POSIX ownership checks")
+def test_cleanup_removes_token_when_owned_root_is_missing(tmp_path: Path, capsys) -> None:
+    profile_path, _, _ = _write_profile(tmp_path)
+    status = main(
+        [
+            "preflight",
+            str(profile_path),
+            "--artifact",
+            f"core-fixture={tmp_path / 'core-fixture.bin'}",
+            "--allow-host-execution",
+            "--setup",
+        ]
+    )
+    setup_payload = _payload(capsys)
+    assert status == 0
+    owned_root = Path(setup_payload["report"]["scope"]["ownedRoot"])  # type: ignore[index]
+    token_path = owned_root.parent / f".hol-guard-evaluation-recovery-{owned_root.name}.token"
+    shutil.rmtree(owned_root)
+
+    cleanup_status = main(["cleanup", str(profile_path), str(owned_root)])
+    cleanup_payload = _payload(capsys)
+    assert cleanup_status == 2
+    assert cleanup_payload["status"] == "not_run"
+    assert cleanup_payload["cleanup"] == {"removed": False, "reason": "setup_missing"}
+    assert not token_path.exists()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="CLI recovery storage requires POSIX ownership checks")
+@pytest.mark.parametrize(
+    ("tamper", "expected_code"),
+    [
+        ("missing", "recovery_token_missing"),
+        ("permissive", "recovery_token_invalid"),
+        ("symlink", "recovery_token_invalid"),
+        ("malformed", "recovery_token_invalid"),
+        ("nonascii", "recovery_token_invalid"),
+        ("oversized", "recovery_token_invalid"),
+    ],
+)
+def test_cleanup_rejects_tampered_token_without_removing_setup(
+    tmp_path: Path, capsys, tamper: str, expected_code: str
+) -> None:
+    profile_path, _, _ = _write_profile(tmp_path)
+    assert (
+        main(
+            [
+                "preflight",
+                str(profile_path),
+                "--artifact",
+                f"core-fixture={tmp_path / 'core-fixture.bin'}",
+                "--allow-host-execution",
+                "--setup",
+            ]
+        )
+        == 0
+    )
+    setup_payload = _payload(capsys)
+    owned_root = Path(setup_payload["report"]["scope"]["ownedRoot"])  # type: ignore[index]
+    token_path = owned_root.parent / f".hol-guard-evaluation-recovery-{owned_root.name}.token"
+    if tamper == "missing":
+        token_path.unlink()
+    elif tamper == "permissive":
+        token_path.chmod(0o644)
+    elif tamper == "symlink":
+        token_path.unlink()
+        replacement = tmp_path / "replacement-token"
+        replacement.write_bytes(b"a" * 32)
+        token_path.symlink_to(replacement)
+    else:
+        token_path.write_bytes({"malformed": b"invalid", "nonascii": b"\xff", "oversized": b"a" * 129}[tamper])
+
+    assert main(["cleanup", str(profile_path), str(owned_root)]) == 2
+    cleanup_payload = _payload(capsys)
+    assert cleanup_payload["status"] == "blocked_environment"
+    assert cleanup_payload["error"]["code"] == expected_code
+    assert owned_root.is_dir()
+
+
 @pytest.mark.skipif(os.name != "nt", reason="Windows filesystem access semantics")
-def test_windows_recovery_token_round_trip(tmp_path: Path) -> None:
+def test_windows_recovery_token_fails_closed(tmp_path: Path) -> None:
     owned_root = tmp_path / "hol-guard-eval-windows-test"
     owned_root.mkdir()
     setup = EvaluationSetup(
@@ -218,11 +296,103 @@ def test_windows_recovery_token_round_trip(tmp_path: Path) -> None:
         root_path=owned_root,
         marker_token="a" * 32,
     )
-    _write_recovery_token(setup)
+    with pytest.raises(_CliError) as error:
+        _write_recovery_token(setup, declared_parent=tmp_path)
+    assert error.value.status == "blocked_environment"
     token_path = tmp_path / f".hol-guard-evaluation-recovery-{owned_root.name}.token"
-    assert _read_recovery_token(owned_root, declared_parent=tmp_path) == "a" * 32
-    _remove_recovery_token(token_path, expected_parent=tmp_path)
     assert not token_path.exists()
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows filesystem access semantics")
+def test_windows_setup_and_cleanup_report_blocked_environment(tmp_path: Path, capsys) -> None:
+    profile_path, _, _ = _write_profile(tmp_path)
+    assert main(["preflight", str(profile_path), "--setup"]) == 2
+    setup_payload = _payload(capsys)
+    assert setup_payload["status"] == "blocked_environment"
+    assert setup_payload["error"]["code"] == "recovery_windows_unavailable"
+    assert not list(tmp_path.glob("hol-guard-eval-*"))
+
+    owned_root = tmp_path / "hol-guard-eval-missing"
+    assert main(["cleanup", str(profile_path), str(owned_root)]) == 2
+    cleanup_payload = _payload(capsys)
+    assert cleanup_payload["status"] == "blocked_environment"
+    assert cleanup_payload["error"]["code"] == "recovery_windows_unavailable"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="CLI recovery storage requires POSIX ownership checks")
+def test_recovery_token_write_checks_declared_parent(tmp_path: Path) -> None:
+    owned_root = tmp_path / "hol-guard-eval-scope-test"
+    owned_root.mkdir()
+    setup = EvaluationSetup(
+        report=EvaluationPreflightReport(status="passed", phase="setup", profile_id="test", checks=()),
+        root_path=owned_root,
+        marker_token="a" * 32,
+    )
+    with pytest.raises(_CliError) as error:
+        _write_recovery_token(setup, declared_parent=tmp_path / "other")
+    assert error.value.code == "recovery_path_invalid"
+    assert not list(tmp_path.glob(".hol-guard-evaluation-recovery-*.token"))
+
+
+@pytest.mark.skipif(os.name == "nt", reason="CLI recovery storage requires POSIX ownership checks")
+def test_recovery_token_write_does_not_replace_an_existing_token(tmp_path: Path) -> None:
+    owned_root = tmp_path / "hol-guard-eval-collision-test"
+    owned_root.mkdir()
+    setup = EvaluationSetup(
+        report=EvaluationPreflightReport(status="passed", phase="setup", profile_id="test", checks=()),
+        root_path=owned_root,
+        marker_token="a" * 32,
+    )
+    _write_recovery_token(setup, declared_parent=tmp_path)
+    token_path = tmp_path / f".hol-guard-evaluation-recovery-{owned_root.name}.token"
+    original = token_path.read_bytes()
+
+    with pytest.raises(_CliError) as error:
+        _write_recovery_token(setup, declared_parent=tmp_path)
+    assert error.value.code == "cleanup_token_unavailable"
+    assert token_path.read_bytes() == original
+
+
+@pytest.mark.skipif(os.name == "nt", reason="CLI recovery storage requires POSIX ownership checks")
+@pytest.mark.parametrize("unsafe_parent", ["permissive", "symlink"])
+def test_recovery_token_write_rejects_unsafe_parent(tmp_path: Path, unsafe_parent: str) -> None:
+    parent = tmp_path
+    if unsafe_parent == "symlink":
+        private_parent = tmp_path / "private"
+        private_parent.mkdir(mode=0o700)
+        parent = tmp_path / "alias"
+        parent.symlink_to(private_parent, target_is_directory=True)
+    owned_root = parent / "hol-guard-eval-unsafe-parent"
+    owned_root.mkdir()
+    setup = EvaluationSetup(
+        report=EvaluationPreflightReport(status="passed", phase="setup", profile_id="test", checks=()),
+        root_path=owned_root,
+        marker_token="a" * 32,
+    )
+    original_mode = tmp_path.stat().st_mode & 0o777
+    if unsafe_parent == "permissive":
+        tmp_path.chmod(0o755)
+    try:
+        with pytest.raises(_CliError) as error:
+            _write_recovery_token(setup, declared_parent=parent)
+    finally:
+        tmp_path.chmod(original_mode)
+    assert error.value.code == "recovery_path_invalid"
+    assert not list(tmp_path.rglob(".hol-guard-evaluation-recovery-*.token"))
+
+
+@pytest.mark.skipif(os.name == "nt", reason="CLI recovery storage requires POSIX ownership checks")
+@pytest.mark.parametrize("relative_path", ["unowned-root", "other/hol-guard-eval-foreign"])
+def test_cleanup_rejects_a_root_outside_declared_scope(tmp_path: Path, capsys, relative_path: str) -> None:
+    profile_path, _, _ = _write_profile(tmp_path)
+    outside_root = tmp_path / relative_path
+    outside_root.mkdir(parents=True)
+
+    assert main(["cleanup", str(profile_path), str(outside_root)]) == 2
+    payload = _payload(capsys)
+    assert payload["status"] == "blocked_environment"
+    assert payload["error"]["code"] == "recovery_path_invalid"
+    assert outside_root.is_dir()
 
 
 def test_verify_evidence_reports_canonical_manifest(tmp_path: Path, capsys) -> None:
@@ -292,3 +462,17 @@ def test_argument_errors_are_machine_readable(capsys) -> None:
         "schemaVersion": "guard.evaluation-cli.v1",
         "status": "not_run",
     }
+
+
+@pytest.mark.parametrize(
+    ("arguments", "expected_code"),
+    [
+        (["verify-evidence"], "evidence_package_argument_required"),
+        (["cleanup", "profile.json"], "owned_root_argument_required"),
+    ],
+)
+def test_missing_paths_use_argument_specific_codes(capsys, arguments: list[str], expected_code: str) -> None:
+    assert main(arguments) == 2
+    payload = _payload(capsys)
+    assert payload["status"] == "not_run"
+    assert payload["error"]["code"] == expected_code
