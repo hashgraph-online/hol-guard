@@ -10,8 +10,10 @@ from pathlib import Path
 
 import pytest
 
+import codex_plugin_scanner.guard.evaluation_cli_recovery as recovery
 from codex_plugin_scanner.guard.evaluation_cli import (
     _CliError,
+    _remove_recovery_token,
     _write_recovery_token,
     main,
 )
@@ -352,6 +354,33 @@ def test_recovery_token_write_does_not_replace_an_existing_token(tmp_path: Path)
     assert error.value.code == "cleanup_token_unavailable"
     assert token_path.read_bytes() == original
 
+    with pytest.raises(_CliError) as error:
+        _remove_recovery_token(token_path, expected_parent=tmp_path / "other")
+    assert error.value.code == "recovery_path_invalid"
+    assert token_path.read_bytes() == original
+
+
+@pytest.mark.skipif(os.name == "nt", reason="CLI recovery storage requires POSIX directory descriptors")
+def test_recovery_token_removal_rejects_a_replaced_symlink(tmp_path: Path) -> None:
+    owned_root = tmp_path / "hol-guard-eval-removal-test"
+    owned_root.mkdir()
+    setup = EvaluationSetup(
+        report=EvaluationPreflightReport(status="passed", phase="setup", profile_id="test", checks=()),
+        root_path=owned_root,
+        marker_token="a" * 32,
+    )
+    _write_recovery_token(setup, declared_parent=tmp_path)
+    token_path = tmp_path / f".hol-guard-evaluation-recovery-{owned_root.name}.token"
+    token_path.unlink()
+    target = tmp_path / "unrelated"
+    target.write_bytes(b"preserve")
+    token_path.symlink_to(target)
+
+    with pytest.raises(_CliError) as error:
+        _remove_recovery_token(token_path, expected_parent=tmp_path)
+    assert error.value.code == "recovery_token_invalid"
+    assert target.read_bytes() == b"preserve"
+
 
 @pytest.mark.skipif(os.name == "nt", reason="CLI recovery storage requires POSIX ownership checks")
 @pytest.mark.parametrize("unsafe_parent", ["permissive", "symlink"])
@@ -379,6 +408,38 @@ def test_recovery_token_write_rejects_unsafe_parent(tmp_path: Path, unsafe_paren
         tmp_path.chmod(original_mode)
     assert error.value.code == "recovery_path_invalid"
     assert not list(tmp_path.rglob(".hol-guard-evaluation-recovery-*.token"))
+
+
+@pytest.mark.skipif(os.name == "nt", reason="CLI recovery storage requires POSIX directory descriptors")
+def test_recovery_token_write_stays_in_opened_parent_after_path_replacement(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    private_parent = tmp_path / "private"
+    private_parent.mkdir(mode=0o700)
+    owned_root = private_parent / "hol-guard-eval-race-test"
+    owned_root.mkdir()
+    attacker_parent = tmp_path / "attacker"
+    attacker_parent.mkdir(mode=0o700)
+    moved_parent = tmp_path / "moved"
+    setup = EvaluationSetup(
+        report=EvaluationPreflightReport(status="passed", phase="setup", profile_id="test", checks=()),
+        root_path=owned_root,
+        marker_token="a" * 32,
+    )
+    open_parent = recovery._open_private_recovery_parent
+
+    def replace_parent_after_open(parent: Path) -> int:
+        descriptor = open_parent(parent)
+        private_parent.rename(moved_parent)
+        private_parent.symlink_to(attacker_parent, target_is_directory=True)
+        return descriptor
+
+    monkeypatch.setattr(recovery, "_open_private_recovery_parent", replace_parent_after_open)
+    _write_recovery_token(setup, declared_parent=private_parent)
+
+    token_name = f".hol-guard-evaluation-recovery-{owned_root.name}.token"
+    assert (moved_parent / token_name).read_bytes() == b"a" * 32
+    assert not (attacker_parent / token_name).exists()
 
 
 @pytest.mark.skipif(os.name == "nt", reason="CLI recovery storage requires POSIX ownership checks")

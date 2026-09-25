@@ -25,7 +25,7 @@ The optional `--setup` flag allocates the private setup only after a passed
 preflight. It retains the opaque cleanup token in the profile's private declared
 parent, outside the owned setup child. On POSIX the token file is mode 0600
 and owner checked. Windows setup and cleanup return `blocked_environment`
-until private directory and token ACL ownership can be verified. The token is
+because this CLI does not verify private directory and token ACL ownership. The token is
 never printed. The command reports the owned setup scope and that cleanup is
 available; preserve that scope for the cleanup stage.
 

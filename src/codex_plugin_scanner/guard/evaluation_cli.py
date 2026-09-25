@@ -260,7 +260,7 @@ def _run_cleanup(args: argparse.Namespace) -> int:
             error = _CliError("cleanup_rejected", str(exc), status="blocked_environment")
             _emit(_result("cleanup", error.status, error=error))
             return _exit_code(error.status)
-        _remove_recovery_token(token_path, expected_parent=token_path.parent)
+        _remove_recovery_token(token_path, expected_parent=Path(os.path.realpath(declared_parent)))
         status = "passed" if removed else "not_run"
         cleanup: dict[str, object] = {"removed": removed}
         if not removed:
