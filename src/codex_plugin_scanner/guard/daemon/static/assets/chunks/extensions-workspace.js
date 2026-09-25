@@ -1,4 +1,4 @@
-import { aM as fetchLocalCliApi, r as reactExports, aN as fetchExtensionControlApi, j as jsxRuntimeExports, B as HiMiniSparkles, s as HiMiniCheckCircle, aO as HiMiniNoSymbol, af as HiMiniLockClosed, P as HiMiniExclamationTriangle, aP as useResolvedApprovalGate, al as HiMiniArrowPath, w as HiMiniShieldCheck, aQ as HiMiniInformationCircle, an as isApprovalProofSubmitDisabled, C as HiMiniXMark, am as ApprovalProofFieldInputs, ao as buildApprovalProofCredentials, aR as GenIcon, Q as HiMiniBolt, aS as HiMiniGlobeAlt, aT as HiMiniCube, K as HiMiniCloud, aU as HiMiniServerStack, b as HiMiniCommandLine, aV as HiMiniFolder, aW as FaWindows, aX as FaAws, c as HiMiniChevronRight, I as HiMiniChevronDown, aY as approvalProofRecentlySatisfied, aZ as HiMiniArrowLeft, a_ as HiMiniPlus, a8 as HiMiniClipboardDocumentCheck, a9 as HiMiniClipboard, ah as HiMiniAdjustmentsHorizontal, a$ as HiMiniCheck, aH as HiMiniMagnifyingGlass, b0 as startGuardCloudConnect, b1 as HiMiniArrowTopRightOnSquare, aG as WorkspacePageHeader, b2 as guardAwareHref } from "../guard-dashboard.js";
+import { aN as fetchLocalCliApi, r as reactExports, aO as fetchExtensionControlApi, j as jsxRuntimeExports, B as HiMiniSparkles, s as HiMiniCheckCircle, aP as HiMiniNoSymbol, af as HiMiniLockClosed, P as HiMiniExclamationTriangle, aQ as useResolvedApprovalGate, al as HiMiniArrowPath, w as HiMiniShieldCheck, aR as HiMiniInformationCircle, an as isApprovalProofSubmitDisabled, C as HiMiniXMark, am as ApprovalProofFieldInputs, ao as buildApprovalProofCredentials, aS as GenIcon, Q as HiMiniBolt, aT as HiMiniGlobeAlt, aU as HiMiniCube, K as HiMiniCloud, aV as HiMiniServerStack, b as HiMiniCommandLine, aW as HiMiniFolder, aX as FaWindows, aY as FaAws, c as HiMiniChevronRight, I as HiMiniChevronDown, aZ as approvalProofRecentlySatisfied, a_ as HiMiniArrowLeft, a$ as HiMiniPlus, a8 as HiMiniClipboardDocumentCheck, a9 as HiMiniClipboard, ah as HiMiniAdjustmentsHorizontal, b0 as HiMiniCheck, aH as HiMiniMagnifyingGlass, b1 as startGuardCloudConnect, b2 as HiMiniArrowTopRightOnSquare, aG as WorkspacePageHeader, b3 as guardAwareHref } from "../guard-dashboard.js";
 import { A as ApprovalProofModal } from "./approval-proof-modal.js";
 import { u as useConfirmDialog } from "./confirm-dialog.js";
 const EXTENSION_ID_PATTERN = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
@@ -6065,7 +6065,7 @@ function ProtectionModuleDetail(props) {
     const latestUrlState = urlStateRef.current;
     const latestOnUrlState = onUrlStateRef.current;
     if (!latestOnUrlState) return false;
-    if (needsConfirmation && canonicalProtectionDetailTab(latestUrlState?.tab ?? "overview") === tab) {
+    if (needsConfirmation && canonicalProtectionDetailTab(latestUrlState?.tab ?? "overview") !== activeTab) {
       return false;
     }
     latestOnUrlState({

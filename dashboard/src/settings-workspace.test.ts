@@ -178,7 +178,7 @@ assert(
 );
 const repairListMessage = resolveRepairApprovalCenterMessage(["locator", "daemon_state", "daemon_discovery_key"]);
 assert(
-  repairListMessage.includes("stale approval link, stale service record and invalid discovery key"),
+  repairListMessage.includes("stale approval link, stale service record, and invalid discovery key"),
   "repair: multiple codes join with commas and 'and'",
 );
 assert(

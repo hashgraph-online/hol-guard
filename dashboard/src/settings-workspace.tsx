@@ -37,6 +37,7 @@ import {
   revokeApprovalGateCooldown,
 } from "./guard-api";
 import { approvalGateCooldownLabel } from "./approval-gate-utils";
+import { humanizeList } from "./approval-center-utils";
 import { resolveProtectionLevelCopy } from "./runtime-overview";
 import { RISK_CONTROL_CONSEQUENCES, filterSettingsBySearch } from "./apps/app-catalog";
 import { WorkspacePageHeader } from "./workspace-page-header";
@@ -140,10 +141,7 @@ export function resolveRepairApprovalCenterMessage(cleared: string[]): string {
     return "Nothing needed repair. The approval center is already reachable from this dashboard.";
   }
   const labels = cleared.map((code) => REPAIR_APPROVAL_CENTER_LABELS[code] ?? code);
-  const list = labels.length === 1
-    ? labels[0]
-    : `${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}`;
-  return `Approval center repaired: cleared ${list}. Approval links reconnect the next time a hook reaches Guard.`;
+  return `Approval center repaired: cleared ${humanizeList(labels)}. Approval links reconnect the next time a hook reaches Guard.`;
 }
 
 export function buildClearPolicyPayload(all: boolean): { harness?: string; all?: boolean } {

@@ -233,7 +233,7 @@ export function ProtectionModuleDetail(props: {
     const latestUrlState = urlStateRef.current;
     const latestOnUrlState = onUrlStateRef.current;
     if (!latestOnUrlState) return false;
-    if (needsConfirmation && canonicalProtectionDetailTab(latestUrlState?.tab ?? "overview") === tab) {
+    if (needsConfirmation && canonicalProtectionDetailTab(latestUrlState?.tab ?? "overview") !== activeTab) {
       return false;
     }
     latestOnUrlState({
