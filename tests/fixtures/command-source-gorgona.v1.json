@@ -238,6 +238,36 @@
       "expected_action": "allow",
       "rule_id": null,
       "expected_effective_segments": []
+    },
+    {
+      "id": "genkeys-disabled-block",
+      "command": "gorgona genkeys",
+      "enabled_extensions": [
+        "command.gorgona"
+      ],
+      "disabled_permissions": [
+        "command.gorgona.permission.genkeys"
+      ],
+      "expected_action": "block",
+      "rule_id": "command.gorgona.genkeys",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "listen-exec-disabled-block",
+      "command": "gorgona -e listen new 4YzEYpwB9hc=",
+      "enabled_extensions": [
+        "command.gorgona"
+      ],
+      "disabled_permissions": [
+        "command.gorgona.permission.exec-listen"
+      ],
+      "expected_action": "block",
+      "rule_id": "command.gorgona.exec-listen",
+      "expected_effective_segments": [
+        0
+      ]
     }
   ],
   "build": {
