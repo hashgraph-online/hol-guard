@@ -7,6 +7,7 @@ import threading
 import time
 from collections.abc import Mapping
 from pathlib import Path
+from typing import Protocol
 
 from codex_plugin_scanner.guard.extension_builder.native_source_compiler import (
     compile_source,
@@ -198,20 +199,21 @@ def persisted_native_receipt_ids(store: GuardStore) -> set[str]:
     return {row["decision_id"] for row in rows if isinstance(row["decision_id"], str)}
 
 
-def _receipt_processed_count(writer: object) -> int | None:
+class _ReceiptProgressWriter(Protocol):
+    def stats(self) -> Mapping[str, object]: ...
+
+
+def receipt_processed_count(writer: _ReceiptProgressWriter) -> int | None:
     """Read the bounded in-memory native-receipt progress counter when available."""
 
-    stats = getattr(writer, "stats", None)
-    if not callable(stats):
-        return None
     try:
-        snapshot = stats()
+        snapshot = writer.stats()
     except Exception:
         return None
     if not isinstance(snapshot, Mapping):
         return None
     value = snapshot.get("receipt_processed")
-    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
         return None
     return value
 
@@ -220,7 +222,7 @@ def await_persisted_native_receipt(
     store: GuardStore,
     known_ids: set[str],
     *,
-    writer: object | None = None,
+    writer: _ReceiptProgressWriter | None = None,
     receipt_processed_before: int | None = None,
     timeout_seconds: float = 10.0,
 ) -> dict[str, object]:
@@ -240,15 +242,17 @@ def await_persisted_native_receipt(
     while time.monotonic() < deadline:
         should_read = not writer_progress_available
         if writer_progress_available:
-            assert writer is not None
-            assert processed_mark is not None
-            processed = _receipt_processed_count(writer)
-            if processed is None:
+            if writer is None or processed_mark is None:
                 writer_progress_available = False
                 should_read = True
-            elif processed > processed_mark:
-                processed_mark = processed
-                should_read = True
+            else:
+                processed = receipt_processed_count(writer)
+                if processed is None:
+                    writer_progress_available = False
+                    should_read = True
+                elif processed > processed_mark:
+                    processed_mark = processed
+                    should_read = True
         if should_read:
             new_ids = persisted_native_receipt_ids(store) - known_ids
             if len(new_ids) > 1:
