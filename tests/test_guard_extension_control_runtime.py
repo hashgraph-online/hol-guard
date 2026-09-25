@@ -352,19 +352,23 @@ def test_daemon_refreshes_resident_snapshot_after_external_authority_change(
         port=0,
         extension_control_refresh_interval_seconds=0.01,
     )
+    updated = ExtensionControlAuthorityView(
+        AuthorityHealth.PROTECTED,
+        7,
+        BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
+        (),
+    )
+    assert daemon._server.extension_control_runtime.current().revision != updated.revision
+    # The resident snapshot is initialized in the daemon constructor. Install
+    # the external authority view before the refresh worker starts so its first
+    # read cannot race into the real SQLite path on a loaded Windows runner.
+    monkeypatch.setattr(
+        store,
+        "read_extension_control_authority_for_registry",
+        lambda registry, *, read_only=False: updated,
+    )
     daemon.start()
     try:
-        updated = ExtensionControlAuthorityView(
-            AuthorityHealth.PROTECTED,
-            7,
-            BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
-            (),
-        )
-        monkeypatch.setattr(
-            store,
-            "read_extension_control_authority_for_registry",
-            lambda registry, *, read_only=False: updated,
-        )
         deadline = time.monotonic() + 5
         while daemon._server.extension_control_runtime.current().revision != 7:
             assert time.monotonic() < deadline
