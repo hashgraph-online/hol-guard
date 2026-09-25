@@ -107,6 +107,7 @@ override-dependencies = [
 
 [project.scripts]
 hol-guard = "codex_plugin_scanner.cli:main"
+hol-guard-eval = "codex_plugin_scanner.guard.evaluation_cli:main"
 hol-guard-secrets = "codex_plugin_scanner.guard.secrets.cli:main"
 plugin-scanner = "codex_plugin_scanner.cli:main"
 plugin-guard = "codex_plugin_scanner.cli:main"
