@@ -82,7 +82,7 @@ pub(super) fn safe_plain_file_arguments(arguments: &[String]) -> bool {
     let mut after_options = false;
     for argument in arguments {
         if after_options {
-            if argument == "-" || !safe_read_target(argument) {
+            if argument == "-" || !safe_read_target(argument) || saw_target {
                 return false;
             }
             saw_target = true;
@@ -108,6 +108,9 @@ pub(super) fn safe_plain_file_arguments(arguments: &[String]) -> bool {
         if !safe_read_target(argument) {
             return false;
         }
+        if saw_target {
+            return false;
+        }
         saw_target = true;
     }
     saw_target
@@ -129,7 +132,7 @@ pub(super) fn safe_head_tail_arguments(arguments: &[String]) -> bool {
             continue;
         }
         if after_options {
-            if argument == "-" || !safe_read_target(argument) {
+            if argument == "-" || !safe_read_target(argument) || saw_target {
                 return false;
             }
             saw_target = true;
@@ -166,6 +169,9 @@ pub(super) fn safe_head_tail_arguments(arguments: &[String]) -> bool {
             return false;
         }
         if !safe_read_target(argument) {
+            return false;
+        }
+        if saw_target {
             return false;
         }
         saw_target = true;
