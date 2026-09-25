@@ -12,9 +12,10 @@ const MAX_SCOPES: usize = 16;
 // fail-closes when a flooded directory might have hidden the caller's runtime
 // before that scope was seen.
 const MAX_DIRECTORY_ENTRIES: usize = 4096;
-// Malformed names can sort ahead of a real generation. Reading four times
-// the retained set still reaches a valid state without letting junk hide it.
-const MAX_STATE_READ_ATTEMPTS: usize = MAX_STATE_FILES * 4;
+// Malformed names can sort ahead of a real generation. Reading this many
+// times the retained set still reaches a valid state without letting junk hide it.
+const MALFORMED_STATE_READ_MULTIPLIER: usize = 4;
+const MAX_STATE_READ_ATTEMPTS: usize = MAX_STATE_FILES * MALFORMED_STATE_READ_MULTIPLIER;
 
 #[allow(dead_code)]
 pub(crate) fn discover_home_states(
@@ -29,9 +30,9 @@ pub(crate) fn discover_home_states_prefer(
 ) -> Result<Vec<(PathBuf, String, ResidentState)>, String> {
     let private_root = private_root_for_state_base(base)?;
     let base = ensure_private_directory_under(base, &private_root, false)?;
-    let preferred_prefix = preferred_digest
-        .filter(|digest| digest.len() == 64 && digest.bytes().all(|byte| byte.is_ascii_hexdigit()))
-        .map(|digest| &digest[..16]);
+    let validated_preferred_digest = preferred_digest
+        .filter(|digest| digest.len() == 64 && digest.bytes().all(|byte| byte.is_ascii_hexdigit()));
+    let preferred_prefix = validated_preferred_digest.map(|digest| &digest[..16]);
     let mut preferred_candidate = None;
     let mut fallback_candidates = Vec::with_capacity(MAX_SCOPES);
     let mut scanned = 0usize;
@@ -64,9 +65,9 @@ pub(crate) fn discover_home_states_prefer(
         }
         fallback_candidates.push(candidate);
     }
-    // Fail closed only when the caller's scope was never seen. A cap hit
-    // after that scope is found can omit later fallbacks; those are read
-    // only when the caller's scope has no live process.
+    // Fail closed only when no directory matching the preferred digest prefix
+    // was found. A cap hit after that directory entry is found can omit later
+    // fallbacks; those are read only when that scope has no live process.
     if truncated && preferred_candidate.is_none() {
         return Err("native_resident_state_list_failed".to_owned());
     }
@@ -75,8 +76,6 @@ pub(crate) fn discover_home_states_prefer(
     fallback_candidates
         .sort_unstable_by(|left, right| left.1.cmp(&right.1).then_with(|| left.0.cmp(&right.0)));
     fallback_candidates.truncate(MAX_SCOPES - usize::from(preferred_candidate.is_some()));
-    let validated_preferred_digest = preferred_digest
-        .filter(|digest| digest.len() == 64 && digest.bytes().all(|byte| byte.is_ascii_hexdigit()));
     // A preferred-scope listing failure still fail-closes. Other preferred
     // errors fall through so an older runtime can answer. One broken older
     // directory must not fail every hook.
