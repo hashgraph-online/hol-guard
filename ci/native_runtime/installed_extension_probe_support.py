@@ -241,6 +241,7 @@ def await_persisted_native_receipt(
         should_read = not writer_progress_available
         if writer_progress_available:
             assert writer is not None
+            assert processed_mark is not None
             processed = _receipt_processed_count(writer)
             if processed is None:
                 writer_progress_available = False
