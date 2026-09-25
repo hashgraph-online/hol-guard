@@ -268,7 +268,7 @@ fn controls_are_bound_to_program_and_both_independent_revisions() {
     let controls = CompiledNativeCommandControls::new(&original).unwrap();
     let result = controls.apply(
         &model("ollama push model"),
-        decision("pwd", &original),
+        decision("gh api graphql -f query='{ viewer { login } }'", &original),
         Some(Instant::now()),
     );
     assert_eq!(result.minimum_action, "block");

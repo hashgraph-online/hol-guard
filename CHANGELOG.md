@@ -5,6 +5,18 @@ All notable changes to HOL Guard will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.0](https://github.com/hashgraph-online/hol-guard/compare/v3.5.1...v3.6.0) (2026-09-25)
+
+
+### Features
+
+* **guard:** add staged evaluation CLI ([#3110](https://github.com/hashgraph-online/hol-guard/issues/3110)) ([54ab9a9](https://github.com/hashgraph-online/hol-guard/commit/54ab9a9f309c191800273e477c6606358cadb2c2))
+
+
+### Bug Fixes
+
+* **command:** prove bounded clock, listing, and file reads benign ([#3113](https://github.com/hashgraph-online/hol-guard/issues/3113)) ([7b9b5c1](https://github.com/hashgraph-online/hol-guard/commit/7b9b5c18ab3c37f2701b2cc3fd9c9df1f0995d19))
+
 ## [3.5.1](https://github.com/hashgraph-online/hol-guard/compare/v3.5.0...v3.5.1) (2026-09-25)
 
 
