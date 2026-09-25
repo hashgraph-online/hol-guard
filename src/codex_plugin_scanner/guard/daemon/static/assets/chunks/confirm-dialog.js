@@ -75,20 +75,18 @@ function ConfirmDialog(props) {
 function useConfirmDialog() {
   const [pending, setPending] = reactExports.useState(null);
   const pendingRef = reactExports.useRef(null);
-  pendingRef.current = pending;
   const confirm = reactExports.useCallback((options) => {
     return new Promise((resolve) => {
-      setPending((previous) => {
-        previous?.resolve(false);
-        return { options, resolve };
-      });
+      pendingRef.current?.resolve(false);
+      const next = { options, resolve };
+      pendingRef.current = next;
+      setPending(next);
     });
   }, []);
   const settle = reactExports.useCallback((value) => {
-    setPending((current) => {
-      current?.resolve(value);
-      return null;
-    });
+    pendingRef.current?.resolve(value);
+    pendingRef.current = null;
+    setPending(null);
   }, []);
   reactExports.useEffect(() => {
     return () => {

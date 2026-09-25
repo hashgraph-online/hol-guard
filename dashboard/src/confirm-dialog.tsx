@@ -118,22 +118,20 @@ export function useConfirmDialog(): {
 } {
   const [pending, setPending] = useState<PendingConfirmation | null>(null);
   const pendingRef = useRef<PendingConfirmation | null>(null);
-  pendingRef.current = pending;
 
   const confirm = useCallback((options: ConfirmDialogOptions): Promise<boolean> => {
     return new Promise<boolean>((resolve) => {
-      setPending((previous) => {
-        previous?.resolve(false);
-        return { options, resolve };
-      });
+      pendingRef.current?.resolve(false);
+      const next: PendingConfirmation = { options, resolve };
+      pendingRef.current = next;
+      setPending(next);
     });
   }, []);
 
   const settle = useCallback((value: boolean) => {
-    setPending((current) => {
-      current?.resolve(value);
-      return null;
-    });
+    pendingRef.current?.resolve(value);
+    pendingRef.current = null;
+    setPending(null);
   }, []);
 
   useEffect(() => {
