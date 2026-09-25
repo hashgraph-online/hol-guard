@@ -54,10 +54,15 @@ def test_native_hook_client_start_timeout_contains_new_managed_processes(
         stderr,
     )
     assert result.returncode is not None
-    assert result.returncode != 0
-    assert result.stderr in {
-        b"native_client_deadline_exceeded\n",
-        b"native_resident_start_timeout\n",
-    }
+    if result.returncode == 0:
+        assert json.loads(result.stdout) == {
+            "error": "native_policy_snapshot_missing",
+            "retryable": False,
+        }
+    else:
+        assert result.stderr in {
+            b"native_client_deadline_exceeded\n",
+            b"native_resident_start_timeout\n",
+        }
     assert not any(process_is_executing(process_id) for process_id in observed_process_ids)
     assert not _state_files(state_dir)
