@@ -1,4 +1,3 @@
-
 use super::*;
 
 fn request(command: &str) -> CommandModelRequestV1 {
