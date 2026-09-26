@@ -148,7 +148,7 @@ class HookProcessRunner(HookProcessRunnerLifecycleMixin):
             return
         try:
             _ = self.wait_for_capacity(
-                minimum_workers=min(1, self._capacity_target),
+                minimum_workers=self._capacity_target,
                 timeout_seconds=_HOOK_PROCESS_START_TIMEOUT_SECONDS,
             )
         finally:
