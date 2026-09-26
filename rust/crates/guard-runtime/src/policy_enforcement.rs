@@ -26,8 +26,7 @@ mod policy_enforcement_facts;
 mod policy_enforcement_policy;
 
 use policy_enforcement_facts::{
-    classify_tool_name, collect_fact_maps, payload_facts, preferred_tool_name, risk_classes,
-    PolicyFacts, PATH_KEYS,
+    payload_facts, post_action_type, preferred_tool_name, risk_classes, PolicyFacts,
 };
 pub(crate) use policy_enforcement_policy::validate_pre_tool_result_matrix;
 use policy_enforcement_policy::{
@@ -313,47 +312,6 @@ pub(crate) fn apply_pre_tool_policy(
     output.explicitly_benign = effective == "allow";
     validate_pre_tool_result_matrix(&output)?;
     Ok(output)
-}
-
-fn post_action_type(
-    request: &NativeHookRequestV1,
-    payload_kind: GuardHookPayloadKindV2,
-) -> Result<PreToolActionTypeV1, String> {
-    if payload_kind == GuardHookPayloadKindV2::SourceFileRef {
-        return Ok(PreToolActionTypeV1::FileRead);
-    }
-    let mut maps = Vec::new();
-    let mut nodes = 0usize;
-    collect_fact_maps(&request.payload, 0, &mut nodes, &mut maps)?;
-    if let Some(tool) = preferred_tool_name(&maps)? {
-        return Ok(classify_tool_name(&tool));
-    }
-    for record in maps {
-        if record.keys().any(|key| {
-            matches!(
-                key.as_str(),
-                "command" | "cmd" | "shell_command" | "shellCommand"
-            )
-        }) {
-            return Ok(PreToolActionTypeV1::Command);
-        }
-        if record
-            .keys()
-            .any(|key| matches!(key.as_str(), "package" | "package_name" | "packageName"))
-        {
-            return Ok(PreToolActionTypeV1::Package);
-        }
-        if record.keys().any(|key| PATH_KEYS.contains(&key.as_str())) {
-            return Ok(PreToolActionTypeV1::FileRead);
-        }
-        if record
-            .keys()
-            .any(|key| matches!(key.as_str(), "url" | "uri" | "href" | "endpoint"))
-        {
-            return Ok(PreToolActionTypeV1::Network);
-        }
-    }
-    Ok(PreToolActionTypeV1::Unknown)
 }
 
 /// Apply the authenticated policy to a Rust-owned PostTool result. The
