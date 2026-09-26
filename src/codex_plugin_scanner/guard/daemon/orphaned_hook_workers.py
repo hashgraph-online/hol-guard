@@ -156,6 +156,9 @@ def _is_hol_guard_hook_worker(command: str) -> bool:
 
 
 def _is_hol_guard_daemon_serve(command: str) -> bool:
+    frozen_at = command.find(" --_hol-guard-daemon-serve")
+    if frozen_at > 0 and _is_absolute_hol_guard_executable(command[:frozen_at]):
+        return True
     for marker in (" daemon --serve", " guard daemon --serve"):
         marker_at = command.find(marker)
         if marker_at <= 0:
