@@ -68,6 +68,11 @@ PROMPTBRANCH_VERSIONED_LAUNCHER_OPTION_CASES: tuple[tuple[str, str, str], ...] =
         _SUGGEST_RULE,
     ),
     (
+        "exec bunx --bun @promptbranch/cli@0.2.8 publish security-audit",
+        _PUBLISH_ACTION,
+        _PUBLISH_RULE,
+    ),
+    (
         "npx --future-launcher-option helper @promptbranch/cli@0.2.8 publish security-audit",
         _PUBLISH_ACTION,
         _PUBLISH_RULE,
@@ -402,6 +407,22 @@ def test_enabled_promptbranch_read_and_preview_commands_do_not_review(tmp_path: 
             for item in evaluation.extension_observations
             if item.extension.extension_id == "command.promptbranch"
         )
+
+
+def test_promptbranch_launcher_flags_do_not_satisfy_preview_safe_variant(tmp_path: Path) -> None:
+    evaluation = real_native_command_evaluation(
+        "npx --preview @promptbranch/cli@0.2.8 publish security-audit",
+        cwd=tmp_path,
+        home_dir=tmp_path,
+        controls=(("extension", "command.promptbranch", "enabled"),),
+    ).evaluation
+    publish = next(
+        item
+        for item in evaluation.extension_observations
+        if item.extension.extension_id == "command.promptbranch" and item.rule.rule_id == _PUBLISH_RULE
+    )
+    assert publish.effective_evidence
+    assert all(variant.variant_id != "preview" for variant in publish.safe_variants)
 
 
 def test_promptbranch_evidence_omits_prompt_names_notes_and_raw_arguments(tmp_path: Path) -> None:

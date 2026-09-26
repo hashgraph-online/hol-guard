@@ -146,6 +146,8 @@ class PromptBranchVersionedPackageMatcher:
     package_launcher_options_with_values: frozenset[str]
     package_launcher_flags: frozenset[str]
     package_prefix: str = "@promptbranch/cli@"
+    # The literal matcher already owns unqualified and @latest launches. Keep
+    # this structural matcher for arbitrary pinned versions and dist-tags.
     excluded_qualifiers: frozenset[str] = frozenset({"latest"})
     required_flags: frozenset[str] = frozenset()
     options_with_values: frozenset[str] = frozenset()
@@ -188,11 +190,9 @@ class PromptBranchVersionedPackageMatcher:
         object.__setattr__(self, "package_launcher_flags", package_launcher_flags)
 
     def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
+        """Return evidence for bounded version-qualified package launches."""
+
         evidence: list[MatcherEvidence] = []
-        all_options_with_values = (
-            self.options_with_values | self.wrapper_options_with_values | self.package_launcher_options_with_values
-        )
-        known_flags = self.flags | self.required_flags | self.wrapper_flags | self.package_launcher_flags
         for index, segment in enumerate(command.segments):
             if segment.executable is None:
                 continue
@@ -217,7 +217,7 @@ class PromptBranchVersionedPackageMatcher:
             else:
                 launcher_invocations.append((executable, lowered_arguments))
 
-            matched_launch = False
+            matched_arguments: tuple[str, ...] | None = None
             for _launcher, launcher_arguments in launcher_invocations:
                 for package_arguments in _leading_operand_suffixes(
                     launcher_arguments,
@@ -231,21 +231,21 @@ class PromptBranchVersionedPackageMatcher:
                         continue
                     qualifier = package[len(self.package_prefix) :]
                     if qualifier and qualifier not in self.excluded_qualifiers and subcommand == self.subcommand:
-                        matched_launch = True
+                        matched_arguments = package_arguments[2:]
                         break
-                if matched_launch:
+                if matched_arguments is not None:
                     break
-            if not matched_launch:
+            if matched_arguments is None:
                 continue
             if self.required_flags:
-                semantics = argument_semantics(lowered_arguments, options_with_values=all_options_with_values)
+                semantics = argument_semantics(matched_arguments, options_with_values=self.options_with_values)
                 if not self.required_flags <= semantics.present_flags:
                     continue
                 if not flags_present_in_all_option_parses(
-                    lowered_arguments,
+                    matched_arguments,
                     self.required_flags,
-                    options_with_values=all_options_with_values,
-                    known_flags=known_flags,
+                    options_with_values=self.options_with_values,
+                    known_flags=self.flags | self.required_flags,
                 ):
                     continue
             evidence.append(
@@ -263,6 +263,8 @@ def _promptbranch_versioned_package_matcher(
     options_with_values: frozenset[str],
     flags: frozenset[str],
 ) -> PromptBranchVersionedPackageMatcher:
+    """Build the structural matcher for pinned or tagged package launches."""
+
     return PromptBranchVersionedPackageMatcher(
         subcommand=subcommand,
         package_launchers=_PROMPTBRANCH_PACKAGE_LAUNCHERS,
@@ -300,6 +302,8 @@ def _promptbranch_matcher(
     options_with_values: frozenset[str],
     flags: frozenset[str] | None = None,
 ) -> AnyMatcher:
+    """Build literal, package-launcher, wrapper, and versioned matchers."""
+
     command_flags = _COMMON_FLAGS | (flags if flags is not None else _NO_FLAGS)
     versioned_package_matcher = _promptbranch_versioned_package_matcher(
         subcommand,
@@ -310,6 +314,8 @@ def _promptbranch_matcher(
         ("@promptbranch/cli", subcommand),
         ("@promptbranch/cli@latest", subcommand),
     )
+    # Wrappers receive the full launcher prefix, so enumerate each executable
+    # spelling across both npx and bunx package forms.
     launcher_arguments = (
         *((launcher, subcommand) for launcher in sorted(executable_names("promptbranch"))),
         *(

@@ -307,8 +307,11 @@ impl PromptBranchVersionedPackageConfig {
             vec![arguments.as_slice()]
         };
 
-        let mut matched_launch = false;
+        let mut matched_arguments = None;
         for launcher_arguments in launcher_arguments {
+            // Parse launcher options conservatively before locating the
+            // package token; safe flags are proven only in argv after the
+            // matched PromptBranch subcommand below.
             for candidate in leading_operand_suffixes(
                 launcher_arguments,
                 &self.package_launcher_options_with_values,
@@ -323,39 +326,35 @@ impl PromptBranchVersionedPackageConfig {
                         .contains(&candidate[0][self.package_prefix.len()..])
                     && candidate[1] == self.subcommand
                 {
-                    matched_launch = true;
+                    matched_arguments = Some(&candidate[2..]);
                     break;
                 }
             }
-            if matched_launch {
+            if matched_arguments.is_some() {
                 break;
             }
         }
-        if !matched_launch {
+        let Some(matched_arguments) = matched_arguments else {
             return Ok(false);
-        }
+        };
         if self.required_flags.is_empty() {
             return Ok(true);
         }
-        let options_with_values = self
-            .options_with_values
-            .union(&self.wrapper_options_with_values)
-            .chain(&self.package_launcher_options_with_values)
-            .cloned()
-            .collect::<BTreeSet<_>>();
         let known_flags = self
             .flags
             .union(&self.required_flags)
-            .chain(&self.wrapper_flags)
-            .chain(&self.package_launcher_flags)
             .cloned()
             .collect::<BTreeSet<_>>();
-        let semantics = argument_semantics(&arguments, &options_with_values, &BTreeSet::new());
+        let semantics = argument_semantics(
+            matched_arguments,
+            &self.options_with_values,
+            &BTreeSet::new(),
+        );
         Ok(self.required_flags.is_subset(&semantics.present_flags)
             && crate::command_option_parsing::flags_present_in_all_option_parses_with_deadline(
-                &arguments,
+                matched_arguments,
                 &self.required_flags,
-                &options_with_values,
+                &self.options_with_values,
                 &known_flags,
                 deadline,
             ))

@@ -190,6 +190,18 @@ fn promptbranch_versioned_package_launches_preserve_native_review_parity() {
             ],
             "command.promptbranch.suggest",
         ),
+        (
+            "exec bunx --bun @promptbranch/cli@0.2.8 publish security-audit",
+            "exec",
+            &[
+                "bunx",
+                "--bun",
+                "@promptbranch/cli@0.2.8",
+                "publish",
+                "security-audit",
+            ],
+            "command.promptbranch.publish",
+        ),
     ] {
         let observations = program
             .observe_declarative(&exact_model(executable, arguments), &active, None)
@@ -268,6 +280,29 @@ fn promptbranch_versioned_package_launches_preserve_native_review_parity() {
             .collect::<Vec<_>>(),
         ["preview"]
     );
+
+    let launcher_preview = program
+        .observe_declarative(
+            &exact_model(
+                "npx",
+                &[
+                    "--preview",
+                    "@promptbranch/cli@0.2.8",
+                    "publish",
+                    "security-audit",
+                ],
+            ),
+            &active,
+            None,
+        )
+        .unwrap();
+    let publish = launcher_preview
+        .observations
+        .iter()
+        .find(|item| item.rule_id == "command.promptbranch.publish")
+        .unwrap();
+    assert_eq!(publish.effective_segment_indexes, [0]);
+    assert!(publish.safe_variants.is_empty());
 
     for (source, executable, arguments) in [
         (
