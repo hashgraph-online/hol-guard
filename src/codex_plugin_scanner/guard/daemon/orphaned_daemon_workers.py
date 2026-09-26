@@ -16,6 +16,7 @@ from __future__ import annotations
 import os
 import signal
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 
 _HOL_GUARD_EXECUTABLES = frozenset(
@@ -29,6 +30,10 @@ _HOL_GUARD_EXECUTABLES = frozenset(
 _MAX_PARENT_HOPS = 8
 _ORPHAN_REAP_GRACE_SECONDS = 1.0
 _ORPHAN_REAP_POLL_SECONDS = 0.05
+HOOK_WORKER_COMMAND_MARKER = "--hol-guard-hook-worker"
+
+CommandReader = Callable[[int], str | None]
+StartTokenReader = Callable[[int], str | None]
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,36 +74,118 @@ def parse_process_snapshot(output: str) -> list[ProcessSnapshot]:
     return processes
 
 
-def orphaned_hook_worker_pids(processes: list[ProcessSnapshot]) -> list[int]:
+def with_hook_worker_command_marker(command: list[str]) -> list[str]:
+    """Mark a spawned worker command so a later reaper can attribute it."""
+
+    if HOOK_WORKER_COMMAND_MARKER in command:
+        return list(command)
+    return [*command, HOOK_WORKER_COMMAND_MARKER]
+
+
+def orphaned_daemon_workers(processes: list[ProcessSnapshot]) -> list[ProcessSnapshot]:
     """Return detached Guard hook workers whose daemon is no longer live."""
 
     by_pid = {process.pid: process for process in processes}
-    return sorted(
-        process.pid
+    selected = [
+        process
         for process in processes
         if process.pid > 1
+        and process.pid != os.getpid()
         and _is_hol_guard_hook_worker(process.command)
         and not _has_live_daemon_ancestor(process, by_pid)
-    )
+    ]
+    return sorted(selected, key=lambda process: process.pid)
 
 
-def terminate_orphaned_hook_workers(
-    pids: list[int],
+def terminate_orphaned_daemon_workers(
+    workers: list[ProcessSnapshot],
     *,
+    command_for_pid: CommandReader,
+    start_token_for_pid: StartTokenReader,
     grace_seconds: float = _ORPHAN_REAP_GRACE_SECONDS,
 ) -> None:
-    """Stop orphaned workers, then force any that ignore the first signal."""
+    """Stop orphaned workers, then force any that ignore the first signal.
 
-    targets = [pid for pid in pids if pid > 1 and pid != os.getpid()]
-    for pid in targets:
-        _signal_worker(pid, signal.SIGTERM)
+    Each signal is sent only when the pid still has the snapshotted command and
+    the same process start token captured for that worker. A reused pid is skipped.
+    """
+
+    armed: list[tuple[ProcessSnapshot, str]] = []
+    for worker in workers:
+        if worker.pid <= 1 or worker.pid == os.getpid():
+            continue
+        token = _signal_matching_worker(
+            worker,
+            signal.SIGTERM,
+            command_for_pid=command_for_pid,
+            start_token_for_pid=start_token_for_pid,
+            expected_token=None,
+        )
+        if token is not None:
+            armed.append((worker, token))
     deadline = time.monotonic() + max(0.0, grace_seconds)
-    pending = [pid for pid in targets if _pid_is_alive(pid)]
+    pending = armed
     while pending and time.monotonic() < deadline:
         time.sleep(min(_ORPHAN_REAP_POLL_SECONDS, max(0.0, deadline - time.monotonic())))
-        pending = [pid for pid in pending if _pid_is_alive(pid)]
-    for pid in pending:
-        _signal_worker(pid, signal.SIGKILL)
+        pending = [
+            (worker, token)
+            for worker, token in pending
+            if _worker_identity_matches(
+                worker,
+                expected_token=token,
+                command_for_pid=command_for_pid,
+                start_token_for_pid=start_token_for_pid,
+            )
+        ]
+    for worker, token in pending:
+        _signal_matching_worker(
+            worker,
+            signal.SIGKILL,
+            command_for_pid=command_for_pid,
+            start_token_for_pid=start_token_for_pid,
+            expected_token=token,
+        )
+
+
+def _signal_matching_worker(
+    worker: ProcessSnapshot,
+    sig: int,
+    *,
+    command_for_pid: CommandReader,
+    start_token_for_pid: StartTokenReader,
+    expected_token: str | None,
+) -> str | None:
+    token = _worker_identity_matches(
+        worker,
+        expected_token=expected_token,
+        command_for_pid=command_for_pid,
+        start_token_for_pid=start_token_for_pid,
+    )
+    if token is None:
+        return None
+    command_again = command_for_pid(worker.pid)
+    if command_again is None or command_again.strip() != worker.command:
+        return None
+    _signal_worker(worker.pid, sig)
+    return token
+
+
+def _worker_identity_matches(
+    worker: ProcessSnapshot,
+    *,
+    expected_token: str | None,
+    command_for_pid: CommandReader,
+    start_token_for_pid: StartTokenReader,
+) -> str | None:
+    command = command_for_pid(worker.pid)
+    if command is None or command.strip() != worker.command:
+        return None
+    token = start_token_for_pid(worker.pid)
+    if token is None or token == "":
+        return None
+    if expected_token is not None and token != expected_token:
+        return None
+    return token
 
 
 def _signal_worker(pid: int, sig: int) -> None:
@@ -116,18 +203,6 @@ def _signal_worker(pid: int, sig: int) -> None:
         os.kill(pid, sig)
     except OSError:
         return
-
-
-def _pid_is_alive(pid: int) -> bool:
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    except OSError:
-        return False
-    return True
 
 
 def _has_live_daemon_ancestor(
@@ -152,7 +227,9 @@ def _is_hol_guard_hook_worker(command: str) -> bool:
     if fork_at > 0 and _is_absolute_hol_guard_executable(command[:fork_at]):
         return True
     tracker_marker = "from multiprocessing.resource_tracker import main"
-    return tracker_marker in command and _leading_executable_is_hol_guard(command)
+    if tracker_marker in command and _leading_executable_is_hol_guard(command):
+        return True
+    return _is_marked_python_hook_worker(command)
 
 
 def _is_hol_guard_daemon_serve(command: str) -> bool:
@@ -192,6 +269,20 @@ def _leading_executable_is_hol_guard(command: str) -> bool:
         if marker_at > 0 and " -" not in stripped[:marker_at]:
             return True
     return False
+
+
+def _is_marked_python_hook_worker(command: str) -> bool:
+    if HOOK_WORKER_COMMAND_MARKER not in command.split():
+        return False
+    if "--multiprocessing-fork" not in command.split() and (
+        "from multiprocessing.resource_tracker import main" not in command
+    ):
+        return False
+    stripped = command.strip().strip('"')
+    if not stripped.startswith("/") and not _is_windows_absolute(stripped):
+        return False
+    executable = stripped.split()[0].replace("\\", "/").rsplit("/", 1)[-1].lower()
+    return executable.startswith("python")
 
 
 def _is_windows_absolute(value: str) -> bool:

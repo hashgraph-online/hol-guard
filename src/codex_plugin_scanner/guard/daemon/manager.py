@@ -401,12 +401,12 @@ def ensure_guard_daemon(
                 _schedule_duplicate_guard_daemon_retirement(guard_home)
                 return existing_url
             if existing_url is not None:
-                retire_all_guard_daemons_for_home(guard_home)
+                retire_all_guard_daemons_for_home(guard_home, deadline=start_deadline)
                 if not guard_daemon_retirement_is_complete(guard_home):
                     raise RuntimeError("Existing Guard daemon could not be retired safely.")
                 clear_guard_daemon_state(guard_home)
         if state_path.is_file() and _load_authenticated_daemon_identity(guard_home) is None:
-            retire_all_guard_daemons_for_home(guard_home)
+            retire_all_guard_daemons_for_home(guard_home, deadline=start_deadline)
             if not _daemon_lifecycle_artifact_is_exact_tombstone(state_path):
                 raise RuntimeError("Untrusted Guard daemon state could not be retired safely.")
             _remove_invalid_daemon_discovery_key(guard_home)
@@ -430,20 +430,20 @@ def ensure_guard_daemon(
             if inflight_url is not None:
                 _schedule_duplicate_guard_daemon_retirement(guard_home)
                 return inflight_url
-            retire_all_guard_daemons_for_home(guard_home)
+            retire_all_guard_daemons_for_home(guard_home, deadline=start_deadline)
             if not guard_daemon_retirement_is_complete(guard_home):
                 raise RuntimeError("In-progress Guard daemon launch could not be retired safely.")
         if os.name == "nt" and (
             _pending_launch_path(guard_home).is_file()
             or load_authenticated_guard_daemon_pending_launch(guard_home) is not None
         ):
-            retire_all_guard_daemons_for_home(guard_home)
+            retire_all_guard_daemons_for_home(guard_home, deadline=start_deadline)
             if not _guard_daemon_pending_launch_state_is_resolved(guard_home):
                 raise RuntimeError("A previous Guard daemon launch could not be retired safely.")
         clear_guard_daemon_state(guard_home)
         # setsid() keeps hook workers alive after the daemon exits. They hold
         # the local store, so the replacement never publishes daemon state.
-        reap_orphaned_hook_workers()
+        reap_orphaned_daemon_workers(deadline=start_deadline)
         for candidate_port in _candidate_ports(guard_home, preferred_port=preferred_port):
             remaining_start_time = start_deadline - time.monotonic()
             if remaining_start_time <= 0:
@@ -637,6 +637,7 @@ def retire_all_guard_daemons_for_home(
     guard_home: Path,
     *,
     keep_port: int | None = None,
+    deadline: float | None = None,
 ) -> list[int]:
     """Stop Guard daemon processes for one guard home, optionally keeping one port alive."""
     retired: list[int] = []
@@ -735,28 +736,57 @@ def retire_all_guard_daemons_for_home(
             empty_inventory_confirmed = _guard_daemon_process_inventory_for_guard_home(guard_home) == []
         if empty_inventory_confirmed and keep_port is None:
             _reconcile_invalid_daemon_lifecycle_artifacts(guard_home)
-    reap_orphaned_hook_workers()
+    reap_orphaned_daemon_workers(deadline=deadline)
     return retired
 
 
-def reap_orphaned_hook_workers() -> None:
+def reap_orphaned_daemon_workers(*, deadline: float | None = None) -> None:
     """Stop hook workers whose daemon parent is already gone."""
 
     if os.name == "nt":
         return
-    from .orphaned_hook_workers import (
-        orphaned_hook_worker_pids,
+    if deadline is not None and time.monotonic() >= deadline:
+        return
+    from .orphaned_daemon_workers import (
+        orphaned_daemon_workers,
         parse_process_snapshot,
-        terminate_orphaned_hook_workers,
+        terminate_orphaned_daemon_workers,
     )
 
     ps_path = _trusted_posix_ps_path()
     if ps_path is None:
         return
-    output = _bounded_process_query_stdout([ps_path, "-axww", "-o", "pid=,ppid=,state=,command="])
+    query_timeout = _GUARD_DAEMON_PROCESS_QUERY_TIMEOUT_SECONDS
+    if deadline is not None:
+        query_timeout = min(query_timeout, deadline - time.monotonic())
+    output = _bounded_process_query_stdout(
+        [ps_path, "-axww", "-o", "pid=,ppid=,state=,command="],
+        timeout_seconds=query_timeout,
+    )
     if output is None:
         return
-    terminate_orphaned_hook_workers(orphaned_hook_worker_pids(parse_process_snapshot(output)))
+    grace_seconds = 1.0
+    if deadline is not None:
+        grace_seconds = min(grace_seconds, max(0.0, deadline - time.monotonic()))
+    terminate_orphaned_daemon_workers(
+        orphaned_daemon_workers(parse_process_snapshot(output)),
+        command_for_pid=_orphan_worker_command,
+        start_token_for_pid=process_start_token,
+        grace_seconds=grace_seconds,
+    )
+
+
+def _orphan_worker_command(pid: int) -> str | None:
+    if pid <= 1:
+        return None
+    ps_path = _trusted_posix_ps_path()
+    if ps_path is None:
+        return None
+    output = _bounded_process_query_stdout([ps_path, "-p", str(pid), "-ww", "-o", "command="])
+    if output is None:
+        return None
+    command = output.strip()
+    return command or None
 
 
 def guard_daemon_retirement_is_complete(guard_home: Path) -> bool:
