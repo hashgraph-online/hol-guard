@@ -2,17 +2,12 @@ from __future__ import annotations
 
 import multiprocessing
 import os
-import threading
 import time
-from multiprocessing import spawn as multiprocessing_spawn
 from pathlib import Path
 
 from .hook_process_entrypoint import hook_worker_main
 from .hook_process_protocol import as_string_object_dict, is_pair
 from .hook_process_worker import HookWorkerSlot
-from .orphaned_daemon_workers import with_hook_worker_command_marker
-
-_HOOK_WORKER_COMMAND_MARKER_LOCK = threading.Lock()
 
 
 def spawn_hook_worker(guard_home: Path | None) -> HookWorkerSlot:
@@ -24,21 +19,12 @@ def spawn_hook_worker(guard_home: Path | None) -> HookWorkerSlot:
         name="hol-guard-hook-worker",
         daemon=False,
     )
-    original_command_line = multiprocessing_spawn.get_command_line
-
-    def marked_command_line(**kwds: int) -> list[str]:
-        return with_hook_worker_command_marker(list(original_command_line(**kwds)))
-
-    with _HOOK_WORKER_COMMAND_MARKER_LOCK:
-        multiprocessing_spawn.get_command_line = marked_command_line
-        try:
-            process.start()
-        except BaseException:
-            parent_connection.close()
-            child_connection.close()
-            raise
-        finally:
-            multiprocessing_spawn.get_command_line = original_command_line
+    try:
+        process.start()
+    except BaseException:
+        parent_connection.close()
+        child_connection.close()
+        raise
     child_connection.close()
     return HookWorkerSlot(
         process=process,
