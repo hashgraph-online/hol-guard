@@ -219,7 +219,11 @@ def _exercise_installed_routes(
                 )
             )
         for event, payload in events:
-            response_payload = _installed_hook_request(daemon, guard_home, workspace, harness, event, payload)
+            try:
+                response_payload = _installed_hook_request(daemon, guard_home, workspace, harness, event, payload)
+            except TimeoutError as error:
+                # Report the failed route without exposing tokens or replaying a possibly dispatched request.
+                raise RuntimeError(f"installed hook transport timed out: harness={harness} event={event}") from error
             if response_payload is None:
                 raise RuntimeError(f"empty response for {harness} {event}")
             _require(
