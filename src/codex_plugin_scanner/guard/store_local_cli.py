@@ -247,6 +247,34 @@ class StoreLocalCliMixin:
                         (cli_id, command_id),
                     )
 
+    def merge_local_cli_commands(
+        self, cli_id: str, commands: Sequence[LocalCliCommand], *, limit: int,
+    ) -> None:
+        """Append observed tools atomically without deleting existing choices."""
+        if not is_local_cli_id(cli_id) or limit < 1:
+            raise ValueError("invalid local CLI catalog")
+        with self._connect() as connection:
+            ensure_local_cli_schema(connection)
+            connection.commit()
+            connection.execute("begin immediate")
+            rows = connection.execute(
+                "select command_id from local_cli_command where cli_id = ?", (cli_id,),
+            ).fetchall()
+            known = {str(row[0]) for row in rows}
+            for command in commands:
+                if not is_local_cli_command_id(command.command_id):
+                    raise ValueError("invalid local CLI command id")
+                if command.command_id in known or len(known) >= limit:
+                    continue
+                connection.execute(
+                    """insert into local_cli_command
+                    (cli_id, command_id, name, usage, description, parent_id, sort_index)
+                    values (?, ?, ?, ?, ?, ?, ?)""",
+                    (cli_id, command.command_id, command.name[:120], command.usage[:160],
+                     command.description[:240], command.parent_id, len(known)),
+                )
+                known.add(command.command_id)
+
     def upsert_local_cli_command_states(
         self,
         cli_id: str,

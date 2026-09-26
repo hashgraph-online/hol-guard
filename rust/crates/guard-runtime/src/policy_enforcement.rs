@@ -272,7 +272,7 @@ fn policy_override_reason(action: &str) -> (&'static str, &'static str) {
 pub(crate) fn apply_pre_tool_policy(
     snapshot: &AdmittedPolicySnapshot,
     payload: &Value,
-    result: PreToolResultV1,
+    mut result: PreToolResultV1,
 ) -> Result<PreToolResultV1, String> {
     if !matches!(snapshot.mode.as_str(), "enforce" | "observe") {
         return Err("native_policy_mode_invalid".to_owned());
@@ -281,6 +281,58 @@ pub(crate) fn apply_pre_tool_policy(
     let harness = normalized_harness(&result.action.harness);
     let mut facts = payload_facts(payload, result.action.action_type, &result.reason_code)?;
     facts.sensitive_target |= result.action.sensitive_target;
+    if result.action.action_type == PreToolActionTypeV1::McpTool {
+        // Tool arguments can themselves contain `tool_name` (dispatchers are
+        // common). They are data, never the outer tool's authority selector.
+        let tool = match payload.as_object() {
+            Some(record) => preferred_tool_name(&[record])?,
+            None => None,
+        };
+        if let Some(tool) = tool {
+            let choice = guard_policy_snapshot::observed_mcp_tool_action(
+                &snapshot.effective_policy.mcp_tool_actions,
+                &harness,
+                &tool,
+            );
+            if choice == Some("block") && result.minimum_action != "block" {
+                result.minimum_action = "block".into();
+                result.policy_action = "block".into();
+                result.decision = "deny".into();
+                result.explicitly_benign = false;
+                result.reason_code = "native_custom_mcp_tool_block".into();
+                result.reason =
+                    "This MCP tool is blocked by a custom extension on this device.".into();
+            } else if choice == Some("allow")
+                && result.minimum_action == "review"
+                && result.reason_code == "native_mcp_tool_review"
+                && result.action.bounded
+                && !facts.sensitive_target
+                && !facts.changed_hash
+                && result.command_extensions.as_ref().is_none_or(|evidence| {
+                    evidence.binding.observation_count == 0 && evidence.evaluation_error.is_none()
+                })
+            {
+                // Only explicit operator authority in the admitted, authenticated
+                // snapshot can replace the unknown-tool review. Independent
+                // native findings and every installed policy floor still apply.
+                result.minimum_action = "allow".into();
+                result.policy_action = "allow".into();
+                result.decision = "allow".into();
+                result.explicitly_benign = true;
+                result.reason_code = "native_custom_mcp_tool_allow".into();
+                result.reason =
+                    "This exact MCP tool is allowed by a custom extension on this device.".into();
+                // The explicit operator choice satisfies the generic unknown
+                // publisher review for this namespace. Stronger publisher
+                // actions and independent MCP risk policies remain floors.
+                if facts.publisher.is_none()
+                    && snapshot.effective_policy.unknown_publisher_action == "review"
+                {
+                    facts.publisher_relevant = false;
+                }
+            }
+        }
+    }
     let policy_floor = policy_floor(
         &snapshot.effective_policy,
         &snapshot.compiled,

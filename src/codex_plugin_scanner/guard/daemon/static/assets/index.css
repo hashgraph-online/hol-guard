@@ -1191,6 +1191,10 @@
     min-height: calc(var(--spacing) * 12);
   }
 
+  .min-h-14 {
+    min-height: calc(var(--spacing) * 14);
+  }
+
   .min-h-16 {
     min-height: calc(var(--spacing) * 16);
   }
@@ -1433,6 +1437,10 @@
 
   .max-w-\[28rem\] {
     max-width: 28rem;
+  }
+
+  .max-w-\[55\%\] {
+    max-width: 55%;
   }
 
   .max-w-\[70vw\] {
@@ -5358,13 +5366,13 @@
     font-family: system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif;
   }
 
-  .placeholder\:text-brand-dark\/40::placeholder {
+  .placeholder\:text-brand-dark\/70::placeholder {
     color: var(--brand-dark);
   }
 
   @supports (color: color-mix(in lab, red, red)) {
-    .placeholder\:text-brand-dark\/40::placeholder {
-      color: color-mix(in oklab, var(--brand-dark) 40%, transparent);
+    .placeholder\:text-brand-dark\/70::placeholder {
+      color: color-mix(in oklab, var(--brand-dark) 70%, transparent);
     }
   }
 

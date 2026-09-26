@@ -34,6 +34,7 @@ pub const POLICY_SNAPSHOT_PROTOCOL_VERSION: u16 = 1;
 pub const POLICY_SNAPSHOT_MAX_BYTES: usize = 256 * 1024;
 pub const POLICY_SNAPSHOT_MAX_STRING_BYTES: usize = 4 * 1024;
 pub const POLICY_SNAPSHOT_MAX_MAP_ENTRIES: usize = 256;
+pub const POLICY_SNAPSHOT_MAX_MCP_TOOL_ACTIONS: usize = 1024;
 pub const POLICY_SNAPSHOT_MAX_HARNESS_ENTRIES: usize = 64;
 pub const POLICY_SNAPSHOT_MAX_EXPIRY_MS: u64 = 24 * 60 * 60 * 1000;
 pub const POLICY_SNAPSHOT_INTEGRITY_ALGORITHM: &str = "hmac-sha256";
@@ -111,6 +112,8 @@ pub struct EffectiveNativePolicyV3 {
     pub harness_actions: BTreeMap<String, String>,
     pub publisher_actions: BTreeMap<String, String>,
     pub artifact_actions: BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub mcp_tool_actions: BTreeMap<String, String>,
     pub sandbox_analysis: String,
     pub receipt_redaction_level: String,
 }
@@ -397,6 +400,10 @@ fn validate_risk_action_map(map: &BTreeMap<String, String>, maximum: usize) -> b
             .all(|key| VALID_RISK_ACTION_KEYS.contains(&key.as_str()))
 }
 
+mod observed_mcp;
+use observed_mcp::validate_mcp_tool_actions;
+pub use observed_mcp::{mcp_tool_namespace, observed_mcp_tool_action};
+
 fn validate_effective_policy(policy: &EffectiveNativePolicyV3) -> Result<(), SnapshotError> {
     for action in [
         &policy.default_action,
@@ -421,6 +428,7 @@ fn validate_effective_policy(policy: &EffectiveNativePolicyV3) -> Result<(), Sna
         || !validate_harness_action_map(&policy.harness_actions, POLICY_SNAPSHOT_MAX_MAP_ENTRIES)
         || !validate_action_map(&policy.publisher_actions, POLICY_SNAPSHOT_MAX_MAP_ENTRIES)
         || !validate_action_map(&policy.artifact_actions, POLICY_SNAPSHOT_MAX_MAP_ENTRIES)
+        || !validate_mcp_tool_actions(&policy.mcp_tool_actions)
         || policy.harness_risk_actions.len() > POLICY_SNAPSHOT_MAX_HARNESS_ENTRIES
         || !policy.harness_risk_actions.iter().all(|(key, value)| {
             valid_selector_key(key)

@@ -187,14 +187,19 @@ class NativePolicySnapshotPublisherInputs:
         """Build the native snapshot input off the synchronous hook path."""
 
         from .config import load_guard_config
+        from .runtime.observed_mcp_tools import native_observed_mcp_tool_actions
 
         with self._condition:
             workspaces = tuple(sorted(self._workspace_paths, key=str))
         configs = [load_guard_config(self.guard_home)]
         configs.extend(load_guard_config(self.guard_home, workspace=workspace) for workspace in workspaces)
-        return _merge_effective_native_policies(
+        policy = _merge_effective_native_policies(
             tuple(effective_native_policy_v3(config) | {"mode": config.mode} for config in configs)
         )
+        mcp_actions = native_observed_mcp_tool_actions(self.store)
+        if mcp_actions:
+            policy["mcp_tool_actions"] = mcp_actions
+        return policy
 
     def _compiled_command_extensions(self) -> dict[str, object]:
         try:
