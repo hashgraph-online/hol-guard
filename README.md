@@ -245,6 +245,16 @@ Skill trust uses the HCS-28 baseline adapter IDs, weights, and denominator rules
 
 <a id="quality-suite-commands"></a>
 
+For parseable Python files, the `eval` check inspects syntax: bare builtin references,
+`builtins.eval` (including import aliases), and `.eval(...)` calls with arguments
+remain findings. A no-argument method call such as PyTorch's
+[`Module.eval()`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.eval)
+does not by itself indicate dynamic code execution. Python comments and string
+literals are not treated as `eval` calls; expressions inside f-strings are inspected.
+If Python parsing fails, the conservative text check remains in effect. JavaScript
+and TypeScript checks are unchanged. This rule is a heuristic, not type inference
+or a proof that an arbitrary method implementation is safe.
+
 ## CLI Usage
 
 ```bash
