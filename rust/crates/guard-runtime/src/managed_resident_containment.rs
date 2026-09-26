@@ -371,14 +371,14 @@ pub(super) fn abort_spawned_managed(
         start_marker: process_start_marker(process_id).ok(),
         runtime_digest: runtime_digest().ok(),
     }];
-    let _ = terminate_spawned_managed(child, Duration::from_millis(100));
+    let _ = terminate_spawned_managed(child, super::MANAGED_STOP_TIMEOUT);
     let _ = wait_for_generation_containment(
         scope,
         digest,
         generation,
         token,
         &known_processes,
-        Instant::now() + Duration::from_millis(50),
+        Instant::now() + super::MANAGED_STOP_TIMEOUT,
     );
 }
 
