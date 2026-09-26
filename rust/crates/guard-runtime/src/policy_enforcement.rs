@@ -304,7 +304,7 @@ pub(crate) fn apply_pre_tool_policy(
             && intrinsic_rank <= action_rank("warn").unwrap_or(1)
             && output.decision == "allow";
         if policy_only_warning {
-            output.reason_code = "native_policy_warning".to_owned();
+            output.reason_code = "native_policy_observed".to_owned();
             output.reason =
                 "HOL Guard observed a stricter installed native policy floor.".to_owned();
             output.policy_action = "warn".to_owned();
