@@ -5,6 +5,14 @@ All notable changes to HOL Guard will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.1](https://github.com/hashgraph-online/hol-guard/compare/v3.6.0...v3.6.1) (2026-09-25)
+
+
+### Bug Fixes
+
+* **ci:** stabilize Windows native CI timing ([#3115](https://github.com/hashgraph-online/hol-guard/issues/3115)) ([ad36211](https://github.com/hashgraph-online/hol-guard/commit/ad3621183d5b33079d858450d476e135bbb87d08))
+* **guard:** include evaluation command in release wheel ([#3116](https://github.com/hashgraph-online/hol-guard/issues/3116)) ([9ad7c06](https://github.com/hashgraph-online/hol-guard/commit/9ad7c0631379cf85aacd4020517e3bda320851ad))
+
 ## [3.6.0](https://github.com/hashgraph-online/hol-guard/compare/v3.5.1...v3.6.0) (2026-09-25)
 
 

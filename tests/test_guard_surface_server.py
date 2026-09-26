@@ -1074,7 +1074,7 @@ class TestGuardSurfaceServer:
             last_post_error: BaseException | None = None
             while True:
                 try:
-                    hook_payload = urlopen_json(hook_request, timeout=15, attempts=1)
+                    hook_payload = urlopen_json(hook_request, timeout=15, attempts=3)
                     break
                 except ConnectionRefusedError as exc:
                     last_post_error = exc

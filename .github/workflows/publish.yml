@@ -347,7 +347,8 @@ jobs:
           end = text.index("\n\n[project.urls]")
           scripts = "[project.scripts]\n" \
               'hol-guard = "codex_plugin_scanner.cli:main"\n' \
-              'plugin-guard = "codex_plugin_scanner.cli:main"'
+              'plugin-guard = "codex_plugin_scanner.cli:main"\n' \
+              'hol-guard-eval = "codex_plugin_scanner.guard.evaluation_cli:main"'
           text = text[:start] + scripts + text[end:]
           path.write_text(text, encoding="utf-8")
           PY
@@ -383,7 +384,9 @@ jobs:
           uv run --no-sync python -m build
           mv pyproject.toml.bak pyproject.toml
       - name: Verify distributions
-        run: uv run --no-sync twine check dist/*
+        run: |
+          uv run --no-sync twine check dist/*
+          python3 scripts/verify_guard_wheel_entrypoints.py dist
       - name: Record immutable distribution hashes
         run: |
           find dist -maxdepth 1 -type f -print0 | sort -z | xargs -0 sha256sum > distribution-sha256.txt
