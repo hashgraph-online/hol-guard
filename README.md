@@ -24,6 +24,9 @@ Run it locally without an account. Use the CLI and local dashboard to manage pro
 
 [Get started](#install-hol-guard) · [Supported agents](#supported-ai-agents) · [Plugin scanner](#plugin-scanner) · [Documentation](#documentation) · [Contribute an extension](#contribute-a-new-extension) · [Development](#development)
 
+<!-- hol-sponsors:start -->
+<!-- hol-sponsors:end -->
+
 ## Install HOL Guard
 
 Requires Python 3.10 or newer and [pipx](https://pipx.pypa.io/stable/installation/).
