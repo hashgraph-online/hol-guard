@@ -106,14 +106,16 @@ def test_sessionless_retry_does_not_inherit_approval(
     assert retry["approval_request_id"] != first["approval_request_id"]
 
 
-def test_unpresentable_native_action_stays_blocked(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_unpresentable_native_action_stays_blocked(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
     worker, store = _worker(tmp_path, monkeypatch, _edge("omp"))
 
     def cannot_describe(*_args: object, **_kwargs: object) -> None:
-        raise ValueError("fixture normalization failure")
+        raise ValueError("fixture-private-value")
 
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_native_review_approval.normalize_harness_payload", cannot_describe
+        "codex_plugin_scanner.guard.daemon.hook_native_review_approval.normalize_native_review_payload", cannot_describe
     )
     result = worker.review_http_payload(
         payload={"hook_event_name": "PreToolUse", "tool_name": "eval", "tool_input": {"code": "1 + 1"}},
@@ -127,3 +129,6 @@ def test_unpresentable_native_action_stays_blocked(tmp_path: Path, monkeypatch: 
     assert result["policy_action"] == "block"
     assert result["reason_code"] == "native_review_queue_failed"
     assert store.list_approval_requests(status="pending") == []
+    assert "Native review presentation failed" in caplog.text
+    assert "ValueError" in caplog.text
+    assert "fixture-private-value" not in caplog.text

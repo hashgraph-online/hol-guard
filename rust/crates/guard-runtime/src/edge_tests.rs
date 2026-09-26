@@ -256,6 +256,26 @@ fn pi_retry_without_session_keeps_transport_identity() {
 }
 
 #[test]
+fn pi_retry_identity_matches_shared_python_fixture_vectors() {
+    let vectors: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../../tests/fixtures/pi-retry-identity-vectors.json"
+    ))
+    .unwrap();
+    for vector in vectors.as_array().unwrap() {
+        let mut before = envelope("PreToolUse", vector["before"].clone());
+        before.harness = vector["harness"].as_str().unwrap().to_owned();
+        let mut after = before.clone();
+        after.raw_payload = vector["after"].clone();
+        assert_eq!(
+            request_identity(&before).unwrap().1 == request_identity(&after).unwrap().1,
+            vector["same_identity"].as_bool().unwrap(),
+            "{}",
+            vector["name"]
+        );
+    }
+}
+
+#[test]
 fn evaluates_complete_cursor_file_envelope_as_native_generic_result() {
     let bytes = evaluate_isolated(envelope(
         "beforeReadFile",

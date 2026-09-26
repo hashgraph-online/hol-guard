@@ -17,11 +17,12 @@ def test_native_review_produces_dashboard_wire_contract() -> None:
         command=None,
         launch_target="tool:eval",
         workspace=None,
+        payload={"tool_name": "eval", "tool_input": {"code": "1 + 1"}},
     )
     assert actual == expected
 
 
-@pytest.mark.parametrize("harness", ("pi", "omp"))
+@pytest.mark.parametrize("harness", ("pi", "omp", "unregistered-native-fixture"))
 def test_native_review_displays_redacted_read_details(harness: str) -> None:
     envelope = _native_review_action_envelope(
         request_id="read-review",
@@ -52,5 +53,15 @@ def test_native_review_displays_eval_input() -> None:
         workspace=None,
         payload={"tool_name": "eval", "tool_input": {"code": "1 + 1"}},
     )
-    assert envelope["action_type"] == "mcp_tool"
+    assert envelope["action_type"] == "config_change"
     assert "1 + 1" in json.dumps(envelope["raw_payload_redacted"])
+
+
+def test_native_review_preserves_configuration_classification() -> None:
+    envelope = _native_review_action_envelope(
+        request_id="config-review", harness="omp", tool_name="configure", command=None,
+        launch_target="tool:configure", workspace=None,
+        payload={"tool_name": "configure", "tool_input": {"setting": "example"}},
+    )
+    assert envelope["action_type"] == "config_change"
+    assert "example" in json.dumps(envelope["raw_payload_redacted"])

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { normalizeApprovalRequest } from "./guard-api";
+import { resolveActionEnvelopeDetailText } from "./approval-center-utils";
 
 const envelope = JSON.parse(readFileSync(
   new URL("../../tests/fixtures/native-review-action-envelope.json", import.meta.url), "utf8",
@@ -18,4 +19,7 @@ const request = normalizeApprovalRequest({
 });
 assert.equal(request.decision_contract_error, undefined);
 assert.equal(request.action_envelope_json?.tool_name, "eval");
+assert.equal(request.action_envelope_json?.action_type, "config_change");
+assert.ok(request.action_envelope_json);
+assert.match(resolveActionEnvelopeDetailText(request.action_envelope_json) ?? "", /1 \+ 1/);
 console.log("Native review dashboard contract passed");

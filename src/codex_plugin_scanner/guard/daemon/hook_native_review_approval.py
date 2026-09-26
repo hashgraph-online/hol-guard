@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import re
 import shlex
 import sqlite3
@@ -20,7 +21,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from ..models import GuardApprovalRequest, format_local_http_origin
-from ..runtime.actions import action_envelope_harnesses, normalize_harness_payload
+from ..runtime.native_review_presentation import normalize_native_review_payload
 from .hook_native_review_binding import native_review_policy_binding
 from .hook_request_parsing import pre_tool_command
 from .hook_worker_responses import (
@@ -29,6 +30,7 @@ from .hook_worker_responses import (
 )
 
 _DEFAULT_APPROVAL_CENTER_PORT = 4781
+_LOGGER = logging.getLogger(__name__)
 _MUTABLE_CODE_LAUNCHERS = {
     ".",
     "source",
@@ -197,8 +199,10 @@ def queue_native_pre_tool_review(
             workspace=workspace,
             payload=payload,
         )
-    except (OSError, RuntimeError, TypeError, ValueError, KeyError):
+    except (OSError, RuntimeError, TypeError, ValueError, KeyError) as error:
         # Never make an action approvable when its details could not be safely presented.
+        # Exception messages can contain private tool input; log only the error class.
+        _LOGGER.warning("Native review presentation failed for %s (%s)", request_id, type(error).__name__)
         return None
     request = GuardApprovalRequest(
         request_id=request_id,
@@ -400,47 +404,15 @@ def _native_review_action_envelope(
     command: str | None,
     launch_target: str,
     workspace: Path | None,
-    payload: Mapping[str, object] | None = None,
+    payload: Mapping[str, object],
 ) -> dict[str, object]:
-    if payload is not None and harness.strip().lower() in action_envelope_harnesses():
-        # Presentation only: approval identity and policy remain Rust-owned.
-        envelope = normalize_harness_payload(harness, "PreToolUse", payload, workspace=workspace).to_dict()
-        envelope.update(action_id=request_id, pre_execution_result="review")
-        host = urlparse(launch_target).hostname if "://" in launch_target else None
-        if command is None and host:
-            envelope.update(action_type="network_request", network_hosts=[host])
-        elif envelope["action_type"] == "config_change":
-            envelope["action_type"] = "mcp_tool"
-        return envelope
+    # Presentation only: approval identity and policy remain Rust-owned.
+    envelope = normalize_native_review_payload(harness, payload, workspace=workspace).to_dict()
+    envelope.update(action_id=request_id, pre_execution_result="review")
     host = urlparse(launch_target).hostname if "://" in launch_target else None
-    if command is not None:
-        action_type = "shell_command"
-    elif host:
-        action_type = "network_request"
-    else:
-        action_type = "mcp_tool"
-    return {
-        "schema_version": 1,
-        "action_id": request_id,
-        "harness": harness,
-        "event_name": "PreToolUse",
-        "action_type": action_type,
-        "workspace": str(workspace) if workspace is not None else None,
-        "workspace_hash": None,
-        "tool_name": tool_name,
-        "command": command,
-        "prompt_excerpt": None,
-        "prompt_text": None,
-        "target_paths": [],
-        "network_hosts": [host] if isinstance(host, str) and host else [],
-        "mcp_server": None,
-        "mcp_tool": None,
-        "package_manager": None,
-        "package_name": None,
-        "script_name": None,
-        "raw_payload_redacted": {},
-        "pre_execution_result": "review",
-    }
+    if command is None and host:
+        envelope.update(action_type="network_request", network_hosts=[host])
+    return envelope
 
 
 def _native_review_approval_center_url(store: object) -> str:

@@ -153,7 +153,7 @@ for (const toolName of ["read", "eval"]) {
       harness: "omp", policy_action: "review", artifact_type: "tool_call", launch_target: `tool:${toolName}`,
       action_envelope_json: {
         ...envelope, action_id: request.request_id, tool_name: toolName,
-        action_type: toolName === "read" ? "file_read" : "mcp_tool",
+        action_type: toolName === "read" ? "file_read" : "config_change",
         target_paths: toolName === "read" ? ["src/example.py"] : [],
         raw_payload_redacted: { tool_name: toolName, tool_input: { code: "1 + 1" } },
       },
