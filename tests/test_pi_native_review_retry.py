@@ -70,3 +70,60 @@ def test_acknowledged_watch_does_not_queue_unsupported_pi_tools(
     assert response.get("block") is not True
     assert "approval_request_id" not in response
     assert store.list_approval_requests(status="pending") == []
+
+
+@pytest.mark.parametrize("harness", ("pi", "omp"))
+def test_sessionless_retry_does_not_inherit_approval(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, harness: str
+) -> None:
+    worker, store = _worker(tmp_path, monkeypatch, _edge(harness))
+    payload = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "read",
+        "tool_call_id": "original-call",
+        "tool_input": {"path": "src/example.py"},
+    }
+    kwargs = {
+        "payload": payload,
+        "params": {},
+        "default_harness": harness,
+        "home_dir": tmp_path / "home",
+        "guard_home": tmp_path / "guard-home",
+        "workspace": tmp_path / "workspace",
+    }
+    first = worker.review_http_payload(**kwargs)
+    store.resolve_approval_request(
+        first["approval_request_id"],
+        resolution_action="allow",
+        resolution_scope="once",
+        reason="operator approved original call",
+        resolved_at=datetime.now(timezone.utc).isoformat(),
+    )
+    payload["tool_call_id"] = "retry-call"
+    retry = worker.review_http_payload(**kwargs)
+    assert retry["decision"] == "deny"
+    assert retry["policy_action"] == "review"
+    assert retry["approval_request_id"] != first["approval_request_id"]
+
+
+def test_unpresentable_native_action_stays_blocked(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    worker, store = _worker(tmp_path, monkeypatch, _edge("omp"))
+
+    def cannot_describe(*_args: object, **_kwargs: object) -> None:
+        raise ValueError("fixture normalization failure")
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.hook_native_review_approval.normalize_harness_payload", cannot_describe
+    )
+    result = worker.review_http_payload(
+        payload={"hook_event_name": "PreToolUse", "tool_name": "eval", "tool_input": {"code": "1 + 1"}},
+        params={},
+        default_harness="omp",
+        home_dir=tmp_path / "home",
+        guard_home=tmp_path / "guard-home",
+        workspace=tmp_path / "workspace",
+    )
+    assert result["decision"] == "deny"
+    assert result["policy_action"] == "block"
+    assert result["reason_code"] == "native_review_queue_failed"
+    assert store.list_approval_requests(status="pending") == []

@@ -72,9 +72,8 @@ async function mountApprovalFixture(
     else if (path.endsWith("/requests/bulk-allow-once")) {
       resolutionBodies.push(routeRequest.postDataJSON() as Record<string, unknown>);
       body = {
-        approved_count: options.requests?.length ?? 1,
-        approved_request_ids: options.requests?.map((item) => item.request_id) ?? [approvalRequest.request_id],
-        rejected_request_ids: [],
+        resolved_count: options.requests?.length ?? 1,
+        failed: [],
         resolution_summary: "Selected actions approved once.",
       };
     }

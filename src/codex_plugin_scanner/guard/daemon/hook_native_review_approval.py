@@ -187,6 +187,19 @@ def queue_native_pre_tool_review(
     approval_url = f"{approval_center_url}/requests/{request_id}"
     reason = str(native_result.get("reason") or "HOL Guard requires review before this action can execute.")
     binding = _native_review_binding(harness, payload, native_result, native_receipt, workspace)
+    try:
+        action_envelope = _native_review_action_envelope(
+            request_id=request_id,
+            harness=harness,
+            tool_name=tool_name,
+            command=command,
+            launch_target=launch_target,
+            workspace=workspace,
+            payload=payload,
+        )
+    except (OSError, RuntimeError, TypeError, ValueError, KeyError):
+        # Never make an action approvable when its details could not be safely presented.
+        return None
     request = GuardApprovalRequest(
         request_id=request_id,
         harness=harness,
@@ -204,15 +217,7 @@ def queue_native_pre_tool_review(
         artifact_type="tool_call",
         launch_target=launch_target,
         risk_summary=reason,
-        action_envelope_json=_native_review_action_envelope(
-            request_id=request_id,
-            harness=harness,
-            tool_name=tool_name,
-            command=command,
-            launch_target=launch_target,
-            workspace=workspace,
-            payload=payload,
-        ),
+        action_envelope_json=action_envelope,
     )
     try:
         persisted_id = persist(request, datetime.now(tz=timezone.utc).isoformat())
@@ -398,18 +403,15 @@ def _native_review_action_envelope(
     payload: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
     if payload is not None:
-        try:
-            envelope = normalize_harness_payload(harness, "PreToolUse", payload, workspace=workspace).to_dict()
-        except (ValueError, TypeError, KeyError):
-            envelope = None
-        if envelope is not None:
-            envelope.update(action_id=request_id, pre_execution_result="review")
-            host = urlparse(launch_target).hostname if "://" in launch_target else None
-            if command is None and host:
-                envelope.update(action_type="network_request", network_hosts=[host])
-            elif envelope.get("action_type") == "config_change":
-                envelope["action_type"] = "mcp_tool"
-            return envelope
+        # Presentation only: approval identity and policy remain Rust-owned.
+        envelope = normalize_harness_payload(harness, "PreToolUse", payload, workspace=workspace).to_dict()
+        envelope.update(action_id=request_id, pre_execution_result="review")
+        host = urlparse(launch_target).hostname if "://" in launch_target else None
+        if command is None and host:
+            envelope.update(action_type="network_request", network_hosts=[host])
+        elif envelope["action_type"] == "config_change":
+            envelope["action_type"] = "mcp_tool"
+        return envelope
     host = urlparse(launch_target).hostname if "://" in launch_target else None
     if command is not None:
         action_type = "shell_command"
