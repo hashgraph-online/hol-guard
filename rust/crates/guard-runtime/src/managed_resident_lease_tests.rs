@@ -181,6 +181,45 @@ fn busy_lease_directory_is_retained_as_live() {
 }
 
 #[test]
+fn stale_lease_overflow_drains_instead_of_keeping_the_resident() {
+    let root = test_directory("stale-overflow");
+    let directory = lease_directory(&root).expect("lease directory should be available");
+    let stale_at = SystemTime::now()
+        .checked_sub(LEASE_EXPIRY + Duration::from_secs(1))
+        .expect("test clock should support stale timestamp");
+    let count = LEASE_MAX_DIRECTORY_ENTRIES + 10;
+    for index in 0..count {
+        let path = directory.join(format!("client-stale-{index:04}.lease"));
+        let mut file = fixture_file_handle(&path);
+        file.write_all(b"partial lease")
+            .expect("fixture should be written");
+        file.set_modified(stale_at)
+            .expect("fixture should become stale");
+    }
+
+    let mut retained = true;
+    for _ in 0..4 {
+        retained = any_live_for_home(&root);
+        if !retained {
+            break;
+        }
+    }
+
+    assert!(!retained);
+    let remaining = fs::read_dir(&directory)
+        .expect("lease directory should remain readable")
+        .filter_map(Result::ok)
+        .filter(|entry| {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            name.starts_with("client-") && name.ends_with(".lease")
+        })
+        .count();
+    assert_eq!(remaining, 0);
+    fs::remove_dir_all(root).expect("test directory should be removable");
+}
+
+#[test]
 fn lease_directory_entry_overflow_is_retained_as_live() {
     let root = test_directory("entry-overflow");
     let directory = lease_directory(&root).expect("lease directory should be available");

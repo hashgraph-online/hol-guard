@@ -423,13 +423,18 @@ fn any_live_with_digest(state_base: &Path, expected_digest: Option<&str>) -> boo
         return true;
     };
     let mut paths = Vec::with_capacity(LEASE_MAX_FILES);
+    let mut stopped_before_end = false;
     for (entry_count, entry) in entries.enumerate() {
         if entry_count >= LEASE_MAX_DIRECTORY_ENTRIES {
             // Do not scan an attacker-controlled directory without a bound.
-            // Any uninspected entry may be a live lease, so retain the resident.
-            return true;
+            // Any uninspected entry may be a live lease, so retain the resident
+            // after this bounded pass. Stale records in the inspected batch are
+            // still removed so a later probe can reach the remainder.
+            stopped_before_end = true;
+            break;
         }
         let Ok(entry) = entry else {
+            let _ = batch_has_live_lease(&mut paths, expected_digest, &private_root);
             return true;
         };
         let name = entry.file_name();
@@ -437,22 +442,32 @@ fn any_live_with_digest(state_base: &Path, expected_digest: Option<&str>) -> boo
         if !name.starts_with(LEASE_PREFIX) || !name.ends_with(LEASE_SUFFIX) {
             continue;
         }
-        if paths.len() >= LEASE_MAX_FILES {
-            // More matching lease records than the verifier can inspect must
-            // retain the resident, even before the directory-entry bound.
+        if paths.len() >= LEASE_MAX_FILES
+            && batch_has_live_lease(&mut paths, expected_digest, &private_root)
+        {
             return true;
         }
         paths.push(entry.path());
     }
+    let found_live = batch_has_live_lease(&mut paths, expected_digest, &private_root);
+    found_live || stopped_before_end
+}
+
+fn batch_has_live_lease(
+    paths: &mut Vec<PathBuf>,
+    expected_digest: Option<&str>,
+    private_root: &Path,
+) -> bool {
     paths.sort_unstable();
-    paths.into_iter().fold(false, |found_live, path| {
-        if lease_is_live(&path, expected_digest, &private_root) {
+    let found_live = paths.drain(..).fold(false, |found_live, path| {
+        if lease_is_live(&path, expected_digest, private_root) {
             true
         } else {
-            let _ = remove_stale_lease(&path, &private_root);
+            let _ = remove_stale_lease(&path, private_root);
             found_live
         }
-    })
+    });
+    found_live
 }
 
 #[cfg(test)]
