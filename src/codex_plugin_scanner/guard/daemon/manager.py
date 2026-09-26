@@ -2277,24 +2277,33 @@ def _linux_proc_process_entries(proc_root: Path = Path("/proc")) -> list[tuple[i
 
 
 def _terminate_bounded_process_query(process: subprocess.Popen[bytes]) -> None:
+    pid = getattr(process, "pid", None)
+    wait = getattr(process, "wait", None)
+    poll = getattr(process, "poll", None)
     if os.name == "nt":
+        terminate = getattr(process, "terminate", None)
+        if callable(terminate):
+            with suppress(OSError):
+                terminate()
+    elif isinstance(pid, int) and pid > 0:
         with suppress(OSError):
-            process.terminate()
-    else:
-        with suppress(OSError):
-            os.killpg(process.pid, signal.SIGTERM)
-    with suppress(subprocess.TimeoutExpired):
-        _ = process.wait(timeout=_GUARD_DAEMON_PROCESS_QUERY_TERMINATE_GRACE_SECONDS)
-    if process.poll() is not None:
+            os.killpg(pid, signal.SIGTERM)
+    if callable(wait):
+        with suppress(subprocess.TimeoutExpired):
+            _ = wait(timeout=_GUARD_DAEMON_PROCESS_QUERY_TERMINATE_GRACE_SECONDS)
+    if callable(poll) and poll() is not None:
         return
     if os.name == "nt":
+        kill = getattr(process, "kill", None)
+        if callable(kill):
+            with suppress(OSError):
+                kill()
+    elif isinstance(pid, int) and pid > 0:
         with suppress(OSError):
-            process.kill()
-    else:
-        with suppress(OSError):
-            os.killpg(process.pid, signal.SIGKILL)
-    with suppress(subprocess.TimeoutExpired):
-        _ = process.wait(timeout=_GUARD_DAEMON_PROCESS_QUERY_TERMINATE_GRACE_SECONDS)
+            os.killpg(pid, signal.SIGKILL)
+    if callable(wait):
+        with suppress(subprocess.TimeoutExpired):
+            _ = wait(timeout=_GUARD_DAEMON_PROCESS_QUERY_TERMINATE_GRACE_SECONDS)
 
 
 def _capture_bounded_process_query_stdout(
