@@ -409,8 +409,14 @@ def _native_review_action_envelope(
 ) -> dict[str, object]:
     # Presentation only: approval identity and policy remain Rust-owned.
     return normalize_native_review_payload(
-        harness, payload, request_id=request_id, tool_name=tool_name, command=command,
-        launch_target=launch_target, workspace=workspace, native_action=native_action,
+        harness,
+        payload,
+        request_id=request_id,
+        tool_name=tool_name,
+        command=command,
+        launch_target=launch_target,
+        workspace=workspace,
+        native_action=native_action,
     )
 
 

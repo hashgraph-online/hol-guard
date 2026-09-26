@@ -115,10 +115,10 @@ export function resolveActionEnvelopeDetailText(
   envelope: GuardActionEnvelope,
   options: { mcpInputMaxLength?: number | null } = {}
 ): string | null {
-  if (isApplyPatchEnvelope(envelope) && envelope.command !== null && envelope.command.length > 0) {
+  if (isApplyPatchEnvelope(envelope) && envelope.command !== null && envelope.command.trim().length > 0) {
     return envelope.command;
   }
-  if (envelope.action_type === "shell_command" && envelope.command !== null && envelope.command.length > 0) {
+  if (envelope.action_type === "shell_command" && envelope.command !== null && envelope.command.trim().length > 0) {
     return envelope.command;
   }
   const promptText = envelope.prompt_text ?? envelope.prompt_excerpt;
@@ -134,16 +134,6 @@ export function resolveActionEnvelopeDetailText(
   if (envelope.action_type === "network_request" && envelope.network_hosts.length > 0) {
     return envelope.network_hosts.join("\n");
   }
-  // Native calls keep Rust's kind; calls without rendered canonical details still need their inputs.
-  if (
-    envelope.action_type === "mcp_tool" ||
-    envelope.event_name === "PreToolUse"
-  ) {
-    const baseText =
-      resolveEnvelopeDisplayText(envelope) ?? envelope.mcp_tool ?? envelope.tool_name ?? envelope.action_type;
-    const inputSummary = serializeMcpInput(envelope.raw_payload_redacted, options.mcpInputMaxLength ?? null);
-    return inputSummary === null ? baseText : `${baseText}\n\nInput:\n${inputSummary}`;
-  }
   if (envelope.action_type === "package_script") {
     if (envelope.package_manager && envelope.package_name) {
       return `${envelope.package_manager} install ${envelope.package_name}`;
@@ -152,7 +142,15 @@ export function resolveActionEnvelopeDetailText(
       return envelope.package_name;
     }
   }
-  return resolveEnvelopeDisplayText(envelope);
+  // All canonical details above take precedence. This JSON input fallback never changes Rust's action kind.
+  if (envelope.action_type === "mcp_tool" || envelope.event_name === "PreToolUse") {
+    const baseText =
+      resolveEnvelopeDisplayText(envelope) ?? envelope.mcp_tool ?? envelope.tool_name ?? envelope.action_type;
+    const inputSummary = serializeMcpInput(envelope.raw_payload_redacted, options.mcpInputMaxLength ?? null);
+    if (inputSummary !== null) return `${baseText}\n\nInput:\n${inputSummary}`;
+    return envelope.action_type === "shell_command" ? null : baseText;
+  }
+  return envelope.action_type === "shell_command" ? null : resolveEnvelopeDisplayText(envelope);
 }
 
 export function humanizeList(values: string[]): string {

@@ -134,11 +134,32 @@ _WINDOWS_USER_PATH_PATTERN = re.compile(
 )
 
 
-_REVIEW_SENSITIVE_KEYS = frozenset({
-    "api_key", "apikey", "access_token", "auth", "authorization", "client_secret", "content", "cookie",
-    "credential", "credentials", "id_token", "output", "password", "private_key", "refresh_token", "secret",
-    "session_token", "set_cookie", "stderr", "stdout", "token", "tool_response",
-})
+_REVIEW_SENSITIVE_KEYS = frozenset(
+    {
+        "api_key",
+        "apikey",
+        "access_token",
+        "auth",
+        "authorization",
+        "client_secret",
+        "content",
+        "cookie",
+        "credential",
+        "credentials",
+        "id_token",
+        "output",
+        "password",
+        "private_key",
+        "refresh_token",
+        "secret",
+        "session_token",
+        "set_cookie",
+        "stderr",
+        "stdout",
+        "token",
+        "tool_response",
+    }
+)
 _REVIEW_SENSITIVE_ALIASES = frozenset(key.replace("_", "") for key in _REVIEW_SENSITIVE_KEYS)
 
 

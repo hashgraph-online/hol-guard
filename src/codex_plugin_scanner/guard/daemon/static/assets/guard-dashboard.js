@@ -14852,10 +14852,10 @@ function buildRetryAfterApprovalCopy(item, action, persistedExactAction = false)
   return `Blocked. Return to ${harness} to continue with a different action, or ask it to try something else.`;
 }
 function resolveActionEnvelopeDetailText(envelope, options = {}) {
-  if (isApplyPatchEnvelope(envelope) && envelope.command !== null && envelope.command.length > 0) {
+  if (isApplyPatchEnvelope(envelope) && envelope.command !== null && envelope.command.trim().length > 0) {
     return envelope.command;
   }
-  if (envelope.action_type === "shell_command" && envelope.command !== null && envelope.command.length > 0) {
+  if (envelope.action_type === "shell_command" && envelope.command !== null && envelope.command.trim().length > 0) {
     return envelope.command;
   }
   const promptText = envelope.prompt_text ?? envelope.prompt_excerpt;
@@ -14868,14 +14868,6 @@ function resolveActionEnvelopeDetailText(envelope, options = {}) {
   if (envelope.action_type === "network_request" && envelope.network_hosts.length > 0) {
     return envelope.network_hosts.join("\n");
   }
-  if (envelope.action_type === "mcp_tool" || envelope.event_name === "PreToolUse") {
-    const baseText = resolveEnvelopeDisplayText(envelope) ?? envelope.mcp_tool ?? envelope.tool_name ?? envelope.action_type;
-    const inputSummary = serializeMcpInput(envelope.raw_payload_redacted, options.mcpInputMaxLength ?? null);
-    return inputSummary === null ? baseText : `${baseText}
-
-Input:
-${inputSummary}`;
-  }
   if (envelope.action_type === "package_script") {
     if (envelope.package_manager && envelope.package_name) {
       return `${envelope.package_manager} install ${envelope.package_name}`;
@@ -14884,7 +14876,16 @@ ${inputSummary}`;
       return envelope.package_name;
     }
   }
-  return resolveEnvelopeDisplayText(envelope);
+  if (envelope.action_type === "mcp_tool" || envelope.event_name === "PreToolUse") {
+    const baseText = resolveEnvelopeDisplayText(envelope) ?? envelope.mcp_tool ?? envelope.tool_name ?? envelope.action_type;
+    const inputSummary = serializeMcpInput(envelope.raw_payload_redacted, options.mcpInputMaxLength ?? null);
+    if (inputSummary !== null) return `${baseText}
+
+Input:
+${inputSummary}`;
+    return envelope.action_type === "shell_command" ? null : baseText;
+  }
+  return envelope.action_type === "shell_command" ? null : resolveEnvelopeDisplayText(envelope);
 }
 function humanizeList(values) {
   if (values.length === 0) {
