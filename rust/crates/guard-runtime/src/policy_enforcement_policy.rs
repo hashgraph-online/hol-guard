@@ -1,6 +1,97 @@
-use super::{normalized_harness, MAX_SELECTOR_VALUE_BYTES, VALID_ACTIONS, VALID_RISK_KEYS};
+use super::{normalized_harness, PreToolResultV1, MAX_SELECTOR_VALUE_BYTES, VALID_ACTIONS, VALID_RISK_KEYS};
 use guard_policy_snapshot::EffectiveNativePolicyV3;
 use std::collections::BTreeMap;
+
+/// The native action lattice is intentionally typed at the enforcement
+/// boundary.  String values remain the wire representation for compatibility
+/// with existing hook contracts, but no decision is made by comparing raw
+/// strings.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[repr(u8)]
+enum ActionFloor {
+    Allow,
+    Warn,
+    Review,
+    RequireReapproval,
+    SandboxRequired,
+    Block,
+}
+
+impl ActionFloor {
+    fn parse(value: &str) -> Option<Self> {
+        Some(match value {
+            "allow" => Self::Allow,
+            "warn" => Self::Warn,
+            "review" => Self::Review,
+            "require-reapproval" => Self::RequireReapproval,
+            "sandbox-required" => Self::SandboxRequired,
+            "block" => Self::Block,
+            _ => return None,
+        })
+    }
+
+    fn is_non_overridable(self) -> bool {
+        matches!(self, Self::SandboxRequired | Self::Block)
+    }
+
+    fn decision(self) -> &'static str {
+        if matches!(self, Self::Allow | Self::Warn) {
+            "allow"
+        } else {
+            "deny"
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct ActionFloorMatrix {
+    policy: ActionFloor,
+    minimum: ActionFloor,
+}
+
+impl ActionFloorMatrix {
+    fn from_result(result: &PreToolResultV1) -> Result<Self, String> {
+        Ok(Self {
+            policy: ActionFloor::parse(&result.policy_action)
+                .ok_or_else(|| "native_policy_action_invalid".to_owned())?,
+            minimum: ActionFloor::parse(&result.minimum_action)
+                .ok_or_else(|| "native_policy_action_invalid".to_owned())?,
+        })
+    }
+
+    fn validate(self, result: &PreToolResultV1) -> Result<(), String> {
+        if self.policy < self.minimum
+            || (self.policy.is_non_overridable() && self.policy != self.minimum)
+            || result.decision != self.minimum.decision()
+            || result.explicitly_benign != (self.minimum == ActionFloor::Allow)
+        {
+            return Err("native_policy_decision_inconsistent".to_owned());
+        }
+        Ok(())
+    }
+}
+
+pub(super) fn action_rank(action: &str) -> Option<u8> {
+    ActionFloor::parse(action).map(|floor| floor as u8)
+}
+
+pub(super) fn join_action(left: &str, right: &str) -> Result<String, String> {
+    let left_rank = action_rank(left).ok_or_else(|| "native_policy_action_invalid".to_owned())?;
+    let right_rank = action_rank(right).ok_or_else(|| "native_policy_action_invalid".to_owned())?;
+    Ok(if left_rank >= right_rank {
+        left.to_owned()
+    } else {
+        right.to_owned()
+    })
+}
+
+/// Validate the typed relationship between the effective action fields.  The
+/// policy action is not a second, weaker authority: it must describe the same
+/// or stronger floor, and a terminal policy block must be reflected by the
+/// minimum floor before any approval path can inspect the result.
+pub(crate) fn validate_pre_tool_result_matrix(result: &PreToolResultV1) -> Result<(), String> {
+    ActionFloorMatrix::from_result(result)?.validate(result)
+}
 
 /// Generation-owned indexes. The signed policy is retained unchanged; only
 /// derived selector keys are canonicalized here, before snapshot publication.

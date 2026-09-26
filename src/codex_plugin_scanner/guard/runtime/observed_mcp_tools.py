@@ -145,7 +145,8 @@ def discover_observed_mcp_tools(store: GuardStore, *, seen_at: str) -> None:
                 name=tool.name,
                 usage=tool.qualified_name,
                 description="Detected from this harness. Recommended keeps the usual review.",
-            ) for tool in tools
+            )
+            for tool in tools
         ]
         # There is no allow-all fallback for an observed connector. Its catalog
         # is incomplete; unseen tools must retain their normal review.
@@ -170,7 +171,7 @@ def native_observed_mcp_tool_actions(store: GuardStore) -> dict[str, str]:
         marker = observation.get("server_command") if observation is not None else None
         if not isinstance(marker, str) or not marker.startswith(OBSERVED_MCP_PREFIX):
             continue
-        harness, separator, namespace = marker[len(OBSERVED_MCP_PREFIX):].partition(":")
+        harness, separator, namespace = marker[len(OBSERVED_MCP_PREFIX) :].partition(":")
         if not separator:
             continue
         example = observed_mcp_tool(harness, namespace + "probe")

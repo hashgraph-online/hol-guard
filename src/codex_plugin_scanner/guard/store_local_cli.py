@@ -248,7 +248,11 @@ class StoreLocalCliMixin:
                     )
 
     def merge_local_cli_commands(
-        self, cli_id: str, commands: Sequence[LocalCliCommand], *, limit: int,
+        self,
+        cli_id: str,
+        commands: Sequence[LocalCliCommand],
+        *,
+        limit: int,
     ) -> None:
         """Append observed tools atomically without deleting existing choices."""
         if not is_local_cli_id(cli_id) or limit < 1:
@@ -258,7 +262,8 @@ class StoreLocalCliMixin:
             connection.commit()
             connection.execute("begin immediate")
             rows = connection.execute(
-                "select command_id from local_cli_command where cli_id = ?", (cli_id,),
+                "select command_id from local_cli_command where cli_id = ?",
+                (cli_id,),
             ).fetchall()
             known = {str(row[0]) for row in rows}
             for command in commands:
@@ -270,8 +275,15 @@ class StoreLocalCliMixin:
                     """insert into local_cli_command
                     (cli_id, command_id, name, usage, description, parent_id, sort_index)
                     values (?, ?, ?, ?, ?, ?, ?)""",
-                    (cli_id, command.command_id, command.name[:120], command.usage[:160],
-                     command.description[:240], command.parent_id, len(known)),
+                    (
+                        cli_id,
+                        command.command_id,
+                        command.name[:120],
+                        command.usage[:160],
+                        command.description[:240],
+                        command.parent_id,
+                        len(known),
+                    ),
                 )
                 known.add(command.command_id)
 

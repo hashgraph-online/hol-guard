@@ -99,7 +99,14 @@ class LocalCliApiService:
         """
         # Connector history and configured launch discovery are independent.
         with suppress(
-            OSError, RuntimeError, TypeError, ValueError, KeyError, UnicodeError, sqlite3.Error, AttributeError,
+            OSError,
+            RuntimeError,
+            TypeError,
+            ValueError,
+            KeyError,
+            UnicodeError,
+            sqlite3.Error,
+            AttributeError,
         ):
             discover_observed_mcp_tools(self._store, seen_at=utc_now())
         try:

@@ -169,9 +169,7 @@ def matching_local_mcp_grant(
     commands = grant.get("commands")
     if not isinstance(commands, list) or not commands:
         return None if observed is not None else "allowed"
-    command_id = (
-        observed.command_id if observed is not None else slug_local_cli_command_id(_mcp_tool_name(artifact))
-    )
+    command_id = observed.command_id if observed is not None else slug_local_cli_command_id(_mcp_tool_name(artifact))
     known = {item.command_id for item in commands if isinstance(item, LocalCliCommand)}
     states = grant.get("command_states")
     if observed is not None and command_id not in known:

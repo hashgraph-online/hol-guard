@@ -75,7 +75,10 @@ def _action_value(config: GuardConfig | Mapping[str, object], name: str, default
 
 
 def _string_map(
-    value: object, *, risk_keys: bool = False, selector_keys: bool = False,
+    value: object,
+    *,
+    risk_keys: bool = False,
+    selector_keys: bool = False,
     max_entries: int = POLICY_SNAPSHOT_MAX_MAP_ENTRIES,
 ) -> dict[str, str]:
     if value is None:
