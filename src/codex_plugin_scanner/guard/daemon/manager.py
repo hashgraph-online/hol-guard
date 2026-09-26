@@ -441,6 +441,9 @@ def ensure_guard_daemon(
             if not _guard_daemon_pending_launch_state_is_resolved(guard_home):
                 raise RuntimeError("A previous Guard daemon launch could not be retired safely.")
         clear_guard_daemon_state(guard_home)
+        # setsid() keeps hook workers alive after the daemon exits. They hold
+        # the local store, so the replacement never publishes daemon state.
+        reap_orphaned_hook_workers()
         for candidate_port in _candidate_ports(guard_home, preferred_port=preferred_port):
             remaining_start_time = start_deadline - time.monotonic()
             if remaining_start_time <= 0:
@@ -732,7 +735,28 @@ def retire_all_guard_daemons_for_home(
             empty_inventory_confirmed = _guard_daemon_process_inventory_for_guard_home(guard_home) == []
         if empty_inventory_confirmed and keep_port is None:
             _reconcile_invalid_daemon_lifecycle_artifacts(guard_home)
+    reap_orphaned_hook_workers()
     return retired
+
+
+def reap_orphaned_hook_workers() -> None:
+    """Stop hook workers whose daemon parent is already gone."""
+
+    if os.name == "nt":
+        return
+    from .orphaned_hook_workers import (
+        orphaned_hook_worker_pids,
+        parse_process_snapshot,
+        terminate_orphaned_hook_workers,
+    )
+
+    ps_path = _trusted_posix_ps_path()
+    if ps_path is None:
+        return
+    output = _bounded_process_query_stdout([ps_path, "-axww", "-o", "pid=,ppid=,state=,command="])
+    if output is None:
+        return
+    terminate_orphaned_hook_workers(orphaned_hook_worker_pids(parse_process_snapshot(output)))
 
 
 def guard_daemon_retirement_is_complete(guard_home: Path) -> bool:
