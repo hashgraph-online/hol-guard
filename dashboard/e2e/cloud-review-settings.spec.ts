@@ -1,8 +1,12 @@
 import { expect, test, type Page } from "@playwright/test";
 import { defaultSettingsPayload, emptyInventoryPayload, emptyPoliciesPayload, emptyReceiptsPayload, freeStateSnapshot } from "./fixture-states";
 
-async function fixture(page: Page, held = 0, gatePatch: Record<string, unknown> = {}) {
-  let enabled = false;
+async function fixture(page: Page, held = 0, gatePatch: Record<string, unknown> = {}, initial: {
+  enabled?: boolean; reconnectRequired?: boolean; deliveryState?: string;
+} = {}) {
+  let enabled = initial.enabled ?? false;
+  let reconnectRequired = initial.reconnectRequired ?? false;
+  const deliveryState = initial.deliveryState ?? "healthy";
   let rejectMessage: string | null = null;
   let lastSyncedAt: string | null = null;
   const writes: Record<string, unknown>[] = [];
@@ -34,10 +38,11 @@ async function fixture(page: Page, held = 0, gatePatch: Record<string, unknown> 
         if (input.include_held_requests) held = 0;
       }
       body = {
-        enabled, connected: true, reason: enabled ? null : "cloud_review_capability_missing",
+        enabled, connected: true, reconnect_required: reconnectRequired,
+        reason: enabled ? null : "cloud_review_capability_missing",
         workspace_id: "workspace-1", source: "default", pending_uploads: 0, held_events: held, isolated_events: held,
         expires_at: enabled ? "2099-01-01T00:00:00Z" : null,
-        delivery_state: "healthy", last_synced_at: lastSyncedAt, approval_gate: gate,
+        delivery_state: deliveryState, last_synced_at: lastSyncedAt, approval_gate: gate,
       };
     }
     await route.fulfill({ status: 200, json: body });
@@ -51,6 +56,7 @@ async function fixture(page: Page, held = 0, gatePatch: Record<string, unknown> 
       enabled = authorized;
       lastSyncedAt = deliveredAt;
     },
+    updateConnection: (needsReconnect: boolean) => { reconnectRequired = needsReconnect; },
   };
 }
 
@@ -80,6 +86,32 @@ for (const viewport of [{ width: 1365, height: 900 }, { width: 390, height: 844 
     expect(errors).toEqual([]);
   });
 }
+
+test("upload errors do not prompt for MFA again after Cloud Review was enabled", async ({ page }) => {
+  const state = await fixture(page, 0, {}, { deliveryState: "error" });
+  const section = page.getByRole("region", { name: "Cloud Review", exact: true });
+  await section.getByRole("button", { name: "Enable Cloud Review" }).click();
+  const dialog = page.getByRole("dialog", { name: "Authorize Cloud Review" });
+  await dialog.getByLabel("Authenticator code").fill("123456");
+  await dialog.getByRole("button", { name: "Authorize this device" }).click();
+  await expect(dialog).not.toBeVisible();
+  await expect(section).toContainText("Uploads are retrying");
+  await expect(section.getByRole("button", { name: "Restore Cloud Review" })).toHaveCount(0);
+  expect(state.writes).toHaveLength(1);
+});
+
+test("expired Cloud sign-in offers reconnect without another consent dialog", async ({ page }) => {
+  const state = await fixture(page, 0, {}, { enabled: true, reconnectRequired: true, deliveryState: "error" });
+  const section = page.getByRole("region", { name: "Cloud Review", exact: true });
+  await expect(section).toContainText("Paused until sign-in");
+  await expect(section.getByRole("button", { name: "Reconnect Guard Cloud" })).toBeVisible();
+  await expect(section.getByRole("button", { name: "Restore Cloud Review" })).toHaveCount(0);
+  state.updateConnection(false);
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect(section.getByRole("button", { name: "Reconnect Guard Cloud" })).toHaveCount(0);
+  await expect(section).toContainText("Uploads are retrying");
+  expect(state.writes).toEqual([]);
+});
 
 test("rejected MFA keeps recovery inline and does not claim success", async ({ page }) => {
   const state = await fixture(page);

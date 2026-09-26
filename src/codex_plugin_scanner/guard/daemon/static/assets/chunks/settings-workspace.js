@@ -2535,6 +2535,7 @@ function cloudReviewConfirmationError(message) {
 }
 function cloudReviewStatusCopy(status) {
   if (!status.connected) return "Connect Guard Cloud on this device to review its requests in the cloud.";
+  if (status.reconnect_required) return "Guard Cloud sign-in needs repair. Reconnect to resume uploads and cloud decisions; local review is still available.";
   if (!status.enabled) return "Cloud sync is connected. Cloud decisions still need this device's authorization. Confirm it here to update pending requests; you do not need to reconnect.";
   if (status.activation_error) return "Authorization is saved. Request delivery needs another attempt.";
   if (status.held_events > 0) return "Cloud Review is enabled. Some earlier requests need your confirmation before upload.";
@@ -2542,6 +2543,12 @@ function cloudReviewStatusCopy(status) {
   if (status.delivery_state === "error") return "Cloud Review is enabled. Uploads are retrying; local review is still available.";
   if (status.pending_uploads > 0) return "Cloud Review is enabled. Pending requests are being uploaded.";
   return "Cloud Review is enabled for this device. Each cloud decision applies only to its exact request.";
+}
+function cloudReviewRecoveryAction(status) {
+  if (!status.connected || status.reconnect_required) return "connect";
+  if (!status.enabled) return "authorize";
+  if (status.activation_error || status.held_events > 0) return "restore";
+  return "none";
 }
 function CloudReviewSettings() {
   const [status, setStatus] = reactExports.useState(null);
@@ -2633,7 +2640,7 @@ function CloudReviewSettings() {
       setPending(false);
     }
   }
-  const needsRecovery = Boolean(status?.activation_error || status?.held_events || status?.delivery_state === "error");
+  const recoveryAction = status ? cloudReviewRecoveryAction(status) : "none";
   const requireFreshTotp = status?.approval_gate.totp_enabled === true;
   const disabled = pending || cloudReviewProofIncomplete(status?.approval_gate, password, totp, requireFreshTotp);
   let confirmLabel = "Turn off Cloud Review";
@@ -2673,11 +2680,11 @@ function CloudReviewSettings() {
     status ? /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "mt-3 grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs text-slate-600", children: "Cloud connection" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 font-medium text-brand-dark", children: status.connected ? "Connected" : "Not connected" })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 font-medium text-brand-dark", children: status.reconnect_required ? "Reconnect needed" : status.connected ? "Connected" : "Not connected" })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs text-slate-600", children: "Cloud decisions" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 font-medium text-brand-dark", children: status.enabled ? "Enabled" : "Confirmation needed" })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 font-medium text-brand-dark", children: status.reconnect_required ? "Paused until sign-in" : status.enabled ? "Enabled" : "Confirmation needed" })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs text-slate-600", children: "Last activity delivered" }),
@@ -2689,15 +2696,22 @@ function CloudReviewSettings() {
         }) }) : "Not recorded yet" })
       ] })
     ] }) : null,
-    status?.connected ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 flex flex-wrap gap-2", children: [
-      !status.enabled || needsRecovery ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+    status ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 flex flex-wrap items-start gap-2", children: [
+      recoveryAction === "connect" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+        ConnectGuardCloudButton,
+        {
+          label: status.reconnect_required ? "Reconnect Guard Cloud" : "Connect Guard Cloud",
+          variant: status.reconnect_required ? "primary" : "secondary"
+        }
+      ) : null,
+      recoveryAction === "authorize" || recoveryAction === "restore" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
         "button",
         {
           type: "button",
           disabled: loading || pending,
           onClick: () => openConfirmation("enable"),
           className: "min-h-10 rounded-md bg-brand-blue px-3 py-2 text-sm font-semibold text-white disabled:opacity-50",
-          children: status.enabled ? "Restore Cloud Review" : "Enable Cloud Review"
+          children: recoveryAction === "restore" ? "Restore Cloud Review" : "Enable Cloud Review"
         }
       ) : null,
       status.enabled ? /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -2711,7 +2725,6 @@ function CloudReviewSettings() {
         }
       ) : null
     ] }) : null,
-    status && !status.connected ? /* @__PURE__ */ jsxRuntimeExports.jsx(ConnectGuardCloudButton, { className: "mt-3" }) : null,
     action && status ? /* @__PURE__ */ jsxRuntimeExports.jsx(
       "div",
       {

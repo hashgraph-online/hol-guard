@@ -3,7 +3,8 @@ import type { GuardApprovalGatePublicConfig, GuardSettings } from "./guard-types
 import { approvalGateCooldownLabel, requiresApprovalPasswordPrompt } from "./approval-gate-utils";
 import { buildApprovalProofCredentials, isApprovalProofSubmitDisabled } from "./approval-proof-inline";
 import { applyApprovalGateDraft, effectiveApprovalGateCooldownSeconds, hasUnsavedChanges } from "./settings-workspace";
-import { cloudReviewConfirmationError, cloudReviewProofIncomplete } from "./settings/cloud-review-settings";
+import { cloudReviewConfirmationError, cloudReviewProofIncomplete, cloudReviewRecoveryAction, cloudReviewStatusCopy } from "./settings/cloud-review-settings";
+import type { CloudReviewSettingsStatus } from "./guard-api";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -361,6 +362,21 @@ function testCloudReviewKeepsAuthenticatorFieldAfterRecentProof(): void {
   );
 }
 
+function testCloudReviewRecoveryDistinguishesSignInFromConsentAndDelivery(): void {
+  const status = {
+    connected: true, enabled: true, reconnect_required: true, activation_error: null,
+    held_events: 0, delivery_state: "error",
+  } as CloudReviewSettingsStatus;
+  assert(cloudReviewRecoveryAction(status) === "connect", "expired Cloud sign-in needs reconnect, not another MFA consent");
+  assert(cloudReviewStatusCopy(status).includes("Reconnect"), "recovery copy names Cloud sign-in");
+  assert(cloudReviewRecoveryAction({ ...status, reconnect_required: false }) === "none",
+    "upload retries must not request another MFA consent when review is already enabled");
+  assert(cloudReviewRecoveryAction({ ...status, reconnect_required: false, held_events: 2 }) === "restore",
+    "held requests still require explicit local confirmation");
+  assert(cloudReviewRecoveryAction({ ...status, reconnect_required: false, enabled: false }) === "authorize",
+    "missing local consent requires authorization");
+}
+
 function testDisconnectWaitsForApprovalSettingsBeforeConfirm(): void {
   const harnessSetupPanel = readFileSync(new URL("./apps/harness-setup-panel.tsx", import.meta.url), "utf8");
   assert(
@@ -395,6 +411,7 @@ const tests: Array<[string, () => void]> = [
   ["testApprovalProofRecentTotpSkipsCode", testApprovalProofRecentTotpSkipsCode],
   ["testApprovalProofFreshTotpRequiredForDisconnect", testApprovalProofFreshTotpRequiredForDisconnect],
   ["testCloudReviewKeepsAuthenticatorFieldAfterRecentProof", testCloudReviewKeepsAuthenticatorFieldAfterRecentProof],
+  ["testCloudReviewRecoveryDistinguishesSignInFromConsentAndDelivery", testCloudReviewRecoveryDistinguishesSignInFromConsentAndDelivery],
   ["testDisconnectWaitsForApprovalSettingsBeforeConfirm", testDisconnectWaitsForApprovalSettingsBeforeConfirm],
 ];
 

@@ -6,6 +6,7 @@ import logging
 import os
 import random
 import threading
+import urllib.error
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -167,6 +168,11 @@ def _cloud_sync_sync_loop(
                 {
                     "state": "error",
                     "last_error": sync._redacted_error(error),
+                    "last_error_code": (
+                        "cloud_auth_expired"
+                        if isinstance(error, GuardSyncAuthorizationExpiredError)
+                        else "cloud_connect_required"
+                    ),
                     "last_error_at": sync._now(),
                 }
             )
@@ -179,6 +185,11 @@ def _cloud_sync_sync_loop(
                 {
                     "state": "error",
                     "last_error": sync._redacted_error(error),
+                    "last_error_code": (
+                        "cloud_auth_expired"
+                        if isinstance(error, urllib.error.HTTPError) and error.code == 401
+                        else "cloud_delivery_error"
+                    ),
                     "last_error_at": sync._now(),
                 }
             )

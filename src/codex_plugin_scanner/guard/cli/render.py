@@ -2183,13 +2183,23 @@ def _render_protect(console: Console, payload: dict[str, object]) -> None:
     if isinstance(request, dict):
         body.add_row("Command", _command_text(request.get("command")))
         body.add_row("Kind", str(request.get("install_kind") or "unknown"))
+    supply_chain_evaluation = payload.get("supply_chain_evaluation")
     if isinstance(verdict, dict):
         action = str(verdict.get("action") or "review")
         body.add_row("Action", _action_text(action))
         body.add_row("Executed", _bool_label(bool(payload.get("executed"))))
         body.add_row("Reason", str(verdict.get("reason") or "unknown"))
+        if action == "block" and isinstance(supply_chain_evaluation, dict):
+            reasons = _coerce_dict_list(supply_chain_evaluation.get("reasons"))
+            user_copy = supply_chain_evaluation.get("user_copy")
+            if (
+                isinstance(user_copy, dict)
+                and user_copy.get("next_step") == "hol-guard connect"
+                and any(item.get("code") == "cloud_auth_error" for item in reasons)
+                and not any(item.get("code") == "saved_package_block" for item in reasons)
+            ):
+                body.add_row("Next", "Run hol-guard connect to sign in, then retry this install.")
     console.print(Panel(body, title="Install protection", border_style="cyan"))
-    supply_chain_evaluation = payload.get("supply_chain_evaluation")
     if isinstance(supply_chain_evaluation, dict):
         user_copy = supply_chain_evaluation.get("user_copy")
         if isinstance(user_copy, dict):
