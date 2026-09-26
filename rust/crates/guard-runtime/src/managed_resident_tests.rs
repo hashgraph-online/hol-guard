@@ -323,6 +323,32 @@ fn managed_owner_lock_is_exclusive_for_resident_lifetime() {
 
 #[cfg(unix)]
 #[test]
+fn managed_owner_barrier_allows_authority_load_in_same_process() {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let root = std::env::temp_dir().join(format!(
+        "hol-guard-managed-owner-authority-load-{}-{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    fs::create_dir(&root).unwrap();
+    fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();
+    let key_path = root.join("policy-verifier.key");
+    fs::write(&key_path, [7u8; 32]).unwrap();
+    fs::set_permissions(&key_path, fs::Permissions::from_mode(0o600)).unwrap();
+
+    let owner = acquire_managed_owner_lock(&root).unwrap();
+    let loaded = crate::policy_store::PolicySnapshotStore::new(&root, &"a".repeat(64));
+    assert!(loaded.is_ok(), "authority load failed: {:?}", loaded.err());
+    drop(owner);
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[cfg(unix)]
+#[test]
 fn managed_owner_lock_rejects_second_process() {
     use std::fs;
     use std::os::unix::fs::PermissionsExt;

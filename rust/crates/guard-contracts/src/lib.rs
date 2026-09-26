@@ -13,6 +13,8 @@ mod native_command_controls;
 pub use native_command_controls::*;
 mod approval_v4_contracts;
 pub use approval_v4_contracts::*;
+mod workspace_review_contracts;
+pub use workspace_review_contracts::*;
 
 pub const NATIVE_PROTOCOL_VERSION: u16 = 1;
 pub const GUARD_HOOK_ENVELOPE_V2_SCHEMA: &str = "guard-hook-envelope.v2";

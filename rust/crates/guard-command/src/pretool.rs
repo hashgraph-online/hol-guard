@@ -118,7 +118,7 @@ fn safe_git_arguments(arguments: &[String], allow_helper_context: bool) -> bool 
     };
     if !matches!(
         subcommand,
-        "status" | "diff" | "log" | "show" | "rev-parse" | "ls-files" | "remote"
+        "status" | "diff" | "log" | "show" | "rev-parse" | "ls-files"
     ) {
         return false;
     }
@@ -127,14 +127,6 @@ fn safe_git_arguments(arguments: &[String], allow_helper_context: bool) -> bool 
         .position(|argument| argument == "--")
         .unwrap_or(arguments.len());
     let active_options = &arguments[1..option_end];
-    if subcommand == "remote" {
-        let has_arguments_after_options = option_end + 1 < arguments.len();
-        return !active_options.is_empty()
-            && !has_arguments_after_options
-            && active_options
-                .iter()
-                .all(|argument| matches!(argument.as_str(), "-v" | "--verbose"));
-    }
     if !allow_helper_context
         && matches!(subcommand, "diff" | "log" | "show")
         && !(active_options

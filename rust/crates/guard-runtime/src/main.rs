@@ -16,6 +16,8 @@ mod resident_state;
 mod resident_state_encoding;
 mod resident_transport;
 mod resident_transport_service;
+#[cfg(unix)]
+mod state_directory_lock;
 mod strict_json;
 
 pub(crate) use resident_protocol::{capabilities, encode_response, strict_json_value};
@@ -168,6 +170,16 @@ fn run() -> Result<(), String> {
                 std::path::Path::new(record_path),
             )
         }
+        [command, state_flag, state_dir, record_flag, record_path]
+            if command == "enroll-workspace-review-authority"
+                && state_flag == "--state-dir"
+                && record_flag == "--record" =>
+        {
+            policy_store::workspace_review_authority::install_record(
+                std::path::Path::new(state_dir),
+                std::path::Path::new(record_path),
+            )
+        }
         [command, state_flag, state_dir, rp_flag, rp_id, origin_flag, origin]
             if command == "prepare-approval-v4-enrollment"
                 && state_flag == "--state-dir"
@@ -219,6 +231,47 @@ fn run() -> Result<(), String> {
             let bytes = read_stdin_bounded()?;
             let response = oneshot::evaluate_pre_tool_bytes(&bytes)?;
             write_bytes_response(&response)
+        }
+        [command, flag, state_dir, request_flag, request_id]
+            if command == "workspace-review-decision"
+                && flag == "--stdin"
+                && request_flag == "--request-id" =>
+        {
+            let bytes = read_stdin_bounded()?;
+            let decision = strict_json_value(&bytes)?;
+            let canonical = guard_policy_snapshot::canonical_json_bytes(&decision)
+                .map_err(|_| "native_workspace_review_decision_invalid".to_owned())?;
+            if canonical != bytes {
+                return Err("native_workspace_review_decision_noncanonical".to_owned());
+            }
+            let state_base = std::path::Path::new(state_dir);
+            let runtime_identity = resident_state::runtime_digest()?;
+            let policy_store = policy_store::PolicySnapshotStore::new_with_resident_generation(
+                state_base,
+                &runtime_identity,
+                0,
+            )?;
+            let verified = policy_store::workspace_review_decision::verify_and_claim_request(
+                &policy_store,
+                request_id,
+                &decision,
+            )?;
+            write_json(&serde_json::json!({
+                "status": if verified.replayed { "replayed" } else { "verified" },
+                "replayed": verified.replayed,
+                "request_id": request_id,
+                "decision": verified.decision,
+                "claim_id": verified.claim_id,
+                "authority_record_digest": verified.authority_record_digest,
+                "request_binding": verified.request_binding,
+                "action_binding": verified.action_binding,
+                "intent_binding": verified.intent_binding,
+                "revision_binding": verified.revision_binding,
+                "policy_binding": verified.policy_binding,
+                "retry_scope_binding": verified.retry_scope_binding,
+                "request_snapshot_digest": verified.request_snapshot_digest,
+                "envelope_digest": verified.envelope_digest,
+            }))
         }
         [command, flag, path] if command == "serve" && flag == "--socket" => serve(path),
         [command, flag, address] if command == "serve" && flag == "--tcp-loopback" => {
@@ -285,7 +338,7 @@ fn run() -> Result<(), String> {
             )
         }
         _ => Err(
-            "usage: hol-guard-runtime capabilities --json | rule-contract --json | self-test --json | hook --stdin | migrate-policy --state-dir STATE_DIR | prepare-approval-enrollment --state-dir STATE_DIR | enroll-approval-authority --state-dir STATE_DIR --record RECORD | prepare-approval-v4-enrollment --state-dir STATE_DIR --rp-id RP_ID --origin ORIGIN | enroll-approval-v4-authority --state-dir STATE_DIR --record RECORD | hook-client --stdin STATE_DIR | resident-client --stdin STATE_DIR | resident-client-stream --stdin STATE_DIR | command-model --stdin | pre-tool --stdin | serve --socket PATH | serve --tcp-loopback 127.0.0.1:PORT | resident-stop --state-dir STATE_DIR | serve-managed --state-dir STATE_DIR --generation N --owner-process-id PID --runtime-sha256 SHA | supervise-managed --state-dir STATE_DIR --generation N --owner-process-id PID --runtime-sha256 SHA"
+            "usage: hol-guard-runtime capabilities --json | rule-contract --json | self-test --json | hook --stdin | migrate-policy --state-dir STATE_DIR | prepare-approval-enrollment --state-dir STATE_DIR | enroll-approval-authority --state-dir STATE_DIR --record RECORD | prepare-approval-v4-enrollment --state-dir STATE_DIR --rp-id RP_ID --origin ORIGIN | enroll-approval-v4-authority --state-dir STATE_DIR --record RECORD | enroll-workspace-review-authority --state-dir STATE_DIR --record RECORD | workspace-review-decision --stdin STATE_DIR --request-id REQUEST_ID | hook-client --stdin STATE_DIR | resident-client --stdin STATE_DIR | resident-client-stream --stdin STATE_DIR | command-model --stdin | pre-tool --stdin | serve --socket PATH | serve --tcp-loopback 127.0.0.1:PORT | resident-stop --state-dir STATE_DIR | serve-managed --state-dir STATE_DIR --generation N --owner-process-id PID --runtime-sha256 SHA | supervise-managed --state-dir STATE_DIR --generation N --owner-process-id PID --runtime-sha256 SHA"
                 .into(),
         ),
     }

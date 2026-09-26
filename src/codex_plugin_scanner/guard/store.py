@@ -38,6 +38,7 @@ from .store_policy_document import StorePolicyDocumentMixin
 from .store_review_event_outbox import StoreReviewEventOutboxMixin
 from .store_review_policy_memory import StoreReviewPolicyMemoryMixin
 from .store_native_decision_receipts import StoreNativeDecisionReceiptsMixin
+from .store_native_workspace_review import StoreNativeWorkspaceReviewMixin
 from .store_oauth import StoreOAuthConnectMixin
 from .store_portable_project_memory import StorePortableProjectMemoryMixin
 from .store_policy import StorePolicyMixin
@@ -91,6 +92,7 @@ class GuardStore(
     StoreReviewEventOutboxMixin,
     StoreEventReceiptsMixin,
     StoreNativeDecisionReceiptsMixin,
+    StoreNativeWorkspaceReviewMixin,
     StoreOAuthConnectMixin,
     StoreSessionsMixin,
     StoreEvidenceMixin,

@@ -41,6 +41,14 @@ mod policy_store_persistence;
 mod policy_store_request;
 #[path = "policy_store_validation.rs"]
 mod policy_store_validation;
+#[path = "workspace_review_authority.rs"]
+pub(crate) mod workspace_review_authority;
+#[path = "workspace_review_decision.rs"]
+pub(crate) mod workspace_review_decision;
+#[path = "workspace_review_request.rs"]
+pub(crate) mod workspace_review_request;
+#[path = "workspace_review_secure_state.rs"]
+pub(crate) mod workspace_review_secure_state;
 
 use crate::policy_enforcement::AdmittedPolicySnapshot;
 use approval_authority::ApprovalAuthority;
@@ -50,6 +58,9 @@ use policy_store_authority::*;
 use policy_store_persistence::*;
 use policy_store_validation::{read_verifier_key, validate_private_directory};
 
+#[cfg(test)]
+#[path = "policy_store_scope_tests.rs"]
+mod scope_tests;
 #[cfg(test)]
 #[path = "policy_store_tests.rs"]
 mod tests;
@@ -141,6 +152,7 @@ struct LoadedAuthority {
 }
 
 pub(crate) struct PolicySnapshotStore {
+    state_base: PathBuf,
     authority_path: PathBuf,
     expected_runtime_identity: String,
     expected_rule_digest: String,
@@ -229,6 +241,7 @@ impl PolicySnapshotStore {
             None => (None, false),
         };
         Ok(Self {
+            state_base: state_base.to_owned(),
             authority_path,
             expected_runtime_identity: runtime_identity.to_owned(),
             expected_rule_digest,
@@ -252,6 +265,10 @@ impl PolicySnapshotStore {
                 command_control_floor: loaded.command_control_floor,
             }),
         })
+    }
+
+    pub(crate) fn state_base(&self) -> &Path {
+        &self.state_base
     }
 
     /// Migrate legacy policy files only on an explicit upgrade command.
@@ -322,6 +339,9 @@ impl PolicySnapshotStore {
             now,
         )
         .map_err(snapshot_error)?;
+        if request.snapshot.scope_contract.scope_digest != self.expected_scope_digest {
+            return Err("native_policy_snapshot_scope_mismatch".to_owned());
+        }
         if let Some(current) = state.snapshot.as_ref() {
             if request.snapshot.generation < current.generation {
                 return Err("native_policy_snapshot_generation_downgrade".to_owned());
