@@ -45,6 +45,10 @@ def test_live_daemon_workers_stay_and_orphans_are_selected() -> None:
                 _line(201, 200, "S", _WORKER),
                 _line(202, 1, "S", _TRACKER),
                 _line(203, 1, "S", _PYTHON_WORKER),
+                _line(204, 201, "S", _WORKER),
+                _line(205, 202, "S", _TRACKER),
+                _line(206, 1, "S", "/usr/bin/hol-guard-desktop"),
+                _line(207, 206, "S", _WORKER),
                 _line(300, 1, "S", _OTHER_DAEMON),
                 _line(301, 300, "S", _OTHER_WORKER),
                 _line(400, 1, "S", "/usr/bin/python3 -c from multiprocessing.spawn import spawn_main"),
@@ -53,7 +57,7 @@ def test_live_daemon_workers_stay_and_orphans_are_selected() -> None:
         )
     )
 
-    assert [process.pid for process in orphaned_daemon_workers(processes)] == [201, 202, 203]
+    assert [process.pid for process in orphaned_daemon_workers(processes)] == [201, 202, 203, 204, 205, 207]
 
 
 def test_python_module_daemon_anchors_its_worker() -> None:

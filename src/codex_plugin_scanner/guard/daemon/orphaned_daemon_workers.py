@@ -6,9 +6,9 @@ local store open, and the replacement daemon blocks on that store before it
 can publish daemon state. Desktop then treats the new CLI as offline and
 restores the previous version.
 
-A worker is orphaned when no live ``daemon --serve`` process remains in its
-parent chain. Workers of a live daemon, including a daemon for another home,
-are left alone.
+A worker is orphaned when its parent chain has no live daemon and no other
+live hol-guard process that is not itself a hook worker. Workers of a live
+daemon, including a daemon for another home, are left alone.
 """
 
 from __future__ import annotations
@@ -216,13 +216,25 @@ def _has_live_guard_ancestor(
     for _ in range(_MAX_PARENT_HOPS):
         if current is None or current.pid <= 1 or current.pid in seen:
             return False
-        if not current.state.startswith("Z") and (
-            _is_hol_guard_daemon_serve(current.command) or _leading_executable_is_hol_guard(current.command + " ")
-        ):
+        if not current.state.startswith("Z") and _is_protecting_guard_ancestor(current.command):
             return True
         seen.add(current.pid)
         current = by_pid.get(current.ppid)
     return False
+
+
+def _is_protecting_guard_ancestor(command: str) -> bool:
+    """Keep workers of a live daemon or another live non-worker hol-guard process.
+
+    A hook worker is not an anchor. After the daemon exits, a nested worker
+    whose parent is another worker must still be reaped.
+    """
+
+    if _is_hol_guard_daemon_serve(command):
+        return True
+    if _is_hol_guard_hook_worker(command):
+        return False
+    return _leading_executable_is_hol_guard(f"{command} ")
 
 
 def _is_hol_guard_hook_worker(command: str) -> bool:
