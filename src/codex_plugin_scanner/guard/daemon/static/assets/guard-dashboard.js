@@ -15015,7 +15015,7 @@ function resolvePrimaryReviewText(item) {
   return resolveStoppedCommandText(item);
 }
 function serializeMcpInput(payload, maxLength = null) {
-  const input = payload.arguments ?? payload.input ?? payload.params ?? null;
+  const input = payload.tool_input ?? payload.toolInput ?? payload.arguments ?? payload.input ?? payload.params ?? null;
   if (input === null || input === void 0) {
     return null;
   }
@@ -28076,6 +28076,58 @@ function useRequestReadState() {
   );
 }
 const REQUEST_READ_STATE_LIMIT = 5e4;
+function BulkDrawerShell(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "div",
+    {
+      className: "fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-0 backdrop-blur-sm sm:items-center sm:p-4",
+      role: "dialog",
+      "aria-modal": "true",
+      "aria-labelledby": props.labelledBy,
+      onClick: (event) => {
+        if (event.target === event.currentTarget) props.onClose();
+      },
+      children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "form",
+        {
+          onSubmit: (event) => {
+            event.preventDefault();
+            props.onSubmit?.(event);
+          },
+          className: "guard-fade-in flex max-h-[92vh] w-full max-w-xl flex-col overflow-hidden rounded-t-2xl border border-slate-200 bg-white shadow-2xl sm:rounded-2xl",
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex-1 overflow-y-auto px-5 py-6 sm:px-7", children: props.children }),
+            props.footer ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "border-t border-slate-100 bg-white/95 px-5 py-3.5 backdrop-blur sm:px-7", children: props.footer }) : null
+          ]
+        }
+      )
+    }
+  );
+}
+function toneRing(tone) {
+  if (tone === "attention") {
+    return "border-brand-attention/30 bg-brand-attention/[0.06]";
+  }
+  if (tone === "amber") {
+    return "border-amber-300/60 bg-amber-50/70";
+  }
+  return "border-brand-green/30 bg-brand-green-bg/40";
+}
+function toneChip(tone) {
+  if (tone === "attention") {
+    return "bg-brand-attention/10 text-brand-attention";
+  }
+  if (tone === "amber") {
+    return "bg-amber-100 text-amber-800";
+  }
+  return "bg-brand-green/15 text-brand-green-text";
+}
+function toneIcon(tone) {
+  if (tone === "attention" || tone === "amber") {
+    return HiMiniExclamationTriangle;
+  }
+  return HiMiniShieldCheck;
+}
 function isBulkApproveGateReady(gate) {
   return gate?.enabled === true && gate?.configured === true;
 }
@@ -28111,30 +28163,6 @@ const TIER_LABEL = {
   elevated: "Elevated risk",
   high: "High risk"
 };
-function toneRing(tone) {
-  if (tone === "attention") {
-    return "border-brand-attention/30 bg-brand-attention/[0.06]";
-  }
-  if (tone === "amber") {
-    return "border-amber-300/60 bg-amber-50/70";
-  }
-  return "border-brand-green/30 bg-brand-green-bg/40";
-}
-function toneChip(tone) {
-  if (tone === "attention") {
-    return "bg-brand-attention/10 text-brand-attention";
-  }
-  if (tone === "amber") {
-    return "bg-amber-100 text-amber-800";
-  }
-  return "bg-brand-green/15 text-brand-green-text";
-}
-function toneIcon(tone) {
-  if (tone === "attention" || tone === "amber") {
-    return HiMiniExclamationTriangle;
-  }
-  return HiMiniShieldCheck;
-}
 function QueueBulkStickyBar(props) {
   if (!props.visible) return null;
   const unit = props.selectedActionCount === 1 ? "read" : "reads";
@@ -28495,34 +28523,6 @@ function QueueBulkDrawer(props) {
           props.errorMessage !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-xs text-brand-purple", role: "alert", children: props.errorMessage })
         ] })
       ]
-    }
-  );
-}
-function BulkDrawerShell(props) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(
-    "div",
-    {
-      className: "fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-0 backdrop-blur-sm sm:items-center sm:p-4",
-      role: "dialog",
-      "aria-modal": "true",
-      "aria-labelledby": props.labelledBy,
-      onClick: (event) => {
-        if (event.target === event.currentTarget) props.onClose();
-      },
-      children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
-        "form",
-        {
-          onSubmit: (event) => {
-            event.preventDefault();
-            props.onSubmit?.(event);
-          },
-          className: "guard-fade-in flex max-h-[92vh] w-full max-w-xl flex-col overflow-hidden rounded-t-2xl border border-slate-200 bg-white shadow-2xl sm:rounded-2xl",
-          children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex-1 overflow-y-auto px-5 py-6 sm:px-7", children: props.children }),
-            props.footer ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "border-t border-slate-100 bg-white/95 px-5 py-3.5 backdrop-blur sm:px-7", children: props.footer }) : null
-          ]
-        }
-      )
     }
   );
 }

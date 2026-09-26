@@ -231,6 +231,31 @@ fn pi_retry_identity_ignores_call_id_but_binds_arguments_and_session() {
 }
 
 #[test]
+fn pi_retry_without_session_keeps_transport_identity() {
+    for harness in ["pi", "omp"] {
+        for session in [serde_json::Value::Null, serde_json::json!("")] {
+            let mut first = envelope(
+                "PreToolUse",
+                serde_json::json!({
+                    "tool_name": "eval", "tool_call_id": "first-call",
+                    "tool_input": {"code": "1 + 1"}
+                }),
+            );
+            first.harness = harness.to_owned();
+            if !session.is_null() {
+                first.raw_payload["session_id"] = session;
+            }
+            let mut retry = first.clone();
+            retry.raw_payload["tool_call_id"] = serde_json::json!("retry-call");
+            assert_ne!(
+                request_identity(&first).unwrap().1,
+                request_identity(&retry).unwrap().1
+            );
+        }
+    }
+}
+
+#[test]
 fn evaluates_complete_cursor_file_envelope_as_native_generic_result() {
     let bytes = evaluate_isolated(envelope(
         "beforeReadFile",

@@ -20,6 +20,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from ..models import GuardApprovalRequest, format_local_http_origin
+from ..runtime.actions import normalize_harness_payload
 from .hook_native_review_binding import native_review_policy_binding
 from .hook_request_parsing import pre_tool_command
 from .hook_worker_responses import (
@@ -210,6 +211,7 @@ def queue_native_pre_tool_review(
             command=command,
             launch_target=launch_target,
             workspace=workspace,
+            payload=payload,
         ),
     )
     try:
@@ -393,7 +395,19 @@ def _native_review_action_envelope(
     command: str | None,
     launch_target: str,
     workspace: Path | None,
+    payload: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
+    if payload is not None:
+        # Presentation only: approval identity and policy remain Rust-owned.
+        envelope = normalize_harness_payload(harness, "PreToolUse", payload, workspace=workspace).to_dict()
+        envelope.update(action_id=request_id, pre_execution_result="review")
+        host = urlparse(launch_target).hostname if "://" in launch_target else None
+        if command is None and host:
+            envelope.update(action_type="network_request", network_hosts=[host])
+        elif envelope["action_type"] == "config_change":
+            # Unknown native tools must show their redacted input, not a generic config label.
+            envelope["action_type"] = "mcp_tool"
+        return envelope
     host = urlparse(launch_target).hostname if "://" in launch_target else None
     if command is not None:
         action_type = "shell_command"

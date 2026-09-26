@@ -535,6 +535,7 @@ def managed_extension_source(
         '        hook_event_name: "PreToolUse",\n'
         "        config_path: GUARD_CONFIG_PATH,\n"
         "        tool_call_id: event.toolCallId,\n"
+        "        session_id: ctx.sessionManager?.getSessionId?.(),\n"
         "        tool_name: event.toolName,\n"
         "        tool_input: toolInput,\n"
         "      },\n"

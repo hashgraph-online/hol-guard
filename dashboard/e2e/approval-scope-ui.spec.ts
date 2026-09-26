@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { readFileSync } from "node:fs";
 import type { GuardApprovalRequest } from "../src/guard-types";
 
 import {
@@ -142,6 +143,29 @@ test("approval review renders action-eligible scopes and binds the selected cont
     scope_contract_digest: "scope-contract-digest",
   });
 });
+
+for (const toolName of ["read", "eval"]) {
+  test(`native ${toolName} review shows the exact redacted action`, async ({ page }) => {
+    const envelope = JSON.parse(readFileSync(
+      new URL("../../tests/fixtures/native-review-action-envelope.json", import.meta.url), "utf8",
+    ));
+    const nativeRequest: GuardApprovalRequest = {
+      ...request,
+      harness: "omp", policy_action: "review", artifact_type: "tool_call", launch_target: `tool:${toolName}`,
+      action_envelope_json: {
+        ...envelope, action_id: request.request_id, tool_name: toolName,
+        action_type: toolName === "read" ? "file_read" : "mcp_tool",
+        target_paths: toolName === "read" ? ["src/example.py"] : [],
+        raw_payload_redacted: { tool_name: toolName, tool_input: { code: "1 + 1" } },
+      },
+    };
+    await mountApprovalFixture(page, [], nativeRequest);
+    await page.goto(`/requests/scope-e2e?${DAEMON}`);
+    await expect(page.getByText(toolName === "read" ? /src\/example\.py/ : /1 \+ 1/).first()).toBeVisible();
+    await expect(page.getByText("Launch details were not available.")).toHaveCount(0);
+    await expect(page.getByText(/inconsistent stored decision data/)).toHaveCount(0);
+  });
+}
 
 for (const totpEnabled of [false, true]) {
   test(`Enter submits multiple selected reads with ${totpEnabled ? "Authenticator" : "password"} proof`, async ({ page }) => {

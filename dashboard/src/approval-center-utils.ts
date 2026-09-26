@@ -464,7 +464,7 @@ function resolvePrimaryReviewText(item: GuardApprovalRequest): string {
 }
 
 function serializeMcpInput(payload: Record<string, unknown>, maxLength: number | null = null): string | null {
-  const input = payload.arguments ?? payload.input ?? payload.params ?? null;
+  const input = payload.tool_input ?? payload.toolInput ?? payload.arguments ?? payload.input ?? payload.params ?? null;
   if (input === null || input === undefined) {
     return null;
   }
