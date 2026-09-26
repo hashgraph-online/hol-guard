@@ -139,7 +139,7 @@ def harness_json_from_native_pre_tool(harness: str, response: Mapping[str, objec
                 "policy_action": action,
                 "reason_code": reason_code,
             }
-            if action == "warn":
+            if action == "warn" and reason_code != "native_policy_warning":
                 output["reason"] = reason
                 output["notice"] = "warning"
             return output
@@ -147,7 +147,7 @@ def harness_json_from_native_pre_tool(harness: str, response: Mapping[str, objec
             "hookEventName": "PreToolUse",
             "permissionDecision": "allow",
         }
-        if action == "warn":
+        if action == "warn" and reason_code != "native_policy_warning":
             hook_specific["permissionDecisionReason"] = reason
         if canonical in _GROK_DECISION_HARNESSES:
             grok_allow: dict[str, object] = {
@@ -156,7 +156,7 @@ def harness_json_from_native_pre_tool(harness: str, response: Mapping[str, objec
                 "reason_code": reason_code,
                 "hookSpecificOutput": hook_specific,
             }
-            if action == "warn":
+            if action == "warn" and reason_code != "native_policy_warning":
                 grok_allow["reason"] = reason
             return grok_allow
         return {

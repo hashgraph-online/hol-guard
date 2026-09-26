@@ -212,6 +212,7 @@ def test_generic_warning_result_is_allow_with_warning_and_renders_mechanically()
     hook_specific = rendered["hookSpecificOutput"]
     assert isinstance(hook_specific, dict)
     assert hook_specific["permissionDecision"] == "allow"
+    assert "permissionDecisionReason" not in hook_specific
 
 
 @pytest.mark.parametrize(
