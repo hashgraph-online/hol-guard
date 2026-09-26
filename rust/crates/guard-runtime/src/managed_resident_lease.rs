@@ -396,12 +396,32 @@ fn remove_stale_lease(path: &Path, private_root: &Path) -> bool {
     let Ok(age) = SystemTime::now().duration_since(record.modified) else {
         return false;
     };
-    if age <= LEASE_EXPIRY
-        || process_start_marker(record.process_id).is_ok_and(|actual| actual == record.start_marker)
+    if age <= LEASE_EXPIRY {
+        return false;
+    }
+    // A client whose heartbeat has stopped can still be the same process.
+    // Re-read the file before unlinking so a refresh or replacement is kept.
+    let confirmed = match read_lease(path, private_root) {
+        Ok(record) => record,
+        Err(
+            LeaseReadError::Missing | LeaseReadError::Unavailable | LeaseReadError::Malformed(_),
+        ) => {
+            return false;
+        }
+    };
+    if confirmed.process_id != record.process_id
+        || confirmed.start_marker != record.start_marker
+        || !confirmed.digest.eq_ignore_ascii_case(&record.digest)
     {
         return false;
     }
-    record.identity.remove_if_same(path)
+    let Ok(confirmed_age) = SystemTime::now().duration_since(confirmed.modified) else {
+        return false;
+    };
+    if confirmed_age <= LEASE_EXPIRY {
+        return false;
+    }
+    confirmed.identity.remove_if_same(path)
 }
 
 fn any_live_with_digest(state_base: &Path, expected_digest: Option<&str>) -> bool {
