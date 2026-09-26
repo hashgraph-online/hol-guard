@@ -217,8 +217,7 @@ def _has_live_guard_ancestor(
         if current is None or current.pid <= 1 or current.pid in seen:
             return False
         if not current.state.startswith("Z") and (
-            _is_hol_guard_daemon_serve(current.command)
-            or _leading_executable_is_hol_guard(current.command + " ")
+            _is_hol_guard_daemon_serve(current.command) or _leading_executable_is_hol_guard(current.command + " ")
         ):
             return True
         seen.add(current.pid)
