@@ -284,8 +284,8 @@ pub(super) fn wait_for_generation_containment(
             .cloned()
             .collect::<Vec<_>>();
         let process_ids = generation_process_ids(&generation_states, known_processes);
-        let timeout = deadline.saturating_duration_since(Instant::now());
         for process_id in &process_ids {
+            let timeout = deadline.saturating_duration_since(Instant::now());
             terminate_managed_process(process_id, timeout)?;
         }
         for state in &generation_states {
@@ -365,20 +365,24 @@ pub(super) fn abort_spawned_managed(
     generation: u64,
     token: &[u8],
 ) {
+    let cleanup_deadline = Instant::now() + super::MANAGED_STOP_TIMEOUT;
     let process_id = child_process_id(child);
     let known_processes = [ManagedProcessIdentity {
         process_id,
         start_marker: process_start_marker(process_id).ok(),
         runtime_digest: runtime_digest().ok(),
     }];
-    let _ = terminate_spawned_managed(child, Duration::from_millis(100));
+    let _ = terminate_spawned_managed(
+        child,
+        cleanup_deadline.saturating_duration_since(Instant::now()),
+    );
     let _ = wait_for_generation_containment(
         scope,
         digest,
         generation,
         token,
         &known_processes,
-        Instant::now() + Duration::from_millis(50),
+        cleanup_deadline,
     );
 }
 

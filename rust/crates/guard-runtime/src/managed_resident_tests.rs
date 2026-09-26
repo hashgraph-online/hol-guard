@@ -139,7 +139,8 @@ fn stale_lease_cleanup_requires_a_dead_process_identity() {
     }
     std::thread::sleep(lease::LEASE_EXPIRY + Duration::from_millis(100));
     assert!(!lease::any_live_for_home(&root));
-    assert!(current_process_lease.exists());
+    // Expired leases are drained even when the owning process is still running.
+    assert!(!current_process_lease.exists());
     assert!(!dead_process_lease.exists());
     fs::remove_dir_all(root).unwrap();
 }
