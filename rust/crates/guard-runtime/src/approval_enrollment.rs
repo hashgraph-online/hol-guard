@@ -7,7 +7,9 @@
 use guard_policy_snapshot::canonical_json_bytes;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::fs::File;
+#[cfg(unix)]
+use std::fs::OpenOptions;
+use std::fs::{self, File};
 use std::path::Path;
 
 #[path = "approval_enrollment_platform.rs"]
@@ -33,11 +35,15 @@ const DEVICE_BINDING_DOMAIN: &[u8] = b"hol-guard-native-approval-device-binding-
 const INSTALLATION_BINDING_DOMAIN: &[u8] = b"hol-guard-native-approval-installation-binding-v1\0";
 const MAX_SECRET_TEXT_BYTES: usize = 16 * 1024;
 const TRANSITION_LOCK_FILE_NAME: &str = "approval-authority-transition.v1.lock";
+#[cfg(test)]
+const TEST_ENROLLMENT_STATE_FILE_NAME: &str = "approval-enrollment-state.test.json";
 
 /// Owner-private inter-process fence for enrollment and authority changes.
 /// The inode is retained; the OS lock, not a writable PID/same-UID marker, supplies ownership.
 pub(crate) struct TransitionLock {
     _file: File,
+    #[cfg(unix)]
+    _directory: File,
     #[cfg(windows)]
     _directory_binding: guard_runtime_windows_process::PrivateDirectoryBinding,
 }
@@ -112,11 +118,49 @@ fn open_transition_lock(path: &Path) -> Result<OpenedTransitionLock, String> {
     })
 }
 
+#[cfg(unix)]
+fn open_transition_directory_lock(state_base: &Path) -> Result<File, String> {
+    use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
+
+    let mut options = OpenOptions::new();
+    options
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC);
+    let file = options
+        .open(state_base)
+        .map_err(|_| "native_approval_authority_directory_lock_failed".to_owned())?;
+    let opened = file
+        .metadata()
+        .map_err(|_| "native_approval_authority_directory_lock_invalid".to_owned())?;
+    let path_metadata = fs::symlink_metadata(state_base)
+        .map_err(|_| "native_approval_authority_directory_lock_invalid".to_owned())?;
+    if !opened.is_dir()
+        || path_metadata.file_type().is_symlink()
+        || !path_metadata.is_dir()
+        || opened.dev() != path_metadata.dev()
+        || opened.ino() != path_metadata.ino()
+        || opened.permissions().mode() & 0o077 != 0
+    {
+        return Err("native_approval_authority_directory_lock_invalid".to_owned());
+    }
+    Ok(file)
+}
+
 pub(crate) fn with_transition_lock<T, F>(state_base: &Path, operation: F) -> Result<T, String>
 where
     F: FnOnce() -> Result<T, String>,
 {
     let path = transition_lock_path(state_base)?;
+    #[cfg(unix)]
+    let directory = open_transition_directory_lock(state_base)?;
+    #[cfg(unix)]
+    fs2::FileExt::try_lock_exclusive(&directory).map_err(|error| {
+        if crate::resident_state::is_lock_contention(&error) {
+            "native_approval_authority_busy".to_owned()
+        } else {
+            "native_approval_authority_directory_lock_failed".to_owned()
+        }
+    })?;
     let opened = open_transition_lock(&path)?;
     validate_transition_lock(&path, &opened.file)?;
     fs2::FileExt::try_lock_exclusive(&opened.file).map_err(|error| {
@@ -128,6 +172,8 @@ where
     })?;
     let _lock = TransitionLock {
         _file: opened.file,
+        #[cfg(unix)]
+        _directory: directory,
         #[cfg(windows)]
         _directory_binding: opened.directory_binding,
     };
@@ -231,7 +277,7 @@ fn decode_state(value: &str) -> Result<SecureApprovalState, String> {
     {
         return Err("native_approval_secure_state_invalid".to_owned());
     }
-    if record.pending && !valid_digest(&record.pending_record_digest) {
+    if record.pending && record.generation > 0 && !valid_digest(&record.pending_record_digest) {
         return Err("native_approval_secure_state_invalid".to_owned());
     }
     if !record.pending && !record.pending_record_digest.is_empty() {
@@ -249,11 +295,71 @@ fn decode_state(value: &str) -> Result<SecureApprovalState, String> {
 }
 
 pub(super) fn load_unlocked(state_base: &Path) -> Result<Option<SecureApprovalState>, String> {
-    let account = account_for_state_base(state_base)?;
-    let Some(value) = read_platform_secret(&account)? else {
-        return Ok(None);
+    #[cfg(test)]
+    {
+        let path = state_base.join(TEST_ENROLLMENT_STATE_FILE_NAME);
+        let metadata = match fs::symlink_metadata(&path) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(_) => return Err("native_approval_secure_state_unavailable".to_owned()),
+        };
+        if metadata.file_type().is_symlink() || !metadata.is_file() {
+            return Err("native_approval_secure_state_invalid".to_owned());
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            if metadata.permissions().mode() & 0o077 != 0 {
+                return Err("native_approval_secure_state_invalid".to_owned());
+            }
+        }
+        let encoded = fs::read_to_string(path)
+            .map_err(|_| "native_approval_secure_state_unavailable".to_owned())?;
+        Ok(Some(decode_state(encoded.trim())?))
+    }
+    #[cfg(not(test))]
+    {
+        let account = account_for_state_base(state_base)?;
+        let Some(value) = read_platform_secret(&account)? else {
+            return Ok(None);
+        };
+        Ok(Some(decode_state(&value)?))
+    }
+}
+
+#[cfg(test)]
+pub(super) fn write_test_enrollment_bindings(
+    state_base: &Path,
+    device_binding: &str,
+    installation_binding: &str,
+) -> Result<(), String> {
+    super::validate_private_directory(state_base)?;
+    if !valid_digest(device_binding)
+        || !valid_digest(installation_binding)
+        || device_binding == installation_binding
+    {
+        return Err("native_approval_secure_state_invalid".to_owned());
+    }
+    let state = SecureApprovalState {
+        generation: 0,
+        device_binding: device_binding.to_owned(),
+        installation_binding: installation_binding.to_owned(),
+        key_id: String::new(),
+        status: "pending".to_owned(),
+        pending: true,
+        pending_record_digest: String::new(),
     };
-    Ok(Some(decode_state(&value)?))
+    let encoded = encode_state(&state)?;
+    let path = state_base.join(TEST_ENROLLMENT_STATE_FILE_NAME);
+    let private_root = crate::resident_state::private_root_for_state_base(state_base)?;
+    super::policy_store_persistence::persist_private_bytes(
+        &path,
+        encoded.as_bytes(),
+        MAX_SECRET_TEXT_BYTES as u64,
+        "approval_enrollment_test_state",
+        &private_root,
+    )
+    .map_err(|_| "native_approval_secure_state_unavailable".to_owned())
 }
 
 fn binding_for_secret(domain: &[u8], secret: &[u8; 32]) -> String {
@@ -475,5 +581,39 @@ mod tests {
         );
         drop(opened);
         with_transition_lock(&root, || Ok::<(), String>(())).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn transition_directory_lock_survives_lock_path_replacement() {
+        let root = test_root();
+        let path = transition_lock_path(&root).unwrap();
+        with_transition_lock(&root, || {
+            fs::remove_file(&path).unwrap();
+            let mut options = OpenOptions::new();
+            options.write(true).create_new(true);
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+            options.open(&path).unwrap();
+            assert_eq!(
+                with_transition_lock(&root, || Ok::<(), String>(())),
+                Err("native_approval_authority_busy".to_owned())
+            );
+            Ok::<(), String>(())
+        })
+        .unwrap();
+        with_transition_lock(&root, || Ok::<(), String>(())).unwrap();
+    }
+
+    #[test]
+    fn test_enrollment_binding_fixture_round_trips() {
+        let root = test_root();
+        let device = guard_policy_snapshot::digest_bytes(b"fixture-device");
+        let installation = guard_policy_snapshot::digest_bytes(b"fixture-installation");
+        write_test_enrollment_bindings(&root, &device, &installation).unwrap();
+        let loaded = load_unlocked(&root).unwrap().unwrap();
+        assert_eq!(loaded.device_binding, device);
+        assert_eq!(loaded.installation_binding, installation);
+        fs::remove_dir_all(root).unwrap();
     }
 }

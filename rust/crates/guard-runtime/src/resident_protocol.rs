@@ -7,6 +7,7 @@ use guard_contracts::{
     NATIVE_PROTOCOL_VERSION, NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES,
 };
 use guard_hook_core::review_post_tool;
+use guard_policy_snapshot::canonical_json_bytes;
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -24,8 +25,16 @@ pub(crate) enum ResidentOperationV1 {
     ApprovalChallengeV4(ApprovalChallengeRequestV4),
     ApprovalValidateV4(ApprovalValidateRequestV4),
     ApprovalConsumeV4(ApprovalConsumeRequestV4),
+    WorkspaceReviewDecision(WorkspaceReviewDecisionRequestV1),
     Health(Value),
     Shutdown(Value),
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct WorkspaceReviewDecisionRequestV1 {
+    pub(crate) request_id: String,
+    pub(crate) decision: Value,
 }
 
 #[derive(Debug, Deserialize)]
@@ -65,6 +74,8 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         "native-approval-validation-v4".into(),
         "native-approval-consume-v4".into(),
         "native-approval-replay-memory-v1".into(),
+        "native-workspace-review-authority-v1".into(),
+        "native-workspace-review-decision-v1".into(),
         "native-policy-in-memory-v1".into(),
         "hook-envelope-v2".into(),
         "native-resident-client-v1".into(),
@@ -91,6 +102,13 @@ pub(crate) fn evaluate_resident_bytes(
     policy_store: Option<&PolicySnapshotStore>,
 ) -> Result<Vec<u8>, String> {
     let value = strict_json_value(bytes)?;
+    if value.get("operation").and_then(Value::as_str) == Some("workspace_review_decision") {
+        let canonical = canonical_json_bytes(&value)
+            .map_err(|_| "native_workspace_review_decision_invalid".to_owned())?;
+        if canonical != bytes {
+            return Err("native_workspace_review_decision_noncanonical".to_owned());
+        }
+    }
     if bytes.len() > NATIVE_APPROVAL_MAX_BYTES
         && matches!(
             value.get("operation").and_then(Value::as_str),
@@ -171,6 +189,32 @@ pub(crate) fn evaluate_resident_bytes(
                 let policy_store =
                     policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
                 crate::approval::approval_v4::consume_approval(request, policy_store)
+            }
+            ResidentOperationV1::WorkspaceReviewDecision(request) => {
+                let policy_store =
+                    policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
+                let state_base = policy_store.state_base();
+                let verified =
+                    crate::policy_store::workspace_review_decision::verify_and_claim_request(
+                        state_base,
+                        &request.request_id,
+                        &request.decision,
+                    )?;
+                encode_response(&serde_json::json!({
+                    "status": if verified.replayed { "replayed" } else { "verified" },
+                    "replayed": verified.replayed,
+                    "request_id": request.request_id,
+                    "decision": verified.decision,
+                    "claim_id": verified.claim_id,
+                    "authority_record_digest": verified.authority_record_digest,
+                    "request_binding": verified.request_binding,
+                    "action_binding": verified.action_binding,
+                    "intent_binding": verified.intent_binding,
+                    "revision_binding": verified.revision_binding,
+                    "policy_binding": verified.policy_binding,
+                    "retry_scope_binding": verified.retry_scope_binding,
+                    "envelope_digest": verified.envelope_digest,
+                }))
             }
             ResidentOperationV1::Health(_request) => encode_response(&serde_json::json!({
                 "status": "ready",
