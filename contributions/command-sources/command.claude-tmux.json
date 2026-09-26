@@ -1,0 +1,932 @@
+{
+ "extension": {
+  "action_classes": [
+   "claude tmux session teardown command",
+   "claude tmux process prune command"
+  ],
+  "aliases": [],
+  "conflicts": [],
+  "delegated_protection": null,
+  "dependencies": [],
+  "description": "Reviews claude-tmux-cleanup runs that kill agent-team sessions or Claude Code processes.",
+  "ecosystem_ids": [],
+  "executables": [
+   "claude-tmux-cleanup",
+   "ctc"
+  ],
+  "extension_id": "command.claude-tmux",
+  "homepage": "https://github.com/s403o/claude-code-tmux",
+  "icon": {
+   "kind": "none"
+  },
+  "license": null,
+  "name": "Claude tmux cleanup protection",
+  "permissions": [
+   {
+    "action_classes": [
+     "claude tmux session teardown command"
+    ],
+    "baseline_floor": "review",
+    "configurable": true,
+    "conflicts": [],
+    "default_enabled": true,
+    "dependencies": [],
+    "deprecated": false,
+    "description": "Identifies claude-tmux-cleanup runs that kill tmux sessions without answering the confirmation prompt by hand — --force, a pipeline feeding the prompt its consent, or a here-string holding it. Every pane in a selected session is terminated, ending the agent teams running in them and discarding the unsaved terminal state they hold. With no target and no selection flag the run sweeps every session on the host.",
+    "example_command": "ctc --all --force",
+    "family": null,
+    "fixed_reason": null,
+    "implementation_version": "1.0.0",
+    "implied_permissions": [],
+    "introduced_version": "2.2.0",
+    "label": "Claude tmux unattended session teardown",
+    "permission_id": "command.claude-tmux.permission.session-teardown",
+    "replacement_permission_id": null,
+    "risk_tier": "medium",
+    "safer_guidance": [
+     "Run the same command with --dry-run to list the sessions, or drop --force and confirm each one."
+    ],
+    "typed_capabilities": []
+   },
+   {
+    "action_classes": [
+     "claude tmux process prune command"
+    ],
+    "baseline_floor": "review",
+    "configurable": true,
+    "conflicts": [],
+    "default_enabled": true,
+    "dependencies": [],
+    "deprecated": false,
+    "description": "Identifies claude-tmux-cleanup runs that kill Claude Code processes outside tmux without answering the confirmation prompt by hand. The scan runs after any session teardown in the same command, so it takes both the processes that teardown just orphaned and any that were already stray, including a Claude Code session started in a plain terminal that the caller never named.",
+    "example_command": "ctc --all --force --prune",
+    "family": null,
+    "fixed_reason": null,
+    "implementation_version": "1.0.0",
+    "implied_permissions": [],
+    "introduced_version": "2.2.0",
+    "label": "Claude tmux unattended process prune",
+    "permission_id": "command.claude-tmux.permission.process-prune",
+    "replacement_permission_id": null,
+    "risk_tier": "high",
+    "safer_guidance": [
+     "Run the same command with --dry-run to list the pids before signalling any of them."
+    ],
+    "typed_capabilities": []
+   }
+  ],
+  "project_markers": [],
+  "publisher": null,
+  "reference_urls": [
+   "https://github.com/s403o/claude-code-tmux"
+  ],
+  "required": false,
+  "risk_classes": [
+   "destructive_shell"
+  ],
+  "rules": [
+   {
+    "action_classes": [
+     "claude tmux session teardown command"
+    ],
+    "default_mode": "review",
+    "description": "Identifies claude-tmux-cleanup runs that kill tmux sessions without answering the confirmation prompt by hand — --force, a pipeline feeding the prompt its consent, or a here-string holding it. Every pane in a selected session is terminated, ending the agent teams running in them and discarding the unsaved terminal state they hold. With no target and no selection flag the run sweeps every session on the host.",
+    "family": null,
+    "matcher": {
+     "config": {},
+     "matchers": [
+      {
+       "config": {
+        "allow_leading_options": false,
+        "executables": [
+         "claude-tmux-cleanup",
+         "claude-tmux-cleanup.cmd",
+         "claude-tmux-cleanup.exe"
+        ],
+        "fail_secure_unknown_options": false,
+        "forbidden_flags": [
+         "--help",
+         "-h"
+        ],
+        "interspersed_flags": [],
+        "interspersed_options_with_values": [],
+        "inverse_flag_pairs": [],
+        "leading_options_with_values": [],
+        "options_with_values": [],
+        "required_flags": [
+         "--force"
+        ],
+        "required_flags_in_all_arguments": false,
+        "required_option_values": [],
+        "subcommands": []
+       },
+       "op": "executable.v1"
+      },
+      {
+       "config": {
+        "allow_leading_options": false,
+        "executables": [
+         "ctc",
+         "ctc.cmd",
+         "ctc.exe"
+        ],
+        "fail_secure_unknown_options": false,
+        "forbidden_flags": [
+         "--help",
+         "-h"
+        ],
+        "interspersed_flags": [],
+        "interspersed_options_with_values": [],
+        "inverse_flag_pairs": [],
+        "leading_options_with_values": [],
+        "options_with_values": [],
+        "required_flags": [
+         "--force"
+        ],
+        "required_flags_in_all_arguments": false,
+        "required_option_values": [],
+        "subcommands": []
+       },
+       "op": "executable.v1"
+      },
+      {
+       "config": {
+        "allow_leading_options": false,
+        "executables": [
+         "claude-tmux-cleanup",
+         "claude-tmux-cleanup.cmd",
+         "claude-tmux-cleanup.exe"
+        ],
+        "fail_secure_unknown_options": false,
+        "forbidden_flags": [
+         "--help",
+         "-h"
+        ],
+        "interspersed_flags": [],
+        "interspersed_options_with_values": [],
+        "inverse_flag_pairs": [],
+        "leading_options_with_values": [],
+        "options_with_values": [],
+        "required_flags": [
+         "-f"
+        ],
+        "required_flags_in_all_arguments": false,
+        "required_option_values": [],
+        "subcommands": []
+       },
+       "op": "executable.v1"
+      },
+      {
+       "config": {
+        "allow_leading_options": false,
+        "executables": [
+         "ctc",
+         "ctc.cmd",
+         "ctc.exe"
+        ],
+        "fail_secure_unknown_options": false,
+        "forbidden_flags": [
+         "--help",
+         "-h"
+        ],
+        "interspersed_flags": [],
+        "interspersed_options_with_values": [],
+        "inverse_flag_pairs": [],
+        "leading_options_with_values": [],
+        "options_with_values": [],
+        "required_flags": [
+         "-f"
+        ],
+        "required_flags_in_all_arguments": false,
+        "required_option_values": [],
+        "subcommands": []
+       },
+       "op": "executable.v1"
+      },
+      {
+       "config": {
+        "feeders": [
+         "echo",
+         "printf",
+         "yes"
+        ],
+        "forwarders": [
+         "cat"
+        ],
+        "values": [
+         "y",
+         "y\n",
+         "y\\n",
+         "yes",
+         "yes\n",
+         "yes\\n"
+        ]
+       },
+       "consumer": {
+        "config": {},
+        "matchers": [
+         {
+          "config": {
+           "allow_leading_options": false,
+           "executables": [
+            "claude-tmux-cleanup",
+            "claude-tmux-cleanup.cmd",
+            "claude-tmux-cleanup.exe"
+           ],
+           "fail_secure_unknown_options": false,
+           "forbidden_flags": [
+            "--help",
+            "-h"
+           ],
+           "interspersed_flags": [],
+           "interspersed_options_with_values": [],
+           "inverse_flag_pairs": [],
+           "leading_options_with_values": [],
+           "options_with_values": [],
+           "required_flags": [],
+           "required_flags_in_all_arguments": false,
+           "required_option_values": [],
+           "subcommands": []
+          },
+          "op": "executable.v1"
+         },
+         {
+          "config": {
+           "allow_leading_options": false,
+           "executables": [
+            "ctc",
+            "ctc.cmd",
+            "ctc.exe"
+           ],
+           "fail_secure_unknown_options": false,
+           "forbidden_flags": [
+            "--help",
+            "-h"
+           ],
+           "interspersed_flags": [],
+           "interspersed_options_with_values": [],
+           "inverse_flag_pairs": [],
+           "leading_options_with_values": [],
+           "options_with_values": [],
+           "required_flags": [],
+           "required_flags_in_all_arguments": false,
+           "required_option_values": [],
+           "subcommands": []
+          },
+          "op": "executable.v1"
+         }
+        ],
+        "op": "any.v1"
+       },
+       "op": "confirmation-fed.v1"
+      }
+     ],
+     "op": "any.v1"
+    },
+    "native_capability": null,
+    "permission_id": "command.claude-tmux.permission.session-teardown",
+    "risk_classes": [
+     "destructive_shell"
+    ],
+    "rule_id": "command.claude-tmux.session-teardown",
+    "rule_version": "1.0.0",
+    "safe_variants": [
+     {
+      "matcher": {
+       "config": {},
+       "matchers": [
+        {
+         "config": {
+          "allow_leading_options": false,
+          "executables": [
+           "claude-tmux-cleanup",
+           "claude-tmux-cleanup.cmd",
+           "claude-tmux-cleanup.exe"
+          ],
+          "fail_secure_unknown_options": false,
+          "forbidden_flags": [
+           "--help",
+           "-h"
+          ],
+          "interspersed_flags": [],
+          "interspersed_options_with_values": [],
+          "inverse_flag_pairs": [],
+          "leading_options_with_values": [],
+          "options_with_values": [],
+          "required_flags": [
+           "--dry-run"
+          ],
+          "required_flags_in_all_arguments": false,
+          "required_option_values": [],
+          "subcommands": []
+         },
+         "op": "executable.v1"
+        },
+        {
+         "config": {
+          "allow_leading_options": false,
+          "executables": [
+           "ctc",
+           "ctc.cmd",
+           "ctc.exe"
+          ],
+          "fail_secure_unknown_options": false,
+          "forbidden_flags": [
+           "--help",
+           "-h"
+          ],
+          "interspersed_flags": [],
+          "interspersed_options_with_values": [],
+          "inverse_flag_pairs": [],
+          "leading_options_with_values": [],
+          "options_with_values": [],
+          "required_flags": [
+           "--dry-run"
+          ],
+          "required_flags_in_all_arguments": false,
+          "required_option_values": [],
+          "subcommands": []
+         },
+         "op": "executable.v1"
+        },
+        {
+         "config": {
+          "allow_leading_options": false,
+          "executables": [
+           "claude-tmux-cleanup",
+           "claude-tmux-cleanup.cmd",
+           "claude-tmux-cleanup.exe"
+          ],
+          "fail_secure_unknown_options": false,
+          "forbidden_flags": [
+           "--help",
+           "-h"
+          ],
+          "interspersed_flags": [],
+          "interspersed_options_with_values": [],
+          "inverse_flag_pairs": [],
+          "leading_options_with_values": [],
+          "options_with_values": [],
+          "required_flags": [
+           "-n"
+          ],
+          "required_flags_in_all_arguments": false,
+          "required_option_values": [],
+          "subcommands": []
+         },
+         "op": "executable.v1"
+        },
+        {
+         "config": {
+          "allow_leading_options": false,
+          "executables": [
+           "ctc",
+           "ctc.cmd",
+           "ctc.exe"
+          ],
+          "fail_secure_unknown_options": false,
+          "forbidden_flags": [
+           "--help",
+           "-h"
+          ],
+          "interspersed_flags": [],
+          "interspersed_options_with_values": [],
+          "inverse_flag_pairs": [],
+          "leading_options_with_values": [],
+          "options_with_values": [],
+          "required_flags": [
+           "-n"
+          ],
+          "required_flags_in_all_arguments": false,
+          "required_option_values": [],
+          "subcommands": []
+         },
+         "op": "executable.v1"
+        }
+       ],
+       "op": "any.v1"
+      },
+      "title": "Claude tmux cleanup preview",
+      "variant_id": "dry-run"
+     }
+    ],
+    "safer_alternatives": [
+     "Run the same command with --dry-run to list the sessions, or drop --force and confirm each one."
+    ],
+    "severity": "medium",
+    "title": "Claude tmux unattended session teardown"
+   },
+   {
+    "action_classes": [
+     "claude tmux process prune command"
+    ],
+    "default_mode": "review",
+    "description": "Identifies claude-tmux-cleanup runs that kill Claude Code processes outside tmux without answering the confirmation prompt by hand. The scan runs after any session teardown in the same command, so it takes both the processes that teardown just orphaned and any that were already stray, including a Claude Code session started in a plain terminal that the caller never named.",
+    "family": null,
+    "matcher": {
+     "config": {},
+     "matchers": [
+      {
+       "config": {
+        "allow_leading_options": false,
+        "executables": [
+         "claude-tmux-cleanup",
+         "claude-tmux-cleanup.cmd",
+         "claude-tmux-cleanup.exe"
+        ],
+        "fail_secure_unknown_options": false,
+        "forbidden_flags": [
+         "--help",
+         "-h"
+        ],
+        "interspersed_flags": [],
+        "interspersed_options_with_values": [],
+        "inverse_flag_pairs": [],
+        "leading_options_with_values": [],
+        "options_with_values": [],
+        "required_flags": [
+         "--force",
+         "--prune"
+        ],
+        "required_flags_in_all_arguments": false,
+        "required_option_values": [],
+        "subcommands": []
+       },
+       "op": "executable.v1"
+      },
+      {
+       "config": {
+        "allow_leading_options": false,
+        "executables": [
+         "ctc",
+         "ctc.cmd",
+         "ctc.exe"
+        ],
+        "fail_secure_unknown_options": false,
+        "forbidden_flags": [
+         "--help",
+         "-h"
+        ],
+        "interspersed_flags": [],
+        "interspersed_options_with_values": [],
+        "inverse_flag_pairs": [],
+        "leading_options_with_values": [],
+        "options_with_values": [],
+        "required_flags": [
+         "--force",
+         "--prune"
+        ],
+        "required_flags_in_all_arguments": false,
+        "required_option_values": [],
+        "subcommands": []
+       },
+       "op": "executable.v1"
+      },
+      {
+       "config": {
+        "allow_leading_options": false,
+        "executables": [
+         "claude-tmux-cleanup",
+         "claude-tmux-cleanup.cmd",
+         "claude-tmux-cleanup.exe"
+        ],
+        "fail_secure_unknown_options": false,
+        "forbidden_flags": [
+         "--help",
+         "-h"
+        ],
+        "interspersed_flags": [],
+        "interspersed_options_with_values": [],
+        "inverse_flag_pairs": [],
+        "leading_options_with_values": [],
+        "options_with_values": [],
+        "required_flags": [
+         "--prune",
+         "-f"
+        ],
+        "required_flags_in_all_arguments": false,
+        "required_option_values": [],
+        "subcommands": []
+       },
+       "op": "executable.v1"
+      },
+      {
+       "config": {
+        "allow_leading_options": false,
+        "executables": [
+         "ctc",
+         "ctc.cmd",
+         "ctc.exe"
+        ],
+        "fail_secure_unknown_options": false,
+        "forbidden_flags": [
+         "--help",
+         "-h"
+        ],
+        "interspersed_flags": [],
+        "interspersed_options_with_values": [],
+        "inverse_flag_pairs": [],
+        "leading_options_with_values": [],
+        "options_with_values": [],
+        "required_flags": [
+         "--prune",
+         "-f"
+        ],
+        "required_flags_in_all_arguments": false,
+        "required_option_values": [],
+        "subcommands": []
+       },
+       "op": "executable.v1"
+      },
+      {
+       "config": {
+        "allow_leading_options": false,
+        "executables": [
+         "claude-tmux-cleanup",
+         "claude-tmux-cleanup.cmd",
+         "claude-tmux-cleanup.exe"
+        ],
+        "fail_secure_unknown_options": false,
+        "forbidden_flags": [
+         "--help",
+         "-h"
+        ],
+        "interspersed_flags": [],
+        "interspersed_options_with_values": [],
+        "inverse_flag_pairs": [],
+        "leading_options_with_values": [],
+        "options_with_values": [],
+        "required_flags": [
+         "--force",
+         "-p"
+        ],
+        "required_flags_in_all_arguments": false,
+        "required_option_values": [],
+        "subcommands": []
+       },
+       "op": "executable.v1"
+      },
+      {
+       "config": {
+        "allow_leading_options": false,
+        "executables": [
+         "ctc",
+         "ctc.cmd",
+         "ctc.exe"
+        ],
+        "fail_secure_unknown_options": false,
+        "forbidden_flags": [
+         "--help",
+         "-h"
+        ],
+        "interspersed_flags": [],
+        "interspersed_options_with_values": [],
+        "inverse_flag_pairs": [],
+        "leading_options_with_values": [],
+        "options_with_values": [],
+        "required_flags": [
+         "--force",
+         "-p"
+        ],
+        "required_flags_in_all_arguments": false,
+        "required_option_values": [],
+        "subcommands": []
+       },
+       "op": "executable.v1"
+      },
+      {
+       "config": {
+        "allow_leading_options": false,
+        "executables": [
+         "claude-tmux-cleanup",
+         "claude-tmux-cleanup.cmd",
+         "claude-tmux-cleanup.exe"
+        ],
+        "fail_secure_unknown_options": false,
+        "forbidden_flags": [
+         "--help",
+         "-h"
+        ],
+        "interspersed_flags": [],
+        "interspersed_options_with_values": [],
+        "inverse_flag_pairs": [],
+        "leading_options_with_values": [],
+        "options_with_values": [],
+        "required_flags": [
+         "-f",
+         "-p"
+        ],
+        "required_flags_in_all_arguments": false,
+        "required_option_values": [],
+        "subcommands": []
+       },
+       "op": "executable.v1"
+      },
+      {
+       "config": {
+        "allow_leading_options": false,
+        "executables": [
+         "ctc",
+         "ctc.cmd",
+         "ctc.exe"
+        ],
+        "fail_secure_unknown_options": false,
+        "forbidden_flags": [
+         "--help",
+         "-h"
+        ],
+        "interspersed_flags": [],
+        "interspersed_options_with_values": [],
+        "inverse_flag_pairs": [],
+        "leading_options_with_values": [],
+        "options_with_values": [],
+        "required_flags": [
+         "-f",
+         "-p"
+        ],
+        "required_flags_in_all_arguments": false,
+        "required_option_values": [],
+        "subcommands": []
+       },
+       "op": "executable.v1"
+      },
+      {
+       "config": {
+        "feeders": [
+         "echo",
+         "printf",
+         "yes"
+        ],
+        "forwarders": [
+         "cat"
+        ],
+        "values": [
+         "y",
+         "y\n",
+         "y\\n",
+         "yes",
+         "yes\n",
+         "yes\\n"
+        ]
+       },
+       "consumer": {
+        "config": {},
+        "matchers": [
+         {
+          "config": {
+           "allow_leading_options": false,
+           "executables": [
+            "claude-tmux-cleanup",
+            "claude-tmux-cleanup.cmd",
+            "claude-tmux-cleanup.exe"
+           ],
+           "fail_secure_unknown_options": false,
+           "forbidden_flags": [
+            "--help",
+            "-h"
+           ],
+           "interspersed_flags": [],
+           "interspersed_options_with_values": [],
+           "inverse_flag_pairs": [],
+           "leading_options_with_values": [],
+           "options_with_values": [],
+           "required_flags": [
+            "--prune"
+           ],
+           "required_flags_in_all_arguments": false,
+           "required_option_values": [],
+           "subcommands": []
+          },
+          "op": "executable.v1"
+         },
+         {
+          "config": {
+           "allow_leading_options": false,
+           "executables": [
+            "ctc",
+            "ctc.cmd",
+            "ctc.exe"
+           ],
+           "fail_secure_unknown_options": false,
+           "forbidden_flags": [
+            "--help",
+            "-h"
+           ],
+           "interspersed_flags": [],
+           "interspersed_options_with_values": [],
+           "inverse_flag_pairs": [],
+           "leading_options_with_values": [],
+           "options_with_values": [],
+           "required_flags": [
+            "--prune"
+           ],
+           "required_flags_in_all_arguments": false,
+           "required_option_values": [],
+           "subcommands": []
+          },
+          "op": "executable.v1"
+         },
+         {
+          "config": {
+           "allow_leading_options": false,
+           "executables": [
+            "claude-tmux-cleanup",
+            "claude-tmux-cleanup.cmd",
+            "claude-tmux-cleanup.exe"
+           ],
+           "fail_secure_unknown_options": false,
+           "forbidden_flags": [
+            "--help",
+            "-h"
+           ],
+           "interspersed_flags": [],
+           "interspersed_options_with_values": [],
+           "inverse_flag_pairs": [],
+           "leading_options_with_values": [],
+           "options_with_values": [],
+           "required_flags": [
+            "-p"
+           ],
+           "required_flags_in_all_arguments": false,
+           "required_option_values": [],
+           "subcommands": []
+          },
+          "op": "executable.v1"
+         },
+         {
+          "config": {
+           "allow_leading_options": false,
+           "executables": [
+            "ctc",
+            "ctc.cmd",
+            "ctc.exe"
+           ],
+           "fail_secure_unknown_options": false,
+           "forbidden_flags": [
+            "--help",
+            "-h"
+           ],
+           "interspersed_flags": [],
+           "interspersed_options_with_values": [],
+           "inverse_flag_pairs": [],
+           "leading_options_with_values": [],
+           "options_with_values": [],
+           "required_flags": [
+            "-p"
+           ],
+           "required_flags_in_all_arguments": false,
+           "required_option_values": [],
+           "subcommands": []
+          },
+          "op": "executable.v1"
+         }
+        ],
+        "op": "any.v1"
+       },
+       "op": "confirmation-fed.v1"
+      }
+     ],
+     "op": "any.v1"
+    },
+    "native_capability": null,
+    "permission_id": "command.claude-tmux.permission.process-prune",
+    "risk_classes": [
+     "destructive_shell"
+    ],
+    "rule_id": "command.claude-tmux.process-prune",
+    "rule_version": "1.0.0",
+    "safe_variants": [
+     {
+      "matcher": {
+       "config": {},
+       "matchers": [
+        {
+         "config": {
+          "allow_leading_options": false,
+          "executables": [
+           "claude-tmux-cleanup",
+           "claude-tmux-cleanup.cmd",
+           "claude-tmux-cleanup.exe"
+          ],
+          "fail_secure_unknown_options": false,
+          "forbidden_flags": [
+           "--help",
+           "-h"
+          ],
+          "interspersed_flags": [],
+          "interspersed_options_with_values": [],
+          "inverse_flag_pairs": [],
+          "leading_options_with_values": [],
+          "options_with_values": [],
+          "required_flags": [
+           "--dry-run"
+          ],
+          "required_flags_in_all_arguments": false,
+          "required_option_values": [],
+          "subcommands": []
+         },
+         "op": "executable.v1"
+        },
+        {
+         "config": {
+          "allow_leading_options": false,
+          "executables": [
+           "ctc",
+           "ctc.cmd",
+           "ctc.exe"
+          ],
+          "fail_secure_unknown_options": false,
+          "forbidden_flags": [
+           "--help",
+           "-h"
+          ],
+          "interspersed_flags": [],
+          "interspersed_options_with_values": [],
+          "inverse_flag_pairs": [],
+          "leading_options_with_values": [],
+          "options_with_values": [],
+          "required_flags": [
+           "--dry-run"
+          ],
+          "required_flags_in_all_arguments": false,
+          "required_option_values": [],
+          "subcommands": []
+         },
+         "op": "executable.v1"
+        },
+        {
+         "config": {
+          "allow_leading_options": false,
+          "executables": [
+           "claude-tmux-cleanup",
+           "claude-tmux-cleanup.cmd",
+           "claude-tmux-cleanup.exe"
+          ],
+          "fail_secure_unknown_options": false,
+          "forbidden_flags": [
+           "--help",
+           "-h"
+          ],
+          "interspersed_flags": [],
+          "interspersed_options_with_values": [],
+          "inverse_flag_pairs": [],
+          "leading_options_with_values": [],
+          "options_with_values": [],
+          "required_flags": [
+           "-n"
+          ],
+          "required_flags_in_all_arguments": false,
+          "required_option_values": [],
+          "subcommands": []
+         },
+         "op": "executable.v1"
+        },
+        {
+         "config": {
+          "allow_leading_options": false,
+          "executables": [
+           "ctc",
+           "ctc.cmd",
+           "ctc.exe"
+          ],
+          "fail_secure_unknown_options": false,
+          "forbidden_flags": [
+           "--help",
+           "-h"
+          ],
+          "interspersed_flags": [],
+          "interspersed_options_with_values": [],
+          "inverse_flag_pairs": [],
+          "leading_options_with_values": [],
+          "options_with_values": [],
+          "required_flags": [
+           "-n"
+          ],
+          "required_flags_in_all_arguments": false,
+          "required_option_values": [],
+          "subcommands": []
+         },
+         "op": "executable.v1"
+        }
+       ],
+       "op": "any.v1"
+      },
+      "title": "Claude tmux prune preview",
+      "variant_id": "dry-run"
+     }
+    ],
+    "safer_alternatives": [
+     "Run the same command with --dry-run to list the pids before signalling any of them."
+    ],
+    "severity": "high",
+    "title": "Claude tmux unattended process prune"
+   }
+  ],
+  "safer_alternatives": [
+   "Use --dry-run to list the sessions and pids before killing anything."
+  ],
+  "source": "built-in",
+  "version": "1.0.0"
+ },
+ "schema": "guard.command-extension-source.v1"
+}

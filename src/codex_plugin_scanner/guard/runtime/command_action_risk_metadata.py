@@ -81,6 +81,11 @@ BLITCP_ACTION_RISK_CLASSES: Final[dict[str, tuple[str, ...]]] = {
     "blitcp unverified copy command": ("destructive_shell",),
 }
 
+CLAUDE_TMUX_ACTION_RISK_CLASSES: Final[dict[str, tuple[str, ...]]] = {
+    "claude tmux session teardown command": ("destructive_shell",),
+    "claude tmux process prune command": ("destructive_shell",),
+}
+
 GITHUB_ACTION_RISK_CLASSES: Final[dict[str, tuple[str, ...]]] = {
     "github routine pull-request merge command": ("destructive_shell", "network_egress"),
     "github workflow rerun": ("destructive_shell", "network_egress"),
@@ -107,12 +112,14 @@ OLLAMA_ACTION_RISK_CLASSES: Final[dict[str, tuple[str, ...]]] = {
 COMMAND_ACTION_RISK_CLASSES: Final[dict[str, tuple[str, ...]]] = {
     **_BASE_COMMAND_ACTION_RISK_CLASSES,
     **BLITCP_ACTION_RISK_CLASSES,
+    **CLAUDE_TMUX_ACTION_RISK_CLASSES,
     **GITHUB_ACTION_RISK_CLASSES,
     **OLLAMA_ACTION_RISK_CLASSES,
 }
 
 __all__ = [
     "BLITCP_ACTION_RISK_CLASSES",
+    "CLAUDE_TMUX_ACTION_RISK_CLASSES",
     "COMMAND_ACTION_RISK_CLASSES",
     "GITHUB_ACTION_RISK_CLASSES",
     "OLLAMA_ACTION_RISK_CLASSES",

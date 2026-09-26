@@ -80,6 +80,63 @@ impl Evaluation<'_> {
                 }
                 Ok(Arc::from(evidence))
             }
+            Matcher::ConfirmationFed(consumer, node) => {
+                let consumer = self.evaluate(*consumer)?;
+                let mut fed: Vec<(&str, usize)> = Vec::new();
+                for segment in &self.command.segments {
+                    if feeds_affirmative_input(segment, &node.feeders, &node.values) {
+                        fed.push((segment.execution_context.as_str(), segment.pipeline_index));
+                    }
+                }
+                let mut here_strings: Vec<usize> = Vec::new();
+                for (index, segment) in self.command.segments.iter().enumerate() {
+                    if reads_affirmative_here_string(&segment.arguments, &node.values) {
+                        here_strings.push(index);
+                    }
+                }
+                if fed.is_empty() && here_strings.is_empty() {
+                    return Ok(Arc::from(Vec::new()));
+                }
+                // `cat` forwards stdin unchanged, so consent survives it. A file
+                // operand makes it read that file instead, and only `-` still
+                // names stdin. Visiting in pipeline order lets a chain carry it.
+                let mut forwarders: Vec<&CommandSegmentV1> = self.command.segments.iter().collect();
+                forwarders.sort_by_key(|segment| segment.pipeline_index);
+                for segment in forwarders {
+                    let Some(name) = executable_name(segment) else {
+                        continue;
+                    };
+                    if !node.forwarders.contains(name.as_str())
+                        || !segment.arguments.iter().all(|argument| argument == "-")
+                    {
+                        continue;
+                    }
+                    let previous = segment.pipeline_index.checked_sub(1);
+                    if previous.is_some_and(|previous| {
+                        fed.iter().any(|(context, index)| {
+                            *context == segment.execution_context && *index == previous
+                        })
+                    }) {
+                        fed.push((segment.execution_context.as_str(), segment.pipeline_index));
+                    }
+                }
+                let mut evidence = Vec::new();
+                for index in consumer.iter() {
+                    let segment = &self.command.segments[*index];
+                    let carried = here_strings.contains(index)
+                        || fed.iter().any(|(context, position)| {
+                            *context == segment.execution_context
+                                && position.saturating_add(1) == segment.pipeline_index
+                        });
+                    if carried {
+                        if evidence.len() >= MAX_NATIVE_COMMAND_EVIDENCE_ITEMS {
+                            return Err("native_command_evidence_limit_exceeded");
+                        }
+                        evidence.push(*index);
+                    }
+                }
+                Ok(Arc::from(evidence))
+            }
             Matcher::Pipeline(producer, consumer) => {
                 let producer = self.evaluate(*producer)?;
                 let consumer = self.evaluate(*consumer)?;
@@ -331,4 +388,82 @@ fn without_options(
         }
     }
     retained
+}
+
+/// The prompt reads one line of standard input, so a stage that writes `y` or
+/// `yes` into it answers the prompt exactly as `--force` would. A bare `yes`
+/// repeats `y` forever; bare `echo`/`printf` write nothing a prompt reads as
+/// consent, and an explicit refusal (`yes n`) is not consent.
+fn feeds_affirmative_input(
+    segment: &CommandSegmentV1,
+    feeders: &BTreeSet<String>,
+    values: &BTreeSet<String>,
+) -> bool {
+    let Some(name) = executable_name(segment) else {
+        return false;
+    };
+    if !feeders.contains(name.as_str()) {
+        return false;
+    }
+    let operands = segment
+        .arguments
+        .iter()
+        .filter(|argument| !argument.starts_with('-'))
+        .collect::<Vec<_>>();
+    if operands.is_empty() {
+        return name == "yes";
+    }
+    operands
+        .iter()
+        .all(|operand| values.contains(&trimmed_value(operand)))
+}
+
+/// A here-string reaches the same prompt with no feeding stage at all. The
+/// parser keeps it in the segment arguments, split (`<<<`, `y`) or joined
+/// (`<<<y`), and an explicit descriptor may prefix the operator.
+///
+/// Out of scope, because the consent text is not in the arguments: a file
+/// redirect (`< consent.txt`) and a here-document body (`<< EOF`), whose
+/// content this matcher cannot read, exactly as an unknown `cat notes |` feed
+/// is not treated as consent. Both leave the command uncertain in this parser
+/// today, so neither can be reported safe on the strength of this rule.
+fn reads_affirmative_here_string(arguments: &[String], values: &BTreeSet<String>) -> bool {
+    for (index, argument) in arguments.iter().enumerate() {
+        let operator = argument.trim_start_matches(|character: char| character.is_ascii_digit());
+        let Some(inline) = operator.strip_prefix("<<<") else {
+            continue;
+        };
+        let value = if inline.is_empty() {
+            match arguments.get(index + 1) {
+                Some(value) => value.as_str(),
+                None => continue,
+            }
+        } else {
+            inline
+        };
+        if values.contains(&trimmed_value(value)) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Consent is compared case-insensitively: the prompt accepts `Y` and `YES`
+/// as readily as `y`, so folding case widens what counts as an unattended run
+/// rather than narrowing it.
+fn trimmed_value(value: &str) -> String {
+    value
+        .trim()
+        .trim_matches(|character| character == '\'' || character == '"')
+        .to_lowercase()
+}
+
+fn executable_name(segment: &CommandSegmentV1) -> Option<String> {
+    segment.executable.as_deref().map(|executable| {
+        executable
+            .rsplit('/')
+            .next()
+            .unwrap_or(executable)
+            .to_lowercase()
+    })
 }
