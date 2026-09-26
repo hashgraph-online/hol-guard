@@ -18,6 +18,7 @@ def test_native_review_produces_dashboard_wire_contract() -> None:
         launch_target="tool:eval",
         workspace=None,
         payload={"tool_name": "eval", "tool_input": {"code": "1 + 1"}},
+        native_action={"action_type": "unknown"},
     )
     assert actual == expected
 
@@ -53,6 +54,7 @@ def test_native_review_displays_eval_input() -> None:
         launch_target="tool:eval",
         workspace=None,
         payload={"tool_name": "eval", "tool_input": {"code": "1 + 1"}},
+        native_action={"action_type": "unknown"},
     )
     assert envelope["action_type"] == "config_change"
     assert "1 + 1" in json.dumps(envelope["raw_payload_redacted"])
@@ -101,6 +103,18 @@ def test_native_review_preserves_full_code_without_filesystem_io(monkeypatch: py
             request_id="pure-review", harness="omp", tool_name="eval", command=None,
             launch_target="tool:eval", workspace=None,
             payload={"tool_name": "eval", "tool_input": {"code": code, "apiKey": "fixture-private-value"}},
+            native_action={"action_type": "unknown"},
         )
     assert envelope["raw_payload_redacted"]["tool_input"]["code"] == code
     assert "fixture-private-value" not in json.dumps(envelope)
+
+
+@pytest.mark.parametrize("native_action", (None, "invalid", {}, {"action_type": "unsupported"}))
+def test_native_review_rejects_missing_or_invalid_rust_metadata(native_action: object) -> None:
+    with pytest.raises(ValueError, match="Native action"):
+        _native_review_action_envelope(
+            request_id="invalid-native-metadata", harness="omp", tool_name="eval", command=None,
+            launch_target="tool:eval", workspace=None,
+            payload={"tool_name": "eval", "tool_input": {"code": "1 + 1"}},
+            native_action=native_action,
+        )

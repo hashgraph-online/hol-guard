@@ -57,3 +57,7 @@ def installed_hook_request(
         raise RuntimeError(
             f"installed hook corpus request failed: harness={harness} event={event} status={error.code} body={detail}"
         ) from error
+    except urllib.error.URLError as error:
+        if isinstance(error.reason, TimeoutError):
+            raise TimeoutError("installed hook transport timed out") from error
+        raise

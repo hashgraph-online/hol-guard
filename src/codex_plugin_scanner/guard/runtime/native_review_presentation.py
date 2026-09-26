@@ -33,15 +33,15 @@ def normalize_native_review_payload(
     command: str | None,
     launch_target: str,
     workspace: Path | None,
-    native_action: object = None,
+    native_action: object,
 ) -> dict[str, object]:
     """Never classify paths, normalize commands, read files, or derive approval identity."""
     normalized_harness = harness.strip().lower()
     if not normalized_harness:
         raise ValueError("Native review harness must not be empty")
-    if native_action is not None and not isinstance(native_action, Mapping):
+    if not isinstance(native_action, Mapping):
         raise ValueError("Native action metadata must be an object")
-    native_kind = native_action.get("action_type") if isinstance(native_action, Mapping) else "unknown"
+    native_kind = native_action.get("action_type")
     if not isinstance(native_kind, str) or native_kind not in _NATIVE_ACTION_TYPES:
         raise ValueError("Native action kind is unsupported")
     action_type = _NATIVE_ACTION_TYPES[native_kind]

@@ -33,8 +33,8 @@ def _edge(harness: str, *, url: str = "https://example.test", action_type: str =
     }
 
 
-def _test_request_digest(harness: str, payload: object, workspace: object) -> str:
-    # The underscore prevents pytest from collecting this shared receipt-fixture helper as a test.
+def request_digest_for_fixture(harness: str, payload: object, workspace: object) -> str:
+    """Shared receipt fixture implementation, not a pytest test function."""
     semantic = dict(payload) if isinstance(payload, dict) else payload
     if isinstance(semantic, dict):
         if harness in {"pi", "omp"} and isinstance(semantic.get("session_id"), str) and semantic["session_id"]:
@@ -75,7 +75,7 @@ def _worker(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, edge: dict[str, obj
         assert isinstance(result, dict)
         harness = str(rendered["harness"])
         workspace = kwargs.get("cwd")
-        digest = _test_request_digest(harness, kwargs.get("payload"), workspace)
+        digest = request_digest_for_fixture(harness, kwargs.get("payload"), workspace)
         receipt = {
             "schema": "guard-native-hook-decision-receipt.v1",
             "version": 1,
