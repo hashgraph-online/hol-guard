@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -79,6 +80,11 @@ def _status() -> SimpleNamespace:
     )
 
 
+def _staged_digest(guard_home: Path, request_id: str) -> str:
+    path = guard_home / "native-runtime" / "workspace-review-requests" / f"{request_id}.json"
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
 def test_staging_uses_only_persisted_request_material(tmp_path: Path) -> None:
     store = _Store(_request())
     staged = native.stage_workspace_review_request(store, tmp_path, "request-1")
@@ -108,6 +114,7 @@ def test_apply_reconciles_native_claim_into_local_queue(
                 "decision": "allow",
                 "claim_id": "a" * 64,
                 "envelope_digest": "b" * 64,
+                "request_snapshot_digest": _staged_digest(cast(Path, kwargs["guard_home"]), "request-1"),
             }
         ).encode("utf-8"),
     )
@@ -167,6 +174,7 @@ def test_signed_deny_is_block_to_real_waiter_and_grok_harness(
                 "policy_binding": "2" * 64,
                 "retry_scope_binding": "3" * 64,
                 "envelope_digest": "b" * 64,
+                "request_snapshot_digest": _staged_digest(cast(Path, kwargs["guard_home"]), "request-deny"),
             }
         ).encode("utf-8"),
     )
@@ -208,6 +216,44 @@ def test_signed_deny_is_block_to_real_waiter_and_grok_harness(
         )
         == "block"
     )
+
+
+def test_staged_snapshot_substitution_is_rejected_before_sqlite_application(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _Store(_request())
+    monkeypatch.setattr(native, "native_runtime_status", _status)
+    monkeypatch.setattr(native, "_isolated_environment", lambda: {})
+
+    def substitute_and_respond(**kwargs: object) -> bytes:
+        guard_home = cast(Path, kwargs["guard_home"])
+        path = guard_home / "native-runtime" / "workspace-review-requests" / "request-1.json"
+        substituted = json.loads(path.read_text(encoding="utf-8"))
+        substituted["action"]["raw_command_text"] = "git log --oneline"
+        path.write_bytes(native._canonical_json_bytes(substituted))
+        return json.dumps(
+            {
+                "status": "verified",
+                "replayed": False,
+                "request_id": "request-1",
+                "decision": "allow",
+                "claim_id": "a" * 64,
+                "envelope_digest": "b" * 64,
+                "request_snapshot_digest": _staged_digest(guard_home, "request-1"),
+            }
+        ).encode("utf-8")
+
+    monkeypatch.setattr(native, "native_resident_client_request", substitute_and_respond)
+    with pytest.raises(native.NativeWorkspaceReviewError) as error:
+        native.apply_native_workspace_review_decision(
+            store,
+            tmp_path,
+            "request-1",
+            {"signed": "native-envelope"},
+        )
+    assert error.value.code == "native_workspace_review_response_invalid"
+    assert store.request["status"] == "pending"
 
 
 def test_request_selector_rejects_path_traversal(tmp_path: Path) -> None:

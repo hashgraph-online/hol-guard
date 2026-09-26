@@ -1,6 +1,4 @@
 #![forbid(unsafe_code)]
-#![allow(dead_code)]
-
 //! Root-authenticated workspace-review authority metadata.
 //!
 //! This module verifies a purpose-separated record with the existing
@@ -12,9 +10,7 @@ use guard_policy_snapshot::{canonical_json_bytes, digest_bytes};
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-const SHA256_HEX_BYTES: usize = 32;
 const ED25519_PUBLIC_KEY_BYTES: usize = 32;
-const ED25519_SIGNATURE_BYTES: usize = 64;
 pub(crate) const AUTHORITY_FILE_NAME: &str = "workspace-review-authority.v1.json";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -162,17 +158,18 @@ pub(crate) fn read_installed_record(
     state_base: &Path,
     now_ms: u64,
 ) -> Result<Option<VerifiedWorkspaceReviewAuthority>, String> {
-    load_at(state_base, now_ms)
+    load_at(state_base, Some(now_ms))
 }
 
-pub(crate) fn load(state_base: &Path) -> Result<Option<VerifiedWorkspaceReviewAuthority>, String> {
-    let now_ms = now_ms()?;
-    super::approval_enrollment::with_transition_lock(state_base, || load_at(state_base, now_ms))
+pub(crate) fn read_installed_record_without_time(
+    state_base: &Path,
+) -> Result<Option<VerifiedWorkspaceReviewAuthority>, String> {
+    load_at(state_base, None)
 }
 
 fn load_at(
     state_base: &Path,
-    now_ms: u64,
+    now_ms: Option<u64>,
 ) -> Result<Option<VerifiedWorkspaceReviewAuthority>, String> {
     let private_root = crate::resident_state::private_root_for_state_base(state_base)?;
     let path = state_base.join(AUTHORITY_FILE_NAME);
@@ -203,7 +200,10 @@ fn load_at(
         }
         return Ok(None);
     };
-    let verified = verify_record(&record, now_ms)?;
+    let verified = match now_ms {
+        Some(now_ms) => verify_record(&record, now_ms)?,
+        None => verify_record_for_transition(&record)?,
+    };
     if verified.record_digest != transition_verified.record_digest {
         return Err("native_workspace_review_authority_invalid".to_owned());
     }
@@ -320,7 +320,7 @@ pub(crate) fn load_at_for_test(
     state_base: &Path,
     now_ms: u64,
 ) -> Result<Option<VerifiedWorkspaceReviewAuthority>, String> {
-    load_at(state_base, now_ms)
+    load_at(state_base, Some(now_ms))
 }
 
 pub(crate) fn validate_transition(

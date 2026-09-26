@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import tempfile
@@ -155,6 +156,17 @@ def stage_workspace_review_request(
 ) -> dict[str, object]:
     """Persist a private native snapshot sourced solely from the local row."""
 
+    request, _ = _stage_workspace_review_request(store, guard_home, request_id)
+    return request
+
+
+def _stage_workspace_review_request(
+    store: NativeWorkspaceReviewStore,
+    guard_home: Path,
+    request_id: str,
+) -> tuple[dict[str, object], str]:
+    """Stage a request and retain the digest of the exact bytes written."""
+
     request = store.get_approval_request(request_id)
     if not isinstance(request, dict):
         raise NativeWorkspaceReviewError("native_workspace_review_request_missing")
@@ -188,7 +200,7 @@ def stage_workspace_review_request(
         if temporary_path is not None:
             with suppress(OSError):
                 temporary_path.unlink()
-    return request
+    return request, hashlib.sha256(encoded).hexdigest()
 
 
 def _native_response(
@@ -196,6 +208,7 @@ def _native_response(
     guard_home: Path,
     request_id: str,
     decision: Mapping[str, object],
+    request_snapshot_digest: str,
 ) -> dict[str, object]:
     status = native_runtime_status()
     identity = status.identity
@@ -242,6 +255,8 @@ def _native_response(
         raise NativeWorkspaceReviewError("native_workspace_review_response_invalid")
     if response.get("decision") not in {"allow", "deny"}:
         raise NativeWorkspaceReviewError("native_workspace_review_response_invalid")
+    if response.get("request_snapshot_digest") != request_snapshot_digest:
+        raise NativeWorkspaceReviewError("native_workspace_review_response_invalid")
     return response
 
 
@@ -267,8 +282,13 @@ def apply_native_workspace_review_decision(
         return {"status": "already_resolved", "resolved_request": request}
     if not isinstance(decision, Mapping):
         raise NativeWorkspaceReviewError("native_workspace_review_decision_invalid")
-    expected_request = stage_workspace_review_request(store, guard_home, request_id)
-    response = _native_response(guard_home=guard_home, request_id=request_id, decision=decision)
+    expected_request, request_snapshot_digest = _stage_workspace_review_request(store, guard_home, request_id)
+    response = _native_response(
+        guard_home=guard_home,
+        request_id=request_id,
+        decision=decision,
+        request_snapshot_digest=request_snapshot_digest,
+    )
     action_value = response.get("decision")
     if not isinstance(action_value, str):
         raise NativeWorkspaceReviewError("native_workspace_review_response_invalid")

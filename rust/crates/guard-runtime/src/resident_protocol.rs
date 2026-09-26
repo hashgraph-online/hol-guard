@@ -193,10 +193,9 @@ pub(crate) fn evaluate_resident_bytes(
             ResidentOperationV1::WorkspaceReviewDecision(request) => {
                 let policy_store =
                     policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
-                let state_base = policy_store.state_base();
                 let verified =
                     crate::policy_store::workspace_review_decision::verify_and_claim_request(
-                        state_base,
+                        policy_store,
                         &request.request_id,
                         &request.decision,
                     )?;
@@ -213,6 +212,7 @@ pub(crate) fn evaluate_resident_bytes(
                     "revision_binding": verified.revision_binding,
                     "policy_binding": verified.policy_binding,
                     "retry_scope_binding": verified.retry_scope_binding,
+                    "request_snapshot_digest": verified.request_snapshot_digest,
                     "envelope_digest": verified.envelope_digest,
                 }))
             }

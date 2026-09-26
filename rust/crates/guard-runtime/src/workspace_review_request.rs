@@ -40,6 +40,7 @@ struct WorkspaceReviewRequestStateV1 {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct TrustedWorkspaceReviewRequest {
     pub(crate) request_id: String,
+    pub(crate) request_snapshot_digest: String,
     pub(crate) request_binding: String,
     pub(crate) action_binding: String,
     pub(crate) intent_binding: String,
@@ -130,6 +131,7 @@ pub(crate) fn load(
     )?;
     Ok(TrustedWorkspaceReviewRequest {
         request_id: state.request_id,
+        request_snapshot_digest: digest_bytes(&bytes),
         request_binding: request_binding(request_id)?,
         action_binding,
         intent_binding,

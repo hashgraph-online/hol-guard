@@ -19,6 +19,9 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+#[path = "workspace_review_decision_clock_tests.rs"]
+mod clock_tests;
+
 const NOW_MS: u64 = 2_000;
 const ROOT_SEED: [u8; 32] = [42u8; 32];
 const REVIEW_SEED: [u8; 32] = [9u8; 32];

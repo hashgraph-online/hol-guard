@@ -242,8 +242,15 @@ fn run() -> Result<(), String> {
             if canonical != bytes {
                 return Err("native_workspace_review_decision_noncanonical".to_owned());
             }
+            let state_base = std::path::Path::new(state_dir);
+            let runtime_identity = resident_state::runtime_digest()?;
+            let policy_store = policy_store::PolicySnapshotStore::new_with_resident_generation(
+                state_base,
+                &runtime_identity,
+                0,
+            )?;
             let verified = policy_store::workspace_review_decision::verify_and_claim_request(
-                std::path::Path::new(state_dir),
+                &policy_store,
                 request_id,
                 &decision,
             )?;
@@ -260,6 +267,7 @@ fn run() -> Result<(), String> {
                 "revision_binding": verified.revision_binding,
                 "policy_binding": verified.policy_binding,
                 "retry_scope_binding": verified.retry_scope_binding,
+                "request_snapshot_digest": verified.request_snapshot_digest,
                 "envelope_digest": verified.envelope_digest,
             }))
         }

@@ -1,6 +1,4 @@
 #![forbid(unsafe_code)]
-#![allow(dead_code)]
-
 //! Verification and durable one-shot claiming for workspace-review decisions.
 //!
 //! The resident dispatch accepts only a Rust contract signed by the installed
@@ -60,6 +58,7 @@ pub(crate) struct VerifiedWorkspaceReviewDecision {
     pub(crate) revision_binding: String,
     pub(crate) policy_binding: String,
     pub(crate) retry_scope_binding: String,
+    pub(crate) request_snapshot_digest: Option<String>,
     pub(crate) envelope_digest: String,
     /// True only when the same durable claim is being resumed after a lost
     /// response. It is never a second acceptance of the envelope.
@@ -266,21 +265,11 @@ fn verify_envelope(
         revision_binding: envelope.revision_binding.clone(),
         policy_binding: envelope.policy_binding.clone(),
         retry_scope_binding: envelope.retry_scope_binding.clone(),
+        request_snapshot_digest: None,
         envelope_digest: digest_bytes(&canonical),
         replayed: false,
     };
     Ok((verified, canonical))
-}
-
-pub(crate) fn verify_and_claim(
-    state_base: &Path,
-    envelope: &WorkspaceReviewDecisionEnvelopeV1,
-    context: &WorkspaceReviewDecisionContext<'_>,
-) -> Result<VerifiedWorkspaceReviewDecision, String> {
-    let now_ms = now_ms()?;
-    super::approval_enrollment::with_transition_lock(state_base, || {
-        verify_and_claim_at(state_base, envelope, context, now_ms)
-    })
 }
 
 fn verify_and_claim_at(
@@ -289,36 +278,47 @@ fn verify_and_claim_at(
     context: &WorkspaceReviewDecisionContext<'_>,
     now_ms: u64,
 ) -> Result<VerifiedWorkspaceReviewDecision, String> {
-    let authority = read_installed_record(state_base, now_ms)?
-        .ok_or_else(|| "native_workspace_review_authority_missing".to_owned())?;
-    if authority.status != "active" {
-        return Err("native_workspace_review_authority_revoked".to_owned());
-    }
     let mut state = super::workspace_review_secure_state::load(state_base)?
         .ok_or_else(|| "native_workspace_review_secure_state_unavailable".to_owned())?;
-    if !state.matches_authority(&authority) {
-        return Err("native_workspace_review_authority_provenance_mismatch".to_owned());
-    }
+    let mut floor_changed = false;
     if state.last_observed_time_ms == 0 {
         // A v1 state created before the floor existed still carries expiry
         // timestamps. Treat the latest one as the conservative migration
         // floor instead of allowing a rollback to replay an old claim.
-        state.last_observed_time_ms = state
+        let migrated_floor = state
             .consumed_claims
             .iter()
             .filter_map(|claim| claim.expires_at_ms)
             .max()
             .unwrap_or(0);
+        if migrated_floor != 0 {
+            state.last_observed_time_ms = migrated_floor;
+            floor_changed = true;
+        }
     }
     if now_ms < state.last_observed_time_ms {
         return Err("native_workspace_review_clock_rollback".to_owned());
     }
     if now_ms > state.last_observed_time_ms {
         state.last_observed_time_ms = now_ms;
+        floor_changed = true;
+    }
+    if floor_changed {
         state.validate()?;
-        // Persist the floor before validating the candidate. Invalid or
-        // expired requests must still advance the durable observation floor.
+        // Persist the floor before validating the authority or candidate.
+        // Invalid, expired, and not-yet-valid requests must still advance the
+        // durable observation floor.
         super::workspace_review_secure_state::store(state_base, &state)?;
+    }
+    let authority = read_installed_record(state_base, now_ms)?
+        .ok_or_else(|| "native_workspace_review_authority_missing".to_owned())?;
+    if authority.status != "active" {
+        return Err("native_workspace_review_authority_revoked".to_owned());
+    }
+    state = super::workspace_review_secure_state::load(state_base)?
+        .ok_or_else(|| "native_workspace_review_secure_state_unavailable".to_owned())?;
+    if !state.matches_authority(&authority) {
+        return Err("native_workspace_review_authority_provenance_mismatch".to_owned());
     }
     let (verified, _) = verify_envelope(envelope, &authority, context, now_ms)?;
     if let Some(claim) = state
@@ -352,55 +352,84 @@ fn verify_and_claim_at(
     Ok(verified)
 }
 
-pub(crate) fn verify_and_claim_bytes(
+fn current_native_workspace_review_bindings(
     state_base: &Path,
-    bytes: &[u8],
-    context: &WorkspaceReviewDecisionContext<'_>,
-) -> Result<VerifiedWorkspaceReviewDecision, String> {
-    if bytes.is_empty() || bytes.len() > NATIVE_WORKSPACE_REVIEW_MAX_DECISION_BYTES {
-        return Err("native_workspace_review_decision_invalid".to_owned());
+    scope_digest: &str,
+) -> Result<(String, String), String> {
+    // This native tuple is the enrollment contract; request metadata cannot
+    // supply a fallback workspace or scope binding.
+    let (guard_home, expected_scope_digest) =
+        super::policy_store_authority::scope_binding_for_state_base(state_base);
+    if scope_digest != expected_scope_digest {
+        return Err("native_policy_snapshot_scope_mismatch".to_owned());
     }
-    let value: Value = crate::strict_json_value(bytes)
-        .map_err(|_| "native_workspace_review_decision_invalid".to_owned())?;
-    let canonical = canonical_json_bytes(&value)
-        .map_err(|_| "native_workspace_review_decision_invalid".to_owned())?;
-    if canonical != bytes {
-        return Err("native_workspace_review_decision_noncanonical".to_owned());
+    let workspace_binding = crate::approval::binding_digest("workspace", &[guard_home.as_str()])?;
+    let scope_binding =
+        crate::approval::binding_digest("scope", &[scope_digest, workspace_binding.as_str()])?;
+    Ok((workspace_binding, scope_binding))
+}
+
+fn ensure_current_native_workspace_review_provenance(
+    authority: &VerifiedWorkspaceReviewAuthority,
+    workspace_binding: &str,
+    scope_binding: &str,
+) -> Result<(), String> {
+    if authority.workspace_binding != workspace_binding || authority.scope_binding != scope_binding
+    {
+        return Err("native_workspace_review_authority_provenance_mismatch".to_owned());
     }
-    let envelope: WorkspaceReviewDecisionEnvelopeV1 = serde_json::from_value(value)
-        .map_err(|_| "native_workspace_review_decision_invalid".to_owned())?;
-    verify_and_claim(state_base, &envelope, context)
+    Ok(())
 }
 
 /// Verify one decision against the request snapshot selected by `request_id`.
 /// The selector is not a binding input: all request and action material comes
 /// from the private snapshot loaded by the resident.
 pub(crate) fn verify_and_claim_request(
-    state_base: &Path,
+    policy_store: &super::PolicySnapshotStore,
     request_id: &str,
     decision: &Value,
 ) -> Result<VerifiedWorkspaceReviewDecision, String> {
-    let authority = super::workspace_review_authority::load(state_base)?
-        .ok_or_else(|| "native_workspace_review_authority_missing".to_owned())?;
-    let request = super::workspace_review_request::load(state_base, request_id)?;
-    let context = WorkspaceReviewDecisionContext {
-        workspace_binding: &authority.workspace_binding,
-        device_binding: &authority.device_binding,
-        installation_binding: &authority.installation_binding,
-        scope_binding: &authority.scope_binding,
-        request_binding: &request.request_binding,
-        action_binding: &request.action_binding,
-        intent_binding: &request.intent_binding,
-        revision_binding: &request.revision_binding,
-        policy_binding: &request.policy_binding,
-        retry_scope_binding: &request.retry_scope_binding,
-    };
-    let bytes = canonical_json_bytes(decision)
-        .map_err(|_| "native_workspace_review_decision_invalid".to_owned())?;
-    verify_and_claim_bytes(state_base, &bytes, &context)
+    let observed_time_ms = now_ms()?;
+    let state_base = policy_store.state_base();
+    super::approval_enrollment::with_transition_lock(state_base, || {
+        // The request snapshot supplies only action material. Workspace and
+        // scope come from the current native policy store and state path, so
+        // Python metadata cannot choose the authority's provenance.
+        let snapshot = policy_store.current_snapshot()?;
+        let (workspace_binding, scope_binding) = current_native_workspace_review_bindings(
+            state_base,
+            &snapshot.scope_contract.scope_digest,
+        )?;
+        let authority =
+            super::workspace_review_authority::read_installed_record_without_time(state_base)?
+                .ok_or_else(|| "native_workspace_review_authority_missing".to_owned())?;
+        ensure_current_native_workspace_review_provenance(
+            &authority,
+            &workspace_binding,
+            &scope_binding,
+        )?;
+        let request = super::workspace_review_request::load(state_base, request_id)?;
+        let context = WorkspaceReviewDecisionContext {
+            workspace_binding: &workspace_binding,
+            device_binding: &authority.device_binding,
+            installation_binding: &authority.installation_binding,
+            scope_binding: &scope_binding,
+            request_binding: &request.request_binding,
+            action_binding: &request.action_binding,
+            intent_binding: &request.intent_binding,
+            revision_binding: &request.revision_binding,
+            policy_binding: &request.policy_binding,
+            retry_scope_binding: &request.retry_scope_binding,
+        };
+        let bytes = canonical_json_bytes(decision)
+            .map_err(|_| "native_workspace_review_decision_invalid".to_owned())?;
+        let mut verified =
+            verify_and_claim_bytes_at(state_base, &bytes, &context, observed_time_ms)?;
+        verified.request_snapshot_digest = Some(request.request_snapshot_digest);
+        Ok(verified)
+    })
 }
 
-#[cfg(test)]
 pub(crate) fn verify_and_claim_bytes_at(
     state_base: &Path,
     bytes: &[u8],

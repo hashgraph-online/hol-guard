@@ -1,6 +1,4 @@
 #![forbid(unsafe_code)]
-#![allow(dead_code)]
-
 //! Secure resident state for the root-enrolled workspace-review authority.
 //!
 //! The record is public metadata, but its accepted digest and one-shot claim
@@ -220,7 +218,7 @@ pub(crate) fn load(state_base: &Path) -> Result<Option<WorkspaceReviewSecureStat
         if value.len() > MAX_SECRET_TEXT_BYTES {
             return Err("native_workspace_review_secure_state_invalid".to_owned());
         }
-        value
+        Some(value)
     };
     #[cfg(not(test))]
     let encoded = {
@@ -229,9 +227,16 @@ pub(crate) fn load(state_base: &Path) -> Result<Option<WorkspaceReviewSecureStat
             super::approval_enrollment::account_for_state_base(state_base)?,
             SECURE_STATE_ACCOUNT_SUFFIX
         );
-        read_platform_secret_for_v4(&account)
-            .map_err(map_platform_error)?
-            .ok_or_else(|| "native_workspace_review_secure_state_unavailable".to_owned())?
+        read_platform_secret_for_v4(&account).map_err(map_platform_error)?
+    };
+    decode_secure_state(encoded)
+}
+
+fn decode_secure_state(
+    encoded: Option<String>,
+) -> Result<Option<WorkspaceReviewSecureStateV1>, String> {
+    let Some(encoded) = encoded else {
+        return Ok(None);
     };
     let value: Value = crate::strict_json_value(encoded.as_bytes())
         .map_err(|_| "native_workspace_review_secure_state_invalid".to_owned())?;
@@ -293,5 +298,25 @@ fn map_platform_error(error: String) -> String {
             "native_workspace_review_secure_state_unavailable".to_owned()
         }
         _ => error,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::decode_secure_state;
+
+    #[test]
+    fn absent_secure_secret_allows_first_enrollment() {
+        assert_eq!(decode_secure_state(None), Ok(None));
+    }
+
+    #[test]
+    fn present_invalid_secure_secret_is_not_absence() {
+        for encoded in ["", "{}", "not-json"] {
+            assert_eq!(
+                decode_secure_state(Some(encoded.to_owned())),
+                Err("native_workspace_review_secure_state_invalid".to_owned())
+            );
+        }
     }
 }
