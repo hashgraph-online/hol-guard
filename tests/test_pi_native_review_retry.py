@@ -13,7 +13,7 @@ from tests.test_native_review_fixtures import _edge, _worker
 def test_pi_exact_retry_with_new_call_id_consumes_approval_once(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, harness: str, tool_name: str
 ) -> None:
-    worker, store = _worker(tmp_path, monkeypatch, _edge(harness))
+    worker, store = _worker(tmp_path, monkeypatch, _edge(harness, action_type="unknown"))
     payload = {
         "hook_event_name": "PreToolUse",
         "tool_name": tool_name,
@@ -53,7 +53,7 @@ def test_pi_exact_retry_with_new_call_id_consumes_approval_once(
 def test_acknowledged_watch_does_not_queue_unsupported_pi_tools(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, harness: str
 ) -> None:
-    edge = _edge(harness)
+    edge = _edge(harness, action_type="unknown")
     edge["result"]["reason_code"] = "native_pre_tool_unknown_review"
     worker, store = _worker(tmp_path, monkeypatch, edge)
     monkeypatch.setattr(worker, "_native_policy_snapshot", lambda *_args, **_kwargs: {"mode": "observe"})
@@ -76,7 +76,7 @@ def test_acknowledged_watch_does_not_queue_unsupported_pi_tools(
 def test_sessionless_retry_does_not_inherit_approval(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, harness: str
 ) -> None:
-    worker, store = _worker(tmp_path, monkeypatch, _edge(harness))
+    worker, store = _worker(tmp_path, monkeypatch, _edge(harness, action_type="unknown"))
     payload = {
         "hook_event_name": "PreToolUse",
         "tool_name": "read",
@@ -109,7 +109,7 @@ def test_sessionless_retry_does_not_inherit_approval(
 def test_unpresentable_native_action_stays_blocked(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
-    worker, store = _worker(tmp_path, monkeypatch, _edge("omp"))
+    worker, store = _worker(tmp_path, monkeypatch, _edge("omp", action_type="unknown"))
 
     def cannot_describe(*_args: object, **_kwargs: object) -> None:
         raise ValueError("fixture-private-value")

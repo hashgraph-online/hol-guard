@@ -257,9 +257,10 @@ fn pi_retry_without_session_keeps_transport_identity() {
 
 #[test]
 fn pi_retry_identity_matches_shared_python_fixture_vectors() {
-    let vectors: serde_json::Value = serde_json::from_str(include_str!(
-        "../../../../tests/fixtures/pi-retry-identity-vectors.json"
-    ))
+    let vectors: serde_json::Value = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../../tests/fixtures/pi-retry-identity-vectors.json"
+    )))
     .unwrap();
     for vector in vectors.as_array().unwrap() {
         let mut before = envelope("PreToolUse", vector["before"].clone());

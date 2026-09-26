@@ -14855,8 +14855,8 @@ function resolveActionEnvelopeDetailText(envelope, options = {}) {
   if (isApplyPatchEnvelope(envelope) && envelope.command !== null && envelope.command.length > 0) {
     return envelope.command;
   }
-  if (envelope.action_type === "shell_command") {
-    return envelope.command !== null && envelope.command.length > 0 ? envelope.command : null;
+  if (envelope.action_type === "shell_command" && envelope.command !== null && envelope.command.length > 0) {
+    return envelope.command;
   }
   const promptText = envelope.prompt_text ?? envelope.prompt_excerpt;
   if (envelope.action_type === "prompt") {
@@ -14868,7 +14868,7 @@ function resolveActionEnvelopeDetailText(envelope, options = {}) {
   if (envelope.action_type === "network_request" && envelope.network_hosts.length > 0) {
     return envelope.network_hosts.join("\n");
   }
-  if (envelope.action_type === "mcp_tool" || envelope.action_type === "config_change" && envelope.event_name === "PreToolUse") {
+  if (envelope.action_type === "mcp_tool" || envelope.event_name === "PreToolUse") {
     const baseText = resolveEnvelopeDisplayText(envelope) ?? envelope.mcp_tool ?? envelope.tool_name ?? envelope.action_type;
     const inputSummary = serializeMcpInput(envelope.raw_payload_redacted, options.mcpInputMaxLength ?? null);
     return inputSummary === null ? baseText : `${baseText}

@@ -18,7 +18,6 @@ import uuid
 from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import urlparse
 
 from ..models import GuardApprovalRequest, format_local_http_origin
 from ..runtime.native_review_presentation import normalize_native_review_payload
@@ -198,6 +197,7 @@ def queue_native_pre_tool_review(
             launch_target=launch_target,
             workspace=workspace,
             payload=payload,
+            native_action=native_result.get("action"),
         )
     except (OSError, RuntimeError, TypeError, ValueError, KeyError) as error:
         # Never make an action approvable when its details could not be safely presented.
@@ -405,14 +405,13 @@ def _native_review_action_envelope(
     launch_target: str,
     workspace: Path | None,
     payload: Mapping[str, object],
+    native_action: object = None,
 ) -> dict[str, object]:
     # Presentation only: approval identity and policy remain Rust-owned.
-    envelope = normalize_native_review_payload(harness, payload, workspace=workspace).to_dict()
-    envelope.update(action_id=request_id, pre_execution_result="review")
-    host = urlparse(launch_target).hostname if "://" in launch_target else None
-    if command is None and host:
-        envelope.update(action_type="network_request", network_hosts=[host])
-    return envelope
+    return normalize_native_review_payload(
+        harness, payload, request_id=request_id, tool_name=tool_name, command=command,
+        launch_target=launch_target, workspace=workspace, native_action=native_action,
+    )
 
 
 def _native_review_approval_center_url(store: object) -> str:

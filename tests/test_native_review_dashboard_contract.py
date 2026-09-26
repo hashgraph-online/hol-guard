@@ -35,6 +35,7 @@ def test_native_review_displays_redacted_read_details(harness: str) -> None:
             "tool_name": "read",
             "tool_input": {"path": "src/example.py", "password": "fixture-private-value"},
         },
+        native_action={"action_type": "file_read"},
     )
     assert envelope["action_type"] == "file_read"
     assert envelope["target_paths"] == ["src/example.py"]
@@ -62,6 +63,44 @@ def test_native_review_preserves_configuration_classification() -> None:
         request_id="config-review", harness="omp", tool_name="configure", command=None,
         launch_target="tool:configure", workspace=None,
         payload={"tool_name": "configure", "tool_input": {"setting": "example"}},
+        native_action={"action_type": "config"},
     )
     assert envelope["action_type"] == "config_change"
     assert "example" in json.dumps(envelope["raw_payload_redacted"])
+
+
+@pytest.mark.parametrize("harness", ("", " \t\n"))
+def test_native_review_rejects_empty_harness(harness: str) -> None:
+    with pytest.raises(ValueError, match="harness must not be empty"):
+        _native_review_action_envelope(
+            request_id="invalid-harness", harness=harness, tool_name="read", command=None,
+            launch_target="tool:read", workspace=None, payload={"tool_name": "read"},
+        )
+
+
+def test_native_review_does_not_infer_kind_from_tool_name() -> None:
+    envelope = _native_review_action_envelope(
+        request_id="native-config", harness="omp", tool_name="read", command=None,
+        launch_target="tool:read", workspace=None,
+        payload={"tool_name": "read", "tool_input": {"path": "src/example.py"}},
+        native_action={"action_type": "config"},
+    )
+    assert envelope["action_type"] == "config_change"
+    assert envelope["target_paths"] == []
+
+
+def test_native_review_preserves_full_code_without_filesystem_io(monkeypatch: pytest.MonkeyPatch) -> None:
+    def forbidden(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("Review presentation must not inspect files")
+
+    code = "1 + 1\n" * 100
+    with monkeypatch.context() as scoped:
+        for method in ("resolve", "stat", "lstat", "read_text", "read_bytes", "is_symlink"):
+            scoped.setattr(Path, method, forbidden)
+        envelope = _native_review_action_envelope(
+            request_id="pure-review", harness="omp", tool_name="eval", command=None,
+            launch_target="tool:eval", workspace=None,
+            payload={"tool_name": "eval", "tool_input": {"code": code, "apiKey": "fixture-private-value"}},
+        )
+    assert envelope["raw_payload_redacted"]["tool_input"]["code"] == code
+    assert "fixture-private-value" not in json.dumps(envelope)
