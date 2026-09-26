@@ -1,0 +1,21 @@
+{
+  "schemaVersion": "guard.extension-listing.v2",
+  "extensionId": "command.digline",
+  "tagline": "Reviews digline commands that spend model calls, write under .digline/, or can promote a baseline.",
+  "summary": "Reviews digline run, rejudge, promote, register, migrate, and view, which spend model calls, write under .digline/, or expose a way to change the approved baseline. Read-only commands, help, and migrate --dry-run stay automatic.",
+  "category": "other",
+  "limitations": [
+    "Coverage matches digline subcommand names; it does not resolve arguments as paths under .digline/.",
+    "A maintainer profile is not a security certification or an official upstream endorsement."
+  ],
+  "documentationUrl": "https://digline.dev",
+  "tags": ["digline", "llm", "evaluation", "regression", "cli"],
+  "contributors": [
+    {"githubId": "3634610", "githubLogin": "alexpran", "roles": ["author"]}
+  ],
+  "originalContributions": [
+    {"kind": "pull-request", "url": "https://github.com/hashgraph-online/hol-guard/pull/3098"}
+  ],
+  "upstream": {"name": "digline", "url": "https://github.com/digline/digline"},
+  "maintainerGithubIds": ["3634610"]
+}
