@@ -252,6 +252,7 @@
         "src/codex_plugin_scanner/guard/daemon/hook_process_slot_review.py",
         "src/codex_plugin_scanner/guard/daemon/hook_process_spawner.py",
         "src/codex_plugin_scanner/guard/daemon/hook_process_worker.py",
+        "src/codex_plugin_scanner/guard/daemon/orphaned_hook_workers.py",
         "src/codex_plugin_scanner/guard/daemon/hook_request_parsing.py",
         "src/codex_plugin_scanner/guard/daemon/runtime_hook_deadline.py",
         "src/codex_plugin_scanner/guard/daemon/runtime_hook_scheduler.py",
