@@ -232,7 +232,6 @@ fn expired_live_process_leases_drain_and_a_fresh_lease_remains() {
         .checked_sub(LEASE_EXPIRY + Duration::from_secs(1))
         .expect("test clock should support stale timestamp");
     let fresh = directory.join(format!("client-{process_id}-fresh.lease"));
-    fixture_file(&fresh, body.as_bytes());
     for index in 0..LEASE_MAX_DIRECTORY_ENTRIES {
         let path = directory.join(format!("client-{process_id}-stale-{index:04}.lease"));
         let mut file = fixture_file_handle(&path);
@@ -241,6 +240,7 @@ fn expired_live_process_leases_drain_and_a_fresh_lease_remains() {
         file.set_modified(stale_at)
             .expect("fixture should become stale");
     }
+    fixture_file(&fresh, body.as_bytes());
 
     let mut retained = false;
     for _ in 0..4 {
