@@ -65,7 +65,13 @@ fn request_payload_identity(payload: &Value, harness: &str, event: &str) -> Resu
     }
     // Pi retries create a new transport call ID for the unchanged action.
     // Keep nested tool arguments and session identity in the commitment.
-    if matches!(harness, "pi" | "omp") && event == "PreToolUse" {
+    if matches!(harness, "pi" | "omp")
+        && event == "PreToolUse"
+        && identity
+            .get("session_id")
+            .and_then(Value::as_str)
+            .is_some_and(|s| !s.is_empty())
+    {
         identity.remove("tool_call_id");
     }
     Ok(Value::Object(identity))
