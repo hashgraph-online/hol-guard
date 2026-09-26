@@ -268,9 +268,12 @@ def _leading_executable_is_hol_guard(command: str) -> bool:
     stripped = command.strip().strip('"')
     if not stripped.startswith("/") and not _is_windows_absolute(stripped):
         return False
+    # ps omits a trailing space when the executable has no arguments. Keep a
+    # separator so the basename match does not also accept hol-guard-desktop.
+    padded = stripped if stripped.endswith(" ") else f"{stripped} "
     for name in ("/hol-guard ", "/hol-guard.exe ", "/plugin-guard ", "/plugin-guard.exe "):
-        marker_at = stripped.lower().find(name)
-        if marker_at > 0 and " -" not in stripped[:marker_at]:
+        marker_at = padded.lower().find(name)
+        if marker_at > 0 and " -" not in padded[:marker_at]:
             return True
     return False
 
