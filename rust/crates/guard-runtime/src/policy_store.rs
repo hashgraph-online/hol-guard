@@ -59,6 +59,9 @@ use policy_store_persistence::*;
 use policy_store_validation::{read_verifier_key, validate_private_directory};
 
 #[cfg(test)]
+#[path = "policy_store_scope_tests.rs"]
+mod scope_tests;
+#[cfg(test)]
 #[path = "policy_store_tests.rs"]
 mod tests;
 const SNAPSHOT_FILE_NAME: &str = "policy-snapshot-v3.json";
@@ -336,6 +339,9 @@ impl PolicySnapshotStore {
             now,
         )
         .map_err(snapshot_error)?;
+        if request.snapshot.scope_contract.scope_digest != self.expected_scope_digest {
+            return Err("native_policy_snapshot_scope_mismatch".to_owned());
+        }
         if let Some(current) = state.snapshot.as_ref() {
             if request.snapshot.generation < current.generation {
                 return Err("native_policy_snapshot_generation_downgrade".to_owned());
