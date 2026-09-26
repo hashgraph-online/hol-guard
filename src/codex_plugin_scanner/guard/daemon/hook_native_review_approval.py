@@ -419,6 +419,8 @@ def _native_review_action_envelope(
         "mcp_tool": None,
         "package_manager": None,
         "package_name": None,
+        "script_name": None,
+        "raw_payload_redacted": {},
         "pre_execution_result": "review",
     }
 

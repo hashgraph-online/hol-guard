@@ -736,6 +736,22 @@ assert(
   "T081: normalized user_title preserved"
 );
 
+const nativeReviewEnvelope = JSON.parse(readFileSync(
+  new URL("../../tests/fixtures/native-review-action-envelope.json", import.meta.url),
+  "utf8",
+));
+const normalizedNativeReview = normalizeApprovalRequest({
+  ...BASE_REQUEST,
+  policy_action: "review",
+  action_envelope_json: nativeReviewEnvelope,
+  decision_v2_json: null,
+});
+assert(
+  normalizedNativeReview.decision_contract_error === undefined &&
+    normalizedNativeReview.action_envelope_json?.tool_name === "eval",
+  "native queue wire fixture remains approvable in the dashboard",
+);
+
 const normalizedMalformedV2 = normalizeApprovalRequest({
   ...BASE_REQUEST,
   decision_v2_json: { action: "not-a-real-action" }

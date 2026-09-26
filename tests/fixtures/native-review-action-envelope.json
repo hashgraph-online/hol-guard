@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "action_id": "native-review-fixture",
+  "harness": "omp",
+  "event_name": "PreToolUse",
+  "action_type": "mcp_tool",
+  "workspace": null,
+  "workspace_hash": null,
+  "tool_name": "eval",
+  "command": null,
+  "prompt_excerpt": null,
+  "prompt_text": null,
+  "target_paths": [],
+  "network_hosts": [],
+  "mcp_server": null,
+  "mcp_tool": null,
+  "package_manager": null,
+  "package_name": null,
+  "script_name": null,
+  "raw_payload_redacted": {},
+  "pre_execution_result": "review"
+}

@@ -296,8 +296,7 @@ export function QueueBulkDrawer(props: QueueBulkDrawerProps) {
         Cancel
       </button>
       <button
-        type="button"
-        onClick={props.onConfirmApprove}
+        type="submit"
         disabled={props.step === "submitting" || !props.canConfirm}
         className="min-h-11 rounded-full bg-brand-blue px-6 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-blue/90 disabled:cursor-not-allowed disabled:opacity-50"
       >
@@ -307,7 +306,15 @@ export function QueueBulkDrawer(props: QueueBulkDrawerProps) {
   );
 
   return (
-    <BulkDrawerShell onClose={props.onCancel} labelledBy="guard-bulk-drawer-title" footer={actionFooter}>
+    <BulkDrawerShell
+      onClose={props.onCancel}
+      labelledBy="guard-bulk-drawer-title"
+      footer={actionFooter}
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (props.step !== "submitting" && props.canConfirm) props.onConfirmApprove();
+      }}
+    >
       {/* Header zone — generous top space, clear count hierarchy */}
       <header className="flex items-start justify-between gap-4">
         <div className="min-w-0">
@@ -537,6 +544,7 @@ function BulkDrawerShell(props: {
   labelledBy: string;
   children: React.ReactNode;
   footer?: React.ReactNode;
+  onSubmit?: React.FormEventHandler<HTMLFormElement>;
 }) {
   return (
     <div
@@ -548,14 +556,20 @@ function BulkDrawerShell(props: {
         if (event.target === event.currentTarget) props.onClose();
       }}
     >
-      <div className="guard-fade-in flex max-h-[92vh] w-full max-w-xl flex-col overflow-hidden rounded-t-2xl border border-slate-200 bg-white shadow-2xl sm:rounded-2xl">
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          props.onSubmit?.(event);
+        }}
+        className="guard-fade-in flex max-h-[92vh] w-full max-w-xl flex-col overflow-hidden rounded-t-2xl border border-slate-200 bg-white shadow-2xl sm:rounded-2xl"
+      >
         <div className="flex-1 overflow-y-auto px-5 py-6 sm:px-7">{props.children}</div>
         {props.footer ? (
           <div className="border-t border-slate-100 bg-white/95 px-5 py-3.5 backdrop-blur sm:px-7">
             {props.footer}
           </div>
         ) : null}
-      </div>
+      </form>
     </div>
   );
 }

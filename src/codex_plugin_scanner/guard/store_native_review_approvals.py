@@ -67,7 +67,10 @@ def consume_native_review_approval(
     latest_rows = [row for resolved_at, row in resolved_rows if resolved_at == approved_at]
     # Same-instant decisions are one logical resolution set. Any conflict is
     # ambiguous and must fail closed rather than relying on SQLite row order.
-    if any(row["resolution_action"] != "allow" or row["resolution_scope"] != "artifact" for row in latest_rows):
+    if any(
+        row["resolution_action"] != "allow" or row["resolution_scope"] not in {"once", "artifact"}
+        for row in latest_rows
+    ):
         return False
     if not timedelta(0) <= current - approved_at <= timedelta(minutes=5):
         return False

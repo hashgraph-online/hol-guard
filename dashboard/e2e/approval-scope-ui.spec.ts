@@ -59,6 +59,7 @@ async function mountApprovalFixture(
   options: {
     settingsReady?: Promise<void>;
     settingsPayload?: unknown;
+    requests?: GuardApprovalRequest[];
   } = {},
 ): Promise<void> {
   await page.route("**/v1/**", async (route) => {
@@ -66,7 +67,16 @@ async function mountApprovalFixture(
     const path = new URL(routeRequest.url()).pathname;
     let body: unknown = {};
     if (path.endsWith("/initialize")) body = { auth_token: "e2e-approval-token" };
-    else if (path.endsWith("/runtime")) body = { ...freeStateSnapshot, pending_count: 1 };
+    else if (path.endsWith("/runtime")) body = { ...freeStateSnapshot, pending_count: options.requests?.length ?? 1 };
+    else if (path.endsWith("/requests/bulk-allow-once")) {
+      resolutionBodies.push(routeRequest.postDataJSON() as Record<string, unknown>);
+      body = {
+        approved_count: options.requests?.length ?? 1,
+        approved_request_ids: options.requests?.map((item) => item.request_id) ?? [approvalRequest.request_id],
+        rejected_request_ids: [],
+        resolution_summary: "Selected actions approved once.",
+      };
+    }
     else if (
       path.endsWith(`/requests/${approvalRequest.request_id}/approve`) ||
       path.endsWith(`/requests/${approvalRequest.request_id}/block`)
@@ -88,10 +98,10 @@ async function mountApprovalFixture(
     } else if (path.endsWith(`/requests/${approvalRequest.request_id}`)) body = approvalRequest;
     else if (path.endsWith("/requests")) {
       body = {
-        items: [approvalRequest],
+        items: options.requests ?? [approvalRequest],
         next_cursor: null,
-        total_pending_count: 1,
-        total_count: 1,
+        total_pending_count: options.requests?.length ?? 1,
+        total_count: options.requests?.length ?? 1,
         status: "pending",
       };
     } else if (path.endsWith("/receipts")) body = emptyReceiptsPayload;
@@ -132,6 +142,74 @@ test("approval review renders action-eligible scopes and binds the selected cont
     scope_contract_digest: "scope-contract-digest",
   });
 });
+
+for (const totpEnabled of [false, true]) {
+  test(`Enter submits multiple selected reads with ${totpEnabled ? "Authenticator" : "password"} proof`, async ({ page }) => {
+    const bodies: Array<Record<string, unknown>> = [];
+    const pageErrors: string[] = [];
+    page.on("pageerror", (error) => pageErrors.push(error.message));
+    const requests = ["alpha.ts", "beta.ts"].map((path, index): GuardApprovalRequest => ({
+      ...request,
+      request_id: `bulk-enter-${index}`,
+      artifact_id: `codex:project:read:${index}`,
+      artifact_name: `Read ${path}`,
+      artifact_hash: `read-hash-${index}`,
+      launch_target: path,
+      action_envelope_json: {
+        schema_version: 1,
+        action_id: `bulk-enter-${index}`,
+        harness: "codex",
+        event_name: "PreToolUse",
+        action_type: "file_read",
+        workspace: "/workspace/project",
+        workspace_hash: null,
+        tool_name: "read",
+        command: null,
+        prompt_excerpt: null,
+        target_paths: [`src/${path}`],
+        network_hosts: [],
+        mcp_server: null,
+        mcp_tool: null,
+        package_manager: null,
+        package_name: null,
+        script_name: null,
+        raw_payload_redacted: {},
+      },
+    }));
+    await mountApprovalFixture(page, bodies, requests[0], {
+      requests,
+      settingsPayload: {
+        ...defaultSettingsPayload,
+        settings: {
+          ...defaultSettingsPayload.settings,
+          approval_gate: {
+            enabled: true, configured: true, cooldown_seconds: 900,
+            cooldown_active: false, cooldown_expires_at: null, locked_until: null,
+            fail_closed: true, strict_all_decisions: true, totp_enabled: totpEnabled,
+          },
+        },
+      },
+    });
+    await page.goto(`/inbox?${DAEMON}`);
+    await page.getByRole("checkbox", { name: "Select all eligible reads on this page" }).check();
+    await page.getByRole("button", { name: "Review & approve" }).click();
+    const proof = page.getByLabel(totpEnabled ? "Authenticator code" : "Approval password", { exact: true });
+    await proof.focus();
+    await proof.press("Enter");
+    expect(bodies).toHaveLength(0);
+    await proof.fill(totpEnabled ? "123456" : "test-password");
+    await proof.press("Enter");
+    await expect.poll(() => bodies.length).toBe(1);
+    expect(bodies[0]).toMatchObject({
+      request_ids: expect.arrayContaining(["bulk-enter-0", "bulk-enter-1"]),
+      approval_gate_use_cooldown: false,
+      ...(totpEnabled ? { approval_totp_code: "123456" } : { approval_password: "test-password" }),
+    });
+    expect(bodies[0].request_ids).toHaveLength(2);
+    await expect(page.getByRole("button", { name: "Done", exact: true })).toBeVisible();
+    expect(pageErrors).toEqual([]);
+  });
+}
 
 test("non-overridable actions disable approval while preserving eligible block scopes", async ({ page }) => {
   const resolutionBodies: Array<Record<string, unknown>> = [];
