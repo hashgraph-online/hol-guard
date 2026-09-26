@@ -5,6 +5,14 @@ All notable changes to HOL Guard will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.4](https://github.com/hashgraph-online/hol-guard/compare/v3.6.3...v3.6.4) (2026-09-26)
+
+
+### Bug Fixes
+
+* **runtime:** reap detached hook workers before the replacement daemon starts ([a450f6b](https://github.com/hashgraph-online/hol-guard/commit/a450f6b0c19b3ec94a60a156b9924a7d2a038a73))
+* stabilize native approval retries and bulk inbox submission ([#3121](https://github.com/hashgraph-online/hol-guard/issues/3121)) ([e5350eb](https://github.com/hashgraph-online/hol-guard/commit/e5350eb2427d7948b0ec54d2cfbf790c62507cbc))
+
 ## [3.6.3](https://github.com/hashgraph-online/hol-guard/compare/v3.6.2...v3.6.3) (2026-09-26)
 
 
