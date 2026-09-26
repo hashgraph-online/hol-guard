@@ -784,7 +784,10 @@ def _orphan_worker_command(pid: int) -> str | None:
     ps_path = _trusted_posix_ps_path()
     if ps_path is None:
         return None
-    output = _bounded_process_query_stdout([ps_path, "-p", str(pid), "-ww", "-o", "command="])
+    output = _bounded_process_query_stdout(
+        [ps_path, "-p", str(pid), "-ww", "-o", "command="],
+        timeout_seconds=0.5,
+    )
     if output is None:
         return None
     command = output.strip()
