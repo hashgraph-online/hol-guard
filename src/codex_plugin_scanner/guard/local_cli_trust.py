@@ -137,9 +137,20 @@ def matching_local_mcp_grant(
     if not callable(lookup):
         return None
     identity_hash = _mcp_server_identity_hash(artifact)
-    if identity_hash is None:
-        return None
-    command, args_hash = _mcp_server_launch(artifact)
+    observed = None
+    metadata = artifact.metadata
+    server_identity = metadata.get("mcp_server_identity") if isinstance(metadata, Mapping) else None
+    observed_transport = isinstance(server_identity, Mapping) and server_identity.get("transport") == "observed"
+    if identity_hash is None or observed_transport:
+        from .runtime.observed_mcp_tools import observed_mcp_tool
+
+        observed = observed_mcp_tool(artifact.harness, _mcp_tool_name(artifact))
+        if observed is None:
+            return None
+        identity_hash = observed.server_identity.identity_hash
+        command, args_hash = observed.server_identity.command, observed.server_identity.args_hash
+    else:
+        command, args_hash = _mcp_server_launch(artifact)
     grant = lookup(
         identity_hash,
         command=command,
@@ -157,16 +168,22 @@ def matching_local_mcp_grant(
         return "blocked"
     commands = grant.get("commands")
     if not isinstance(commands, list) or not commands:
-        return "allowed"
-    command_id = slug_local_cli_command_id(_mcp_tool_name(artifact))
+        # Observed connectors have incomplete catalogs. An empty catalog cannot
+        # grant authority to a tool the operator has never reviewed.
+        return None if observed is not None else "allowed"
+    command_id = observed.command_id if observed is not None else slug_local_cli_command_id(_mcp_tool_name(artifact))
     known = {item.command_id for item in commands if isinstance(item, LocalCliCommand)}
+    states = grant.get("command_states")
+    if observed is not None and command_id not in known:
+        return "blocked" if isinstance(states, dict) and states.get(OTHER_COMMAND_ID) == "block" else None
     if command_id not in known:
         command_id = OTHER_COMMAND_ID
-    states = grant.get("command_states")
     if not isinstance(states, dict):
         return None
     tool_state = states.get(command_id, "inherit")
     if tool_state == "allow":
+        if observed is not None and current_action == "require-reapproval":
+            return None
         return "allowed"
     if tool_state == "block":
         return "blocked"

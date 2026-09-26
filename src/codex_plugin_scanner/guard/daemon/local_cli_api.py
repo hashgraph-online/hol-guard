@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 import time
+from contextlib import suppress
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -49,6 +50,7 @@ from ..runtime.local_mcp_probe import (
     mcp_launch_tokens,
     probe_stdio_mcp_server,
 )
+from ..runtime.observed_mcp_tools import discover_observed_mcp_tools
 from ..runtime.package_json_script_memory import (
     _package_item_available,
     operator_working_directory,
@@ -95,6 +97,18 @@ class LocalCliApiService:
         GET listing stays a store read. This write path is for Add custom
         extension so project scripts reappear without blocking the overview.
         """
+        # Connector history and configured launch discovery are independent.
+        with suppress(
+            OSError,
+            RuntimeError,
+            TypeError,
+            ValueError,
+            KeyError,
+            UnicodeError,
+            sqlite3.Error,
+            AttributeError,
+        ):
+            discover_observed_mcp_tools(self._store, seen_at=utc_now())
         try:
             labels = self._observe_harness_mcp_servers()
             items = apply_source_labels(

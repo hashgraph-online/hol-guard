@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 import stat
 from pathlib import Path
 from threading import Condition
@@ -15,7 +16,11 @@ from .native_policy_snapshot_constants import (
     NATIVE_RUNTIME_STATE_DIRECTORY,
     NativePolicySnapshotError,
 )
-from .native_policy_snapshot_policy import _merge_effective_native_policies, effective_native_policy_v3
+from .native_policy_snapshot_policy import (
+    _merge_effective_native_policies,
+    _stricter_action,
+    effective_native_policy_v3,
+)
 
 if TYPE_CHECKING:
     from .runtime.extension_control_runtime import ExtensionControlRuntime
@@ -187,14 +192,32 @@ class NativePolicySnapshotPublisherInputs:
         """Build the native snapshot input off the synchronous hook path."""
 
         from .config import load_guard_config
+        from .runtime.observed_mcp_tools import bound_native_mcp_tool_actions, native_observed_mcp_tool_actions
 
         with self._condition:
             workspaces = tuple(sorted(self._workspace_paths, key=str))
         configs = [load_guard_config(self.guard_home)]
         configs.extend(load_guard_config(self.guard_home, workspace=workspace) for workspace in workspaces)
-        return _merge_effective_native_policies(
+        policy = _merge_effective_native_policies(
             tuple(effective_native_policy_v3(config) | {"mode": config.mode} for config in configs)
         )
+        try:
+            mcp_actions = native_observed_mcp_tool_actions(self.store)
+        except sqlite3.Error as error:
+            raise NativePolicySnapshotError("native_policy_snapshot_policy_unavailable") from error
+        if mcp_actions:
+            existing = cast(dict[str, str], policy.get("mcp_tool_actions", {}))
+            merged = dict(existing)
+            required_blocks = frozenset(key for key, action in existing.items() if action == "block")
+            namespace_blocks = tuple(key[:-1] for key in required_blocks if key.endswith("*"))
+            for key, action in mcp_actions.items():
+                # An exact local allow cannot create an exception to a configured
+                # namespace block. Existing configured restrictions remain floors.
+                if action == "allow" and key.startswith(namespace_blocks):
+                    continue
+                merged[key] = _stricter_action(merged.get(key, "allow"), action)
+            policy["mcp_tool_actions"] = bound_native_mcp_tool_actions(merged, required_blocks=required_blocks)
+        return policy
 
     def _compiled_command_extensions(self) -> dict[str, object]:
         try:

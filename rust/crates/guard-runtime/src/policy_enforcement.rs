@@ -26,10 +26,12 @@ mod policy_enforcement_facts;
 mod policy_enforcement_policy;
 
 use policy_enforcement_facts::{
-    classify_tool_name, collect_fact_maps, payload_facts, preferred_tool_name, risk_classes,
-    PolicyFacts, PATH_KEYS,
+    payload_facts, post_action_type, preferred_tool_name, risk_classes, PolicyFacts,
 };
-use policy_enforcement_policy::{policy_map_action, CompiledEffectivePolicy};
+pub(crate) use policy_enforcement_policy::validate_pre_tool_result_matrix;
+use policy_enforcement_policy::{
+    action_rank, join_action, policy_map_action, CompiledEffectivePolicy,
+};
 
 #[path = "policy_enforcement_admission.rs"]
 mod policy_enforcement_admission;
@@ -70,97 +72,6 @@ const VALID_RISK_KEYS: &[&str] = &[
 const MAX_SELECTOR_VALUE_BYTES: usize = 4 * 1024;
 const MAX_FACT_DEPTH: usize = 32;
 const MAX_FACT_NODES: usize = 2_048;
-
-/// The native action lattice is intentionally typed at the enforcement
-/// boundary.  String values remain the wire representation for compatibility
-/// with existing hook contracts, but no decision is made by comparing raw
-/// strings.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-#[repr(u8)]
-enum ActionFloor {
-    Allow,
-    Warn,
-    Review,
-    RequireReapproval,
-    SandboxRequired,
-    Block,
-}
-
-impl ActionFloor {
-    fn parse(value: &str) -> Option<Self> {
-        Some(match value {
-            "allow" => Self::Allow,
-            "warn" => Self::Warn,
-            "review" => Self::Review,
-            "require-reapproval" => Self::RequireReapproval,
-            "sandbox-required" => Self::SandboxRequired,
-            "block" => Self::Block,
-            _ => return None,
-        })
-    }
-
-    fn is_non_overridable(self) -> bool {
-        matches!(self, Self::SandboxRequired | Self::Block)
-    }
-
-    fn decision(self) -> &'static str {
-        if matches!(self, Self::Allow | Self::Warn) {
-            "allow"
-        } else {
-            "deny"
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct ActionFloorMatrix {
-    policy: ActionFloor,
-    minimum: ActionFloor,
-}
-
-impl ActionFloorMatrix {
-    fn from_result(result: &PreToolResultV1) -> Result<Self, String> {
-        Ok(Self {
-            policy: ActionFloor::parse(&result.policy_action)
-                .ok_or_else(|| "native_policy_action_invalid".to_owned())?,
-            minimum: ActionFloor::parse(&result.minimum_action)
-                .ok_or_else(|| "native_policy_action_invalid".to_owned())?,
-        })
-    }
-
-    fn validate(self, result: &PreToolResultV1) -> Result<(), String> {
-        if self.policy < self.minimum
-            || (self.policy.is_non_overridable() && self.policy != self.minimum)
-            || result.decision != self.minimum.decision()
-            || result.explicitly_benign != (self.minimum == ActionFloor::Allow)
-        {
-            return Err("native_policy_decision_inconsistent".to_owned());
-        }
-        Ok(())
-    }
-}
-
-fn action_rank(action: &str) -> Option<u8> {
-    ActionFloor::parse(action).map(|floor| floor as u8)
-}
-
-fn join_action(left: &str, right: &str) -> Result<String, String> {
-    let left_rank = action_rank(left).ok_or_else(|| "native_policy_action_invalid".to_owned())?;
-    let right_rank = action_rank(right).ok_or_else(|| "native_policy_action_invalid".to_owned())?;
-    Ok(if left_rank >= right_rank {
-        left.to_owned()
-    } else {
-        right.to_owned()
-    })
-}
-
-/// Validate the typed relationship between the effective action fields.  The
-/// policy action is not a second, weaker authority: it must describe the same
-/// or stronger floor, and a terminal policy block must be reflected by the
-/// minimum floor before any approval path can inspect the result.
-pub(crate) fn validate_pre_tool_result_matrix(result: &PreToolResultV1) -> Result<(), String> {
-    ActionFloorMatrix::from_result(result)?.validate(result)
-}
 
 fn canonical_harness(value: &str) -> Option<&str> {
     let normalized = value.trim().to_ascii_lowercase().replace('_', "-");
@@ -272,7 +183,7 @@ fn policy_override_reason(action: &str) -> (&'static str, &'static str) {
 pub(crate) fn apply_pre_tool_policy(
     snapshot: &AdmittedPolicySnapshot,
     payload: &Value,
-    result: PreToolResultV1,
+    mut result: PreToolResultV1,
 ) -> Result<PreToolResultV1, String> {
     if !matches!(snapshot.mode.as_str(), "enforce" | "observe") {
         return Err("native_policy_mode_invalid".to_owned());
@@ -281,6 +192,70 @@ pub(crate) fn apply_pre_tool_policy(
     let harness = normalized_harness(&result.action.harness);
     let mut facts = payload_facts(payload, result.action.action_type, &result.reason_code)?;
     facts.sensitive_target |= result.action.sensitive_target;
+    if result.action.action_type == PreToolActionTypeV1::McpTool {
+        // Tool arguments can themselves contain `tool_name` (dispatchers are
+        // common). They are data, never the outer tool's authority selector.
+        let tool = match payload.as_object() {
+            Some(record) => {
+                let mut envelopes = vec![record];
+                for key in ["tool_call", "toolCall", "preToolUse", "pre_tool_use"] {
+                    if let Some(envelope) = record.get(key).and_then(Value::as_object) {
+                        envelopes.push(envelope);
+                    }
+                }
+                preferred_tool_name(&envelopes)?.or_else(|| {
+                    ["action", "operation"]
+                        .into_iter()
+                        .find_map(|key| record.get(key).and_then(Value::as_str).map(str::to_owned))
+                })
+            }
+            None => None,
+        };
+        if let Some(tool) = tool {
+            let choice = guard_policy_snapshot::observed_mcp_tool_action(
+                &snapshot.effective_policy.mcp_tool_actions,
+                &harness,
+                &tool,
+            );
+            if choice == Some("block") && result.minimum_action != "block" {
+                result.minimum_action = "block".into();
+                result.policy_action = "block".into();
+                result.decision = "deny".into();
+                result.explicitly_benign = false;
+                result.reason_code = "native_custom_mcp_tool_block".into();
+                result.reason =
+                    "This MCP tool is blocked by a custom extension on this device.".into();
+            } else if choice == Some("allow")
+                && result.minimum_action == "review"
+                && result.reason_code == "native_mcp_tool_review"
+                && result.action.bounded
+                && !facts.sensitive_target
+                && !facts.changed_hash
+                && result.command_extensions.as_ref().is_none_or(|evidence| {
+                    evidence.binding.observation_count == 0 && evidence.evaluation_error.is_none()
+                })
+            {
+                // Only explicit operator authority in the admitted, authenticated
+                // snapshot can replace the unknown-tool review. Independent
+                // native findings and every installed policy floor still apply.
+                result.minimum_action = "allow".into();
+                result.policy_action = "allow".into();
+                result.decision = "allow".into();
+                result.explicitly_benign = true;
+                result.reason_code = "native_custom_mcp_tool_allow".into();
+                result.reason =
+                    "This exact MCP tool is allowed by a custom extension on this device.".into();
+                // The explicit operator choice satisfies the generic unknown
+                // publisher review for this namespace. Stronger publisher
+                // actions and independent MCP risk policies remain floors.
+                if facts.publisher.is_none()
+                    && snapshot.effective_policy.unknown_publisher_action == "review"
+                {
+                    facts.publisher_relevant = false;
+                }
+            }
+        }
+    }
     let policy_floor = policy_floor(
         &snapshot.effective_policy,
         &snapshot.compiled,
@@ -341,47 +316,6 @@ pub(crate) fn apply_pre_tool_policy(
     output.explicitly_benign = effective == "allow";
     validate_pre_tool_result_matrix(&output)?;
     Ok(output)
-}
-
-fn post_action_type(
-    request: &NativeHookRequestV1,
-    payload_kind: GuardHookPayloadKindV2,
-) -> Result<PreToolActionTypeV1, String> {
-    if payload_kind == GuardHookPayloadKindV2::SourceFileRef {
-        return Ok(PreToolActionTypeV1::FileRead);
-    }
-    let mut maps = Vec::new();
-    let mut nodes = 0usize;
-    collect_fact_maps(&request.payload, 0, &mut nodes, &mut maps)?;
-    if let Some(tool) = preferred_tool_name(&maps)? {
-        return Ok(classify_tool_name(&tool));
-    }
-    for record in maps {
-        if record.keys().any(|key| {
-            matches!(
-                key.as_str(),
-                "command" | "cmd" | "shell_command" | "shellCommand"
-            )
-        }) {
-            return Ok(PreToolActionTypeV1::Command);
-        }
-        if record
-            .keys()
-            .any(|key| matches!(key.as_str(), "package" | "package_name" | "packageName"))
-        {
-            return Ok(PreToolActionTypeV1::Package);
-        }
-        if record.keys().any(|key| PATH_KEYS.contains(&key.as_str())) {
-            return Ok(PreToolActionTypeV1::FileRead);
-        }
-        if record
-            .keys()
-            .any(|key| matches!(key.as_str(), "url" | "uri" | "href" | "endpoint"))
-        {
-            return Ok(PreToolActionTypeV1::Network);
-        }
-    }
-    Ok(PreToolActionTypeV1::Unknown)
 }
 
 /// Apply the authenticated policy to a Rust-owned PostTool result. The

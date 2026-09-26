@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-26T17:17:22.564Z",
+  "title": "Design System: HOL Guard Dashboard",
+  "extensions": {
+    "motion": [
+      {
+        "name": "ease-out-quart",
+        "value": "cubic-bezier(0.25, 1, 0.5, 1)",
+        "purpose": "Existing dashboard easing."
+      },
+      {
+        "name": "ease-out-quint",
+        "value": "cubic-bezier(0.22, 1, 0.36, 1)",
+        "purpose": "Existing dashboard easing."
+      }
+    ]
+  },
+  "components": [],
+  "narrative": {
+    "northStar": "Operational clarity",
+    "overview": "Trustworthy, precise and calm controls for local protection decisions.",
+    "keyCharacteristics": [
+      "Readable permission scope",
+      "Quiet grouped controls",
+      "Touch-friendly responsive rows"
+    ],
+    "rules": [
+      {
+        "name": "Explicit scope",
+        "body": "Describe whether a choice affects listed tools or the whole connector.",
+        "section": "components"
+      }
+    ],
+    "dos": [
+      "Keep tool choices visible and keyboard accessible."
+    ],
+    "donts": [
+      "Do not imply that an observed catalog is a complete remote inventory."
+    ]
+  }
+}
