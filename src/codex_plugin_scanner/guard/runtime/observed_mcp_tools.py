@@ -13,6 +13,7 @@ from hashlib import sha256
 from typing import TYPE_CHECKING
 
 from ..native_policy_snapshot_codec import _normalized_harness_selector_v3
+from ..native_policy_snapshot_constants import POLICY_SNAPSHOT_MAX_MCP_TOOL_ACTIONS
 from .local_cli_commands import MAX_LOCAL_CLI_COMMANDS, OTHER_COMMAND_ID, LocalCliCommand
 from .local_cli_identity import UnlistedCliIdentity
 from .mcp_protection import McpServerIdentity, build_mcp_server_identity
@@ -199,4 +200,11 @@ def native_observed_mcp_tool_actions(store: GuardStore) -> dict[str, str]:
             state = states.get(command.command_id)
             if state in {"allow", "block"}:
                 actions[f"{harness}:{tool.qualified_name}"] = str(state)
-    return actions
+    blocks = {key: value for key, value in actions.items() if value == "block"}
+    allows = {key: value for key, value in sorted(actions.items()) if value == "allow"}
+    bounded = dict(sorted(blocks.items())[:POLICY_SNAPSHOT_MAX_MCP_TOOL_ACTIONS])
+    for key, value in allows.items():
+        if len(bounded) >= POLICY_SNAPSHOT_MAX_MCP_TOOL_ACTIONS:
+            break
+        bounded[key] = value
+    return bounded

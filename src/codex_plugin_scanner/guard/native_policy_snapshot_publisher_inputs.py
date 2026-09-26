@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 import stat
 from pathlib import Path
 from threading import Condition
@@ -196,7 +197,10 @@ class NativePolicySnapshotPublisherInputs:
         policy = _merge_effective_native_policies(
             tuple(effective_native_policy_v3(config) | {"mode": config.mode} for config in configs)
         )
-        mcp_actions = native_observed_mcp_tool_actions(self.store)
+        try:
+            mcp_actions = native_observed_mcp_tool_actions(self.store)
+        except sqlite3.Error as error:
+            raise NativePolicySnapshotError("native_policy_snapshot_policy_unavailable") from error
         if mcp_actions:
             policy["mcp_tool_actions"] = mcp_actions
         return policy
