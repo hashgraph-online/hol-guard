@@ -128,9 +128,10 @@ fn safe_git_arguments(arguments: &[String], allow_helper_context: bool) -> bool 
         .unwrap_or(arguments.len());
     let active_options = &arguments[1..option_end];
     if subcommand == "remote" {
-        let operands = &arguments[1..];
-        return !operands.is_empty()
-            && operands
+        let has_arguments_after_options = option_end + 1 < arguments.len();
+        return !active_options.is_empty()
+            && !has_arguments_after_options
+            && active_options
                 .iter()
                 .all(|argument| matches!(argument.as_str(), "-v" | "--verbose"));
     }
