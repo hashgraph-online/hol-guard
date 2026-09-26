@@ -20,7 +20,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from ..models import GuardApprovalRequest, format_local_http_origin
-from ..runtime.actions import normalize_harness_payload
+from ..runtime.actions import action_envelope_harnesses, normalize_harness_payload
 from .hook_native_review_binding import native_review_policy_binding
 from .hook_request_parsing import pre_tool_command
 from .hook_worker_responses import (
@@ -402,7 +402,7 @@ def _native_review_action_envelope(
     workspace: Path | None,
     payload: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
-    if payload is not None:
+    if payload is not None and harness.strip().lower() in action_envelope_harnesses():
         # Presentation only: approval identity and policy remain Rust-owned.
         envelope = normalize_harness_payload(harness, "PreToolUse", payload, workspace=workspace).to_dict()
         envelope.update(action_id=request_id, pre_execution_result="review")
