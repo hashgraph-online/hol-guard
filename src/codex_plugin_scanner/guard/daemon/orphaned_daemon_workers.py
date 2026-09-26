@@ -94,7 +94,7 @@ def orphaned_daemon_workers(processes: list[ProcessSnapshot]) -> list[ProcessSna
         if process.pid > 1
         and process.pid != os.getpid()
         and _is_hol_guard_hook_worker(process.command)
-        and not _has_live_daemon_ancestor(process, by_pid)
+        and not _has_live_guard_ancestor(process, by_pid)
     ]
     return sorted(selected, key=lambda process: process.pid)
 
@@ -207,7 +207,7 @@ def _signal_worker(pid: int, sig: int) -> None:
         return
 
 
-def _has_live_daemon_ancestor(
+def _has_live_guard_ancestor(
     process: ProcessSnapshot,
     by_pid: dict[int, ProcessSnapshot],
 ) -> bool:
@@ -216,7 +216,10 @@ def _has_live_daemon_ancestor(
     for _ in range(_MAX_PARENT_HOPS):
         if current is None or current.pid <= 1 or current.pid in seen:
             return False
-        if not current.state.startswith("Z") and _is_hol_guard_daemon_serve(current.command):
+        if not current.state.startswith("Z") and (
+            _is_hol_guard_daemon_serve(current.command)
+            or _leading_executable_is_hol_guard(current.command + " ")
+        ):
             return True
         seen.add(current.pid)
         current = by_pid.get(current.ppid)
