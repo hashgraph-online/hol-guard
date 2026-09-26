@@ -12,6 +12,40 @@ from codex_plugin_scanner.guard.runtime.observed_mcp_tools import (
 from codex_plugin_scanner.guard.store import GuardStore
 
 
+def test_observed_connector_enrollment_uses_stored_catalog_and_requires_trust(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiError, LocalCliApiService
+
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    store = GuardStore(tmp_path / "guard-home")
+    qualified_name = "mcp__codex_apps__composio__composio_search_tools"
+    monkeypatch.setattr(store, "list_receipts", lambda limit: [
+        {"harness": "codex", "raw_command_text": "tool:" + qualified_name},
+    ])
+    discover_observed_mcp_tools(store, seen_at="2026-01-01T00:00:00Z")
+    tool = observed_mcp_tool("codex", qualified_name)
+    assert tool is not None
+    service = LocalCliApiService(store=store)
+    monkeypatch.setattr(service, "_observe_harness_mcp_servers", lambda: [])
+    result = service.recognize({"command": tool.identity.example_label, "cli_id": tool.identity.cli_id})
+    item = result["item"]
+    assert item["cli_id"] == tool.identity.cli_id
+    assert item["commands"][0]["command_id"] == tool.command_id
+    assert result["help_status"] == "ok"
+    payload = {
+        "cli_id": item["cli_id"], "identity_hash": item["identity_hash"],
+        "name": item["name"], "kind": item["kind"], "example_label": item["example_label"],
+        "state": "allowed", "previous_revision": 0, "session_nonce": "test-enrollment",
+        "commands": [{"command_id": tool.command_id, "state": "allow"}],
+    }
+    assert service.preview(payload)["next_revision"] == 1
+    with pytest.raises(LocalCliApiError):
+        service.apply(payload)
+    assert store.read_local_cli_revision() == 0
+    assert native_observed_mcp_tool_actions(store) == {}
+
+
 def test_composio_keeps_its_connector_namespace() -> None:
     tool = observed_mcp_tool("codex", "mcp__codex_apps__composio__composio_search_tools")
     assert tool is not None

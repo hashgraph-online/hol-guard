@@ -1,6 +1,28 @@
 use super::*;
 
 #[test]
+fn observed_mcp_root_operation_aliases_honor_saved_choices() {
+    let tool = "mcp__codex_apps__composio__search";
+    for alias in ["action", "operation"] {
+        for choice in ["allow", "block"] {
+            let mut policy = policy("allow");
+            policy
+                .mcp_tool_actions
+                .insert(format!("codex:{tool}"), choice.into());
+            let mut result = generic_result("review");
+            result.action.harness = "codex".into();
+            result.action.action_type = PreToolActionTypeV1::McpTool;
+            result.reason_code = "native_mcp_tool_review".into();
+            let mut payload = Map::new();
+            payload.insert(alias.into(), json!(tool));
+            let output =
+                apply_pre_tool_policy(&snapshot(policy), &Value::Object(payload), result).unwrap();
+            assert_eq!(output.minimum_action, choice, "{alias}");
+        }
+    }
+}
+
+#[test]
 fn observed_mcp_permissions_apply_only_to_the_exact_tool_and_harness() {
     let tool = "mcp__codex_apps__composio__search";
     let mut policy = policy("allow");

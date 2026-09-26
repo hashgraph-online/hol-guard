@@ -203,7 +203,11 @@ pub(crate) fn apply_pre_tool_policy(
                         envelopes.push(envelope);
                     }
                 }
-                preferred_tool_name(&envelopes)?
+                preferred_tool_name(&envelopes)?.or_else(|| {
+                    ["action", "operation"]
+                        .into_iter()
+                        .find_map(|key| record.get(key).and_then(Value::as_str).map(str::to_owned))
+                })
             }
             None => None,
         };
