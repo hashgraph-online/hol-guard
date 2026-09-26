@@ -272,7 +272,7 @@ try:
     request = json.loads(stdin_bytes.decode("utf-8"))
 except (UnicodeDecodeError, json.JSONDecodeError):
     request = {{}}
-case_id = request.get("tool_call_id") if isinstance(request, dict) else None
+case_id = request.get("tool_call_id") or request.get("toolCallId") if isinstance(request, dict) else None
 if not isinstance(case_id, str):
     case_id = "unknown"
 if {negative!s}:
