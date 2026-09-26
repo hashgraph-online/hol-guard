@@ -40,7 +40,7 @@ def normalize_native_review_payload(
     if not normalized_harness:
         raise ValueError("Native review harness must not be empty")
     if not isinstance(native_action, Mapping):
-        raise ValueError("Native action metadata must be an object")
+        raise ValueError("Native action metadata must be a mapping")
     native_kind = native_action.get("action_type")
     if not isinstance(native_kind, str) or native_kind not in _NATIVE_ACTION_TYPES:
         raise ValueError("Native action kind is unsupported")
