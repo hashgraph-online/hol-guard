@@ -36,6 +36,7 @@ def test_in_tree_mcp_contributions_are_external_catalog_ids() -> None:
     assert ids == mcp_catalog_ids()
     assert ids <= ids_for_class("external")
     assert "command.mcp-filesystem" in ids
+    assert "command.mcp-omarchy-mcp" in ids
     for payload in payloads:
         validate_mcp_contribution(payload, filename=str(payload["id"]))
 

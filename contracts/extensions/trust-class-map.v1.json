@@ -81,6 +81,7 @@
       "command.blitcp",
       "command.mcp-filesystem",
       "command.mcp-instapods",
+      "command.mcp-omarchy-mcp",
       "command.noodle",
       "command.ollama",
       "command.probe",
