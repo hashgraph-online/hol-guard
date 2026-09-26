@@ -128,8 +128,9 @@ fn safe_git_arguments(arguments: &[String], allow_helper_context: bool) -> bool 
         .unwrap_or(arguments.len());
     let active_options = &arguments[1..option_end];
     if subcommand == "remote" {
-        return !active_options.is_empty()
-            && active_options
+        let operands = &arguments[1..];
+        return !operands.is_empty()
+            && operands
                 .iter()
                 .all(|argument| matches!(argument.as_str(), "-v" | "--verbose"));
     }
@@ -214,7 +215,15 @@ fn exfiltration_command(value: &str) -> bool {
 }
 
 fn safe_gh_arguments(arguments: &[String]) -> bool {
-    matches!(arguments, [auth, status] if auth == "auth" && status == "status")
+    match arguments {
+        [auth, status] if auth == "auth" && status == "status" => true,
+        [auth, status, flag]
+            if auth == "auth" && status == "status" && matches!(flag.as_str(), "--help" | "-h") =>
+        {
+            true
+        }
+        _ => false,
+    }
 }
 
 fn exact_safe_command(model: &CanonicalCommandV1, allow_git_helper_context: bool) -> bool {
