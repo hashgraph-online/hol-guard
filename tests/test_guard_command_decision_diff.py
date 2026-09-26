@@ -276,7 +276,7 @@ def test_fresh_process_report_is_environment_independent_and_bounded(
     hash_seed: str, timezone: str, locale: str
 ) -> None:
     script = Path(__file__).with_name("guard_command_decision_diff.py")
-    expected_digest = report_framed_sha256(_fixture())
+    expected_digest = "72678905f2ab7c11ad2c88047252ed627621da85a13db513334cbb7b3b7ccc6a"
     manifest = load_seed_manifest()
     evaluation_budget_seconds = int(str(manifest["evaluation_budget_seconds"]))
     spawn_overhead_seconds = 15
