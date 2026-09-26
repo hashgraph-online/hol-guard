@@ -29,8 +29,10 @@ use policy_enforcement_facts::{
     classify_tool_name, collect_fact_maps, payload_facts, preferred_tool_name, risk_classes,
     PolicyFacts, PATH_KEYS,
 };
-use policy_enforcement_policy::{action_rank, join_action, policy_map_action, CompiledEffectivePolicy};
 pub(crate) use policy_enforcement_policy::validate_pre_tool_result_matrix;
+use policy_enforcement_policy::{
+    action_rank, join_action, policy_map_action, CompiledEffectivePolicy,
+};
 
 #[path = "policy_enforcement_admission.rs"]
 mod policy_enforcement_admission;
@@ -195,7 +197,15 @@ pub(crate) fn apply_pre_tool_policy(
         // Tool arguments can themselves contain `tool_name` (dispatchers are
         // common). They are data, never the outer tool's authority selector.
         let tool = match payload.as_object() {
-            Some(record) => preferred_tool_name(&[record])?,
+            Some(record) => {
+                let mut envelopes = vec![record];
+                for key in ["tool_call", "toolCall", "preToolUse", "pre_tool_use"] {
+                    if let Some(envelope) = record.get(key).and_then(Value::as_object) {
+                        envelopes.push(envelope);
+                    }
+                }
+                preferred_tool_name(&envelopes)?
+            }
             None => None,
         };
         if let Some(tool) = tool {

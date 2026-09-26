@@ -324,6 +324,10 @@ function SuggestionButton(props: { item: LocalCliItem; onSelect: (item: LocalCli
   const handleSelect = useCallback(() => {
     props.onSelect(props.item);
   }, [props]);
+  let connectorLabel = "Load tools";
+  if (mcpCatalogHasTools(props.item.commands)) {
+    connectorLabel = `${props.item.commands.filter((entry) => entry.command_id !== "other").length} tools`;
+  }
   return (
     <button type="button" onClick={handleSelect} className="flex min-h-14 w-full items-center justify-between gap-3 rounded-lg px-2 py-3 text-left hover:bg-brand-blue/5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue">
       <span className="min-w-0">
@@ -334,9 +338,7 @@ function SuggestionButton(props: { item: LocalCliItem; onSelect: (item: LocalCli
       </span>
       {props.item.surface === "mcp" ? (
         <span className="shrink-0 text-xs font-semibold text-brand-blue">
-          {mcpCatalogHasTools(props.item.commands)
-            ? `${props.item.commands.filter((entry) => entry.command_id !== "other").length} tools`
-            : "Load tools"}
+          {connectorLabel}
         </span>
       ) : (
         <span className="max-w-[55%] truncate font-mono text-xs text-brand-dark/60">{props.item.example_label}</span>

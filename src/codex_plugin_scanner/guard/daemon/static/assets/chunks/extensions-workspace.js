@@ -2713,12 +2713,16 @@ function SuggestionButton(props) {
   const handleSelect = reactExports.useCallback(() => {
     props.onSelect(props.item);
   }, [props]);
+  let connectorLabel = "Load tools";
+  if (mcpCatalogHasTools(props.item.commands)) {
+    connectorLabel = `${props.item.commands.filter((entry) => entry.command_id !== "other").length} tools`;
+  }
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", onClick: handleSelect, className: "flex min-h-14 w-full items-center justify-between gap-3 rounded-lg px-2 py-3 text-left hover:bg-brand-blue/5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "min-w-0", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block truncate text-sm font-semibold text-brand-dark", children: props.item.name }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block truncate text-xs text-brand-dark/60", children: props.item.source_label ?? seenSuggestionMeta(props.item) })
     ] }),
-    props.item.surface === "mcp" ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "shrink-0 text-xs font-semibold text-brand-blue", children: mcpCatalogHasTools(props.item.commands) ? `${props.item.commands.filter((entry) => entry.command_id !== "other").length} tools` : "Load tools" }) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "max-w-[55%] truncate font-mono text-xs text-brand-dark/60", children: props.item.example_label })
+    props.item.surface === "mcp" ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "shrink-0 text-xs font-semibold text-brand-blue", children: connectorLabel }) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "max-w-[55%] truncate font-mono text-xs text-brand-dark/60", children: props.item.example_label })
   ] });
 }
 function CatalogPreview(props) {
@@ -3814,7 +3818,18 @@ function AddCustomExtensionWorkspace(props) {
   const enrollable = showingPackageCatalog ? enrollablePackageScriptCommands(commands) : commands;
   const mcpHasTools = mcpCatalogHasTools(enrollable);
   const showMcpRetry = showingMcpCatalog && !mcpHasTools;
-  const visibleCommands = showingPackageCatalog ? filterPackageScriptCommands(enrollable, command) : showingMcpCatalog ? commands.filter((entry) => `${entry.name} ${entry.description}`.toLowerCase().includes(toolQuery.trim().toLowerCase())) : commands;
+  let visibleCommands = commands;
+  if (showingPackageCatalog) {
+    visibleCommands = filterPackageScriptCommands(enrollable, command);
+  } else if (showingMcpCatalog) {
+    visibleCommands = commands.filter((entry) => `${entry.name} ${entry.description}`.toLowerCase().includes(toolQuery.trim().toLowerCase()));
+  }
+  let confirmTitle = allowActionLabel(recognized?.surface);
+  if (pending === "blocked") {
+    confirmTitle = blockActionLabel(recognized?.surface);
+  } else if (observedMcp) {
+    confirmTitle = "Save tool permissions";
+  }
   const previewNames = visibleCommands.slice(0, 8).map((entry) => entry.name);
   const bulkState = bulkCommandState(enrollable);
   const recentlySatisfied = approvalProofRecentlySatisfied(resolvedApprovalGate);
@@ -3838,7 +3853,7 @@ function AddCustomExtensionWorkspace(props) {
           }
         ),
         confirming && recognized ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "mt-6 max-w-xl", "aria-labelledby": "custom-extension-confirm-title", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { id: "custom-extension-confirm-title", className: "text-2xl font-semibold tracking-tight text-brand-dark", children: pending === "blocked" ? blockActionLabel(recognized.surface) : observedMcp ? "Save tool permissions" : allowActionLabel(recognized.surface) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { id: "custom-extension-confirm-title", className: "text-2xl font-semibold tracking-tight text-brand-dark", children: confirmTitle }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-slate-500", children: recognized.source_label ? `${recognized.name} · ${recognized.source_label}` : recognized.name }),
           summary ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-brand-dark/70", children: observedMcp && pending === "blocked" ? "This connector will be blocked, including tools that have not been listed yet." : summary }) : null,
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-5 text-sm leading-6 text-brand-dark/80", children: enrollConfirmCopy(recognized.surface, recentlySatisfied, resolvedApprovalGate?.totp_enabled === true) }),

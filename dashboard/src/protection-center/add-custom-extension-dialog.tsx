@@ -306,11 +306,18 @@ export function AddCustomExtensionWorkspace(props: {
   const enrollable = showingPackageCatalog ? enrollablePackageScriptCommands(commands) : commands;
   const mcpHasTools = mcpCatalogHasTools(enrollable);
   const showMcpRetry = showingMcpCatalog && !mcpHasTools;
-  const visibleCommands = showingPackageCatalog
-    ? filterPackageScriptCommands(enrollable, command)
-    : showingMcpCatalog
-      ? commands.filter((entry) => `${entry.name} ${entry.description}`.toLowerCase().includes(toolQuery.trim().toLowerCase()))
-      : commands;
+  let visibleCommands = commands;
+  if (showingPackageCatalog) {
+    visibleCommands = filterPackageScriptCommands(enrollable, command);
+  } else if (showingMcpCatalog) {
+    visibleCommands = commands.filter((entry) => `${entry.name} ${entry.description}`.toLowerCase().includes(toolQuery.trim().toLowerCase()));
+  }
+  let confirmTitle = allowActionLabel(recognized?.surface);
+  if (pending === "blocked") {
+    confirmTitle = blockActionLabel(recognized?.surface);
+  } else if (observedMcp) {
+    confirmTitle = "Save tool permissions";
+  }
   const previewNames = visibleCommands.slice(0, 8).map((entry) => entry.name);
   const bulkState = bulkCommandState(enrollable);
   const recentlySatisfied = approvalProofRecentlySatisfied(resolvedApprovalGate);
@@ -332,7 +339,7 @@ export function AddCustomExtensionWorkspace(props: {
       {confirming && recognized ? (
         <section className="mt-6 max-w-xl" aria-labelledby="custom-extension-confirm-title">
           <h1 id="custom-extension-confirm-title" className="text-2xl font-semibold tracking-tight text-brand-dark">
-            {pending === "blocked" ? blockActionLabel(recognized.surface) : observedMcp ? "Save tool permissions" : allowActionLabel(recognized.surface)}
+            {confirmTitle}
           </h1>
           <p className="mt-2 text-sm leading-6 text-slate-500">
             {recognized.source_label ? `${recognized.name} · ${recognized.source_label}` : recognized.name}

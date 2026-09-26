@@ -1,4 +1,6 @@
-use super::{normalized_harness, PreToolResultV1, MAX_SELECTOR_VALUE_BYTES, VALID_ACTIONS, VALID_RISK_KEYS};
+use super::{
+    normalized_harness, PreToolResultV1, MAX_SELECTOR_VALUE_BYTES, VALID_ACTIONS, VALID_RISK_KEYS,
+};
 use guard_policy_snapshot::EffectiveNativePolicyV3;
 use std::collections::BTreeMap;
 

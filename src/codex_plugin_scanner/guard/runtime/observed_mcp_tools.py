@@ -201,11 +201,15 @@ def native_observed_mcp_tool_actions(store: GuardStore) -> dict[str, str]:
             state = states.get(command.command_id)
             if state in {"allow", "block"}:
                 actions[f"{harness}:{tool.qualified_name}"] = str(state)
-    blocks = {key: value for key, value in actions.items() if value == "block"}
-    allows = {key: value for key, value in sorted(actions.items()) if value == "allow"}
-    bounded = dict(sorted(blocks.items())[:POLICY_SNAPSHOT_MAX_MCP_TOOL_ACTIONS])
-    for key, value in allows.items():
-        if len(bounded) >= POLICY_SNAPSHOT_MAX_MCP_TOOL_ACTIONS:
-            break
-        bounded[key] = value
-    return bounded
+    return bound_native_mcp_tool_actions(actions)
+
+
+def bound_native_mcp_tool_actions(
+    actions: Mapping[str, str], *, required_blocks: frozenset[str] = frozenset(),
+) -> dict[str, str]:
+    """Keep configured restrictions, then namespace blocks, tool blocks and allows."""
+
+    ordered = sorted(actions, key=lambda key: (
+        actions[key] != "block", key not in required_blocks, not key.endswith("*"), key,
+    ))
+    return {key: actions[key] for key in ordered[:POLICY_SNAPSHOT_MAX_MCP_TOOL_ACTIONS]}
