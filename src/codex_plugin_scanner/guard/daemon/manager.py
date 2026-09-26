@@ -2336,7 +2336,7 @@ def _bounded_process_query_stdout(
         process = _spawn_bounded_process_query(command)
     except (OSError, subprocess.SubprocessError, ValueError):
         return None
-    if process.stdout is None:
+    if getattr(process, "stdout", None) is None:
         _terminate_bounded_process_query(process)
         return None
 
