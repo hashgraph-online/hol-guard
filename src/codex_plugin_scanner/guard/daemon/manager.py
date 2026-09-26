@@ -2412,8 +2412,9 @@ def _bounded_process_query_stdout(
         if reader_started:
             reader.join(timeout=_GUARD_DAEMON_PROCESS_QUERY_TERMINATE_GRACE_SECONDS)
             if reader.is_alive():
-                with suppress(OSError, ValueError):
-                    process.stdout.close()
+                if process.stdout is not None:
+                    with suppress(OSError, ValueError):
+                        process.stdout.close()
                 reader.join(timeout=_GUARD_DAEMON_PROCESS_QUERY_TERMINATE_GRACE_SECONDS)
 
     if timed_out or overflow.is_set() or errors or reader.is_alive():

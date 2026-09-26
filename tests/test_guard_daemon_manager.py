@@ -1171,6 +1171,7 @@ def test_ensure_guard_daemon_serializes_parallel_start_attempts(tmp_path, monkey
     _disable_daemon_adoption(monkeypatch)
     _disable_duplicate_retire(monkeypatch)
     monkeypatch.setattr(daemon_manager_module, "_reap_stale_ephemeral_guard_daemons", lambda **_kwargs: None)
+    monkeypatch.setattr(daemon_manager_module, "reap_orphaned_daemon_workers", lambda **_kwargs: None)
 
     def fake_load_guard_daemon_url(_guard_home):
         if launched_event.is_set():
@@ -1253,6 +1254,7 @@ def test_ensure_guard_daemon_advances_ports_after_early_process_exit(tmp_path, m
         launched_commands.append(list(command))
         return FakeProcess(alive=len(launched_commands) > 1)
 
+    monkeypatch.setattr(daemon_manager_module, "reap_orphaned_daemon_workers", lambda **_kwargs: None)
     monkeypatch.setattr(daemon_manager_module, "load_guard_daemon_url", fake_load_guard_daemon_url)
     monkeypatch.setattr(daemon_manager_module, "_load_state", lambda _guard_home, **kwargs: None)
     monkeypatch.setattr(daemon_manager_module, "_candidate_ports", lambda _guard_home, **kwargs: [5410, 5411])
@@ -1297,6 +1299,7 @@ def test_ensure_guard_daemon_uses_one_start_deadline_across_candidate_ports(tmp_
     _disable_daemon_adoption(monkeypatch)
     _disable_duplicate_retire(monkeypatch)
     monkeypatch.setattr(daemon_manager_module, "_reap_stale_ephemeral_guard_daemons", lambda **_kwargs: None)
+    monkeypatch.setattr(daemon_manager_module, "reap_orphaned_daemon_workers", lambda **_kwargs: None)
     monkeypatch.setattr(daemon_manager_module, "load_guard_daemon_url", lambda _guard_home: None)
     monkeypatch.setattr(daemon_manager_module, "_load_state", lambda _guard_home, **_kwargs: None)
     monkeypatch.setattr(daemon_manager_module, "_candidate_ports", lambda _guard_home, **_kwargs: [5410, 5411, 5412])
@@ -1336,6 +1339,7 @@ def test_ensure_guard_daemon_retires_stale_daemon_from_different_runtime_fingerp
         return None
 
     monkeypatch.setattr(daemon_manager_module, "_reap_stale_ephemeral_guard_daemons", lambda **_kwargs: None)
+    monkeypatch.setattr(daemon_manager_module, "reap_orphaned_daemon_workers", lambda **_kwargs: None)
     monkeypatch.setattr(daemon_manager_module, "load_guard_daemon_url", fake_load_guard_daemon_url)
     monkeypatch.setattr(
         daemon_manager_module,
