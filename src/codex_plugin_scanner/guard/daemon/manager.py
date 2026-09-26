@@ -759,6 +759,8 @@ def reap_orphaned_daemon_workers(*, deadline: float | None = None) -> None:
     query_timeout = _GUARD_DAEMON_PROCESS_QUERY_TIMEOUT_SECONDS
     if deadline is not None:
         query_timeout = min(query_timeout, deadline - time.monotonic())
+    if query_timeout <= 0:
+        return
     output = _bounded_process_query_stdout(
         [ps_path, "-axww", "-o", "pid=,ppid=,state=,command="],
         timeout_seconds=query_timeout,
@@ -2375,7 +2377,8 @@ def _bounded_process_query_stdout(
         process = _spawn_bounded_process_query(command)
     except (OSError, subprocess.SubprocessError, ValueError):
         return None
-    if getattr(process, "stdout", None) is None:
+    stdout = getattr(process, "stdout", None)
+    if stdout is None:
         _terminate_bounded_process_query(process)
         return None
 
@@ -2384,7 +2387,7 @@ def _bounded_process_query_stdout(
     errors: list[OSError | ValueError] = []
     reader = threading.Thread(
         target=_capture_bounded_process_query_stdout,
-        args=(process.stdout, captured, output_limit_bytes, overflow, errors),
+        args=(stdout, captured, output_limit_bytes, overflow, errors),
         name="guard-daemon-process-query",
         daemon=True,
     )
@@ -2412,9 +2415,8 @@ def _bounded_process_query_stdout(
         if reader_started:
             reader.join(timeout=_GUARD_DAEMON_PROCESS_QUERY_TERMINATE_GRACE_SECONDS)
             if reader.is_alive():
-                if process.stdout is not None:
-                    with suppress(OSError, ValueError):
-                        process.stdout.close()
+                with suppress(OSError, ValueError):
+                    stdout.close()
                 reader.join(timeout=_GUARD_DAEMON_PROCESS_QUERY_TERMINATE_GRACE_SECONDS)
 
     if timed_out or overflow.is_set() or errors or reader.is_alive():
