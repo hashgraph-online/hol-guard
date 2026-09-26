@@ -197,15 +197,13 @@ pub(super) fn acquire(state_base: &Path) -> Result<ClientLease, String> {
                 ) else {
                     break;
                 };
-                // As with initial publication, keep the directory lock
-                // only for opening the identity-bound lease path. A
-                // recent partial heartbeat is conservatively live.
+                // Hold the lock through the write. Cleanup also holds it
+                // while deciding a lease is expired, so it cannot unlink a
+                // renewal that has already started. Durability stays outside
+                // the lock.
+                let wrote = file.write_all(heartbeat_contents.as_bytes());
                 drop(directory_lock);
-                if file
-                    .write_all(heartbeat_contents.as_bytes())
-                    .and_then(|()| file.sync_all())
-                    .is_err()
-                {
+                if wrote.and_then(|()| file.sync_all()).is_err() {
                     break;
                 }
             }
