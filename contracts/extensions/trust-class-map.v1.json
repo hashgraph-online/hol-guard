@@ -87,7 +87,8 @@
       "command.remote.essh",
       "command.repo2nb",
       "command.skill-sunset",
-      "command.uivoid"
+      "command.uivoid",
+      "command.vaultsync"
     ]
   }
 }

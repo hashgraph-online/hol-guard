@@ -21,6 +21,7 @@ _ARTIFACTS = {
     "contributions/extensions/command.repo2nb.json": "extensions/contributions/command.repo2nb.json",
     "contributions/extensions/command.skill-sunset.json": "extensions/contributions/command.skill-sunset.json",
     "contributions/extensions/command.uivoid.json": "extensions/contributions/command.uivoid.json",
+    "contributions/extensions/command.vaultsync.json": "extensions/contributions/command.vaultsync.json",
     "contracts/mcp-servers/contribution.v1.schema.json": "mcp_servers/contribution.v1.schema.json",
     "contributions/mcp-servers/mcp.filesystem.json": "mcp_servers/contributions/mcp.filesystem.json",
     "contributions/mcp-servers/mcp.instapods.json": "mcp_servers/contributions/mcp.instapods.json",

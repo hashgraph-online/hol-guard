@@ -6,7 +6,7 @@
     "canonical_diff_digest",
     "effective"
   ],
-  "catalog_digest": "bdf36e74b2ca93074e43398bbef93ef1cb0399951ab25e0657b57be832bc9f58",
+  "catalog_digest": "1e4b8563a0b698714153829e97babfc195b6661b4eb4c3ec9ac6cb5ec71b161b",
   "control_schema_version": "1.0.0",
   "daemon_api_schema": "guard.daemon.extension-controls.v1",
   "effective_shape": [
@@ -20,7 +20,7 @@
     "failures",
     "projection"
   ],
-  "extension_count": 72,
+  "extension_count": 73,
   "extension_ids": [
     "command.api-gateway",
     "command.backup.borg",
@@ -93,12 +93,13 @@
     "command.storage.minio",
     "command.system",
     "command.uivoid",
+    "command.vaultsync",
     "command.windows"
   ],
   "extension_schema_version": 2,
   "installed_browser_config": "dashboard/playwright.installed.config.ts",
   "overview_route": "/extensions",
-  "permission_count": 253,
+  "permission_count": 257,
   "permission_examples": {
     "command.api-gateway.permission.delete": "aws apigateway delete-rest-api",
     "command.backup.borg.permission.mutation": "borg delete",
@@ -352,6 +353,10 @@
     "command.uivoid.permission.login": "uivoid login",
     "command.uivoid.permission.oauth-config": "uivoid oauth-config my-app",
     "command.uivoid.permission.skill-install": "uivoid skill --install",
+    "command.vaultsync.permission.prune": "vaultsync prune Demo --keep-last 5",
+    "command.vaultsync.permission.remove-project": "vaultsync remove-project Demo",
+    "command.vaultsync.permission.restore": "vaultsync restore Demo ./Recovered",
+    "command.vaultsync.permission.set-path": "vaultsync set-path Demo /srv/projects/Demo",
     "command.windows.permission.destructive-storage": "clear-disk"
   },
   "permission_families": {
@@ -703,6 +708,10 @@
     "command.uivoid.permission.login",
     "command.uivoid.permission.oauth-config",
     "command.uivoid.permission.skill-install",
+    "command.vaultsync.permission.prune",
+    "command.vaultsync.permission.remove-project",
+    "command.vaultsync.permission.restore",
+    "command.vaultsync.permission.set-path",
     "command.windows.permission.destructive-storage"
   ],
   "preview_shape": [
@@ -715,7 +724,7 @@
     "controls",
     "semantic_preview"
   ],
-  "rule_count": 239,
+  "rule_count": 243,
   "rule_ids": [
     "command.api-gateway.delete",
     "command.backup.borg.mutation",
@@ -955,6 +964,10 @@
     "command.uivoid.oauth-config",
     "command.uivoid.login",
     "command.uivoid.skill-install",
+    "command.vaultsync.prune",
+    "command.vaultsync.restore",
+    "command.vaultsync.remove-project",
+    "command.vaultsync.set-path",
     "command.windows.destructive-storage"
   ],
   "schema_version": "guard.extension-control-center.baseline.v1"

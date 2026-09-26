@@ -36,10 +36,10 @@ from codex_plugin_scanner.guard.runtime.extension_trust import (
     mapped_ids,
     trust_class_for,
 )
+from tests.command_extension_contracts import enable_local_admin_extension_layer
 from tests.native_command_test_support import (
     extract_sensitive_tool_action_request_native_test as extract_sensitive_tool_action_request,
 )
-from tests.command_extension_contracts import enable_local_admin_extension_layer
 from tests.native_command_test_support import real_native_command_evaluation
 
 _NOODLE = "noodle request run users/get --collection ./my-api --env staging"
@@ -92,6 +92,7 @@ def test_trust_map_covers_every_builtin_extension() -> None:
         "command.repo2nb",
         "command.skill-sunset",
         "command.uivoid",
+        "command.vaultsync",
     }
     assert trust_class_for("command.git") == "first-party"
     assert trust_class_for("command.cloud.aws") == "trusted-library"

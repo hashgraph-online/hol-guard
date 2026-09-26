@@ -1,0 +1,670 @@
+{
+  "schema": "guard.command-extension-source.v1",
+  "extension": {
+    "extension_id": "command.vaultsync",
+    "version": "1.0.0",
+    "name": "VaultSync command protection",
+    "description": "Reviews VaultSync commands that prune snapshot history, restore backup data, unregister projects, or repoint project roots while keeping inspection-oriented commands outside the extension review boundary.",
+    "action_classes": [
+      "vaultsync snapshot prune command",
+      "vaultsync restore command",
+      "vaultsync project removal command",
+      "vaultsync project path update command"
+    ],
+    "risk_classes": [
+      "destructive_shell"
+    ],
+    "safer_alternatives": [
+      "Use list-projects, history, diff, and verify to inspect backup state before making changes.",
+      "Use prune --dry-run before approving snapshot deletion.",
+      "Use restore --dry-run before approving restore writes or cleanup."
+    ],
+    "reference_urls": [
+      "https://github.com/ATAC-Helicopter/VaultSync",
+      "https://fglabs.dev/vaultsync"
+    ],
+    "required": false,
+    "source": "built-in",
+    "aliases": [],
+    "dependencies": [],
+    "conflicts": [],
+    "ecosystem_ids": [],
+    "executables": [
+      "vaultsync"
+    ],
+    "project_markers": [],
+    "permissions": [
+      {
+        "permission_id": "command.vaultsync.permission.prune",
+        "implementation_version": "1.0.0",
+        "label": "VaultSync snapshot prune command",
+        "description": "Reviews VaultSync prune operations that can permanently remove eligible local snapshot history.",
+        "risk_tier": "high",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "vaultsync snapshot prune command"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "3.2.0",
+        "deprecated": false,
+        "safer_guidance": [
+          "Run vaultsync prune with --dry-run first and inspect the planned deletions.",
+          "Use vaultsync history to inspect the project before pruning."
+        ],
+        "example_command": "vaultsync prune Demo --keep-last 5",
+        "family": null,
+        "fixed_reason": null,
+        "replacement_permission_id": null
+      },
+      {
+        "permission_id": "command.vaultsync.permission.restore",
+        "implementation_version": "1.0.0",
+        "label": "VaultSync restore command",
+        "description": "Reviews VaultSync restore operations that can write or delete files in the selected destination.",
+        "risk_tier": "critical",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "vaultsync restore command"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "3.2.0",
+        "deprecated": false,
+        "safer_guidance": [
+          "Run vaultsync restore with --dry-run first and review the planned changes.",
+          "Inspect history, diff, and verify results before restoring."
+        ],
+        "example_command": "vaultsync restore Demo ./Recovered",
+        "family": null,
+        "fixed_reason": null,
+        "replacement_permission_id": null
+      },
+      {
+        "permission_id": "command.vaultsync.permission.remove-project",
+        "implementation_version": "1.0.0",
+        "label": "VaultSync project removal command",
+        "description": "Reviews removal of a VaultSync project registration and its local indexed history. Source files and stored backup files are not deleted by this command.",
+        "risk_tier": "medium",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "vaultsync project removal command"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "3.2.0",
+        "deprecated": false,
+        "safer_guidance": [
+          "Run vaultsync list-projects first and confirm the exact project registration.",
+          "Do not treat --yes or --quiet as a safe variant."
+        ],
+        "example_command": "vaultsync remove-project Demo",
+        "family": null,
+        "fixed_reason": null,
+        "replacement_permission_id": null
+      },
+      {
+        "permission_id": "command.vaultsync.permission.set-path",
+        "implementation_version": "1.0.0",
+        "label": "VaultSync project path update command",
+        "description": "Reviews VaultSync set-path and update-path operations that repoint a registered project to a different root directory.",
+        "risk_tier": "medium",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "vaultsync project path update command"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "3.2.0",
+        "deprecated": false,
+        "safer_guidance": [
+          "Run vaultsync list-projects first and confirm the project's current path.",
+          "Confirm the replacement root directory before approving the change."
+        ],
+        "example_command": "vaultsync set-path Demo /srv/projects/Demo",
+        "family": null,
+        "fixed_reason": null,
+        "replacement_permission_id": null
+      }
+    ],
+    "rules": [
+      {
+        "rule_id": "command.vaultsync.prune",
+        "rule_version": "1.0.0",
+        "permission_id": "command.vaultsync.permission.prune",
+        "title": "VaultSync snapshot prune",
+        "description": "Identifies VaultSync prune operations. Dry-run and help are safe variants; quiet and JSON output do not change the review requirement for a real prune.",
+        "severity": "high",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "action_classes": [
+          "vaultsync snapshot prune command"
+        ],
+        "safer_alternatives": [
+          "Run vaultsync prune with --dry-run first and inspect the planned deletions.",
+          "Use vaultsync history before deleting snapshot history."
+        ],
+        "default_mode": "review",
+        "matcher": {
+          "op": "executable.v1",
+          "config": {
+            "allow_leading_options": false,
+            "executables": [
+              "vaultsync",
+              "vaultsync.cmd",
+              "vaultsync.exe"
+            ],
+            "fail_secure_unknown_options": true,
+            "forbidden_flags": [],
+            "interspersed_flags": [
+              "--dry-run",
+              "--quiet",
+              "--json"
+            ],
+            "interspersed_options_with_values": [
+              "--keep-last",
+              "--before",
+              "--db"
+            ],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [],
+            "options_with_values": [],
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": [
+              "prune"
+            ]
+          }
+        },
+        "safe_variants": [
+          {
+            "variant_id": "dry-run",
+            "title": "VaultSync prune dry run",
+            "matcher": {
+              "op": "executable.v1",
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "vaultsync",
+                  "vaultsync.cmd",
+                  "vaultsync.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--quiet",
+                  "--json",
+                  "--dry-run"
+                ],
+                "interspersed_options_with_values": [
+                  "--keep-last",
+                  "--before",
+                  "--db"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [
+                  "--dry-run"
+                ],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": [
+                  "prune"
+                ]
+              }
+            }
+          },
+          {
+            "variant_id": "help",
+            "title": "VaultSync prune help",
+            "matcher": {
+              "op": "executable.v1",
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "vaultsync",
+                  "vaultsync.cmd",
+                  "vaultsync.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--dry-run",
+                  "--quiet",
+                  "--json",
+                  "--help"
+                ],
+                "interspersed_options_with_values": [
+                  "--keep-last",
+                  "--before",
+                  "--db"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [
+                  "--help"
+                ],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": [
+                  "prune"
+                ]
+              }
+            }
+          }
+        ],
+        "family": null,
+        "native_capability": null
+      },
+      {
+        "rule_id": "command.vaultsync.restore",
+        "rule_version": "1.0.0",
+        "permission_id": "command.vaultsync.permission.restore",
+        "title": "VaultSync restore",
+        "description": "Identifies VaultSync restore operations that can write or delete files at the destination. Dry-run and help are safe variants.",
+        "severity": "critical",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "action_classes": [
+          "vaultsync restore command"
+        ],
+        "safer_alternatives": [
+          "Run vaultsync restore with --dry-run first and review the planned writes and deletions.",
+          "Confirm the recovery point and destination before approving the restore."
+        ],
+        "default_mode": "review",
+        "matcher": {
+          "op": "executable.v1",
+          "config": {
+            "allow_leading_options": false,
+            "executables": [
+              "vaultsync",
+              "vaultsync.cmd",
+              "vaultsync.exe"
+            ],
+            "fail_secure_unknown_options": true,
+            "forbidden_flags": [],
+            "interspersed_flags": [
+              "--dry-run",
+              "--clean",
+              "--keep-empty-dirs",
+              "--quiet",
+              "--json"
+            ],
+            "interspersed_options_with_values": [
+              "--snapshot",
+              "--db"
+            ],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [],
+            "options_with_values": [],
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": [
+              "restore"
+            ]
+          }
+        },
+        "safe_variants": [
+          {
+            "variant_id": "dry-run",
+            "title": "VaultSync restore dry run",
+            "matcher": {
+              "op": "executable.v1",
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "vaultsync",
+                  "vaultsync.cmd",
+                  "vaultsync.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--clean",
+                  "--keep-empty-dirs",
+                  "--quiet",
+                  "--json",
+                  "--dry-run"
+                ],
+                "interspersed_options_with_values": [
+                  "--snapshot",
+                  "--db"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [
+                  "--dry-run"
+                ],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": [
+                  "restore"
+                ]
+              }
+            }
+          },
+          {
+            "variant_id": "help",
+            "title": "VaultSync restore help",
+            "matcher": {
+              "op": "executable.v1",
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "vaultsync",
+                  "vaultsync.cmd",
+                  "vaultsync.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--dry-run",
+                  "--clean",
+                  "--keep-empty-dirs",
+                  "--quiet",
+                  "--json",
+                  "--help"
+                ],
+                "interspersed_options_with_values": [
+                  "--snapshot",
+                  "--db"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [
+                  "--help"
+                ],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": [
+                  "restore"
+                ]
+              }
+            }
+          }
+        ],
+        "family": null,
+        "native_capability": null
+      },
+      {
+        "rule_id": "command.vaultsync.remove-project",
+        "rule_version": "1.0.0",
+        "permission_id": "command.vaultsync.permission.remove-project",
+        "title": "VaultSync project removal",
+        "description": "Identifies VaultSync remove-project operations. The command removes project registration and local history index state; --yes and --quiet remain reviewed.",
+        "severity": "medium",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "action_classes": [
+          "vaultsync project removal command"
+        ],
+        "safer_alternatives": [
+          "Run vaultsync list-projects first and confirm the project to unregister.",
+          "Review removal even when --yes or --quiet is supplied."
+        ],
+        "default_mode": "review",
+        "matcher": {
+          "op": "executable.v1",
+          "config": {
+            "allow_leading_options": false,
+            "executables": [
+              "vaultsync",
+              "vaultsync.cmd",
+              "vaultsync.exe"
+            ],
+            "fail_secure_unknown_options": true,
+            "forbidden_flags": [],
+            "interspersed_flags": [
+              "--yes",
+              "--quiet"
+            ],
+            "interspersed_options_with_values": [
+              "--db"
+            ],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [],
+            "options_with_values": [],
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": [
+              "remove-project"
+            ]
+          }
+        },
+        "safe_variants": [
+          {
+            "variant_id": "help",
+            "title": "VaultSync remove-project help",
+            "matcher": {
+              "op": "executable.v1",
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "vaultsync",
+                  "vaultsync.cmd",
+                  "vaultsync.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--yes",
+                  "--quiet",
+                  "--help"
+                ],
+                "interspersed_options_with_values": [
+                  "--db"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [
+                  "--help"
+                ],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": [
+                  "remove-project"
+                ]
+              }
+            }
+          }
+        ],
+        "family": null,
+        "native_capability": null
+      },
+      {
+        "rule_id": "command.vaultsync.set-path",
+        "rule_version": "1.0.0",
+        "permission_id": "command.vaultsync.permission.set-path",
+        "title": "VaultSync project path update",
+        "description": "Identifies VaultSync set-path and update-path operations. update-path is a CLI alias of set-path and is covered by the same rule.",
+        "severity": "medium",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "action_classes": [
+          "vaultsync project path update command"
+        ],
+        "safer_alternatives": [
+          "Run vaultsync list-projects first and confirm the current project root.",
+          "Confirm the new path before approving the change."
+        ],
+        "default_mode": "review",
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "executable.v1",
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "vaultsync",
+                  "vaultsync.cmd",
+                  "vaultsync.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--quiet"
+                ],
+                "interspersed_options_with_values": [
+                  "--db"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "set-path"
+                ]
+              }
+            },
+            {
+              "op": "executable.v1",
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "vaultsync",
+                  "vaultsync.cmd",
+                  "vaultsync.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--quiet"
+                ],
+                "interspersed_options_with_values": [
+                  "--db"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "update-path"
+                ]
+              }
+            }
+          ]
+        },
+        "safe_variants": [
+          {
+            "variant_id": "help",
+            "title": "VaultSync path-update help",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "vaultsync",
+                      "vaultsync.cmd",
+                      "vaultsync.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--quiet",
+                      "--help"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--db"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "set-path"
+                    ]
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "vaultsync",
+                      "vaultsync.cmd",
+                      "vaultsync.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--quiet",
+                      "--help"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--db"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "update-path"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "family": null,
+        "native_capability": null
+      }
+    ],
+    "publisher": {
+      "id": "community.vaultsync",
+      "display_name": "FG Labs",
+      "url": "https://fglabs.dev/vaultsync"
+    },
+    "homepage": "https://fglabs.dev/vaultsync",
+    "license": "MIT",
+    "icon": null,
+    "delegated_protection": null
+  }
+}
