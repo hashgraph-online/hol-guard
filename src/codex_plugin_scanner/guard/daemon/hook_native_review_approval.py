@@ -398,16 +398,18 @@ def _native_review_action_envelope(
     payload: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
     if payload is not None:
-        # Presentation only: approval identity and policy remain Rust-owned.
-        envelope = normalize_harness_payload(harness, "PreToolUse", payload, workspace=workspace).to_dict()
-        envelope.update(action_id=request_id, pre_execution_result="review")
-        host = urlparse(launch_target).hostname if "://" in launch_target else None
-        if command is None and host:
-            envelope.update(action_type="network_request", network_hosts=[host])
-        elif envelope["action_type"] == "config_change":
-            # Unknown native tools must show their redacted input, not a generic config label.
-            envelope["action_type"] = "mcp_tool"
-        return envelope
+        try:
+            envelope = normalize_harness_payload(harness, "PreToolUse", payload, workspace=workspace).to_dict()
+        except (ValueError, TypeError, KeyError):
+            envelope = None
+        if envelope is not None:
+            envelope.update(action_id=request_id, pre_execution_result="review")
+            host = urlparse(launch_target).hostname if "://" in launch_target else None
+            if command is None and host:
+                envelope.update(action_type="network_request", network_hosts=[host])
+            elif envelope.get("action_type") == "config_change":
+                envelope["action_type"] = "mcp_tool"
+            return envelope
     host = urlparse(launch_target).hostname if "://" in launch_target else None
     if command is not None:
         action_type = "shell_command"
