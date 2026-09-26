@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import os
 import signal
+import sys
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -77,7 +78,8 @@ def parse_process_snapshot(output: str) -> list[ProcessSnapshot]:
 def with_hook_worker_command_marker(command: list[str]) -> list[str]:
     """Mark a spawned worker command so a later reaper can attribute it."""
 
-    if HOOK_WORKER_COMMAND_MARKER in command:
+    # Frozen children parse every argv[2:] entry as key=value in freeze_support().
+    if getattr(sys, "frozen", False) or HOOK_WORKER_COMMAND_MARKER in command:
         return list(command)
     return [*command, HOOK_WORKER_COMMAND_MARKER]
 
