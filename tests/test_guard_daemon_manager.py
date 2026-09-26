@@ -2813,7 +2813,7 @@ def test_existing_active_pending_launch_is_retired_or_blocks_before_spawn(tmp_pa
     monkeypatch.setattr(
         daemon_manager_module,
         "retire_all_guard_daemons_for_home",
-        lambda _guard_home: events.append("retire-attempted") or [],
+        lambda _guard_home, **_kwargs: events.append("retire-attempted") or [],
     )
     monkeypatch.setattr(
         daemon_manager_module,
