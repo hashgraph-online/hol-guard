@@ -1,5 +1,5 @@
 use super::*;
-use std::fs::{self, OpenOptions};
+use std::fs;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -50,6 +50,8 @@ fn transition_lock_rejects_concurrent_owner_and_recovers_on_release() {
 #[cfg(unix)]
 #[test]
 fn transition_directory_lock_survives_lock_path_replacement() {
+    use std::fs::OpenOptions;
+
     let root = test_root();
     let path = transition_lock_path(&root).unwrap();
     with_transition_lock(&root, || {
