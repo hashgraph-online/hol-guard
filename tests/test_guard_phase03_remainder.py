@@ -430,6 +430,66 @@ def test_version_check_falls_back_to_cached_pypi_latest(monkeypatch: pytest.Monk
     assert payload["update_available"] is True
 
 
+def test_latest_version_lookup_keeps_prior_cache_when_response_lacks_stable_version(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cached_payload = {"info": {"version": "2.0.9"}}
+    monkeypatch.setattr(update_commands, "_last_pypi_payload", cached_payload)
+
+    class FakeResponse:
+        def __enter__(self) -> FakeResponse:
+            return self
+
+        def __exit__(
+            self,
+            exc_type: type[BaseException] | None,
+            exc_value: BaseException | None,
+            traceback: object,
+        ) -> None:
+            return None
+
+        def read(self, _limit: int) -> bytes:
+            return b'{"info":{}}'
+
+    monkeypatch.setattr(
+        update_commands.urllib.request, "urlopen", lambda *_args, **_kwargs: FakeResponse()
+    )
+
+    assert update_commands._latest_version_from_pypi() == "2.0.9"
+    assert update_commands._last_pypi_payload == cached_payload
+
+
+def test_latest_version_lookup_ignores_prerelease_info_version(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(update_commands, "_last_pypi_payload", None)
+
+    class FakeResponse:
+        def __enter__(self) -> FakeResponse:
+            return self
+
+        def __exit__(
+            self,
+            exc_type: type[BaseException] | None,
+            exc_value: BaseException | None,
+            traceback: object,
+        ) -> None:
+            return None
+
+        def read(self, _limit: int) -> bytes:
+            return (
+                b'{"info":{"version":"3.0.0a1"},"releases":{'
+                b'"3.0.0a1":[{"filename":"hol_guard-3.0.0a1-py3-none-any.whl"}],'
+                b'"2.0.9":[{"filename":"hol_guard-2.0.9-py3-none-any.whl"}]}}'
+            )
+
+    monkeypatch.setattr(
+        update_commands.urllib.request, "urlopen", lambda *_args, **_kwargs: FakeResponse()
+    )
+
+    assert update_commands._latest_version_from_pypi() == "2.0.9"
+
+
 def test_install_setup_listing_detects_safe_config_without_mutating_it(tmp_path: Path) -> None:
     context = _context(tmp_path)
     store = GuardStore(context.guard_home)

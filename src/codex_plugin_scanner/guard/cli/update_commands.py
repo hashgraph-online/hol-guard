@@ -1362,16 +1362,33 @@ def _latest_version_from_pypi() -> str | None:
         UnicodeDecodeError,
     ):
         return _cached_pypi_latest_version()
-    if not isinstance(payload, dict):
+    version = _stable_version_from_pypi_payload(payload)
+    if version is None:
         return _cached_pypi_latest_version()
     _last_pypi_payload = payload
+    return version
+
+
+def _stable_version_from_pypi_payload(payload: object) -> str | None:
+    """Return the newest stable release in a PyPI payload, or ``None``.
+
+    ``info.version`` can name a pre-release when the newest PyPI upload is an
+    alpha, so stable-channel consumers must reject pre-releases there and fall
+    back to scanning the ``releases`` map.
+    """
+
+    if not isinstance(payload, dict):
+        return None
     info = payload.get("info")
-    if not isinstance(info, dict):
-        return _cached_pypi_latest_version()
-    version = info.get("version")
-    if isinstance(version, str) and version.strip():
-        return version
-    return _cached_pypi_latest_version()
+    if isinstance(info, dict):
+        version = info.get("version")
+        if isinstance(version, str) and version.strip():
+            try:
+                if not Version(version.strip()).is_prerelease:
+                    return version.strip()
+            except InvalidVersion:
+                pass
+    return newest_pypi_version(payload, include_stable=True, include_alpha=False)
 
 
 def _cached_pypi_latest_version() -> str | None:
@@ -1382,15 +1399,7 @@ def _cached_pypi_latest_version() -> str | None:
     as consistent as the alpha channel, which already reads the same cache.
     """
 
-    payload = _last_pypi_payload
-    if not isinstance(payload, dict):
-        return None
-    info = payload.get("info")
-    if isinstance(info, dict):
-        version = info.get("version")
-        if isinstance(version, str) and version.strip():
-            return version.strip()
-    return newest_pypi_version(payload, include_stable=True, include_alpha=False)
+    return _stable_version_from_pypi_payload(_last_pypi_payload)
 
 
 def _latest_alpha_version_from_pypi(current_version: str) -> str | None:
