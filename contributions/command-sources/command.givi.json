@@ -5,45 +5,21 @@
     "version": "1.0.0",
     "name": "GiviLoop CLI controls",
     "description": "Opt-in review of six direct givi CLI operations affecting automatic review and finding decisions. Does not cover MCP calls, npm/Node wrappers, other submissions or all GiviLoop writes.",
-    "icon": {
-      "kind": "none"
-    },
-    "publisher": {
-      "id": "community.givi",
-      "display_name": "Community"
-    },
+    "icon": {"kind": "none"},
+    "publisher": {"id": "community.givi", "display_name": "Community"},
     "homepage": "https://github.com/vgflutter/GiviLoop",
     "license": "Apache-2.0",
-    "action_classes": [
-      "givi automatic-review configuration",
-      "givi automatic-review execution",
-      "givi finding decision write"
-    ],
-    "risk_classes": [
-      "execution"
-    ],
-    "safer_alternatives": [
-      "Inspect givi auto-review status and the selected repository before changing automation or acknowledging a run.",
-      "Inspect the selected changed files and configured reviewer; keep the stable task ID and do not bypass a skipped or suspended attempt.",
-      "Verify the claim independently and keep the original --run-id; updates must identify the finding with --id in that run."
-    ],
-    "reference_urls": [
-      "https://github.com/vgflutter/GiviLoop/blob/bb97231e82585599417320d901e63591b358a720/src/cli.ts",
-      "https://github.com/vgflutter/GiviLoop/blob/bb97231e82585599417320d901e63591b358a720/src/workflow-commands.ts",
-      "https://github.com/vgflutter/GiviLoop/blob/bb97231e82585599417320d901e63591b358a720/src/auto-review.ts",
-      "https://github.com/vgflutter/GiviLoop/blob/bb97231e82585599417320d901e63591b358a720/src/review-evidence.ts",
-      "https://github.com/vgflutter/GiviLoop/blob/bb97231e82585599417320d901e63591b358a720/src/review-report.ts",
-      "https://github.com/vgflutter/GiviLoop/blob/bb97231e82585599417320d901e63591b358a720/package.json"
-    ],
+    "action_classes": ["givi automatic-review configuration", "givi automatic-review execution", "givi finding decision write"],
+    "risk_classes": ["execution"],
+    "safer_alternatives": ["Inspect givi auto-review status and the selected repository before changing automation or acknowledging a run.", "Inspect the selected changed files and configured reviewer; keep the stable task ID and do not bypass a skipped or suspended attempt.", "Verify the claim independently and keep the original --run-id; updates must identify the finding with --id in that run."],
+    "reference_urls": ["https://github.com/vgflutter/GiviLoop/blob/bb97231e82585599417320d901e63591b358a720/src/cli.ts", "https://github.com/vgflutter/GiviLoop/blob/bb97231e82585599417320d901e63591b358a720/src/workflow-commands.ts", "https://github.com/vgflutter/GiviLoop/blob/bb97231e82585599417320d901e63591b358a720/src/auto-review.ts", "https://github.com/vgflutter/GiviLoop/blob/bb97231e82585599417320d901e63591b358a720/src/review-evidence.ts", "https://github.com/vgflutter/GiviLoop/blob/bb97231e82585599417320d901e63591b358a720/src/review-report.ts", "https://github.com/vgflutter/GiviLoop/blob/bb97231e82585599417320d901e63591b358a720/package.json"],
     "required": false,
     "source": "built-in",
     "aliases": [],
     "dependencies": [],
     "conflicts": [],
     "ecosystem_ids": [],
-    "executables": [
-      "givi"
-    ],
+    "executables": ["givi"],
     "project_markers": [],
     "permissions": [
       {
@@ -56,17 +32,13 @@
         "default_enabled": true,
         "configurable": true,
         "typed_capabilities": [],
-        "action_classes": [
-          "givi automatic-review configuration"
-        ],
+        "action_classes": ["givi automatic-review configuration"],
         "dependencies": [],
         "conflicts": [],
         "implied_permissions": [],
         "introduced_version": "1.0.0",
         "deprecated": false,
-        "safer_guidance": [
-          "Inspect givi auto-review status and the selected repository before changing automation or acknowledging a run."
-        ],
+        "safer_guidance": ["Inspect givi auto-review status and the selected repository before changing automation or acknowledging a run."],
         "example_command": "givi auto-review enable"
       },
       {
@@ -79,17 +51,13 @@
         "default_enabled": true,
         "configurable": true,
         "typed_capabilities": [],
-        "action_classes": [
-          "givi automatic-review execution"
-        ],
+        "action_classes": ["givi automatic-review execution"],
         "dependencies": [],
         "conflicts": [],
         "implied_permissions": [],
         "introduced_version": "1.0.0",
         "deprecated": false,
-        "safer_guidance": [
-          "Inspect the selected changed files and configured reviewer; keep the stable task ID and do not bypass a skipped or suspended attempt."
-        ],
+        "safer_guidance": ["Inspect the selected changed files and configured reviewer; keep the stable task ID and do not bypass a skipped or suspended attempt."],
         "example_command": "givi auto-review run --task-id task-1 --checks passed"
       },
       {
@@ -102,17 +70,13 @@
         "default_enabled": true,
         "configurable": true,
         "typed_capabilities": [],
-        "action_classes": [
-          "givi finding decision write"
-        ],
+        "action_classes": ["givi finding decision write"],
         "dependencies": [],
         "conflicts": [],
         "implied_permissions": [],
         "introduced_version": "1.0.0",
         "deprecated": false,
-        "safer_guidance": [
-          "Verify the claim independently and keep the original --run-id; updates must identify the finding with --id in that run."
-        ],
+        "safer_guidance": ["Verify the claim independently and keep the original --run-id; updates must identify the finding with --id in that run."],
         "example_command": "givi findings update --run-id RUN --id F-ID --status unverified"
       }
     ],
@@ -124,60 +88,18 @@
         "title": "Enable automatic review",
         "description": "Can write .giviloop/auto-review.json, AGENTS.md and supporting configuration; --client codex also installs managed client settings and tool approvals.",
         "severity": "medium",
-        "risk_classes": [
-          "execution"
-        ],
-        "action_classes": [
-          "givi automatic-review configuration"
-        ],
-        "safer_alternatives": [
-          "Inspect givi auto-review status and the selected repository before changing automation or acknowledging a run."
-        ],
+        "risk_classes": ["execution"],
+        "action_classes": ["givi automatic-review configuration"],
+        "safer_alternatives": ["Inspect givi auto-review status and the selected repository before changing automation or acknowledging a run."],
         "default_mode": "review",
         "matcher": {
           "op": "leading-subcommand.v1",
           "config": {
-            "executables": [
-              "givi"
-            ],
-            "subcommands": [
-              "auto-review",
-              "enable"
-            ],
-            "options_with_values": [
-              "--repo",
-              "--task-id",
-              "--checks",
-              "--file",
-              "--run-id",
-              "--client",
-              "--repositoryPath",
-              "-f"
-            ],
-            "forbidden_flags": [
-              "--repo",
-              "--task-id",
-              "--checks",
-              "--file",
-              "--run-id",
-              "--client",
-              "--version",
-              "--help",
-              "-h",
-              "--json",
-              "--repositoryPath",
-              "-f"
-            ],
-            "interleaved_options_with_values": [
-              "--repo",
-              "--task-id",
-              "--checks",
-              "--file",
-              "--run-id",
-              "--client",
-              "--repositoryPath",
-              "-f"
-            ]
+            "executables": ["givi"],
+            "subcommands": ["auto-review", "enable"],
+            "options_with_values": ["--repo", "--task-id", "--checks", "--file", "--run-id", "--client", "--repositoryPath", "-f"],
+            "forbidden_flags": ["--repo", "--task-id", "--checks", "--file", "--run-id", "--client", "--version", "--help", "-h", "--json", "--repositoryPath", "-f"],
+            "interleaved_options_with_values": ["--repo", "--task-id", "--checks", "--file", "--run-id", "--client", "--repositoryPath", "-f"]
           }
         },
         "safe_variants": [
@@ -187,32 +109,13 @@
             "matcher": {
               "op": "executable.v1",
               "config": {
-                "executables": [
-                  "givi"
-                ],
-                "subcommands": [
-                  "auto-review",
-                  "enable"
-                ],
+                "executables": ["givi"],
+                "subcommands": ["auto-review", "enable"],
                 "allow_leading_options": false,
-                "interspersed_options_with_values": [
-                  "--repo",
-                  "--task-id",
-                  "--checks",
-                  "--file",
-                  "--run-id",
-                  "--client",
-                  "--repositoryPath",
-                  "-f"
-                ],
-                "interspersed_flags": [
-                  "--help",
-                  "-h"
-                ],
+                "interspersed_options_with_values": ["--repo", "--task-id", "--checks", "--file", "--run-id", "--client", "--repositoryPath", "-f"],
+                "interspersed_flags": ["--help", "-h"],
                 "fail_secure_unknown_options": true,
-                "required_flags": [
-                  "--help"
-                ],
+                "required_flags": ["--help"],
                 "required_flags_in_all_arguments": true
               }
             }
@@ -223,32 +126,13 @@
             "matcher": {
               "op": "executable.v1",
               "config": {
-                "executables": [
-                  "givi"
-                ],
-                "subcommands": [
-                  "auto-review",
-                  "enable"
-                ],
+                "executables": ["givi"],
+                "subcommands": ["auto-review", "enable"],
                 "allow_leading_options": false,
-                "interspersed_options_with_values": [
-                  "--repo",
-                  "--task-id",
-                  "--checks",
-                  "--file",
-                  "--run-id",
-                  "--client",
-                  "--repositoryPath",
-                  "-f"
-                ],
-                "interspersed_flags": [
-                  "--help",
-                  "-h"
-                ],
+                "interspersed_options_with_values": ["--repo", "--task-id", "--checks", "--file", "--run-id", "--client", "--repositoryPath", "-f"],
+                "interspersed_flags": ["--help", "-h"],
                 "fail_secure_unknown_options": true,
-                "required_flags": [
-                  "-h"
-                ],
+                "required_flags": ["-h"],
                 "required_flags_in_all_arguments": true
               }
             }
@@ -262,60 +146,18 @@
         "title": "Disable automatic review",
         "description": "Revokes automatic-review policy and removes managed instructions/client configuration. An in-flight review is not cancelled.",
         "severity": "medium",
-        "risk_classes": [
-          "execution"
-        ],
-        "action_classes": [
-          "givi automatic-review configuration"
-        ],
-        "safer_alternatives": [
-          "Inspect givi auto-review status and the selected repository before changing automation or acknowledging a run."
-        ],
+        "risk_classes": ["execution"],
+        "action_classes": ["givi automatic-review configuration"],
+        "safer_alternatives": ["Inspect givi auto-review status and the selected repository before changing automation or acknowledging a run."],
         "default_mode": "review",
         "matcher": {
           "op": "leading-subcommand.v1",
           "config": {
-            "executables": [
-              "givi"
-            ],
-            "subcommands": [
-              "auto-review",
-              "disable"
-            ],
-            "options_with_values": [
-              "--repo",
-              "--task-id",
-              "--checks",
-              "--file",
-              "--run-id",
-              "--client",
-              "--repositoryPath",
-              "-f"
-            ],
-            "forbidden_flags": [
-              "--repo",
-              "--task-id",
-              "--checks",
-              "--file",
-              "--run-id",
-              "--client",
-              "--version",
-              "--help",
-              "-h",
-              "--json",
-              "--repositoryPath",
-              "-f"
-            ],
-            "interleaved_options_with_values": [
-              "--repo",
-              "--task-id",
-              "--checks",
-              "--file",
-              "--run-id",
-              "--client",
-              "--repositoryPath",
-              "-f"
-            ]
+            "executables": ["givi"],
+            "subcommands": ["auto-review", "disable"],
+            "options_with_values": ["--repo", "--task-id", "--checks", "--file", "--run-id", "--client", "--repositoryPath", "-f"],
+            "forbidden_flags": ["--repo", "--task-id", "--checks", "--file", "--run-id", "--client", "--version", "--help", "-h", "--json", "--repositoryPath", "-f"],
+            "interleaved_options_with_values": ["--repo", "--task-id", "--checks", "--file", "--run-id", "--client", "--repositoryPath", "-f"]
           }
         },
         "safe_variants": [
@@ -325,32 +167,13 @@
             "matcher": {
               "op": "executable.v1",
               "config": {
-                "executables": [
-                  "givi"
-                ],
-                "subcommands": [
-                  "auto-review",
-                  "disable"
-                ],
+                "executables": ["givi"],
+                "subcommands": ["auto-review", "disable"],
                 "allow_leading_options": false,
-                "interspersed_options_with_values": [
-                  "--repo",
-                  "--task-id",
-                  "--checks",
-                  "--file",
-                  "--run-id",
-                  "--client",
-                  "--repositoryPath",
-                  "-f"
-                ],
-                "interspersed_flags": [
-                  "--help",
-                  "-h"
-                ],
+                "interspersed_options_with_values": ["--repo", "--task-id", "--checks", "--file", "--run-id", "--client", "--repositoryPath", "-f"],
+                "interspersed_flags": ["--help", "-h"],
                 "fail_secure_unknown_options": true,
-                "required_flags": [
-                  "--help"
-                ],
+                "required_flags": ["--help"],
                 "required_flags_in_all_arguments": true
               }
             }
@@ -361,32 +184,13 @@
             "matcher": {
               "op": "executable.v1",
               "config": {
-                "executables": [
-                  "givi"
-                ],
-                "subcommands": [
-                  "auto-review",
-                  "disable"
-                ],
+                "executables": ["givi"],
+                "subcommands": ["auto-review", "disable"],
                 "allow_leading_options": false,
-                "interspersed_options_with_values": [
-                  "--repo",
-                  "--task-id",
-                  "--checks",
-                  "--file",
-                  "--run-id",
-                  "--client",
-                  "--repositoryPath",
-                  "-f"
-                ],
-                "interspersed_flags": [
-                  "--help",
-                  "-h"
-                ],
+                "interspersed_options_with_values": ["--repo", "--task-id", "--checks", "--file", "--run-id", "--client", "--repositoryPath", "-f"],
+                "interspersed_flags": ["--help", "-h"],
                 "fail_secure_unknown_options": true,
-                "required_flags": [
-                  "-h"
-                ],
+                "required_flags": ["-h"],
                 "required_flags_in_all_arguments": true
               }
             }
@@ -400,60 +204,18 @@
         "title": "Acknowledge an automatic-review attempt",
         "description": "Writes acknowledgement to automatic-review history, potentially allowing new tasks after an unresolved attempt. Does not resend or certify the old review.",
         "severity": "medium",
-        "risk_classes": [
-          "execution"
-        ],
-        "action_classes": [
-          "givi automatic-review configuration"
-        ],
-        "safer_alternatives": [
-          "Inspect givi auto-review status and the selected repository before changing automation or acknowledging a run."
-        ],
+        "risk_classes": ["execution"],
+        "action_classes": ["givi automatic-review configuration"],
+        "safer_alternatives": ["Inspect givi auto-review status and the selected repository before changing automation or acknowledging a run."],
         "default_mode": "review",
         "matcher": {
           "op": "leading-subcommand.v1",
           "config": {
-            "executables": [
-              "givi"
-            ],
-            "subcommands": [
-              "auto-review",
-              "acknowledge"
-            ],
-            "options_with_values": [
-              "--repo",
-              "--task-id",
-              "--checks",
-              "--file",
-              "--run-id",
-              "--client",
-              "--repositoryPath",
-              "-f"
-            ],
-            "forbidden_flags": [
-              "--repo",
-              "--task-id",
-              "--checks",
-              "--file",
-              "--run-id",
-              "--client",
-              "--version",
-              "--help",
-              "-h",
-              "--json",
-              "--repositoryPath",
-              "-f"
-            ],
-            "interleaved_options_with_values": [
-              "--repo",
-              "--task-id",
-              "--checks",
-              "--file",
-              "--run-id",
-              "--client",
-              "--repositoryPath",
-              "-f"
-            ]
+            "executables": ["givi"],
+            "subcommands": ["auto-review", "acknowledge"],
+            "options_with_values": ["--repo", "--task-id", "--checks", "--file", "--run-id", "--client", "--repositoryPath", "-f"],
+            "forbidden_flags": ["--repo", "--task-id", "--checks", "--file", "--run-id", "--client", "--version", "--help", "-h", "--json", "--repositoryPath", "-f"],
+            "interleaved_options_with_values": ["--repo", "--task-id", "--checks", "--file", "--run-id", "--client", "--repositoryPath", "-f"]
           }
         },
         "safe_variants": [
@@ -463,32 +225,13 @@
             "matcher": {
               "op": "executable.v1",
               "config": {
-                "executables": [
-                  "givi"
-                ],
-                "subcommands": [
-                  "auto-review",
-                  "acknowledge"
-                ],
+                "executables": ["givi"],
+                "subcommands": ["auto-review", "acknowledge"],
                 "allow_leading_options": false,
-                "interspersed_options_with_values": [
-                  "--repo",
-                  "--task-id",
-                  "--checks",
-                  "--file",
-                  "--run-id",
-                  "--client",
-                  "--repositoryPath",
-                  "-f"
-                ],
-                "interspersed_flags": [
-                  "--help",
-                  "-h"
-                ],
+                "interspersed_options_with_values": ["--repo", "--task-id", "--checks", "--file", "--run-id", "--client", "--repositoryPath", "-f"],
+                "interspersed_flags": ["--help", "-h"],
                 "fail_secure_unknown_options": true,
-                "required_flags": [
-                  "--help"
-                ],
+                "required_flags": ["--help"],
                 "required_flags_in_all_arguments": true
               }
             }
@@ -499,32 +242,13 @@
             "matcher": {
               "op": "executable.v1",
               "config": {
-                "executables": [
-                  "givi"
-                ],
-                "subcommands": [
-                  "auto-review",
-                  "acknowledge"
-                ],
+                "executables": ["givi"],
+                "subcommands": ["auto-review", "acknowledge"],
                 "allow_leading_options": false,
-                "interspersed_options_with_values": [
-                  "--repo",
-                  "--task-id",
-                  "--checks",
-                  "--file",
-                  "--run-id",
-                  "--client",
-                  "--repositoryPath",
-                  "-f"
-                ],
-                "interspersed_flags": [
-                  "--help",
-                  "-h"
-                ],
+                "interspersed_options_with_values": ["--repo", "--task-id", "--checks", "--file", "--run-id", "--client", "--repositoryPath", "-f"],
+                "interspersed_flags": ["--help", "-h"],
                 "fail_secure_unknown_options": true,
-                "required_flags": [
-                  "-h"
-                ],
+                "required_flags": ["-h"],
                 "required_flags_in_all_arguments": true
               }
             }
@@ -538,60 +262,18 @@
         "title": "Run automatic review",
         "description": "May skip according to application state, or save review artifacts/history and submit selected changed code to the configured reviewer.",
         "severity": "medium",
-        "risk_classes": [
-          "execution"
-        ],
-        "action_classes": [
-          "givi automatic-review execution"
-        ],
-        "safer_alternatives": [
-          "Inspect the selected changed files and configured reviewer; keep the stable task ID and do not bypass a skipped or suspended attempt."
-        ],
+        "risk_classes": ["execution"],
+        "action_classes": ["givi automatic-review execution"],
+        "safer_alternatives": ["Inspect the selected changed files and configured reviewer; keep the stable task ID and do not bypass a skipped or suspended attempt."],
         "default_mode": "review",
         "matcher": {
           "op": "leading-subcommand.v1",
           "config": {
-            "executables": [
-              "givi"
-            ],
-            "subcommands": [
-              "auto-review",
-              "run"
-            ],
-            "options_with_values": [
-              "--repo",
-              "--task-id",
-              "--checks",
-              "--file",
-              "--run-id",
-              "--client",
-              "--repositoryPath",
-              "-f"
-            ],
-            "forbidden_flags": [
-              "--repo",
-              "--task-id",
-              "--checks",
-              "--file",
-              "--run-id",
-              "--client",
-              "--version",
-              "--help",
-              "-h",
-              "--json",
-              "--repositoryPath",
-              "-f"
-            ],
-            "interleaved_options_with_values": [
-              "--repo",
-              "--task-id",
-              "--checks",
-              "--file",
-              "--run-id",
-              "--client",
-              "--repositoryPath",
-              "-f"
-            ]
+            "executables": ["givi"],
+            "subcommands": ["auto-review", "run"],
+            "options_with_values": ["--repo", "--task-id", "--checks", "--file", "--run-id", "--client", "--repositoryPath", "-f"],
+            "forbidden_flags": ["--repo", "--task-id", "--checks", "--file", "--run-id", "--client", "--version", "--help", "-h", "--json", "--repositoryPath", "-f"],
+            "interleaved_options_with_values": ["--repo", "--task-id", "--checks", "--file", "--run-id", "--client", "--repositoryPath", "-f"]
           }
         },
         "safe_variants": [
@@ -601,32 +283,13 @@
             "matcher": {
               "op": "executable.v1",
               "config": {
-                "executables": [
-                  "givi"
-                ],
-                "subcommands": [
-                  "auto-review",
-                  "run"
-                ],
+                "executables": ["givi"],
+                "subcommands": ["auto-review", "run"],
                 "allow_leading_options": false,
-                "interspersed_options_with_values": [
-                  "--repo",
-                  "--task-id",
-                  "--checks",
-                  "--file",
-                  "--run-id",
-                  "--client",
-                  "--repositoryPath",
-                  "-f"
-                ],
-                "interspersed_flags": [
-                  "--help",
-                  "-h"
-                ],
+                "interspersed_options_with_values": ["--repo", "--task-id", "--checks", "--file", "--run-id", "--client", "--repositoryPath", "-f"],
+                "interspersed_flags": ["--help", "-h"],
                 "fail_secure_unknown_options": true,
-                "required_flags": [
-                  "--help"
-                ],
+                "required_flags": ["--help"],
                 "required_flags_in_all_arguments": true
               }
             }
@@ -637,32 +300,13 @@
             "matcher": {
               "op": "executable.v1",
               "config": {
-                "executables": [
-                  "givi"
-                ],
-                "subcommands": [
-                  "auto-review",
-                  "run"
-                ],
+                "executables": ["givi"],
+                "subcommands": ["auto-review", "run"],
                 "allow_leading_options": false,
-                "interspersed_options_with_values": [
-                  "--repo",
-                  "--task-id",
-                  "--checks",
-                  "--file",
-                  "--run-id",
-                  "--client",
-                  "--repositoryPath",
-                  "-f"
-                ],
-                "interspersed_flags": [
-                  "--help",
-                  "-h"
-                ],
+                "interspersed_options_with_values": ["--repo", "--task-id", "--checks", "--file", "--run-id", "--client", "--repositoryPath", "-f"],
+                "interspersed_flags": ["--help", "-h"],
                 "fail_secure_unknown_options": true,
-                "required_flags": [
-                  "-h"
-                ],
+                "required_flags": ["-h"],
                 "required_flags_in_all_arguments": true
               }
             }
@@ -676,15 +320,9 @@
         "title": "Add a finding decision",
         "description": "Creates a finding and its first recorded assessment, including confirmed or dismissed when application evidence requirements are satisfied.",
         "severity": "medium",
-        "risk_classes": [
-          "execution"
-        ],
-        "action_classes": [
-          "givi finding decision write"
-        ],
-        "safer_alternatives": [
-          "Verify the claim independently and keep the original --run-id; updates must identify the finding with --id in that run."
-        ],
+        "risk_classes": ["execution"],
+        "action_classes": ["givi finding decision write"],
+        "safer_alternatives": ["Verify the claim independently and keep the original --run-id; updates must identify the finding with --id in that run."],
         "default_mode": "review",
         "matcher": {
           "op": "any.v1",
@@ -693,112 +331,21 @@
             {
               "op": "leading-subcommand.v1",
               "config": {
-                "executables": [
-                  "givi"
-                ],
-                "subcommands": [
-                  "findings",
-                  "add"
-                ],
-                "options_with_values": [
-                  "--repo",
-                  "--run-id",
-                  "--id",
-                  "--title",
-                  "--claim",
-                  "--status",
-                  "--reason",
-                  "--evidence",
-                  "--file",
-                  "--repositoryPath",
-                  "-f"
-                ],
-                "forbidden_flags": [
-                  "--repo",
-                  "--run-id",
-                  "--id",
-                  "--title",
-                  "--claim",
-                  "--status",
-                  "--reason",
-                  "--evidence",
-                  "--file",
-                  "--version",
-                  "--help",
-                  "-h",
-                  "--json",
-                  "--repositoryPath",
-                  "-f"
-                ],
-                "interleaved_options_with_values": [
-                  "--repo",
-                  "--run-id",
-                  "--id",
-                  "--title",
-                  "--claim",
-                  "--status",
-                  "--reason",
-                  "--evidence",
-                  "--file",
-                  "--repositoryPath",
-                  "-f"
-                ]
+                "executables": ["givi"],
+                "subcommands": ["findings", "add"],
+                "options_with_values": ["--repo", "--run-id", "--id", "--title", "--claim", "--status", "--reason", "--evidence", "--file", "--repositoryPath", "-f"],
+                "forbidden_flags": ["--repo", "--run-id", "--id", "--title", "--claim", "--status", "--reason", "--evidence", "--file", "--version", "--help", "-h", "--json", "--repositoryPath", "-f"],
+                "interleaved_options_with_values": ["--repo", "--run-id", "--id", "--title", "--claim", "--status", "--reason", "--evidence", "--file", "--repositoryPath", "-f"]
               }
             },
             {
               "op": "leading-subcommand.v1",
               "config": {
-                "executables": [
-                  "givi"
-                ],
-                "subcommands": [
-                  "findings",
-                  "--json",
-                  "add"
-                ],
-                "options_with_values": [
-                  "--repo",
-                  "--run-id",
-                  "--id",
-                  "--title",
-                  "--claim",
-                  "--status",
-                  "--reason",
-                  "--evidence",
-                  "--file",
-                  "--repositoryPath",
-                  "-f"
-                ],
-                "forbidden_flags": [
-                  "--repo",
-                  "--run-id",
-                  "--id",
-                  "--title",
-                  "--claim",
-                  "--status",
-                  "--reason",
-                  "--evidence",
-                  "--file",
-                  "--version",
-                  "--help",
-                  "-h",
-                  "--json",
-                  "--repositoryPath",
-                  "-f"
-                ],
-                "interleaved_options_with_values": [
-                  "--repo",
-                  "--run-id",
-                  "--id",
-                  "--title",
-                  "--claim",
-                  "--status",
-                  "--reason",
-                  "--evidence",
-                  "--file",
-                  "--repositoryPath",
-                  "-f"
-                ]
+                "executables": ["givi"],
+                "subcommands": ["findings", "--json", "add"],
+                "options_with_values": ["--repo", "--run-id", "--id", "--title", "--claim", "--status", "--reason", "--evidence", "--file", "--repositoryPath", "-f"],
+                "forbidden_flags": ["--repo", "--run-id", "--id", "--title", "--claim", "--status", "--reason", "--evidence", "--file", "--version", "--help", "-h", "--json", "--repositoryPath", "-f"],
+                "interleaved_options_with_values": ["--repo", "--run-id", "--id", "--title", "--claim", "--status", "--reason", "--evidence", "--file", "--repositoryPath", "-f"]
               }
             }
           ]
@@ -810,36 +357,13 @@
             "matcher": {
               "op": "executable.v1",
               "config": {
-                "executables": [
-                  "givi"
-                ],
-                "subcommands": [
-                  "findings",
-                  "add"
-                ],
+                "executables": ["givi"],
+                "subcommands": ["findings", "add"],
                 "allow_leading_options": false,
-                "interspersed_options_with_values": [
-                  "--repo",
-                  "--run-id",
-                  "--id",
-                  "--title",
-                  "--claim",
-                  "--status",
-                  "--reason",
-                  "--evidence",
-                  "--file",
-                  "--repositoryPath",
-                  "-f"
-                ],
-                "interspersed_flags": [
-                  "--help",
-                  "-h",
-                  "--json"
-                ],
+                "interspersed_options_with_values": ["--repo", "--run-id", "--id", "--title", "--claim", "--status", "--reason", "--evidence", "--file", "--repositoryPath", "-f"],
+                "interspersed_flags": ["--help", "-h", "--json"],
                 "fail_secure_unknown_options": true,
-                "required_flags": [
-                  "--help"
-                ],
+                "required_flags": ["--help"],
                 "required_flags_in_all_arguments": true
               }
             }
@@ -850,36 +374,13 @@
             "matcher": {
               "op": "executable.v1",
               "config": {
-                "executables": [
-                  "givi"
-                ],
-                "subcommands": [
-                  "findings",
-                  "add"
-                ],
+                "executables": ["givi"],
+                "subcommands": ["findings", "add"],
                 "allow_leading_options": false,
-                "interspersed_options_with_values": [
-                  "--repo",
-                  "--run-id",
-                  "--id",
-                  "--title",
-                  "--claim",
-                  "--status",
-                  "--reason",
-                  "--evidence",
-                  "--file",
-                  "--repositoryPath",
-                  "-f"
-                ],
-                "interspersed_flags": [
-                  "--help",
-                  "-h",
-                  "--json"
-                ],
+                "interspersed_options_with_values": ["--repo", "--run-id", "--id", "--title", "--claim", "--status", "--reason", "--evidence", "--file", "--repositoryPath", "-f"],
+                "interspersed_flags": ["--help", "-h", "--json"],
                 "fail_secure_unknown_options": true,
-                "required_flags": [
-                  "-h"
-                ],
+                "required_flags": ["-h"],
                 "required_flags_in_all_arguments": true
               }
             }
@@ -893,15 +394,9 @@
         "title": "Update a finding decision",
         "description": "Appends a decision to a finding in the explicitly selected run, preserving its original title and claim. Missing IDs are not supplied by Guard.",
         "severity": "medium",
-        "risk_classes": [
-          "execution"
-        ],
-        "action_classes": [
-          "givi finding decision write"
-        ],
-        "safer_alternatives": [
-          "Verify the claim independently and keep the original --run-id; updates must identify the finding with --id in that run."
-        ],
+        "risk_classes": ["execution"],
+        "action_classes": ["givi finding decision write"],
+        "safer_alternatives": ["Verify the claim independently and keep the original --run-id; updates must identify the finding with --id in that run."],
         "default_mode": "review",
         "matcher": {
           "op": "any.v1",
@@ -910,112 +405,21 @@
             {
               "op": "leading-subcommand.v1",
               "config": {
-                "executables": [
-                  "givi"
-                ],
-                "subcommands": [
-                  "findings",
-                  "update"
-                ],
-                "options_with_values": [
-                  "--repo",
-                  "--run-id",
-                  "--id",
-                  "--title",
-                  "--claim",
-                  "--status",
-                  "--reason",
-                  "--evidence",
-                  "--file",
-                  "--repositoryPath",
-                  "-f"
-                ],
-                "forbidden_flags": [
-                  "--repo",
-                  "--run-id",
-                  "--id",
-                  "--title",
-                  "--claim",
-                  "--status",
-                  "--reason",
-                  "--evidence",
-                  "--file",
-                  "--version",
-                  "--help",
-                  "-h",
-                  "--json",
-                  "--repositoryPath",
-                  "-f"
-                ],
-                "interleaved_options_with_values": [
-                  "--repo",
-                  "--run-id",
-                  "--id",
-                  "--title",
-                  "--claim",
-                  "--status",
-                  "--reason",
-                  "--evidence",
-                  "--file",
-                  "--repositoryPath",
-                  "-f"
-                ]
+                "executables": ["givi"],
+                "subcommands": ["findings", "update"],
+                "options_with_values": ["--repo", "--run-id", "--id", "--title", "--claim", "--status", "--reason", "--evidence", "--file", "--repositoryPath", "-f"],
+                "forbidden_flags": ["--repo", "--run-id", "--id", "--title", "--claim", "--status", "--reason", "--evidence", "--file", "--version", "--help", "-h", "--json", "--repositoryPath", "-f"],
+                "interleaved_options_with_values": ["--repo", "--run-id", "--id", "--title", "--claim", "--status", "--reason", "--evidence", "--file", "--repositoryPath", "-f"]
               }
             },
             {
               "op": "leading-subcommand.v1",
               "config": {
-                "executables": [
-                  "givi"
-                ],
-                "subcommands": [
-                  "findings",
-                  "--json",
-                  "update"
-                ],
-                "options_with_values": [
-                  "--repo",
-                  "--run-id",
-                  "--id",
-                  "--title",
-                  "--claim",
-                  "--status",
-                  "--reason",
-                  "--evidence",
-                  "--file",
-                  "--repositoryPath",
-                  "-f"
-                ],
-                "forbidden_flags": [
-                  "--repo",
-                  "--run-id",
-                  "--id",
-                  "--title",
-                  "--claim",
-                  "--status",
-                  "--reason",
-                  "--evidence",
-                  "--file",
-                  "--version",
-                  "--help",
-                  "-h",
-                  "--json",
-                  "--repositoryPath",
-                  "-f"
-                ],
-                "interleaved_options_with_values": [
-                  "--repo",
-                  "--run-id",
-                  "--id",
-                  "--title",
-                  "--claim",
-                  "--status",
-                  "--reason",
-                  "--evidence",
-                  "--file",
-                  "--repositoryPath",
-                  "-f"
-                ]
+                "executables": ["givi"],
+                "subcommands": ["findings", "--json", "update"],
+                "options_with_values": ["--repo", "--run-id", "--id", "--title", "--claim", "--status", "--reason", "--evidence", "--file", "--repositoryPath", "-f"],
+                "forbidden_flags": ["--repo", "--run-id", "--id", "--title", "--claim", "--status", "--reason", "--evidence", "--file", "--version", "--help", "-h", "--json", "--repositoryPath", "-f"],
+                "interleaved_options_with_values": ["--repo", "--run-id", "--id", "--title", "--claim", "--status", "--reason", "--evidence", "--file", "--repositoryPath", "-f"]
               }
             }
           ]
@@ -1027,36 +431,13 @@
             "matcher": {
               "op": "executable.v1",
               "config": {
-                "executables": [
-                  "givi"
-                ],
-                "subcommands": [
-                  "findings",
-                  "update"
-                ],
+                "executables": ["givi"],
+                "subcommands": ["findings", "update"],
                 "allow_leading_options": false,
-                "interspersed_options_with_values": [
-                  "--repo",
-                  "--run-id",
-                  "--id",
-                  "--title",
-                  "--claim",
-                  "--status",
-                  "--reason",
-                  "--evidence",
-                  "--file",
-                  "--repositoryPath",
-                  "-f"
-                ],
-                "interspersed_flags": [
-                  "--help",
-                  "-h",
-                  "--json"
-                ],
+                "interspersed_options_with_values": ["--repo", "--run-id", "--id", "--title", "--claim", "--status", "--reason", "--evidence", "--file", "--repositoryPath", "-f"],
+                "interspersed_flags": ["--help", "-h", "--json"],
                 "fail_secure_unknown_options": true,
-                "required_flags": [
-                  "--help"
-                ],
+                "required_flags": ["--help"],
                 "required_flags_in_all_arguments": true
               }
             }
@@ -1067,36 +448,13 @@
             "matcher": {
               "op": "executable.v1",
               "config": {
-                "executables": [
-                  "givi"
-                ],
-                "subcommands": [
-                  "findings",
-                  "update"
-                ],
+                "executables": ["givi"],
+                "subcommands": ["findings", "update"],
                 "allow_leading_options": false,
-                "interspersed_options_with_values": [
-                  "--repo",
-                  "--run-id",
-                  "--id",
-                  "--title",
-                  "--claim",
-                  "--status",
-                  "--reason",
-                  "--evidence",
-                  "--file",
-                  "--repositoryPath",
-                  "-f"
-                ],
-                "interspersed_flags": [
-                  "--help",
-                  "-h",
-                  "--json"
-                ],
+                "interspersed_options_with_values": ["--repo", "--run-id", "--id", "--title", "--claim", "--status", "--reason", "--evidence", "--file", "--repositoryPath", "-f"],
+                "interspersed_flags": ["--help", "-h", "--json"],
                 "fail_secure_unknown_options": true,
-                "required_flags": [
-                  "-h"
-                ],
+                "required_flags": ["-h"],
                 "required_flags_in_all_arguments": true
               }
             }

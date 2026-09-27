@@ -105,6 +105,16 @@ form or separated named options. `--version` is only a root command and there
 is no generic `--dry-run`. Invalid attempts are not certified safe; some retain
 the operation rule and others fall back to Guard's existing handling.
 
+The matcher policy intentionally treats unknown options conservatively: they
+must not turn a recognized write into an unreviewed action. Help safe variants
+are stricter because suppressing a review requires proving that the invocation
+is only help. Flags listed in both value-option and forbidden-flag sets are
+consumed with their values; a bare occurrence cannot stand in for an action.
+The second findings matcher explicitly recognizes the historical token sequence
+`findings --json add|update`; the native schema calls that sequence `subcommands`,
+which does not make `--json` a GiviLoop subcommand. These compatibility cases do
+not claim the current CLI accepts every historical form.
+
 ## Review identity and controls
 
 [`recordFinding`](https://github.com/vgflutter/GiviLoop/blob/bb97231e82585599417320d901e63591b358a720/src/review-evidence.ts)
