@@ -1363,10 +1363,9 @@ def _latest_version_from_pypi() -> str | None:
     ):
         return _cached_pypi_latest_version()
     version = _stable_version_from_pypi_payload(payload)
-    if version is None:
-        return _cached_pypi_latest_version()
-    _last_pypi_payload = payload
-    return version
+    if newest_pypi_version(payload, include_stable=True, include_alpha=True) is not None:
+        _last_pypi_payload = payload
+    return version if version is not None else _cached_pypi_latest_version()
 
 
 def _stable_version_from_pypi_payload(payload: object) -> str | None:
