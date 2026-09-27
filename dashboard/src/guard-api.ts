@@ -1221,8 +1221,11 @@ export function parseActionEnvelope(raw: unknown): GuardActionEnvelope | null {
   const packageTargets = raw["package_targets"];
   const preExecutionResult = aliasedPreExecutionResult.value;
   const policyAction = aliasedPolicyAction.value;
-  const scriptName = raw["script_name"];
-  const rawPayloadRedacted = raw["raw_payload_redacted"];
+  // Native reviews queued before the envelope carried these presentation fields
+  // omitted them. Absence is not an action contradiction. A present value with
+  // the wrong type still fails closed below.
+  const scriptName = raw["script_name"] === undefined ? null : raw["script_name"];
+  const rawPayloadRedacted = raw["raw_payload_redacted"] === undefined ? {} : raw["raw_payload_redacted"];
   if (
     typeof schemaVersion !== "number" ||
     typeof actionId !== "string" ||

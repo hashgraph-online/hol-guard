@@ -370,6 +370,50 @@ assert(
   parseActionEnvelope({ ...BASE_ENVELOPE, pre_execution_result: "future-action" }) === null,
   "P45: unknown pre-execution action invalidates the envelope",
 );
+assert(
+  parseActionEnvelope({ ...BASE_ENVELOPE, script_name: 1 }) === null,
+  "P45: a non-string script name still invalidates the envelope",
+);
+assert(
+  parseActionEnvelope({ ...BASE_ENVELOPE, raw_payload_redacted: null }) === null,
+  "P45: a null redacted payload still invalidates the envelope",
+);
+assert(
+  parseActionEnvelope({ ...BASE_ENVELOPE, raw_payload_redacted: ["not-a-record"] }) === null,
+  "P45: a non-object redacted payload still invalidates the envelope",
+);
+
+const historicalNativeReviewEnvelope = {
+  schema_version: 1,
+  action_id: "native-review",
+  harness: "cursor",
+  event_name: "PreToolUse",
+  action_type: "shell_command" as const,
+  workspace: null,
+  workspace_hash: null,
+  tool_name: "Shell",
+  command: "printf fixture",
+  prompt_excerpt: null,
+  prompt_text: null,
+  target_paths: [],
+  network_hosts: [],
+  mcp_server: null,
+  mcp_tool: null,
+  package_manager: null,
+  package_name: null,
+  pre_execution_result: "review" as const,
+};
+const parsedHistoricalNativeReview = parseActionEnvelope(historicalNativeReviewEnvelope);
+assert(parsedHistoricalNativeReview !== null, "P45: historical native reviews omit presentation fields without losing their action");
+assert(parsedHistoricalNativeReview?.script_name === null, "P45: omitted script name defaults to null");
+assert(
+  JSON.stringify(parsedHistoricalNativeReview?.raw_payload_redacted) === "{}",
+  "P45: omitted redacted payload defaults to an empty record",
+);
+assert(
+  parsedHistoricalNativeReview?.pre_execution_result === "review",
+  "P45: historical native review authority stays review",
+);
 
 const parsedBlockedEnvelope = parseActionEnvelope({
   ...BASE_ENVELOPE,
@@ -825,6 +869,24 @@ assert(
   normalizedMalformedEnvelope.action_envelope_json === null &&
     normalizedMalformedEnvelope.decision_contract_error === "authoritative_decision_inconsistent",
   "P45: approval normalization flags a malformed non-null envelope",
+);
+
+const normalizedHistoricalNativeReview = normalizeApprovalRequest({
+  ...BASE_REQUEST,
+  policy_action: "review",
+  action_envelope_json: historicalNativeReviewEnvelope,
+  decision_v2_json: {
+    ...BASE_DECISION_V2,
+    guard_action: "review",
+    action: "ask",
+  },
+});
+assert(
+  normalizedHistoricalNativeReview.decision_contract_error === undefined &&
+    normalizedHistoricalNativeReview.policy_action === "review" &&
+    normalizedHistoricalNativeReview.action_envelope_json?.pre_execution_result === "review" &&
+    normalizedHistoricalNativeReview.decision_v2_json?.action === "ask",
+  "P45: a historical native review with agreeing actions stays approvable",
 );
 
 const contradictoryReceiptSnapshot = normalizeRuntimeSnapshot({
