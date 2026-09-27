@@ -310,6 +310,7 @@ def test_latest_version_lookup_uses_practical_timeout(monkeypatch: pytest.Monkey
 
 
 def test_latest_version_lookup_rejects_oversized_response(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(update_commands, "_last_pypi_payload", None)
     monkeypatch.setattr(update_commands, "_PYPI_RESPONSE_LIMIT_BYTES", 32)
 
     class FakeResponse:
@@ -383,12 +384,50 @@ def test_bounded_version_read_enforces_total_deadline(monkeypatch: pytest.Monkey
 
 
 def test_latest_version_lookup_handles_truncated_response(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(update_commands, "_last_pypi_payload", None)
+
     def fake_urlopen(request: object, timeout: float, *, context=None) -> object:
         raise http.client.IncompleteRead(partial=b'{"info":')
 
     monkeypatch.setattr(update_commands.urllib.request, "urlopen", fake_urlopen)
 
     assert update_commands._latest_version_from_pypi() is None
+
+
+def test_latest_version_lookup_reuses_cached_pypi_payload_after_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        update_commands,
+        "_last_pypi_payload",
+        {"info": {"version": "2.0.9"}},
+    )
+
+    def fake_urlopen(request: object, timeout: float, *, context=None) -> object:
+        raise OSError("pypi unreachable")
+
+    monkeypatch.setattr(update_commands.urllib.request, "urlopen", fake_urlopen)
+
+    assert update_commands._latest_version_from_pypi() == "2.0.9"
+
+
+def test_version_check_falls_back_to_cached_pypi_latest(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        update_commands,
+        "_last_pypi_payload",
+        {"info": {"version": "2.0.9"}},
+    )
+
+    def fake_urlopen(request: object, timeout: float, *, context=None) -> object:
+        raise OSError("pypi unreachable")
+
+    monkeypatch.setattr(update_commands.urllib.request, "urlopen", fake_urlopen)
+
+    payload = update_commands._version_check_payload("2.0.0")
+
+    assert payload["status"] == "stale"
+    assert payload["latest_version"] == "2.0.9"
+    assert payload["update_available"] is True
 
 
 def test_install_setup_listing_detects_safe_config_without_mutating_it(tmp_path: Path) -> None:

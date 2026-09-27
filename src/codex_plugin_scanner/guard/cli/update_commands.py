@@ -1350,7 +1350,7 @@ def _latest_version_from_pypi() -> str | None:
         ) as response:
             raw_payload = _read_bounded_pypi_response(response, deadline=deadline)
             if len(raw_payload) > _PYPI_RESPONSE_LIMIT_BYTES:
-                return None
+                return _cached_pypi_latest_version()
             payload = json.loads(raw_payload.decode("utf-8"))
     except (
         ManagedNetworkError,
@@ -1361,15 +1361,36 @@ def _latest_version_from_pypi() -> str | None:
         json.JSONDecodeError,
         UnicodeDecodeError,
     ):
-        return None
+        return _cached_pypi_latest_version()
     if not isinstance(payload, dict):
-        return None
+        return _cached_pypi_latest_version()
     _last_pypi_payload = payload
     info = payload.get("info")
     if not isinstance(info, dict):
-        return None
+        return _cached_pypi_latest_version()
     version = info.get("version")
-    return version if isinstance(version, str) and version.strip() else None
+    if isinstance(version, str) and version.strip():
+        return version
+    return _cached_pypi_latest_version()
+
+
+def _cached_pypi_latest_version() -> str | None:
+    """Return the last successfully fetched PyPI release when a fresh lookup fails.
+
+    A transient PyPI outage must not flip ``update_available`` back to
+    unavailable between polls; the last good payload keeps the stable channel
+    as consistent as the alpha channel, which already reads the same cache.
+    """
+
+    payload = _last_pypi_payload
+    if not isinstance(payload, dict):
+        return None
+    info = payload.get("info")
+    if isinstance(info, dict):
+        version = info.get("version")
+        if isinstance(version, str) and version.strip():
+            return version.strip()
+    return newest_pypi_version(payload, include_stable=True, include_alpha=False)
 
 
 def _latest_alpha_version_from_pypi(current_version: str) -> str | None:
