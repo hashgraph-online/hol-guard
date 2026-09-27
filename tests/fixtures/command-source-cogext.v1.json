@@ -1,0 +1,485 @@
+{
+  "build": {
+    "schema": "guard.command-extension-build.v1",
+    "sources": [
+      {
+        "extension": {
+          "action_classes": [
+            "cogext commitment mutation"
+          ],
+          "aliases": [],
+          "conflicts": [],
+          "delegated_protection": null,
+          "dependencies": [],
+          "description": "Reviews the cogext CLI's mutating commitment operations (add, fulfill, fail). Read-only commands (extract, list, get, stats) are not matched and remain automatic. Note: `cogext add` may initialize ~/.cogext on a fresh machine; that side effect is covered structurally because `add` is in the reviewed set.",
+          "ecosystem_ids": [],
+          "executables": [
+            "cogext"
+          ],
+          "extension_id": "command.cogext",
+          "homepage": "https://cogextai.com",
+          "icon": {
+            "kind": "none"
+          },
+          "license": "MIT",
+          "name": "COGEXT command protection",
+          "permissions": [
+            {
+              "action_classes": [
+                "cogext commitment mutation"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies `cogext add`, which creates a tracked commitment and may initialize the local ~/.cogext store on a fresh machine.",
+              "example_command": "cogext add \"Send the report by Friday\"",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "cogext commitment creation",
+              "permission_id": "command.cogext.permission.add",
+              "replacement_permission_id": null,
+              "risk_tier": "high",
+              "safer_guidance": [
+                "Run `cogext list` first to confirm the target store before adding a commitment."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "cogext commitment mutation"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies `cogext fulfill <id>`, which marks a tracked commitment as fulfilled and writes its terminal state.",
+              "example_command": "cogext fulfill abc-123",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "cogext commitment fulfillment",
+              "permission_id": "command.cogext.permission.fulfill",
+              "replacement_permission_id": null,
+              "risk_tier": "high",
+              "safer_guidance": [
+                "Confirm the commitment ID with `cogext get <id>` before fulfilling it."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "cogext commitment mutation"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies `cogext fail <id>`, which marks a tracked commitment as failed and writes its terminal state.",
+              "example_command": "cogext fail abc-123",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "cogext commitment failure",
+              "permission_id": "command.cogext.permission.fail",
+              "replacement_permission_id": null,
+              "risk_tier": "high",
+              "safer_guidance": [
+                "Confirm the commitment ID with `cogext get <id>` before failing it."
+              ],
+              "typed_capabilities": []
+            }
+          ],
+          "project_markers": [],
+          "publisher": null,
+          "reference_urls": [
+            "https://cogextai.com/standard",
+            "https://github.com/cogext/cogext"
+          ],
+          "required": false,
+          "risk_classes": [
+            "destructive_shell"
+          ],
+          "rules": [
+            {
+              "action_classes": [
+                "cogext commitment mutation"
+              ],
+              "default_mode": "review",
+              "description": "Identifies `cogext add`, which creates a tracked commitment.",
+              "family": null,
+              "matcher": {
+                "config": {},
+                "matchers": [
+                  {
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "cogext",
+                        "cogext.cmd",
+                        "cogext.exe"
+                      ],
+                      "fail_secure_unknown_options": false,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "add"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  }
+                ],
+                "op": "any.v1"
+              },
+              "native_capability": null,
+              "permission_id": "command.cogext.permission.add",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "rule_id": "command.cogext.add",
+              "rule_version": "1.0.0",
+              "safe_variants": [],
+              "safer_alternatives": [
+                "Run `cogext list` first to confirm the target store."
+              ],
+              "severity": "high",
+              "title": "cogext commitment creation"
+            },
+            {
+              "action_classes": [
+                "cogext commitment mutation"
+              ],
+              "default_mode": "review",
+              "description": "Identifies `cogext fulfill`, which marks a commitment as fulfilled.",
+              "family": null,
+              "matcher": {
+                "config": {},
+                "matchers": [
+                  {
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "cogext",
+                        "cogext.cmd",
+                        "cogext.exe"
+                      ],
+                      "fail_secure_unknown_options": false,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "fulfill"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  }
+                ],
+                "op": "any.v1"
+              },
+              "native_capability": null,
+              "permission_id": "command.cogext.permission.fulfill",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "rule_id": "command.cogext.fulfill",
+              "rule_version": "1.0.0",
+              "safe_variants": [],
+              "safer_alternatives": [
+                "Confirm the commitment ID with `cogext get <id>`."
+              ],
+              "severity": "high",
+              "title": "cogext commitment fulfillment"
+            },
+            {
+              "action_classes": [
+                "cogext commitment mutation"
+              ],
+              "default_mode": "review",
+              "description": "Identifies `cogext fail`, which marks a commitment as failed.",
+              "family": null,
+              "matcher": {
+                "config": {},
+                "matchers": [
+                  {
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "cogext",
+                        "cogext.cmd",
+                        "cogext.exe"
+                      ],
+                      "fail_secure_unknown_options": false,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "fail"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  }
+                ],
+                "op": "any.v1"
+              },
+              "native_capability": null,
+              "permission_id": "command.cogext.permission.fail",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "rule_id": "command.cogext.fail",
+              "rule_version": "1.0.0",
+              "safe_variants": [],
+              "safer_alternatives": [
+                "Confirm the commitment ID with `cogext get <id>`."
+              ],
+              "severity": "high",
+              "title": "cogext commitment failure"
+            }
+          ],
+          "safer_alternatives": [
+            "Run `cogext list` or `cogext get <id>` before mutating commitment state."
+          ],
+          "source": "external",
+          "version": "1.0.0"
+        },
+        "schema": "guard.command-extension-source.v1"
+      }
+    ],
+    "trust": {
+      "classes": {
+        "external": [
+          "command.blitcp",
+          "command.cogext",
+          "command.mcp-filesystem",
+          "command.mcp-instapods",
+          "command.noodle",
+          "command.ollama",
+          "command.probe",
+          "command.remote.essh",
+          "command.repo2nb",
+          "command.skill-sunset",
+          "command.uivoid"
+        ],
+        "first-party": [
+          "command.container-runtime",
+          "command.data-protection",
+          "command.encoded-execution",
+          "command.filesystem",
+          "command.git",
+          "command.guard-self-protection",
+          "command.kubernetes-secrets",
+          "command.package.go",
+          "command.package.jvm",
+          "command.package.node",
+          "command.package.php",
+          "command.package.python",
+          "command.package.ruby",
+          "command.package.rust",
+          "command.package.system",
+          "command.shell-mutations",
+          "command.system",
+          "command.windows"
+        ],
+        "trusted-library": [
+          "command.api-gateway",
+          "command.backup.borg",
+          "command.backup.rclone",
+          "command.backup.restic",
+          "command.backup.velero",
+          "command.cdn",
+          "command.cicd.circleci",
+          "command.cicd.github",
+          "command.cicd.gitlab",
+          "command.cloud.aws",
+          "command.cloud.azure",
+          "command.cloud.gcp",
+          "command.database.mongodb",
+          "command.database.mysql",
+          "command.database.postgresql",
+          "command.database.redis",
+          "command.database.sqlite",
+          "command.database.supabase",
+          "command.dns.aws",
+          "command.dns.azure",
+          "command.dns.gcp",
+          "command.email",
+          "command.feature-flags",
+          "command.framework.laravel",
+          "command.github",
+          "command.infrastructure-as-code",
+          "command.kubernetes-operations",
+          "command.load-balancer",
+          "command.messaging.kafka",
+          "command.messaging.nats",
+          "command.messaging.rabbitmq",
+          "command.monitoring",
+          "command.payment",
+          "command.platform.heroku",
+          "command.platform.netlify",
+          "command.platform.vercel",
+          "command.remote.rsync",
+          "command.remote.scp",
+          "command.remote.ssh",
+          "command.search.elasticsearch",
+          "command.storage.aws-s3",
+          "command.storage.azure-blob",
+          "command.storage.google-cloud",
+          "command.storage.minio"
+        ]
+      },
+      "publishers": {
+        "hol": {
+          "displayName": "Hashgraph Online",
+          "id": "hol"
+        },
+        "hol-curated": {
+          "displayName": "HOL curated library",
+          "id": "hol-curated"
+        }
+      },
+      "schemaVersion": "guard.extension-trust-class-map.v1"
+    }
+  },
+  "cases": [
+    {
+      "command": "cogext add \"Send the report by Friday\"",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cogext"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "add-basic",
+      "rule_id": "command.cogext.add"
+    },
+    {
+      "command": "cogext add \"Call Sarah tomorrow\"",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cogext"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "add-call",
+      "rule_id": "command.cogext.add"
+    },
+    {
+      "command": "cogext fulfill abc-123",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cogext"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "fulfill-basic",
+      "rule_id": "command.cogext.fulfill"
+    },
+    {
+      "command": "cogext fail abc-123",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cogext"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "fail-basic",
+      "rule_id": "command.cogext.fail"
+    },
+    {
+      "command": "cogext extract \"I'll call you tomorrow\"",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cogext"
+      ],
+      "expected_action": "allow",
+      "expected_effective_segments": [],
+      "id": "extract-automatic",
+      "rule_id": "command.cogext.add"
+    },
+    {
+      "command": "cogext list",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cogext"
+      ],
+      "expected_action": "allow",
+      "expected_effective_segments": [],
+      "id": "list-basic",
+      "rule_id": "command.cogext.add"
+    },
+    {
+      "command": "cogext list --status open",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cogext"
+      ],
+      "expected_action": "allow",
+      "expected_effective_segments": [],
+      "id": "list-status-open",
+      "rule_id": "command.cogext.add"
+    },
+    {
+      "command": "cogext get abc-123",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cogext"
+      ],
+      "expected_action": "allow",
+      "expected_effective_segments": [],
+      "id": "get-basic",
+      "rule_id": "command.cogext.add"
+    },
+    {
+      "command": "cogext stats",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cogext"
+      ],
+      "expected_action": "allow",
+      "expected_effective_segments": [],
+      "id": "stats-basic",
+      "rule_id": "command.cogext.add"
+    }
+  ],
+  "schema": "guard.command-extension-fixtures.v1"
+}
