@@ -203,17 +203,10 @@ impl CompiledNativeCommandControls {
         };
         let mut batch = match observed {
             Ok(batch) => batch,
-            Err(_) => {
-                strengthen(
-                    &mut result,
-                    "block",
-                    "native_command_extension_evaluation_failed",
-                );
-                NativeCommandObservationBatchV1 {
-                    evaluation_error: Some("native_command_evaluation_failed".to_owned()),
-                    ..Default::default()
-                }
-            }
+            Err(_) => NativeCommandObservationBatchV1 {
+                evaluation_error: Some("native_command_evaluation_failed".to_owned()),
+                ..Default::default()
+            },
         };
         let delegated_floor = if batch.evaluation_error.is_none() {
             match self.delegated_observations(command, tool, packages, &mut batch, deadline) {
@@ -324,6 +317,7 @@ impl CompiledNativeCommandControls {
                     .count()
                 + usize::from(batch.evaluation_error.is_some()),
         };
+        let evaluation_error = batch.evaluation_error.clone();
         result.command_extensions = Some(NativeCommandObservationsV1 {
             schema: NATIVE_COMMAND_OBSERVATIONS_SCHEMA.to_owned(),
             binding,
@@ -331,6 +325,10 @@ impl CompiledNativeCommandControls {
             permission_observations: batch.permission_observations,
             evaluation_error: batch.evaluation_error,
         });
+        if evaluation_error.is_some() && !self.global_block && rank(floor) < rank("block") {
+            floor = "block";
+            reason = "native_command_extension_evaluation_failed";
+        }
         strengthen(&mut result, floor, reason);
         result
     }
@@ -429,6 +427,46 @@ mod review_regressions {
         assert_eq!(
             result.reason_code,
             "native_command_extension_evaluation_failed"
+        );
+    }
+
+    #[test]
+    fn expired_extension_deadline_fail_closes_a_proven_benign_command() {
+        let program = packaged_command_program().unwrap();
+        let mut binding: NativeCommandControlBindingV1 =
+            serde_json::from_value(serde_json::json!({
+                "schema": "guard.native-command-control-binding.v1",
+                "program_digest": program.program_digest,
+                "catalog_digest": program.catalog_digest,
+                "trust_digest": program.trust_digest,
+                "health": "protected", "revision": 1, "managed_revision": 0,
+                "effective_digest": "", "layers": []
+            }))
+            .unwrap();
+        binding.effective_digest = binding.compute_effective_digest().unwrap();
+        let controls = CompiledNativeCommandControls::new(&binding).unwrap();
+        let intrinsic = crate::pretool::evaluate_pre_tool_envelope(
+            "claude-code",
+            "PreToolUse",
+            &serde_json::json!({"tool_name": "bash", "command": "pwd"}),
+        );
+        let decision = crate::pretool::evaluate_pre_tool(&crate::CommandModelRequestV1 {
+            command: "pwd".to_owned(),
+            dialect: "posix".to_owned(),
+            transport: "shell_string".to_owned(),
+            extraction_provenance: "guard-shell".to_owned(),
+        })
+        .unwrap();
+        let result = controls.apply(
+            &decision.command_model,
+            intrinsic,
+            Some(Instant::now() - std::time::Duration::from_secs(1)),
+        );
+        assert_eq!(result.minimum_action, "block");
+        assert!(!result.explicitly_benign);
+        assert_eq!(
+            result.reason,
+            "HOL Guard requires the native command extension policy before this action can execute."
         );
     }
 }

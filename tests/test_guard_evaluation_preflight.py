@@ -1,16 +1,23 @@
 from __future__ import annotations
 
+import io
 import os
 import platform
+import shlex
 import stat
+import sys
+import time
+from collections.abc import Callable
 from hashlib import sha256
 from pathlib import Path
+from threading import Event, Thread
 from types import SimpleNamespace
 from urllib.request import Request, urlopen
 
 import pytest
 
 from codex_plugin_scanner.guard import evaluation_preflight as preflight_module
+from codex_plugin_scanner.guard.adapters import hook_python_subprocess as probe_module
 from codex_plugin_scanner.guard.evaluation_contracts import EvaluationResult
 from codex_plugin_scanner.guard.evaluation_preflight import (
     EvaluationSetup,
@@ -19,6 +26,53 @@ from codex_plugin_scanner.guard.evaluation_preflight import (
     setup_evaluation,
 )
 from codex_plugin_scanner.guard.evaluation_witness import LocalSideEffectWitness
+
+
+def test_windows_job_cleanup_serializes_only_the_owned_probe() -> None:
+    entered = Event()
+    release = Event()
+    attempted = Event()
+    terminated = Event()
+    other_closed = Event()
+    calls: list[str] = []
+
+    class BlockingJob:
+        def close(self) -> None:
+            calls.append("closing")
+            entered.set()
+            assert release.wait(timeout=2)
+            calls.append("closed")
+
+        def terminate(self) -> None:
+            calls.append("terminated")
+            terminated.set()
+
+    owned = probe_module._ProbeWindowsJob(BlockingJob())
+    other = probe_module._ProbeWindowsJob(SimpleNamespace(close=other_closed.set))
+
+    def terminate_owned() -> None:
+        attempted.set()
+        owned.terminate()
+
+    threads = [Thread(target=owned.close), Thread(target=terminate_owned), Thread(target=other.close)]
+    started: list[Thread] = []
+    try:
+        threads[0].start()
+        started.append(threads[0])
+        assert entered.wait(timeout=1)
+        threads[1].start()
+        started.append(threads[1])
+        assert attempted.wait(timeout=1)
+        threads[2].start()
+        started.append(threads[2])
+        assert other_closed.wait(timeout=1)
+        assert not terminated.wait(timeout=0.05)
+    finally:
+        release.set()
+        for thread in started:
+            thread.join(timeout=2)
+    assert all(not thread.is_alive() for thread in started)
+    assert calls == ["closing", "closed", "terminated"]
 
 
 def _host_os() -> str:
@@ -119,6 +173,354 @@ def _artifact(tmp_path: Path) -> Path:
 
 def _artifact_paths(path: Path) -> dict[str, Path]:
     return {"core-fixture": path}
+
+
+@pytest.mark.parametrize(
+    "settings",
+    [
+        {"timeout_seconds": True},
+        {"timeout_seconds": "bad"},
+        {"timeout_seconds": float("nan")},
+        {"timeout_seconds": float("inf")},
+        {"timeout_seconds": 0},
+        {"timeout_seconds": -1},
+        {"timeout_seconds": 3601},
+        {"output_limit_bytes": True},
+        {"output_limit_bytes": "bad"},
+        {"output_limit_bytes": 1.0},
+        {"output_limit_bytes": 0},
+        {"output_limit_bytes": -1},
+        {"output_limit_bytes": 131073},
+    ],
+)
+def test_invalid_probe_budget_never_spawns(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, settings: dict[str, object]
+) -> None:
+    def unexpected_spawn(*_args: object, **_kwargs: object) -> object:
+        pytest.fail("invalid budget attempted process execution")
+
+    monkeypatch.setattr(probe_module, "subprocess", SimpleNamespace(Popen=unexpected_spawn))
+
+    with pytest.raises(ValueError, match="invalid probe"):
+        probe_module.run_probe(["synthetic-agent"], cwd=tmp_path, env={}, **settings)  # type: ignore[arg-type]
+
+
+@pytest.mark.skipif(os.name != "posix", reason="requires POSIX process-group cleanup")
+@pytest.mark.parametrize("error_type", [OSError, ValueError])
+def test_posix_capture_failure_reaps_owned_process(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, error_type: type[Exception]
+) -> None:
+    original = probe_module.subprocess
+    processes = []
+
+    def spawn(*args: object, **kwargs: object) -> object:
+        process = original.Popen(*args, **kwargs)
+        processes.append(process)
+        return process
+
+    class BrokenSelector:
+        def __enter__(self) -> object:
+            raise error_type("synthetic private diagnostic")
+
+        def __exit__(self, *_args: object) -> None:
+            pass
+
+    monkeypatch.setattr(probe_module, "selectors", SimpleNamespace(DefaultSelector=BrokenSelector))
+    monkeypatch.setattr(
+        probe_module,
+        "subprocess",
+        SimpleNamespace(
+            Popen=spawn, PIPE=original.PIPE, DEVNULL=original.DEVNULL, TimeoutExpired=original.TimeoutExpired
+        ),
+    )
+
+    result = probe_module.run_probe(
+        [sys.executable, "-I", "-c", "import time; time.sleep(3)"], cwd=tmp_path, env={}, timeout_seconds=1
+    )
+
+    assert result.capture_incomplete
+    assert result.returncode != 0
+    assert len(processes) == 1
+    assert processes[0].returncode is not None
+    assert processes[0].stdout.closed and processes[0].stderr.closed
+
+
+@pytest.mark.parametrize("error_type", [OSError, ValueError])
+def test_windows_stdin_failure_kills_process_when_job_cleanup_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, error_type: type[Exception]
+) -> None:
+    calls: list[str] = []
+
+    class BrokenStdin:
+        def close(self) -> None:
+            raise error_type("synthetic private diagnostic")
+
+    def failed_job_operation() -> None:
+        raise OSError("synthetic job failure")
+
+    process = SimpleNamespace(
+        stdin=BrokenStdin(), kill=lambda: calls.append("kill"), wait=lambda **_kwargs: calls.append("wait")
+    )
+    job = SimpleNamespace(close=failed_job_operation, terminate=failed_job_operation)
+    monkeypatch.setattr(probe_module, "os", SimpleNamespace(name="nt"))
+    monkeypatch.setattr(probe_module, "spawn_windows_hook_process", lambda *_args, **_kwargs: (process, job))
+
+    with pytest.raises(RuntimeError, match="guard_hook_python_probe_execution_failed"):
+        probe_module.run_probe(["synthetic-agent"], cwd=tmp_path, env={})
+    assert calls == ["kill", "wait"]
+
+
+@pytest.mark.parametrize("reap_expires", [False, True])
+def test_windows_timeout_has_bounded_reap(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, reap_expires: bool) -> None:
+    calls: list[str] = []
+    deadlines: list[float] = []
+    timeout_error = probe_module.subprocess.TimeoutExpired
+
+    def wait(*, timeout: float) -> int:
+        deadlines.append(timeout)
+        if len(deadlines) == 1 or reap_expires:
+            raise timeout_error("synthetic-agent", timeout)
+        process.returncode = -9
+        return -9
+
+    process = SimpleNamespace(stdin=io.BytesIO(), stdout=io.BytesIO(), stderr=io.BytesIO(), returncode=None, wait=wait)
+    job = SimpleNamespace(terminate=lambda: calls.append("terminate"), close=lambda: calls.append("close"))
+    monkeypatch.setattr(probe_module, "os", SimpleNamespace(name="nt"))
+    monkeypatch.setattr(probe_module, "spawn_windows_hook_process", lambda *_args, **_kwargs: (process, job))
+
+    result = probe_module.run_probe(["synthetic-agent"], cwd=tmp_path, env={}, timeout_seconds=0.1)
+
+    assert result.timed_out
+    assert result.capture_incomplete is reap_expires
+    assert len(deadlines) == 2 and all(0 < timeout <= 1 for timeout in deadlines)
+    assert calls == ["terminate", "close"]
+
+
+def test_windows_probe_interrupt_closes_job(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+
+    def wait(**_kwargs: object) -> int:
+        raise KeyboardInterrupt
+
+    process = SimpleNamespace(stdin=io.BytesIO(), stdout=io.BytesIO(), stderr=io.BytesIO(), returncode=0, wait=wait)
+    job = SimpleNamespace(terminate=lambda: calls.append("terminate"), close=lambda: calls.append("close"))
+    monkeypatch.setattr(probe_module, "os", SimpleNamespace(name="nt"))
+    monkeypatch.setattr(probe_module, "spawn_windows_hook_process", lambda *_args, **_kwargs: (process, job))
+
+    with pytest.raises(KeyboardInterrupt):
+        probe_module.run_probe(["synthetic-agent"], cwd=tmp_path, env={})
+
+    assert calls == ["close"]
+
+
+@pytest.mark.parametrize("error_type", [OSError, ValueError])
+def test_windows_probe_requires_job_assignment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, error_type: type[Exception]
+) -> None:
+    def unavailable(*_args: object, **_kwargs: object) -> object:
+        raise error_type("synthetic private diagnostic")
+
+    monkeypatch.setattr(probe_module, "os", SimpleNamespace(name="nt"))
+    monkeypatch.setattr(probe_module, "spawn_windows_hook_process", unavailable)
+
+    with pytest.raises(RuntimeError, match=r"^guard_hook_python_probe_execution_failed$"):
+        probe_module.run_probe(["synthetic-agent"], cwd=tmp_path, env={})
+
+
+@pytest.mark.parametrize(("close_fails", "terminate_fails"), [(False, False), (True, False), (True, True)])
+def test_windows_probe_job_cleanup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, close_fails: bool, terminate_fails: bool
+) -> None:
+    calls: list[str] = []
+
+    def close() -> None:
+        calls.append("close")
+        if close_fails:
+            raise OSError("synthetic private diagnostic")
+
+    def terminate() -> None:
+        calls.append("terminate")
+        if terminate_fails:
+            raise OSError("synthetic private diagnostic")
+
+    process = SimpleNamespace(
+        stdin=io.BytesIO(),
+        stdout=io.BytesIO(b"synthetic-agent 0.1.0\n"),
+        stderr=io.BytesIO(),
+        returncode=0,
+        wait=lambda **_kwargs: 0,
+    )
+    process.kill = lambda: calls.append("kill")
+    job = SimpleNamespace(terminate=terminate, close=close)
+    monkeypatch.setattr(probe_module, "os", SimpleNamespace(name="nt"))
+    monkeypatch.setattr(probe_module, "spawn_windows_hook_process", lambda *_args, **_kwargs: (process, job))
+
+    result = probe_module.run_probe(["synthetic-agent"], cwd=tmp_path, env={}, timeout_seconds=1)
+
+    assert process.stdin.closed
+    assert result.stdout == b"synthetic-agent 0.1.0\n"
+    assert result.capture_incomplete is close_fails
+    expected = ["close", "terminate", "close", "kill"] if terminate_fails else ["close", "terminate"]
+    assert calls == (expected if close_fails else ["close"])
+
+
+@pytest.mark.parametrize("terminate_fails", [False, True])
+def test_windows_probe_overflow_terminates_job(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, terminate_fails: bool
+) -> None:
+    calls: list[str] = []
+
+    def terminate() -> None:
+        calls.append("terminate")
+        if terminate_fails:
+            raise OSError("synthetic private diagnostic")
+
+    process = SimpleNamespace(
+        stdin=io.BytesIO(),
+        stdout=io.BytesIO(b"x" * 10000),
+        stderr=io.BytesIO(),
+        returncode=0,
+        wait=lambda **_kwargs: 0,
+    )
+    process.kill = lambda: calls.append("kill")
+    job = SimpleNamespace(terminate=terminate, close=lambda: calls.append("close"))
+    monkeypatch.setattr(probe_module, "os", SimpleNamespace(name="nt"))
+    monkeypatch.setattr(probe_module, "spawn_windows_hook_process", lambda *_args, **_kwargs: (process, job))
+
+    result = probe_module.run_probe(["synthetic-agent"], cwd=tmp_path, env={}, output_limit_bytes=4096)
+
+    assert result.output_overflow
+    assert len(result.stdout) <= 4096
+    assert "terminate" in calls
+    assert "close" in calls
+    assert result.capture_incomplete is terminate_fails
+    if terminate_fails:
+        assert calls.index("close") < calls.index("kill")
+
+
+def test_threaded_probe_read_failure_is_not_complete_capture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    class BrokenStream(io.BytesIO):
+        def read(self, size: int = -1) -> bytes:
+            raise OSError("synthetic private diagnostic")
+
+    process = SimpleNamespace(
+        stdin=io.BytesIO(),
+        stdout=io.BytesIO(b"synthetic-agent 0.1.0\n"),
+        stderr=BrokenStream(),
+        returncode=0,
+        wait=lambda **_kwargs: 0,
+    )
+    monkeypatch.setattr(probe_module, "os", SimpleNamespace(name="nt"))
+    monkeypatch.setattr(
+        probe_module,
+        "spawn_windows_hook_process",
+        lambda *_args, **_kwargs: (process, SimpleNamespace(terminate=lambda: None, close=lambda: None)),
+    )
+    monkeypatch.setattr(
+        probe_module,
+        "subprocess",
+        SimpleNamespace(Popen=lambda *_args, **_kwargs: process, PIPE=-1, DEVNULL=-3),
+    )
+
+    result = probe_module.run_probe(["synthetic-agent"], cwd=tmp_path, env={}, timeout_seconds=0.1)
+
+    assert result.capture_incomplete
+    assert result.stdout == b"synthetic-agent 0.1.0\n"
+    assert result.stderr == b""
+
+
+def test_threaded_probe_late_capture_remains_incomplete(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    clock = [0.0]
+
+    class DelayedReader:
+        def __init__(self, *, target: Callable[..., None], args: tuple[object, ...], daemon: bool) -> None:
+            self.target = target
+            self.args = args
+            self.alive = True
+
+        def start(self) -> None:
+            pass
+
+        def join(self, timeout: float) -> None:
+            if timeout > 0.5:
+                self.target(*self.args)
+                self.alive = False
+
+        def is_alive(self) -> bool:
+            return self.alive
+
+    def wait(**_kwargs: object) -> int:
+        clock[0] = 0.1
+        return 0
+
+    process = SimpleNamespace(
+        stdin=io.BytesIO(), stdout=io.BytesIO(b"synthetic-agent 0.1.0\n"), stderr=io.BytesIO(), returncode=0, wait=wait
+    )
+    monkeypatch.setattr(probe_module, "os", SimpleNamespace(name="nt"))
+    monkeypatch.setattr(
+        probe_module,
+        "spawn_windows_hook_process",
+        lambda *_args, **_kwargs: (process, SimpleNamespace(terminate=lambda: None, close=lambda: None)),
+    )
+    monkeypatch.setattr(probe_module, "time", SimpleNamespace(monotonic=lambda: clock[0]))
+    monkeypatch.setattr(
+        probe_module, "threading", SimpleNamespace(Event=probe_module.threading.Event, Thread=DelayedReader)
+    )
+    monkeypatch.setattr(
+        probe_module, "subprocess", SimpleNamespace(Popen=lambda *_args, **_kwargs: process, PIPE=-1, DEVNULL=-3)
+    )
+
+    result = probe_module.run_probe(["synthetic-agent"], cwd=tmp_path, env={}, timeout_seconds=0.1)
+
+    assert result.capture_incomplete
+    assert result.stdout == b"synthetic-agent 0.1.0\n"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="synthetic executable uses a POSIX shebang")
+@pytest.mark.parametrize("writes", [((1, 131072),), ((2, 131072),), ((1, 3000), (2, 3000))])
+def test_host_version_probe_rejects_output_beyond_profile_budget(
+    tmp_path: Path, writes: tuple[tuple[int, int], ...]
+) -> None:
+    executable = tmp_path / "synthetic-agent"
+    executable.write_text(
+        f"#!{sys.executable}\nimport os\nos.write(1, b'synthetic-agent 0.1.0\\n')\n"
+        + "".join(f"os.write({descriptor}, b'x' * {size})\n" for descriptor, size in writes),
+        encoding="utf-8",
+    )
+    executable.chmod(0o755)
+    profile = _profile(tmp_path, executable)
+    profile["resourceLimits"]["maxOutputBytes"] = 4096  # type: ignore[index]
+    report = preflight_evaluation(
+        profile, artifact_paths=_artifact_paths(_artifact(tmp_path)), allow_host_execution=True
+    )
+
+    assert report.status == "blocked_environment"
+    assert report.reason == "host_version_output_limit"
+    assert "xxxxxxxx" not in str(report.to_dict())
+
+
+@pytest.mark.skipif(os.name == "nt", reason="requires POSIX process-group cleanup")
+def test_host_version_deadline_stops_child_holding_output_pipe(tmp_path: Path) -> None:
+    effect = tmp_path / "delayed-child-effect"
+    started = tmp_path / "child-started"
+    executable = tmp_path / "synthetic-agent"
+    executable.write_text(
+        "#!/bin/sh\n"
+        f"(/bin/sleep 3; printf '%s' 'child ran' > {shlex.quote(str(effect))}) &\n"
+        f"printf '%s' 'started' > {shlex.quote(str(started))}\n"
+        "printf '%s\\n' 'synthetic-agent 0.1.0'\n",
+        encoding="utf-8",
+    )
+    executable.chmod(0o755)
+    report = preflight_evaluation(
+        _profile(tmp_path, executable), artifact_paths=_artifact_paths(_artifact(tmp_path)), allow_host_execution=True
+    )
+
+    assert started.exists(), report.reason
+    assert report.status == "blocked_environment"
+    assert report.reason == "host_version_timeout"
+    time.sleep(3.1)
+    assert not effect.exists()
 
 
 def test_preflight_validates_host_and_artifact_without_running_scenarios(tmp_path: Path) -> None:

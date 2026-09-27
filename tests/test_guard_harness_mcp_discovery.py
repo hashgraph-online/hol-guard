@@ -54,6 +54,24 @@ def _detection(harness: str, *artifacts: GuardArtifact) -> HarnessDetection:
     )
 
 
+def test_packaged_native_proxies_are_not_offered_as_servers(tmp_path: Path) -> None:
+    detections = (_detection(
+        "opencode",
+        _artifact(
+            harness="opencode", name="hol-guard::browser", command="hol-guard",
+            args=("opencode-mcp-proxy", "--command", "node"),
+        ),
+        _artifact(
+            harness="opencode", name="hol-guard::unverified", command="node",
+            args=("server.js",),
+        ),
+    ),)
+    servers = discover_harness_mcp_servers(
+        home_dir=tmp_path, guard_home=tmp_path / "guard-home", detections=detections,
+    )
+    assert [server.identity.name for server in servers] == ["hol-guard::unverified"]
+
+
 def test_discover_groups_same_launch_across_harnesses() -> None:
     detections = (
         _detection(

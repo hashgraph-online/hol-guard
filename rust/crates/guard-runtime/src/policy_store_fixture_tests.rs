@@ -1,8 +1,30 @@
 use super::{fixture_file, test_root};
+use guard_policy_snapshot::EffectiveNativePolicyV3;
+use std::collections::BTreeMap;
 use std::fs;
 use std::io::Write;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
+
+pub(super) fn policy() -> EffectiveNativePolicyV3 {
+    EffectiveNativePolicyV3 {
+        protection_posture: "protected".into(),
+        security_level: "balanced".into(),
+        default_action: "warn".into(),
+        unknown_publisher_action: "review".into(),
+        changed_hash_action: "require-reapproval".into(),
+        new_network_domain_action: "warn".into(),
+        subprocess_action: "warn".into(),
+        risk_actions: BTreeMap::new(),
+        harness_risk_actions: BTreeMap::new(),
+        harness_actions: BTreeMap::new(),
+        publisher_actions: BTreeMap::new(),
+        artifact_actions: BTreeMap::new(),
+        mcp_tool_actions: BTreeMap::new(),
+        sandbox_analysis: "off".into(),
+        receipt_redaction_level: "full".into(),
+    }
+}
 
 #[test]
 fn fixture_rewrite_truncates_private_file_without_weakening_create_new() {

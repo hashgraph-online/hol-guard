@@ -14,7 +14,7 @@ from typing import Literal, TypeGuard
 
 from ..action_lattice import is_action_bearing_key
 from ..adapters.hermes_runtime_hooks import prepare_hermes_hook_payload
-from ..redaction import redact_text
+from ..redaction import is_sensitive_review_key, redact_text
 from .secret_sensitivity import redacted_secret_path_context
 from .shell_command_wrappers import normalize_transparent_shell_command
 
@@ -87,33 +87,6 @@ _EXPLICIT_COMMAND_KEYS = ("command", "cmd", "shell_command", "shellCommand")
 _SEARCH_PATTERN_KEYS = ("pattern", "query", "search", "regex")
 _PATCH_INPUT_KEYS = ("patch", "input", "command")
 _PATCH_FILE_HEADER_PATTERN = re.compile(r"^\*\*\* (?:Add|Delete|Update) File: (?P<path>.+)$", re.MULTILINE)
-_SENSITIVE_RAW_KEYS = frozenset(
-    {
-        "api_key",
-        "apikey",
-        "access_token",
-        "auth",
-        "authorization",
-        "client_secret",
-        "content",
-        "cookie",
-        "credential",
-        "credentials",
-        "id_token",
-        "output",
-        "password",
-        "private_key",
-        "refresh_token",
-        "secret",
-        "session_token",
-        "set_cookie",
-        "stderr",
-        "stdout",
-        "token",
-        "tool_response",
-    }
-)
-_SENSITIVE_RAW_KEY_ALIASES = frozenset(key.replace("_", "") for key in _SENSITIVE_RAW_KEYS)
 _HOOK_EVENT_NAME_MAP = {
     "prompt": "UserPromptSubmit",
     "userpromptsubmit": "UserPromptSubmit",
@@ -1156,8 +1129,7 @@ def _redacted_payload(payload: Mapping[str, object], *, home_dir: Path | str | N
 
 
 def _redacted_value(key: str, value: object, *, home_dir: Path | str | None) -> object:
-    normalized_key = _normalized_secret_key(key)
-    if normalized_key in _SENSITIVE_RAW_KEYS or normalized_key.replace("_", "") in _SENSITIVE_RAW_KEY_ALIASES:
+    if is_sensitive_review_key(key):
         return "[redacted]"
     if isinstance(value, Mapping):
         return {

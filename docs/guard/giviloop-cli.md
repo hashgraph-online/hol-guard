@@ -8,11 +8,11 @@ Existing Guard policy and authenticated controls determine the final action.
 
 ## Upstream behavior and scope
 
-This boundary was checked against the GiviLoop **0.8.2 source checkout**, including the unreleased CLI simplification at commit
-[`322deef43597e32c60f09aa24df25e7c6cd947a1`](https://github.com/vgflutter/GiviLoop/tree/322deef43597e32c60f09aa24df25e7c6cd947a1).
+This boundary was checked against the GiviLoop **0.9.0 release candidate**, at commit
+[`7d0cbc47b5d1b7645298ff614fbcf68fdf3c080e`](https://github.com/vgflutter/GiviLoop/tree/7d0cbc47b5d1b7645298ff614fbcf68fdf3c080e).
 The relevant dispatch and argument parser are
-[`main`](https://github.com/vgflutter/GiviLoop/blob/322deef43597e32c60f09aa24df25e7c6cd947a1/src/cli.ts)
-and [`autoReviewCommand`, `findingsCommand`, `parse`, `reportCommand`](https://github.com/vgflutter/GiviLoop/blob/322deef43597e32c60f09aa24df25e7c6cd947a1/src/workflow-commands.ts).
+[`main`](https://github.com/vgflutter/GiviLoop/blob/7d0cbc47b5d1b7645298ff614fbcf68fdf3c080e/src/cli.ts)
+and [`autoReviewCommand`, `findingsCommand`, `parse`, `reportCommand`](https://github.com/vgflutter/GiviLoop/blob/7d0cbc47b5d1b7645298ff614fbcf68fdf3c080e/src/workflow-commands.ts).
 
 | Direct CLI operation | Effect and reason for review | Permission suffix |
 | --- | --- | --- |
@@ -47,8 +47,8 @@ grant trust: the separately reviewed trust map classifies it as `external`.
 requirements from this extension. This is not a global allow rule. In
 particular, `report` and `report --json` can write `double-check.md`;
 `report --stdout` avoids saving the report but still acquires a disk lock.
-See [`exportReviewReport`](https://github.com/vgflutter/GiviLoop/blob/322deef43597e32c60f09aa24df25e7c6cd947a1/src/review-report.ts)
-and [`acquireRunLock`](https://github.com/vgflutter/GiviLoop/blob/322deef43597e32c60f09aa24df25e7c6cd947a1/src/run-lock.ts).
+See [`exportReviewReport`](https://github.com/vgflutter/GiviLoop/blob/7d0cbc47b5d1b7645298ff614fbcf68fdf3c080e/src/review-report.ts)
+and [`acquireRunLock`](https://github.com/vgflutter/GiviLoop/blob/7d0cbc47b5d1b7645298ff614fbcf68fdf3c080e/src/run-lock.ts).
 
 Other submissions (`opinion`, `review`, `send`, `resume`, `ask --send`, `archive --send`),
 preparation, import/clipboard, onboarding, demonstrations and browser management
@@ -57,7 +57,7 @@ This extension is not complete protection for GiviLoop or code transmission.
 
 The normal automatic workflow uses direct MCP calls. Those calls and server
 launches (`givi-mcp`, `npm run mcp`, Node on `mcp-server.js`) are outside this
-CLI extension. [`mcp-server.ts`](https://github.com/vgflutter/GiviLoop/blob/322deef43597e32c60f09aa24df25e7c6cd947a1/src/mcp-server.ts)
+CLI extension. [`mcp-server.ts`](https://github.com/vgflutter/GiviLoop/blob/7d0cbc47b5d1b7645298ff614fbcf68fdf3c080e/src/mcp-server.ts)
 calls the application functions directly; a shell rule does not prove MCP
 coverage. Coverage also depends on the agent exposing the shell event to Guard;
 this contribution does not install hooks or monitor arbitrary child processes.
@@ -74,8 +74,8 @@ Neither is attributed to this extension, even if another Guard policy already
 reviews or blocks the command. `setup()` can print absolute Node/CLI paths;
 those remain excluded too. No package/script is imported or executed to infer
 identity. See the upstream
-[`package.json`](https://github.com/vgflutter/GiviLoop/blob/322deef43597e32c60f09aa24df25e7c6cd947a1/package.json)
-and [`setup()`](https://github.com/vgflutter/GiviLoop/blob/322deef43597e32c60f09aa24df25e7c6cd947a1/src/setup.ts).
+[`package.json`](https://github.com/vgflutter/GiviLoop/blob/7d0cbc47b5d1b7645298ff614fbcf68fdf3c080e/package.json)
+and [`setup()`](https://github.com/vgflutter/GiviLoop/blob/7d0cbc47b5d1b7645298ff614fbcf68fdf3c080e/src/setup.ts).
 
 Native tests demonstrate `sudo -n givi ...` with exact GiviLoop rule evidence.
 Its independent `require-reapproval` floor remains. `env`, shell `-c`/`-lc`,
@@ -87,14 +87,18 @@ Known value options may appear before or after the action, including
 `--json` can precede a findings action. Ordinary `--help`/`-h` narrows only its
 own rule's segments. Help in one command cannot suppress a subsequent write.
 
-Current GiviLoop normalizes options in `src/cli-interface.ts` before dispatch.
-`--repositoryPath` and separated `-f PATH` are recognized here too. Bare
-`givi findings` and `givi auto-review` default to list/status and add no rule.
-The `opinion`, `answer`, `login` and `check` shortcuts remain outside scope.
+The pinned candidate dispatches the command before its operation-specific parser.
+Use the canonical `givi auto-review ACTION ...` or `givi findings ACTION ...`
+forms with `--repo` and `--file`. It does not include `src/cli-interface.ts`:
+`--repositoryPath`, `-f`, bare findings/auto-review defaults and the `opinion`,
+`answer`, `login`, `check` shortcuts from the earlier development checkout are
+not supported. The extension retains conservative recognition fixtures for
+those older aliases; this is not a claim they execute on the pinned candidate.
 
 Help narrows a rule only when the native matcher proves it is a flag, not an
-option value. A value such as `--reason=-h` must not erase a write. GiviLoop's
-current `--` delimiter is not a blanket help escape. Compact short options
+option value. A value such as `--reason=-h` must not erase a write. The candidate checks separated `--help`/`-h` anywhere before dispatch, including
+when supplied as an option value. Guard may conservatively review those no-op
+forms. It does not treat `--` as a blanket help escape. Compact short options
 before the action (for example `findings -ffile add`) and delimiter-separated
 actions are not claimed as supported; use the canonical `givi findings add ...`
 form or separated named options. `--version` is only a root command and there
@@ -103,7 +107,7 @@ the operation rule and others fall back to Guard's existing handling.
 
 ## Review identity and controls
 
-[`recordFinding`](https://github.com/vgflutter/GiviLoop/blob/322deef43597e32c60f09aa24df25e7c6cd947a1/src/review-evidence.ts)
+[`recordFinding`](https://github.com/vgflutter/GiviLoop/blob/7d0cbc47b5d1b7645298ff614fbcf68fdf3c080e/src/review-evidence.ts)
 requires an explicit `runId` and looks up an update's finding only in that run.
 CLI updates use `--id`; MCP uses `id`; results expose `findingId`. Guard neither
 adds missing IDs nor selects latest nor rewrites arguments. GiviLoop still
@@ -148,3 +152,9 @@ uv run --no-sync hol-guard extensions handoff --repo . \
 
 Local source tests and handoff do not establish release availability, installed
 wheel qualification, maintainer acceptance, or activation on a device.
+
+The GiviLoop candidate's `test/hol-cli-contract.test.mjs` separately executes all
+six canonical operations against a synthetic local reviewer. It creates two
+reviews, rejects missing/wrong review IDs and checks that finding writes and
+acknowledgement do not resubmit. This complements the native fixtures; neither
+proves protection of direct MCP calls or acceptance by a web provider.

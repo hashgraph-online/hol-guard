@@ -28,6 +28,9 @@ def _make_start_mock(guard_home: Path, port: int = 5700):
         def poll(self):
             return None
 
+        def wait(self, timeout=None):
+            return 0
+
         def __enter__(self):
             return self
 

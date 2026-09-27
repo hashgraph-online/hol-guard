@@ -149,35 +149,46 @@ fn home_state_discovery_allows_nonmatching_entries_within_bound() {
 }
 
 #[test]
-fn home_state_discovery_fails_closed_on_total_entry_overflow() {
+fn home_state_discovery_ignores_unrelated_entries() {
     let base = test_scope("scope-entry-overflow");
-    for index in 0..=64 {
+    for index in 0..200 {
         fixture_directory(&base.join(format!("unrelated-{index:03}")));
     }
 
-    assert_eq!(
-        discover_home_states(&base).unwrap_err(),
-        "native_resident_state_list_failed"
-    );
+    assert!(discover_home_states(&base).unwrap().is_empty());
     fs::remove_dir_all(base).unwrap();
 }
 
 #[test]
-fn home_state_discovery_rejects_seventeenth_matching_scope() {
+fn home_state_discovery_keeps_current_runtime_among_stale_scopes() {
     let base = test_scope("matching-scope-overflow");
-    for index in 0..=16 {
+    let digest = runtime_digest().unwrap();
+    for index in 0..24 {
         ensure_private_directory(&base.join(format!("resident-v3-{index:016x}")), true).unwrap();
     }
+    let preferred_scope =
+        ensure_private_directory(&base.join(format!("resident-v3-{}", &digest[..16])), true)
+            .unwrap();
+    let token = [7u8; crate::AUTH_TOKEN_BYTES];
+    publish_state(
+        &preferred_scope,
+        4,
+        std::process::id(),
+        &digest,
+        "loopback",
+        "127.0.0.1:1".to_owned(),
+        &token,
+    )
+    .unwrap();
 
-    assert_eq!(
-        discover_home_states(&base).unwrap_err(),
-        "native_resident_state_list_failed"
-    );
+    let states = discover_home_states_prefer(&base, Some(&digest)).unwrap();
+    assert_eq!(states.len(), 1);
+    assert_eq!(states[0].1, digest);
     fs::remove_dir_all(base).unwrap();
 }
 
 #[test]
-fn home_state_discovery_fails_closed_on_many_state_entries() {
+fn home_state_discovery_ignores_extra_unreadable_state_files() {
     let base = test_scope("state-entry-overflow");
     let digest = runtime_digest().unwrap();
     let scope =
@@ -190,15 +201,154 @@ fn home_state_discovery_fails_closed_on_many_state_entries() {
         );
     }
 
+    assert!(discover_home_states_prefer(&base, Some(&digest))
+        .unwrap()
+        .is_empty());
+    fs::remove_dir_all(base).unwrap();
+}
+
+#[test]
+fn malformed_state_names_do_not_hide_a_live_generation() {
+    let base = test_scope("malformed-state-names");
+    let digest = runtime_digest().unwrap();
+    let scope =
+        ensure_private_directory(&base.join(format!("resident-v3-{}", &digest[..16])), true)
+            .unwrap();
+    let token = [7u8; crate::AUTH_TOKEN_BYTES];
+    publish_state(
+        &scope,
+        3,
+        std::process::id(),
+        &digest,
+        "loopback",
+        "127.0.0.1:1".to_owned(),
+        &token,
+    )
+    .unwrap();
+    for index in 0..80 {
+        fixture_file(
+            &scope.join(format!("generation-zzzzzzzzzzzzzzzzzzzz-{index}.json")),
+            b"{}",
+        );
+    }
+
+    let states = discover_home_states_prefer(&base, Some(&digest)).unwrap();
+    assert_eq!(states.len(), 1);
+    assert_eq!(states[0].2.generation, 3);
+    fs::remove_dir_all(base).unwrap();
+}
+
+#[test]
+fn newer_unreadable_generations_do_not_hide_an_older_valid_state() {
+    let base = test_scope("newer-unreadable-generations");
+    let digest = runtime_digest().unwrap();
+    let scope =
+        ensure_private_directory(&base.join(format!("resident-v3-{}", &digest[..16])), true)
+            .unwrap();
+    let token = [7u8; crate::AUTH_TOKEN_BYTES];
+    publish_state(
+        &scope,
+        1,
+        std::process::id(),
+        &digest,
+        "loopback",
+        "127.0.0.1:1".to_owned(),
+        &token,
+    )
+    .unwrap();
+    for generation in 2..80 {
+        fixture_file(
+            &scope.join(format!("generation-{generation:020}.json")),
+            b"{}",
+        );
+    }
+
+    let states = discover_home_states_prefer(&base, Some(&digest)).unwrap();
+    assert_eq!(states.len(), 1);
+    assert_eq!(states[0].2.generation, 1);
+    fs::remove_dir_all(base).unwrap();
+}
+
+#[test]
+fn dead_preferred_scope_still_returns_a_live_fallback() {
+    let base = test_scope("dead-preferred-live-fallback");
+    let digest = runtime_digest().unwrap();
+    let preferred =
+        ensure_private_directory(&base.join(format!("resident-v3-{}", &digest[..16])), true)
+            .unwrap();
+    let token = [9u8; crate::AUTH_TOKEN_BYTES];
+    let mut dead = ResidentState {
+        schema: STATE_SCHEMA.to_owned(),
+        generation: 2,
+        process_id: u32::MAX,
+        process_start_marker: "dead".to_owned(),
+        owner_process_id: u32::MAX,
+        owner_process_start_marker: "dead".to_owned(),
+        runtime_sha256: digest.clone(),
+        transport: "loopback".to_owned(),
+        endpoint: "127.0.0.1:9".to_owned(),
+        unix_endpoint_identity: None,
+        token_hex: hex_bytes(&token),
+        created_ms: 1,
+        state_mac: String::new(),
+    };
+    dead.state_mac = state_mac(&dead, &token);
+    let encoded = serde_json::to_vec(&dead).unwrap();
+    let private_root = private_root_for_scope(&preferred).unwrap();
+    let mut file = private_file(
+        &preferred.join("generation-00000000000000000002.json"),
+        true,
+        &private_root,
+    )
+    .unwrap();
+    use std::io::Write;
+    file.write_all(&encoded).unwrap();
+    assert!(validate_package_process_identity(u32::MAX, "dead").is_err());
+
+    let fallback_digest = "ab".repeat(32);
+    let fallback = ensure_private_directory(
+        &base.join(format!("resident-v3-{}", &fallback_digest[..16])),
+        true,
+    )
+    .unwrap();
+    publish_state(
+        &fallback,
+        1,
+        std::process::id(),
+        &fallback_digest,
+        "loopback",
+        "127.0.0.1:1".to_owned(),
+        &token,
+    )
+    .unwrap();
+
+    let states = discover_home_states_prefer(&base, Some(&digest)).unwrap();
+    assert!(states.iter().any(|(_, found, _)| found == &fallback_digest));
+    fs::remove_dir_all(base).unwrap();
+}
+
+#[test]
+fn truncated_scope_listing_fails_closed() {
+    let base = test_scope("truncated-scope-listing");
+    let digest = runtime_digest().unwrap();
+    let scope =
+        ensure_private_directory(&base.join(format!("resident-v3-{}", &digest[..16])), true)
+            .unwrap();
+    fixture_file(&scope.join("generation-00000000000000000001.json"), b"{}");
+    // One past MAX_DIRECTORY_ENTRIES so the scan cannot prove it saw every file.
+    for index in 0..4096 {
+        fixture_file(&scope.join(format!("unrelated-{index:05}")), b"x");
+    }
+
     assert_eq!(
-        discover_home_states(&base).unwrap_err(),
+        discover_home_states_prefer(&base, Some(&digest)).unwrap_err(),
         "native_resident_state_list_failed"
     );
     fs::remove_dir_all(base).unwrap();
 }
 
 #[test]
-fn publishing_fails_closed_when_scope_entry_bound_is_exceeded() {
+fn publishing_ignores_unrelated_scope_entries() {
     let scope = test_scope("state-prune-entry-overflow");
     let digest = runtime_digest().unwrap();
     for index in 0..64 {
@@ -206,19 +356,17 @@ fn publishing_fails_closed_when_scope_entry_bound_is_exceeded() {
     }
 
     let token = [7u8; crate::AUTH_TOKEN_BYTES];
-    assert_eq!(
-        publish_state(
-            &scope,
-            1,
-            std::process::id(),
-            &digest,
-            "loopback",
-            "127.0.0.1:1".to_owned(),
-            &token,
-        )
-        .unwrap_err(),
-        "native_resident_state_list_failed"
-    );
+    let state = publish_state(
+        &scope,
+        1,
+        std::process::id(),
+        &digest,
+        "loopback",
+        "127.0.0.1:1".to_owned(),
+        &token,
+    )
+    .unwrap();
+    assert_eq!(state.generation, 1);
     fs::remove_dir_all(scope).unwrap();
 }
 

@@ -28,12 +28,12 @@
       "Verify the claim independently and keep the original --run-id; updates must identify the finding with --id in that run."
     ],
     "reference_urls": [
-      "https://github.com/vgflutter/GiviLoop/blob/322deef43597e32c60f09aa24df25e7c6cd947a1/src/cli.ts",
-      "https://github.com/vgflutter/GiviLoop/blob/322deef43597e32c60f09aa24df25e7c6cd947a1/src/workflow-commands.ts",
-      "https://github.com/vgflutter/GiviLoop/blob/322deef43597e32c60f09aa24df25e7c6cd947a1/src/auto-review.ts",
-      "https://github.com/vgflutter/GiviLoop/blob/322deef43597e32c60f09aa24df25e7c6cd947a1/src/review-evidence.ts",
-      "https://github.com/vgflutter/GiviLoop/blob/322deef43597e32c60f09aa24df25e7c6cd947a1/src/review-report.ts",
-      "https://github.com/vgflutter/GiviLoop/blob/322deef43597e32c60f09aa24df25e7c6cd947a1/package.json"
+      "https://github.com/vgflutter/GiviLoop/blob/7d0cbc47b5d1b7645298ff614fbcf68fdf3c080e/src/cli.ts",
+      "https://github.com/vgflutter/GiviLoop/blob/7d0cbc47b5d1b7645298ff614fbcf68fdf3c080e/src/workflow-commands.ts",
+      "https://github.com/vgflutter/GiviLoop/blob/7d0cbc47b5d1b7645298ff614fbcf68fdf3c080e/src/auto-review.ts",
+      "https://github.com/vgflutter/GiviLoop/blob/7d0cbc47b5d1b7645298ff614fbcf68fdf3c080e/src/review-evidence.ts",
+      "https://github.com/vgflutter/GiviLoop/blob/7d0cbc47b5d1b7645298ff614fbcf68fdf3c080e/src/review-report.ts",
+      "https://github.com/vgflutter/GiviLoop/blob/7d0cbc47b5d1b7645298ff614fbcf68fdf3c080e/package.json"
     ],
     "required": false,
     "source": "built-in",

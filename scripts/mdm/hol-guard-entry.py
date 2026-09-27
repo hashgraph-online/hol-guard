@@ -2,12 +2,45 @@
 
 from __future__ import annotations
 
+import ast
 import json
 import sys
 from multiprocessing import freeze_support
 from pathlib import Path
 
 _FROZEN_DAEMON_SERVE_ARG = "--_hol-guard-daemon-serve"
+
+
+def _packaged_version() -> str:
+    """Read the stamped version without importing Guard.
+
+    Desktop's update check runs ``--version`` with a 90s budget. Importing the
+    frozen daemon runtime before that probe extracts and loads the whole
+    command surface, so the check times out and the current CLI stays in place.
+    """
+
+    candidates = []
+    meipass = getattr(sys, "_MEIPASS", None)
+    if isinstance(meipass, str) and meipass:
+        candidates.append(Path(meipass) / "version.py")
+    if not getattr(sys, "frozen", False):
+        candidates.append(
+            Path(__file__).resolve().parents[2] / "src" / "codex_plugin_scanner" / "version.py"
+        )
+    for path in candidates:
+        if not path.is_file():
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in tree.body:
+            if not isinstance(node, ast.Assign):
+                continue
+            if not any(isinstance(target, ast.Name) and target.id == "__version__" for target in node.targets):
+                continue
+            if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
+                version = node.value.value.strip()
+                if version:
+                    return version
+    raise SystemExit(1)
 
 
 def _consume_frozen_daemon_serve_gate() -> bool:
@@ -49,6 +82,9 @@ if __name__ == "__main__":
     # Dispatch PyInstaller multiprocessing children before importing Guard.
     # Otherwise private resource-tracker argv is parsed as a public CLI command.
     freeze_support()
+    if len(sys.argv) > 1 and sys.argv[1] == "--version":
+        print(f"{Path(sys.argv[0]).name} {_packaged_version()}")
+        raise SystemExit(0)
 
     daemon_gate_released = _consume_frozen_daemon_serve_gate()
 
