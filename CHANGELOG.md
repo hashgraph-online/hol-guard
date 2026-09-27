@@ -5,6 +5,13 @@ All notable changes to HOL Guard will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.7.1](https://github.com/hashgraph-online/hol-guard/compare/v3.7.0...v3.7.1) (2026-09-27)
+
+
+### Bug Fixes
+
+* **dashboard:** keep historical native reviews approvable ([#3130](https://github.com/hashgraph-online/hol-guard/issues/3130)) ([7851c8d](https://github.com/hashgraph-online/hol-guard/commit/7851c8d8525a6672ffb3ba0429324ca75fe8b944))
+
 ## [3.7.0](https://github.com/hashgraph-online/hol-guard/compare/v3.6.4...v3.7.0) (2026-09-27)
 
 
