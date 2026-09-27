@@ -133,6 +133,7 @@ _PYPI_RESPONSE_LIMIT_BYTES = 8 * 1024 * 1024
 _PYPI_READ_CHUNK_BYTES = 64 * 1024
 _PACKAGE_SHIM_REFRESH_TIMEOUT_SECONDS = 30.0
 _last_pypi_payload: dict[str, object] | None = None
+_last_pypi_stable_version: str | None = None
 _version_network_policy: ContextVar[ManagedNetworkPolicy | None] = ContextVar(
     "guard_update_version_network_policy",
     default=None,
@@ -1339,7 +1340,7 @@ def _version_check_payload(
 
 
 def _latest_version_from_pypi() -> str | None:
-    global _last_pypi_payload
+    global _last_pypi_payload, _last_pypi_stable_version
     request = urllib.request.Request(_PYPI_JSON_URL, headers={"Accept": "application/json"})
     deadline = time.monotonic() + _PYPI_TIMEOUT_SECONDS
     try:
@@ -1365,6 +1366,8 @@ def _latest_version_from_pypi() -> str | None:
     version = _stable_version_from_pypi_payload(payload)
     if newest_pypi_version(payload, include_stable=True, include_alpha=True) is not None:
         _last_pypi_payload = payload
+    if version is not None:
+        _last_pypi_stable_version = version
     return version if version is not None else _cached_pypi_latest_version()
 
 
@@ -1391,14 +1394,16 @@ def _stable_version_from_pypi_payload(payload: object) -> str | None:
 
 
 def _cached_pypi_latest_version() -> str | None:
-    """Return the last successfully fetched PyPI release when a fresh lookup fails.
+    """Return the last observed stable PyPI release when a fresh lookup fails.
 
     A transient PyPI outage must not flip ``update_available`` back to
-    unavailable between polls; the last good payload keeps the stable channel
-    as consistent as the alpha channel, which already reads the same cache.
+    unavailable between polls; the last good stable version keeps the stable
+    channel as consistent as the alpha channel, which already reads the cached
+    payload. Tracking the version separately means an alpha-only response
+    cannot displace the stable fallback.
     """
 
-    return _stable_version_from_pypi_payload(_last_pypi_payload)
+    return _last_pypi_stable_version
 
 
 def _latest_alpha_version_from_pypi(current_version: str) -> str | None:
