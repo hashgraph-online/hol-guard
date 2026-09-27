@@ -14,7 +14,9 @@
           "description": "Reviews the cogext CLI's mutating commitment operations (add, fulfill, fail). Read-only commands (extract, list, get, stats) are not matched and remain automatic. Note: `cogext add` may initialize ~/.cogext on a fresh machine; that side effect is covered structurally because `add` is in the reviewed set.",
           "ecosystem_ids": [],
           "executables": [
-            "cogext"
+            "cogext",
+            "cogext.cmd",
+            "cogext.exe"
           ],
           "extension_id": "command.cogext",
           "homepage": "https://cogextai.com",
@@ -104,14 +106,19 @@
             }
           ],
           "project_markers": [],
-          "publisher": null,
+          "publisher": {
+            "display_name": "COGEXT AI",
+            "id": "community.cogext",
+            "url": "https://github.com/yaminbinyoosuf/cogext-primitive"
+          },
           "reference_urls": [
             "https://cogextai.com/standard",
-            "https://github.com/cogext/cogext"
+            "https://github.com/yaminbinyoosuf/cogext-primitive"
           ],
           "required": false,
           "risk_classes": [
-            "destructive_shell"
+            "destructive_shell",
+            "execution"
           ],
           "rules": [
             {
@@ -154,11 +161,85 @@
               "native_capability": null,
               "permission_id": "command.cogext.permission.add",
               "risk_classes": [
-                "destructive_shell"
+                "destructive_shell",
+                "execution"
               ],
               "rule_id": "command.cogext.add",
               "rule_version": "1.0.0",
-              "safe_variants": [],
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "cogext",
+                            "cogext.cmd",
+                            "cogext.exe"
+                          ],
+                          "fail_secure_unknown_options": false,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "add"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      }
+                    ],
+                    "op": "any.v1"
+                  },
+                  "title": "cogext add command help (--help)",
+                  "variant_id": "help"
+                },
+                {
+                  "matcher": {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "cogext",
+                            "cogext.cmd",
+                            "cogext.exe"
+                          ],
+                          "fail_secure_unknown_options": false,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "-h"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "add"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      }
+                    ],
+                    "op": "any.v1"
+                  },
+                  "title": "cogext add command help (-h)",
+                  "variant_id": "short-help"
+                }
+              ],
               "safer_alternatives": [
                 "Run `cogext list` first to confirm the target store."
               ],
@@ -205,11 +286,85 @@
               "native_capability": null,
               "permission_id": "command.cogext.permission.fulfill",
               "risk_classes": [
-                "destructive_shell"
+                "destructive_shell",
+                "execution"
               ],
               "rule_id": "command.cogext.fulfill",
               "rule_version": "1.0.0",
-              "safe_variants": [],
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "cogext",
+                            "cogext.cmd",
+                            "cogext.exe"
+                          ],
+                          "fail_secure_unknown_options": false,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "fulfill"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      }
+                    ],
+                    "op": "any.v1"
+                  },
+                  "title": "cogext fulfill command help (--help)",
+                  "variant_id": "help"
+                },
+                {
+                  "matcher": {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "cogext",
+                            "cogext.cmd",
+                            "cogext.exe"
+                          ],
+                          "fail_secure_unknown_options": false,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "-h"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "fulfill"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      }
+                    ],
+                    "op": "any.v1"
+                  },
+                  "title": "cogext fulfill command help (-h)",
+                  "variant_id": "short-help"
+                }
+              ],
               "safer_alternatives": [
                 "Confirm the commitment ID with `cogext get <id>`."
               ],
@@ -256,11 +411,85 @@
               "native_capability": null,
               "permission_id": "command.cogext.permission.fail",
               "risk_classes": [
-                "destructive_shell"
+                "destructive_shell",
+                "execution"
               ],
               "rule_id": "command.cogext.fail",
               "rule_version": "1.0.0",
-              "safe_variants": [],
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "cogext",
+                            "cogext.cmd",
+                            "cogext.exe"
+                          ],
+                          "fail_secure_unknown_options": false,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "fail"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      }
+                    ],
+                    "op": "any.v1"
+                  },
+                  "title": "cogext fail command help (--help)",
+                  "variant_id": "help"
+                },
+                {
+                  "matcher": {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "cogext",
+                            "cogext.cmd",
+                            "cogext.exe"
+                          ],
+                          "fail_secure_unknown_options": false,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "-h"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "fail"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      }
+                    ],
+                    "op": "any.v1"
+                  },
+                  "title": "cogext fail command help (-h)",
+                  "variant_id": "short-help"
+                }
+              ],
               "safer_alternatives": [
                 "Confirm the commitment ID with `cogext get <id>`."
               ],
@@ -271,7 +500,7 @@
           "safer_alternatives": [
             "Run `cogext list` or `cogext get <id>` before mutating commitment state."
           ],
-          "source": "external",
+          "source": "built-in",
           "version": "1.0.0"
         },
         "schema": "guard.command-extension-source.v1"
