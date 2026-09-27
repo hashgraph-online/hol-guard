@@ -16780,8 +16780,8 @@ function parseActionEnvelope(raw) {
   const packageTargets = raw["package_targets"];
   const preExecutionResult = aliasedPreExecutionResult.value;
   const policyAction = aliasedPolicyAction.value;
-  const scriptName = raw["script_name"];
-  const rawPayloadRedacted = raw["raw_payload_redacted"];
+  const scriptName = raw["script_name"] === void 0 ? null : raw["script_name"];
+  const rawPayloadRedacted = raw["raw_payload_redacted"] === void 0 ? {} : raw["raw_payload_redacted"];
   if (typeof schemaVersion !== "number" || typeof actionId !== "string" || typeof harness !== "string" || typeof eventName !== "string" || !isGuardActionType(actionType)) {
     return null;
   }

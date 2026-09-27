@@ -55,7 +55,7 @@ const request: GuardApprovalRequest = {
   launch_target: "printf fixture",
   transport: "stdio",
   review_command: "hol-guard approvals approve native-review",
-  approval_url: null,
+  approval_url: "http://127.0.0.1:4781/approvals/native-review",
   status: "pending",
   resolution_action: null,
   resolution_scope: null,
