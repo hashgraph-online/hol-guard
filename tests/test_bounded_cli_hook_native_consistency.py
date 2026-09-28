@@ -125,6 +125,17 @@ def test_zcode_native_review_renderer_asks_and_exits_zero() -> None:
     assert payload["hookSpecificOutput"]["permissionDecision"] == "ask"
 
 
+def test_zcode_block_without_reason_still_writes_stderr() -> None:
+    payload, stderr, code = _translate(
+        {"decision": "allow", "policy_action": "block", "hookSpecificOutput": {"hookEventName": "PreToolUse"}},
+        harness="zcode",
+    )
+
+    assert code == 2
+    assert stderr.startswith("HOL Guard blocked this action")
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
 def test_native_deny_promotes_allow_policy_to_block() -> None:
     payload, _stderr, code = _translate(
         {

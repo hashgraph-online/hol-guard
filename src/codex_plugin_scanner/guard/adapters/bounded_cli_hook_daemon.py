@@ -237,10 +237,12 @@ def _daemon_response_to_native(
             reason = native_response.get("reason")
             if (not isinstance(reason, str) or not reason) and isinstance(hook_specific, dict):
                 reason = hook_specific.get("permissionDecisionReason")
-            if isinstance(reason, str) and reason:
-                # ZCode prefers stderr over stdout when a hook exits 2; without
-                # it the raw JSON envelope becomes the user-facing block reason.
-                stderr = zcode_authority_block_reason(reason) if canonical == "zcode" else reason
+            # ZCode prefers stderr over stdout when a hook exits 2; without it
+            # the raw JSON envelope becomes the user-facing block reason, so a
+            # missing reason falls back to a human-readable default.
+            if not isinstance(reason, str) or not reason:
+                reason = f"HOL Guard blocked this action ({policy_action_for_exit})"
+            stderr = zcode_authority_block_reason(reason) if canonical == "zcode" else reason
         if exit_code == 2 and canonical == "devin":
             native_response["decision"] = "block"
             if not native_response.get("reason"):
@@ -300,7 +302,7 @@ def _daemon_response_to_native(
             payload["reason"] = reason or f"HOL Guard blocked this action ({policy_action})"
     stdout = json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
     if exit_code == 2 and canonical == "zcode":
-        stderr = zcode_authority_block_reason(reason)
+        stderr = zcode_authority_block_reason(reason or f"HOL Guard blocked this action ({policy_action})")
     else:
         stderr = reason if exit_code == 2 and canonical in {"kimi", "devin"} else ""
     return stdout, stderr, exit_code
