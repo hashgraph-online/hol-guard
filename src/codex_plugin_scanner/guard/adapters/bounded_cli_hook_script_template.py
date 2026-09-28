@@ -263,6 +263,11 @@ def _permission_decision(policy_action: str) -> str | None:
     if policy_action in {"allow", "warn"}:
         return "allow"
     if policy_action in {"review", "require-reapproval", "sandbox-required"}:
+        # zcode discards the stdout envelope when a hook exits 2, and
+        # sandbox-required keeps the blocking exit for zcode, so the envelope
+        # must say deny instead of ask to stay consistent.
+        if HARNESS == "zcode" and policy_action == "sandbox-required":
+            return "deny"
         return "ask"
     if policy_action == "block":
         return "deny"
@@ -352,8 +357,9 @@ def _to_native(daemon_response: dict[str, object], event_name: str) -> tuple[str
             if not isinstance(reason, str) or not reason:
                 hook_specific = native_response.get("hookSpecificOutput")
                 reason = hook_specific.get("permissionDecisionReason") if isinstance(hook_specific, dict) else None
-            if isinstance(reason, str) and reason:
-                return stdout, _stderr_reason(reason), exit_code
+            if not isinstance(reason, str) or not reason:
+                reason = f"HOL Guard blocked this action ({policy})"
+            return stdout, _stderr_reason(reason), exit_code
         return stdout, "", exit_code
     policy_action = str(daemon_response.get("policy_action") or "block")
     reason = str(daemon_response.get("reason") or daemon_response.get("permission_decision_reason") or "")
@@ -385,7 +391,7 @@ def _to_native(daemon_response: dict[str, object], event_name: str) -> tuple[str
     if exit_code == 2 and HARNESS in {"kimi", "devin"}:
         return stdout, reason, exit_code
     if exit_code == 2 and HARNESS == "zcode":
-        return stdout, _stderr_reason(reason), exit_code
+        return stdout, _stderr_reason(reason or f"HOL Guard blocked this action ({policy_action})"), exit_code
     return stdout, "", exit_code
 
 

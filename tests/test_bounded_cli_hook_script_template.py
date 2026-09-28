@@ -323,6 +323,26 @@ def test_generated_zcode_authority_block_stderr_appends_remediation(tmp_path: Pa
     assert "hol-guard command controls acknowledge-degraded" in stderr
 
 
+def test_generated_zcode_sandbox_required_denies_with_exit_two(tmp_path: Path) -> None:
+    module = _load_script(tmp_path, harness="zcode")
+    stdout, stderr, code = module._to_native(
+        {"policy_action": "sandbox-required", "reason": "Sandbox required."}, "PreToolUse"
+    )
+    payload = json.loads(stdout)
+
+    assert code == 2
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert stderr == "Sandbox required."
+
+
+def test_generated_zcode_block_without_reason_writes_stderr(tmp_path: Path) -> None:
+    module = _load_script(tmp_path, harness="zcode")
+    _stdout, stderr, code = module._to_native({"policy_action": "block"}, "PreToolUse")
+
+    assert code == 2
+    assert stderr.startswith("HOL Guard blocked this action")
+
+
 def test_generated_zcode_prompt_block_keeps_exit_two(tmp_path: Path) -> None:
     module = _load_script(tmp_path, harness="zcode")
     _stdout, _stderr, code = module._to_native(

@@ -92,6 +92,20 @@ def _native_hook_permission_decision(policy_action: str) -> str | None:
     return None
 
 
+def _zcode_envelope_decision(policy_action: str) -> str | None:
+    """ZCode envelope decisions aligned with the zcode exit policy.
+
+    ``sandbox-required`` keeps the blocking exit for zcode, so its envelope
+    must say ``deny``; ``ask`` paired with exit 2 would be discarded by zcode
+    and mislead any consumer that reads the JSON.
+    """
+
+    decision = _native_hook_permission_decision(policy_action)
+    if decision == "ask" and policy_action == "sandbox-required":
+        return "deny"
+    return decision
+
+
 def _policy_action_from_daemon(daemon_response: Mapping[str, object]) -> str:
     reason_code = str(daemon_response.get("reason_code") or "")
     if hook_reason_continues_session(reason_code):
@@ -268,6 +282,8 @@ def _daemon_response_to_native(
             payload["hookSpecificOutput"] = {"hookEventName": event_name}
     else:
         permission_decision = _native_hook_permission_decision(policy_action)
+        if canonical == "zcode":
+            permission_decision = _zcode_envelope_decision(policy_action)
         if canonical == "codex" and event_name == "PreToolUse" and permission_decision is None:
             return "", "", 0
         hook_specific_output: dict[str, object] = {"hookEventName": event_name}

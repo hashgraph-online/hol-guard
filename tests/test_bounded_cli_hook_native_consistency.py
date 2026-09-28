@@ -125,6 +125,17 @@ def test_zcode_native_review_renderer_asks_and_exits_zero() -> None:
     assert payload["hookSpecificOutput"]["permissionDecision"] == "ask"
 
 
+def test_zcode_sandbox_required_envelope_denies_with_exit_two() -> None:
+    payload, stderr, code = _translate(
+        {"policy_action": "sandbox-required", "reason": "Sandbox required."}, harness="zcode"
+    )
+
+    assert code == 2
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert payload["hookSpecificOutput"]["permissionDecisionReason"] == "Sandbox required."
+    assert stderr == "Sandbox required."
+
+
 def test_zcode_block_without_reason_still_writes_stderr() -> None:
     payload, stderr, code = _translate(
         {"decision": "allow", "policy_action": "block", "hookSpecificOutput": {"hookEventName": "PreToolUse"}},
