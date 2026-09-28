@@ -210,7 +210,8 @@ def _native_hook_permission_decision(policy_action: str, *, harness: str) -> str
     if policy_action in {"block", "sandbox-required"}:
         return "deny"
     if policy_action in {"review", "require-reapproval"}:
-        if canonical in {"codex", "kimi", "grok", "zcode", "devin"}:
+        # zcode routes ask to its native permission prompt instead of denying.
+        if canonical in {"codex", "kimi", "grok", "devin"}:
             return "deny"
         return "ask"
     if canonical == "codex":
