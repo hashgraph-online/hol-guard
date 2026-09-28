@@ -1,0 +1,710 @@
+{
+  "extension": {
+    "action_classes": [
+      "gitsync mirror-mutating command",
+      "gitsync webhook-rewriting command",
+      "gitsync service-install command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews gitsync's live mirror sync, server-side webhook rewrites, and service install/uninstall. Read-only inspection (`check`, `status`) and `run --dry-run` are not covered and pass automatically.",
+    "ecosystem_ids": [],
+    "executables": [],
+    "extension_id": "command.gitsync",
+    "homepage": "https://github.com/cristobaltormo/git-sync",
+    "icon": {
+      "kind": "none"
+    },
+    "license": "Apache-2.0",
+    "name": "gitsync command protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "gitsync mirror-mutating command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `gitsync sync` and `gitsync run` (without --dry-run), which force-push and prune every configured repo's branches and tags to GitHub so the two sides end up identical, and can eventually delete the GitHub mirror once a repo disappears from the source (subject to gitsync's own delete_grace and delete_limit safeguards).",
+        "example_command": "gitsync sync",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "gitsync live mirror sync",
+        "permission_id": "command.gitsync.permission.mirror-mutation",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Run `gitsync run --dry-run` first and review what it reports before running it live.",
+          "Run `gitsync check` to confirm token scopes and account mapping before mirroring."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "gitsync webhook-rewriting command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `gitsync hooks --force` (rewrites existing webhooks on the git server) and `gitsync hooks --remove` (deletes them). Plain `gitsync hooks` only creates missing webhooks and is not covered by this rule.",
+        "example_command": "gitsync hooks --remove",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "gitsync webhook rewrite or removal",
+        "permission_id": "command.gitsync.permission.hook-rewrite",
+        "replacement_permission_id": null,
+        "risk_tier": "medium",
+        "safer_guidance": [
+          "Run `gitsync hooks` without --force or --remove first to see which webhooks are missing."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "gitsync service-install command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `gitsync install` and `gitsync uninstall`, which register or remove a persistent background service (systemd on Linux, a scheduled task on Windows) that runs gitsync's live daemon unattended.",
+        "example_command": "gitsync install",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "gitsync service install or uninstall",
+        "permission_id": "command.gitsync.permission.service-install",
+        "replacement_permission_id": null,
+        "risk_tier": "medium",
+        "safer_guidance": [
+          "Run `gitsync run --dry-run` interactively first before installing it as an unattended service."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": {
+      "display_name": "Community",
+      "id": "community.gitsync",
+      "url": null
+    },
+    "reference_urls": [
+      "https://github.com/cristobaltormo/git-sync#commands",
+      "https://github.com/cristobaltormo/git-sync#things-worth-knowing"
+    ],
+    "required": false,
+    "risk_classes": [
+      "destructive_shell",
+      "network_egress",
+      "execution"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "gitsync mirror-mutating command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `gitsync sync` and `gitsync run` (without --dry-run), which force-push and prune every configured repo's branches and tags to GitHub so the two sides end up identical, and can eventually delete the GitHub mirror once a repo disappears from the source (subject to gitsync's own delete_grace and delete_limit safeguards).",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "gitsync",
+                  "gitsync.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--help",
+                  "-h"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-c"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "sync"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "gitsync",
+                  "gitsync.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--help",
+                  "-h"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-c"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "run"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.gitsync.permission.mirror-mutation",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.gitsync.mirror-mutation",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "gitsync",
+                      "gitsync.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--help",
+                      "-h"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-c"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "sync"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "gitsync",
+                      "gitsync.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--help",
+                      "-h"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-c"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "run"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "gitsync",
+                      "gitsync.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--help",
+                      "-h"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-c"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "sync"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "gitsync",
+                      "gitsync.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--help",
+                      "-h"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-c"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "run"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "short-help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "gitsync",
+                      "gitsync.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--help",
+                      "-h"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-c"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--dry-run"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "run"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Dry run, no push or delete happens",
+            "variant_id": "dry-run"
+          }
+        ],
+        "safer_alternatives": [
+          "Run `gitsync run --dry-run` first and review what it reports before running it live.",
+          "Run `gitsync check` to confirm token scopes and account mapping before mirroring."
+        ],
+        "severity": "high",
+        "title": "gitsync live mirror sync"
+      },
+      {
+        "action_classes": [
+          "gitsync webhook-rewriting command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `gitsync hooks --force` (rewrites existing webhooks on the git server) and `gitsync hooks --remove` (deletes them). Plain `gitsync hooks` only creates missing webhooks and is not covered by this rule.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "gitsync",
+                  "gitsync.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--help",
+                  "-h"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-c"
+                ],
+                "options_with_values": [],
+                "required_flags": [
+                  "--force"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "hooks"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "gitsync",
+                  "gitsync.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--help",
+                  "-h"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-c"
+                ],
+                "options_with_values": [],
+                "required_flags": [
+                  "--remove"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "hooks"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.gitsync.permission.hook-rewrite",
+        "risk_classes": [
+          "network_egress"
+        ],
+        "rule_id": "command.gitsync.hook-rewrite",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "gitsync",
+                      "gitsync.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--help",
+                      "-h"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-c"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--force",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "hooks"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "gitsync",
+                      "gitsync.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--help",
+                      "-h"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-c"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--remove",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "hooks"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Run `gitsync hooks` without --force or --remove first to see which webhooks are missing."
+        ],
+        "severity": "medium",
+        "title": "gitsync webhook rewrite or removal"
+      },
+      {
+        "action_classes": [
+          "gitsync service-install command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `gitsync install` and `gitsync uninstall`, which register or remove a persistent background service (systemd on Linux, a scheduled task on Windows) that runs gitsync's live daemon unattended.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "gitsync",
+                  "gitsync.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--help",
+                  "-h"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-c"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "install"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "gitsync",
+                  "gitsync.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--help",
+                  "-h"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-c"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "uninstall"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.gitsync.permission.service-install",
+        "risk_classes": [
+          "execution"
+        ],
+        "rule_id": "command.gitsync.service-install",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "gitsync",
+                      "gitsync.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--help",
+                      "-h"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-c"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "install"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "gitsync",
+                      "gitsync.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--help",
+                      "-h"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-c"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "uninstall"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Run `gitsync run --dry-run` interactively first before installing it as an unattended service."
+        ],
+        "severity": "medium",
+        "title": "gitsync service install or uninstall"
+      }
+    ],
+    "safer_alternatives": [
+      "Run `gitsync run --dry-run` first and review what it reports before running it live.",
+      "Run `gitsync check` to confirm token scopes and account mapping before mirroring.",
+      "Only set adopt_existing on a GitHub repo you are fine handing lifecycle ownership of to gitsync."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

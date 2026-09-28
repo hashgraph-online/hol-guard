@@ -1,0 +1,293 @@
+{
+  "schema": "guard.command-extension-fixtures.v1",
+  "cases": [
+    {
+      "id": "mirror-inactive",
+      "command": "gitsync sync",
+      "enabled_extensions": [],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.gitsync.mirror-mutation",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "mirror-sync-active",
+      "command": "gitsync sync",
+      "enabled_extensions": [
+        "command.gitsync"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.gitsync.mirror-mutation",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "mirror-sync-one-repo-active",
+      "command": "gitsync sync alice/example",
+      "enabled_extensions": [
+        "command.gitsync"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.gitsync.mirror-mutation",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "mirror-run-active",
+      "command": "gitsync run",
+      "enabled_extensions": [
+        "command.gitsync"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.gitsync.mirror-mutation",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "mirror-run-dry-run-safe",
+      "command": "gitsync run --dry-run",
+      "enabled_extensions": [
+        "command.gitsync"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.gitsync.mirror-mutation",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "mirror-run-help-safe",
+      "command": "gitsync run --help",
+      "enabled_extensions": [
+        "command.gitsync"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.gitsync.mirror-mutation",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "mirror-sync-short-help-safe",
+      "command": "gitsync sync -h",
+      "enabled_extensions": [
+        "command.gitsync"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.gitsync.mirror-mutation",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "mirror-config-flag-leading",
+      "command": "gitsync -c /etc/gitsync/config.toml sync",
+      "enabled_extensions": [
+        "command.gitsync"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.gitsync.mirror-mutation",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "mirror-compound",
+      "command": "gitsync run --dry-run; gitsync sync",
+      "enabled_extensions": [
+        "command.gitsync"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.gitsync.mirror-mutation",
+      "expected_effective_segments": [
+        1
+      ]
+    },
+    {
+      "id": "mirror-disabled-permission",
+      "command": "gitsync sync",
+      "enabled_extensions": [
+        "command.gitsync"
+      ],
+      "disabled_permissions": [
+        "command.gitsync.permission.mirror-mutation"
+      ],
+      "expected_action": "block",
+      "rule_id": "command.gitsync.mirror-mutation",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "mirror-unrelated-safe",
+      "command": "gitsync status",
+      "enabled_extensions": [
+        "command.gitsync"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "allow",
+      "rule_id": "command.gitsync.mirror-mutation",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "mirror-unknown-cli",
+      "command": "another-unrelated-tool sync",
+      "enabled_extensions": [
+        "command.gitsync"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.gitsync.mirror-mutation",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "hooks-inactive",
+      "command": "gitsync hooks --force",
+      "enabled_extensions": [],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.gitsync.hook-rewrite",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "hooks-force-active",
+      "command": "gitsync hooks --force",
+      "enabled_extensions": [
+        "command.gitsync"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.gitsync.hook-rewrite",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "hooks-remove-active",
+      "command": "gitsync hooks --remove",
+      "enabled_extensions": [
+        "command.gitsync"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.gitsync.hook-rewrite",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "hooks-bare-safe",
+      "command": "gitsync hooks",
+      "enabled_extensions": [
+        "command.gitsync"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "allow",
+      "rule_id": "command.gitsync.hook-rewrite",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "hooks-force-help-safe",
+      "command": "gitsync hooks --force --help",
+      "enabled_extensions": [
+        "command.gitsync"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.gitsync.hook-rewrite",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "hooks-disabled-permission",
+      "command": "gitsync hooks --remove",
+      "enabled_extensions": [
+        "command.gitsync"
+      ],
+      "disabled_permissions": [
+        "command.gitsync.permission.hook-rewrite"
+      ],
+      "expected_action": "block",
+      "rule_id": "command.gitsync.hook-rewrite",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "service-inactive",
+      "command": "gitsync install",
+      "enabled_extensions": [],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.gitsync.service-install",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "service-install-active",
+      "command": "gitsync install",
+      "enabled_extensions": [
+        "command.gitsync"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.gitsync.service-install",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "service-uninstall-active",
+      "command": "gitsync uninstall",
+      "enabled_extensions": [
+        "command.gitsync"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.gitsync.service-install",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "service-install-help-safe",
+      "command": "gitsync install --help",
+      "enabled_extensions": [
+        "command.gitsync"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.gitsync.service-install",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "service-unrelated-safe",
+      "command": "gitsync check",
+      "enabled_extensions": [
+        "command.gitsync"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "allow",
+      "rule_id": "command.gitsync.service-install",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "service-disabled-permission",
+      "command": "gitsync uninstall",
+      "enabled_extensions": [
+        "command.gitsync"
+      ],
+      "disabled_permissions": [
+        "command.gitsync.permission.service-install"
+      ],
+      "expected_action": "block",
+      "rule_id": "command.gitsync.service-install",
+      "expected_effective_segments": [
+        0
+      ]
+    }
+  ]
+}
