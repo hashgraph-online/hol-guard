@@ -87,6 +87,17 @@ def test_witness_rejects_cleaned_setup(tmp_path: Path) -> None:
         pass
 
 
+def test_witness_rejects_marker_with_trailing_data(tmp_path: Path) -> None:
+    setup = _setup(tmp_path)
+    assert setup.root_path is not None and setup.marker_token is not None
+    marker = setup.root_path / ".hol-guard-evaluation-owned"
+    marker.write_text(setup.marker_token + "x", encoding="utf-8")
+    with pytest.raises(ValueError, match="owned evaluation setup"), LocalSideEffectWitness(setup=setup):
+        pass
+    marker.write_text(setup.marker_token, encoding="utf-8")
+    assert setup.cleanup() is True
+
+
 @pytest.mark.skipif(os.name == "nt", reason="directory descriptor checks require POSIX")
 def test_witness_exit_tolerates_setup_cleanup(tmp_path: Path) -> None:
     setup = _setup(tmp_path)

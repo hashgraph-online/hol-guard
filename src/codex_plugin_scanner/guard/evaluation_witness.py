@@ -110,7 +110,11 @@ def _owned_witness_directory(setup: EvaluationSetup) -> _PinnedWitnessDirectory:
                     marker_fd = os.open(".hol-guard-evaluation-owned", os.O_RDONLY | os.O_NOFOLLOW, dir_fd=root_fd)
                     try:
                         marker_info = os.fstat(marker_fd)
-                        marker_matches = stat.S_ISREG(marker_info.st_mode) and os.read(marker_fd, 33) == token.encode()
+                        token_bytes = token.encode("utf-8")
+                        marker_matches = (
+                            stat.S_ISREG(marker_info.st_mode)
+                            and os.read(marker_fd, len(token_bytes) + 1) == token_bytes
+                        )
                     finally:
                         os.close(marker_fd)
                     for descriptor, expected_identity in (
