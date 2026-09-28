@@ -101,6 +101,7 @@ assert(
 const css = source("./shell-navigation.css");
 const drawerSource = source("./shell-navigation-drawer.tsx");
 const layoutSource = source("./approval-center-layout.tsx");
+const appSource = source("./app.tsx");
 const responsiveSource = source("./responsive-layout.css");
 const mainSource = source("./main.tsx");
 
@@ -137,6 +138,12 @@ assert(
 assert(
   drawerSource.includes("onSetUpdateChannel={props.onSetUpdateChannel}"),
   "The navigation drawer keeps the alpha update control",
+);
+assert(
+  layoutSource.includes("useGuardUpdate({ onReconnected: props.onGuardReconnected })") &&
+    !layoutSource.includes("enableUpdateStatus") &&
+    !appSource.includes("enableUpdateStatus"),
+  "Update status stays enabled on every view so the Update action cannot disappear on Inbox",
 );
 
 const alphaMarkup = renderToStaticMarkup(

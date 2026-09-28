@@ -186,6 +186,12 @@ def _recover_authority(
             "catalog_digest": view.catalog_digest,
         }
     else:
+        from ..daemon.manager import ensure_guard_daemon
+
+        try:
+            ensure_guard_daemon(guard_home)
+        except RuntimeError as error:
+            raise GuardDaemonRequestError(str(error)) from error
         payload: dict[str, object] = {"session_nonce": session_nonce}
         if gate_input is not None:
             payload["approval_password"] = gate_input.password
@@ -301,6 +307,13 @@ def run_extension_controls_command(
                 command=command,
                 output_stream=output_stream,
             )
+        if command != "status":
+            from ..daemon.manager import ensure_guard_daemon
+
+            try:
+                ensure_guard_daemon(guard_home)
+            except RuntimeError as error:
+                raise GuardDaemonRequestError(str(error)) from error
         client = _client(guard_home)
         if command == "patterns":
             return _patterns(client, args, output_stream)

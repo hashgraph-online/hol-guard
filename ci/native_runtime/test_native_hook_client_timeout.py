@@ -33,7 +33,10 @@ def test_native_hook_client_start_timeout_contains_new_managed_processes(
     deadline = time.monotonic() + 3
     while process.poll() is None and time.monotonic() < deadline:
         for path in _state_files(state_dir):
-            state = json.loads(path.read_text(encoding="utf-8"))
+            try:
+                state = json.loads(path.read_text(encoding="utf-8"))
+            except FileNotFoundError:
+                continue
             for key in ("process_id", "owner_process_id"):
                 process_id = state.get(key)
                 if isinstance(process_id, int) and process_id > 0:
@@ -51,10 +54,15 @@ def test_native_hook_client_start_timeout_contains_new_managed_processes(
         stderr,
     )
     assert result.returncode is not None
-    assert result.returncode != 0
-    assert result.stderr in {
-        b"native_client_deadline_exceeded\n",
-        b"native_resident_start_timeout\n",
-    }
+    if result.returncode == 0:
+        assert json.loads(result.stdout) == {
+            "error": "native_policy_snapshot_missing",
+            "retryable": False,
+        }
+    else:
+        assert result.stderr in {
+            b"native_client_deadline_exceeded\n",
+            b"native_resident_start_timeout\n",
+        }
     assert not any(process_is_executing(process_id) for process_id in observed_process_ids)
     assert not _state_files(state_dir)

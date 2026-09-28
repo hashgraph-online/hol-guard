@@ -307,7 +307,12 @@ def is_guard_proxy_command(command: str | None, args: tuple[str, ...]) -> bool:
     if not isinstance(command, str):
         return False
     if _hol_guard_command_name(command) is not None:
-        return "guard" in args and any(value in _GUARD_PROXY_COMMANDS for value in args)
+        # Packaged native launchers expose the proxy subcommand directly.
+        # Python CLI launchers retain the historical `guard` command group.
+        return bool(args) and (
+            args[0] in _GUARD_PROXY_COMMANDS
+            or (len(args) > 1 and args[0] == "guard" and args[1] in _GUARD_PROXY_COMMANDS)
+        )
     if "codex_plugin_scanner.cli" not in args or "guard" not in args:
         return False
     return any(value in _GUARD_PROXY_COMMANDS for value in args)

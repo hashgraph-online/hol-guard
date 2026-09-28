@@ -146,6 +146,32 @@ def test_bundled_runtime_skips_world_writable_execute_restore(
     assert stat.S_IMODE(runtime.stat().st_mode) & 0o111 == 0
 
 
+def test_windows_native_environment_uses_the_interpreter_crt_without_user_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    prefix = tmp_path / "python"
+    prefix.mkdir()
+    (prefix / "vcruntime140.dll").write_bytes(b"crt")
+    runtime_dir = tmp_path / "native"
+    runtime_dir.mkdir()
+    monkeypatch.setattr(native_runtime_module.os, "name", "nt")
+    monkeypatch.setattr(native_runtime_module.sys, "base_prefix", str(prefix))
+    monkeypatch.setattr(
+        native_runtime_module,
+        "_bundled_runtime_candidate",
+        lambda: runtime_dir / "hol-guard-runtime.exe",
+    )
+    monkeypatch.setenv("PATH", str(tmp_path / "user-bin"))
+    monkeypatch.setenv("SYSTEMROOT", str(tmp_path / "Windows"))
+
+    environment = native_runtime_module._isolated_environment()
+
+    assert str(tmp_path / "user-bin") not in environment["PATH"].split(os.pathsep)
+    assert str(prefix) in environment["PATH"].split(os.pathsep)
+    assert str(tmp_path / "Windows" / "System32") in environment["PATH"].split(os.pathsep)
+
+
 def test_override_is_ignored_in_auto_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     binary = tmp_path / "hol-guard-runtime"
     binary.write_text("not executable", encoding="utf-8")

@@ -16,7 +16,6 @@ import re
 import secrets
 import shutil
 import stat
-import subprocess
 import tempfile
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
@@ -28,6 +27,7 @@ from .evaluation_contracts import (
     EvaluationProfile,
     validate_evaluation_profile,
 )
+from .evaluation_host_probe import check_host_version
 
 EvaluationSetupStatus = Literal["passed", "blocked_environment", "not_run"]
 EvaluationPhase = Literal["preflight", "setup"]
@@ -35,7 +35,6 @@ EVALUATION_SETUP_SCHEMA_VERSION = "guard.evaluation-setup.v1"
 
 _OWNED_ROOT_PREFIX = "hol-guard-eval-"
 _MARKER_NAME = ".hol-guard-evaluation-owned"
-_VERSION_TIMEOUT_SECONDS = 2.0
 
 
 def _check(
@@ -248,79 +247,6 @@ def _resolve_host_executable(value: str) -> Path | None:
         return None
 
 
-def _isolated_version_environment(probe_root: Path) -> dict[str, str]:
-    """Build a minimal environment with all user-state locations redirected."""
-
-    state_root = probe_root / "state"
-    state_root.mkdir(mode=0o700)
-    environment = {
-        "PATH": os.environ.get("PATH", os.defpath),
-        "HOME": str(state_root),
-        "USERPROFILE": str(state_root),
-        "XDG_CONFIG_HOME": str(state_root / "config"),
-        "XDG_DATA_HOME": str(state_root / "data"),
-        "XDG_STATE_HOME": str(state_root / "state"),
-        "XDG_CACHE_HOME": str(state_root / "cache"),
-        "TMPDIR": str(state_root / "tmp"),
-        "TMP": str(state_root / "tmp"),
-        "TEMP": str(state_root / "tmp"),
-        "PYTHONNOUSERSITE": "1",
-        "LC_ALL": "C",
-        "LANG": "C",
-    }
-    for directory in ("config", "data", "state", "cache", "tmp"):
-        (state_root / directory).mkdir(mode=0o700)
-    if os.name == "nt":
-        for name in ("SystemRoot", "WINDIR", "PATHEXT"):
-            value = os.environ.get(name)
-            if value:
-                environment[name] = value
-    return environment
-
-
-def _version_matches(output: str, expected_version: str) -> bool:
-    core = (
-        expected_version[1:]
-        if expected_version[:1] in {"v", "V"} and expected_version[1:2].isdigit()
-        else expected_version
-    )
-    prefix = "[vV]?" if core[0].isdigit() else ""
-    pattern = rf"(?<![A-Za-z0-9_.-]){prefix}{re.escape(core)}(?![A-Za-z0-9_.-])"
-    return re.search(pattern, output) is not None
-
-
-def _check_host_version(executable: Path, expected_version: str) -> tuple[bool, str]:
-    probe_root = Path(tempfile.mkdtemp(prefix="hol-guard-preflight-"))
-    try:
-        probe_root.chmod(0o700)
-        environment = _isolated_version_environment(probe_root)
-        try:
-            completed = subprocess.run(
-                [os.fspath(executable), "--version"],
-                cwd=probe_root,
-                env=environment,
-                stdin=subprocess.DEVNULL,
-                capture_output=True,
-                text=True,
-                timeout=_VERSION_TIMEOUT_SECONDS,
-                check=False,
-                shell=False,
-            )
-        except subprocess.TimeoutExpired:
-            return False, "host_version_timeout"
-        except (OSError, UnicodeError):
-            return False, "host_version_unavailable"
-        if completed.returncode != 0:
-            return False, "host_version_unavailable"
-        if not _version_matches(f"{completed.stdout}\n{completed.stderr}", expected_version):
-            return False, "host_version_mismatch"
-        return True, ""
-    except (OSError, RuntimeError):
-        return False, "host_version_unavailable"
-    finally:
-        shutil.rmtree(probe_root, ignore_errors=True)
-
-
 def _artifact_checks(
     payload: Mapping[str, object],
     artifact_paths: Mapping[str, str | Path] | None,
@@ -482,7 +408,13 @@ def preflight_evaluation(
         return _report("not_run", "preflight", profile_id, checks, reason="isolated_host_execution_not_enabled")
 
     version = str(host["version"])
-    version_ok, version_reason = _check_host_version(executable, version)
+    limits = cast(Mapping[str, object], payload["resourceLimits"])
+    version_ok, version_reason = check_host_version(
+        executable,
+        version,
+        timeout_seconds=float(cast(int, limits["maxDurationSeconds"])),
+        output_limit_bytes=cast(int, limits["maxOutputBytes"]),
+    )
     if not version_ok:
         checks.append(_check("host_version", "blocked_environment", reason=version_reason))
         return _report("blocked_environment", "preflight", profile_id, checks, reason=version_reason)
