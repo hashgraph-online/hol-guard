@@ -736,6 +736,19 @@
       ]
     },
     {
+      "id": "ops-hooks-force-single-dash-equals-active",
+      "command": "gitsync hooks -force=true",
+      "enabled_extensions": [
+        "command.gitsync"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.gitsync.operational-mutation",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
       "id": "ops-hooks-remove-single-dash-active",
       "command": "gitsync hooks -remove",
       "enabled_extensions": [
@@ -756,6 +769,21 @@
       ],
       "disabled_permissions": [],
       "expected_action": "review",
+      "rule_id": "command.gitsync.operational-mutation",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "ops-hooks-force-single-dash-disabled-permission",
+      "command": "gitsync hooks -force",
+      "enabled_extensions": [
+        "command.gitsync"
+      ],
+      "disabled_permissions": [
+        "command.gitsync.permission.operational-mutation"
+      ],
+      "expected_action": "block",
       "rule_id": "command.gitsync.operational-mutation",
       "expected_effective_segments": [
         0
