@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
+from codex_plugin_scanner.guard import evaluation_scope
 from codex_plugin_scanner.guard.evaluation_preflight import EvaluationSetup, setup_evaluation
 from codex_plugin_scanner.guard.evaluation_witness import LocalSideEffectWitness
 from tests.test_guard_evaluation_preflight import _artifact, _artifact_paths, _fake_host, _profile
@@ -21,6 +23,54 @@ def _setup(tmp_path: Path) -> EvaluationSetup:
     )
     assert setup.report.status == "passed"
     return setup
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX ownership and permission checks")
+def test_temp_parent_rejects_public_and_linked_directories(tmp_path: Path) -> None:
+    private = tmp_path / "private"
+    private.mkdir(mode=0o700)
+    assert evaluation_scope._safe_temp_parent(private)
+
+    private.chmod(0o755)
+    assert not evaluation_scope._safe_temp_parent(private)
+    private.chmod(0o700)
+
+    linked = tmp_path / "linked"
+    linked.symlink_to(private, target_is_directory=True)
+    assert not evaluation_scope._safe_temp_parent(linked)
+    assert not evaluation_scope._safe_temp_parent(tmp_path / "missing")
+
+
+def test_windows_temp_parent_requires_a_descendant_on_a_local_path(tmp_path: Path, monkeypatch) -> None:
+    temp_root = tmp_path / "windows-temp"
+    temp_root.mkdir()
+    private = temp_root / "private"
+    private.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    path_ops = SimpleNamespace(
+        realpath=os.path.realpath,
+        normcase=os.path.normcase,
+        normpath=os.path.normpath,
+        commonpath=os.path.commonpath,
+    )
+    monkeypatch.setattr(
+        evaluation_scope,
+        "os",
+        SimpleNamespace(name="nt", path=path_ops, fspath=os.fspath),
+    )
+    monkeypatch.setattr(evaluation_scope, "tempfile", SimpleNamespace(gettempdir=lambda: str(temp_root)))
+
+    assert evaluation_scope._safe_temp_parent(private)
+    assert not evaluation_scope._safe_temp_parent(temp_root)
+    assert not evaluation_scope._safe_temp_parent(outside)
+
+    path_ops.realpath = lambda path: r"\\server\share" if os.fspath(path) == str(private) else os.path.realpath(path)
+    assert not evaluation_scope._safe_temp_parent(private)
+
+    path_ops.realpath = os.path.realpath
+    path_ops.commonpath = lambda _paths: (_ for _ in ()).throw(ValueError("different drives"))
+    assert not evaluation_scope._safe_temp_parent(private)
 
 
 @pytest.mark.skipif(os.name == "nt", reason="directory descriptor checks require POSIX")
