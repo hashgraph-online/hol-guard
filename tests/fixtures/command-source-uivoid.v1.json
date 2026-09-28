@@ -16000,6 +16000,7 @@
       "classes": {
         "external": [
           "command.blitcp",
+          "command.cogext",
           "command.genclave",
           "command.mcp-filesystem",
           "command.mcp-instapods",

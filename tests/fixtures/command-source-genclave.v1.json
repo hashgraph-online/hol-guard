@@ -1,5 +1,4 @@
 {
-  "schema": "guard.command-extension-fixtures.v1",
   "build": {
     "schema": "guard.command-extension-build.v1",
     "sources": [
@@ -10904,18 +10903,21 @@
       }
     ],
     "trust": {
-      "schemaVersion": "guard.extension-trust-class-map.v1",
-      "publishers": {
-        "hol": {
-          "id": "hol",
-          "displayName": "Hashgraph Online"
-        },
-        "hol-curated": {
-          "id": "hol-curated",
-          "displayName": "HOL curated library"
-        }
-      },
       "classes": {
+        "external": [
+          "command.blitcp",
+          "command.cogext",
+          "command.genclave",
+          "command.mcp-filesystem",
+          "command.mcp-instapods",
+          "command.noodle",
+          "command.ollama",
+          "command.probe",
+          "command.remote.essh",
+          "command.repo2nb",
+          "command.skill-sunset",
+          "command.uivoid"
+        ],
         "first-party": [
           "command.container-runtime",
           "command.data-protection",
@@ -10981,496 +10983,495 @@
           "command.storage.azure-blob",
           "command.storage.google-cloud",
           "command.storage.minio"
-        ],
-        "external": [
-          "command.blitcp",
-          "command.genclave",
-          "command.mcp-filesystem",
-          "command.mcp-instapods",
-          "command.noodle",
-          "command.ollama",
-          "command.probe",
-          "command.remote.essh",
-          "command.repo2nb",
-          "command.skill-sunset",
-          "command.uivoid"
         ]
-      }
+      },
+      "publishers": {
+        "hol": {
+          "displayName": "Hashgraph Online",
+          "id": "hol"
+        },
+        "hol-curated": {
+          "displayName": "HOL curated library",
+          "id": "hol-curated"
+        }
+      },
+      "schemaVersion": "guard.extension-trust-class-map.v1"
     }
   },
   "cases": [
     {
+      "command": "ge passkey delete key-1",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.genclave"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
       "id": "passkey-delete",
-      "command": "ge passkey delete key-1",
-      "enabled_extensions": [
-        "command.genclave"
-      ],
-      "disabled_permissions": [],
-      "expected_action": "review",
-      "rule_id": "command.genclave.mutate",
-      "expected_effective_segments": [
-        0
-      ]
+      "rule_id": "command.genclave.mutate"
     },
     {
-      "id": "webauthn-delete",
       "command": "ge webauthn delete user@example.com",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.genclave"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.genclave.mutate",
       "expected_effective_segments": [
         0
-      ]
+      ],
+      "id": "webauthn-delete",
+      "rule_id": "command.genclave.mutate"
     },
     {
-      "id": "secret-delete",
       "command": "ge secret delete api-token",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.genclave"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.genclave.mutate",
       "expected_effective_segments": [
         0
-      ]
+      ],
+      "id": "secret-delete",
+      "rule_id": "command.genclave.mutate"
     },
     {
-      "id": "secret-set",
       "command": "ge secret set api-token secretvalue",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.genclave"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.genclave.mutate",
       "expected_effective_segments": [
         0
-      ]
+      ],
+      "id": "secret-set",
+      "rule_id": "command.genclave.mutate"
     },
     {
-      "id": "set-secret",
       "command": "ge set-secret api-token secretvalue",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.genclave"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.genclave.mutate",
       "expected_effective_segments": [
         0
-      ]
+      ],
+      "id": "set-secret",
+      "rule_id": "command.genclave.mutate"
     },
     {
-      "id": "ssh-remove",
       "command": "ge ssh remove id_ed25519",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.genclave"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.genclave.mutate",
       "expected_effective_segments": [
         0
-      ]
+      ],
+      "id": "ssh-remove",
+      "rule_id": "command.genclave.mutate"
     },
     {
-      "id": "ssh-generate",
       "command": "ge ssh generate -a ed25519 -c \"work key\"",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.genclave"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.genclave.mutate",
       "expected_effective_segments": [
         0
-      ]
+      ],
+      "id": "ssh-generate",
+      "rule_id": "command.genclave.mutate"
     },
     {
-      "id": "ssh-import",
       "command": "ge ssh import ~/.ssh/id_ed25519 --shred",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.genclave"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.genclave.mutate",
       "expected_effective_segments": [
         0
-      ]
+      ],
+      "id": "ssh-import",
+      "rule_id": "command.genclave.mutate"
     },
     {
-      "id": "gpg-remove",
       "command": "ge gpg remove 3AA5C34371567BD2",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.genclave"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.genclave.mutate",
       "expected_effective_segments": [
         0
-      ]
+      ],
+      "id": "gpg-remove",
+      "rule_id": "command.genclave.mutate"
     },
     {
-      "id": "gpg-generate",
       "command": "ge gpg generate --name \"Alice\" --email \"alice@example.com\"",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.genclave"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.genclave.mutate",
       "expected_effective_segments": [
         0
-      ]
+      ],
+      "id": "gpg-generate",
+      "rule_id": "command.genclave.mutate"
     },
     {
-      "id": "gpg-import",
       "command": "ge gpg import private.asc",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.genclave"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.genclave.mutate",
       "expected_effective_segments": [
         0
-      ]
+      ],
+      "id": "gpg-import",
+      "rule_id": "command.genclave.mutate"
     },
     {
-      "id": "rekey",
       "command": "ge rekey",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.genclave"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.genclave.mutate",
       "expected_effective_segments": [
         0
-      ]
+      ],
+      "id": "rekey",
+      "rule_id": "command.genclave.mutate"
     },
     {
-      "id": "passkey-delete-help",
       "command": "ge passkey delete --help",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.genclave"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.genclave.mutate",
-      "expected_effective_segments": []
+      "expected_effective_segments": [],
+      "id": "passkey-delete-help",
+      "rule_id": "command.genclave.mutate"
     },
     {
-      "id": "passkey-delete-short-help",
       "command": "ge passkey delete -h",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.genclave"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.genclave.mutate",
-      "expected_effective_segments": []
+      "expected_effective_segments": [],
+      "id": "passkey-delete-short-help",
+      "rule_id": "command.genclave.mutate"
     },
     {
-      "id": "ssh-generate-help",
       "command": "ge ssh generate --help",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.genclave"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.genclave.mutate",
-      "expected_effective_segments": []
+      "expected_effective_segments": [],
+      "id": "ssh-generate-help",
+      "rule_id": "command.genclave.mutate"
     },
     {
-      "id": "secret-set-help",
       "command": "ge secret set --help",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.genclave"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.genclave.mutate",
-      "expected_effective_segments": []
+      "expected_effective_segments": [],
+      "id": "secret-set-help",
+      "rule_id": "command.genclave.mutate"
     },
     {
-      "id": "rekey-help",
       "command": "ge rekey --help",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.genclave"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.genclave.mutate",
-      "expected_effective_segments": []
+      "expected_effective_segments": [],
+      "id": "rekey-help",
+      "rule_id": "command.genclave.mutate"
     },
     {
-      "id": "mutate-disabled",
       "command": "ge passkey delete key-1",
-      "enabled_extensions": [
-        "command.genclave"
-      ],
       "disabled_permissions": [
         "command.genclave.permission.mutate"
       ],
+      "enabled_extensions": [
+        "command.genclave"
+      ],
       "expected_action": "block",
-      "rule_id": "command.genclave.mutate",
       "expected_effective_segments": [
         0
-      ]
+      ],
+      "id": "mutate-disabled",
+      "rule_id": "command.genclave.mutate"
     },
     {
-      "id": "mutate-secret-list",
       "command": "ge secret list",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.genclave"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.genclave.mutate",
-      "expected_effective_segments": []
+      "expected_effective_segments": [],
+      "id": "mutate-secret-list",
+      "rule_id": "command.genclave.mutate"
     },
     {
-      "id": "mutate-secret-get",
       "command": "ge secret get api-token",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.genclave"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.genclave.mutate",
-      "expected_effective_segments": []
+      "expected_effective_segments": [],
+      "id": "mutate-secret-get",
+      "rule_id": "command.genclave.mutate"
     },
     {
-      "id": "mutate-ssh-list",
       "command": "ge ssh list",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.genclave"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.genclave.mutate",
-      "expected_effective_segments": []
+      "expected_effective_segments": [],
+      "id": "mutate-ssh-list",
+      "rule_id": "command.genclave.mutate"
     },
     {
-      "id": "mutate-ssh-public",
       "command": "ge ssh public key-1",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.genclave"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.genclave.mutate",
-      "expected_effective_segments": []
+      "expected_effective_segments": [],
+      "id": "mutate-ssh-public",
+      "rule_id": "command.genclave.mutate"
     },
     {
-      "id": "mutate-gpg-list",
       "command": "ge gpg list",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.genclave"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.genclave.mutate",
-      "expected_effective_segments": []
+      "expected_effective_segments": [],
+      "id": "mutate-gpg-list",
+      "rule_id": "command.genclave.mutate"
     },
     {
+      "command": "ge policy set key-1 15m",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.genclave"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
       "id": "policy-set",
-      "command": "ge policy set key-1 15m",
-      "enabled_extensions": [
-        "command.genclave"
-      ],
-      "disabled_permissions": [],
-      "expected_action": "review",
-      "rule_id": "command.genclave.policy",
-      "expected_effective_segments": [
-        0
-      ]
+      "rule_id": "command.genclave.policy"
     },
     {
-      "id": "identity-set-cache-ttl",
       "command": "ge identity set-cache-ttl key-1 1h",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.genclave"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.genclave.policy",
       "expected_effective_segments": [
         0
-      ]
+      ],
+      "id": "identity-set-cache-ttl",
+      "rule_id": "command.genclave.policy"
     },
     {
-      "id": "policy-set-help",
       "command": "ge policy set --help",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.genclave"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.genclave.policy",
-      "expected_effective_segments": []
+      "expected_effective_segments": [],
+      "id": "policy-set-help",
+      "rule_id": "command.genclave.policy"
     },
     {
-      "id": "policy-set-short-help",
       "command": "ge policy set -h",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.genclave"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.genclave.policy",
-      "expected_effective_segments": []
+      "expected_effective_segments": [],
+      "id": "policy-set-short-help",
+      "rule_id": "command.genclave.policy"
     },
     {
-      "id": "policy-disabled",
       "command": "ge policy set key-1 15m",
-      "enabled_extensions": [
-        "command.genclave"
-      ],
       "disabled_permissions": [
         "command.genclave.permission.policy"
       ],
+      "enabled_extensions": [
+        "command.genclave"
+      ],
       "expected_action": "block",
-      "rule_id": "command.genclave.policy",
       "expected_effective_segments": [
         0
-      ]
+      ],
+      "id": "policy-disabled",
+      "rule_id": "command.genclave.policy"
     },
     {
-      "id": "policy-show-passthrough",
       "command": "ge policy show key-1",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.genclave"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.genclave.policy",
-      "expected_effective_segments": []
+      "expected_effective_segments": [],
+      "id": "policy-show-passthrough",
+      "rule_id": "command.genclave.policy"
     },
     {
+      "command": "ge unlock",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.genclave"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
       "id": "unlock",
-      "command": "ge unlock",
-      "enabled_extensions": [
-        "command.genclave"
-      ],
-      "disabled_permissions": [],
-      "expected_action": "review",
-      "rule_id": "command.genclave.session-auth",
-      "expected_effective_segments": [
-        0
-      ]
+      "rule_id": "command.genclave.session-auth"
     },
     {
-      "id": "unlock-stdin",
       "command": "ge unlock --stdin",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.genclave"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.genclave.session-auth",
       "expected_effective_segments": [
         0
-      ]
+      ],
+      "id": "unlock-stdin",
+      "rule_id": "command.genclave.session-auth"
     },
     {
-      "id": "prewarm",
       "command": "ge prewarm --duration 10m",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.genclave"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.genclave.session-auth",
       "expected_effective_segments": [
         0
-      ]
+      ],
+      "id": "prewarm",
+      "rule_id": "command.genclave.session-auth"
     },
     {
-      "id": "unlock-help",
       "command": "ge unlock --help",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.genclave"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.genclave.session-auth",
-      "expected_effective_segments": []
+      "expected_effective_segments": [],
+      "id": "unlock-help",
+      "rule_id": "command.genclave.session-auth"
     },
     {
-      "id": "unlock-short-help",
       "command": "ge unlock -h",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.genclave"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.genclave.session-auth",
-      "expected_effective_segments": []
+      "expected_effective_segments": [],
+      "id": "unlock-short-help",
+      "rule_id": "command.genclave.session-auth"
     },
     {
-      "id": "prewarm-help",
       "command": "ge prewarm --help",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.genclave"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.genclave.session-auth",
-      "expected_effective_segments": []
+      "expected_effective_segments": [],
+      "id": "prewarm-help",
+      "rule_id": "command.genclave.session-auth"
     },
     {
-      "id": "session-auth-disabled",
       "command": "ge unlock",
-      "enabled_extensions": [
-        "command.genclave"
-      ],
       "disabled_permissions": [
         "command.genclave.permission.session-auth"
       ],
+      "enabled_extensions": [
+        "command.genclave"
+      ],
       "expected_action": "block",
-      "rule_id": "command.genclave.session-auth",
       "expected_effective_segments": [
         0
-      ]
+      ],
+      "id": "session-auth-disabled",
+      "rule_id": "command.genclave.session-auth"
     },
     {
-      "id": "status-passthrough",
       "command": "ge status",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.genclave"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.genclave.session-auth",
-      "expected_effective_segments": []
+      "expected_effective_segments": [],
+      "id": "status-passthrough",
+      "rule_id": "command.genclave.session-auth"
     },
     {
-      "id": "lock-passthrough",
       "command": "ge lock",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.genclave"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.genclave.session-auth",
-      "expected_effective_segments": []
+      "expected_effective_segments": [],
+      "id": "lock-passthrough",
+      "rule_id": "command.genclave.session-auth"
     },
     {
-      "id": "extension-inactive",
       "command": "ge passkey delete key-1",
-      "enabled_extensions": [],
       "disabled_permissions": [],
+      "enabled_extensions": [],
       "expected_action": "review",
-      "rule_id": "command.genclave.mutate",
-      "expected_effective_segments": []
+      "expected_effective_segments": [],
+      "id": "extension-inactive",
+      "rule_id": "command.genclave.mutate"
     }
-  ]
+  ],
+  "schema": "guard.command-extension-fixtures.v1"
 }
