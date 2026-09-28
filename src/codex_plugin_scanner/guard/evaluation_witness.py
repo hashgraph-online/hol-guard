@@ -182,29 +182,33 @@ class LocalSideEffectWitness:
         if self._setup is not None and os.name != "nt":
             self._temporary = _owned_witness_directory(self._setup)
         elif self._setup is not None:
-            root = self._setup.root_path
-            workspace = self._setup.workspace
-            token = self._setup.marker_token
-            marker = root / ".hol-guard-evaluation-owned" if root is not None else None
-            if (
-                self._setup.report.status != "passed"
-                or root is None
-                or workspace is None
-                or token is None
-                or marker is None
-                or self._setup.root_identity is None
-                or self._setup.workspace_identity is None
-                or not root.name.startswith("hol-guard-eval-")
-                or root.is_symlink()
-                or (root.stat().st_dev, root.stat().st_ino) != self._setup.root_identity
-                or not workspace.is_dir()
-                or workspace.is_symlink()
-                or (workspace.stat().st_dev, workspace.stat().st_ino) != self._setup.workspace_identity
-                or workspace.parent != root
-                or not marker.is_file()
-                or marker.is_symlink()
-                or marker.read_text(encoding="utf-8") != token
-            ):
+            try:
+                root = self._setup.root_path
+                workspace = self._setup.workspace
+                token = self._setup.marker_token
+                marker = root / ".hol-guard-evaluation-owned" if root is not None else None
+                owned = not (
+                    self._setup.report.status != "passed"
+                    or root is None
+                    or workspace is None
+                    or token is None
+                    or marker is None
+                    or self._setup.root_identity is None
+                    or self._setup.workspace_identity is None
+                    or not root.name.startswith("hol-guard-eval-")
+                    or root.is_symlink()
+                    or (root.stat().st_dev, root.stat().st_ino) != self._setup.root_identity
+                    or not workspace.is_dir()
+                    or workspace.is_symlink()
+                    or (workspace.stat().st_dev, workspace.stat().st_ino) != self._setup.workspace_identity
+                    or workspace.parent != root
+                    or not marker.is_file()
+                    or marker.is_symlink()
+                    or marker.read_text(encoding="utf-8") != token
+                )
+            except (OSError, UnicodeError) as exc:
+                raise ValueError("Witness requires a live owned evaluation setup") from exc
+            if not owned:
                 raise ValueError("Witness requires a live owned evaluation setup")
             self._temporary = TemporaryDirectory(prefix="hol-guard-evaluation-witness-", dir=workspace)
         else:
