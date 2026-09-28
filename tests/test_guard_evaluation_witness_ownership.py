@@ -80,6 +80,7 @@ def test_witness_rejects_replaced_root_symlink(tmp_path: Path) -> None:
         assert setup.cleanup() is True
 
 
+@pytest.mark.skipif(os.name == "nt", reason="synthetic host fixture uses a POSIX shell")
 def test_witness_rejects_cleaned_setup(tmp_path: Path) -> None:
     setup = _setup(tmp_path)
     assert setup.cleanup() is True
@@ -87,6 +88,7 @@ def test_witness_rejects_cleaned_setup(tmp_path: Path) -> None:
         pass
 
 
+@pytest.mark.skipif(os.name == "nt", reason="synthetic host fixture uses a POSIX shell")
 def test_witness_rejects_marker_with_trailing_data(tmp_path: Path) -> None:
     setup = _setup(tmp_path)
     assert setup.root_path is not None and setup.marker_token is not None

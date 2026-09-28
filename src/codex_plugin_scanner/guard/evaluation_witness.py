@@ -216,6 +216,8 @@ class LocalSideEffectWitness:
                     or self._setup.root_identity is None
                     or self._setup.workspace_identity is None
                     or not root.name.startswith("hol-guard-eval-")
+                    or not root.is_absolute()
+                    or not _safe_temp_parent(root.parent)
                     or root.is_symlink()
                     or (root.stat().st_dev, root.stat().st_ino) != self._setup.root_identity
                     or not workspace.is_dir()
