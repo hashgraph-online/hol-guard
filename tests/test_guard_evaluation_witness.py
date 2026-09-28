@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import socket
+import stat
 import subprocess
 import time
 from urllib.error import HTTPError
@@ -56,6 +57,29 @@ def test_pinned_cleanup_restores_owner_write_to_nested_directories(tmp_path) -> 
         if nested.exists():
             nested.chmod(0o700)
     assert not owned.exists()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="directory descriptors require POSIX")
+def test_pinned_cleanup_does_not_change_an_unopenable_directory(tmp_path, monkeypatch) -> None:
+    owned = tmp_path / "owned"
+    owned.mkdir(mode=0o700)
+    owned.chmod(0o555)
+    parent_fd = os.open(tmp_path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    real_open = os.open
+
+    def reject_directory_open(path, flags, mode=0o777, *, dir_fd=None):
+        if path == owned.name and dir_fd == parent_fd:
+            raise PermissionError("cannot pin directory")
+        return real_open(path, flags, mode, dir_fd=dir_fd)
+
+    monkeypatch.setattr(witness_module.os, "open", reject_directory_open)
+    try:
+        with pytest.raises(PermissionError, match="cannot pin directory"):
+            _rmtree_at(parent_fd, owned.name)
+        assert stat.S_IMODE(owned.stat().st_mode) == 0o555
+    finally:
+        os.close(parent_fd)
+        owned.chmod(0o700)
 
 
 @pytest.mark.skipif(os.name == "nt", reason="directory descriptors require POSIX")
