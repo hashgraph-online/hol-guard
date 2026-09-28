@@ -248,7 +248,7 @@ export function PolicyReviewSheet(props: {
   const [password, setPassword] = useState("");
   const [totpCode, setTotpCode] = useState("");
   const count = props.preview.semantic_preview.changed_target_count;
-  const submitDisabled = isApprovalProofSubmitDisabled(props.approvalGate, { approvalPassword: password, approvalTotpCode: totpCode }, props.busy);
+  const submitDisabled = isApprovalProofSubmitDisabled(props.approvalGate, { approvalPassword: password, approvalTotpCode: totpCode }, props.busy, false, true);
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
     if (submitDisabled) return;
@@ -284,6 +284,7 @@ export function PolicyReviewSheet(props: {
             approvalGate={props.approvalGate}
             approvalPassword={password}
             approvalTotpCode={totpCode}
+            requireGate={true}
             onApprovalPasswordChange={(event) => setPassword(event.target.value)}
             onApprovalTotpCodeChange={(event) => setTotpCode(event.target.value)}
           />
