@@ -39,7 +39,14 @@ def _rmtree_at(directory_fd: int, entry: str, *, expected_identity: tuple[int, i
         return
 
     flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
-    child_fd = os.open(entry, flags, dir_fd=directory_fd)
+    try:
+        child_fd = os.open(entry, flags, dir_fd=directory_fd)
+    except PermissionError:
+        again = os.stat(entry, dir_fd=directory_fd, follow_symlinks=False)
+        if (again.st_dev, again.st_ino) != identity or not stat.S_ISDIR(again.st_mode):
+            raise ValueError("Witness directory changed before cleanup") from None
+        os.chmod(entry, stat.S_IMODE(again.st_mode) | stat.S_IRWXU, dir_fd=directory_fd)
+        child_fd = os.open(entry, flags, dir_fd=directory_fd)
     try:
         opened = os.fstat(child_fd)
         if (opened.st_dev, opened.st_ino) != identity:
