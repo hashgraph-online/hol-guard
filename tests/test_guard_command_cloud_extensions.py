@@ -297,6 +297,13 @@ def test_cloud_safe_variant_rejects_unsupported_matcher_nesting() -> None:
     with pytest.raises(ValueError, match="executable matcher children"):
         with_required_flag(nested, "--help")
     with pytest.raises(ValueError, match="executable matcher children"):
+        safe_flag_variant(
+            nested,
+            variant_id="help",
+            title="Help",
+            flag="--help",
+        )
+    with pytest.raises(ValueError, match="executable matcher children"):
         safe_option_variant(
             nested,
             variant_id="skeleton",
@@ -356,5 +363,37 @@ def test_cloud_safe_variants_clone_path_set_matcher_constraints() -> None:
     assert cloned.interspersed_flags == frozenset({"--quiet"})
     assert cloned.options_with_values == frozenset({"--output"})
     assert cloned.required_option_values == (("--output", frozenset({"name"})),)
+    assert cloned.required_flags_in_all_arguments is True
+    assert cloned.fail_secure_unknown_options is True
+
+
+def test_cloud_safe_flag_variant_clones_executable_matcher_constraints() -> None:
+    matcher = AnyMatcher(
+        matchers=(
+            ExecutableMatcher(
+                executables=frozenset({"aws"}),
+                subcommands=("ec2", "terminate-instances"),
+                forbidden_flags=frozenset({"--no-dry-run"}),
+                options_with_values=frozenset({"--region"}),
+                fail_secure_unknown_options=True,
+            ),
+        )
+    )
+
+    variant = safe_flag_variant(
+        matcher,
+        variant_id="dry-run",
+        title="Dry run",
+        flag="--dry-run",
+        inverse_flag="--no-dry-run",
+    )
+    cloned, = variant.matcher.matchers
+
+    assert isinstance(cloned, ExecutableMatcher)
+    assert cloned.subcommands == ("ec2", "terminate-instances")
+    assert cloned.required_flags == frozenset({"--dry-run"})
+    assert cloned.forbidden_flags == frozenset({"--no-dry-run"})
+    assert cloned.inverse_flag_pairs == frozenset({("--dry-run", "--no-dry-run")})
+    assert cloned.options_with_values == frozenset({"--region"})
     assert cloned.required_flags_in_all_arguments is True
     assert cloned.fail_secure_unknown_options is True

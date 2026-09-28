@@ -50,13 +50,18 @@ def main() -> int:
     environment["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] = "1"
     with tempfile.TemporaryDirectory(prefix="guard-evaluation-wheel-") as temporary:
         root = Path(temporary)
+        test_root = root / "tests"
+        test_root.mkdir()
         for name in (
+            "__init__.py",
+            "evaluation_cli_fixtures.py",
             "test_guard_evaluation_cli.py",
+            "test_guard_evaluation_cli_package.py",
             "test_guard_evaluation_preflight.py",
             "test_opencode_hook_python.py",
             "test_opencode_hook_python_isolation.py",
         ):
-            shutil.copy2(repo / "tests" / name, root / name)
+            shutil.copy2(repo / "tests" / name, test_root / name)
         configuration = root / "pytest.ini"
         configuration.write_text("[pytest]\naddopts = --strict-markers\n", encoding="utf-8")
         result = subprocess.run(

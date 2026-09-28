@@ -19888,14 +19888,61 @@ function TabBar(props) {
     tab.value
   )) });
 }
+function isBulkApproveGateReady(gate) {
+  return gate?.enabled === true && gate?.configured === true;
+}
+function validateBulkApproveCredentials(gate, credentials) {
+  if (!isBulkApproveGateReady(gate)) {
+    return "Set up an approval gate in Settings before bulk approval.";
+  }
+  if (gate?.totp_enabled === true) {
+    return credentials.totpCode.trim() ? null : "Enter your authenticator code to continue.";
+  }
+  if (!credentials.password.trim()) {
+    return "Enter your approval password to continue.";
+  }
+  return null;
+}
+function buildBulkGateCredentials(gate, password, totpCode) {
+  if (!isBulkApproveGateReady(gate)) {
+    return void 0;
+  }
+  if (gate?.totp_enabled === true) {
+    return {
+      approval_totp_code: totpCode.trim(),
+      approval_gate_use_cooldown: false
+    };
+  }
+  return {
+    approval_password: password.trim(),
+    approval_gate_use_cooldown: false
+  };
+}
 function approvalProofRecentlySatisfied(gate) {
   return gate?.totp_enabled === true && gate.totp_recent_satisfied === true;
 }
 function approvalProofRequiresPassword(gate) {
   return gate?.totp_enabled !== true;
 }
-function isApprovalProofSubmitDisabled(gate, credentials, busy, requireFreshTotp = false) {
+function ApprovalGateSetupNotice() {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-brand-blue/20 bg-brand-blue/[0.04] px-4 py-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-blue/10", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniKey, { className: "h-5 w-5 text-brand-blue", "aria-hidden": "true" }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-sm font-semibold text-brand-dark", children: "Local approval isn't ready" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-relaxed text-slate-600", children: "This change needs proof from this device, but the approval gate is off or missing its password. Enable Ask for proof and set an approval password in Settings > Approval gate, then come back." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: "/settings?section=approval", variant: "primary", children: "Set up approval" }) })
+    ] })
+  ] }) });
+}
+function isApprovalProofSubmitDisabled(gate, credentials, busy, requireFreshTotp = false, requireGate = false) {
   if (busy) {
+    return true;
+  }
+  if (requireGate && gate == null) {
+    return true;
+  }
+  if (gate != null && !isBulkApproveGateReady(gate)) {
+    if (!requireGate && gate.enabled === false) return false;
     return true;
   }
   if (!requireFreshTotp && approvalProofRecentlySatisfied(gate)) {
@@ -19907,6 +19954,9 @@ function isApprovalProofSubmitDisabled(gate, credentials, busy, requireFreshTotp
   return credentials.approvalTotpCode.trim() === "";
 }
 function buildApprovalProofCredentials(gate, credentials, requireFreshTotp = false) {
+  if (gate != null && !isBulkApproveGateReady(gate)) {
+    return {};
+  }
   if (!requireFreshTotp && approvalProofRecentlySatisfied(gate)) {
     return {};
   }
@@ -19924,6 +19974,13 @@ function ApprovalProofFieldInputs(props) {
     event.target.value = digits;
     props.onApprovalTotpCodeChange(event);
   }, [props]);
+  if (props.requireGate && props.approvalGate === null) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm leading-6 text-brand-dark/75", role: "status", children: "Checking local approval settings. Try again when they are available." });
+  }
+  if (props.approvalGate !== null && !isBulkApproveGateReady(props.approvalGate)) {
+    if (!props.requireGate && props.approvalGate.enabled === false) return null;
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(ApprovalGateSetupNotice, {});
+  }
   if (!props.requireFreshTotp && approvalProofRecentlySatisfied(props.approvalGate)) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm leading-6 text-brand-dark/75", children: "Recently confirmed with your authenticator. A new code is not needed yet." });
   }
@@ -28129,36 +28186,6 @@ function toneIcon(tone) {
   }
   return HiMiniShieldCheck;
 }
-function isBulkApproveGateReady(gate) {
-  return gate?.enabled === true && gate?.configured === true;
-}
-function validateBulkApproveCredentials(gate, credentials) {
-  if (!isBulkApproveGateReady(gate)) {
-    return "Set up an approval gate in Settings before bulk approval.";
-  }
-  if (gate?.totp_enabled === true) {
-    return credentials.totpCode.trim() ? null : "Enter your authenticator code to continue.";
-  }
-  if (!credentials.password.trim()) {
-    return "Enter your approval password to continue.";
-  }
-  return null;
-}
-function buildBulkGateCredentials(gate, password, totpCode) {
-  if (!isBulkApproveGateReady(gate)) {
-    return void 0;
-  }
-  if (gate?.totp_enabled === true) {
-    return {
-      approval_totp_code: totpCode.trim(),
-      approval_gate_use_cooldown: false
-    };
-  }
-  return {
-    approval_password: password.trim(),
-    approval_gate_use_cooldown: false
-  };
-}
 const TIER_LABEL = {
   low: "Low risk",
   elevated: "Elevated risk",
@@ -32540,7 +32567,7 @@ export {
   waitForAuthorizeUrl as Z,
   startOrRecoverCloudConnect as _,
   EvidenceActivityHeatmapMini as a,
-  HiMiniPlus as a$,
+  HiMiniArrowLeft as a$,
   openPackageFirewallAuthorizeFallback as a0,
   waitForCloudConnection as a1,
   activeFailedHarnesses as a2,
@@ -32577,7 +32604,7 @@ export {
   FaWindows as aX,
   FaAws as aY,
   approvalProofRecentlySatisfied as aZ,
-  HiMiniArrowLeft as a_,
+  isBulkApproveGateReady as a_,
   PROTECTION_POSTURE_COPY as aa,
   POSTURE_OUTCOME_COLUMNS as ab,
   getDefaultExportFromCjs as ac,
@@ -32605,99 +32632,100 @@ export {
   resetSettings as ay,
   enrollApprovalGateTotp as az,
   HiMiniCommandLine as b,
-  HiMiniIdentification as b$,
-  HiMiniCheck as b0,
-  startGuardCloudConnect as b1,
-  HiMiniArrowTopRightOnSquare as b2,
-  guardAwareHref as b3,
-  GuardModalLayer as b4,
-  runHarnessAction as b5,
-  GuardHarnessActionError as b6,
-  HiMiniRocketLaunch as b7,
-  HiMiniTrash as b8,
-  isGuardDemoMode as b9,
-  ActivationSummary as bA,
-  ActionResultPanel as bB,
-  HiMiniBugAnt as bC,
-  ConnectFlowCard as bD,
-  ApprovalProofInline as bE,
-  HiMiniCloudArrowDown as bF,
-  fetchPackageFirewallStatus as bG,
-  runPackageAudit as bH,
-  resolveSupplyChainAuditFailure as bI,
-  runPackageSync as bJ,
-  startPackageFirewallConnect as bK,
-  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as bL,
-  repairSupplyChainProtection as bM,
-  runPackageFirewallAction as bN,
-  parseInterceptProofSnapshot as bO,
-  activatePackageFirewallRuntime as bP,
-  EntitlementNotice as bQ,
-  chooseSupplyChainAuditFolder as bR,
-  fetchReceipts as bS,
-  lazyWorkspace as bT,
-  __vitePreload as bU,
-  scopeLabel as bV,
-  HiMiniDocumentText as bW,
-  HiMiniCloudArrowUp as bX,
-  HiMiniCodeBracket as bY,
-  HiMiniClipboardDocument as bZ,
-  HiMiniUsers as b_,
-  fetchGuardApi as ba,
-  formatHarnessCommand as bb,
-  fetchApprovalPage as bc,
-  fetchPolicy as bd,
-  HiMiniHome as be,
-  appSetupTarget as bf,
-  guardActionPresentation as bg,
-  DEFAULT_FILTER_STATE as bh,
-  filterEvidence as bi,
-  sortEvidence as bj,
-  computeMetrics as bk,
-  CommandActivityWorkspace as bl,
-  EvidenceFilterBar as bm,
-  EvidenceInsightStrip as bn,
-  EvidenceActionList as bo,
-  EvidenceActionDetail as bp,
-  policyIdentityKey as bq,
-  clearLabelForScope as br,
-  HiMiniChartBar as bs,
-  isSupplyChainAuditIncomplete as bt,
-  isSupplyChainAuditEvidence as bu,
-  readString$1 as bv,
-  isRecord$3 as bw,
-  HiMiniClock as bx,
-  IconActionButton as by,
-  HiMiniBeaker as bz,
+  HiMiniUsers as b$,
+  HiMiniPlus as b0,
+  HiMiniCheck as b1,
+  startGuardCloudConnect as b2,
+  HiMiniArrowTopRightOnSquare as b3,
+  guardAwareHref as b4,
+  GuardModalLayer as b5,
+  runHarnessAction as b6,
+  GuardHarnessActionError as b7,
+  HiMiniRocketLaunch as b8,
+  HiMiniTrash as b9,
+  HiMiniBeaker as bA,
+  ActivationSummary as bB,
+  ActionResultPanel as bC,
+  HiMiniBugAnt as bD,
+  ConnectFlowCard as bE,
+  ApprovalProofInline as bF,
+  HiMiniCloudArrowDown as bG,
+  fetchPackageFirewallStatus as bH,
+  runPackageAudit as bI,
+  resolveSupplyChainAuditFailure as bJ,
+  runPackageSync as bK,
+  startPackageFirewallConnect as bL,
+  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as bM,
+  repairSupplyChainProtection as bN,
+  runPackageFirewallAction as bO,
+  parseInterceptProofSnapshot as bP,
+  activatePackageFirewallRuntime as bQ,
+  EntitlementNotice as bR,
+  chooseSupplyChainAuditFolder as bS,
+  fetchReceipts as bT,
+  lazyWorkspace as bU,
+  __vitePreload as bV,
+  scopeLabel as bW,
+  HiMiniDocumentText as bX,
+  HiMiniCloudArrowUp as bY,
+  HiMiniCodeBracket as bZ,
+  HiMiniClipboardDocument as b_,
+  isGuardDemoMode as ba,
+  fetchGuardApi as bb,
+  formatHarnessCommand as bc,
+  fetchApprovalPage as bd,
+  fetchPolicy as be,
+  HiMiniHome as bf,
+  appSetupTarget as bg,
+  guardActionPresentation as bh,
+  DEFAULT_FILTER_STATE as bi,
+  filterEvidence as bj,
+  sortEvidence as bk,
+  computeMetrics as bl,
+  CommandActivityWorkspace as bm,
+  EvidenceFilterBar as bn,
+  EvidenceInsightStrip as bo,
+  EvidenceActionList as bp,
+  EvidenceActionDetail as bq,
+  policyIdentityKey as br,
+  clearLabelForScope as bs,
+  HiMiniChartBar as bt,
+  isSupplyChainAuditIncomplete as bu,
+  isSupplyChainAuditEvidence as bv,
+  readString$1 as bw,
+  isRecord$3 as bx,
+  HiMiniClock as by,
+  IconActionButton as bz,
   HiMiniChevronRight as c,
-  policyActionLabel as c0,
-  createCloudExceptionRequest as c1,
-  HiMiniArrowRight as c2,
-  HiMiniPuzzlePiece as c3,
-  fetchCloudExceptions as c4,
-  fetchCloudExceptionRequests as c5,
-  downloadBlob as c6,
-  PolicyStatField as c7,
-  PaginationControls as c8,
-  HiMiniArrowDownTray as c9,
-  HiMiniQueueList as ca,
-  Surface as cb,
-  HiMiniCheckBadge as cc,
-  fetchMcpPolicyRequest as cd,
-  resolveMcpPolicyRequest as ce,
-  HiMiniDocumentPlus as cf,
-  HiMiniDocumentMagnifyingGlass as cg,
-  fetchSupplyChainBundle as ch,
-  isSupplyChainScannerEvidence as ci,
-  isBlockedGuardAction as cj,
-  HiMiniShieldExclamation as ck,
-  HiMiniComputerDesktop as cl,
-  HiMiniChevronLeft as cm,
-  HiMiniFunnel as cn,
-  HiMiniArrowDown as co,
-  HiMiniArrowUp as cp,
-  runAuditRemediation as cq,
-  HiMiniSignal as cr,
+  HiMiniIdentification as c0,
+  policyActionLabel as c1,
+  createCloudExceptionRequest as c2,
+  HiMiniArrowRight as c3,
+  HiMiniPuzzlePiece as c4,
+  fetchCloudExceptions as c5,
+  fetchCloudExceptionRequests as c6,
+  downloadBlob as c7,
+  PolicyStatField as c8,
+  PaginationControls as c9,
+  HiMiniArrowDownTray as ca,
+  HiMiniQueueList as cb,
+  Surface as cc,
+  HiMiniCheckBadge as cd,
+  fetchMcpPolicyRequest as ce,
+  resolveMcpPolicyRequest as cf,
+  HiMiniDocumentPlus as cg,
+  HiMiniDocumentMagnifyingGlass as ch,
+  fetchSupplyChainBundle as ci,
+  isSupplyChainScannerEvidence as cj,
+  isBlockedGuardAction as ck,
+  HiMiniShieldExclamation as cl,
+  HiMiniComputerDesktop as cm,
+  HiMiniChevronLeft as cn,
+  HiMiniFunnel as co,
+  HiMiniArrowDown as cp,
+  HiMiniArrowUp as cq,
+  runAuditRemediation as cr,
+  HiMiniSignal as cs,
   createCommandActivityClient as d,
   updateSettings as e,
   fetchCommandActivityApi as f,

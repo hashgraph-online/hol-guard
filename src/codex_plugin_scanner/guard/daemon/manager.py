@@ -24,7 +24,7 @@ import urllib.request
 from contextlib import contextmanager, suppress
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import BinaryIO, Literal, TypedDict
+from typing import BinaryIO, Literal, TypedDict, cast
 
 from ...version import __version__
 from .. import windows_processes
@@ -54,6 +54,13 @@ from .discovery import (
 from .file_locking import lock_daemon_file as _lock_daemon_start_file
 from .file_locking import try_lock_daemon_file as _try_lock_daemon_file
 from .lifecycle_journal import record_daemon_lifecycle_event
+from .start_classification import (
+    GuardDaemonStillStartingError,
+    SpawnedDaemonSignals,
+    classify_spawned_daemon,
+    collect_spawned_daemon_signals,
+    daemon_still_starting_evidence_present,
+)
 from .start_lock import guard_daemon_start_lock as _guard_daemon_start_lock
 
 DEFAULT_GUARD_DAEMON_PORT = 4781
@@ -71,12 +78,14 @@ _GUARD_DAEMON_PRIVATE_FILE_MODE = 0o600
 _GUARD_DAEMON_PRIVATE_DIR_MODE = 0o700
 _APPROVAL_CENTER_LOCATOR_FILE = "approval-center-locator.json"
 _GUARD_DAEMON_PENDING_LAUNCH_FILE = "daemon-launch-pending.json"
+_GUARD_DAEMON_START_PROGRESS_FILE = "daemon-start-progress.json"
 _GUARD_DAEMON_WAKE_RESERVATION_FILE = "daemon-wake-reservation.json"
 _GUARD_DAEMON_RECOVERY_RESERVATION_FILE = "daemon-recovery-reservation.json"
 _GUARD_DAEMON_OWNER_LOCK_FILE = "daemon-owner.lock"
 _GUARD_DAEMON_RECOVERY_LOCK_FILE = "daemon-recovery.lock"
 _GUARD_DAEMON_STATE_MAX_BYTES = 64 * 1024
 _GUARD_DAEMON_PENDING_LAUNCH_MAX_BYTES = 4096
+_GUARD_DAEMON_START_PROGRESS_MAX_BYTES = 4096
 _GUARD_DAEMON_WAKE_RESERVATION_MAX_BYTES = 4096
 _GUARD_DAEMON_WAKE_RESERVATION_SECONDS = 30.0
 _GUARD_DAEMON_RECOVERY_RESERVATION_MAX_BYTES = 4096
@@ -433,10 +442,37 @@ def ensure_guard_daemon(
             retire_all_guard_daemons_for_home(guard_home, deadline=start_deadline)
             if not guard_daemon_retirement_is_complete(guard_home):
                 raise RuntimeError("In-progress Guard daemon launch could not be retired safely.")
-        if os.name == "nt" and (
-            _pending_launch_path(guard_home).is_file()
-            or load_authenticated_guard_daemon_pending_launch(guard_home) is not None
-        ):
+        start_progress = load_authenticated_guard_daemon_start_progress(guard_home)
+        progress_is_live = start_progress is not None and _guard_daemon_start_progress_is_live(
+            guard_home, start_progress
+        )
+        if start_progress is not None and not progress_is_live:
+            _clear_guard_daemon_start_progress(guard_home)
+        if progress_is_live:
+            assert start_progress is not None
+            progress_pid = start_progress["pid"]
+            progress_spawned_at_ns = start_progress["spawned_at_ns"]
+            adopted_url = _wait_for_guard_daemon_url(
+                guard_home,
+                timeout=max(0.0, start_deadline - time.monotonic()),
+            )
+            if adopted_url is not None:
+                _clear_guard_daemon_start_progress(guard_home)
+                _schedule_duplicate_guard_daemon_retirement(guard_home)
+                return adopted_url
+            if _guard_daemon_pid_is_running(progress_pid) and daemon_still_starting_evidence_present(
+                guard_home,
+                root_pid=progress_pid,
+                spawned_at_ns=progress_spawned_at_ns,
+            ):
+                raise GuardDaemonStillStartingError(
+                    f"Guard daemon is still starting; retry shortly. Expected state file at {state_path}."
+                )
+            _clear_guard_daemon_start_progress(guard_home)
+            retire_all_guard_daemons_for_home(guard_home, deadline=start_deadline)
+            if not guard_daemon_retirement_is_complete(guard_home):
+                raise RuntimeError("In-progress Guard daemon launch could not be retired safely.")
+        if _windows_pending_launch_needs_retirement(guard_home, progress_is_live=progress_is_live):
             retire_all_guard_daemons_for_home(guard_home, deadline=start_deadline)
             if not _guard_daemon_pending_launch_state_is_resolved(guard_home):
                 raise RuntimeError("A previous Guard daemon launch could not be retired safely.")
@@ -469,6 +505,7 @@ def ensure_guard_daemon(
                     guard_home=guard_home,
                     executable=executable,
                 )
+            spawned_at_ns = time.time_ns()
             if os.name == "nt":
                 process = subprocess.Popen(
                     command,
@@ -513,12 +550,43 @@ def ensure_guard_daemon(
                         raise RuntimeError("Guard daemon pending launch state could not be cleared safely.")
                     _schedule_duplicate_guard_daemon_retirement(guard_home)
                     return url
+                signals = (
+                    collect_spawned_daemon_signals(
+                        guard_home,
+                        process=process,
+                        spawned_at_ns=spawned_at_ns,
+                        pending_creation_time=pending_creation_time,
+                    )
+                    if process.poll() is None
+                    else SpawnedDaemonSignals(
+                        pending_launch_present=False,
+                        lock_held_by_spawned_tree=False,
+                        journal_start_requested_after=False,
+                    )
+                )
+                spawn_state = classify_spawned_daemon(
+                    process,
+                    pending_launch_present=signals.pending_launch_present,
+                    lock_held_by_spawned_tree=signals.lock_held_by_spawned_tree,
+                    journal_start_requested_after=signals.journal_start_requested_after,
+                )
+                if spawn_state == "progressing" and _record_guard_daemon_start_progress(
+                    guard_home,
+                    process=process,
+                    port=candidate_port,
+                    spawned_at_ns=spawned_at_ns,
+                ):
+                    raise GuardDaemonStillStartingError(
+                        f"Guard daemon is still starting; retry shortly. Expected state file at {state_path}."
+                    )
                 if not _terminate_spawned_guard_daemon(process):
                     raise RuntimeError("Guard daemon startup process could not be retired safely.")
                 if not _clear_spawned_guard_daemon_pending_launch(
                     guard_home, process=process, creation_time=pending_creation_time
                 ):
                     raise RuntimeError("Guard daemon pending launch state could not be cleared safely.")
+            except GuardDaemonStillStartingError:
+                raise
             except BaseException:
                 if _terminate_spawned_guard_daemon(process):
                     _clear_spawned_guard_daemon_pending_launch(
@@ -1359,6 +1427,13 @@ def _guard_daemon_pid_for_guard_home_port(guard_home: Path, port: int) -> int | 
     return None
 
 
+def _daemon_state_executable() -> str:
+    try:
+        return str(Path(sys.executable).resolve(strict=True))
+    except OSError:
+        return sys.executable
+
+
 def write_guard_daemon_state(
     guard_home: Path,
     port: int,
@@ -1381,6 +1456,7 @@ def write_guard_daemon_state(
             "port": port,
             "compatibility_version": GUARD_DAEMON_COMPATIBILITY_VERSION,
             "package_version": __version__,
+            "executable": _daemon_state_executable(),
             "source_root": _current_guard_daemon_source_root(),
             "runtime_fingerprint": _current_guard_daemon_runtime_fingerprint(),
             "pid": pid if isinstance(pid, int) and pid > 0 else os.getpid(),
@@ -1911,6 +1987,142 @@ def _clear_spawned_guard_daemon_pending_launch(
         guard_home,
         pid=process.pid,
         creation_time=creation_time,
+    )
+
+
+def _start_progress_path(guard_home: Path) -> Path:
+    return guard_home / _GUARD_DAEMON_START_PROGRESS_FILE
+
+
+class GuardDaemonStartProgress(TypedDict):
+    state_kind: str
+    guard_home: str
+    pid: int
+    port: int
+    process_start_token: str
+    recorded_at_ns: int
+    spawned_at_ns: int
+
+
+def _record_guard_daemon_start_progress(
+    guard_home: Path,
+    *,
+    process: subprocess.Popen[bytes],
+    port: int,
+    spawned_at_ns: int,
+) -> bool:
+    """Persist an authenticated marker so the next starter adopts the live spawn."""
+
+    start_token = process_start_token(process.pid)
+    if start_token is None:
+        return False
+    _ensure_private_directory(guard_home)
+    try:
+        with _guard_daemon_state_write_lock(guard_home):
+            discovery_key = ensure_daemon_discovery_key(guard_home)
+            progress = authenticate_daemon_state(
+                {
+                    "state_kind": "daemon_start_progress",
+                    "guard_home": str(guard_home.resolve()),
+                    "pid": process.pid,
+                    "port": port,
+                    "process_start_token": start_token,
+                    "recorded_at_ns": time.time_ns(),
+                    "spawned_at_ns": spawned_at_ns,
+                },
+                discovery_key=discovery_key,
+            )
+            _write_private_atomic_text(
+                _start_progress_path(guard_home),
+                json.dumps(progress, sort_keys=True),
+            )
+    except OSError:
+        return False
+    return True
+
+
+def load_authenticated_guard_daemon_start_progress(guard_home: Path) -> GuardDaemonStartProgress | None:
+    """Load one signed still-starting record from a private regular file."""
+
+    raw_payload = read_private_regular_text(
+        _start_progress_path(guard_home),
+        max_bytes=_GUARD_DAEMON_START_PROGRESS_MAX_BYTES,
+        require_private_parent=True,
+    )
+    if raw_payload is None:
+        return None
+    try:
+        payload = json.loads(raw_payload)
+    except json.JSONDecodeError:
+        return None
+    discovery_key = load_daemon_discovery_key(guard_home)
+    if (
+        discovery_key is None
+        or not isinstance(payload, dict)
+        or not verify_daemon_state(payload, discovery_key=discovery_key)
+        or payload.get("state_kind") != "daemon_start_progress"
+    ):
+        return None
+    pid = payload.get("pid")
+    port = payload.get("port")
+    recorded_at_ns = payload.get("recorded_at_ns")
+    spawned_at_ns = payload.get("spawned_at_ns")
+    start_token = payload.get("process_start_token")
+    payload_guard_home = payload.get("guard_home")
+    if (
+        type(pid) is not int
+        or pid <= 0
+        or type(port) is not int
+        or not 0 < port <= 65535
+        or type(recorded_at_ns) is not int
+        or recorded_at_ns <= 0
+        or type(spawned_at_ns) is not int
+        or spawned_at_ns <= 0
+        or not isinstance(start_token, str)
+        or not start_token
+        or not isinstance(payload_guard_home, str)
+    ):
+        return None
+    try:
+        if Path(payload_guard_home).resolve() != guard_home.resolve():
+            return None
+    except OSError:
+        return None
+    return cast(GuardDaemonStartProgress, cast(object, payload))
+
+
+def _clear_guard_daemon_start_progress(guard_home: Path) -> None:
+    with _guard_daemon_state_write_lock(guard_home):
+        _write_private_atomic_text(_start_progress_path(guard_home), "{}")
+
+
+def _guard_daemon_start_progress_is_live(guard_home: Path, record: GuardDaemonStartProgress) -> bool:
+    """Whether the record still names a live, identity-proven daemon for this home."""
+
+    pid = record.get("pid")
+    start_token = record.get("process_start_token")
+    recorded_at_ns = record.get("recorded_at_ns")
+    if not (
+        type(pid) is int and pid > 0 and isinstance(start_token, str) and start_token and type(recorded_at_ns) is int
+    ):
+        return False
+    age_ns = time.time_ns() - recorded_at_ns
+    if age_ns < 0 or age_ns >= int(GUARD_DAEMON_POST_UPDATE_START_TIMEOUT_SECONDS * 1_000_000_000):
+        return False
+    if not _guard_daemon_pid_is_running(pid):
+        return False
+    if process_start_token(pid) != start_token:
+        return False
+    return _guard_daemon_pid_matches_command(pid, expected_guard_home=guard_home)
+
+
+def _windows_pending_launch_needs_retirement(guard_home: Path, *, progress_is_live: bool) -> bool:
+    """A live still-starting record exempts its pid from the previous-launch retire."""
+
+    if os.name != "nt" or progress_is_live:
+        return False
+    return _pending_launch_path(guard_home).is_file() or (
+        load_authenticated_guard_daemon_pending_launch(guard_home) is not None
     )
 
 

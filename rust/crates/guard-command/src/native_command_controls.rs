@@ -380,7 +380,13 @@ fn strengthen(result: &mut PreToolResultV1, action: &str, reason: &str) {
         .to_owned();
         result.explicitly_benign = action == "allow";
         result.reason_code = reason.to_owned();
-        result.reason = "HOL Guard requires the native command extension policy before this action can execute.".to_owned();
+        result.reason = match reason {
+            "native_command_extension_evaluation_failed" => {
+                "HOL Guard could not evaluate the extension controls for this command. Check Guard diagnostics before retrying."
+            }
+            _ => "HOL Guard requires the native command extension policy before this action can execute.",
+        }
+        .to_owned();
     }
 }
 
@@ -428,6 +434,10 @@ mod review_regressions {
             result.reason_code,
             "native_command_extension_evaluation_failed"
         );
+        assert_eq!(
+            result.reason,
+            "HOL Guard could not evaluate the extension controls for this command. Check Guard diagnostics before retrying."
+        );
     }
 
     #[test]
@@ -464,9 +474,14 @@ mod review_regressions {
         );
         assert_eq!(result.minimum_action, "block");
         assert!(!result.explicitly_benign);
+        assert_eq!(result.decision, "deny");
+        assert_eq!(
+            result.reason_code,
+            "native_command_extension_evaluation_failed"
+        );
         assert_eq!(
             result.reason,
-            "HOL Guard requires the native command extension policy before this action can execute."
+            "HOL Guard could not evaluate the extension controls for this command. Check Guard diagnostics before retrying."
         );
     }
 }

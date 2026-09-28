@@ -43,6 +43,27 @@ contracts. The manifest remains labelled `caller_supplied_unverified`; this
 stage does not authenticate a host action, promote evidence to live proof, or
 execute a scenario. Inputs are bounded before verification.
 
+## Evidence packaging
+
+Package one validated profile and result pair under the profile's private
+temporary root:
+
+```shell
+hol-guard-eval package-evidence \
+  --profile profile.json \
+  --result result.json \
+  --output-dir /absolute/path/to/profile-private-root
+```
+
+The command reads both JSON inputs with fixed size limits, rejects duplicate
+object keys and non-standard numeric constants, validates that the result
+matches the profile, and delegates exclusive mode-0600 archive creation to
+the evidence package writer. The output is one stable JSON object with the new
+archive's digest, path, size, and `caller_supplied_unverified` boundary.
+Existing archives and output directories outside the profile's private
+temporary root are rejected without overwriting or creating files. Packaging
+does not execute a host, run scenarios, or claim installed-host proof.
+
 ## Cleanup
 
 Remove one setup created by `preflight --setup`:
