@@ -43,6 +43,70 @@ def test_policy_block_cannot_be_weakened_by_native_allow(harness: str, expected_
     }
 
 
+def test_zcode_review_pretool_exits_zero_and_keeps_ask_envelope() -> None:
+    # ZCode discards stdout JSON when a hook exits 2, so the review tier must
+    # exit 0 for its ask envelope to reach ZCode's native permission prompt.
+    payload, stderr, code = _translate(
+        {
+            "decision": "allow",
+            "policy_action": "review",
+            "reason": "Approval required.",
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "ask",
+                "permissionDecisionReason": "Approval required.",
+            },
+        },
+        harness="zcode",
+    )
+
+    assert code == 0
+    assert stderr == ""
+    assert payload["decision"] == "deny"
+    assert payload["policy_action"] == "review"
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "ask"
+
+
+def test_zcode_block_pretool_keeps_blocking_exit_with_stderr_reason() -> None:
+    payload, stderr, code = _translate(
+        {
+            "decision": "allow",
+            "policy_action": "block",
+            "reason": "Blocked by policy.",
+            "hookSpecificOutput": {"hookEventName": "PreToolUse"},
+        },
+        harness="zcode",
+    )
+
+    assert code == 2
+    assert stderr == "Blocked by policy."
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_zcode_authority_block_stderr_carries_remediation() -> None:
+    _payload, stderr, code = _translate(
+        {
+            "decision": "allow",
+            "policy_action": "block",
+            "reason": "HOL Guard requires the native command extension policy before this action can execute.",
+            "hookSpecificOutput": {"hookEventName": "PreToolUse"},
+        },
+        harness="zcode",
+    )
+
+    assert code == 2
+    assert "hol-guard extension-controls acknowledge-degraded" in stderr
+
+
+def test_zcode_prompt_blocks_keep_blocking_exit() -> None:
+    _payload, _stderr, code = _translate(
+        {"decision": "block", "policy_action": "review", "reason": "Prompt review."},
+        harness="zcode",
+        event="UserPromptSubmit",
+    )
+    assert code == 2
+
+
 def test_native_deny_promotes_allow_policy_to_block() -> None:
     payload, _stderr, code = _translate(
         {

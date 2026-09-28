@@ -63,6 +63,9 @@ from .zcode_config import (
 )
 
 _ZCODE_HOME_ENV_VAR = "ZCODE_HOME"
+# Current ZCode renders this label beside the hook in its Hooks settings UI
+# instead of the full managed command string.
+_GUARD_HOOK_STATUS_MESSAGE = "HOL Guard runtime policy enforcement"
 _ZCODE_PRETOOL_TIMEOUT_SECONDS = 30
 _ZCODE_PROMPT_TIMEOUT_SECONDS = 30
 _GUARD_HOOK_INTERNAL_TIMEOUT_SECONDS = 25
@@ -340,6 +343,7 @@ class ZCodeHarnessAdapter(HarnessAdapter):
                 "Guard hook entries added to ~/.zcode/cli/config.json under the hooks.events section",
                 "User mcp, plugins, and any pre-existing hooks were preserved",
                 "Legacy flat hook groups were migrated into hooks.events for current ZCode",
+                "Hook entries carry a statusMessage label rendered by ZCode's Hooks settings UI",
                 *shim_notes,
             ],
         }
@@ -402,11 +406,13 @@ class ZCodeHarnessAdapter(HarnessAdapter):
             "type": "command",
             "command": managed_command,
             "timeout": _ZCODE_PRETOOL_TIMEOUT_SECONDS,
+            "statusMessage": _GUARD_HOOK_STATUS_MESSAGE,
         }
         prompt_handler: dict[str, object] = {
             "type": "command",
             "command": managed_command,
             "timeout": _ZCODE_PROMPT_TIMEOUT_SECONDS,
+            "statusMessage": _GUARD_HOOK_STATUS_MESSAGE,
         }
         for matcher in ZCODE_PRETOOL_MATCHERS:
             pretool_entries = _merge_hook_entry(pretool_entries, matcher, pretool_handler)

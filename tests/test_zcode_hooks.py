@@ -9,6 +9,8 @@ from pathlib import Path
 from codex_plugin_scanner.guard.adapters.zcode_hooks import (
     emit_zcode_hook_response,
     prepare_zcode_hook_payload,
+    zcode_authority_block_reason,
+    zcode_hook_process_exit,
     zcode_hook_response_from_guard,
     zcode_hook_should_block,
 )
@@ -104,6 +106,24 @@ class TestZCodeHookResponses:
             }
         }
 
+    def test_sandbox_required_pretool_response_is_deny(self) -> None:
+        payload = zcode_hook_response_from_guard(policy_action="sandbox-required", reason="sandbox needed")
+        assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+    def test_review_pretool_response_asks_through_native_prompt(self) -> None:
+        payload = zcode_hook_response_from_guard(policy_action="review", reason="Approval required.")
+        assert payload == {
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "ask",
+                "permissionDecisionReason": "Approval required.",
+            }
+        }
+
+    def test_require_reapproval_pretool_response_asks(self) -> None:
+        payload = zcode_hook_response_from_guard(policy_action="require-reapproval", reason="re-approve")
+        assert payload["hookSpecificOutput"]["permissionDecision"] == "ask"
+
     def test_block_uses_default_reason_when_empty(self) -> None:
         payload = zcode_hook_response_from_guard(policy_action="block", reason="")
         reason = payload["hookSpecificOutput"]["permissionDecisionReason"]
@@ -116,6 +136,31 @@ class TestZCodeHookResponses:
         assert payload["decision"] == "block"
         assert payload["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
 
+    def test_authority_block_reason_appends_remediation(self) -> None:
+        reason = "HOL Guard requires the native command extension policy before this action can execute."
+        enriched = zcode_authority_block_reason(reason)
+        assert enriched.startswith(reason)
+        assert "hol-guard extension-controls acknowledge-degraded" in enriched
+        assert "hol-guard extension-controls recover-authority" in enriched
+
+    def test_authority_block_reason_is_idempotent(self) -> None:
+        once = zcode_authority_block_reason(
+            "HOL Guard requires the native command extension policy before this action can execute."
+        )
+        assert zcode_authority_block_reason(once) == once
+
+    def test_authority_block_reason_leaves_other_reasons_alone(self) -> None:
+        assert zcode_authority_block_reason("Blocked by policy.") == "Blocked by policy."
+
+    def test_authority_block_reason_surfaces_in_deny_envelope(self) -> None:
+        payload = zcode_hook_response_from_guard(
+            policy_action="block",
+            reason="HOL Guard requires the native command extension policy before this action can execute.",
+        )
+        assert "hol-guard extension-controls acknowledge-degraded" in payload["hookSpecificOutput"][
+            "permissionDecisionReason"
+        ]
+
     def test_should_block_flags_blocking_actions(self) -> None:
         assert zcode_hook_should_block(policy_action="review")
         assert zcode_hook_should_block(policy_action="block")
@@ -123,7 +168,30 @@ class TestZCodeHookResponses:
         assert zcode_hook_should_block(policy_action="require-reapproval")
         assert not zcode_hook_should_block(policy_action="allow")
 
+    def test_process_exit_review_pretool_exits_zero_so_ask_json_is_parsed(self) -> None:
+        # ZCode only parses stdout JSON for successful hook processes; exit 2
+        # would discard the ask envelope and deny the call outright.
+        assert zcode_hook_process_exit(policy_action="review", event_name="PreToolUse") == 0
+        assert zcode_hook_process_exit(policy_action="require-reapproval", event_name="PreToolUse") == 0
+
+    def test_process_exit_hard_denials_keep_blocking_exit(self) -> None:
+        assert zcode_hook_process_exit(policy_action="block", event_name="PreToolUse") == 2
+        assert zcode_hook_process_exit(policy_action="sandbox-required", event_name="PreToolUse") == 2
+
+    def test_process_exit_prompt_blocks_keep_blocking_exit(self) -> None:
+        assert zcode_hook_process_exit(policy_action="review", event_name="UserPromptSubmit") == 2
+        assert zcode_hook_process_exit(policy_action="block", event_name="UserPromptSubmit") == 2
+
+    def test_process_exit_allows_exit_zero(self) -> None:
+        assert zcode_hook_process_exit(policy_action="allow", event_name="PreToolUse") == 0
+
     def test_emit_writes_json_line(self) -> None:
         stream = io.StringIO()
         emit_zcode_hook_response(policy_action="allow", reason="", output_stream=stream)
         assert json.loads(stream.getvalue())["hookSpecificOutput"]["permissionDecision"] == "allow"
+
+    def test_emit_review_writes_ask_envelope(self) -> None:
+        stream = io.StringIO()
+        emit_zcode_hook_response(policy_action="review", reason="Approval required.", output_stream=stream)
+        payload = json.loads(stream.getvalue())
+        assert payload["hookSpecificOutput"]["permissionDecision"] == "ask"
