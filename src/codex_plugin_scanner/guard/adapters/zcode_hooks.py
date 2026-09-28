@@ -53,8 +53,8 @@ _ZCODE_BLOCKING_ACTIONS = frozenset({"review", "require-reapproval", "sandbox-re
 # remediation command must travel with the message.
 _AUTHORITY_BLOCK_REASON_MARKER = "native command extension policy"
 _AUTHORITY_BLOCK_REMEDIATION = (
-    " Run `hol-guard extension-controls acknowledge-degraded` after reviewing the "
-    "degradation, or `hol-guard extension-controls recover-authority`, to restore the "
+    " Run `hol-guard command controls acknowledge-degraded` after reviewing the "
+    "degradation, or `hol-guard command controls recover-authority`, to restore the "
     "protected control floor."
 )
 
@@ -133,7 +133,7 @@ def zcode_authority_block_reason(reason: str) -> str:
     """
 
     text = reason if isinstance(reason, str) else ""
-    if _AUTHORITY_BLOCK_REASON_MARKER in text and "hol-guard extension-controls" not in text:
+    if _AUTHORITY_BLOCK_REASON_MARKER in text and "hol-guard command controls" not in text:
         return text + _AUTHORITY_BLOCK_REMEDIATION
     return text
 
