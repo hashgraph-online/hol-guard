@@ -1,0 +1,520 @@
+{
+  "extension": {
+    "action_classes": [
+      "CloudG asset collection command",
+      "CloudG pipeline execution command",
+      "CloudG scanner execution command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews cloud credential use, security scanner execution, and Terraform file generation through the CloudG CLI.",
+    "ecosystem_ids": [],
+    "executables": [],
+    "extension_id": "command.cloudg",
+    "homepage": "https://github.com/morpheuslord/cloudg",
+    "icon": {
+      "background": "#0E7490",
+      "kind": "react-icon",
+      "name": "HiMiniCloud"
+    },
+    "license": "MIT",
+    "name": "CloudG command protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "CloudG asset collection command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies asset collection runs that resolve cloud credentials and enumerate resources through provider APIs.",
+        "example_command": "cloudg collect -p aws --profile prod --region us-east-1",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "0.3.1",
+        "label": "CloudG asset collection",
+        "permission_id": "command.cloudg.permission.collect",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Confirm the provider, profile, and region flags point at the account you intend to inventory."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "CloudG pipeline execution command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies full pipeline runs that resolve cloud credentials, enumerate assets across accounts and regions, execute security scanners, and write Terraform recreation files when --terraform is set.",
+        "example_command": "cloudg run -p aws --profile prod --terraform",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "0.3.1",
+        "label": "CloudG full pipeline",
+        "permission_id": "command.cloudg.permission.run",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Check the selected providers, credential flags, regions, and scanner list before running.",
+          "Leave --terraform off unless you want .tf.json recreation files written to the output directory."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "CloudG scanner execution command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies scanner runs that execute external security tools such as Prowler, ScoutSuite, Checkov, and Trivy against cloud accounts, IaC directories, and container images.",
+        "example_command": "cloudg scan -p aws --scanners prowler,checkov",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "0.3.1",
+        "label": "CloudG scanner execution",
+        "permission_id": "command.cloudg.permission.scan",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Review the scanner list, IaC directory, and image list before running; scanners inherit the resolved cloud credentials."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": {
+      "display_name": "Community",
+      "id": "community.morpheuslord",
+      "url": "https://github.com/morpheuslord/cloudg"
+    },
+    "reference_urls": [
+      "https://github.com/morpheuslord/cloudg"
+    ],
+    "required": false,
+    "risk_classes": [
+      "execution",
+      "network_egress"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "CloudG asset collection command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies asset collection runs that resolve cloud credentials and enumerate resources through provider APIs.",
+        "family": null,
+        "matcher": {
+          "config": {
+            "allow_leading_options": true,
+            "executables": [
+              "cloudg",
+              "cloudg.cmd",
+              "cloudg.exe"
+            ],
+            "fail_secure_unknown_options": true,
+            "forbidden_flags": [],
+            "interspersed_flags": [
+              "--verbose",
+              "-v"
+            ],
+            "interspersed_options_with_values": [
+              "--config",
+              "--log-file",
+              "--output",
+              "--profile",
+              "--project-id",
+              "--provider",
+              "--region",
+              "--subscription-id",
+              "-c",
+              "-o",
+              "-p"
+            ],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [
+              "--config",
+              "--log-file",
+              "-c"
+            ],
+            "options_with_values": [],
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": [
+              "collect"
+            ]
+          },
+          "op": "executable.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.cloudg.permission.collect",
+        "risk_classes": [
+          "network_egress"
+        ],
+        "rule_id": "command.cloudg.collect",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "cloudg",
+                  "cloudg.cmd",
+                  "cloudg.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--verbose",
+                  "-v"
+                ],
+                "interspersed_options_with_values": [
+                  "--config",
+                  "--log-file",
+                  "--output",
+                  "--profile",
+                  "--project-id",
+                  "--provider",
+                  "--region",
+                  "--subscription-id",
+                  "-c",
+                  "-o",
+                  "-p"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--log-file",
+                  "-c"
+                ],
+                "options_with_values": [],
+                "required_flags": [
+                  "--help"
+                ],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": [
+                  "collect"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Confirm the provider, profile, and region flags point at the account you intend to inventory."
+        ],
+        "severity": "high",
+        "title": "CloudG asset collection"
+      },
+      {
+        "action_classes": [
+          "CloudG pipeline execution command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies full pipeline runs that resolve cloud credentials, enumerate assets, execute security scanners, and write Terraform recreation files when --terraform is set.",
+        "family": null,
+        "matcher": {
+          "config": {
+            "allow_leading_options": true,
+            "executables": [
+              "cloudg",
+              "cloudg.cmd",
+              "cloudg.exe"
+            ],
+            "fail_secure_unknown_options": true,
+            "forbidden_flags": [],
+            "interspersed_flags": [
+              "--azure-managed-identity",
+              "--no-ontology",
+              "--no-rag-export",
+              "--no-terraform",
+              "--ontology",
+              "--rag-export",
+              "--terraform",
+              "--verbose",
+              "-v"
+            ],
+            "interspersed_options_with_values": [
+              "--aws-external-id",
+              "--aws-key",
+              "--aws-role-arn",
+              "--aws-secret",
+              "--aws-session-token",
+              "--aws-web-identity-token-file",
+              "--azure-cert-path",
+              "--azure-client-id",
+              "--azure-client-secret",
+              "--azure-federated-token-file",
+              "--azure-tenant-id",
+              "--config",
+              "--gcp-credentials-file",
+              "--gcp-impersonate-sa",
+              "--iac-dir",
+              "--images",
+              "--log-file",
+              "--output",
+              "--profile",
+              "--project-id",
+              "--provider",
+              "--region",
+              "--regions",
+              "--scanners",
+              "--subscription-id",
+              "-c",
+              "-o",
+              "-p"
+            ],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [
+              "--config",
+              "--log-file",
+              "-c"
+            ],
+            "options_with_values": [],
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": [
+              "run"
+            ]
+          },
+          "op": "executable.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.cloudg.permission.run",
+        "risk_classes": [
+          "execution",
+          "network_egress"
+        ],
+        "rule_id": "command.cloudg.run",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "cloudg",
+                  "cloudg.cmd",
+                  "cloudg.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--azure-managed-identity",
+                  "--no-ontology",
+                  "--no-rag-export",
+                  "--no-terraform",
+                  "--ontology",
+                  "--rag-export",
+                  "--terraform",
+                  "--verbose",
+                  "-v"
+                ],
+                "interspersed_options_with_values": [
+                  "--aws-external-id",
+                  "--aws-key",
+                  "--aws-role-arn",
+                  "--aws-secret",
+                  "--aws-session-token",
+                  "--aws-web-identity-token-file",
+                  "--azure-cert-path",
+                  "--azure-client-id",
+                  "--azure-client-secret",
+                  "--azure-federated-token-file",
+                  "--azure-tenant-id",
+                  "--config",
+                  "--gcp-credentials-file",
+                  "--gcp-impersonate-sa",
+                  "--iac-dir",
+                  "--images",
+                  "--log-file",
+                  "--output",
+                  "--profile",
+                  "--project-id",
+                  "--provider",
+                  "--region",
+                  "--regions",
+                  "--scanners",
+                  "--subscription-id",
+                  "-c",
+                  "-o",
+                  "-p"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--log-file",
+                  "-c"
+                ],
+                "options_with_values": [],
+                "required_flags": [
+                  "--help"
+                ],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": [
+                  "run"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Check the selected providers, credential flags, regions, and scanner list before running."
+        ],
+        "severity": "high",
+        "title": "CloudG full pipeline"
+      },
+      {
+        "action_classes": [
+          "CloudG scanner execution command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies scanner runs that execute external security tools such as Prowler, ScoutSuite, Checkov, and Trivy.",
+        "family": null,
+        "matcher": {
+          "config": {
+            "allow_leading_options": true,
+            "executables": [
+              "cloudg",
+              "cloudg.cmd",
+              "cloudg.exe"
+            ],
+            "fail_secure_unknown_options": true,
+            "forbidden_flags": [],
+            "interspersed_flags": [
+              "--verbose",
+              "-v"
+            ],
+            "interspersed_options_with_values": [
+              "--config",
+              "--iac-dir",
+              "--images",
+              "--log-file",
+              "--output",
+              "--profile",
+              "--provider",
+              "--scanners",
+              "-c",
+              "-o",
+              "-p"
+            ],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [
+              "--config",
+              "--log-file",
+              "-c"
+            ],
+            "options_with_values": [],
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": [
+              "scan"
+            ]
+          },
+          "op": "executable.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.cloudg.permission.scan",
+        "risk_classes": [
+          "execution",
+          "network_egress"
+        ],
+        "rule_id": "command.cloudg.scan",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "cloudg",
+                  "cloudg.cmd",
+                  "cloudg.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--verbose",
+                  "-v"
+                ],
+                "interspersed_options_with_values": [
+                  "--config",
+                  "--iac-dir",
+                  "--images",
+                  "--log-file",
+                  "--output",
+                  "--profile",
+                  "--provider",
+                  "--scanners",
+                  "-c",
+                  "-o",
+                  "-p"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "--log-file",
+                  "-c"
+                ],
+                "options_with_values": [],
+                "required_flags": [
+                  "--help"
+                ],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": [
+                  "scan"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Review the scanner list, IaC directory, and image list before running; scanners inherit the resolved cloud credentials."
+        ],
+        "severity": "high",
+        "title": "CloudG scanner execution"
+      }
+    ],
+    "safer_alternatives": [
+      "Generate reports from existing scan data with `cloudg report -i findings.json`, which reads a local file and does not touch cloud credentials or scanners."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}
