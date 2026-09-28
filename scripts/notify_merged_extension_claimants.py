@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from typing import Any
 
 MARKER = "<!-- hol-extension-claim-notice:v1 -->"
+GUIDANCE_MARKER = "<!-- hol-extension-claim-guidance:v1 -->"
 DEFAULT_STUDIO_URL = "https://hol.org/guard/extension-studio"
 NOTICE_SOURCE_SURFACE = "github_claim_notice"
 PORTAL_READINESS_URL_ENV = "GUARD_EXTENSION_PORTAL_READINESS_URL"
@@ -38,6 +39,7 @@ READYNESS_REASONS = frozenset(
 CONTRIBUTION_PREFIXES = (
     "contributions/extensions/",
     "contributions/mcp-servers/",
+    "contributions/command-sources/",
 )
 EXTENSION_ID_RE = re.compile(r"^(?:command|mcp)\.[a-z0-9]+(?:[.-][a-z0-9]+)*$")
 TAG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
@@ -88,6 +90,7 @@ class ExtensionReadiness:
     extension_id: str
     status: str
     notified_ids: tuple[str, ...] = ()
+    missing_mapping: bool = False
 
 
 class GitHubApi:
@@ -477,6 +480,65 @@ def has_trusted_notice(comments: list[dict[str, Any]]) -> bool:
     return False
 
 
+def has_trusted_guidance(comments: list[dict[str, Any]]) -> bool:
+    """Ignore contributor-spoofed markers when checking guidance delivery."""
+    for comment in comments:
+        if GUIDANCE_MARKER not in str(comment.get("body") or ""):
+            continue
+        user = comment.get("user")
+        if isinstance(user, dict) and user.get("id") == TRUSTED_NOTICE_ACTOR_ID and user.get("type") == "Bot":
+            return True
+    return False
+
+
+def build_guidance_comment(extension_ids: list[str]) -> str:
+    """Explain the reviewed mapping required before a publisher claim is possible."""
+    lines = [
+        GUIDANCE_MARKER,
+        "The merged extension contribution is available, but its publisher profile cannot yet be claimed.",
+        "A separate, maintainer-reviewed publisher listing must name the authorized numeric GitHub ID first:",
+        "",
+    ]
+    lines.extend(
+        f"- `{extension_id}`: add `contributions/extension-listings/{extension_id}.json`"
+        for extension_id in extension_ids
+    )
+    lines.extend(
+        [
+            "",
+            (
+                "Follow the [publisher metadata guide]"
+                "(https://github.com/hashgraph-online/hol-guard/blob/main/"
+                "docs/guard/extensions/publisher-metadata.md). "
+                "Once that mapping is accepted on `main`, the claim notice will link the authorized account "
+                "to Extension Studio. The contribution PR or its author does not grant publisher access by itself."
+            ),
+        ]
+    )
+    return "\n".join(lines)
+
+
+def current_unmapped_contributions(client: GitHubApi, pr_number: int, records: list[ExtensionReadiness]) -> list[str]:
+    """Offer guidance only while the exact merged source remains on main without a claim mapping."""
+    missing = [entry.extension_id for entry in records if entry.missing_mapping]
+    if not missing:
+        return []
+    default_branch = client.repo_metadata().get("default_branch")
+    merge_sha = client.pull_request(pr_number).get("merge_commit_sha")
+    if not isinstance(default_branch, str) or not isinstance(merge_sha, str):
+        raise ClaimNoticeError("canonical contribution revision is unavailable")
+    current: list[str] = []
+    for extension_id in missing:
+        native_path = contribution_path(extension_id)
+        if not client.file_exists(native_path, merge_sha) or not client.file_exists(native_path, default_branch):
+            continue
+        listing_path = f"{LISTING_PREFIX}{extension_id}.json"
+        tip_listing = client.file_json(listing_path, default_branch, missing_ok=True)
+        if tip_listing is None or not accepted_github_ids(tip_listing, extension_id):
+            current.append(extension_id)
+    return current
+
+
 def _plan_notice_items(
     client: GitHubApi,
     pr_number: int,
@@ -492,9 +554,16 @@ def _plan_notice_items(
     ``no_mapping`` and ``source_not_current`` instead of skipping silently.
     """
 
-    def record(extension_id: str, status: str, ids: tuple[str, ...] = ()) -> None:
+    def record(extension_id: str, status: str, ids: tuple[str, ...] = (), *, missing_mapping: bool = False) -> None:
         if records is not None:
-            records.append(ExtensionReadiness(extension_id=extension_id, status=status, notified_ids=ids))
+            records.append(
+                ExtensionReadiness(
+                    extension_id=extension_id,
+                    status=status,
+                    notified_ids=ids,
+                    missing_mapping=missing_mapping,
+                )
+            )
 
     repo = client.repo_metadata()
     default_branch = repo.get("default_branch")
@@ -540,11 +609,11 @@ def _plan_notice_items(
         listing_path = f"{LISTING_PREFIX}{extension_id}.json"
         current_listing = client.file_json(listing_path, merge_sha, missing_ok=True)
         if current_listing is None:
-            record(extension_id, "no_mapping")
+            record(extension_id, "no_mapping", missing_mapping=True)
             continue
         merge_ids = accepted_github_ids(current_listing, extension_id)
         if not merge_ids:
-            record(extension_id, "no_mapping")
+            record(extension_id, "no_mapping", missing_mapping=True)
             continue
 
         native_path = contribution_path(extension_id)
@@ -748,9 +817,9 @@ def process(
             )
         )
         return 0
-    if has_trusted_notice(client.comments(pr_number)):
-        print(f"PR #{pr_number}: trusted extension claim notice already exists; skipping")
-        return 0
+    comments = client.comments(pr_number)
+    notice_exists = has_trusted_notice(comments)
+    guidance_exists = has_trusted_guidance(comments)
     if portal_readiness_url:
         portal_status, portal_detail = portal_readiness(portal_readiness_url)
         if portal_status != "ok":
@@ -758,15 +827,27 @@ def process(
             # produce an invitation that promises an immediately available claim.
             print(f"PR #{pr_number}: portal readiness check failed ({portal_status}: {portal_detail}); skipping")
             return 0
-    items = collect_notice_items(client, pr_number, allow_renames=allow_renames)
-    if not items:
-        return 0
-    body = build_comment(items, studio_url.rstrip("/"))
-    if dry_run:
-        print(body)
-        return 0
-    client.post_comment(pr_number, body)
-    print(f"PR #{pr_number}: posted Extension Studio claim notice for {len(items)} extension(s)")
+    records: list[ExtensionReadiness] = []
+    items, _ = _plan_notice_items(client, pr_number, allow_renames=allow_renames, records=records)
+    unmapped = current_unmapped_contributions(client, pr_number, records)
+    if items and not notice_exists:
+        body = build_comment(items, studio_url.rstrip("/"))
+        if dry_run:
+            print(body)
+        else:
+            client.post_comment(pr_number, body)
+            print(f"PR #{pr_number}: posted Extension Studio claim notice for {len(items)} extension(s)")
+    elif notice_exists:
+        print(f"PR #{pr_number}: trusted extension claim notice already exists; skipping duplicate")
+    if unmapped and not guidance_exists:
+        body = build_guidance_comment(unmapped)
+        if dry_run:
+            print(body)
+        else:
+            client.post_comment(pr_number, body)
+            print(f"PR #{pr_number}: posted claim guidance for {len(unmapped)} extension(s)")
+    elif guidance_exists:
+        print(f"PR #{pr_number}: trusted claim guidance already exists; skipping duplicate")
     return 0
 
 

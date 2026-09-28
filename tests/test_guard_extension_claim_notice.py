@@ -124,6 +124,14 @@ def configure_new_contribution(
     )
 
 
+def configure_unmapped_contribution(client: FakeGitHub, extension_id: str) -> str:
+    contribution_path = f"contributions/extensions/{extension_id}.json"
+    client.files = [{"status": "added", "filename": contribution_path}]
+    client.file_payloads[(MERGE_SHA, contribution_path)] = {"schemaVersion": "v1"}
+    client.file_payloads[(client.default_branch, contribution_path)] = {"schemaVersion": "v1"}
+    return contribution_path
+
+
 def test_new_contribution_notifies_only_reviewed_numeric_ids() -> None:
     client = FakeGitHub()
     configure_new_contribution(client, "command.example", ["200", "100"])
@@ -151,6 +159,68 @@ def test_pr_authorship_never_creates_claim_authority() -> None:
 
     assert MODULE.process(client, 7, MODULE.DEFAULT_STUDIO_URL) == 0
     assert client.posted == []
+
+
+def test_current_unmapped_contribution_gets_reviewed_mapping_instructions() -> None:
+    client = FakeGitHub()
+    configure_unmapped_contribution(client, "command.unmapped")
+
+    assert MODULE.process(client, 7, MODULE.DEFAULT_STUDIO_URL) == 0
+    assert len(client.posted) == 1
+    body = client.posted[0][1]
+    assert MODULE.GUIDANCE_MARKER in body
+    assert "contributions/extension-listings/command.unmapped.json" in body
+    assert "publisher-metadata.md" in body
+    assert "?claim=" not in body
+    assert MODULE.MARKER not in body
+
+
+def test_guidance_is_idempotent_only_for_the_trusted_bot() -> None:
+    client = FakeGitHub()
+    configure_unmapped_contribution(client, "command.unmapped")
+    client.comment_rows = [{"body": MODULE.GUIDANCE_MARKER, "user": {"id": 1234, "type": "User"}}]
+
+    assert MODULE.process(client, 7, MODULE.DEFAULT_STUDIO_URL) == 0
+    assert len(client.posted) == 1
+
+    client.comment_rows.append(
+        {
+            "body": client.posted[0][1],
+            "user": {"id": MODULE.TRUSTED_NOTICE_ACTOR_ID, "type": "Bot"},
+        }
+    )
+    assert MODULE.process(client, 7, MODULE.DEFAULT_STUDIO_URL) == 0
+    assert len(client.posted) == 1
+
+
+def test_removed_or_later_claimable_source_gets_no_stale_guidance() -> None:
+    client = FakeGitHub()
+    contribution_path = configure_unmapped_contribution(client, "command.unmapped")
+    del client.file_payloads[(client.default_branch, contribution_path)]
+
+    assert MODULE.process(client, 7, MODULE.DEFAULT_STUDIO_URL) == 0
+    assert client.posted == []
+
+    client.file_payloads[(client.default_branch, contribution_path)] = {"schemaVersion": "v1"}
+    client.file_payloads[(client.default_branch, "contributions/extension-listings/command.unmapped.json")] = listing(
+        "command.unmapped", ["100"]
+    )
+    assert MODULE.process(client, 7, MODULE.DEFAULT_STUDIO_URL) == 0
+    assert client.posted == []
+
+
+def test_empty_accepted_set_gets_guidance_without_a_claim_link() -> None:
+    client = FakeGitHub()
+    contribution_path = configure_unmapped_contribution(client, "command.unmapped")
+    listing_path = "contributions/extension-listings/command.unmapped.json"
+    client.file_payloads[(MERGE_SHA, listing_path)] = listing("command.unmapped", [])
+    client.file_payloads[(client.default_branch, listing_path)] = listing("command.unmapped", [])
+    assert client.file_payloads[(client.default_branch, contribution_path)] is not None
+
+    assert MODULE.process(client, 7, MODULE.DEFAULT_STUDIO_URL) == 0
+    assert len(client.posted) == 1
+    assert MODULE.GUIDANCE_MARKER in client.posted[0][1]
+    assert "?claim=" not in client.posted[0][1]
 
 
 def test_listing_change_notifies_only_newly_accepted_ids() -> None:
@@ -325,10 +395,11 @@ def test_changed_extension_ids_track_renames_and_ignore_removed_files() -> None:
                 "previous_filename": "contributions/extensions/command.old.json",
             },
             {"status": "removed", "filename": "contributions/extensions/command.gone.json"},
+            {"status": "added", "filename": "contributions/command-sources/command.source.json"},
             {"status": "modified", "filename": "README.md"},
         ]
     )
-    assert contributions == {"command.one", "command.new"}
+    assert contributions == {"command.one", "command.new", "command.source"}
     assert listings == {"mcp.two"}
     assert renamed == {"command.new", "command.old"}
 
@@ -345,6 +416,7 @@ def test_workflow_is_merge_only_and_supports_reviewed_rename_backfill() -> None:
     assert "allow_renames:" in text
     assert "dry_run:" in text
     assert "contributions/extension-listings/**" in text
+    assert "contributions/command-sources/**" in text
     assert "pull-requests: write" in text
     assert "issues: write" not in text
     assert "persist-credentials: false" in text
