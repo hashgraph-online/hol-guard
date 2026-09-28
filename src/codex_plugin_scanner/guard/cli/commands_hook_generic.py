@@ -1408,7 +1408,7 @@ def _run_hook_generic_payload(
                 payload=payload_map,
                 output_stream=output_stream,
             )
-            return zcode_hook_process_exit(policy_action=policy_action, event_name=event_name)
+            return zcode_hook_process_exit(policy_action=policy_action, event_name=hook_event_name)
         if _canonical_harness_name(args.harness) == "devin":
             from ..adapters.devin_hooks import emit_devin_hook_response
 
