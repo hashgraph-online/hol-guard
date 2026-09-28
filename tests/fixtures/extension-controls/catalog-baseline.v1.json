@@ -6,7 +6,7 @@
     "canonical_diff_digest",
     "effective"
   ],
-  "catalog_digest": "7b5ad2d7f24d47d3d4c796e5f88a23d291b04a8206a92294501e8839997a3ede",
+  "catalog_digest": "6b87e56dd952c06dad9a875445445ea9ec7b263ff93cd24fd0d08fcd24ea4036",
   "control_schema_version": "1.0.0",
   "daemon_api_schema": "guard.daemon.extension-controls.v1",
   "effective_shape": [
@@ -20,7 +20,7 @@
     "failures",
     "projection"
   ],
-  "extension_count": 73,
+  "extension_count": 74,
   "extension_ids": [
     "command.api-gateway",
     "command.backup.borg",
@@ -35,6 +35,7 @@
     "command.cloud.aws",
     "command.cloud.azure",
     "command.cloud.gcp",
+    "command.cogext",
     "command.container-runtime",
     "command.data-protection",
     "command.database.mongodb",
@@ -99,7 +100,7 @@
   "extension_schema_version": 2,
   "installed_browser_config": "dashboard/playwright.installed.config.ts",
   "overview_route": "/extensions",
-  "permission_count": 256,
+  "permission_count": 259,
   "permission_examples": {
     "command.api-gateway.permission.delete": "aws apigateway delete-rest-api",
     "command.backup.borg.permission.mutation": "borg delete",
@@ -118,6 +119,9 @@
     "command.cloud.aws.permission.resource-deletion": "aws ec2 terminate-instances",
     "command.cloud.azure.permission.resource-deletion": "az vm delete",
     "command.cloud.gcp.permission.resource-deletion": "gcloud compute instances delete",
+    "command.cogext.permission.add": "cogext add \"Send the report by Friday\"",
+    "command.cogext.permission.fail": "cogext fail abc-123",
+    "command.cogext.permission.fulfill": "cogext fulfill abc-123",
     "command.container-runtime.permission.build-cache-prune": "docker buildx prune -a",
     "command.container-runtime.permission.buildx-builder-removal": "docker buildx rm old-builder",
     "command.container-runtime.permission.compose-destructive-cleanup": "docker compose down --volumes",
@@ -472,6 +476,9 @@
     "command.cloud.aws.permission.resource-deletion",
     "command.cloud.azure.permission.resource-deletion",
     "command.cloud.gcp.permission.resource-deletion",
+    "command.cogext.permission.add",
+    "command.cogext.permission.fail",
+    "command.cogext.permission.fulfill",
     "command.container-runtime.permission.build-cache-prune",
     "command.container-runtime.permission.buildx-builder-removal",
     "command.container-runtime.permission.compose-destructive-cleanup",
@@ -722,7 +729,7 @@
     "controls",
     "semantic_preview"
   ],
-  "rule_count": 242,
+  "rule_count": 245,
   "rule_ids": [
     "command.api-gateway.delete",
     "command.backup.borg.mutation",
@@ -741,6 +748,9 @@
     "command.cloud.aws.resource-deletion",
     "command.cloud.azure.resource-deletion",
     "command.cloud.gcp.resource-deletion",
+    "command.cogext.add",
+    "command.cogext.fulfill",
+    "command.cogext.fail",
     "command.container-runtime.docker-sensitive",
     "command.container-runtime.docker-config-access",
     "command.container-runtime.system-prune",
