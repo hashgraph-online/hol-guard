@@ -152,6 +152,49 @@ assert.match(pendingApprovalMarkup, /check again/i);
 assert.doesNotMatch(pendingApprovalMarkup, /command controls enroll/);
 assert.doesNotMatch(pendingApprovalMarkup, /Copy setup command/);
 
+const unconfiguredRepairMarkup = renderToStaticMarkup(createElement(ProtectionAuthorityNotice, {
+  effective: baseEffective,
+  approvalGate: { enabled: false, configured: false, cooldown_seconds: 0, cooldown_active: false, cooldown_expires_at: null, locked_until: null, fail_closed: true, strict_all_decisions: false, totp_enabled: false },
+  onAction: () => undefined,
+  onCheckAgain: () => undefined,
+  onOpenApprovalSettings: () => undefined,
+}));
+assert.match(unconfiguredRepairMarkup, /Protection needs repair/);
+assert.match(unconfiguredRepairMarkup, /Set up approval/);
+assert.match(unconfiguredRepairMarkup, /local approval is not ready/);
+assert.doesNotMatch(unconfiguredRepairMarkup, /Repair protection<\/button>/);
+assert.match(unconfiguredRepairMarkup, /recover-authority/, "terminal repair remains the documented fallback");
+
+const disabledGateRepairMarkup = renderToStaticMarkup(createElement(ProtectionAuthorityNotice, {
+  effective: baseEffective,
+  approvalGate: { enabled: false, configured: true, cooldown_seconds: 0, cooldown_active: false, cooldown_expires_at: null, locked_until: null, fail_closed: true, strict_all_decisions: false, totp_enabled: false },
+  onAction: () => undefined,
+  onCheckAgain: () => undefined,
+  onOpenApprovalSettings: () => undefined,
+}));
+assert.match(disabledGateRepairMarkup, /Set up approval/);
+assert.doesNotMatch(disabledGateRepairMarkup, /Repair protection<\/button>/, "a disabled gate cannot supply the repair proof");
+
+const unconfiguredAckMarkup = renderToStaticMarkup(createElement(ProtectionAuthorityNotice, {
+  effective: { ...baseEffective, health: "degraded-unacknowledged" },
+  approvalGate: { enabled: false, configured: false, cooldown_seconds: 0, cooldown_active: false, cooldown_expires_at: null, locked_until: null, fail_closed: true, strict_all_decisions: false, totp_enabled: false },
+  onAction: () => undefined,
+  onCheckAgain: () => undefined,
+  onOpenApprovalSettings: () => undefined,
+}));
+assert.match(unconfiguredAckMarkup, /Set up approval/);
+assert.doesNotMatch(unconfiguredAckMarkup, /Acknowledge limited state<\/button>/);
+
+const unconfiguredAckedMarkup = renderToStaticMarkup(createElement(ProtectionAuthorityNotice, {
+  effective: { ...baseEffective, health: "degraded-acknowledged" },
+  approvalGate: { enabled: false, configured: false, cooldown_seconds: 0, cooldown_active: false, cooldown_expires_at: null, locked_until: null, fail_closed: true, strict_all_decisions: false, totp_enabled: false },
+  onAction: () => undefined,
+  onCheckAgain: () => undefined,
+  onOpenApprovalSettings: () => undefined,
+}));
+assert.match(unconfiguredAckedMarkup, /Set up approval/);
+assert.match(unconfiguredAckedMarkup, /recover-authority/);
+
 const protectedMarkup = renderToStaticMarkup(createElement(ProtectionAuthorityNotice, {
   effective: { ...baseEffective, health: "protected" },
   approvalGate: { enabled: true, configured: true, cooldown_seconds: 0, cooldown_active: false, cooldown_expires_at: null, locked_until: null, fail_closed: true, strict_all_decisions: false, totp_enabled: false },
