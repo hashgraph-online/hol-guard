@@ -44,6 +44,8 @@ def _rmtree_at(directory_fd: int, entry: str, *, expected_identity: tuple[int, i
         opened = os.fstat(child_fd)
         if (opened.st_dev, opened.st_ino) != identity:
             raise ValueError("Witness directory changed before cleanup")
+        if stat.S_IMODE(opened.st_mode) & stat.S_IRWXU != stat.S_IRWXU:
+            os.fchmod(child_fd, stat.S_IMODE(opened.st_mode) | stat.S_IRWXU)
         with os.scandir(child_fd) as entries:
             for child in entries:
                 _rmtree_at(child_fd, child.name)

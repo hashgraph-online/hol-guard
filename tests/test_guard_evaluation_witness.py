@@ -39,6 +39,26 @@ def test_pinned_cleanup_fallback_keeps_symlink_target(tmp_path) -> None:
 
 
 @pytest.mark.skipif(os.name == "nt", reason="directory descriptors require POSIX")
+def test_pinned_cleanup_restores_owner_write_to_nested_directories(tmp_path) -> None:
+    owned = tmp_path / "owned"
+    nested = owned / "nested"
+    nested.mkdir(parents=True)
+    (nested / "file").write_bytes(b"owned")
+    nested.chmod(0o555)
+    owned.chmod(0o555)
+    parent_fd = os.open(tmp_path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        _rmtree_at(parent_fd, owned.name)
+    finally:
+        os.close(parent_fd)
+        if owned.exists():
+            owned.chmod(0o700)
+        if nested.exists():
+            nested.chmod(0o700)
+    assert not owned.exists()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="directory descriptors require POSIX")
 def test_pinned_cleanup_fallback_rejects_directory_swap(tmp_path, monkeypatch) -> None:
     owned = tmp_path / "owned"
     owned.mkdir()
