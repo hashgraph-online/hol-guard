@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "guard.extension-contribution.v1",
+  "id": "command.knot",
+  "version": "1.0.0",
+  "name": "Knot",
+  "description": "Reviews knot init and sync commands.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "community.kyncl",
+    "displayName": "Community",
+    "url": "https://github.com/kyncl/knot"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniBolt", "background": "#1F3A8A" },
+  "homepage": "https://github.com/kyncl/knot",
+  "license": "MIT",
+  "executables": ["knot"],
+  "ecosystemIds": ["knot"],
+  "riskClasses": ["destructive_shell"],
+  "actionClasses": [
+    "knot initialization command",
+    "knot synchronization command"
+  ],
+  "referenceUrls": ["https://github.com/kyncl/knot"],
+  "saferAlternatives": ["Verify the working directory and target environments before running knot commands."],
+  "detector": {
+    "kind": "python-module",
+    "module": "codex_plugin_scanner.guard.runtime.command_knot_extensions"
+  }
+}
