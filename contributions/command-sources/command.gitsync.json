@@ -9,7 +9,7 @@
     "conflicts": [],
     "delegated_protection": null,
     "dependencies": [],
-    "description": "Reviews gitsync's live mirror sync, server-side webhook rewrites, and service install/uninstall. Read-only inspection (`check`, `status`) and `run --dry-run` are not covered and pass automatically.",
+    "description": "Reviews gitsync's live mirror sync, server-side webhook rewrites, and service install/uninstall. Read-only inspection (`check`, `status`) and `run --dry-run` do not match this extension's rules; Guard's default floor for an unrecognized executable still applies to them.",
     "ecosystem_ids": [],
     "executables": [],
     "extension_id": "command.gitsync",

@@ -130,7 +130,7 @@
         "command.gitsync"
       ],
       "disabled_permissions": [],
-      "expected_action": "allow",
+      "expected_action": "review",
       "rule_id": "command.gitsync.mirror-mutation",
       "expected_effective_segments": []
     },
@@ -187,7 +187,7 @@
         "command.gitsync"
       ],
       "disabled_permissions": [],
-      "expected_action": "allow",
+      "expected_action": "review",
       "rule_id": "command.gitsync.hook-rewrite",
       "expected_effective_segments": []
     },
@@ -270,7 +270,7 @@
         "command.gitsync"
       ],
       "disabled_permissions": [],
-      "expected_action": "allow",
+      "expected_action": "review",
       "rule_id": "command.gitsync.service-install",
       "expected_effective_segments": []
     },
