@@ -93,6 +93,8 @@ class EvaluationSetup:
     report: EvaluationPreflightReport
     root_path: Path | None = None
     marker_token: str | None = None
+    root_identity: tuple[int, int] | None = None
+    workspace_identity: tuple[int, int] | None = None
 
     @property
     def guard_home(self) -> Path | None:
@@ -506,6 +508,8 @@ def setup_evaluation(
         workspace = root_path / "workspace"
         guard_home.mkdir(mode=0o700)
         workspace.mkdir(mode=0o700)
+        root_info = root_path.stat(follow_symlinks=False)
+        workspace_info = workspace.stat(follow_symlinks=False)
         report = replace(
             preflight,
             phase="setup",
@@ -514,7 +518,13 @@ def setup_evaluation(
             owned_root=str(root_path),
             checks=(*preflight.checks, _check("setup", "passed")),
         )
-        return EvaluationSetup(report=report, root_path=root_path, marker_token=marker_token)
+        return EvaluationSetup(
+            report=report,
+            root_path=root_path,
+            marker_token=marker_token,
+            root_identity=(root_info.st_dev, root_info.st_ino),
+            workspace_identity=(workspace_info.st_dev, workspace_info.st_ino),
+        )
     except (OSError, RuntimeError) as exc:
         if root_path is not None and root_path.exists():
             with contextlib.suppress(EvaluationContractError):

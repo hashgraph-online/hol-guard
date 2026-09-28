@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import socket
 import subprocess
 import time
@@ -13,7 +14,27 @@ from codex_plugin_scanner.guard.evaluation_witness import (
     FileWitnessPair,
     LocalSideEffectWitness,
     NetworkWitnessPair,
+    _rmtree_at,
 )
+
+
+@pytest.mark.skipif(os.name == "nt", reason="directory descriptors require POSIX")
+def test_pinned_cleanup_fallback_keeps_symlink_target(tmp_path) -> None:
+    owned = tmp_path / "owned"
+    owned.mkdir()
+    (owned / "nested").mkdir()
+    (owned / "nested" / "file").write_bytes(b"owned")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "keep").write_bytes(b"keep")
+    (owned / "outside-link").symlink_to(outside, target_is_directory=True)
+    parent_fd = os.open(tmp_path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        _rmtree_at(parent_fd, owned.name)
+    finally:
+        os.close(parent_fd)
+    assert not owned.exists()
+    assert (outside / "keep").read_bytes() == b"keep"
 
 
 def _post(url: str) -> None:
