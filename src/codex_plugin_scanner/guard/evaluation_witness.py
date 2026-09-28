@@ -73,6 +73,7 @@ def _owned_witness_directory(setup: EvaluationSetup) -> _PinnedWitnessDirectory:
     if (
         setup.report.status != "passed"
         or root is None
+        or workspace is None
         or workspace != root / "workspace"
         or token is None
         or setup.root_identity is None
