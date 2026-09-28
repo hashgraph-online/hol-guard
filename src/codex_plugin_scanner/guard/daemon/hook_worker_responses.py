@@ -290,7 +290,9 @@ def _attach_native_review_approval_aliases(
 
 def _native_review_permission_decision(harness: str) -> str:
     canonical = _canonical_hook_harness(harness)
-    if canonical in {"codex", "kimi", "grok", "zcode", "hermes", "devin"}:
+    # zcode opens its native permission prompt for review-tier decisions, so
+    # the review envelope must ask rather than deny.
+    if canonical in {"codex", "kimi", "grok", "hermes", "devin"}:
         return "deny"
     return "ask"
 
