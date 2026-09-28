@@ -10,6 +10,7 @@ from urllib.request import Request, urlopen
 
 import pytest
 
+from codex_plugin_scanner.guard import evaluation_witness as witness_module
 from codex_plugin_scanner.guard.evaluation_witness import (
     FileWitnessPair,
     LocalSideEffectWitness,
@@ -35,6 +36,34 @@ def test_pinned_cleanup_fallback_keeps_symlink_target(tmp_path) -> None:
         os.close(parent_fd)
     assert not owned.exists()
     assert (outside / "keep").read_bytes() == b"keep"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="directory descriptors require POSIX")
+def test_pinned_cleanup_fallback_rejects_directory_swap(tmp_path, monkeypatch) -> None:
+    owned = tmp_path / "owned"
+    owned.mkdir()
+    (owned / "original").write_bytes(b"original")
+    replacement = tmp_path / "replacement"
+    replacement.mkdir()
+    (replacement / "keep").write_bytes(b"keep")
+    held = tmp_path / "held"
+    parent_fd = os.open(tmp_path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    real_open = os.open
+
+    def swap_before_open(path, flags, mode=0o777, *, dir_fd=None):
+        if path == owned.name and dir_fd == parent_fd:
+            owned.rename(held)
+            replacement.rename(owned)
+        return real_open(path, flags, mode, dir_fd=dir_fd)
+
+    monkeypatch.setattr(witness_module.os, "open", swap_before_open)
+    try:
+        with pytest.raises(ValueError, match="changed before cleanup"):
+            _rmtree_at(parent_fd, owned.name)
+    finally:
+        os.close(parent_fd)
+    assert (owned / "keep").read_bytes() == b"keep"
+    assert (held / "original").read_bytes() == b"original"
 
 
 def _post(url: str) -> None:

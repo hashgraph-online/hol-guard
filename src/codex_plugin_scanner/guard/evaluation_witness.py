@@ -7,7 +7,6 @@ adapter or turn a synthetic action into installed-host enforcement evidence.
 from __future__ import annotations
 
 import os
-import shutil
 import socket
 import stat
 import sys
@@ -25,21 +24,32 @@ from codex_plugin_scanner.guard.evaluation_preflight import EvaluationSetup, _sa
 _MAX_ACTIVE_RECEIVER_CONNECTIONS = 8
 
 
-def _rmtree_at(directory_fd: int, entry: str) -> None:
+def _rmtree_at(directory_fd: int, entry: str, *, expected_identity: tuple[int, int] | None = None) -> None:
     try:
         details = os.stat(entry, dir_fd=directory_fd, follow_symlinks=False)
     except FileNotFoundError:
         return
+    identity = details.st_dev, details.st_ino
+    if expected_identity is not None and identity != expected_identity:
+        raise ValueError("Witness directory changed before cleanup")
     if not stat.S_ISDIR(details.st_mode):
+        if expected_identity is not None:
+            raise ValueError("Witness directory changed before cleanup")
         os.unlink(entry, dir_fd=directory_fd)
         return
 
     flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
     child_fd = os.open(entry, flags, dir_fd=directory_fd)
     try:
+        opened = os.fstat(child_fd)
+        if (opened.st_dev, opened.st_ino) != identity:
+            raise ValueError("Witness directory changed before cleanup")
         with os.scandir(child_fd) as entries:
             for child in entries:
                 _rmtree_at(child_fd, child.name)
+        current = os.stat(entry, dir_fd=directory_fd, follow_symlinks=False)
+        if (current.st_dev, current.st_ino) != identity:
+            raise ValueError("Witness directory changed before cleanup")
     finally:
         os.close(child_fd)
     os.rmdir(entry, dir_fd=directory_fd)
@@ -48,20 +58,23 @@ def _rmtree_at(directory_fd: int, entry: str) -> None:
 class _PinnedWitnessDirectory:
     """Remove a witness through the workspace descriptor used to create it."""
 
-    def __init__(self, *, workspace_fd: int, entry: str, name: str) -> None:
-        self._finalizer = weakref.finalize(self, _cleanup_pinned_witness, workspace_fd, entry)
+    def __init__(self, *, workspace_fd: int, entry: str, name: str, identity: tuple[int, int]) -> None:
+        self._finalizer = weakref.finalize(self, _cleanup_pinned_witness, workspace_fd, entry, identity)
         self.name = name
 
     def cleanup(self) -> None:
         self._finalizer()
 
 
-def _cleanup_pinned_witness(workspace_fd: int, entry: str) -> None:
+def _cleanup_pinned_witness(workspace_fd: int, entry: str, identity: tuple[int, int]) -> None:
     try:
-        if sys.version_info >= (3, 11):
-            shutil.rmtree(entry, dir_fd=workspace_fd)
-        else:
-            _rmtree_at(workspace_fd, entry)
+        try:
+            details = os.stat(entry, dir_fd=workspace_fd, follow_symlinks=False)
+        except FileNotFoundError:
+            return
+        if not stat.S_ISDIR(details.st_mode) or (details.st_dev, details.st_ino) != identity:
+            raise ValueError("Witness directory changed before cleanup")
+        _rmtree_at(workspace_fd, entry, expected_identity=identity)
     finally:
         os.close(workspace_fd)
 
@@ -119,10 +132,12 @@ def _owned_witness_directory(setup: EvaluationSetup) -> _PinnedWitnessDirectory:
                         raise ValueError("Witness requires a live owned evaluation setup")
                     entry = f"hol-guard-evaluation-witness-{uuid4().hex}"
                     os.mkdir(entry, mode=0o700, dir_fd=workspace_fd)
+                    witness_info = os.stat(entry, dir_fd=workspace_fd, follow_symlinks=False)
                     return _PinnedWitnessDirectory(
                         workspace_fd=workspace_fd,
                         entry=entry,
                         name=str(workspace / entry),
+                        identity=(witness_info.st_dev, witness_info.st_ino),
                     )
                 except BaseException:
                     os.close(workspace_fd)
