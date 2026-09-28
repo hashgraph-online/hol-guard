@@ -42,7 +42,11 @@ export function enrollConfirmCopy(
   surface: LocalCliItem["surface"],
   recentlySatisfied: boolean,
   totpEnabled: boolean,
+  gateReady: boolean | null,
 ): string {
+  if (gateReady === false) {
+    return "Local approval isn't ready on this device. Set it up below, then come back to save these settings.";
+  }
   if (recentlySatisfied) {
     return "Recently confirmed with your authenticator. Save these settings.";
   }
