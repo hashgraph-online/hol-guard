@@ -608,13 +608,14 @@ def _plan_notice_items(
     for extension_id in candidates:
         listing_path = f"{LISTING_PREFIX}{extension_id}.json"
         current_listing = client.file_json(listing_path, merge_sha, missing_ok=True)
-        if current_listing is None:
-            record(extension_id, "no_mapping", missing_mapping=True)
+        if current_listing is None or not accepted_github_ids(current_listing, extension_id):
+            newly_added = (
+                extension_id in contribution_changes
+                and not client.file_exists(contribution_path(extension_id), before_sha)
+            )
+            record(extension_id, "no_mapping", missing_mapping=newly_added)
             continue
         merge_ids = accepted_github_ids(current_listing, extension_id)
-        if not merge_ids:
-            record(extension_id, "no_mapping", missing_mapping=True)
-            continue
 
         native_path = contribution_path(extension_id)
         if not client.file_exists(native_path, merge_sha):
