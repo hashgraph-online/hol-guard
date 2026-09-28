@@ -223,7 +223,8 @@ def zcode_hook_process_exit(
     resolved_event = event_name
     if resolved_event is None and payload is not None:
         resolved_event = _event_name_for_response(payload)
-    if (resolved_event or "PreToolUse") == "PreToolUse" and policy_action in _ZCODE_ASK_ACTIONS:
+    compact = (resolved_event or "PreToolUse").replace("_", "").replace("-", "").lower()
+    if compact == "pretooluse" and policy_action in _ZCODE_ASK_ACTIONS:
         return 0
     return 2 if policy_action in _ZCODE_BLOCKING_ACTIONS else 0
 

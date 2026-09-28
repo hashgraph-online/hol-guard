@@ -339,12 +339,15 @@ def _should_emit_native_hook_exit_block(args: argparse.Namespace, *, event_name:
     compact_event = event_name.replace("_", "").replace("-", "").lower()
     blocking = compact_event in {"pretooluse", "userpromptsubmit", "pretoolcall"}
     if canonical in {"kimi", "grok", "hermes", "pi", "omp", "zcode", "devin"} and blocking:
-        # ZCode turns exit code 2 into an unconditional deny and never parses
-        # the stdout JSON, so review-tier PreToolUse actions fall through to the
-        # JSON response path where ``permissionDecision: "ask"`` can reach
-        # ZCode's native permission prompt (and the process exits 0).
-        if canonical == "zcode" and compact_event == "pretooluse":
-            return policy_action in {"sandbox-required", "block"}
+        if canonical == "zcode":
+            from ..adapters.zcode_hooks import zcode_hook_process_exit
+
+            # ZCode turns exit code 2 into an unconditional deny and never
+            # parses the stdout JSON, so review-tier PreToolUse actions fall
+            # through to the JSON response path where
+            # ``permissionDecision: "ask"`` can reach ZCode's native
+            # permission prompt (and the process exits 0).
+            return zcode_hook_process_exit(policy_action=policy_action, event_name=event_name) == 2
         return policy_action in {"review", "require-reapproval", "sandbox-required", "block"}
     return False
 

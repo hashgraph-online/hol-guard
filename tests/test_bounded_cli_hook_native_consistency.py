@@ -6,6 +6,7 @@ import json
 import pytest
 
 from codex_plugin_scanner.guard.adapters.bounded_cli_hook_daemon import _daemon_response_to_native
+from codex_plugin_scanner.guard.daemon.hook_worker_responses import harness_json_from_native_pre_tool_review
 
 
 def _translate(payload: dict[str, object], *, harness: str = "grok", event: str = "PreToolUse"):
@@ -105,6 +106,23 @@ def test_zcode_prompt_blocks_keep_blocking_exit() -> None:
         event="UserPromptSubmit",
     )
     assert code == 2
+
+
+def test_zcode_native_review_renderer_asks_and_exits_zero() -> None:
+    # The daemon worker renders review-tier PreToolUse responses through
+    # harness_json_from_native_pre_tool_review; for zcode that envelope must
+    # ask and the bridge must exit 0 so zcode opens its permission prompt.
+    rendered = harness_json_from_native_pre_tool_review(
+        "zcode",
+        {"policy_action": "review", "reason": "Approval required.", "reason_code": "native_pre_tool_review"},
+        approval=None,
+    )
+    payload, stderr, code = _translate(rendered, harness="zcode")
+
+    assert code == 0
+    assert stderr == ""
+    assert payload["policy_action"] == "review"
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "ask"
 
 
 def test_native_deny_promotes_allow_policy_to_block() -> None:

@@ -65,6 +65,22 @@ _APPROVAL_KEYS = (
     "approval_requests",
 )
 _FAILURE_REASON = "HOL Guard could not complete this review before the hook deadline. Retry the action."
+_AUTHORITY_MARKER = "native command extension policy"
+_AUTHORITY_REMEDIATION = (
+    " Run `hol-guard command controls acknowledge-degraded` after reviewing the "
+    "degradation, or `hol-guard command controls recover-authority`, to restore the "
+    "protected control floor."
+)
+
+
+def _stderr_reason(reason: str) -> str:
+    if (
+        HARNESS == "zcode"
+        and _AUTHORITY_MARKER in reason
+        and "hol-guard command controls" not in reason
+    ):
+        return reason + _AUTHORITY_REMEDIATION
+    return reason
 
 
 def _assert_loopback_http_url(url: str) -> None:
@@ -259,6 +275,11 @@ def _should_exit_block(event_name: str, policy_action: str) -> bool:
     if HARNESS == "devin":
         blocking_events.add("permissionrequest")
     if HARNESS in {"kimi", "grok", "hermes", "pi", "omp", "zcode", "devin"} and compact in blocking_events:
+        # zcode discards stdout JSON when a hook exits 2 and denies the call,
+        # so review-tier PreToolUse decisions exit 0 for their ask envelope to
+        # reach zcode's native permission prompt.
+        if HARNESS == "zcode" and compact == "pretooluse":
+            return policy_action in {"sandbox-required", "block"}
         return policy_action in {"review", "require-reapproval", "sandbox-required", "block"}
     return False
 
@@ -326,6 +347,13 @@ def _to_native(daemon_response: dict[str, object], event_name: str) -> tuple[str
             if not native_response.get("reason"):
                 native_response["reason"] = f"HOL Guard blocked this action ({policy})"
         stdout = json.dumps(native_response, ensure_ascii=True, separators=(",", ":"))
+        if exit_code == 2 and HARNESS == "zcode":
+            reason = native_response.get("reason")
+            if not isinstance(reason, str) or not reason:
+                hook_specific = native_response.get("hookSpecificOutput")
+                reason = hook_specific.get("permissionDecisionReason") if isinstance(hook_specific, dict) else None
+            if isinstance(reason, str) and reason:
+                return stdout, _stderr_reason(reason), exit_code
         return stdout, "", exit_code
     policy_action = str(daemon_response.get("policy_action") or "block")
     reason = str(daemon_response.get("reason") or daemon_response.get("permission_decision_reason") or "")
@@ -354,7 +382,11 @@ def _to_native(daemon_response: dict[str, object], event_name: str) -> tuple[str
         if not payload.get("reason"):
             payload["reason"] = reason or f"HOL Guard blocked this action ({policy_action})"
     stdout = json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
-    return stdout, reason if exit_code == 2 and HARNESS in {"kimi", "devin"} else "", exit_code
+    if exit_code == 2 and HARNESS in {"kimi", "devin"}:
+        return stdout, reason, exit_code
+    if exit_code == 2 and HARNESS == "zcode":
+        return stdout, _stderr_reason(reason), exit_code
+    return stdout, "", exit_code
 
 
 def _failure_payload(event_name: str, reason: str) -> tuple[dict[str, object], int]:

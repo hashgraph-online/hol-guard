@@ -14,7 +14,7 @@ from ..action_lattice import is_guard_action
 from ..daemon.hook_availability_policy import hook_reason_continues_session
 from ..private_file_io import read_private_regular_text
 from .bounded_cli_hook_bridge import _event_name, _json_object
-from .zcode_hooks import zcode_authority_block_reason
+from .zcode_hooks import zcode_authority_block_reason, zcode_hook_process_exit
 
 _MAX_HOOK_RESPONSE_BYTES = 1_000_000
 _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
@@ -109,12 +109,8 @@ def _should_exit_block(harness: str, event_name: str, policy_action: str) -> boo
     if canonical == "devin":
         blocking_events.add("permissionrequest")
     if canonical in {"kimi", "grok", "hermes", "pi", "omp", "zcode", "devin"} and compact in blocking_events:
-        # ZCode discards stdout JSON when a hook exits 2 and denies the call,
-        # so review-tier PreToolUse decisions must exit 0 for their
-        # ``permissionDecision: "ask"`` envelope to reach ZCode's native
-        # permission prompt. Hard denials and prompt blocks keep exit 2.
-        if canonical == "zcode" and compact == "pretooluse":
-            return policy_action in {"sandbox-required", "block"}
+        if canonical == "zcode":
+            return zcode_hook_process_exit(policy_action=policy_action, event_name=event_name) == 2
         return policy_action in {"review", "require-reapproval", "sandbox-required", "block"}
     return False
 
