@@ -58,7 +58,7 @@
         "default_enabled": true,
         "dependencies": [],
         "deprecated": false,
-        "description": "Identifies `gitsync hooks --force` (rewrites existing webhooks on the git server), `gitsync hooks --remove` (deletes them), and `gitsync install` / `gitsync uninstall` (registers or removes the persistent background service). Plain `gitsync hooks` (no flags) still mutates - it creates any missing webhooks - but never rewrites or deletes an existing one, so it is not covered here. No safe variant is offered for --help/-h on any of these: gitsync's flag parser stops at the first non-flag token and never looks at anything after it, so a flag placed after any other token is silently ignored rather than shown as help, and a declarative matcher cannot tell that case apart from one where the flag actually took effect. `uninstall` additionally never parses flags at all - it ignores every argument on both Linux and Windows and always removes the service and binary - so it was never going to have a safe variant regardless.",
+        "description": "Identifies `gitsync hooks --force`/`-force` (rewrites existing webhooks on the git server), `gitsync hooks --remove`/`-remove` (deletes them), and `gitsync install` / `gitsync uninstall` (registers or removes the persistent background service). Go's flag parser treats a single dash the same as a double dash for a named flag, so both spellings are matched. Plain `gitsync hooks` (no flags) still mutates - it creates any missing webhooks - but never rewrites or deletes an existing one, so it is not covered here. No safe variant is offered for --help/-h on any of these: gitsync's flag parser stops at the first non-flag token and never looks at anything after it, so a flag placed after any other token is silently ignored rather than shown as help, and a declarative matcher cannot tell that case apart from one where the flag actually took effect. `uninstall` additionally never parses flags at all - it ignores every argument on both Linux and Windows and always removes the service and binary - so it was never going to have a safe variant regardless.",
         "example_command": "gitsync hooks --remove",
         "family": null,
         "fixed_reason": null,
@@ -184,7 +184,7 @@
           "gitsync service-install command"
         ],
         "default_mode": "review",
-        "description": "Identifies `gitsync hooks --force` (rewrites existing webhooks on the git server), `gitsync hooks --remove` (deletes them), and `gitsync install` / `gitsync uninstall` (registers or removes the persistent background service). Plain `gitsync hooks` (no flags) still mutates - it creates any missing webhooks - but never rewrites or deletes an existing one, so it is not covered here. No safe variant is offered for --help/-h on any of these: gitsync's flag parser stops at the first non-flag token and never looks at anything after it, so a flag placed after any other token is silently ignored rather than shown as help, and a declarative matcher cannot tell that case apart from one where the flag actually took effect. `uninstall` additionally never parses flags at all - it ignores every argument on both Linux and Windows and always removes the service and binary - so it was never going to have a safe variant regardless.",
+        "description": "Identifies `gitsync hooks --force`/`-force` (rewrites existing webhooks on the git server), `gitsync hooks --remove`/`-remove` (deletes them), and `gitsync install` / `gitsync uninstall` (registers or removes the persistent background service). Go's flag parser treats a single dash the same as a double dash for a named flag, so both spellings are matched. Plain `gitsync hooks` (no flags) still mutates - it creates any missing webhooks - but never rewrites or deletes an existing one, so it is not covered here. No safe variant is offered for --help/-h on any of these: gitsync's flag parser stops at the first non-flag token and never looks at anything after it, so a flag placed after any other token is silently ignored rather than shown as help, and a declarative matcher cannot tell that case apart from one where the flag actually took effect. `uninstall` additionally never parses flags at all - it ignores every argument on both Linux and Windows and always removes the service and binary - so it was never going to have a safe variant regardless.",
         "family": null,
         "matcher": {
           "config": {},
@@ -239,7 +239,67 @@
                 ],
                 "options_with_values": [],
                 "required_flags": [
+                  "-force"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "hooks"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "gitsync",
+                  "gitsync.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--help",
+                  "-h"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-c"
+                ],
+                "options_with_values": [],
+                "required_flags": [
                   "--remove"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "hooks"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "gitsync",
+                  "gitsync.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--help",
+                  "-h"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-c"
+                ],
+                "options_with_values": [],
+                "required_flags": [
+                  "-remove"
                 ],
                 "required_flags_in_all_arguments": false,
                 "required_option_values": [],
