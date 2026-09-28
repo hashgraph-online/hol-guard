@@ -140,8 +140,8 @@ class TestZCodeHookResponses:
         reason = "HOL Guard requires the native command extension policy before this action can execute."
         enriched = zcode_authority_block_reason(reason)
         assert enriched.startswith(reason)
-        assert "hol-guard extension-controls acknowledge-degraded" in enriched
-        assert "hol-guard extension-controls recover-authority" in enriched
+        assert "hol-guard command controls acknowledge-degraded" in enriched
+        assert "hol-guard command controls recover-authority" in enriched
 
     def test_authority_block_reason_is_idempotent(self) -> None:
         once = zcode_authority_block_reason(
@@ -157,7 +157,7 @@ class TestZCodeHookResponses:
             policy_action="block",
             reason="HOL Guard requires the native command extension policy before this action can execute.",
         )
-        assert "hol-guard extension-controls acknowledge-degraded" in payload["hookSpecificOutput"][
+        assert "hol-guard command controls acknowledge-degraded" in payload["hookSpecificOutput"][
             "permissionDecisionReason"
         ]
 
