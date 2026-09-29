@@ -221,3 +221,27 @@ def test_verifier_rejects_parent_traversal_cookie_runtime(
 
     with pytest.raises(ValueError, match="archive-relative"):
         module.verify(archive, "TEAM123")
+
+
+def test_signature_info_reads_codedirectory_flags_not_segment_flags(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_verifier()
+    binary = tmp_path / "sample.so"
+    binary.write_bytes(b"\xcf\xfa\xed\xfe")
+
+    class _Result:
+        returncode = 0
+        stderr = (
+            "CodeDirectory v=20500 size=3156 flags=0x10002(adhoc,runtime) hashes=92+2 location=embedded\n"
+            "TeamIdentifier=ABCDE12345\n"
+            "Executable Segment flags=0x0\n"
+        )
+
+    monkeypatch.setattr(module.subprocess, "run", lambda *args, **kwargs: _Result())
+
+    team_id, flags = module._signature_info(binary)
+
+    assert team_id == "ABCDE12345"
+    assert flags & module._CS_RUNTIME_FLAG
