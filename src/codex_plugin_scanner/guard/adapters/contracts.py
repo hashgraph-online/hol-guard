@@ -300,6 +300,29 @@ _BASE_HARNESS_CONTRACTS: tuple[HarnessProtectionContract, ...] = (
         smoke_command="hol-guard install zcode --dry-run",
     ),
     HarnessProtectionContract(
+        harness="devin",
+        install_aliases=("devin", "devin-cli", "cognition-devin"),
+        config_paths=(
+            "~/.config/devin/config.json",
+            "~/.config/devin/mcp_config.json",
+            ".devin/hooks.v1.json",
+            ".devin/mcp_config.json",
+        ),
+        event_surfaces=("shell", "prompt", "mcp_tool", "file_read", "file_write", "tool_result"),
+        native_approval=False,
+        browser_fallback=True,
+        resume_support=False,
+        known_blind_spots=(
+            "Devin loads Claude Code hook files by default, so Guard's Claude Code hooks may also run inside "
+            "Devin sessions and attribute them to Claude Code. Inline edits applied without a tool call, "
+            "write_to_process input, and background shell output are not visible to Guard. Subagent tool "
+            "calls are covered only where Devin fires hooks for them."
+        ),
+        smoke_command="hol-guard install devin --dry-run",
+        docs_path="docs/guard/devin.md",
+        icon_label="Devin",
+    ),
+    HarnessProtectionContract(
         harness="paseo",
         install_aliases=("paseo",),
         config_paths=("~/.paseo/config.json",),
@@ -724,6 +747,55 @@ _CAPABILITY_EVENTS_BY_HARNESS: dict[str, tuple[HarnessEventCapability, ...]] = {
             "Oh My Pi must load the managed Guard extension and forward tool_result events before model delivery.",
             ("A synthetic extension canary does not prove live model-visible replacement.",),
             'src/codex_plugin_scanner/guard/adapters/pi_extension_source.py:pi.on("tool_result")',
+        ),
+    ),
+    "devin": (
+        _capability(
+            "devin",
+            "PreToolUse",
+            "native_hook",
+            "blocking",
+            ("observe", "block", "approval"),
+            "Malformed payload, hook failure, or unavailable Guard authority fails closed before tool execution.",
+            "Devin must invoke the managed PreToolUse hook and honor its block decision before running the tool.",
+            ("A source declaration does not prove that a live Devin session honored a deny response.",),
+            "src/codex_plugin_scanner/guard/adapters/devin.py:_sync_managed_hook_groups",
+        ),
+        _capability(
+            "devin",
+            "PermissionRequest",
+            "native_hook",
+            "approval",
+            ("observe", "block", "approval"),
+            "Approval hook failures fail closed and leave the request pending or denied.",
+            "Devin must preserve the managed PermissionRequest hook group in its user config.",
+            ("Native approval UX and Guard evidence still require a live host/version check.",),
+            "src/codex_plugin_scanner/guard/adapters/devin.py:_sync_managed_hook_groups",
+        ),
+        _capability(
+            "devin",
+            "UserPromptSubmit",
+            "native_hook",
+            "screening",
+            ("observe", "block", "approval"),
+            "Prompt hook failures return a bounded fail-closed response where Devin honors the hook contract.",
+            "Devin must expose UserPromptSubmit and preserve the Guard hook response schema.",
+            ("Prompt screening does not prove downstream model or host request rewriting.",),
+            "src/codex_plugin_scanner/guard/adapters/devin.py:_sync_managed_hook_groups",
+        ),
+        _capability(
+            "devin",
+            "PostToolUse",
+            "native_hook",
+            "observe",
+            ("observe",),
+            (
+                "Post-tool transport failures are surfaced as unavailable review; a completed host action "
+                "cannot be undone."
+            ),
+            "Devin must invoke the managed PostToolUse hook after the tool event.",
+            ("Post-tool observation does not block or replace model-visible output.",),
+            "src/codex_plugin_scanner/guard/adapters/devin.py:_sync_managed_hook_groups",
         ),
     ),
 }

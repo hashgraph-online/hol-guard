@@ -48,6 +48,8 @@ from scripts.ci.python_capability_cleanup_analysis import (  # noqa: E402
 from scripts.ci.python_capability_cleanup_analysis import (  # noqa: E402
     reachable as _reachable,
 )
+from scripts.ci.python_runtime_retirement import validate_retired_modules  # noqa: E402
+from scripts.ci.runtime_retirement_ledger import validate_retirement_ledger  # noqa: E402
 
 SCHEMA: Final = "hol-guard.python-capability-cleanup.v1"
 CONTRACT: Final = "docs/guard/contracts/python-capability-ownership.v1.json"
@@ -173,7 +175,7 @@ def _validate_fixture(root: Path, relative: str) -> dict[str, object]:
     return {"case_count": len(cases), "sha256": sha256((root / relative).read_bytes()).hexdigest()}
 
 
-def _verify_import_surface(root: Path, oracle_modules: list[str], candidate_module: str) -> None:
+def _verify_import_surface(root: Path, oracle_modules: list[str], candidate_modules: list[str]) -> None:
     source = root / "src"
     clean_env = os.environ.copy()
     for key in (
@@ -188,7 +190,7 @@ def _verify_import_surface(root: Path, oracle_modules: list[str], candidate_modu
         "import sys; "
         "import codex_plugin_scanner.guard.cli.commands_support; "
         "loaded = set(sys.modules); "
-        f"forbidden = {oracle_modules!r} + [{candidate_module!r}]; "
+        f"forbidden = {oracle_modules!r} + {candidate_modules!r}; "
         "assert not (loaded & set(forbidden)), sorted(loaded & set(forbidden))"
     )
     completed = subprocess.run(
@@ -254,14 +256,12 @@ def _run_inputs(
     excluded_candidates = contract.get("package_excluded_candidates")
     deletion_candidates = contract.get("deletion_candidates")
     oracle_tests = contract.get("oracle_tests")
-    if (
-        not isinstance(excluded_candidates, list)
-        or not excluded_candidates
-        or not all(isinstance(item, str) for item in excluded_candidates)
-    ):
-        raise RuntimeError("package_excluded_candidates must be a non-empty list")
-    if not isinstance(deletion_candidates, list) or not deletion_candidates:
-        raise RuntimeError("deletion candidates must be recorded")
+    if not isinstance(excluded_candidates, list) or not all(isinstance(item, str) for item in excluded_candidates):
+        raise RuntimeError("package_excluded_candidates must be a list of strings")
+    if not isinstance(deletion_candidates, list):
+        raise RuntimeError("deletion_candidates must be a list")
+    if not excluded_candidates and not contract.get("retired_modules"):
+        raise RuntimeError("cleanup requires a non-empty exclusion or retirement record")
     if not isinstance(oracle_tests, list) or not all(isinstance(item, str) for item in oracle_tests):
         raise RuntimeError("oracle_tests must be a list")
     missing_tests = [path for path in oracle_tests if not (root / path).is_file()]
@@ -354,7 +354,11 @@ def run(root: Path, wheel: Path | None = None, *, artifacts: Sequence[Path] = ()
     oracle_modules = contract.get("lazy_oracle_modules", [])
     if not isinstance(oracle_modules, list) or not all(isinstance(item, str) for item in oracle_modules):
         raise RuntimeError("lazy_oracle_modules must be a list")
-    _verify_import_surface(root, oracle_modules, candidate_modules[0])
+    retired_evidence = validate_retired_modules(root, contract, analysis=import_analysis, artifacts=checked_artifacts)
+    if contract.get("retired_modules"):
+        validate_retirement_ledger(root, contract)
+    retired_modules = [str(record["module"]) for record in retired_evidence]
+    _verify_import_surface(root, oracle_modules, candidate_modules + retired_modules)
     source_loc, reached, dynamic_imports, dynamic_unbounded = _source_analysis(root, owners, import_analysis)
     return {
         "schema": SCHEMA,
@@ -371,6 +375,7 @@ def run(root: Path, wheel: Path | None = None, *, artifacts: Sequence[Path] = ()
         "lazy_oracle_modules": oracle_modules,
         "fixture": fixture,
         "candidate_evidence": candidate_evidence,
+        "retired_evidence": retired_evidence,
         "package_exclusions": [candidate for candidate in excluded_candidates if candidate in exclusions],
         "checked_artifacts": [str(artifact) for artifact in checked_artifacts],
         "dependency_delta": contract.get("dependency_delta"),

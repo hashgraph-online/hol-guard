@@ -53,8 +53,24 @@ verify_published_wheel() {
     --deny-self-hosted-runners >/dev/null
 }
 # Release Please attests the tag. A manual stable dispatch attests main.
+# A repair dispatch attests the later main commit that checked out this tag.
 if ! verify_published_wheel "refs/tags/${CORE_TAG}"; then
-  verify_published_wheel "refs/heads/${RELEASE_BRANCH}"
+  if ! verify_published_wheel "refs/heads/${RELEASE_BRANCH}"; then
+    attested_commit=$(python3 -I scripts/release/read_publish_attestation_commit.py \
+      "$BUNDLE" "refs/heads/${RELEASE_BRANCH}")
+    [[ "$attested_commit" =~ ^[0-9a-f]{40}$ ]]
+    git -C "$TRUST_REPO" fetch --force --no-recurse-submodules origin \
+      "+${attested_commit}:refs/repair-attested"
+    git -C "$TRUST_REPO" merge-base --is-ancestor "$SOURCE_SHA" "$attested_commit"
+    gh attestation verify "$WHEEL" \
+      --repo "$GITHUB_REPOSITORY" \
+      --bundle "$BUNDLE" \
+      --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/publish.yml" \
+      --signer-digest "$attested_commit" \
+      --source-digest "$attested_commit" \
+      --source-ref "refs/heads/${RELEASE_BRANCH}" \
+      --deny-self-hosted-runners >/dev/null
+  fi
 fi
 cp "$WHEEL" "$RUNNER_TEMP/attested-macos-arm64.whl"
 test -f "$RUNNER_TEMP/attested-macos-arm64.whl"

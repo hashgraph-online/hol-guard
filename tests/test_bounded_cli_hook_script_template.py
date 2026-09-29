@@ -181,6 +181,7 @@ def test_generated_client_defaults_missing_policy_action_closed(tmp_path: Path) 
         ("copilot", "PreToolUse", None, 0),
         ("zcode", "PreToolUse", None, 2),
         ("kimi", "PreToolUse", None, 2),
+        ("devin", "PreToolUse", None, 2),
         ("grok", "PostToolUse", "allow", 0),
         ("copilot", "permissionRequestV2", None, 0),
     ],
@@ -201,7 +202,7 @@ def test_generated_client_unavailable_payload_matches_harness(
         assert payload["decision"] == decision
     if harness == "copilot" and event_name == "permissionRequestV2":
         assert payload["behavior"] == "deny"
-    if harness == "zcode":
+    if harness in {"zcode", "devin"}:
         assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
@@ -263,3 +264,111 @@ def test_generated_client_main_uses_unavailable_matrix(tmp_path: Path, monkeypat
     monkeypatch.setattr(module.sys, "stdout", stdout)
     assert module.main() == 0
     assert json.loads(stdout.getvalue())["decision"] == "allow"
+
+
+def test_generated_zcode_review_pretool_exits_zero_with_ask(tmp_path: Path) -> None:
+    module = _load_script(tmp_path, harness="zcode")
+    stdout, stderr, code = module._to_native(
+        {
+            "policy_action": "review",
+            "reason": "Approval required.",
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "ask",
+                "permissionDecisionReason": "Approval required.",
+            },
+        },
+        "PreToolUse",
+    )
+    payload = json.loads(stdout)
+
+    assert code == 0
+    assert stderr == ""
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "ask"
+
+
+def test_generated_zcode_block_pretool_exits_two_with_stderr_reason(tmp_path: Path) -> None:
+    module = _load_script(tmp_path, harness="zcode")
+    stdout, stderr, code = module._to_native(
+        {
+            "policy_action": "block",
+            "reason": "Blocked by policy.",
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "deny",
+                "permissionDecisionReason": "Blocked by policy.",
+            },
+        },
+        "PreToolUse",
+    )
+    payload = json.loads(stdout)
+
+    assert code == 2
+    assert stderr == "Blocked by policy."
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_generated_zcode_authority_block_stderr_appends_remediation(tmp_path: Path) -> None:
+    module = _load_script(tmp_path, harness="zcode")
+    _stdout, stderr, code = module._to_native(
+        {
+            "policy_action": "block",
+            "reason": "HOL Guard requires the native command extension policy before this action can execute.",
+            "hookSpecificOutput": {"hookEventName": "PreToolUse"},
+        },
+        "PreToolUse",
+    )
+
+    assert code == 2
+    assert "hol-guard command controls acknowledge-degraded" in stderr
+
+
+def test_generated_zcode_sandbox_required_denies_with_exit_two(tmp_path: Path) -> None:
+    module = _load_script(tmp_path, harness="zcode")
+    stdout, stderr, code = module._to_native(
+        {"policy_action": "sandbox-required", "reason": "Sandbox required."}, "PreToolUse"
+    )
+    payload = json.loads(stdout)
+
+    assert code == 2
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert stderr == "Sandbox required."
+
+
+def test_generated_zcode_block_without_reason_writes_stderr(tmp_path: Path) -> None:
+    module = _load_script(tmp_path, harness="zcode")
+    _stdout, stderr, code = module._to_native({"policy_action": "block"}, "PreToolUse")
+
+    assert code == 2
+    assert stderr.startswith("HOL Guard blocked this action")
+
+
+def test_generated_zcode_prompt_block_keeps_exit_two(tmp_path: Path) -> None:
+    module = _load_script(tmp_path, harness="zcode")
+    _stdout, _stderr, code = module._to_native(
+        {"policy_action": "review", "reason": "Prompt review."}, "UserPromptSubmit"
+    )
+    assert code == 2
+
+
+def test_generated_client_devin_permission_request_review_blocks(tmp_path: Path) -> None:
+    module = _load_script(tmp_path, harness="devin")
+    stdout, _stderr, code = module._to_native(
+        {"policy_action": "review", "reason": "Needs review."},
+        "PermissionRequest",
+    )
+    payload = json.loads(stdout)
+    assert code == 2
+    assert payload["decision"] == "block"
+    assert payload["reason"]
+
+
+def test_generated_client_devin_pretooluse_allow_has_no_decision(tmp_path: Path) -> None:
+    module = _load_script(tmp_path, harness="devin")
+    stdout, _stderr, code = module._to_native(
+        {"policy_action": "allow", "reason": "Allowed."},
+        "PreToolUse",
+    )
+    payload = json.loads(stdout)
+    assert code == 0
+    assert "decision" not in payload

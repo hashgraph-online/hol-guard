@@ -117,6 +117,14 @@ Current Guard support in this repo:
   - installs Guard-managed `PreToolUse` and `UserPromptSubmit` hooks in the `hooks` section of `~/.zcode/cli/config.json` without touching user `mcp`, `plugins`, or pre-existing hooks
   - blocks by returning exit code `2` and ZCode-native stdout JSON `hookSpecificOutput.permissionDecision: "deny"` with approval-center copy in stderr
   - fails open if a hook crashes or times out, so ZCode keeps working when Guard is unreachable
+- `devin`
+  - detects `~/.config/devin/config.json` (`%APPDATA%\devin\config.json` on Windows), `~/.config/devin/mcp_config.json`, project `.devin/config.json`, `.devin/config.local.json`, `.devin/hooks.v1.json`, `.devin/mcp_config.json`, and `.devin/mcp_config.local.json`, plus legacy `mcpServers` inside `config.json` files
+  - detects skills in `.devin/skills/` and `.agents/skills/` at both user and project scope
+  - detects Guard-managed Claude Code hooks in `.claude` settings files and warns that Devin also loads them by default (unless `read_config_from.claude` is `false`)
+  - installs Guard-managed `PreToolUse`, `PermissionRequest`, `UserPromptSubmit`, and `PostToolUse` hooks in the `hooks` section of `~/.config/devin/config.json` without touching other config keys
+  - refuses to install when the user config is JSONC (comments or trailing commas) rather than rewriting it lossy
+  - blocks by returning exit code `2` and Devin-native stdout JSON `{"decision":"block","reason":"..."}` with a `hookSpecificOutput.permissionDecision: "deny"` envelope; Guard never emits Devin's `decision: "approve"` auto-approve response
+  - fails closed (exit `2` deny) when hook input is malformed or the Guard authority denies for `PreToolUse`, `PermissionRequest`, and `UserPromptSubmit`; a timed-out or crashed review continues the session with an allow envelope so a wedged Guard cannot stall Devin, and `PostToolUse` is observation-only
 
 Gemini, Antigravity, and shared Codex/AIBOM skill discovery bind approval and
 inventory identity to the complete accepted skill directory rather than only
@@ -189,6 +197,7 @@ Generated from `src/codex_plugin_scanner/guard/adapters/contracts.py`.
 | `pi` | `pi`, `pi-agent`, `pi-coding-agent` | ✅ | ✅ | ✅ | shell, prompt, mcp_tool, file_read, tool_result |
 | `omp` | `omp`, `oh-my-pi` | ✅ | ✅ | ✅ | shell, prompt, mcp_tool, file_read, tool_result |
 | `zcode` | `zcode`, `zai`, `z-code`, `zai-zcode` | ❌ | ✅ | ❌ | shell, prompt, mcp_tool, file_read |
+| `devin` | `devin`, `devin-cli`, `cognition-devin` | ❌ | ✅ | ❌ | shell, prompt, mcp_tool, file_read, file_write, tool_result |
 | `paseo` | `paseo` | ❌ | ❌ | ❌ | — |
 
 ## Versioned Event Capability Report
