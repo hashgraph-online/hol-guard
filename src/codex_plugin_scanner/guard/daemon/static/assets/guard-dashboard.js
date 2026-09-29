@@ -15459,11 +15459,11 @@ function computePeriodComparison(receipts, days, now2) {
 function nonNegativeNumber(value) {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : 0;
 }
-function isRecord$6(value) {
+function isRecord$7(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function normalizeOperatorHealth(raw) {
-  if (!isRecord$6(raw)) {
+  if (!isRecord$7(raw)) {
     return void 0;
   }
   const state = raw["state"];
@@ -15512,6 +15512,54 @@ function standardGuardDaemonOrigin(rawUrl, firstPort, portCount) {
   const port = Number(new URL(origin).port);
   return port >= firstPort && port < firstPort + portCount ? origin : null;
 }
+const PROTECTION_REASON_COPY = {
+  // Runtime registration and heartbeat.
+  daemon_registration_missing: "Guard is re-registering the running local runtime. This clears on the next check.",
+  daemon_registration_unavailable: "Guard could not write the local runtime registration.",
+  daemon_registration_foreign: "A different Guard session owns the runtime registration, so this runtime will not overwrite it.",
+  daemon_runtime_unavailable: "The local Guard runtime is not answering. Restart Guard to restore local protection.",
+  daemon_heartbeat_stale: "The local Guard runtime stopped reporting heartbeats. Restart Guard to restore local protection.",
+  daemon_heartbeat_unavailable: "Guard has no recorded heartbeat for the local runtime yet.",
+  daemon_heartbeat_invalid: "The recorded runtime heartbeat is unreadable.",
+  daemon_heartbeat_future: "The recorded runtime heartbeat is dated in the future, so Guard cannot trust it yet.",
+  daemon_healthy: "The local Guard runtime is healthy.",
+  daemon_runtime_drift: "The running runtime does not match the registered runtime. Restart Guard to converge.",
+  daemon_containment_health_invalid: "The runtime reported unreadable containment health. Guard stays fail-closed.",
+  // Containment compatibility.
+  containment_health_invalid: "Guard could not read containment health from the local runtime.",
+  containment_health_unavailable: "Guard could not obtain containment health from the local runtime.",
+  containment_probe_failed: "The containment self-probe did not confirm enforcement. Guard stays fail-closed.",
+  containment_probe_stale: "The containment self-probe proof is stale and needs to be refreshed.",
+  containment_probe_future: "The containment self-probe proof is dated in the future, so Guard cannot trust it yet.",
+  containment_schema_mismatch: "The containment schema version does not match this Guard build.",
+  policy_version_mismatch: "The containment policy version does not match this Guard build.",
+  policy_digest_mismatch: "The containment policy contents do not match this Guard build.",
+  effect_contract_mismatch: "The effect contract version does not match this Guard build.",
+  decision_plane_mismatch: "The decision plane schema version does not match this Guard build.",
+  unsupported_platform: "Containment controls are not available on this platform.",
+  // Command evidence.
+  native_evaluation_unavailable: "Guard could not run the native policy engine to prove command evidence.",
+  decision_stream_degraded: "Guard could not restore command evidence persistence.",
+  decision_stream_health_unavailable: "Guard could not read the command evidence health store.",
+  // App hooks.
+  no_managed_harness: "No managed AI app is connected, so there are no hooks to verify.",
+  hook_verification_failed: "Guard could not verify the managed app hooks.",
+  one_or_more_hooks_inactive: "One or more managed app hooks are inactive.",
+  hooks_inactive: "One or more managed app hooks are inactive.",
+  hook_attestation_unavailable: "Guard could not obtain hook attestation proof.",
+  hook_repair_failed: "Guard tried to repair managed app hooks and some did not recover.",
+  hook_repair_unknown: "Guard could not confirm whether managed app hook repair finished.",
+  // Integrity.
+  rule_pack_runtime_proof_unavailable: "Guard has no runtime proof for the active local rule packs yet.",
+  rule_packs_disabled: "Local rule packs are disabled until their integrity is proven.",
+  tamper_checks_failed: "Managed Guard files or hooks did not pass integrity checks.",
+  tamper_proof_unavailable: "Guard has no integrity proof for its managed files yet.",
+  local_integrity_unproven: "Guard could not establish a local integrity proof.",
+  proof_unavailable: "Guard has no proof for this check yet."
+};
+function protectionReasonText(reasonCode) {
+  return PROTECTION_REASON_COPY[reasonCode] ?? null;
+}
 const PROTECTION_CHECK_IDS = [
   "harness_hooks",
   "daemon",
@@ -15525,7 +15573,7 @@ const PROTECTION_CHECK_IDS = [
 ];
 const CORE_CHECK_IDS = PROTECTION_CHECK_IDS.filter((checkId) => checkId !== "decision_stream");
 const STABLE_ID$1 = /^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/;
-function isRecord$5(value) {
+function isRecord$6(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function copyForState(state) {
@@ -15558,7 +15606,7 @@ function deriveState(checks) {
   return byId.get("decision_stream")?.status === "pass" ? "protected" : "partial";
 }
 function normalizeCheck(value) {
-  if (!isRecord$5(value)) return null;
+  if (!isRecord$6(value)) return null;
   const checkId = value.check_id;
   const status = value.status;
   const reasonCode = value.reason_code;
@@ -15649,7 +15697,7 @@ function useProtectionPresentationState(health) {
   });
 }
 function normalizeApp(value) {
-  if (!isRecord$5(value)) return null;
+  if (!isRecord$6(value)) return null;
   const harness = value.harness;
   if (typeof harness !== "string" || harness.length > 64 || !STABLE_ID$1.test(harness)) return null;
   const checks = normalizeChecks(value.checks);
@@ -15657,7 +15705,7 @@ function normalizeApp(value) {
   return { harness, ...healthFromChecks(checks) };
 }
 function normalizeProtectionHealth(value) {
-  if (!isRecord$5(value) || value.schema_version !== "guard.protection-health.v1") {
+  if (!isRecord$6(value) || value.schema_version !== "guard.protection-health.v1") {
     return unavailableProtectionHealth();
   }
   const checks = normalizeChecks(value.checks);
@@ -15727,15 +15775,23 @@ function remainingProtectionRepairMessage(health, displayName) {
   const failedHookApps = remainingParts.failedHookHarnesses.map(displayName);
   const remainingMessages = [];
   const unsupportedCount = health.checks.filter(isUnsupportedPlatformCheck).length;
+  const daemonCheck = health.checks.find((check) => check.check_id === "daemon");
+  const decisionStreamCheck = health.checks.find((check) => check.check_id === "decision_stream");
   if (remainingParts.needsConnectedApp) {
     remainingMessages.push("Connect an AI app to start local protection.");
+  }
+  if (daemonCheck?.status !== "pass" && daemonCheck?.reason_code === "daemon_registration_missing") {
+    remainingMessages.push("The local runtime is re-registering; check again in a moment.");
   }
   if (failedHookApps.length > 0) {
     remainingMessages.push(
       `${failedHookApps.join(", ")} still ${failedHookApps.length === 1 ? "needs" : "need"} hook repair.`
     );
   }
-  if (remainingParts.evidenceFailed) remainingMessages.push("Command evidence still needs repair.");
+  if (remainingParts.evidenceFailed) {
+    const reasonText = decisionStreamCheck?.reason_code ? protectionReasonText(decisionStreamCheck.reason_code) : null;
+    remainingMessages.push(reasonText ?? "Command evidence still needs repair.");
+  }
   if (unsupportedCount > 0) {
     remainingMessages.push(
       "Containment remains unavailable on this platform, so full protection cannot be reached here."
@@ -15746,6 +15802,20 @@ function remainingProtectionRepairMessage(health, displayName) {
     failedHookHarnesses: remainingParts.failedHookHarnesses,
     message: `${remaining} Open the repair details below for the exact check.`
   };
+}
+function isRecord$5(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+const REASON_CODE_ID = /^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/;
+function checkReasonMapValue(value) {
+  if (!isRecord$5(value)) return {};
+  const reasons = {};
+  for (const [checkId, reason] of Object.entries(value)) {
+    if (!REASON_CODE_ID.test(checkId) || checkId.length > 96) continue;
+    if (typeof reason !== "string" || reason.length > 96 || !REASON_CODE_ID.test(reason)) continue;
+    reasons[checkId] = reason;
+  }
+  return reasons;
 }
 function isRecord$4(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -18288,6 +18358,7 @@ class GuardProtectionRepairError extends Error {
   failedCheckIds;
   failedHarnesses;
   pendingCheckIds;
+  checkReasons;
   constructor(status, payload) {
     const message = payload === null ? null : stringValue$1(payload.message);
     super(message ?? `Protection repair failed with ${status}`);
@@ -18298,6 +18369,7 @@ class GuardProtectionRepairError extends Error {
     this.failedCheckIds = stringArrayValue(payload?.failed_check_ids);
     this.failedHarnesses = stringArrayValue(payload?.failed_harnesses);
     this.pendingCheckIds = stringArrayValue(payload?.pending_check_ids);
+    this.checkReasons = checkReasonMapValue(payload?.check_reasons);
   }
 }
 function stringArrayValue(value) {
@@ -31763,19 +31835,51 @@ function clearLabelForScope(scope) {
 }
 class ProtectionRepairFlowError extends Error {
   failedHarnesses;
-  constructor(message, failedHarnesses) {
+  signature;
+  checkReasons;
+  constructor(message, failedHarnesses, signature = "", checkReasons = {}) {
     super(message);
     this.name = "ProtectionRepairFlowError";
     this.failedHarnesses = failedHarnesses;
+    this.signature = signature;
+    this.checkReasons = checkReasons;
   }
+}
+function protectionGapSignature(checks) {
+  return repairableProtectionGaps(checks).map((check) => `${check.check_id}:${check.status}:${check.reason_code}`).sort().join("|");
+}
+const RECHECK_UNAVAILABLE_SIGNATURE = "recheck_unavailable";
+function nextProtectionRepairOutcome(tracker, signature, healthSignature = signature) {
+  return tracker?.signature === signature ? { signature, count: tracker.count + 1, healthSignature } : { signature, count: 1, healthSignature };
+}
+function repairOutcomeIsStalled(tracker, currentSignature) {
+  return tracker !== null && tracker.count >= 2 && tracker.healthSignature === currentSignature;
+}
+function resetRepairOutcomeTracker(tracker, currentSignature) {
+  return tracker !== null && tracker.healthSignature !== currentSignature ? null : tracker;
+}
+function gapReasons(checks) {
+  const reasons = {};
+  for (const check of repairableProtectionGaps(checks)) {
+    reasons[check.check_id] = check.reason_code;
+  }
+  return reasons;
 }
 function activeFailedHarnesses(failedHarnesses, repairHarnesses) {
   const repairable = new Set(repairHarnesses);
   return Array.from(new Set(failedHarnesses)).filter((harness) => repairable.has(harness));
 }
+function protectionRepairUnfinishedDetail(checkReasons) {
+  const details = Object.entries(checkReasons).sort(([left], [right]) => left.localeCompare(right)).map(([, reason]) => protectionReasonText(reason) ?? `Reason code: ${reason}`);
+  return `Guard could not finish: ${details.join(" ")}`;
+}
+function protectionRepairFinishMessage(checkReasons) {
+  return `Protection checks pass, but ${protectionRepairUnfinishedDetail(checkReasons)}`;
+}
 async function runAutomaticProtectionRepair(input) {
   const failures = [];
   const failedHarnesses = /* @__PURE__ */ new Set();
+  let repairCheckReasons = {};
   try {
     await repairApprovalCenter();
   } catch {
@@ -31796,6 +31900,7 @@ async function runAutomaticProtectionRepair(input) {
   } catch (error) {
     if (error instanceof GuardProtectionRepairError) {
       for (const harness of error.failedHarnesses) failedHarnesses.add(harness);
+      repairCheckReasons = error.checkReasons;
     }
     failures.push(error instanceof Error ? error.message : "integrity protection");
   }
@@ -31804,24 +31909,35 @@ async function runAutomaticProtectionRepair(input) {
     const detail = failures.length > 0 ? ` Repair reported: ${failures.join(", ")}.` : "";
     throw new ProtectionRepairFlowError(
       `Guard could not recheck protection. Check again in a moment.${detail}`,
-      []
+      [],
+      RECHECK_UNAVAILABLE_SIGNATURE,
+      repairCheckReasons
     );
   }
   const remainingHealth = protectionHealthFor(refreshedSnapshot);
   if (remainingHealth.state === "protected") {
+    if (Object.keys(repairCheckReasons).length > 0) {
+      return protectionRepairFinishMessage(repairCheckReasons);
+    }
     return "Automatic repairs completed. Guard rechecked every protection layer below.";
   }
   if (!hasRepairableProtectionGap(remainingHealth.checks)) {
     const hasUnsupportedGaps = remainingHealth.checks.some(isUnsupportedPlatformCheck);
     if (hasUnsupportedGaps) {
-      return "Supported protection repairs completed. Containment remains unavailable on this platform; Guard remains fail-closed.";
+      const base = "Supported protection repairs completed. Containment remains unavailable on this platform; Guard remains fail-closed.";
+      return Object.keys(repairCheckReasons).length > 0 ? `${base} ${protectionRepairUnfinishedDetail(repairCheckReasons)}` : base;
+    }
+    if (Object.keys(repairCheckReasons).length > 0) {
+      return protectionRepairFinishMessage(repairCheckReasons);
     }
     return "Automatic repairs completed. Guard rechecked every repairable protection layer below.";
   }
   const remaining = remainingProtectionRepairMessage(remainingHealth, input.displayName);
   throw new ProtectionRepairFlowError(
     remaining.message,
-    [...failedHarnesses].filter((harness) => remaining.failedHookHarnesses.includes(harness))
+    [...failedHarnesses].filter((harness) => remaining.failedHookHarnesses.includes(harness)),
+    protectionGapSignature(remainingHealth.checks),
+    { ...repairCheckReasons, ...gapReasons(remainingHealth.checks) }
   );
 }
 function useRouteFocus(view, mainSelector = "main#main-content") {
@@ -32683,7 +32799,7 @@ clientExports.createRoot(container).render(
   /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.StrictMode, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(App, {}) })
 );
 export {
-  safeCloudConnectUrl as $,
+  protectionGapSignature as $,
   ActionButton as A,
   HiMiniSparkles as B,
   HiMiniXMark as C,
@@ -32704,173 +32820,179 @@ export {
   Badge as R,
   SectionLabel as S,
   HiMiniMinusCircle as T,
-  hasRepairableProtectionGap as U,
-  isUnsupportedPlatformCheck as V,
+  isUnsupportedPlatformCheck as U,
+  RECHECK_UNAVAILABLE_SIGNATURE as V,
   WatchProtectionBanner as W,
-  remainingProtectionRepairParts as X,
-  ProtectionRepairFlowError as Y,
-  waitForAuthorizeUrl as Z,
-  startOrRecoverCloudConnect as _,
+  protectionReasonText as X,
+  HiMiniExclamationCircle as Y,
+  hasRepairableProtectionGap as Z,
+  remainingProtectionRepairParts as _,
   EvidenceActivityHeatmapMini as a,
-  HiMiniArrowLeft as a$,
-  openPackageFirewallAuthorizeFallback as a0,
-  waitForCloudConnection as a1,
-  activeFailedHarnesses as a2,
-  HiMiniWrenchScrewdriver as a3,
-  HiMiniExclamationCircle as a4,
-  ProofStrip as a5,
-  HiMiniEye as a6,
-  HiMiniXCircle as a7,
-  HiMiniClipboardDocumentCheck as a8,
-  HiMiniClipboard as a9,
-  verifyApprovalGateTotp as aA,
-  clearEvidence as aB,
-  exportDiagnostics as aC,
-  repairApprovalCenter as aD,
-  exportSettings as aE,
-  setupDesktopNotifications as aF,
-  WorkspacePageHeader as aG,
-  HiMiniMagnifyingGlass as aH,
-  humanizeList as aI,
-  isProtectionPosture as aJ,
-  deriveProtectionPosture as aK,
-  Tag as aL,
-  approvalGateCooldownLabel as aM,
-  fetchLocalCliApi as aN,
-  fetchExtensionControlApi as aO,
-  HiMiniNoSymbol as aP,
-  useResolvedApprovalGate as aQ,
-  HiMiniInformationCircle as aR,
-  GenIcon as aS,
-  HiMiniGlobeAlt as aT,
-  HiMiniCube as aU,
-  HiMiniServerStack as aV,
-  HiMiniFolder as aW,
-  FaWindows as aX,
-  FaAws as aY,
-  approvalProofRecentlySatisfied as aZ,
-  isBulkApproveGateReady as a_,
-  PROTECTION_POSTURE_COPY as aa,
-  POSTURE_OUTCOME_COLUMNS as ab,
-  getDefaultExportFromCjs as ac,
-  React as ad,
-  HiMiniKey as ae,
-  HiMiniLockClosed as af,
-  HiMiniBellAlert as ag,
-  HiMiniAdjustmentsHorizontal as ah,
-  HiMiniCircleStack as ai,
-  TabBar as aj,
-  fetchCloudReviewSettings as ak,
-  HiMiniArrowPath as al,
-  ApprovalProofFieldInputs as am,
-  isApprovalProofSubmitDisabled as an,
-  buildApprovalProofCredentials as ao,
-  changeCloudReviewSettings as ap,
-  resolveProtectionLevelCopy as aq,
-  fetchSettings as ar,
-  fetchRuntimeSnapshot as as,
-  clearPolicy as at,
-  clearReviewQueue as au,
-  revokeApprovalGateCooldown as av,
-  disableApprovalGateTotp as aw,
-  importSettings as ax,
-  resetSettings as ay,
-  enrollApprovalGateTotp as az,
+  HiMiniServerStack as a$,
+  repairOutcomeIsStalled as a0,
+  ProtectionRepairFlowError as a1,
+  nextProtectionRepairOutcome as a2,
+  waitForAuthorizeUrl as a3,
+  startOrRecoverCloudConnect as a4,
+  safeCloudConnectUrl as a5,
+  openPackageFirewallAuthorizeFallback as a6,
+  waitForCloudConnection as a7,
+  activeFailedHarnesses as a8,
+  resetRepairOutcomeTracker as a9,
+  clearReviewQueue as aA,
+  revokeApprovalGateCooldown as aB,
+  disableApprovalGateTotp as aC,
+  importSettings as aD,
+  resetSettings as aE,
+  enrollApprovalGateTotp as aF,
+  verifyApprovalGateTotp as aG,
+  clearEvidence as aH,
+  exportDiagnostics as aI,
+  repairApprovalCenter as aJ,
+  exportSettings as aK,
+  setupDesktopNotifications as aL,
+  WorkspacePageHeader as aM,
+  HiMiniMagnifyingGlass as aN,
+  humanizeList as aO,
+  isProtectionPosture as aP,
+  deriveProtectionPosture as aQ,
+  Tag as aR,
+  approvalGateCooldownLabel as aS,
+  fetchLocalCliApi as aT,
+  fetchExtensionControlApi as aU,
+  HiMiniNoSymbol as aV,
+  useResolvedApprovalGate as aW,
+  HiMiniInformationCircle as aX,
+  GenIcon as aY,
+  HiMiniGlobeAlt as aZ,
+  HiMiniCube as a_,
+  HiMiniWrenchScrewdriver as aa,
+  ProofStrip as ab,
+  HiMiniEye as ac,
+  HiMiniXCircle as ad,
+  HiMiniClipboardDocumentCheck as ae,
+  HiMiniClipboard as af,
+  PROTECTION_POSTURE_COPY as ag,
+  POSTURE_OUTCOME_COLUMNS as ah,
+  getDefaultExportFromCjs as ai,
+  React as aj,
+  HiMiniKey as ak,
+  HiMiniLockClosed as al,
+  HiMiniBellAlert as am,
+  HiMiniAdjustmentsHorizontal as an,
+  HiMiniCircleStack as ao,
+  TabBar as ap,
+  fetchCloudReviewSettings as aq,
+  HiMiniArrowPath as ar,
+  ApprovalProofFieldInputs as as,
+  isApprovalProofSubmitDisabled as at,
+  buildApprovalProofCredentials as au,
+  changeCloudReviewSettings as av,
+  resolveProtectionLevelCopy as aw,
+  fetchSettings as ax,
+  fetchRuntimeSnapshot as ay,
+  clearPolicy as az,
   HiMiniCommandLine as b,
-  HiMiniUsers as b$,
-  HiMiniPlus as b0,
-  guardAwareHref as b1,
-  HiMiniCheck as b2,
-  startGuardCloudConnect as b3,
-  HiMiniArrowTopRightOnSquare as b4,
-  GuardModalLayer as b5,
-  runHarnessAction as b6,
-  GuardHarnessActionError as b7,
-  HiMiniRocketLaunch as b8,
-  HiMiniTrash as b9,
-  HiMiniBeaker as bA,
-  ActivationSummary as bB,
-  ActionResultPanel as bC,
-  HiMiniBugAnt as bD,
-  ConnectFlowCard as bE,
-  ApprovalProofInline as bF,
-  HiMiniCloudArrowDown as bG,
-  fetchPackageFirewallStatus as bH,
-  runPackageAudit as bI,
-  resolveSupplyChainAuditFailure as bJ,
-  runPackageSync as bK,
-  startPackageFirewallConnect as bL,
-  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as bM,
-  repairSupplyChainProtection as bN,
-  runPackageFirewallAction as bO,
-  parseInterceptProofSnapshot as bP,
-  activatePackageFirewallRuntime as bQ,
-  EntitlementNotice as bR,
-  chooseSupplyChainAuditFolder as bS,
-  fetchReceipts as bT,
-  lazyWorkspace as bU,
-  __vitePreload as bV,
-  scopeLabel as bW,
-  HiMiniDocumentText as bX,
-  HiMiniCloudArrowUp as bY,
-  HiMiniCodeBracket as bZ,
-  HiMiniClipboardDocument as b_,
-  isGuardDemoMode as ba,
-  fetchGuardApi as bb,
-  formatHarnessCommand as bc,
-  fetchApprovalPage as bd,
-  fetchPolicy as be,
-  HiMiniHome as bf,
-  appSetupTarget as bg,
-  guardActionPresentation as bh,
-  DEFAULT_FILTER_STATE as bi,
-  filterEvidence as bj,
-  sortEvidence as bk,
-  computeMetrics as bl,
-  CommandActivityWorkspace as bm,
-  EvidenceFilterBar as bn,
-  EvidenceInsightStrip as bo,
-  EvidenceActionList as bp,
-  EvidenceActionDetail as bq,
-  policyIdentityKey as br,
-  clearLabelForScope as bs,
-  HiMiniChartBar as bt,
-  isSupplyChainAuditIncomplete as bu,
-  isSupplyChainAuditEvidence as bv,
-  readString$1 as bw,
-  isRecord$3 as bx,
-  HiMiniClock as by,
-  IconActionButton as bz,
+  __vitePreload as b$,
+  HiMiniFolder as b0,
+  FaWindows as b1,
+  FaAws as b2,
+  approvalProofRecentlySatisfied as b3,
+  isBulkApproveGateReady as b4,
+  HiMiniArrowLeft as b5,
+  HiMiniPlus as b6,
+  guardAwareHref as b7,
+  HiMiniCheck as b8,
+  startGuardCloudConnect as b9,
+  isSupplyChainAuditIncomplete as bA,
+  isSupplyChainAuditEvidence as bB,
+  readString$1 as bC,
+  isRecord$3 as bD,
+  HiMiniClock as bE,
+  IconActionButton as bF,
+  HiMiniBeaker as bG,
+  ActivationSummary as bH,
+  ActionResultPanel as bI,
+  HiMiniBugAnt as bJ,
+  ConnectFlowCard as bK,
+  ApprovalProofInline as bL,
+  HiMiniCloudArrowDown as bM,
+  fetchPackageFirewallStatus as bN,
+  runPackageAudit as bO,
+  resolveSupplyChainAuditFailure as bP,
+  runPackageSync as bQ,
+  startPackageFirewallConnect as bR,
+  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as bS,
+  repairSupplyChainProtection as bT,
+  runPackageFirewallAction as bU,
+  parseInterceptProofSnapshot as bV,
+  activatePackageFirewallRuntime as bW,
+  EntitlementNotice as bX,
+  chooseSupplyChainAuditFolder as bY,
+  fetchReceipts as bZ,
+  lazyWorkspace as b_,
+  HiMiniArrowTopRightOnSquare as ba,
+  GuardModalLayer as bb,
+  runHarnessAction as bc,
+  GuardHarnessActionError as bd,
+  HiMiniRocketLaunch as be,
+  HiMiniTrash as bf,
+  isGuardDemoMode as bg,
+  fetchGuardApi as bh,
+  formatHarnessCommand as bi,
+  fetchApprovalPage as bj,
+  fetchPolicy as bk,
+  HiMiniHome as bl,
+  appSetupTarget as bm,
+  guardActionPresentation as bn,
+  DEFAULT_FILTER_STATE as bo,
+  filterEvidence as bp,
+  sortEvidence as bq,
+  computeMetrics as br,
+  CommandActivityWorkspace as bs,
+  EvidenceFilterBar as bt,
+  EvidenceInsightStrip as bu,
+  EvidenceActionList as bv,
+  EvidenceActionDetail as bw,
+  policyIdentityKey as bx,
+  clearLabelForScope as by,
+  HiMiniChartBar as bz,
   HiMiniChevronRight as c,
-  HiMiniIdentification as c0,
-  policyActionLabel as c1,
-  createCloudExceptionRequest as c2,
-  HiMiniArrowRight as c3,
-  HiMiniPuzzlePiece as c4,
-  fetchCloudExceptions as c5,
-  fetchCloudExceptionRequests as c6,
-  downloadBlob as c7,
-  PolicyStatField as c8,
-  PaginationControls as c9,
-  HiMiniArrowDownTray as ca,
-  HiMiniQueueList as cb,
-  Surface as cc,
-  HiMiniCheckBadge as cd,
-  fetchMcpPolicyRequest as ce,
-  resolveMcpPolicyRequest as cf,
-  HiMiniDocumentPlus as cg,
-  HiMiniDocumentMagnifyingGlass as ch,
-  fetchSupplyChainBundle as ci,
-  isSupplyChainScannerEvidence as cj,
-  isBlockedGuardAction as ck,
-  HiMiniShieldExclamation as cl,
-  HiMiniComputerDesktop as cm,
-  HiMiniChevronLeft as cn,
-  HiMiniFunnel as co,
-  HiMiniArrowDown as cp,
-  HiMiniArrowUp as cq,
-  runAuditRemediation as cr,
-  HiMiniSignal as cs,
+  scopeLabel as c0,
+  HiMiniDocumentText as c1,
+  HiMiniCloudArrowUp as c2,
+  HiMiniCodeBracket as c3,
+  HiMiniClipboardDocument as c4,
+  HiMiniUsers as c5,
+  HiMiniIdentification as c6,
+  policyActionLabel as c7,
+  createCloudExceptionRequest as c8,
+  HiMiniArrowRight as c9,
+  HiMiniPuzzlePiece as ca,
+  fetchCloudExceptions as cb,
+  fetchCloudExceptionRequests as cc,
+  downloadBlob as cd,
+  PolicyStatField as ce,
+  PaginationControls as cf,
+  HiMiniArrowDownTray as cg,
+  HiMiniQueueList as ch,
+  Surface as ci,
+  HiMiniCheckBadge as cj,
+  fetchMcpPolicyRequest as ck,
+  resolveMcpPolicyRequest as cl,
+  HiMiniDocumentPlus as cm,
+  HiMiniDocumentMagnifyingGlass as cn,
+  fetchSupplyChainBundle as co,
+  isSupplyChainScannerEvidence as cp,
+  isBlockedGuardAction as cq,
+  HiMiniShieldExclamation as cr,
+  HiMiniComputerDesktop as cs,
+  HiMiniChevronLeft as ct,
+  HiMiniFunnel as cu,
+  HiMiniArrowDown as cv,
+  HiMiniArrowUp as cw,
+  runAuditRemediation as cx,
+  HiMiniSignal as cy,
   createCommandActivityClient as d,
   updateSettings as e,
   fetchCommandActivityApi as f,

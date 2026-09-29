@@ -11,6 +11,7 @@ import { computeTrendBuckets } from "./evidence/evidence-metrics";
 import { normalizeOperatorHealth } from "./operator-health";
 import { canonicalizeGuardDaemonOrigin, standardGuardDaemonOrigin } from "./guard-daemon-origin";
 import { normalizeProtectionHealth, protectionHeadlineFor } from "./protection-health";
+import { checkReasonMapValue } from "./protection-repair-reasons";
 import { normalizeSupplyChainRepairResult } from "./supply-chain-repair-result";
 export { normalizeOperatorHealth } from "./operator-health";
 import {
@@ -3247,6 +3248,7 @@ export class GuardProtectionRepairError extends Error {
   readonly failedCheckIds: string[];
   readonly failedHarnesses: string[];
   readonly pendingCheckIds: string[];
+  readonly checkReasons: Record<string, string>;
 
   constructor(status: number, payload: Record<string, unknown> | null) {
     const message = payload === null ? null : stringValue(payload.message);
@@ -3258,6 +3260,7 @@ export class GuardProtectionRepairError extends Error {
     this.failedCheckIds = stringArrayValue(payload?.failed_check_ids);
     this.failedHarnesses = stringArrayValue(payload?.failed_harnesses);
     this.pendingCheckIds = stringArrayValue(payload?.pending_check_ids);
+    this.checkReasons = checkReasonMapValue(payload?.check_reasons);
   }
 }
 
