@@ -285,6 +285,10 @@ _CODEX_TRUSTED_PS_PATHS = ("/bin/ps", "/usr/bin/ps")
 _CODEX_DISCOVERY_PROTOCOL_VERSION = 1
 
 
+class _CodexHookRequestSentError(Exception):
+    """The daemon hook request was sent but no usable response was received."""
+
+
 def _codex_bridge_request_config() -> dict[str, object] | None:
     """Parse the managed bridge argv contract without importing Guard."""
 
@@ -500,7 +504,7 @@ def _codex_daemon_hook_request(
     data: str,
     event_name: str,
     deadline: float,
-) -> dict[str, object] | None:
+) -> tuple[dict[str, object], str] | None:
     """Run one authenticated hook round-trip against the resident daemon."""
 
     state, discovery_key, token = identity
@@ -510,6 +514,7 @@ def _codex_daemon_hook_request(
         return None
     nonce = secrets.token_hex(32)
     connection = http.client.HTTPConnection(host, port, timeout=max(0.5, deadline - time.monotonic()))
+    hook_request_started = False
     try:
         connection.request(
             "POST",
@@ -560,6 +565,7 @@ def _codex_daemon_hook_request(
         if connection.sock is not None:
             connection.sock.settimeout(remaining)
         hinted_data = _codex_hint_hook_data(data, event_name=event_name, deadline=deadline)
+        hook_request_started = True
         connection.request(
             "POST",
             f"/v1/hooks/codex?{query}",
@@ -575,14 +581,25 @@ def _codex_daemon_hook_request(
         hook_response = connection.getresponse()
         body = hook_response.read(_CODEX_MAX_DAEMON_RESPONSE_BYTES + 1)
         if len(body) > _CODEX_MAX_DAEMON_RESPONSE_BYTES or hook_response.status != 200:
-            return None
+            raise _CodexHookRequestSentError
         try:
             payload = json.loads(body.decode("utf-8", errors="replace").strip())
-        except (UnicodeDecodeError, json.JSONDecodeError):
-            return None
-        return payload if isinstance(payload, dict) else None
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise _CodexHookRequestSentError from error
+        if not isinstance(payload, dict):
+            raise _CodexHookRequestSentError
+        return payload, hinted_data
+    except (OSError, ValueError, http.client.HTTPException, TimeoutError) as error:
+        if hook_request_started:
+            raise _CodexHookRequestSentError from error
+        raise
     finally:
-        connection.close()
+        try:
+            connection.close()
+        except OSError as error:
+            if hook_request_started:
+                raise _CodexHookRequestSentError from error
+            raise
 
 
 def _codex_normalize_hook_response(response: dict[str, object], *, event_name: str) -> dict[str, object]:
@@ -629,6 +646,26 @@ def _codex_daemon_worker_failed(response: dict[str, object]) -> bool:
     return isinstance(reason_code, str) and reason_code.startswith("daemon_hook_process_")
 
 
+def _codex_sent_hook_failure_response(event_name: str) -> dict[str, object]:
+    reason = "HOL Guard did not return a decision for this action. Retry the action."
+    if event_name == "PreToolUse":
+        return {
+            "hookSpecificOutput": {
+                "hookEventName": event_name,
+                "permissionDecision": "deny",
+                "permissionDecisionReason": reason,
+            }
+        }
+    if event_name == "PermissionRequest":
+        return {
+            "hookSpecificOutput": {
+                "hookEventName": event_name,
+                "decision": {"behavior": "deny", "message": reason},
+            }
+        }
+    return {"continue": True, "systemMessage": reason}
+
+
 def _try_codex_daemon_bridge() -> bool:
     """Answer a managed Codex hook from the running daemon before frozen imports.
 
@@ -671,7 +708,7 @@ def _try_codex_daemon_bridge() -> bool:
     if identity is None:
         return False
     try:
-        response = _codex_daemon_hook_request(
+        request_result = _codex_daemon_hook_request(
             state_path=str(config["state_path"]),
             identity=identity,
             query=str(config["query"]),
@@ -679,10 +716,31 @@ def _try_codex_daemon_bridge() -> bool:
             event_name=event_name,
             deadline=deadline,
         )
+    except _CodexHookRequestSentError:
+        response = _codex_sent_hook_failure_response(event_name)
+        hook_input = data
     except (OSError, ValueError, http.client.HTTPException, TimeoutError):
         return False
-    if response is None or _codex_daemon_worker_failed(response):
-        return False
+    else:
+        if request_result is None:
+            return False
+        response, hook_input = request_result
+        if _codex_daemon_worker_failed(response):
+            response = _codex_sent_hook_failure_response(event_name)
+        elif event_name == "PreToolUse":
+            hook_output = response.get("hookSpecificOutput")
+            if isinstance(hook_output, dict) and hook_output.get("permissionDecision") == "deny":
+                from codex_plugin_scanner.guard.adapters.codex_daemon_hook_resume import (
+                    apply_browser_approval_wait,
+                )
+
+                response = apply_browser_approval_wait(
+                    response,
+                    event_name=event_name,
+                    hook_input=hook_input,
+                    state_path=str(config["state_path"]),
+                    deadline=deadline,
+                )
     sys.stdout.write(
         json.dumps(
             _codex_normalize_hook_response(response, event_name=event_name),
