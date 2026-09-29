@@ -826,6 +826,19 @@ jobs:
             exit 1
           fi
           test ! -e installed-canary/missing-proof-must-not-exist.json
+      - name: Run installed Codex outage regressions
+        shell: bash
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+          SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
+        run: |
+          PYTHONPATH= "$CANARY_PYTHON" -X "pycache_prefix=$RUNNER_TEMP/hol-guard-outage-cache" \
+            -m scripts.run_installed_codex_outage \
+            --subject installed-canary/installed-canary-subject.json \
+            --version "$VERSION" \
+            --source-sha "$SOURCE_SHA" \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --output installed-canary/codex-outage-evidence.json
       - name: Run installed 51k corpus and dashboard smoke
         shell: bash
         env:

@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -45,18 +47,30 @@ def test_total_outage_rejects_unverified_recovery_action(
     outside = tmp_path / "outside"
     outside.mkdir()
     (outside / "ordinary.txt").write_text("Synthetic fixture only.\n", encoding="utf-8")
-    (workspace / "link").symlink_to(outside, target_is_directory=True)
+    if case == "symlink_read":
+        if os.name == "nt":
+            command_shell = Path(os.environ.get("SYSTEMROOT", r"C:\Windows")) / "System32" / "cmd.exe"
+            subprocess.run(
+                [str(command_shell), "/c", "mklink", "/J", str(workspace / "link"), str(outside)],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        else:
+            (workspace / "link").symlink_to(outside, target_is_directory=True)
     attack_bin = workspace / "bin"
     attack_bin.mkdir()
+    executable_paths: dict[str, Path] = {}
     for name in ("hol-guard", "cat"):
-        executable = attack_bin / name
-        executable.write_text("#!/bin/sh\nexit 73\n", encoding="utf-8")
+        executable = attack_bin / (f"{name}.cmd" if os.name == "nt" else name)
+        executable.write_text("@exit /b 73\n" if os.name == "nt" else "#!/bin/sh\nexit 73\n", encoding="utf-8")
         executable.chmod(0o700)
+        executable_paths[name] = executable
 
     commands = {
         "repair_path": "hol-guard daemon status --json",
         "inspection_path": "cat README.md",
-        "explicit_inspection": f"{attack_bin / 'cat'} README.md",
+        "explicit_inspection": f'"{executable_paths["cat"]}" README.md',
     }
     if case == "symlink_read":
         tool_name = "Read"
@@ -66,7 +80,10 @@ def test_total_outage_rejects_unverified_recovery_action(
         tool_name = "Bash"
         tool_input = {"command": commands[case]}
         monkeypatch.setenv("PATH", str(attack_bin))
-        assert Path(shutil.which(tool_input["command"].split()[0]) or "").is_relative_to(attack_bin)
+        if case == "explicit_inspection":
+            assert executable_paths["cat"].is_file()
+        else:
+            assert Path(shutil.which(tool_input["command"].split()[0]) or "").is_relative_to(attack_bin)
 
     monkeypatch.setattr(
         "sys.stdin",
