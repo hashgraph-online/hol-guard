@@ -10091,30 +10091,30 @@
       {
         "extension": {
           "action_classes": [
-            "cogext commitment mutation"
+            "CloudG asset collection command",
+            "CloudG pipeline execution command",
+            "CloudG scanner execution command"
           ],
           "aliases": [],
           "conflicts": [],
           "delegated_protection": null,
           "dependencies": [],
-          "description": "Reviews the cogext CLI's mutating commitment operations (add, fulfill, fail). Read-only commands (extract, list, get, stats) are not matched and remain automatic. Note: `cogext add` may initialize ~/.cogext on a fresh machine; that side effect is covered structurally because `add` is in the reviewed set.",
+          "description": "Reviews cloud credential use, security scanner execution, and Terraform file generation through the CloudG CLI.",
           "ecosystem_ids": [],
-          "executables": [
-            "cogext",
-            "cogext.cmd",
-            "cogext.exe"
-          ],
-          "extension_id": "command.cogext",
-          "homepage": "https://cogextai.com",
+          "executables": [],
+          "extension_id": "command.cloudg",
+          "homepage": "https://github.com/morpheuslord/cloudg",
           "icon": {
-            "kind": "none"
+            "background": "#0E7490",
+            "kind": "react-icon",
+            "name": "HiMiniCloud"
           },
           "license": "MIT",
-          "name": "COGEXT command protection",
+          "name": "CloudG command protection",
           "permissions": [
             {
               "action_classes": [
-                "cogext commitment mutation"
+                "CloudG asset collection command"
               ],
               "baseline_floor": "review",
               "configurable": true,
@@ -10122,25 +10122,25 @@
               "default_enabled": true,
               "dependencies": [],
               "deprecated": false,
-              "description": "Identifies `cogext add`, which creates a tracked commitment and may initialize the local ~/.cogext store on a fresh machine.",
-              "example_command": "cogext add \"Send the report by Friday\"",
+              "description": "Identifies asset collection runs that resolve cloud credentials and enumerate resources through provider APIs.",
+              "example_command": "cloudg collect -p aws --profile prod --region us-east-1",
               "family": null,
               "fixed_reason": null,
               "implementation_version": "1.0.0",
               "implied_permissions": [],
-              "introduced_version": "1.0.0",
-              "label": "cogext commitment creation",
-              "permission_id": "command.cogext.permission.add",
+              "introduced_version": "3.9.0",
+              "label": "CloudG asset collection",
+              "permission_id": "command.cloudg.permission.collect",
               "replacement_permission_id": null,
               "risk_tier": "high",
               "safer_guidance": [
-                "Run `cogext list` first to confirm the target store before adding a commitment."
+                "Confirm the provider, profile, and region flags point at the account you intend to inventory."
               ],
               "typed_capabilities": []
             },
             {
               "action_classes": [
-                "cogext commitment mutation"
+                "CloudG pipeline execution command"
               ],
               "baseline_floor": "review",
               "configurable": true,
@@ -10148,25 +10148,26 @@
               "default_enabled": true,
               "dependencies": [],
               "deprecated": false,
-              "description": "Identifies `cogext fulfill <id>`, which marks a tracked commitment as fulfilled and writes its terminal state.",
-              "example_command": "cogext fulfill abc-123",
+              "description": "Identifies full pipeline runs that resolve cloud credentials, enumerate assets across accounts and regions, execute security scanners, and write Terraform recreation files when --terraform is set.",
+              "example_command": "cloudg run -p aws --profile prod --terraform",
               "family": null,
               "fixed_reason": null,
               "implementation_version": "1.0.0",
               "implied_permissions": [],
-              "introduced_version": "1.0.0",
-              "label": "cogext commitment fulfillment",
-              "permission_id": "command.cogext.permission.fulfill",
+              "introduced_version": "3.9.0",
+              "label": "CloudG full pipeline",
+              "permission_id": "command.cloudg.permission.run",
               "replacement_permission_id": null,
               "risk_tier": "high",
               "safer_guidance": [
-                "Confirm the commitment ID with `cogext get <id>` before fulfilling it."
+                "Check the selected providers, credential flags, regions, and scanner list before running.",
+                "Leave --terraform off unless you want .tf.json recreation files written to the output directory."
               ],
               "typed_capabilities": []
             },
             {
               "action_classes": [
-                "cogext commitment mutation"
+                "CloudG scanner execution command"
               ],
               "baseline_floor": "review",
               "configurable": true,
@@ -10174,417 +10175,433 @@
               "default_enabled": true,
               "dependencies": [],
               "deprecated": false,
-              "description": "Identifies `cogext fail <id>`, which marks a tracked commitment as failed and writes its terminal state.",
-              "example_command": "cogext fail abc-123",
+              "description": "Identifies scanner runs that execute external security tools such as Prowler, ScoutSuite, Checkov, and Trivy against cloud accounts, IaC directories, and container images.",
+              "example_command": "cloudg scan -p aws --scanners prowler,checkov",
               "family": null,
               "fixed_reason": null,
               "implementation_version": "1.0.0",
               "implied_permissions": [],
-              "introduced_version": "1.0.0",
-              "label": "cogext commitment failure",
-              "permission_id": "command.cogext.permission.fail",
+              "introduced_version": "3.9.0",
+              "label": "CloudG scanner execution",
+              "permission_id": "command.cloudg.permission.scan",
               "replacement_permission_id": null,
               "risk_tier": "high",
               "safer_guidance": [
-                "Confirm the commitment ID with `cogext get <id>` before failing it."
+                "Review the scanner list, IaC directory, and image list before running; scanners inherit the resolved cloud credentials."
               ],
               "typed_capabilities": []
             }
           ],
           "project_markers": [],
           "publisher": {
-            "display_name": "COGEXT AI",
-            "id": "community.cogext",
-            "url": "https://github.com/yaminbinyoosuf/cogext-primitive"
+            "display_name": "Community",
+            "id": "community.morpheuslord",
+            "url": "https://github.com/morpheuslord/cloudg"
           },
           "reference_urls": [
-            "https://cogextai.com/standard",
-            "https://github.com/yaminbinyoosuf/cogext-primitive"
+            "https://github.com/morpheuslord/cloudg"
           ],
           "required": false,
           "risk_classes": [
-            "destructive_shell",
-            "execution"
+            "execution",
+            "network_egress"
           ],
           "rules": [
             {
               "action_classes": [
-                "cogext commitment mutation"
+                "CloudG asset collection command"
               ],
               "default_mode": "review",
-              "description": "Identifies `cogext add`, which creates a tracked commitment.",
+              "description": "Identifies asset collection runs that resolve cloud credentials and enumerate resources through provider APIs.",
               "family": null,
               "matcher": {
-                "config": {},
-                "matchers": [
-                  {
-                    "config": {
-                      "allow_leading_options": false,
-                      "executables": [
-                        "cogext",
-                        "cogext.cmd",
-                        "cogext.exe"
-                      ],
-                      "fail_secure_unknown_options": false,
-                      "forbidden_flags": [],
-                      "interspersed_flags": [],
-                      "interspersed_options_with_values": [],
-                      "inverse_flag_pairs": [],
-                      "leading_options_with_values": [],
-                      "options_with_values": [],
-                      "required_flags": [],
-                      "required_flags_in_all_arguments": false,
-                      "required_option_values": [],
-                      "subcommands": [
-                        "add"
-                      ]
-                    },
-                    "op": "executable.v1"
-                  }
-                ],
-                "op": "any.v1"
+                "config": {
+                  "allow_leading_options": true,
+                  "executables": [
+                    "cloudg",
+                    "cloudg.cmd",
+                    "cloudg.exe"
+                  ],
+                  "fail_secure_unknown_options": true,
+                  "forbidden_flags": [],
+                  "interspersed_flags": [
+                    "--verbose",
+                    "-v"
+                  ],
+                  "interspersed_options_with_values": [
+                    "--config",
+                    "--log-file",
+                    "--output",
+                    "--profile",
+                    "--project-id",
+                    "--provider",
+                    "--region",
+                    "--subscription-id",
+                    "-c",
+                    "-o",
+                    "-p"
+                  ],
+                  "inverse_flag_pairs": [],
+                  "leading_options_with_values": [
+                    "--config",
+                    "--log-file",
+                    "-c"
+                  ],
+                  "options_with_values": [],
+                  "required_flags": [],
+                  "required_flags_in_all_arguments": false,
+                  "required_option_values": [],
+                  "subcommands": [
+                    "collect"
+                  ]
+                },
+                "op": "executable.v1"
               },
               "native_capability": null,
-              "permission_id": "command.cogext.permission.add",
+              "permission_id": "command.cloudg.permission.collect",
               "risk_classes": [
-                "destructive_shell",
-                "execution"
+                "network_egress"
               ],
-              "rule_id": "command.cogext.add",
+              "rule_id": "command.cloudg.collect",
               "rule_version": "1.0.0",
               "safe_variants": [
                 {
                   "matcher": {
-                    "config": {},
-                    "matchers": [
-                      {
-                        "config": {
-                          "allow_leading_options": false,
-                          "executables": [
-                            "cogext",
-                            "cogext.cmd",
-                            "cogext.exe"
-                          ],
-                          "fail_secure_unknown_options": false,
-                          "forbidden_flags": [],
-                          "interspersed_flags": [],
-                          "interspersed_options_with_values": [],
-                          "inverse_flag_pairs": [],
-                          "leading_options_with_values": [],
-                          "options_with_values": [],
-                          "required_flags": [
-                            "--help"
-                          ],
-                          "required_flags_in_all_arguments": true,
-                          "required_option_values": [],
-                          "subcommands": [
-                            "add"
-                          ]
-                        },
-                        "op": "executable.v1"
-                      }
-                    ],
-                    "op": "any.v1"
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "cloudg",
+                        "cloudg.cmd",
+                        "cloudg.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--verbose",
+                        "-v"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--config",
+                        "--log-file",
+                        "--output",
+                        "--profile",
+                        "--project-id",
+                        "--provider",
+                        "--region",
+                        "--subscription-id",
+                        "-c",
+                        "-o",
+                        "-p"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--config",
+                        "--log-file",
+                        "-c"
+                      ],
+                      "options_with_values": [],
+                      "required_flags": [
+                        "--help"
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "collect"
+                      ]
+                    },
+                    "op": "executable.v1"
                   },
-                  "title": "cogext add command help (--help)",
+                  "title": "Command help",
                   "variant_id": "help"
-                },
-                {
-                  "matcher": {
-                    "config": {},
-                    "matchers": [
-                      {
-                        "config": {
-                          "allow_leading_options": false,
-                          "executables": [
-                            "cogext",
-                            "cogext.cmd",
-                            "cogext.exe"
-                          ],
-                          "fail_secure_unknown_options": false,
-                          "forbidden_flags": [],
-                          "interspersed_flags": [],
-                          "interspersed_options_with_values": [],
-                          "inverse_flag_pairs": [],
-                          "leading_options_with_values": [],
-                          "options_with_values": [],
-                          "required_flags": [
-                            "-h"
-                          ],
-                          "required_flags_in_all_arguments": true,
-                          "required_option_values": [],
-                          "subcommands": [
-                            "add"
-                          ]
-                        },
-                        "op": "executable.v1"
-                      }
-                    ],
-                    "op": "any.v1"
-                  },
-                  "title": "cogext add command help (-h)",
-                  "variant_id": "short-help"
                 }
               ],
               "safer_alternatives": [
-                "Run `cogext list` first to confirm the target store."
+                "Confirm the provider, profile, and region flags point at the account you intend to inventory."
               ],
               "severity": "high",
-              "title": "cogext commitment creation"
+              "title": "CloudG asset collection"
             },
             {
               "action_classes": [
-                "cogext commitment mutation"
+                "CloudG pipeline execution command"
               ],
               "default_mode": "review",
-              "description": "Identifies `cogext fulfill`, which marks a commitment as fulfilled.",
+              "description": "Identifies full pipeline runs that resolve cloud credentials, enumerate assets, execute security scanners, and write Terraform recreation files when --terraform is set.",
               "family": null,
               "matcher": {
-                "config": {},
-                "matchers": [
-                  {
-                    "config": {
-                      "allow_leading_options": false,
-                      "executables": [
-                        "cogext",
-                        "cogext.cmd",
-                        "cogext.exe"
-                      ],
-                      "fail_secure_unknown_options": false,
-                      "forbidden_flags": [],
-                      "interspersed_flags": [],
-                      "interspersed_options_with_values": [],
-                      "inverse_flag_pairs": [],
-                      "leading_options_with_values": [],
-                      "options_with_values": [],
-                      "required_flags": [],
-                      "required_flags_in_all_arguments": false,
-                      "required_option_values": [],
-                      "subcommands": [
-                        "fulfill"
-                      ]
-                    },
-                    "op": "executable.v1"
-                  }
-                ],
-                "op": "any.v1"
+                "config": {
+                  "allow_leading_options": true,
+                  "executables": [
+                    "cloudg",
+                    "cloudg.cmd",
+                    "cloudg.exe"
+                  ],
+                  "fail_secure_unknown_options": true,
+                  "forbidden_flags": [],
+                  "interspersed_flags": [
+                    "--azure-managed-identity",
+                    "--no-ontology",
+                    "--no-rag-export",
+                    "--no-terraform",
+                    "--ontology",
+                    "--rag-export",
+                    "--terraform",
+                    "--verbose",
+                    "-v"
+                  ],
+                  "interspersed_options_with_values": [
+                    "--aws-external-id",
+                    "--aws-key",
+                    "--aws-role-arn",
+                    "--aws-secret",
+                    "--aws-session-token",
+                    "--aws-web-identity-token-file",
+                    "--azure-cert-path",
+                    "--azure-client-id",
+                    "--azure-client-secret",
+                    "--azure-federated-token-file",
+                    "--azure-tenant-id",
+                    "--config",
+                    "--gcp-credentials-file",
+                    "--gcp-impersonate-sa",
+                    "--iac-dir",
+                    "--images",
+                    "--log-file",
+                    "--output",
+                    "--profile",
+                    "--project-id",
+                    "--provider",
+                    "--region",
+                    "--regions",
+                    "--scanners",
+                    "--subscription-id",
+                    "-c",
+                    "-o",
+                    "-p"
+                  ],
+                  "inverse_flag_pairs": [],
+                  "leading_options_with_values": [
+                    "--config",
+                    "--log-file",
+                    "-c"
+                  ],
+                  "options_with_values": [],
+                  "required_flags": [],
+                  "required_flags_in_all_arguments": false,
+                  "required_option_values": [],
+                  "subcommands": [
+                    "run"
+                  ]
+                },
+                "op": "executable.v1"
               },
               "native_capability": null,
-              "permission_id": "command.cogext.permission.fulfill",
+              "permission_id": "command.cloudg.permission.run",
               "risk_classes": [
-                "destructive_shell",
-                "execution"
+                "execution",
+                "network_egress"
               ],
-              "rule_id": "command.cogext.fulfill",
+              "rule_id": "command.cloudg.run",
               "rule_version": "1.0.0",
               "safe_variants": [
                 {
                   "matcher": {
-                    "config": {},
-                    "matchers": [
-                      {
-                        "config": {
-                          "allow_leading_options": false,
-                          "executables": [
-                            "cogext",
-                            "cogext.cmd",
-                            "cogext.exe"
-                          ],
-                          "fail_secure_unknown_options": false,
-                          "forbidden_flags": [],
-                          "interspersed_flags": [],
-                          "interspersed_options_with_values": [],
-                          "inverse_flag_pairs": [],
-                          "leading_options_with_values": [],
-                          "options_with_values": [],
-                          "required_flags": [
-                            "--help"
-                          ],
-                          "required_flags_in_all_arguments": true,
-                          "required_option_values": [],
-                          "subcommands": [
-                            "fulfill"
-                          ]
-                        },
-                        "op": "executable.v1"
-                      }
-                    ],
-                    "op": "any.v1"
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "cloudg",
+                        "cloudg.cmd",
+                        "cloudg.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--azure-managed-identity",
+                        "--no-ontology",
+                        "--no-rag-export",
+                        "--no-terraform",
+                        "--ontology",
+                        "--rag-export",
+                        "--terraform",
+                        "--verbose",
+                        "-v"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--aws-external-id",
+                        "--aws-key",
+                        "--aws-role-arn",
+                        "--aws-secret",
+                        "--aws-session-token",
+                        "--aws-web-identity-token-file",
+                        "--azure-cert-path",
+                        "--azure-client-id",
+                        "--azure-client-secret",
+                        "--azure-federated-token-file",
+                        "--azure-tenant-id",
+                        "--config",
+                        "--gcp-credentials-file",
+                        "--gcp-impersonate-sa",
+                        "--iac-dir",
+                        "--images",
+                        "--log-file",
+                        "--output",
+                        "--profile",
+                        "--project-id",
+                        "--provider",
+                        "--region",
+                        "--regions",
+                        "--scanners",
+                        "--subscription-id",
+                        "-c",
+                        "-o",
+                        "-p"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--config",
+                        "--log-file",
+                        "-c"
+                      ],
+                      "options_with_values": [],
+                      "required_flags": [
+                        "--help"
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "run"
+                      ]
+                    },
+                    "op": "executable.v1"
                   },
-                  "title": "cogext fulfill command help (--help)",
+                  "title": "Command help",
                   "variant_id": "help"
-                },
-                {
-                  "matcher": {
-                    "config": {},
-                    "matchers": [
-                      {
-                        "config": {
-                          "allow_leading_options": false,
-                          "executables": [
-                            "cogext",
-                            "cogext.cmd",
-                            "cogext.exe"
-                          ],
-                          "fail_secure_unknown_options": false,
-                          "forbidden_flags": [],
-                          "interspersed_flags": [],
-                          "interspersed_options_with_values": [],
-                          "inverse_flag_pairs": [],
-                          "leading_options_with_values": [],
-                          "options_with_values": [],
-                          "required_flags": [
-                            "-h"
-                          ],
-                          "required_flags_in_all_arguments": true,
-                          "required_option_values": [],
-                          "subcommands": [
-                            "fulfill"
-                          ]
-                        },
-                        "op": "executable.v1"
-                      }
-                    ],
-                    "op": "any.v1"
-                  },
-                  "title": "cogext fulfill command help (-h)",
-                  "variant_id": "short-help"
                 }
               ],
               "safer_alternatives": [
-                "Confirm the commitment ID with `cogext get <id>`."
+                "Check the selected providers, credential flags, regions, and scanner list before running."
               ],
               "severity": "high",
-              "title": "cogext commitment fulfillment"
+              "title": "CloudG full pipeline"
             },
             {
               "action_classes": [
-                "cogext commitment mutation"
+                "CloudG scanner execution command"
               ],
               "default_mode": "review",
-              "description": "Identifies `cogext fail`, which marks a commitment as failed.",
+              "description": "Identifies scanner runs that execute external security tools such as Prowler, ScoutSuite, Checkov, and Trivy.",
               "family": null,
               "matcher": {
-                "config": {},
-                "matchers": [
-                  {
-                    "config": {
-                      "allow_leading_options": false,
-                      "executables": [
-                        "cogext",
-                        "cogext.cmd",
-                        "cogext.exe"
-                      ],
-                      "fail_secure_unknown_options": false,
-                      "forbidden_flags": [],
-                      "interspersed_flags": [],
-                      "interspersed_options_with_values": [],
-                      "inverse_flag_pairs": [],
-                      "leading_options_with_values": [],
-                      "options_with_values": [],
-                      "required_flags": [],
-                      "required_flags_in_all_arguments": false,
-                      "required_option_values": [],
-                      "subcommands": [
-                        "fail"
-                      ]
-                    },
-                    "op": "executable.v1"
-                  }
-                ],
-                "op": "any.v1"
+                "config": {
+                  "allow_leading_options": true,
+                  "executables": [
+                    "cloudg",
+                    "cloudg.cmd",
+                    "cloudg.exe"
+                  ],
+                  "fail_secure_unknown_options": true,
+                  "forbidden_flags": [],
+                  "interspersed_flags": [
+                    "--verbose",
+                    "-v"
+                  ],
+                  "interspersed_options_with_values": [
+                    "--config",
+                    "--iac-dir",
+                    "--images",
+                    "--log-file",
+                    "--output",
+                    "--profile",
+                    "--provider",
+                    "--scanners",
+                    "-c",
+                    "-o",
+                    "-p"
+                  ],
+                  "inverse_flag_pairs": [],
+                  "leading_options_with_values": [
+                    "--config",
+                    "--log-file",
+                    "-c"
+                  ],
+                  "options_with_values": [],
+                  "required_flags": [],
+                  "required_flags_in_all_arguments": false,
+                  "required_option_values": [],
+                  "subcommands": [
+                    "scan"
+                  ]
+                },
+                "op": "executable.v1"
               },
               "native_capability": null,
-              "permission_id": "command.cogext.permission.fail",
+              "permission_id": "command.cloudg.permission.scan",
               "risk_classes": [
-                "destructive_shell",
-                "execution"
+                "execution",
+                "network_egress"
               ],
-              "rule_id": "command.cogext.fail",
+              "rule_id": "command.cloudg.scan",
               "rule_version": "1.0.0",
               "safe_variants": [
                 {
                   "matcher": {
-                    "config": {},
-                    "matchers": [
-                      {
-                        "config": {
-                          "allow_leading_options": false,
-                          "executables": [
-                            "cogext",
-                            "cogext.cmd",
-                            "cogext.exe"
-                          ],
-                          "fail_secure_unknown_options": false,
-                          "forbidden_flags": [],
-                          "interspersed_flags": [],
-                          "interspersed_options_with_values": [],
-                          "inverse_flag_pairs": [],
-                          "leading_options_with_values": [],
-                          "options_with_values": [],
-                          "required_flags": [
-                            "--help"
-                          ],
-                          "required_flags_in_all_arguments": true,
-                          "required_option_values": [],
-                          "subcommands": [
-                            "fail"
-                          ]
-                        },
-                        "op": "executable.v1"
-                      }
-                    ],
-                    "op": "any.v1"
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "cloudg",
+                        "cloudg.cmd",
+                        "cloudg.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--verbose",
+                        "-v"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--config",
+                        "--iac-dir",
+                        "--images",
+                        "--log-file",
+                        "--output",
+                        "--profile",
+                        "--provider",
+                        "--scanners",
+                        "-c",
+                        "-o",
+                        "-p"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--config",
+                        "--log-file",
+                        "-c"
+                      ],
+                      "options_with_values": [],
+                      "required_flags": [
+                        "--help"
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "scan"
+                      ]
+                    },
+                    "op": "executable.v1"
                   },
-                  "title": "cogext fail command help (--help)",
+                  "title": "Command help",
                   "variant_id": "help"
-                },
-                {
-                  "matcher": {
-                    "config": {},
-                    "matchers": [
-                      {
-                        "config": {
-                          "allow_leading_options": false,
-                          "executables": [
-                            "cogext",
-                            "cogext.cmd",
-                            "cogext.exe"
-                          ],
-                          "fail_secure_unknown_options": false,
-                          "forbidden_flags": [],
-                          "interspersed_flags": [],
-                          "interspersed_options_with_values": [],
-                          "inverse_flag_pairs": [],
-                          "leading_options_with_values": [],
-                          "options_with_values": [],
-                          "required_flags": [
-                            "-h"
-                          ],
-                          "required_flags_in_all_arguments": true,
-                          "required_option_values": [],
-                          "subcommands": [
-                            "fail"
-                          ]
-                        },
-                        "op": "executable.v1"
-                      }
-                    ],
-                    "op": "any.v1"
-                  },
-                  "title": "cogext fail command help (-h)",
-                  "variant_id": "short-help"
                 }
               ],
               "safer_alternatives": [
-                "Confirm the commitment ID with `cogext get <id>`."
+                "Review the scanner list, IaC directory, and image list before running; scanners inherit the resolved cloud credentials."
               ],
               "severity": "high",
-              "title": "cogext commitment failure"
+              "title": "CloudG scanner execution"
             }
           ],
           "safer_alternatives": [
-            "Run `cogext list` or `cogext get <id>` before mutating commitment state."
+            "Generate reports from existing scan data with `cloudg report -i findings.json`, which reads a local file and does not touch cloud credentials or scanners."
           ],
           "source": "built-in",
           "version": "1.0.0"
@@ -10692,111 +10709,232 @@
   },
   "cases": [
     {
-      "command": "cogext add \"Send the report by Friday\"",
+      "command": "cloudg collect -p aws --profile prod --region us-east-1",
       "disabled_permissions": [],
       "enabled_extensions": [
-        "command.cogext"
+        "command.cloudg"
       ],
       "expected_action": "review",
       "expected_effective_segments": [
         0
       ],
-      "id": "add-basic",
-      "rule_id": "command.cogext.add"
+      "id": "collect-aws",
+      "rule_id": "command.cloudg.collect"
     },
     {
-      "command": "cogext add \"Call Sarah tomorrow\"",
+      "command": "cloudg collect -p azure --subscription-id 00000000-0000-0000-0000-000000000000",
       "disabled_permissions": [],
       "enabled_extensions": [
-        "command.cogext"
+        "command.cloudg"
       ],
       "expected_action": "review",
       "expected_effective_segments": [
         0
       ],
-      "id": "add-call",
-      "rule_id": "command.cogext.add"
+      "id": "collect-azure",
+      "rule_id": "command.cloudg.collect"
     },
     {
-      "command": "cogext fulfill abc-123",
+      "command": "cloudg collect -p gcp --project-id my-project",
       "disabled_permissions": [],
       "enabled_extensions": [
-        "command.cogext"
+        "command.cloudg"
       ],
       "expected_action": "review",
       "expected_effective_segments": [
         0
       ],
-      "id": "fulfill-basic",
-      "rule_id": "command.cogext.fulfill"
+      "id": "collect-gcp",
+      "rule_id": "command.cloudg.collect"
     },
     {
-      "command": "cogext fail abc-123",
+      "command": "cloudg collect -p aws -o ./reports",
       "disabled_permissions": [],
       "enabled_extensions": [
-        "command.cogext"
+        "command.cloudg"
       ],
       "expected_action": "review",
       "expected_effective_segments": [
         0
       ],
-      "id": "fail-basic",
-      "rule_id": "command.cogext.fail"
+      "id": "collect-output-dir",
+      "rule_id": "command.cloudg.collect"
     },
     {
-      "command": "cogext extract \"I'll call you tomorrow\"",
+      "command": "cloudg run -p aws --profile prod",
       "disabled_permissions": [],
       "enabled_extensions": [
-        "command.cogext"
+        "command.cloudg"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "run-basic",
+      "rule_id": "command.cloudg.run"
+    },
+    {
+      "command": "cloudg run -p aws --profile prod --terraform",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cloudg"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "run-terraform",
+      "rule_id": "command.cloudg.run"
+    },
+    {
+      "command": "cloudg run -p aws -p azure --subscription-id 00000000-0000-0000-0000-000000000000",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cloudg"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "run-multi-provider",
+      "rule_id": "command.cloudg.run"
+    },
+    {
+      "command": "cloudg run -p aws --aws-role-arn arn:aws:iam::123456789012:role/scan-readonly",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cloudg"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "run-role-arn",
+      "rule_id": "command.cloudg.run"
+    },
+    {
+      "command": "cloudg run -p aws --regions all",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cloudg"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "run-all-regions",
+      "rule_id": "command.cloudg.run"
+    },
+    {
+      "command": "cloudg -v run -p gcp --project-id my-project",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cloudg"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "run-leading-verbose",
+      "rule_id": "command.cloudg.run"
+    },
+    {
+      "command": "cloudg -c ./config.yaml run -p aws",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cloudg"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "run-leading-config",
+      "rule_id": "command.cloudg.run"
+    },
+    {
+      "command": "cloudg scan",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cloudg"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "scan-default",
+      "rule_id": "command.cloudg.scan"
+    },
+    {
+      "command": "cloudg scan -p aws --scanners prowler,checkov",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cloudg"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "scan-scanner-list",
+      "rule_id": "command.cloudg.scan"
+    },
+    {
+      "command": "cloudg scan --scanners checkov --iac-dir ./infra",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cloudg"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "scan-iac-dir",
+      "rule_id": "command.cloudg.scan"
+    },
+    {
+      "command": "cloudg scan --scanners trivy --images nginx:latest,alpine:3.20",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cloudg"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "scan-images",
+      "rule_id": "command.cloudg.scan"
+    },
+    {
+      "command": "cloudg collect --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cloudg"
       ],
       "expected_action": "review",
       "expected_effective_segments": [],
-      "id": "extract-automatic",
-      "rule_id": "command.cogext.add"
+      "id": "collect-help",
+      "rule_id": "command.cloudg.collect"
     },
     {
-      "command": "cogext list",
+      "command": "cloudg run --help",
       "disabled_permissions": [],
       "enabled_extensions": [
-        "command.cogext"
+        "command.cloudg"
       ],
       "expected_action": "review",
       "expected_effective_segments": [],
-      "id": "list-basic",
-      "rule_id": "command.cogext.add"
+      "id": "run-help",
+      "rule_id": "command.cloudg.run"
     },
     {
-      "command": "cogext list --status open",
+      "command": "cloudg scan --help",
       "disabled_permissions": [],
       "enabled_extensions": [
-        "command.cogext"
+        "command.cloudg"
       ],
       "expected_action": "review",
       "expected_effective_segments": [],
-      "id": "list-status-open",
-      "rule_id": "command.cogext.add"
-    },
-    {
-      "command": "cogext get abc-123",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.cogext"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [],
-      "id": "get-basic",
-      "rule_id": "command.cogext.add"
-    },
-    {
-      "command": "cogext stats",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.cogext"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [],
-      "id": "stats-basic",
-      "rule_id": "command.cogext.add"
+      "id": "scan-help",
+      "rule_id": "command.cloudg.scan"
     }
   ],
   "schema": "guard.command-extension-fixtures.v1"

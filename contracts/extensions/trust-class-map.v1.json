@@ -79,6 +79,7 @@
     ],
     "external": [
       "command.blitcp",
+      "command.cloudg",
       "command.cogext",
       "command.genclave",
       "command.mcp-filesystem",

@@ -6,7 +6,7 @@
     "canonical_diff_digest",
     "effective"
   ],
-  "catalog_digest": "7562536730e27dcf852859983a9fd29fb9574a046d481267ee3f07b01595d25a",
+  "catalog_digest": "19131ed462237ad9d55b2340d633d6ea47403ecdf82a2fe07de6316678f64f21",
   "control_schema_version": "1.0.0",
   "daemon_api_schema": "guard.daemon.extension-controls.v1",
   "effective_shape": [
@@ -20,7 +20,7 @@
     "failures",
     "projection"
   ],
-  "extension_count": 75,
+  "extension_count": 76,
   "extension_ids": [
     "command.api-gateway",
     "command.backup.borg",
@@ -35,6 +35,7 @@
     "command.cloud.aws",
     "command.cloud.azure",
     "command.cloud.gcp",
+    "command.cloudg",
     "command.cogext",
     "command.container-runtime",
     "command.data-protection",
@@ -101,7 +102,7 @@
   "extension_schema_version": 2,
   "installed_browser_config": "dashboard/playwright.installed.config.ts",
   "overview_route": "/extensions",
-  "permission_count": 260,
+  "permission_count": 263,
   "permission_examples": {
     "command.api-gateway.permission.delete": "aws apigateway delete-rest-api",
     "command.backup.borg.permission.mutation": "borg delete",
@@ -120,6 +121,9 @@
     "command.cloud.aws.permission.resource-deletion": "aws ec2 terminate-instances",
     "command.cloud.azure.permission.resource-deletion": "az vm delete",
     "command.cloud.gcp.permission.resource-deletion": "gcloud compute instances delete",
+    "command.cloudg.permission.collect": "cloudg collect -p aws --profile prod --region us-east-1",
+    "command.cloudg.permission.run": "cloudg run -p aws --profile prod --terraform",
+    "command.cloudg.permission.scan": "cloudg scan -p aws --scanners prowler,checkov",
     "command.cogext.permission.add": "cogext add \"Send the report by Friday\"",
     "command.cogext.permission.fail": "cogext fail abc-123",
     "command.cogext.permission.fulfill": "cogext fulfill abc-123",
@@ -478,6 +482,9 @@
     "command.cloud.aws.permission.resource-deletion",
     "command.cloud.azure.permission.resource-deletion",
     "command.cloud.gcp.permission.resource-deletion",
+    "command.cloudg.permission.collect",
+    "command.cloudg.permission.run",
+    "command.cloudg.permission.scan",
     "command.cogext.permission.add",
     "command.cogext.permission.fail",
     "command.cogext.permission.fulfill",
@@ -732,7 +739,7 @@
     "controls",
     "semantic_preview"
   ],
-  "rule_count": 245,
+  "rule_count": 248,
   "rule_ids": [
     "command.api-gateway.delete",
     "command.backup.borg.mutation",
@@ -751,6 +758,9 @@
     "command.cloud.aws.resource-deletion",
     "command.cloud.azure.resource-deletion",
     "command.cloud.gcp.resource-deletion",
+    "command.cloudg.collect",
+    "command.cloudg.run",
+    "command.cloudg.scan",
     "command.cogext.add",
     "command.cogext.fulfill",
     "command.cogext.fail",
