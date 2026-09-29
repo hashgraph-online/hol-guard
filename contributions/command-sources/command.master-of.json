@@ -1,0 +1,598 @@
+{
+  "extension": {
+    "action_classes": [
+      "master-of bulk skill-gate mutation command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews bulk mutation commands from the master-of (mo) CLI \u2014 parking every unparked skill, confirming every pending classification, regenerating AGY gate skills, and toggling Cowork packs \u2014 before they run. Diagnostic and inspection commands (mo doctor, mo status/check, mo full, mo search) are not matched by this extension and stay unreviewed.",
+    "ecosystem_ids": [],
+    "executables": [],
+    "extension_id": "command.master-of",
+    "homepage": "https://github.com/devrudals/master-of",
+    "icon": {
+      "background": "#0F766E",
+      "kind": "react-icon",
+      "name": "HiMiniCommandLine"
+    },
+    "license": "MIT",
+    "name": "master-of command protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "master-of bulk skill-gate mutation command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies parking every unparked raw skill into skills-library in one operation, instead of a single named skill.",
+        "example_command": "mo park --all",
+        "family": "master-of-bulk",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Bulk skill parking",
+        "permission_id": "command.master-of.permission.bulk-park",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Park one named skill at a time (`mo park <name>`) and review the move before running --all."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "master-of bulk skill-gate mutation command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies confirming every pending component's scanner-guessed gate in one operation, instead of a single named component.",
+        "example_command": "mo classify --all",
+        "family": "master-of-bulk",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Bulk component classification",
+        "permission_id": "command.master-of.permission.bulk-classify",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Classify one named component at a time (`mo classify <name> <category>`) and review the guessed category before confirming --all."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "master-of bulk skill-gate mutation command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies generating AGY (Antigravity) gate skill files across a target directory, overwriting any existing gate skills there.",
+        "example_command": "mo agy-setup",
+        "family": "master-of-bulk",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "AGY gate skill generation",
+        "permission_id": "command.master-of.permission.agy-setup",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Generate into a scratch directory first and diff the output before pointing at the real gate skills directory."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "master-of bulk skill-gate mutation command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies enabling or disabling account-synced Cowork packs through `claude plugin enable`/`disable`, affecting every synced pack when no domain is given.",
+        "example_command": "mo cowork off",
+        "family": "master-of-bulk",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Cowork pack enable or disable",
+        "permission_id": "command.master-of.permission.cowork-toggle",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Pass an explicit domain (`mo cowork off <domain>`) and run `mo cowork list` first to review what will change."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": {
+      "display_name": "Community",
+      "id": "community.devrudals",
+      "url": "https://github.com/devrudals/master-of"
+    },
+    "reference_urls": [
+      "https://github.com/devrudals/master-of"
+    ],
+    "required": false,
+    "risk_classes": [
+      "destructive_shell"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "master-of bulk skill-gate mutation command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies parking every unparked raw skill into skills-library in one operation.",
+        "family": null,
+        "matcher": {
+          "config": {
+            "allow_leading_options": false,
+            "executables": [
+              "mo",
+              "mo.cmd",
+              "mo.exe",
+              "master-of",
+              "master-of.cmd",
+              "master-of.exe"
+            ],
+            "fail_secure_unknown_options": false,
+            "forbidden_flags": [],
+            "interspersed_flags": [],
+            "interspersed_options_with_values": [
+              "--data-dir",
+              "--sandbox",
+              "--source"
+            ],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [],
+            "options_with_values": [],
+            "required_flags": [
+              "--all"
+            ],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": [
+              "park"
+            ]
+          },
+          "op": "executable.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.master-of.permission.bulk-park",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.master-of.bulk-park",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "mo",
+                  "mo.cmd",
+                  "mo.exe",
+                  "master-of",
+                  "master-of.cmd",
+                  "master-of.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [
+                  "--data-dir",
+                  "--sandbox",
+                  "--source"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [
+                  "--all",
+                  "--help"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "park"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Park one named skill at a time (`mo park <name>`) and review the move before running --all."
+        ],
+        "severity": "high",
+        "title": "Bulk skill parking"
+      },
+      {
+        "action_classes": [
+          "master-of bulk skill-gate mutation command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies confirming every pending component's scanner-guessed gate in one operation.",
+        "family": null,
+        "matcher": {
+          "config": {
+            "allow_leading_options": false,
+            "executables": [
+              "mo",
+              "mo.cmd",
+              "mo.exe",
+              "master-of",
+              "master-of.cmd",
+              "master-of.exe"
+            ],
+            "fail_secure_unknown_options": false,
+            "forbidden_flags": [],
+            "interspersed_flags": [],
+            "interspersed_options_with_values": [
+              "--data-dir",
+              "--sandbox",
+              "--source"
+            ],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [],
+            "options_with_values": [],
+            "required_flags": [
+              "--all"
+            ],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": [
+              "classify"
+            ]
+          },
+          "op": "executable.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.master-of.permission.bulk-classify",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.master-of.bulk-classify",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "mo",
+                  "mo.cmd",
+                  "mo.exe",
+                  "master-of",
+                  "master-of.cmd",
+                  "master-of.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [
+                  "--data-dir",
+                  "--sandbox",
+                  "--source"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [
+                  "--all",
+                  "--help"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "classify"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Classify one named component at a time (`mo classify <name> <category>`) and review the guessed category before confirming --all."
+        ],
+        "severity": "high",
+        "title": "Bulk component classification"
+      },
+      {
+        "action_classes": [
+          "master-of bulk skill-gate mutation command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies generating AGY gate skill files across a target directory, overwriting any existing gate skills there.",
+        "family": null,
+        "matcher": {
+          "config": {
+            "allow_leading_options": false,
+            "executables": [
+              "mo",
+              "mo.cmd",
+              "mo.exe",
+              "master-of",
+              "master-of.cmd",
+              "master-of.exe"
+            ],
+            "fail_secure_unknown_options": false,
+            "forbidden_flags": [],
+            "interspersed_flags": [],
+            "interspersed_options_with_values": [
+              "--data-dir",
+              "--sandbox",
+              "--source"
+            ],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [],
+            "options_with_values": [],
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": [
+              "agy-setup"
+            ]
+          },
+          "op": "executable.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.master-of.permission.agy-setup",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.master-of.agy-setup",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "mo",
+                  "mo.cmd",
+                  "mo.exe",
+                  "master-of",
+                  "master-of.cmd",
+                  "master-of.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [
+                  "--data-dir",
+                  "--sandbox",
+                  "--source"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [
+                  "--help"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "agy-setup"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Generate into a scratch directory first and diff the output before pointing at the real gate skills directory."
+        ],
+        "severity": "high",
+        "title": "AGY gate skill generation"
+      },
+      {
+        "action_classes": [
+          "master-of bulk skill-gate mutation command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies enabling or disabling account-synced Cowork packs, affecting every synced pack when no domain is given.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "mo",
+                  "mo.cmd",
+                  "mo.exe",
+                  "master-of",
+                  "master-of.cmd",
+                  "master-of.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [
+                  "--data-dir",
+                  "--sandbox",
+                  "--source"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "cowork",
+                  "on"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "mo",
+                  "mo.cmd",
+                  "mo.exe",
+                  "master-of",
+                  "master-of.cmd",
+                  "master-of.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [
+                  "--data-dir",
+                  "--sandbox",
+                  "--source"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "cowork",
+                  "off"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.master-of.permission.cowork-toggle",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.master-of.cowork-toggle",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "mo",
+                      "mo.cmd",
+                      "mo.exe",
+                      "master-of",
+                      "master-of.cmd",
+                      "master-of.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [
+                      "--data-dir",
+                      "--sandbox",
+                      "--source"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "cowork",
+                      "on"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "mo",
+                      "mo.cmd",
+                      "mo.exe",
+                      "master-of",
+                      "master-of.cmd",
+                      "master-of.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [
+                      "--data-dir",
+                      "--sandbox",
+                      "--source"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "cowork",
+                      "off"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Pass an explicit domain (`mo cowork off <domain>`) and run `mo cowork list` first to review what will change."
+        ],
+        "severity": "high",
+        "title": "Cowork pack enable or disable"
+      }
+    ],
+    "safer_alternatives": [
+      "Park or classify one named component at a time and review the change before running --all.",
+      "Generate AGY gates into a scratch directory first and diff before overwriting the real gate skills directory.",
+      "Pass an explicit domain and run `mo cowork list` before toggling Cowork packs."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}
