@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 import sqlite3
+import time
 from contextlib import suppress
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Literal
 from uuid import uuid4
+
+from .sqlite_quarantine_forensics import QUARANTINE_FORENSICS_SUFFIX
 
 FATAL_SQLITE_ERROR_MARKERS = (
     "database disk image is malformed",
@@ -65,6 +70,76 @@ def _sqlite_store_identity(path: Path) -> SQLiteStoreIdentity:
     return identities[0], identities[1], identities[2]
 
 
+@dataclass(frozen=True, slots=True)
+class SQLiteStoreProbeDetail:
+    """Proof states observed while revalidating a failed store."""
+
+    proven_unusable: bool
+    first_state: SQLiteStoreProbe | None
+    second_state: SQLiteStoreProbe | None
+    guard_home_accepts_write: bool | None
+    identity_stable: bool
+
+
+def sqlite_store_probe_detail(
+    *,
+    path: Path,
+    guard_home: Path,
+    error: BaseException,
+    fatal_error: bool,
+) -> SQLiteStoreProbeDetail:
+    """Revalidate the current path before permitting destructive recovery."""
+
+    io_error = SQLITE_IO_ERROR_MARKER in str(error).lower()
+    if not fatal_error and not io_error:
+        return SQLiteStoreProbeDetail(
+            proven_unusable=False,
+            first_state=None,
+            second_state=None,
+            guard_home_accepts_write=None,
+            identity_stable=True,
+        )
+    initial_identity = _sqlite_store_identity(path)
+    first_state = _probe_sqlite_store(path)
+    confirmed_identity = _sqlite_store_identity(path)
+    identity_stable = initial_identity == confirmed_identity
+    if not identity_stable or first_state == "healthy":
+        return SQLiteStoreProbeDetail(
+            proven_unusable=False,
+            first_state=first_state,
+            second_state=None,
+            guard_home_accepts_write=None,
+            identity_stable=identity_stable,
+        )
+    if first_state != "fatal":
+        return SQLiteStoreProbeDetail(
+            proven_unusable=False,
+            first_state=first_state,
+            second_state=None,
+            guard_home_accepts_write=None,
+            identity_stable=True,
+        )
+    guard_home_accepts_write = _guard_home_accepts_sqlite_write(guard_home)
+    if not guard_home_accepts_write:
+        return SQLiteStoreProbeDetail(
+            proven_unusable=False,
+            first_state=first_state,
+            second_state=None,
+            guard_home_accepts_write=False,
+            identity_stable=True,
+        )
+    second_state = _probe_sqlite_store(path)
+    final_identity = _sqlite_store_identity(path)
+    final_stable = confirmed_identity == final_identity
+    return SQLiteStoreProbeDetail(
+        proven_unusable=second_state == "fatal" and final_stable,
+        first_state=first_state,
+        second_state=second_state,
+        guard_home_accepts_write=guard_home_accepts_write,
+        identity_stable=identity_stable and final_stable,
+    )
+
+
 def sqlite_store_is_proven_unusable(
     *,
     path: Path,
@@ -74,19 +149,12 @@ def sqlite_store_is_proven_unusable(
 ) -> bool:
     """Revalidate the current path before permitting destructive recovery."""
 
-    io_error = SQLITE_IO_ERROR_MARKER in str(error).lower()
-    if not fatal_error and not io_error:
-        return False
-    initial_identity = _sqlite_store_identity(path)
-    first_state = _probe_sqlite_store(path)
-    confirmed_identity = _sqlite_store_identity(path)
-    if initial_identity != confirmed_identity or first_state == "healthy":
-        return False
-    if first_state != "fatal" or not _guard_home_accepts_sqlite_write(guard_home):
-        return False
-    second_state = _probe_sqlite_store(path)
-    final_identity = _sqlite_store_identity(path)
-    return second_state == "fatal" and confirmed_identity == final_identity
+    return sqlite_store_probe_detail(
+        path=path,
+        guard_home=guard_home,
+        error=error,
+        fatal_error=fatal_error,
+    ).proven_unusable
 
 
 def _quarantine_event_sort_key(base: str, fallback_mtime: float) -> tuple[str, str, float]:
@@ -117,41 +185,90 @@ def _quarantine_event_sort_key(base: str, fallback_mtime: float) -> tuple[str, s
     return ("0", "", fallback_mtime)
 
 
-def prune_quarantined_store_snapshots(guard_home: Path, *, keep: int = 2) -> int:
-    """Delete the oldest quarantined store snapshots beyond ``keep`` events.
+def _quarantine_event_base(name: str) -> str:
+    """Map a quarantine artifact name to the base database name of its event."""
+
+    for ending in ("-wal", "-shm", QUARANTINE_FORENSICS_SUFFIX):
+        if name.endswith(ending):
+            return name[: -len(ending)]
+    return name
+
+
+def _quarantine_event_epoch_seconds(base: str, fallback_mtime: float) -> float:
+    """Event time from the encoded stamp, or file mtime for legacy names."""
+
+    rank, stamp, _mtime = _quarantine_event_sort_key(base, fallback_mtime)
+    if rank != "1":
+        return fallback_mtime
+    with suppress(ValueError):
+        return datetime.strptime(stamp[:22], "%Y%m%dT%H%M%S%fZ").replace(tzinfo=timezone.utc).timestamp()
+    return fallback_mtime
+
+
+@dataclass(slots=True)
+class _QuarantineEvent:
+    sort_key: tuple[str, str, float] | None = None
+    bytes: int = 0
+    mtime: float = 0.0
+    has_snapshot: bool = False
+
+
+def prune_quarantined_store_snapshots(
+    guard_home: Path,
+    *,
+    now: float | None = None,
+    min_keep: int = 2,
+    max_age: timedelta = timedelta(days=7),
+    max_total_bytes: int = 2 * 1024**3,
+) -> int:
+    """Prune quarantined store snapshots by recency, age, and size budget.
 
     Every quarantine preserves a full copy of an unusable database, which on
-    long-lived installs reaches multiple gigabytes per event. Without this
-    sweep the Guard home grows without bound and every later start pays for
-    it. The newest ``keep`` events stay available for support diagnostics.
+    long-lived installs reaches multiple gigabytes per event. Events are
+    ordered newest first by the encoded quarantine stamp; the newest
+    ``min_keep`` events always stay, and older events stay only while they
+    are within ``max_age`` and the running byte budget. The forensic record
+    (``*.forensics.json``) belongs to its event but is never deleted — it is
+    tiny and is the only record of why the store was quarantined.
     """
 
-    keep = max(0, int(keep))
-    groups: dict[str, tuple[str, str, float]] = {}
+    min_keep = max(0, int(min_keep))
+    now_epoch = time.time() if now is None else float(now)
+    max_age_seconds = max_age.total_seconds()
+    events: dict[str, _QuarantineEvent] = {}
     with suppress(OSError):
         for entry in guard_home.glob("guard.db.corrupt-*"):
             if entry.is_symlink() or not entry.is_file():
                 continue
-            # Group the base database with its -wal/-shm sidecars by the
-            # shared quarantine id prefix.
-            name = entry.name
-            base = name
-            for ending in ("-wal", "-shm"):
-                if name.endswith(ending):
-                    base = name[: -len(ending)]
-                    break
+            base = _quarantine_event_base(entry.name)
             try:
-                modified = entry.stat().st_mtime
+                metadata = entry.stat()
             except OSError:
                 continue
-            key = _quarantine_event_sort_key(base, modified)
-            previous = groups.get(base)
-            groups[base] = key if previous is None else max(previous, key)
-    if keep >= len(groups):
-        return 0
-    stale_prefixes = sorted(groups, key=groups.__getitem__, reverse=True)[keep:]
+            event = events.setdefault(base, _QuarantineEvent())
+            key = _quarantine_event_sort_key(base, metadata.st_mtime)
+            if event.sort_key is None or key > event.sort_key:
+                event.sort_key = key
+            if not entry.name.endswith(QUARANTINE_FORENSICS_SUFFIX):
+                event.bytes += metadata.st_size
+                event.has_snapshot = True
+            event.mtime = max(event.mtime, metadata.st_mtime)
+    ordered = sorted(
+        ((base, event) for base, event in events.items() if event.has_snapshot),
+        key=lambda item: item[1].sort_key or ("0", "", 0.0),
+        reverse=True,
+    )
     removed = 0
-    for base in stale_prefixes:
+    kept_bytes = 0
+    for index, (base, event) in enumerate(ordered):
+        if index < min_keep:
+            keep_event = True
+        else:
+            age_seconds = now_epoch - _quarantine_event_epoch_seconds(base, event.mtime)
+            keep_event = age_seconds <= max_age_seconds and kept_bytes + event.bytes <= max_total_bytes
+        if keep_event:
+            kept_bytes += event.bytes
+            continue
         for ending in ("", "-wal", "-shm"):
             candidate = guard_home / f"{base}{ending}"
             with suppress(OSError):
@@ -163,6 +280,43 @@ def prune_quarantined_store_snapshots(guard_home: Path, *, keep: int = 2) -> int
                 candidate.unlink()
                 removed += 1
     return removed
+
+
+def quarantined_store_summary(guard_home: Path) -> dict[str, object]:
+    """Compact summary of quarantined store snapshots for diagnostics."""
+
+    count = 0
+    total_bytes = 0
+    forensic_record_count = 0
+    newest_epoch: float | None = None
+    events: dict[str, float] = {}
+    with suppress(OSError):
+        for entry in guard_home.glob("guard.db.corrupt-*"):
+            if entry.is_symlink() or not entry.is_file():
+                continue
+            try:
+                metadata = entry.stat()
+            except OSError:
+                continue
+            total_bytes += metadata.st_size
+            if entry.name.endswith(QUARANTINE_FORENSICS_SUFFIX):
+                forensic_record_count += 1
+            if not entry.name.endswith(QUARANTINE_FORENSICS_SUFFIX):
+                base = _quarantine_event_base(entry.name)
+                epoch = _quarantine_event_epoch_seconds(base, metadata.st_mtime)
+                previous = events.get(base)
+                events[base] = epoch if previous is None else max(previous, epoch)
+    count = len(events)
+    if events:
+        newest_epoch = max(events.values())
+    return {
+        "count": count,
+        "total_bytes": total_bytes,
+        "newest_quarantined_at": (
+            datetime.fromtimestamp(newest_epoch, tz=timezone.utc).isoformat() if newest_epoch is not None else None
+        ),
+        "forensic_record_count": forensic_record_count,
+    }
 
 
 def restore_readable_sqlite_store(*, destination: Path, quarantined: Path) -> bool:
