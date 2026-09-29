@@ -650,6 +650,25 @@ def test_portal_outage_does_not_suppress_mapping_guidance(monkeypatch: pytest.Mo
     assert MODULE.MARKER not in client.posted[0][1]
 
 
+def test_account_lookup_failure_does_not_suppress_mapping_guidance(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = FakeGitHub()
+    configure_new_contribution(client, "command.mapped", ["800"])
+    unmapped_path = "contributions/extensions/command.unmapped.json"
+    client.files.append({"status": "added", "filename": unmapped_path})
+    client.file_payloads[(MERGE_SHA, unmapped_path)] = {"schemaVersion": "v1"}
+    client.file_payloads[(client.default_branch, unmapped_path)] = {"schemaVersion": "v1"}
+
+    def lookup_failure(_account_id: str) -> str | None:
+        raise MODULE.ClaimNoticeError("GitHub API request failed")
+
+    monkeypatch.setattr(client, "user_login", lookup_failure)
+    with pytest.raises(MODULE.ClaimNoticeError, match="GitHub API request failed"):
+        MODULE.process(client, 7, MODULE.DEFAULT_STUDIO_URL)
+    assert len(client.posted) == 1
+    assert MODULE.GUIDANCE_MARKER in client.posted[0][1]
+    assert MODULE.MARKER not in client.posted[0][1]
+
+
 def test_trusted_marker_marks_readiness_already_notified() -> None:
     client = FakeGitHub()
     configure_new_contribution(client, "command.duplicate", ["900"])

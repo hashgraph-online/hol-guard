@@ -668,15 +668,26 @@ def _plan_notice_items(
         items.append(
             NoticeItem(
                 extension_id=extension_id,
-                identities=_resolve_identities(client, revalidated),
+                identities=tuple((account_id, None) for account_id in revalidated),
             )
         )
     return items, "eligible_for_notice"
 
 
+def resolve_notice_identities(client: GitHubApi, items: list[NoticeItem]) -> list[NoticeItem]:
+    """Resolve account handles only when a claim invitation will be delivered."""
+    return [
+        NoticeItem(
+            item.extension_id,
+            _resolve_identities(client, tuple(account_id for account_id, _ in item.identities)),
+        )
+        for item in items
+    ]
+
+
 def collect_notice_items(client: GitHubApi, pr_number: int, *, allow_renames: bool = False) -> list[NoticeItem]:
     items, _ = _plan_notice_items(client, pr_number, allow_renames=allow_renames)
-    return items
+    return resolve_notice_identities(client, items)
 
 
 def portal_readiness(url: str) -> tuple[str, str]:
@@ -838,15 +849,6 @@ def process(
                 f"({portal_status}: {portal_detail}); skipping claim notice"
             )
             items = []
-    if items and not notice_exists:
-        body = build_comment(items, studio_url.rstrip("/"))
-        if dry_run:
-            print(body)
-        else:
-            client.post_comment(pr_number, body)
-            print(f"PR #{pr_number}: posted Extension Studio claim notice for {len(items)} extension(s)")
-    elif notice_exists:
-        print(f"PR #{pr_number}: trusted extension claim notice already exists; skipping duplicate")
     if unmapped and not guidance_exists:
         body = build_guidance_comment(unmapped)
         if dry_run:
@@ -856,6 +858,15 @@ def process(
             print(f"PR #{pr_number}: posted claim guidance for {len(unmapped)} extension(s)")
     elif guidance_exists:
         print(f"PR #{pr_number}: trusted claim guidance already exists; skipping duplicate")
+    if items and not notice_exists:
+        body = build_comment(resolve_notice_identities(client, items), studio_url.rstrip("/"))
+        if dry_run:
+            print(body)
+        else:
+            client.post_comment(pr_number, body)
+            print(f"PR #{pr_number}: posted Extension Studio claim notice for {len(items)} extension(s)")
+    elif notice_exists:
+        print(f"PR #{pr_number}: trusted extension claim notice already exists; skipping duplicate")
     return 0
 
 
