@@ -10595,6 +10595,7 @@
     "trust": {
       "classes": {
         "external": [
+          "command.batterycontrol",
           "command.blitcp",
           "command.cloudg",
           "command.cogext",
