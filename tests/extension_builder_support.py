@@ -4,14 +4,15 @@ from __future__ import annotations
 
 import shutil
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
+from codex_plugin_scanner.guard.extension_builder import kit as kit_module
+from codex_plugin_scanner.guard.extension_builder import native_source_compiler
 from codex_plugin_scanner.guard.extension_builder.discover import discover
 from codex_plugin_scanner.guard.extension_builder.io import canonical_json
 from codex_plugin_scanner.guard.extension_builder.kit import Kit, build_kit
 from codex_plugin_scanner.guard.extension_builder.models import Discovery, Metadata
 from codex_plugin_scanner.guard.extension_builder.repository_edits import (
-    CATALOG_PATH,
     PYPROJECT_PATH,
     STAGING_PATH,
     TRUST_PATH,
@@ -19,6 +20,30 @@ from codex_plugin_scanner.guard.extension_builder.repository_edits import (
 from codex_plugin_scanner.guard.extension_builder.review import default_review, load_review
 
 REPOSITORY = Path(__file__).resolve().parents[1]
+
+
+def use_built_native_source_compiler(monkeypatch: Any) -> None:
+    """Route builder unit tests through the explicitly built native compiler."""
+
+    candidates = [
+        REPOSITORY / "rust/target/release/guard-command-source",
+        REPOSITORY / "rust/target/release/guard-command-source.exe",
+        REPOSITORY / "rust/target/debug/guard-command-source",
+        REPOSITORY / "rust/target/debug/guard-command-source.exe",
+    ]
+    compiler = next((candidate for candidate in candidates if candidate.is_file()), candidates[0])
+    assert compiler.is_file(), "build guard-command-source before running builder orchestration tests"
+    setter = monkeypatch.setattr
+    setter(
+        kit_module,
+        "compile_source",
+        lambda request: native_source_compiler.compile_source(request, compiler=compiler),
+    )
+    setter(
+        kit_module,
+        "run_source_compiler",
+        lambda operation, request: native_source_compiler.run_source_compiler(operation, request, compiler=compiler),
+    )
 
 
 def metadata(kind: Literal["cli", "mcp"] = "cli", *, slug: str = "builder-demo") -> Metadata:
@@ -97,8 +122,6 @@ def repository_fixture(tmp_path: Path) -> Path:
         PYPROJECT_PATH,
         TRUST_PATH,
         STAGING_PATH,
-        CATALOG_PATH,
-        "src/codex_plugin_scanner/guard/runtime/command_reviewed_literal_matcher.py",
     ):
         destination = root / name
         destination.parent.mkdir(parents=True, exist_ok=True)

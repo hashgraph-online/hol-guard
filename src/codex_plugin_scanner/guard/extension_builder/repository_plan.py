@@ -11,12 +11,10 @@ from .io import canonical_json, checked_path, digest, object_value, read_bytes, 
 from .kit import MAX_ARTIFACT_BYTES, Kit, build_kit
 from .models import Metadata, load_discovery
 from .repository_edits import (
-    CATALOG_PATH,
     PYPROJECT_PATH,
     STAGING_PATH,
     TRUST_PATH,
     conflict,
-    edit_catalog,
     edit_pyproject,
     edit_staging,
     edit_trust,
@@ -105,6 +103,15 @@ def _previous_kit(root: Path, metadata: Metadata) -> Kit | None:
     payload = object_value(read_json(prefix / "record.json"))
     if payload.get("schemaVersion") != OWNERSHIP_SCHEMA or payload.get("builderVersion") != BUILDER_VERSION:
         raise conflict("The prior authoring record uses an unsupported builder contract; migrate it explicitly.")
+    managed = payload.get("managedFiles")
+    if isinstance(managed, dict) and any(
+        isinstance(path, str) and (path.endswith("_extensions.py") or path.startswith("tests/test_generated_cli_"))
+        for path in managed
+    ):
+        raise conflict(
+            "The prior kit contains generated Python detector artifacts; regenerate it as a declarative "
+            "command source and review the resulting native diff before applying."
+        )
     discovery = load_discovery(read_json(prefix / "discovery.json"))
     if discovery.metadata.contribution_id != metadata.contribution_id:
         raise conflict("The existing authoring record belongs to a different contribution.")
@@ -129,17 +136,12 @@ def _installed_executable_collision(metadata: Metadata) -> None:
     # This is the installed Guard registry, never code imported from the destination
     # checkout. Destination-only contributions are checked separately as JSON data.
     from ..runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
-    from ..runtime.command_rules import matcher_index_hints
 
     wanted = _executable_identity(metadata.executable)
     for extension in BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions:
         if extension.extension_id == metadata.catalog_id:
             continue
-        executables = set(extension.executables)
-        for rule in extension.rules:
-            if rule.matcher is not None:
-                executables.update(matcher_index_hints(rule.matcher).executables)
-        if wanted in {_executable_identity(name) for name in executables}:
+        if wanted in {_executable_identity(name) for name in extension.executables}:
             raise conflict("This executable already has Guard coverage; extend its existing contribution instead.")
 
 
@@ -174,10 +176,6 @@ def _contribution_collisions(root: Path, metadata: Metadata) -> None:
 
 def _shared_files(root: Path, metadata: Metadata) -> dict[str, str]:
     paths = [PYPROJECT_PATH, TRUST_PATH, STAGING_PATH]
-    if metadata.kind == "cli":
-        paths.append(CATALOG_PATH)
-        helper = root / "src/codex_plugin_scanner/guard/runtime/command_reviewed_literal_matcher.py"
-        read_bytes(helper)
     return {path: text_from_bytes(read_bytes(root / path)) for path in paths}
 
 
@@ -187,8 +185,6 @@ def _edited_shared(files: dict[str, str], metadata: Metadata) -> dict[str, str]:
         PYPROJECT_PATH: edit_pyproject(files[PYPROJECT_PATH], metadata),
         STAGING_PATH: edit_staging(files[STAGING_PATH], metadata),
     }
-    if metadata.kind == "cli":
-        edited[CATALOG_PATH] = edit_catalog(files[CATALOG_PATH], metadata)
     return edited
 
 

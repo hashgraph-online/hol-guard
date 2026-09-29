@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.shims import (
+    activate_package_shims,
     build_shim_content_hash,
     get_path_order_status,
     get_real_binary_info,
@@ -266,6 +267,25 @@ class TestScrg266ShimAutoRepair:
         assert result["repaired"] == []
         assert result["path_repair_required"] == ["npm"]
         assert result["shell_hints"]["bash"].startswith("export PATH=")
+
+    def test_repair_restores_shell_profile_for_intact_shim(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        ctx = _make_context(tmp_path)
+        ctx.home_dir = tmp_path / "home"
+        ctx.home_dir.mkdir()
+        monkeypatch.setenv("SHELL", "/bin/bash")
+        monkeypatch.setattr("codex_plugin_scanner.guard.shims._is_transient_path", lambda _: False)
+        install_package_shims(ctx, managers=("npm",))
+        (ctx.home_dir / ".bashrc").unlink(missing_ok=True)
+        real_dir = tmp_path / "bin"
+        real_dir.mkdir()
+        (real_dir / "npm").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        monkeypatch.setenv("PATH", str(real_dir))
+        result = activate_package_shims(ctx, managers=("npm",), repair=True)
+        assert result["repaired"] == []
+        assert result["profile"]["changed"] is True
+        assert "package-shims" in (ctx.home_dir / ".bashrc").read_text(encoding="utf-8")
 
     def test_status_includes_shell_hints_for_path_repair(self, tmp_path: Path) -> None:
         ctx = _make_context(tmp_path)

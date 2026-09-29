@@ -13,6 +13,9 @@ build/
 *.egg
 rust/target/
 
+# Native binaries are staged only for wheel and frozen builds.
+/src/codex_plugin_scanner/_native/
+
 # Virtual environments
 .venv/
 venv/

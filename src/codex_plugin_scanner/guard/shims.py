@@ -1067,7 +1067,7 @@ def _profile_already_references_path(content: str, shim_dir: Path) -> bool:
     )
 
 
-def _package_protect_command_args(context: HarnessContextLike, workspace_args: list[str]) -> list[str]:
+def _package_protect_command_args(context: HarnessContextLike) -> list[str]:
     home_dir = context.home_dir
     protect_args = [
         "protect",
@@ -1075,7 +1075,6 @@ def _package_protect_command_args(context: HarnessContextLike, workspace_args: l
         "--guard-home",
         str(context.guard_home),
         *(["--home", str(home_dir)] if home_dir else []),
-        *workspace_args,
     ]
     if bool(getattr(sys, "frozen", False)):
         return [package_shim_interpreter(), *protect_args]
@@ -1092,11 +1091,8 @@ def _package_protect_command_args(context: HarnessContextLike, workspace_args: l
 
 
 def _build_package_manager_python_shim(context: HarnessContext, command: str) -> str:
-    workspace_args: list[str] = []
-    if context.workspace_dir is not None:
-        workspace_args = ["--workspace", str(context.workspace_dir)]
     shim_dir = context.guard_home / "package-shims" / "bin"
-    command_args = _package_protect_command_args(context, workspace_args)
+    command_args = _package_protect_command_args(context)
     return "\n".join(
         (
             f"#!{package_shim_interpreter()}",
@@ -1111,9 +1107,9 @@ def _build_package_manager_python_shim(context: HarnessContext, command: str) ->
             f"base_command = {command_args!r}",
             f"command_name = {command!r}",
             f"guard_cli_cwd = {str(_trusted_import_root())!r}",
-            f"guard_workspace = {str(context.workspace_dir) if context.workspace_dir is not None else None!r}",
+            "guard_workspace = None",
             f"guard_home = {str(context.guard_home)!r}",
-            f"guard_has_explicit_workspace = {context.workspace_dir is not None!r}",
+            "guard_has_explicit_workspace = False",
             f"shim_dir = {str(shim_dir.resolve())!r}",
             f"local_test_runners = {tuple(sorted(_LOCAL_TEST_RUNNER_COMMANDS))!r}",
             f"shim_probe = os.environ.get({SHIM_PROBE_ENV_VAR!r}) == {SHIM_PROBE_ENV_VALUE!r}",

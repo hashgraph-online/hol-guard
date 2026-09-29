@@ -8,14 +8,17 @@ import threading
 from collections import OrderedDict
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ..approval_gate import (
     ApprovalGateError,
+    ApprovalGateInput,
     consume_extension_control_grant,
     input_from_mapping,
     require_extension_control,
 )
+from ..runtime import command_inspection
 from ..runtime.command_extensions import CommandSafetyExtensionRegistry
 from ..runtime.extension_control_authority import (
     AuthorityHealth,
@@ -57,6 +60,7 @@ _MAX_PENDING_PROOFS = 128
 _MAX_APPLIED_MUTATIONS = 128
 _MAX_EVENT_TARGETS = 512
 _MAX_EVENT_RULE_IDS = 1024
+_MAX_INSPECTION_COMMAND_CHARS = 4096
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,6 +129,31 @@ class ExtensionControlApiService:
             payload=payload,
         )
 
+    def inspect_command(self, payload: dict[str, object]) -> dict[str, object]:
+        raw_command = payload.get("command")
+        command = raw_command.strip() if isinstance(raw_command, str) else ""
+        if not command or len(command) > _MAX_INSPECTION_COMMAND_CHARS or "\x00" in command:
+            raise ExtensionControlApiError(400, "invalid_inspection_command")
+        paths: dict[str, Path] = {}
+        for field in ("cwd", "home_dir"):
+            raw_path = payload.get(field)
+            if not isinstance(raw_path, str) or not raw_path or "\x00" in raw_path:
+                raise ExtensionControlApiError(400, f"invalid_{field}")
+            path = Path(raw_path)
+            if not path.is_absolute():
+                raise ExtensionControlApiError(400, f"invalid_{field}")
+            paths[field] = path
+        try:
+            return command_inspection.inspect_command(
+                command,
+                cwd=paths["cwd"],
+                home_dir=paths["home_dir"],
+                guard_home=self._store.guard_home,
+                extension_control_snapshot=self._runtime.current(),
+            )
+        except ValueError as exc:
+            raise ExtensionControlApiError(400, "invalid_inspection_command") from exc
+
     def history(self) -> dict[str, object]:
         current = self._runtime.current()
         try:
@@ -141,12 +170,22 @@ class ExtensionControlApiService:
             "items": items,
         }
 
-    def _require_action_grant(self, payload: dict[str, object], *, action: str, subject: str) -> None:
+    def _require_action_grant(
+        self,
+        payload: dict[str, object],
+        *,
+        action: str,
+        subject: str,
+        require_fresh_totp: bool = False,
+    ) -> None:
         session_nonce = required_request_string(payload, "session_nonce")
+        gate_input = input_from_mapping(payload)
+        if require_fresh_totp:
+            gate_input = replace(gate_input or ApprovalGateInput(), require_fresh_totp=True)
         try:
             grant = require_extension_control(
                 self._store.guard_home,
-                approval_gate_input=input_from_mapping(payload),
+                approval_gate_input=gate_input,
                 action=action,
                 subject=subject,
                 session_nonce=session_nonce,
@@ -161,7 +200,7 @@ class ExtensionControlApiService:
         except ApprovalGateError as exc:
             raise ExtensionControlApiError(exc.status, exc.code) from exc
 
-    def recover_authority(self, payload: dict[str, object]) -> dict[str, object]:
+    def recover_authority(self, payload: dict[str, object], *, require_fresh_totp: bool = False) -> dict[str, object]:
         current = self._store.read_extension_control_authority_for_registry(self._registry)
         if current.health not in {AuthorityHealth.TAMPERED, AuthorityHealth.RECOVERY_REQUIRED}:
             runtime = self._runtime.current()
@@ -178,7 +217,12 @@ class ExtensionControlApiService:
         _ = self._runtime.refresh(current)
         action = "recover-authority"
         subject = f"{action}:{current.health.value}:{current.revision}:{self._registry.catalog_digest}"
-        self._require_action_grant(payload, action=action, subject=subject)
+        self._require_action_grant(
+            payload,
+            action=action,
+            subject=subject,
+            require_fresh_totp=require_fresh_totp,
+        )
         try:
             view = self._store.recover_extension_control_authority(
                 catalog_digest=self._registry.catalog_digest,

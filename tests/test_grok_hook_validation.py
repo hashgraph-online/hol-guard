@@ -59,7 +59,31 @@ def test_frozen_generated_grok_bridge_is_recognized(tmp_path: Path, monkeypatch:
     """Packaged Core hooks retain the supported frozen bridge form."""
     monkeypatch.setattr(sys, "frozen", True, raising=False)
     monkeypatch.delenv("HOL_GUARD_DESKTOP", raising=False)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge.isolated_cursor_hook_python",
+        lambda: None,
+    )
     assert is_grok_hook_command(_shell_command(_command(tmp_path))) is True
+
+
+def test_isolated_frozen_grok_client_is_recognized(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Frozen Core prefers the stdlib client that posts to the running daemon."""
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.delenv("HOL_GUARD_DESKTOP", raising=False)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge.isolated_cursor_hook_python",
+        lambda: "/usr/bin/python3",
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.adapters.cursor_hook_config.isolated_cursor_hook_python",
+        lambda: "/usr/bin/python3",
+    )
+    context = HarnessContext(tmp_path / "home", tmp_path / "workspace", tmp_path / "guard")
+    command = GrokHarnessAdapter._hook_command_parts(context)
+    assert command[:2] == ("/usr/bin/python3", "-I")
+    assert is_grok_hook_command(_shell_command(command), context) is True
+    other = HarnessContext(tmp_path / "other", None, tmp_path / "other-guard")
+    assert is_grok_hook_command(_shell_command(command), other) is False
 
 
 @pytest.mark.skipif(os.name == "nt", reason="macOS signed proxy uses POSIX shell serialization")

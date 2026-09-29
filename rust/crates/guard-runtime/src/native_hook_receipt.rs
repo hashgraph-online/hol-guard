@@ -40,6 +40,7 @@ struct DecisionReceiptInputs<'a> {
     reason_code: &'a str,
     reviewed_output_sha256: Option<&'a str>,
     observe_mode: bool,
+    command_extensions: Option<&'a guard_contracts::NativeCommandReceiptBindingV1>,
 }
 
 fn build_decision_receipt(
@@ -54,7 +55,7 @@ fn build_decision_receipt(
     let rule_digest = optional_snapshot_string(policy_snapshot, envelope, "rule_digest");
     let runtime_identity = optional_snapshot_string(policy_snapshot, envelope, "runtime_identity");
     let workspace_bound = envelope.source.cwd.is_some();
-    let identity = serde_json::json!({
+    let mut identity = serde_json::json!({
         "schema": "guard-native-hook-decision-identity.v1",
         "version": 1,
         "request_id": inputs.request_id,
@@ -77,6 +78,10 @@ fn build_decision_receipt(
         "observe_mode": inputs.observe_mode,
         "deadline_budget_ms": envelope.deadline_budget_ms,
     });
+    if let Some(binding) = inputs.command_extensions {
+        identity["command_extensions"] = serde_json::to_value(binding)
+            .map_err(|_| "native_hook_decision_receipt_digest_failed".to_owned())?;
+    }
     let canonical = guard_policy_snapshot::canonical_json_bytes(&identity)
         .map_err(|_| "native_hook_decision_receipt_digest_failed".to_owned())?;
     let decision_id = hex::encode(Sha256::digest(&canonical));
@@ -104,6 +109,7 @@ fn build_decision_receipt(
         reviewed_output_sha256: inputs.reviewed_output_sha256.map(ToOwned::to_owned),
         observe_mode: inputs.observe_mode,
         deadline_budget_ms: envelope.deadline_budget_ms,
+        command_extensions: inputs.command_extensions.cloned(),
     };
     let encoded = serde_json::to_vec(&receipt)
         .map_err(|_| "native_hook_decision_receipt_encode_failed".to_owned())?;
@@ -138,6 +144,10 @@ pub(crate) fn receipt_from_pre_tool(
             reason_code: &result.reason_code,
             reviewed_output_sha256: None,
             observe_mode: false,
+            command_extensions: result
+                .command_extensions
+                .as_ref()
+                .map(|value| &value.binding),
         },
     )
 }
@@ -167,6 +177,7 @@ pub(crate) fn receipt_from_post_tool(
             reason_code: &result.reason_code,
             reviewed_output_sha256: result.reviewed_output_sha256.as_deref(),
             observe_mode: result.observe_mode,
+            command_extensions: None,
         },
     )
 }

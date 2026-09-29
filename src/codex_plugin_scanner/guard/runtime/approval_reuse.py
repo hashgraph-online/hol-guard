@@ -33,6 +33,7 @@ ApprovalReuseValidationFailure = Literal[
     "approval_reuse_integrity_failure",
     "approval_reuse_claim_failed",
     "approval_reuse_launch_identity_unverified",
+    "approval_reuse_provider_account_unverified",
     "approval_reuse_context_changed_after_claim",
 ]
 

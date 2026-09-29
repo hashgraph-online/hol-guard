@@ -28,10 +28,6 @@ fn allows_bounded_command_without_returning_raw_content() {
 fn covers_generic_action_classes_and_dangerous_process_floor() {
     let cases = [
         (
-            json!({"toolName": "read_file", "path": "README.md"}),
-            PreToolActionTypeV1::FileRead,
-        ),
-        (
             json!({"toolName": "run_terminal_command", "command": "npm install left-pad"}),
             PreToolActionTypeV1::Package,
         ),
@@ -178,6 +174,23 @@ fn tool_classification_uses_token_boundaries() {
 
     let get_target = generic(json!({"toolName": "get_target"}));
     assert_eq!(get_target.action.action_type, PreToolActionTypeV1::Unknown);
+}
+
+#[test]
+fn allows_one_non_sensitive_file_read() {
+    let source = generic(json!({"toolName": "read_file", "path": "README.md"}));
+    assert_eq!(source.action.action_type, PreToolActionTypeV1::FileRead);
+    assert_eq!(source.minimum_action, "allow");
+    assert!(source.explicitly_benign);
+    let secret = generic(json!({"toolName": "read_file", "path": ".env"}));
+    assert_eq!(secret.minimum_action, "review");
+    assert!(!secret.explicitly_benign);
+    let system = generic(json!({"toolName": "read_file", "path": "/etc/passwd"}));
+    assert_eq!(system.minimum_action, "review");
+    let credentials = generic(json!({"toolName": "read_file", "path": ".aws/credentials"}));
+    assert_eq!(credentials.minimum_action, "review");
+    let aliased = generic(json!({"toolName": "read_file", "path": "/./proc/self/environ"}));
+    assert_eq!(aliased.minimum_action, "review");
 }
 
 #[test]
