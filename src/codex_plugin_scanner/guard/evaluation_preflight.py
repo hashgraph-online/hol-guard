@@ -28,6 +28,7 @@ from .evaluation_contracts import (
     validate_evaluation_profile,
 )
 from .evaluation_host_probe import check_host_version
+from .evaluation_scope import _safe_temp_parent
 
 EvaluationSetupStatus = Literal["passed", "blocked_environment", "not_run"]
 EvaluationPhase = Literal["preflight", "setup"]
@@ -93,6 +94,8 @@ class EvaluationSetup:
     report: EvaluationPreflightReport
     root_path: Path | None = None
     marker_token: str | None = None
+    root_identity: tuple[int, int] | None = None
+    workspace_identity: tuple[int, int] | None = None
 
     @property
     def guard_home(self) -> Path | None:
@@ -195,38 +198,6 @@ def _observed_privilege() -> str:
     if hasattr(os, "geteuid"):
         return "administrator" if os.geteuid() == 0 else "standard_user"
     return "unknown"
-
-
-def _safe_temp_parent(path: Path) -> bool:
-    """Require a private owned directory below the process temporary root."""
-
-    try:
-        if "\x00" in str(path) or path.is_symlink() or not path.is_dir():
-            return False
-        candidate = os.path.realpath(os.fspath(path))
-    except (OSError, RuntimeError):
-        return False
-
-    if os.name == "nt":
-        if candidate.startswith("\\\\"):
-            return False
-        temp_root = os.path.normcase(os.path.normpath(os.path.realpath(tempfile.gettempdir())))
-        candidate_normalized = os.path.normcase(os.path.normpath(candidate))
-        try:
-            return (
-                candidate_normalized != temp_root and os.path.commonpath((candidate_normalized, temp_root)) == temp_root
-            )
-        except ValueError:
-            return False
-
-    root = os.path.realpath(tempfile.gettempdir())
-    try:
-        if os.path.commonpath((candidate, root)) != root or candidate == root:
-            return False
-        details = path.stat()
-        return details.st_uid == os.getuid() and stat.S_IMODE(details.st_mode) & 0o077 == 0
-    except (OSError, ValueError):
-        return False
 
 
 def _resolve_host_executable(value: str) -> Path | None:
@@ -506,6 +477,8 @@ def setup_evaluation(
         workspace = root_path / "workspace"
         guard_home.mkdir(mode=0o700)
         workspace.mkdir(mode=0o700)
+        root_info = root_path.stat(follow_symlinks=False)
+        workspace_info = workspace.stat(follow_symlinks=False)
         report = replace(
             preflight,
             phase="setup",
@@ -514,7 +487,13 @@ def setup_evaluation(
             owned_root=str(root_path),
             checks=(*preflight.checks, _check("setup", "passed")),
         )
-        return EvaluationSetup(report=report, root_path=root_path, marker_token=marker_token)
+        return EvaluationSetup(
+            report=report,
+            root_path=root_path,
+            marker_token=marker_token,
+            root_identity=(root_info.st_dev, root_info.st_ino),
+            workspace_identity=(workspace_info.st_dev, workspace_info.st_ino),
+        )
     except (OSError, RuntimeError) as exc:
         if root_path is not None and root_path.exists():
             with contextlib.suppress(EvaluationContractError):

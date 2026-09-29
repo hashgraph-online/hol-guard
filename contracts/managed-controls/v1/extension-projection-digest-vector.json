@@ -1,7 +1,7 @@
 {
-  "canonicalProjectionJson": "{\"authorityMode\":\"managed-restrictive\",\"delegatedTargets\":[],\"ruleTargets\":[{\"extensionIds\":[\"command.git\"],\"permissionIds\":[\"command.git.permission.force-push\"],\"ruleId\":\"force-push-review\"}],\"schemaVersion\":\"guard.signed-cloud-extension-projection.v1\",\"signedCloudLayersJson\":\"[{\\\"catalog_digest\\\":\\\"5ddd99d39d734148250f7f212e4b615cf8db38c864e70731e4b835117126c31d\\\",\\\"controls\\\":[{\\\"state\\\":\\\"disabled\\\",\\\"target_id\\\":\\\"command.git.permission.force-push\\\",\\\"target_kind\\\":\\\"permission\\\"}],\\\"global_lockdown\\\":false,\\\"kind\\\":\\\"signed-cloud\\\",\\\"schema_version\\\":\\\"1.0.0\\\"}]\"}",
-  "catalogDigest": "5ddd99d39d734148250f7f212e4b615cf8db38c864e70731e4b835117126c31d",
-  "expectedExtensionProjectionDigest": "sha256:56cdb673cf14d447a7bc0a8135fb26d0fb32d5518474029f248e92e2f21912d8",
+  "canonicalProjectionJson": "{\"authorityMode\":\"managed-restrictive\",\"delegatedTargets\":[],\"ruleTargets\":[{\"extensionIds\":[\"command.git\"],\"permissionIds\":[\"command.git.permission.force-push\"],\"ruleId\":\"force-push-review\"}],\"schemaVersion\":\"guard.signed-cloud-extension-projection.v1\",\"signedCloudLayersJson\":\"[{\\\"catalog_digest\\\":\\\"cf1c0637d2bd9528842350f7d669e923f6fd69f8897a105250a5d8b0335c57b1\\\",\\\"controls\\\":[{\\\"state\\\":\\\"disabled\\\",\\\"target_id\\\":\\\"command.git.permission.force-push\\\",\\\"target_kind\\\":\\\"permission\\\"}],\\\"global_lockdown\\\":false,\\\"kind\\\":\\\"signed-cloud\\\",\\\"schema_version\\\":\\\"1.0.0\\\"}]\"}",
+  "catalogDigest": "cf1c0637d2bd9528842350f7d669e923f6fd69f8897a105250a5d8b0335c57b1",
+  "expectedExtensionProjectionDigest": "sha256:0267560984e4ea6e6982264fb5e15a875ff940e91caec87ef0dd9c2bac45ea5f",
   "schemaVersion": "guard.signed-cloud-extension-projection-vector.v1",
   "sourceBundleVector": "policy-bundle-v2-extension-signature-vector.json"
 }

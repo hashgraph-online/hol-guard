@@ -440,6 +440,7 @@ _DAEMON_CRITICAL_PATHS = frozenset(
     {
         "/healthz",
         "/v1/daemon/identity-challenge",
+        "/v1/desktop/bootstrap",
     }
 )
 
@@ -2192,6 +2193,39 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         self._write_empty(status=200, extra_headers=headers)
 
+    def _serve_desktop_bootstrap(self, store: GuardStore) -> None:
+        """Return the desktop bootstrap document without queueing behind hook traffic.
+
+        The token is accepted only as a header. A query-string token is rejected
+        the same way as the other v1 routes. Failure is a 503 so the CLI falls
+        through to the full bootstrap command.
+        """
+
+        parsed = urlparse(self.path)
+        if self._query_has_guard_token(parsed.query):
+            self._record_query_token_rejection()
+            self._write_unauthorized(extra_headers=self._cors_headers_for_request())
+            return
+        if not self._header_token_is_valid():
+            self._write_unauthorized(extra_headers=self._cors_headers_for_request())
+            return
+        try:
+            from ..cli.commands_dispatch_desktop import desktop_bootstrap_document_for_running_daemon
+
+            document = desktop_bootstrap_document_for_running_daemon(
+                store=store,
+                home_dir=self.server.home_dir,
+                daemon_url=f"http://127.0.0.1:{self.server.daemon_port()}",
+                auth_token=self.server.auth_token,
+            )
+        except Exception:
+            diagnostics = getattr(self.server, "diagnostics", None)
+            if diagnostics is not None:
+                diagnostics.record_exception("desktop_bootstrap_unavailable")
+            self._write_json({"error": "desktop_bootstrap_unavailable"}, status=503)
+            return
+        self._write_json(document)
+
     def do_GET(self) -> None:
         store = self.server.store  # type: ignore[attr-defined]
         parsed = urlparse(self.path)
@@ -2208,6 +2242,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 self._write_unauthorized(extra_headers=self._cors_headers_for_request())
                 return
             self._write_json(self._detailed_healthz_payload())
+            return
+        if parsed.path == "/v1/desktop/bootstrap":
+            self._serve_desktop_bootstrap(store)
             return
         if parsed.path == "/v1/events/stream":
             if self._query_has_guard_token(parsed.query):
@@ -8199,6 +8236,7 @@ class GuardDaemonServer:
                 raise RuntimeError("Guard daemon serve thread did not become ready")
             self._publish_listen_state()
             self._diagnostics.record("daemon_listen_ready")
+            self._warm_desktop_bootstrap_cache()
             if not continue_after_listen:
                 return
         self._complete_owned_service_after_listen(generation, already_locked=True)
@@ -8249,6 +8287,31 @@ class GuardDaemonServer:
             return
         with self._finish_service_lock:
             start_post_listen_workers()
+
+    def _warm_desktop_bootstrap_cache(self) -> None:
+        """Fill the bootstrap document before Desktop's first open poll.
+
+        This runs beside artifact reconciliation. A failure leaves the cache
+        empty; the request path builds the document or returns 503.
+        """
+
+        server = self._server
+
+        def warm() -> None:
+            try:
+                from ..cli.commands_dispatch_desktop import desktop_bootstrap_document_for_running_daemon
+
+                desktop_bootstrap_document_for_running_daemon(
+                    store=server.store,
+                    home_dir=server.home_dir,
+                    daemon_url=f"http://127.0.0.1:{server.daemon_port()}",
+                    auth_token=server.auth_token,
+                )
+            except Exception:
+                self._diagnostics.record_exception("desktop_bootstrap_warmup_failed")
+                return
+
+        threading.Thread(target=warm, name="desktop-bootstrap-warm", daemon=True).start()
 
     def refresh_command_queue_worker(self) -> dict[str, object]:
         """Apply changed Cloud connectivity and consent without a daemon restart."""

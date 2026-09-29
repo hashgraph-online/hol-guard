@@ -80,8 +80,11 @@
     "external": [
       "command.blitcp",
       "command.cloudg",
+      "command.cogext",
+      "command.genclave",
       "command.mcp-filesystem",
       "command.mcp-instapods",
+      "command.mcp-pr-ui-compare",
       "command.noodle",
       "command.ollama",
       "command.probe",

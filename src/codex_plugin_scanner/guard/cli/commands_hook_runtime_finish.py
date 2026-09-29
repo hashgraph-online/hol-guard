@@ -286,7 +286,7 @@ def _finalize_runtime_artifact_hook(
                 output_stream=output_stream,
             )
         elif _canonical_harness_name(args.harness) == "zcode":
-            from ..adapters.zcode_hooks import emit_zcode_hook_response
+            from ..adapters.zcode_hooks import emit_zcode_hook_response, zcode_hook_process_exit
 
             emit_zcode_hook_response(
                 policy_action=policy_action,
@@ -390,7 +390,7 @@ def _finalize_runtime_artifact_hook(
             )
             return 0 if policy_action not in {"review", "require-reapproval", "sandbox-required", "block"} else 2
         if canonical_harness == "zcode":
-            from ..adapters.zcode_hooks import emit_zcode_hook_response
+            from ..adapters.zcode_hooks import emit_zcode_hook_response, zcode_hook_process_exit
 
             emit_zcode_hook_response(
                 policy_action=policy_action,
@@ -405,7 +405,7 @@ def _finalize_runtime_artifact_hook(
                 payload=payload,
                 policy_action=policy_action,
             )
-            return 0 if policy_action not in {"review", "require-reapproval", "sandbox-required", "block"} else 2
+            return zcode_hook_process_exit(policy_action=policy_action, event_name=event_name)
         if canonical_harness == "devin":
             from ..adapters.devin_hooks import emit_devin_hook_response
 

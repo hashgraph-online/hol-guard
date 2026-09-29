@@ -171,8 +171,9 @@ def test_feed_builds_core_with_multiprocessing_safe_entrypoint() -> None:
     entrypoint = FROZEN_ENTRYPOINT.read_text(encoding="utf-8")
     freeze_dispatch = entrypoint.index("freeze_support()")
     version_probe = entrypoint.index('sys.argv[1] == "--version"')
+    bootstrap_proxy = entrypoint.index("if _try_proxy_running_desktop_bootstrap():")
     guard_import = entrypoint.index("from codex_plugin_scanner.guard.frozen_daemon_runtime")
-    assert freeze_dispatch < version_probe < guard_import
+    assert freeze_dispatch < version_probe < bootstrap_proxy < guard_import
     assert "scripts/mdm/hol-guard-entry.py" in workflow_text()
 
 
