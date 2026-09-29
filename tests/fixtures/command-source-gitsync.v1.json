@@ -10499,6 +10499,7 @@
           "command.mcp-filesystem",
           "command.mcp-instapods",
           "command.mcp-pr-ui-compare",
+          "command.mcp-reaper",
           "command.noodle",
           "command.ollama",
           "command.probe",
