@@ -1,0 +1,611 @@
+{
+  "schema": "guard.command-extension-source.v1",
+  "extension": {
+    "action_classes": [
+      "batterycontrol charging policy command",
+      "batterycontrol privileged maintenance command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews BatteryControl commands that change charging policy, discharge state, or the privileged daemon installation, while keeping read-only status, diagnostics, and help output automatic.",
+    "ecosystem_ids": [],
+    "executables": [
+      "batterycontrol"
+    ],
+    "extension_id": "command.batterycontrol",
+    "homepage": null,
+    "icon": {
+      "kind": "none"
+    },
+    "license": "MIT",
+    "name": "BatteryControl command protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "batterycontrol charging policy command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `batterycontrol limit set`, which installs a daemon-owned charge-limit policy that changes when the battery charges and pauses until it is removed.",
+        "example_command": "batterycontrol limit set 80",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "3.6.1",
+        "label": "Charge limit change",
+        "permission_id": "command.batterycontrol.permission.limit-set",
+        "replacement_permission_id": null,
+        "risk_tier": "medium",
+        "safer_guidance": [
+          "Run `batterycontrol status` and `batterycontrol limit status` to inspect the current policy before changing it.",
+          "Confirm the limit and resume values are intentional before approving; the daemon re-applies the policy across reboots and wake."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "batterycontrol charging policy command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `batterycontrol limit off`, which removes an active charge-limit policy and hands charging back to macOS. Upstream requires `--confirm` while a limit is active so unattended callers cannot silently drop the protection.",
+        "example_command": "batterycontrol limit off --confirm",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "3.6.1",
+        "label": "Charge limit removal",
+        "permission_id": "command.batterycontrol.permission.limit-off",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Run `batterycontrol limit status` first to see whether a limit is active and verified on hardware.",
+          "Removing an active limit lets the battery charge to 100% again; confirm the change is deliberate."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "batterycontrol charging policy command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `batterycontrol discharge start`, which cuts adapter input and runs the Mac on battery down to a target while plugged in.",
+        "example_command": "batterycontrol discharge start 60",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "3.6.1",
+        "label": "Forced discharge start",
+        "permission_id": "command.batterycontrol.permission.discharge-start",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Run `batterycontrol discharge status` first; a discharge session may already be running.",
+          "Keep the default 20% floor; unplugging stops the session, but the battery drains while the session is active."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "batterycontrol charging policy command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `batterycontrol discharge start --allow-below-floor`, which consents to draining below the 20% safety floor. Upstream documents this as deliberate battery wear and the daemon enforces its own consent check.",
+        "example_command": "batterycontrol discharge start 10 --allow-below-floor",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "3.6.1",
+        "label": "Below-floor forced discharge",
+        "permission_id": "command.batterycontrol.permission.discharge-below-floor",
+        "replacement_permission_id": null,
+        "risk_tier": "critical",
+        "safer_guidance": [
+          "Draining below 20% accelerates battery wear; only approve when the battery is being deliberately serviced.",
+          "Prefer a target at or above the 20% floor unless the upstream safety-floor switch has been consciously removed."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "batterycontrol privileged maintenance command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `batterycontrol uninstall`, which removes the root LaunchDaemon, the privileged helper, and the CLI after restoring normal charging.",
+        "example_command": "batterycontrol uninstall --confirm",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "3.6.1",
+        "label": "Privileged daemon uninstall",
+        "permission_id": "command.batterycontrol.permission.uninstall",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Run `batterycontrol status` first so the removal decision is made against a known daemon state.",
+          "Uninstall removes privileged charging control system-wide; confirm no scheduled automation depends on it."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": {
+      "display_name": "Community",
+      "id": "community.batterycontrol",
+      "url": null
+    },
+    "reference_urls": [
+      "https://github.com/Ednk-1312/BatteryControl",
+      "https://github.com/Ednk-1312/BatteryControl/blob/main/README.md"
+    ],
+    "required": false,
+    "risk_classes": [
+      "destructive_shell"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "batterycontrol charging policy command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `batterycontrol limit set`, which installs a daemon-owned charge-limit policy that changes when the battery charges and pauses until it is removed.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "batterycontrol",
+                  "batterycontrol.cmd",
+                  "batterycontrol.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--resume"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "limit",
+                  "set"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.batterycontrol.permission.limit-set",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.batterycontrol.limit-set",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "batterycontrol",
+                      "batterycontrol.cmd",
+                      "batterycontrol.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--resume"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "limit",
+                      "set"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "batterycontrol limit set command help",
+            "variant_id": "help"
+          }
+        ],
+        "severity": "medium",
+        "title": "BatteryControl charge limit change",
+        "safer_alternatives": [
+          "Run `batterycontrol limit status` to inspect the active policy before changing it.",
+          "Confirm the limit and resume values are intentional; the daemon re-applies the policy across reboots and wake."
+        ]
+      },
+      {
+        "action_classes": [
+          "batterycontrol charging policy command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `batterycontrol limit off`, which removes an active charge-limit policy and hands charging back to macOS. Upstream requires `--confirm` while a limit is active so unattended callers cannot silently drop the protection.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "batterycontrol",
+                  "batterycontrol.cmd",
+                  "batterycontrol.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "limit",
+                  "off"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.batterycontrol.permission.limit-off",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.batterycontrol.limit-off",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "batterycontrol",
+                      "batterycontrol.cmd",
+                      "batterycontrol.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "limit",
+                      "off"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "batterycontrol limit off command help",
+            "variant_id": "help"
+          }
+        ],
+        "severity": "high",
+        "title": "BatteryControl charge limit removal",
+        "safer_alternatives": [
+          "Run `batterycontrol limit status` first to see whether a limit is active and verified on hardware.",
+          "Removing an active limit lets the battery charge to 100% again; confirm the change is deliberate."
+        ]
+      },
+      {
+        "action_classes": [
+          "batterycontrol charging policy command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `batterycontrol discharge start`, which cuts adapter input and runs the Mac on battery down to a target while plugged in.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "batterycontrol",
+                  "batterycontrol.cmd",
+                  "batterycontrol.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--floor"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "discharge",
+                  "start"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.batterycontrol.permission.discharge-start",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.batterycontrol.discharge-start",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "batterycontrol",
+                      "batterycontrol.cmd",
+                      "batterycontrol.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--floor"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "discharge",
+                      "start"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "batterycontrol discharge start command help",
+            "variant_id": "help"
+          }
+        ],
+        "severity": "high",
+        "title": "BatteryControl forced discharge start",
+        "safer_alternatives": [
+          "Run `batterycontrol discharge status` first; a discharge session may already be running.",
+          "Keep the default 20% floor; the battery drains for the whole session."
+        ]
+      },
+      {
+        "action_classes": [
+          "batterycontrol charging policy command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `batterycontrol discharge start --allow-below-floor`, which consents to draining below the 20% safety floor. Upstream documents this as deliberate battery wear and the daemon enforces its own consent check.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "batterycontrol",
+                  "batterycontrol.cmd",
+                  "batterycontrol.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--floor"
+                ],
+                "required_flags": [
+                  "--allow-below-floor"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "discharge",
+                  "start"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.batterycontrol.permission.discharge-below-floor",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.batterycontrol.discharge-below-floor",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "severity": "critical",
+        "title": "BatteryControl below-floor forced discharge",
+        "safer_alternatives": [
+          "Draining below 20% accelerates battery wear; only approve when the battery is deliberately being serviced.",
+          "Prefer a target at or above the 20% floor unless the upstream safety-floor switch was consciously removed."
+        ]
+      },
+      {
+        "action_classes": [
+          "batterycontrol privileged maintenance command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `batterycontrol uninstall`, which removes the root LaunchDaemon, the privileged helper, and the CLI after restoring normal charging.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "batterycontrol",
+                  "batterycontrol.cmd",
+                  "batterycontrol.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "uninstall"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.batterycontrol.permission.uninstall",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.batterycontrol.uninstall",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "batterycontrol",
+                      "batterycontrol.cmd",
+                      "batterycontrol.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "uninstall"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "batterycontrol uninstall command help",
+            "variant_id": "help"
+          }
+        ],
+        "severity": "high",
+        "title": "BatteryControl privileged daemon uninstall",
+        "safer_alternatives": [
+          "Run `batterycontrol status` first so the removal decision is made against a known daemon state.",
+          "Uninstall removes privileged charging control system-wide; confirm no scheduled automation depends on it."
+        ]
+      }
+    ],
+    "safer_alternatives": [
+      "Use `batterycontrol status` or `batterycontrol limit status` to inspect charging state before changing a policy.",
+      "Keep the discharge floor at 20% unless the battery is deliberately being serviced."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  }
+}

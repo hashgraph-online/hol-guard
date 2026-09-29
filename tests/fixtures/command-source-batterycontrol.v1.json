@@ -1,4 +1,5 @@
 {
+  "schema": "guard.command-extension-fixtures.v1",
   "build": {
     "schema": "guard.command-extension-build.v1",
     "sources": [
@@ -10089,32 +10090,32 @@
         "schema": "guard.command-extension-source.v1"
       },
       {
+        "schema": "guard.command-extension-source.v1",
         "extension": {
           "action_classes": [
-            "cogext commitment mutation"
+            "batterycontrol charging policy command",
+            "batterycontrol privileged maintenance command"
           ],
           "aliases": [],
           "conflicts": [],
           "delegated_protection": null,
           "dependencies": [],
-          "description": "Reviews the cogext CLI's mutating commitment operations (add, fulfill, fail). Read-only commands (extract, list, get, stats) are not matched and remain automatic. Note: `cogext add` may initialize ~/.cogext on a fresh machine; that side effect is covered structurally because `add` is in the reviewed set.",
+          "description": "Reviews BatteryControl commands that change charging policy, discharge state, or the privileged daemon installation, while keeping read-only status, diagnostics, and help output automatic.",
           "ecosystem_ids": [],
           "executables": [
-            "cogext",
-            "cogext.cmd",
-            "cogext.exe"
+            "batterycontrol"
           ],
-          "extension_id": "command.cogext",
-          "homepage": "https://cogextai.com",
+          "extension_id": "command.batterycontrol",
+          "homepage": null,
           "icon": {
             "kind": "none"
           },
           "license": "MIT",
-          "name": "COGEXT command protection",
+          "name": "BatteryControl command protection",
           "permissions": [
             {
               "action_classes": [
-                "cogext commitment mutation"
+                "batterycontrol charging policy command"
               ],
               "baseline_floor": "review",
               "configurable": true,
@@ -10122,25 +10123,26 @@
               "default_enabled": true,
               "dependencies": [],
               "deprecated": false,
-              "description": "Identifies `cogext add`, which creates a tracked commitment and may initialize the local ~/.cogext store on a fresh machine.",
-              "example_command": "cogext add \"Send the report by Friday\"",
+              "description": "Identifies `batterycontrol limit set`, which installs a daemon-owned charge-limit policy that changes when the battery charges and pauses until it is removed.",
+              "example_command": "batterycontrol limit set 80",
               "family": null,
               "fixed_reason": null,
               "implementation_version": "1.0.0",
               "implied_permissions": [],
-              "introduced_version": "1.0.0",
-              "label": "cogext commitment creation",
-              "permission_id": "command.cogext.permission.add",
+              "introduced_version": "3.6.1",
+              "label": "Charge limit change",
+              "permission_id": "command.batterycontrol.permission.limit-set",
               "replacement_permission_id": null,
-              "risk_tier": "high",
+              "risk_tier": "medium",
               "safer_guidance": [
-                "Run `cogext list` first to confirm the target store before adding a commitment."
+                "Run `batterycontrol status` and `batterycontrol limit status` to inspect the current policy before changing it.",
+                "Confirm the limit and resume values are intentional before approving; the daemon re-applies the policy across reboots and wake."
               ],
               "typed_capabilities": []
             },
             {
               "action_classes": [
-                "cogext commitment mutation"
+                "batterycontrol charging policy command"
               ],
               "baseline_floor": "review",
               "configurable": true,
@@ -10148,25 +10150,26 @@
               "default_enabled": true,
               "dependencies": [],
               "deprecated": false,
-              "description": "Identifies `cogext fulfill <id>`, which marks a tracked commitment as fulfilled and writes its terminal state.",
-              "example_command": "cogext fulfill abc-123",
+              "description": "Identifies `batterycontrol limit off`, which removes an active charge-limit policy and hands charging back to macOS. Upstream requires `--confirm` while a limit is active so unattended callers cannot silently drop the protection.",
+              "example_command": "batterycontrol limit off --confirm",
               "family": null,
               "fixed_reason": null,
               "implementation_version": "1.0.0",
               "implied_permissions": [],
-              "introduced_version": "1.0.0",
-              "label": "cogext commitment fulfillment",
-              "permission_id": "command.cogext.permission.fulfill",
+              "introduced_version": "3.6.1",
+              "label": "Charge limit removal",
+              "permission_id": "command.batterycontrol.permission.limit-off",
               "replacement_permission_id": null,
               "risk_tier": "high",
               "safer_guidance": [
-                "Confirm the commitment ID with `cogext get <id>` before fulfilling it."
+                "Run `batterycontrol limit status` first to see whether a limit is active and verified on hardware.",
+                "Removing an active limit lets the battery charge to 100% again; confirm the change is deliberate."
               ],
               "typed_capabilities": []
             },
             {
               "action_classes": [
-                "cogext commitment mutation"
+                "batterycontrol charging policy command"
               ],
               "baseline_floor": "review",
               "configurable": true,
@@ -10174,45 +10177,99 @@
               "default_enabled": true,
               "dependencies": [],
               "deprecated": false,
-              "description": "Identifies `cogext fail <id>`, which marks a tracked commitment as failed and writes its terminal state.",
-              "example_command": "cogext fail abc-123",
+              "description": "Identifies `batterycontrol discharge start`, which cuts adapter input and runs the Mac on battery down to a target while plugged in.",
+              "example_command": "batterycontrol discharge start 60",
               "family": null,
               "fixed_reason": null,
               "implementation_version": "1.0.0",
               "implied_permissions": [],
-              "introduced_version": "1.0.0",
-              "label": "cogext commitment failure",
-              "permission_id": "command.cogext.permission.fail",
+              "introduced_version": "3.6.1",
+              "label": "Forced discharge start",
+              "permission_id": "command.batterycontrol.permission.discharge-start",
               "replacement_permission_id": null,
               "risk_tier": "high",
               "safer_guidance": [
-                "Confirm the commitment ID with `cogext get <id>` before failing it."
+                "Run `batterycontrol discharge status` first; a discharge session may already be running.",
+                "Keep the default 20% floor; unplugging stops the session, but the battery drains while the session is active."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "batterycontrol charging policy command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies `batterycontrol discharge start --allow-below-floor`, which consents to draining below the 20% safety floor. Upstream documents this as deliberate battery wear and the daemon enforces its own consent check.",
+              "example_command": "batterycontrol discharge start 10 --allow-below-floor",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "3.6.1",
+              "label": "Below-floor forced discharge",
+              "permission_id": "command.batterycontrol.permission.discharge-below-floor",
+              "replacement_permission_id": null,
+              "risk_tier": "critical",
+              "safer_guidance": [
+                "Draining below 20% accelerates battery wear; only approve when the battery is being deliberately serviced.",
+                "Prefer a target at or above the 20% floor unless the upstream safety-floor switch has been consciously removed."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "batterycontrol privileged maintenance command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies `batterycontrol uninstall`, which removes the root LaunchDaemon, the privileged helper, and the CLI after restoring normal charging.",
+              "example_command": "batterycontrol uninstall --confirm",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "3.6.1",
+              "label": "Privileged daemon uninstall",
+              "permission_id": "command.batterycontrol.permission.uninstall",
+              "replacement_permission_id": null,
+              "risk_tier": "high",
+              "safer_guidance": [
+                "Run `batterycontrol status` first so the removal decision is made against a known daemon state.",
+                "Uninstall removes privileged charging control system-wide; confirm no scheduled automation depends on it."
               ],
               "typed_capabilities": []
             }
           ],
           "project_markers": [],
           "publisher": {
-            "display_name": "COGEXT AI",
-            "id": "community.cogext",
-            "url": "https://github.com/yaminbinyoosuf/cogext-primitive"
+            "display_name": "Community",
+            "id": "community.batterycontrol",
+            "url": null
           },
           "reference_urls": [
-            "https://cogextai.com/standard",
-            "https://github.com/yaminbinyoosuf/cogext-primitive"
+            "https://github.com/Ednk-1312/BatteryControl",
+            "https://github.com/Ednk-1312/BatteryControl/blob/main/README.md"
           ],
           "required": false,
           "risk_classes": [
-            "destructive_shell",
-            "execution"
+            "destructive_shell"
           ],
           "rules": [
             {
               "action_classes": [
-                "cogext commitment mutation"
+                "batterycontrol charging policy command"
               ],
               "default_mode": "review",
-              "description": "Identifies `cogext add`, which creates a tracked commitment.",
+              "description": "Identifies `batterycontrol limit set`, which installs a daemon-owned charge-limit policy that changes when the battery charges and pauses until it is removed.",
               "family": null,
               "matcher": {
                 "config": {},
@@ -10221,22 +10278,25 @@
                     "config": {
                       "allow_leading_options": false,
                       "executables": [
-                        "cogext",
-                        "cogext.cmd",
-                        "cogext.exe"
+                        "batterycontrol",
+                        "batterycontrol.cmd",
+                        "batterycontrol.exe"
                       ],
-                      "fail_secure_unknown_options": false,
+                      "fail_secure_unknown_options": true,
                       "forbidden_flags": [],
                       "interspersed_flags": [],
                       "interspersed_options_with_values": [],
                       "inverse_flag_pairs": [],
                       "leading_options_with_values": [],
-                      "options_with_values": [],
+                      "options_with_values": [
+                        "--resume"
+                      ],
                       "required_flags": [],
                       "required_flags_in_all_arguments": false,
                       "required_option_values": [],
                       "subcommands": [
-                        "add"
+                        "limit",
+                        "set"
                       ]
                     },
                     "op": "executable.v1"
@@ -10245,12 +10305,11 @@
                 "op": "any.v1"
               },
               "native_capability": null,
-              "permission_id": "command.cogext.permission.add",
+              "permission_id": "command.batterycontrol.permission.limit-set",
               "risk_classes": [
-                "destructive_shell",
-                "execution"
+                "destructive_shell"
               ],
-              "rule_id": "command.cogext.add",
+              "rule_id": "command.batterycontrol.limit-set",
               "rule_version": "1.0.0",
               "safe_variants": [
                 {
@@ -10261,9 +10320,9 @@
                         "config": {
                           "allow_leading_options": false,
                           "executables": [
-                            "cogext",
-                            "cogext.cmd",
-                            "cogext.exe"
+                            "batterycontrol",
+                            "batterycontrol.cmd",
+                            "batterycontrol.exe"
                           ],
                           "fail_secure_unknown_options": false,
                           "forbidden_flags": [],
@@ -10271,14 +10330,17 @@
                           "interspersed_options_with_values": [],
                           "inverse_flag_pairs": [],
                           "leading_options_with_values": [],
-                          "options_with_values": [],
+                          "options_with_values": [
+                            "--resume"
+                          ],
                           "required_flags": [
                             "--help"
                           ],
                           "required_flags_in_all_arguments": true,
                           "required_option_values": [],
                           "subcommands": [
-                            "add"
+                            "limit",
+                            "set"
                           ]
                         },
                         "op": "executable.v1"
@@ -10286,58 +10348,23 @@
                     ],
                     "op": "any.v1"
                   },
-                  "title": "cogext add command help (--help)",
+                  "title": "batterycontrol limit set command help",
                   "variant_id": "help"
-                },
-                {
-                  "matcher": {
-                    "config": {},
-                    "matchers": [
-                      {
-                        "config": {
-                          "allow_leading_options": false,
-                          "executables": [
-                            "cogext",
-                            "cogext.cmd",
-                            "cogext.exe"
-                          ],
-                          "fail_secure_unknown_options": false,
-                          "forbidden_flags": [],
-                          "interspersed_flags": [],
-                          "interspersed_options_with_values": [],
-                          "inverse_flag_pairs": [],
-                          "leading_options_with_values": [],
-                          "options_with_values": [],
-                          "required_flags": [
-                            "-h"
-                          ],
-                          "required_flags_in_all_arguments": true,
-                          "required_option_values": [],
-                          "subcommands": [
-                            "add"
-                          ]
-                        },
-                        "op": "executable.v1"
-                      }
-                    ],
-                    "op": "any.v1"
-                  },
-                  "title": "cogext add command help (-h)",
-                  "variant_id": "short-help"
                 }
               ],
+              "severity": "medium",
+              "title": "BatteryControl charge limit change",
               "safer_alternatives": [
-                "Run `cogext list` first to confirm the target store."
-              ],
-              "severity": "high",
-              "title": "cogext commitment creation"
+                "Run `batterycontrol limit status` to inspect the active policy before changing it.",
+                "Confirm the limit and resume values are intentional; the daemon re-applies the policy across reboots and wake."
+              ]
             },
             {
               "action_classes": [
-                "cogext commitment mutation"
+                "batterycontrol charging policy command"
               ],
               "default_mode": "review",
-              "description": "Identifies `cogext fulfill`, which marks a commitment as fulfilled.",
+              "description": "Identifies `batterycontrol limit off`, which removes an active charge-limit policy and hands charging back to macOS. Upstream requires `--confirm` while a limit is active so unattended callers cannot silently drop the protection.",
               "family": null,
               "matcher": {
                 "config": {},
@@ -10346,11 +10373,11 @@
                     "config": {
                       "allow_leading_options": false,
                       "executables": [
-                        "cogext",
-                        "cogext.cmd",
-                        "cogext.exe"
+                        "batterycontrol",
+                        "batterycontrol.cmd",
+                        "batterycontrol.exe"
                       ],
-                      "fail_secure_unknown_options": false,
+                      "fail_secure_unknown_options": true,
                       "forbidden_flags": [],
                       "interspersed_flags": [],
                       "interspersed_options_with_values": [],
@@ -10361,7 +10388,8 @@
                       "required_flags_in_all_arguments": false,
                       "required_option_values": [],
                       "subcommands": [
-                        "fulfill"
+                        "limit",
+                        "off"
                       ]
                     },
                     "op": "executable.v1"
@@ -10370,12 +10398,11 @@
                 "op": "any.v1"
               },
               "native_capability": null,
-              "permission_id": "command.cogext.permission.fulfill",
+              "permission_id": "command.batterycontrol.permission.limit-off",
               "risk_classes": [
-                "destructive_shell",
-                "execution"
+                "destructive_shell"
               ],
-              "rule_id": "command.cogext.fulfill",
+              "rule_id": "command.batterycontrol.limit-off",
               "rule_version": "1.0.0",
               "safe_variants": [
                 {
@@ -10386,9 +10413,9 @@
                         "config": {
                           "allow_leading_options": false,
                           "executables": [
-                            "cogext",
-                            "cogext.cmd",
-                            "cogext.exe"
+                            "batterycontrol",
+                            "batterycontrol.cmd",
+                            "batterycontrol.exe"
                           ],
                           "fail_secure_unknown_options": false,
                           "forbidden_flags": [],
@@ -10403,7 +10430,8 @@
                           "required_flags_in_all_arguments": true,
                           "required_option_values": [],
                           "subcommands": [
-                            "fulfill"
+                            "limit",
+                            "off"
                           ]
                         },
                         "op": "executable.v1"
@@ -10411,58 +10439,23 @@
                     ],
                     "op": "any.v1"
                   },
-                  "title": "cogext fulfill command help (--help)",
+                  "title": "batterycontrol limit off command help",
                   "variant_id": "help"
-                },
-                {
-                  "matcher": {
-                    "config": {},
-                    "matchers": [
-                      {
-                        "config": {
-                          "allow_leading_options": false,
-                          "executables": [
-                            "cogext",
-                            "cogext.cmd",
-                            "cogext.exe"
-                          ],
-                          "fail_secure_unknown_options": false,
-                          "forbidden_flags": [],
-                          "interspersed_flags": [],
-                          "interspersed_options_with_values": [],
-                          "inverse_flag_pairs": [],
-                          "leading_options_with_values": [],
-                          "options_with_values": [],
-                          "required_flags": [
-                            "-h"
-                          ],
-                          "required_flags_in_all_arguments": true,
-                          "required_option_values": [],
-                          "subcommands": [
-                            "fulfill"
-                          ]
-                        },
-                        "op": "executable.v1"
-                      }
-                    ],
-                    "op": "any.v1"
-                  },
-                  "title": "cogext fulfill command help (-h)",
-                  "variant_id": "short-help"
                 }
               ],
-              "safer_alternatives": [
-                "Confirm the commitment ID with `cogext get <id>`."
-              ],
               "severity": "high",
-              "title": "cogext commitment fulfillment"
+              "title": "BatteryControl charge limit removal",
+              "safer_alternatives": [
+                "Run `batterycontrol limit status` first to see whether a limit is active and verified on hardware.",
+                "Removing an active limit lets the battery charge to 100% again; confirm the change is deliberate."
+              ]
             },
             {
               "action_classes": [
-                "cogext commitment mutation"
+                "batterycontrol charging policy command"
               ],
               "default_mode": "review",
-              "description": "Identifies `cogext fail`, which marks a commitment as failed.",
+              "description": "Identifies `batterycontrol discharge start`, which cuts adapter input and runs the Mac on battery down to a target while plugged in.",
               "family": null,
               "matcher": {
                 "config": {},
@@ -10471,22 +10464,25 @@
                     "config": {
                       "allow_leading_options": false,
                       "executables": [
-                        "cogext",
-                        "cogext.cmd",
-                        "cogext.exe"
+                        "batterycontrol",
+                        "batterycontrol.cmd",
+                        "batterycontrol.exe"
                       ],
-                      "fail_secure_unknown_options": false,
+                      "fail_secure_unknown_options": true,
                       "forbidden_flags": [],
                       "interspersed_flags": [],
                       "interspersed_options_with_values": [],
                       "inverse_flag_pairs": [],
                       "leading_options_with_values": [],
-                      "options_with_values": [],
+                      "options_with_values": [
+                        "--floor"
+                      ],
                       "required_flags": [],
                       "required_flags_in_all_arguments": false,
                       "required_option_values": [],
                       "subcommands": [
-                        "fail"
+                        "discharge",
+                        "start"
                       ]
                     },
                     "op": "executable.v1"
@@ -10495,12 +10491,11 @@
                 "op": "any.v1"
               },
               "native_capability": null,
-              "permission_id": "command.cogext.permission.fail",
+              "permission_id": "command.batterycontrol.permission.discharge-start",
               "risk_classes": [
-                "destructive_shell",
-                "execution"
+                "destructive_shell"
               ],
-              "rule_id": "command.cogext.fail",
+              "rule_id": "command.batterycontrol.discharge-start",
               "rule_version": "1.0.0",
               "safe_variants": [
                 {
@@ -10511,9 +10506,158 @@
                         "config": {
                           "allow_leading_options": false,
                           "executables": [
-                            "cogext",
-                            "cogext.cmd",
-                            "cogext.exe"
+                            "batterycontrol",
+                            "batterycontrol.cmd",
+                            "batterycontrol.exe"
+                          ],
+                          "fail_secure_unknown_options": false,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [
+                            "--floor"
+                          ],
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "discharge",
+                            "start"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      }
+                    ],
+                    "op": "any.v1"
+                  },
+                  "title": "batterycontrol discharge start command help",
+                  "variant_id": "help"
+                }
+              ],
+              "severity": "high",
+              "title": "BatteryControl forced discharge start",
+              "safer_alternatives": [
+                "Run `batterycontrol discharge status` first; a discharge session may already be running.",
+                "Keep the default 20% floor; the battery drains for the whole session."
+              ]
+            },
+            {
+              "action_classes": [
+                "batterycontrol charging policy command"
+              ],
+              "default_mode": "review",
+              "description": "Identifies `batterycontrol discharge start --allow-below-floor`, which consents to draining below the 20% safety floor. Upstream documents this as deliberate battery wear and the daemon enforces its own consent check.",
+              "family": null,
+              "matcher": {
+                "config": {},
+                "matchers": [
+                  {
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "batterycontrol",
+                        "batterycontrol.cmd",
+                        "batterycontrol.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [
+                        "--floor"
+                      ],
+                      "required_flags": [
+                        "--allow-below-floor"
+                      ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "discharge",
+                        "start"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  }
+                ],
+                "op": "any.v1"
+              },
+              "native_capability": null,
+              "permission_id": "command.batterycontrol.permission.discharge-below-floor",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "rule_id": "command.batterycontrol.discharge-below-floor",
+              "rule_version": "1.0.0",
+              "safe_variants": [],
+              "severity": "critical",
+              "title": "BatteryControl below-floor forced discharge",
+              "safer_alternatives": [
+                "Draining below 20% accelerates battery wear; only approve when the battery is deliberately being serviced.",
+                "Prefer a target at or above the 20% floor unless the upstream safety-floor switch was consciously removed."
+              ]
+            },
+            {
+              "action_classes": [
+                "batterycontrol privileged maintenance command"
+              ],
+              "default_mode": "review",
+              "description": "Identifies `batterycontrol uninstall`, which removes the root LaunchDaemon, the privileged helper, and the CLI after restoring normal charging.",
+              "family": null,
+              "matcher": {
+                "config": {},
+                "matchers": [
+                  {
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "batterycontrol",
+                        "batterycontrol.cmd",
+                        "batterycontrol.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "uninstall"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  }
+                ],
+                "op": "any.v1"
+              },
+              "native_capability": null,
+              "permission_id": "command.batterycontrol.permission.uninstall",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "rule_id": "command.batterycontrol.uninstall",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "batterycontrol",
+                            "batterycontrol.cmd",
+                            "batterycontrol.exe"
                           ],
                           "fail_secure_unknown_options": false,
                           "forbidden_flags": [],
@@ -10528,7 +10672,7 @@
                           "required_flags_in_all_arguments": true,
                           "required_option_values": [],
                           "subcommands": [
-                            "fail"
+                            "uninstall"
                           ]
                         },
                         "op": "executable.v1"
@@ -10536,84 +10680,40 @@
                     ],
                     "op": "any.v1"
                   },
-                  "title": "cogext fail command help (--help)",
+                  "title": "batterycontrol uninstall command help",
                   "variant_id": "help"
-                },
-                {
-                  "matcher": {
-                    "config": {},
-                    "matchers": [
-                      {
-                        "config": {
-                          "allow_leading_options": false,
-                          "executables": [
-                            "cogext",
-                            "cogext.cmd",
-                            "cogext.exe"
-                          ],
-                          "fail_secure_unknown_options": false,
-                          "forbidden_flags": [],
-                          "interspersed_flags": [],
-                          "interspersed_options_with_values": [],
-                          "inverse_flag_pairs": [],
-                          "leading_options_with_values": [],
-                          "options_with_values": [],
-                          "required_flags": [
-                            "-h"
-                          ],
-                          "required_flags_in_all_arguments": true,
-                          "required_option_values": [],
-                          "subcommands": [
-                            "fail"
-                          ]
-                        },
-                        "op": "executable.v1"
-                      }
-                    ],
-                    "op": "any.v1"
-                  },
-                  "title": "cogext fail command help (-h)",
-                  "variant_id": "short-help"
                 }
               ],
-              "safer_alternatives": [
-                "Confirm the commitment ID with `cogext get <id>`."
-              ],
               "severity": "high",
-              "title": "cogext commitment failure"
+              "title": "BatteryControl privileged daemon uninstall",
+              "safer_alternatives": [
+                "Run `batterycontrol status` first so the removal decision is made against a known daemon state.",
+                "Uninstall removes privileged charging control system-wide; confirm no scheduled automation depends on it."
+              ]
             }
           ],
           "safer_alternatives": [
-            "Run `cogext list` or `cogext get <id>` before mutating commitment state."
+            "Use `batterycontrol status` or `batterycontrol limit status` to inspect charging state before changing a policy.",
+            "Keep the discharge floor at 20% unless the battery is deliberately being serviced."
           ],
           "source": "built-in",
           "version": "1.0.0"
-        },
-        "schema": "guard.command-extension-source.v1"
+        }
       }
     ],
     "trust": {
+      "schemaVersion": "guard.extension-trust-class-map.v1",
+      "publishers": {
+        "hol": {
+          "id": "hol",
+          "displayName": "Hashgraph Online"
+        },
+        "hol-curated": {
+          "id": "hol-curated",
+          "displayName": "HOL curated library"
+        }
+      },
       "classes": {
-        "external": [
-          "command.batterycontrol",
-          "command.blitcp",
-          "command.cloudg",
-          "command.cogext",
-          "command.digline",
-          "command.genclave",
-          "command.gitsync",
-          "command.mcp-filesystem",
-          "command.mcp-instapods",
-          "command.mcp-pr-ui-compare",
-          "command.noodle",
-          "command.ollama",
-          "command.probe",
-          "command.remote.essh",
-          "command.repo2nb",
-          "command.skill-base",
-          "command.skill-sunset",
-          "command.uivoid"
-        ],
         "first-party": [
           "command.container-runtime",
           "command.data-protection",
@@ -10679,129 +10779,247 @@
           "command.storage.azure-blob",
           "command.storage.google-cloud",
           "command.storage.minio"
+        ],
+        "external": [
+          "command.batterycontrol",
+          "command.blitcp",
+          "command.mcp-filesystem",
+          "command.mcp-instapods",
+          "command.noodle",
+          "command.ollama",
+          "command.probe",
+          "command.remote.essh",
+          "command.repo2nb",
+          "command.skill-sunset",
+          "command.uivoid"
         ]
-      },
-      "publishers": {
-        "hol": {
-          "displayName": "Hashgraph Online",
-          "id": "hol"
-        },
-        "hol-curated": {
-          "displayName": "HOL curated library",
-          "id": "hol-curated"
-        }
-      },
-      "schemaVersion": "guard.extension-trust-class-map.v1"
+      }
     }
   },
   "cases": [
     {
-      "command": "cogext add \"Send the report by Friday\"",
-      "disabled_permissions": [],
+      "id": "limit-set-basic",
+      "command": "batterycontrol limit set 80",
       "enabled_extensions": [
-        "command.cogext"
+        "command.batterycontrol"
       ],
+      "disabled_permissions": [],
+      "rule_id": "command.batterycontrol.limit-set",
       "expected_action": "review",
       "expected_effective_segments": [
         0
-      ],
-      "id": "add-basic",
-      "rule_id": "command.cogext.add"
+      ]
     },
     {
-      "command": "cogext add \"Call Sarah tomorrow\"",
-      "disabled_permissions": [],
+      "id": "limit-set-resume",
+      "command": "batterycontrol limit set 80 --resume 70",
       "enabled_extensions": [
-        "command.cogext"
+        "command.batterycontrol"
       ],
+      "disabled_permissions": [],
+      "rule_id": "command.batterycontrol.limit-set",
       "expected_action": "review",
       "expected_effective_segments": [
         0
-      ],
-      "id": "add-call",
-      "rule_id": "command.cogext.add"
+      ]
     },
     {
-      "command": "cogext fulfill abc-123",
-      "disabled_permissions": [],
+      "id": "limit-set-custom-limit",
+      "command": "batterycontrol limit set 55 --resume 48",
       "enabled_extensions": [
-        "command.cogext"
+        "command.batterycontrol"
       ],
+      "disabled_permissions": [],
+      "rule_id": "command.batterycontrol.limit-set",
       "expected_action": "review",
       "expected_effective_segments": [
         0
-      ],
-      "id": "fulfill-basic",
-      "rule_id": "command.cogext.fulfill"
+      ]
     },
     {
-      "command": "cogext fail abc-123",
-      "disabled_permissions": [],
+      "id": "limit-set-help",
+      "command": "batterycontrol limit set --help",
       "enabled_extensions": [
-        "command.cogext"
+        "command.batterycontrol"
       ],
+      "disabled_permissions": [],
+      "rule_id": "command.batterycontrol.limit-set",
+      "expected_action": "review",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "limit-off-bare",
+      "command": "batterycontrol limit off",
+      "enabled_extensions": [
+        "command.batterycontrol"
+      ],
+      "disabled_permissions": [],
+      "rule_id": "command.batterycontrol.limit-off",
       "expected_action": "review",
       "expected_effective_segments": [
         0
-      ],
-      "id": "fail-basic",
-      "rule_id": "command.cogext.fail"
+      ]
     },
     {
-      "command": "cogext extract \"I'll call you tomorrow\"",
-      "disabled_permissions": [],
+      "id": "limit-off-confirm",
+      "command": "batterycontrol limit off --confirm",
       "enabled_extensions": [
-        "command.cogext"
+        "command.batterycontrol"
       ],
+      "disabled_permissions": [],
+      "rule_id": "command.batterycontrol.limit-off",
       "expected_action": "review",
-      "expected_effective_segments": [],
-      "id": "extract-automatic",
-      "rule_id": "command.cogext.add"
+      "expected_effective_segments": [
+        0
+      ]
     },
     {
-      "command": "cogext list",
-      "disabled_permissions": [],
+      "id": "limit-off-help",
+      "command": "batterycontrol limit off --help",
       "enabled_extensions": [
-        "command.cogext"
+        "command.batterycontrol"
       ],
+      "disabled_permissions": [],
+      "rule_id": "command.batterycontrol.limit-off",
       "expected_action": "review",
-      "expected_effective_segments": [],
-      "id": "list-basic",
-      "rule_id": "command.cogext.add"
+      "expected_effective_segments": []
     },
     {
-      "command": "cogext list --status open",
-      "disabled_permissions": [],
+      "id": "discharge-start-basic",
+      "command": "batterycontrol discharge start 60",
       "enabled_extensions": [
-        "command.cogext"
+        "command.batterycontrol"
       ],
+      "disabled_permissions": [],
+      "rule_id": "command.batterycontrol.discharge-start",
       "expected_action": "review",
-      "expected_effective_segments": [],
-      "id": "list-status-open",
-      "rule_id": "command.cogext.add"
+      "expected_effective_segments": [
+        0
+      ]
     },
     {
-      "command": "cogext get abc-123",
-      "disabled_permissions": [],
+      "id": "discharge-start-floor",
+      "command": "batterycontrol discharge start 55 --floor 20",
       "enabled_extensions": [
-        "command.cogext"
+        "command.batterycontrol"
       ],
+      "disabled_permissions": [],
+      "rule_id": "command.batterycontrol.discharge-start",
       "expected_action": "review",
-      "expected_effective_segments": [],
-      "id": "get-basic",
-      "rule_id": "command.cogext.add"
+      "expected_effective_segments": [
+        0
+      ]
     },
     {
-      "command": "cogext stats",
-      "disabled_permissions": [],
+      "id": "discharge-start-help",
+      "command": "batterycontrol discharge start --help",
       "enabled_extensions": [
-        "command.cogext"
+        "command.batterycontrol"
       ],
+      "disabled_permissions": [],
+      "rule_id": "command.batterycontrol.discharge-start",
       "expected_action": "review",
-      "expected_effective_segments": [],
-      "id": "stats-basic",
-      "rule_id": "command.cogext.add"
+      "expected_effective_segments": []
+    },
+    {
+      "id": "discharge-below-floor",
+      "command": "batterycontrol discharge start 10 --allow-below-floor",
+      "enabled_extensions": [
+        "command.batterycontrol"
+      ],
+      "disabled_permissions": [],
+      "rule_id": "command.batterycontrol.discharge-below-floor",
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "discharge-below-floor-order",
+      "command": "batterycontrol discharge start 12 --allow-below-floor --floor 10",
+      "enabled_extensions": [
+        "command.batterycontrol"
+      ],
+      "disabled_permissions": [],
+      "rule_id": "command.batterycontrol.discharge-below-floor",
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "uninstall-confirm",
+      "command": "batterycontrol uninstall --confirm",
+      "enabled_extensions": [
+        "command.batterycontrol"
+      ],
+      "disabled_permissions": [],
+      "rule_id": "command.batterycontrol.uninstall",
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "uninstall-confirm-data",
+      "command": "batterycontrol uninstall --confirm --remove-data",
+      "enabled_extensions": [
+        "command.batterycontrol"
+      ],
+      "disabled_permissions": [],
+      "rule_id": "command.batterycontrol.uninstall",
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "uninstall-help",
+      "command": "batterycontrol uninstall --help",
+      "enabled_extensions": [
+        "command.batterycontrol"
+      ],
+      "disabled_permissions": [],
+      "rule_id": "command.batterycontrol.uninstall",
+      "expected_action": "review",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "limit-set-permission-disabled",
+      "command": "batterycontrol limit set 80",
+      "enabled_extensions": [
+        "command.batterycontrol"
+      ],
+      "disabled_permissions": [
+        "command.batterycontrol.permission.limit-set"
+      ],
+      "rule_id": "command.batterycontrol.limit-set",
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "lookalike-suffix",
+      "command": "batterycontrolx limit set 80",
+      "enabled_extensions": [
+        "command.batterycontrol"
+      ],
+      "disabled_permissions": [],
+      "rule_id": "command.batterycontrol.limit-set",
+      "expected_action": "review",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "lookalike-path",
+      "command": "./bin/batterycontrol-helper limit set 80",
+      "enabled_extensions": [
+        "command.batterycontrol"
+      ],
+      "disabled_permissions": [],
+      "rule_id": "command.batterycontrol.limit-set",
+      "expected_action": "review",
+      "expected_effective_segments": []
     }
-  ],
-  "schema": "guard.command-extension-fixtures.v1"
+  ]
 }
