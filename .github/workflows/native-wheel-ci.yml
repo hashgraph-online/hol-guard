@@ -309,7 +309,7 @@ jobs:
               --recovery-iterations 2 \
               --readiness-samples 2 \
               --json "$output_path" \
-              --enforce
+              --enforce 2> >(tee "${output_path}.stderr" >&2)
           }
           retryable_intel_latency_miss() {
             .venv/bin/python - "$1" <<'PY_CHECK'
@@ -362,9 +362,11 @@ jobs:
               if [[ ! -f "$output_path" ]]; then
                 if grep -Eq 'native_installed_slo_failed: recovery sample [0-9]+ failed' "${output_path}.stderr"; then
                   echo "::warning::Intel macOS SLO attempt ${attempt}/3 hit transient recovery routing crash; retrying."
+                  tail -5 "${output_path}.stderr"
                   continue
                 fi
                 echo "Intel macOS SLO crashed without a report for a non-retryable reason." >&2
+                cat "${output_path}.stderr" >&2
                 exit "$slo_status"
               fi
               cp "$output_path" native-installed-slo.json
@@ -411,6 +413,7 @@ jobs:
             installed-native-extensions.json
             native-installed-slo.json
             native-installed-slo-attempt-*.json
+            native-installed-slo-attempt-*.json.stderr
             native-artifact-evidence.json
             native-stop-diagnostic.json
           if-no-files-found: error
