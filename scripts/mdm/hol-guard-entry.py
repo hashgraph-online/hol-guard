@@ -836,8 +836,10 @@ def _try_codex_daemon_bridge() -> bool:
                 state_path=str(config["state_path"]),
                 deadline=deadline,
             )
-        except Exception:
-            pass
+        except Exception as error:
+            # The hook was already sent; a failed wait still returns the
+            # recorded pending denial rather than re-sending the request.
+            sys.stderr.write(f"HOL Guard approval wait unavailable: {type(error).__name__}\n")
     sys.stdout.write(
         json.dumps(
             _codex_normalize_hook_response(response, event_name=event_name),
