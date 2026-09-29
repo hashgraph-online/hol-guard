@@ -268,6 +268,8 @@ fn devin_reads_allow_only_bounded_non_sensitive_targets() {
         "/etc/passwd",
         "/var/root/.ssh/id_rsa",
         "~root/project/file.json",
+        "/opt/outside/file.txt",
+        "/Users/other/notes.txt",
     ] {
         let result = devin(json!({
             "tool_name": "read",
@@ -288,6 +290,19 @@ fn devin_reads_allow_only_bounded_non_sensitive_targets() {
         &json!({"tool_name": "read", "tool_input": {"file_path": "~/project/file.json"}}),
     );
     assert_ne!(no_home.minimum_action, "allow");
+
+    // A workspace root also proves an absolute read bounded even when the
+    // target is outside the home directory.
+    let workspace_only = evaluate_pre_tool_envelope_with_source(
+        "devin",
+        "PreToolUse",
+        &json!({"tool_name": "read", "tool_input": {"file_path": "/work/repo/src/lib.py"}}),
+        None,
+        None,
+        Some("/Users/tester"),
+        Some("/work/repo"),
+    );
+    assert_eq!(workspace_only.minimum_action, "allow");
 
     let write = devin(json!({
         "tool_name": "write",

@@ -502,9 +502,10 @@ fn evaluate_signals(
 }
 
 /// File-tool read targets may be workspace-relative, absolute, or
-/// `~/`-relative (Devin). Absolute and home-relative candidates must be under
-/// the verified workspace root and pass the stricter sensitive-root,
-/// credential-family, and hidden-directory checks in `safe_absolute_read_target`.
+/// `~/`-relative (Devin). Absolute and home-relative candidates must live
+/// under a verified root — the envelope's `home_dir` or `cwd` — and pass
+/// the stricter sensitive-root, credential-family, and hidden-directory
+/// checks in `safe_absolute_read_target`.
 fn bounded_file_read_target(value: &str, home_dir: Option<&str>, cwd: Option<&str>) -> bool {
     let path = value.trim();
     if path.is_empty() || path.len() > 4096 {
@@ -523,14 +524,11 @@ fn bounded_file_read_target(value: &str, home_dir: Option<&str>, cwd: Option<&st
     }
     let expanded = expand_home_read_path(path, home_dir);
     let candidate = expanded.as_deref().unwrap_or(path);
-    let Some(root) = cwd
-        .map(|c| c.trim_end_matches('/'))
-        .filter(|c| c.starts_with('/'))
-    else {
-        return false;
-    };
-    candidate.starts_with(&format!("{root}/"))
-        && super::safe_reads::safe_absolute_read_target(candidate)
+    let under_known_root = [home_dir, cwd].into_iter().flatten().any(|root| {
+        let root = root.trim().trim_end_matches('/');
+        root.starts_with('/') && (candidate == root || candidate.starts_with(&format!("{root}/")))
+    });
+    under_known_root && super::safe_reads::safe_absolute_read_target(candidate)
 }
 
 fn expand_home_read_path(path: &str, home_dir: Option<&str>) -> Option<String> {
