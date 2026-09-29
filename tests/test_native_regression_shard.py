@@ -154,7 +154,7 @@ def test_regression_action_installs_only_the_same_run_wheel() -> None:
     assert not retry.get("continue-on-error")
 
 
-def test_superseded_runs_can_cancel_all_status_aggregators() -> None:
+def test_required_status_aggregators_run_after_cancellation() -> None:
     for filename, names in {
         "ci.yml": ["ci-python-312"],
         "native-wheel-ci.yml": ["linux-x64", "windows-x64", "macos", "native-regression-complete"],
@@ -163,6 +163,6 @@ def test_superseded_runs_can_cancel_all_status_aggregators() -> None:
         assert workflow["concurrency"]["cancel-in-progress"] is True
         for name in names:
             gate = workflow["jobs"][name]
-            assert gate["if"] == "${{ !cancelled() }}"
+            assert gate["if"] == "always()"
             assert gate["needs"]
             assert any("success" in step.get("run", "") for step in gate["steps"])
