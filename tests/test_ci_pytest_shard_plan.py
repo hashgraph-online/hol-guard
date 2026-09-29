@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shlex
 from pathlib import Path
 
 import pytest
@@ -207,8 +208,34 @@ def test_write_shard_plan_uses_three_digits_for_large_shard_counts(tmp_path: Pat
     ] == shards
 
 
+def _printf_format(command: str) -> str:
+    # Tokenize the shell instead of assuming one quoting style for its format.
+    tokens = iter(shlex.shlex(command, posix=True, punctuation_chars=True))
+    for token in tokens:
+        if token == "printf":
+            return next(tokens)
+    raise AssertionError("coverage command must select a shard with printf")
+
+
+@pytest.mark.parametrize(
+    "command,expected",
+    [
+        ("shard_file=$(printf 'shard-%03d.txt' 7)", "shard-%03d.txt"),
+        ('shard_file=$(printf "shard-%03d.txt" 7)', "shard-%03d.txt"),
+        ('printf "path with spaces/shard-%03d.txt" 7', "path with spaces/shard-%03d.txt"),
+        (r"printf 'shard-'\''%03d.txt' 7", "shard-'%03d.txt"),
+    ],
+)
+def test_printf_format_respects_shell_quoting(command: str, expected: str) -> None:
+    assert _printf_format(command) == expected
+
+
+def test_printf_format_requires_a_printf_command() -> None:
+    with pytest.raises(AssertionError, match="must select a shard"):
+        _printf_format("echo no-shard-selector")
+
+
 def test_live_coverage_matrix_opens_every_generated_response_file(tmp_path: Path) -> None:
-    import re
 
     import yaml
 
@@ -223,12 +250,11 @@ def test_live_coverage_matrix_opens_every_generated_response_file(tmp_path: Path
     command = next(
         step["run"] for step in jobs["coverage"]["steps"] if step.get("name", "").startswith("Run coverage shard")
     )
-    match = re.search(r"printf '([^']+)'", command)
-    assert match is not None
+    format_string = _printf_format(command)
     shards = [[f"tests/test_matrix.py::test_case_{index}"] for index in indices]
     write_shard_plan(tmp_path / "pytest-shards", shards=shards, estimated_loads=[1.0] * count, manifest_used=True)
     assert [
-        (tmp_path / (match.group(1) % index)).read_text(encoding="utf-8").splitlines() for index in indices
+        (tmp_path / (format_string % index)).read_text(encoding="utf-8").splitlines() for index in indices
     ] == shards
 
 

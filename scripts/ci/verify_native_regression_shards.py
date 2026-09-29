@@ -32,7 +32,7 @@ def verify_reports(reports: list[dict[str, object]], shard_count: int) -> dict[s
         expected_count = group[0].get("collected_count")
         expected_digest = group[0].get("inventory_sha256")
         if type(expected_count) is not int or expected_count < shard_count:
-            raise ValueError("invalid native inventory count")
+            raise ValueError(f"invalid native inventory count: {platform}")
         for report in group:
             index = report.get("shard_index")
             nodes = report.get("selected")

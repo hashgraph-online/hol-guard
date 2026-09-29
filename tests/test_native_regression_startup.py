@@ -12,6 +12,7 @@ from types import ModuleType, SimpleNamespace
 import pytest
 import yaml
 
+from codex_plugin_scanner.guard.extension_builder.native_source_compiler import NativeSourceCompilerError
 from scripts.ci import native_regression_shard as shard
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -34,10 +35,13 @@ def _native_probes(monkeypatch: pytest.MonkeyPatch, identity: object, compiler: 
 
     def find_compiler():
         calls.append("compiler")
+        if compiler is None:
+            raise NativeSourceCompilerError("packaged native resources are unavailable")
         return compiler
 
     monkeypatch.setattr(runtime, "native_runtime_status", status, raising=False)
     monkeypatch.setattr(source, "find_packaged_source_compiler", find_compiler, raising=False)
+    monkeypatch.setattr(source, "NativeSourceCompilerError", NativeSourceCompilerError, raising=False)
     monkeypatch.setitem(sys.modules, runtime.__name__, runtime)
     monkeypatch.setitem(sys.modules, source.__name__, source)
     return calls
@@ -124,6 +128,26 @@ def test_startup_failure_writes_a_failing_report_without_running_tests(
     monkeypatch.setattr(shard, "_configure_installed_native", fail)
     monkeypatch.setattr(shard.pytest, "main", unexpected)
 
+    assert shard.main() == int(pytest.ExitCode.USAGE_ERROR)
+    evidence = json.loads(report.read_text())
+    assert evidence["exit_code"] == int(pytest.ExitCode.USAGE_ERROR)
+    assert evidence["collected_count"] == 0
+    assert evidence["selected"] == []
+
+
+def test_packaged_compiler_error_writes_failing_evidence_without_running_pytest(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    site = Path(sysconfig.get_paths()["purelib"])
+    _installed_package(monkeypatch, site / "codex_plugin_scanner/__init__.py")
+    _native_probes(monkeypatch, SimpleNamespace(path=site / "runtime"), None)
+    report = tmp_path / "native.json"
+    _arguments(monkeypatch, report)
+
+    def unexpected(*args, **kwargs):
+        pytest.fail("pytest must not execute after compiler validation fails")
+
+    monkeypatch.setattr(shard.pytest, "main", unexpected)
     assert shard.main() == int(pytest.ExitCode.USAGE_ERROR)
     evidence = json.loads(report.read_text())
     assert evidence["exit_code"] == int(pytest.ExitCode.USAGE_ERROR)

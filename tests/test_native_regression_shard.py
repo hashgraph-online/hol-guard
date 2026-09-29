@@ -176,3 +176,12 @@ def test_every_native_runner_and_reconciler_use_the_same_shard_count() -> None:
         action = next(step for step in job["steps"] if step.get("uses") == "./.github/actions/native-regression")
         assert int(action["with"]["shard-count"]) == count == 8
     assert any("--shard-count 8" in step.get("run", "") for step in jobs["native-regression-complete"]["steps"])
+
+
+@pytest.mark.parametrize("count", [None, True, 0, 3, "37"])
+def test_invalid_inventory_count_identifies_the_platform(count: object) -> None:
+    reports = _reports()
+    reports[0]["collected_count"] = count
+    platform = reports[0]["platform"]
+    with pytest.raises(ValueError, match=f"invalid native inventory count: {platform}"):
+        VERIFY.verify_reports(reports, 4)
