@@ -159,6 +159,23 @@ def _artifact_members(artifact: Path) -> Iterator[tuple[str, bytes | None]]:
     raise RuntimeError(f"unsupported package artifact: {artifact}")
 
 
+def validate_retired_artifact_paths(contract: Mapping[str, object], artifacts: Sequence[Path]) -> None:
+    """Reject forbidden package members before an expensive source-graph analysis."""
+    basenames = {PurePosixPath(str(record["path"])).stem for record in _records(contract)}
+    if not basenames:
+        return
+    for artifact in artifacts:
+        for name, _data in _artifact_members(artifact):
+            basename = PurePosixPath(name.replace("\\", "/")).name
+            if any(
+                basename == stem + ".py"
+                or basename == stem + ".pyc"
+                or (basename.startswith(stem + ".") and basename.endswith(".pyc"))
+                for stem in basenames
+            ):
+                raise RuntimeError(f"package artifact contains retired module: {name}")
+
+
 def validate_retired_modules(
     root: Path,
     contract: Mapping[str, object],

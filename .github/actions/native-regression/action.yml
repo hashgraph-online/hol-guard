@@ -1,0 +1,58 @@
+name: Qualify an installed native regression shard
+description: Run a disjoint slice of the complete manifest against this run's wheel.
+inputs:
+  artifact-name:
+    description: Same-run build artifact containing native-dist wheels.
+    required: true
+  platform:
+    description: Exact native target triple for evidence reconciliation.
+    required: true
+  shard-index:
+    description: Zero-based shard index.
+    required: true
+  shard-count:
+    description: Total shards per platform.
+    required: true
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+      with:
+        python-version: "3.12"
+    - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+      with:
+        version: "0.9.26"
+        enable-cache: true
+        save-cache: false
+    - name: Install locked test dependencies without the source package
+      shell: bash
+      run: uv sync --frozen --no-dev --extra dev --no-install-project --python 3.12
+    - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      with:
+        name: ${{ inputs.artifact-name }}
+    - name: Install the wheel produced by this run
+      shell: bash
+      run: |
+        interpreter=$(uv run --no-sync python -c 'import sys; print(sys.executable)')
+        uv pip install --python "$interpreter" --no-deps native-dist/*.whl
+    - name: Run the complete manifest's assigned shard
+      shell: bash
+      env:
+        HOL_GUARD_NATIVE_REGRESSION: "1"
+        NATIVE_SHARD_INDEX: ${{ inputs.shard-index }}
+        NATIVE_SHARD_COUNT: ${{ inputs.shard-count }}
+        NATIVE_PLATFORM: ${{ inputs.platform }}
+      run: |
+        HOL_GUARD_NATIVE_BINARY=$(uv run --no-sync python -c 'from codex_plugin_scanner.guard.native_runtime import native_runtime_status; status = native_runtime_status(); assert status.identity is not None; print(status.identity.path)')
+        HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER=$(uv run --no-sync python -c 'from codex_plugin_scanner.guard.extension_builder.native_source_compiler import find_packaged_source_compiler; compiler = find_packaged_source_compiler(); assert compiler is not None; print(compiler)')
+        export HOL_GUARD_NATIVE_BINARY HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER
+        uv run --no-sync python scripts/ci/native_regression_shard.py \
+          --shard-index "$NATIVE_SHARD_INDEX" --shard-count "$NATIVE_SHARD_COUNT" \
+          --platform "$NATIVE_PLATFORM" --report native-regression.json
+    - name: Upload regression inventory and result
+      if: always()
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: native-regression-${{ inputs.platform }}-${{ inputs.shard-index }}
+        path: native-regression.json
+        if-no-files-found: error
