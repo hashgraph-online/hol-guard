@@ -243,6 +243,25 @@ fn request_digest_excludes_root_adapter_timestamps_but_binds_nested_arguments() 
 }
 
 #[test]
+fn request_digest_binds_source_cwd() {
+    let mut first = envelope(
+        "PreToolUse",
+        serde_json::json!({
+            "hook_event_name": "PreToolUse",
+            "tool_name": "read",
+            "tool_input": {"path": "relative.txt"}
+        }),
+    );
+    first.request_id = None;
+    let mut changed = first.clone();
+    changed.source.cwd = Some("/different-workspace".to_owned());
+    assert_ne!(
+        request_identity(&first).unwrap().1,
+        request_identity(&changed).unwrap().1
+    );
+}
+
+#[test]
 fn rejects_malformed_source_reference_before_review() {
     let error = evaluate_isolated(envelope(
         "PostToolUse",

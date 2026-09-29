@@ -23,7 +23,7 @@ from scripts.ci.pytest_shard import discover_test_nodes
 PLAN_SCHEMA_VERSION = 1
 UNKNOWN_NODE_DURATION_SECONDS = 1.0
 MAX_UNSPLIT_FILE_TARGET_MULTIPLIER = 1.15
-MAX_NODES_PER_AFFINITY_GROUP = 32
+MAX_NODES_PER_AFFINITY_GROUP = 8
 SCHEDULING_ONLY_NODE_IDS = frozenset(
     {
         "tests/test_guard_hook_process_runner.py::"
@@ -187,7 +187,9 @@ def write_shard_plan(
     if len(shards) != len(estimated_loads) or not shards:
         raise ValueError("shards and estimated loads must be non-empty and aligned")
     output_directory.mkdir(parents=True, exist_ok=True)
-    width = max(2, len(str(len(shards) - 1)))
+    # Keep a stable minimum width at every matrix size, matching printf %03d.
+    # Both formatters naturally expand for indices larger than three digits.
+    width = 3
     for index, shard in enumerate(shards):
         path = output_directory / f"shard-{index:0{width}d}.txt"
         path.write_text("\n".join(shard) + "\n", encoding="utf-8")

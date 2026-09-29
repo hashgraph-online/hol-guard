@@ -24,6 +24,8 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
+from scripts.ci.runtime_retirement_ledger import validate_retirement_ledger  # noqa: E402
+
 from scripts.ci.python_capability_cleanup_analysis import (  # noqa: E402
     DynamicImport as _DynamicImport,
 )
@@ -48,8 +50,10 @@ from scripts.ci.python_capability_cleanup_analysis import (  # noqa: E402
 from scripts.ci.python_capability_cleanup_analysis import (  # noqa: E402
     reachable as _reachable,
 )
-from scripts.ci.python_runtime_retirement import validate_retired_modules  # noqa: E402
-from scripts.ci.runtime_retirement_ledger import validate_retirement_ledger  # noqa: E402
+from scripts.ci.python_runtime_retirement import (  # noqa: E402
+    validate_retired_artifacts,
+    validate_retired_modules,
+)
 
 SCHEMA: Final = "hol-guard.python-capability-cleanup.v1"
 CONTRACT: Final = "docs/guard/contracts/python-capability-ownership.v1.json"
@@ -340,6 +344,7 @@ def run(root: Path, wheel: Path | None = None, *, artifacts: Sequence[Path] = ()
     checked_artifacts = ([wheel] if wheel is not None else []) + list(artifacts)
     for artifact in checked_artifacts:
         _validate_artifact_exclusions(root, artifact, excluded_candidates)
+    validate_retired_artifacts(contract, checked_artifacts)
     # Every source/candidate check sees the same freshly parsed source snapshot.
     # Do not persist this analysis across runs: source changes must be revalidated.
     import_analysis = _analyze_import_graph(root)
@@ -354,7 +359,7 @@ def run(root: Path, wheel: Path | None = None, *, artifacts: Sequence[Path] = ()
     oracle_modules = contract.get("lazy_oracle_modules", [])
     if not isinstance(oracle_modules, list) or not all(isinstance(item, str) for item in oracle_modules):
         raise RuntimeError("lazy_oracle_modules must be a list")
-    retired_evidence = validate_retired_modules(root, contract, analysis=import_analysis, artifacts=checked_artifacts)
+    retired_evidence = validate_retired_modules(root, contract, analysis=import_analysis)
     if contract.get("retired_modules"):
         validate_retirement_ledger(root, contract)
     retired_modules = [str(record["module"]) for record in retired_evidence]

@@ -59,6 +59,14 @@ def test_native_hook_client_start_timeout_contains_new_managed_processes(
             "error": "native_policy_snapshot_missing",
             "retryable": False,
         }
+        # Successful startup retains the shared resident until its one-second
+        # idle lease expires. Only a startup timeout promises immediate cleanup.
+        idle_deadline = time.monotonic() + 3
+        while time.monotonic() < idle_deadline and (
+            _state_files(state_dir)
+            or any(process_is_executing(pid) for pid in observed_process_ids)
+        ):
+            time.sleep(0.01)
     else:
         assert result.stderr in {
             b"native_client_deadline_exceeded\n",
@@ -68,5 +76,7 @@ def test_native_hook_client_start_timeout_contains_new_managed_processes(
         if not any(process_is_executing(process_id) for process_id in observed_process_ids):
             break
         time.sleep(0.05)
-    assert not any(process_is_executing(process_id) for process_id in observed_process_ids)
-    assert not _state_files(state_dir)
+    assert not any(
+        process_is_executing(process_id) for process_id in observed_process_ids
+    ), (result.returncode, result.stdout, result.stderr, observed_process_ids)
+    assert not _state_files(state_dir), (result.returncode, result.stdout, result.stderr)

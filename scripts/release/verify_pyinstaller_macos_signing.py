@@ -140,7 +140,7 @@ def _signature_info(path: Path) -> tuple[str, int]:
     for line in result.stderr.splitlines():
         if line.startswith("TeamIdentifier="):
             team_id = line.split("=", 1)[1]
-        flags_match = re.search(r"\bflags=0x([0-9a-fA-F]+)", line)
+        flags_match = re.match(r"CodeDirectory\b.*?\bflags=0x([0-9a-fA-F]+)", line)
         if flags_match is not None:
             flags = int(flags_match.group(1), 16)
     if team_id is None:
@@ -329,7 +329,9 @@ def verify_onedir(tree: Path, expected_team_id: str) -> None:
     if not tree.is_dir():
         raise ValueError(f"Onedir tree does not exist: {tree}")
     require_onedir_seal(tree)
-    macho_paths = [path for path in sorted(tree.rglob("*")) if path.is_file() and _is_macho_file(path)]
+    macho_paths = [
+        path for path in sorted(tree.rglob("*")) if not path.is_symlink() and path.is_file() and _is_macho_file(path)
+    ]
     if not macho_paths:
         raise ValueError("Onedir tree contained no Mach-O binaries")
     for path in macho_paths:

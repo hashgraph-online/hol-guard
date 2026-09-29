@@ -19,12 +19,17 @@ from .sqlite_profile import (
     SQLiteProfileSnapshot,
     sqlite_error_is_busy_locked,
 )
+from .sqlite_quarantine_forensics import (
+    quarantine_file_stats,
+    update_quarantine_forensics_outcome,
+    write_quarantine_forensics,
+)
 from .sqlite_recovery import (
     FATAL_SQLITE_ERROR_MARKERS,
     SQLITE_IO_ERROR_MARKER,
     restore_readable_sqlite_store,
     salvage_local_cli_state,
-    sqlite_store_is_proven_unusable,
+    sqlite_store_probe_detail,
 )
 
 # ruff: noqa: F403,F405
@@ -260,13 +265,87 @@ class StoreConnectionSchemaMixin:
 
                     fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
+    @contextmanager
+    def _try_hold_storage_gate(self, *, exclusive: bool) -> Iterator[bool]:
+        """Attempt the storage gate once without blocking; yields the result.
+
+        Re-entrancy matches ``_hold_storage_gate``: nesting under an existing
+        hold yields True, while upgrading a shared hold to exclusive yields
+        False instead of raising. Callers that must never stall on storage
+        (the runtime heartbeat) use this to fail fast and retry on their own
+        cadence.
+        """
+
+        local = self._storage_gate_local
+        if getattr(local, "owner", None) == id(self) and getattr(local, "depth", 0) > 0:
+            if exclusive and getattr(local, "exclusive", False) is False:
+                yield False
+                return
+            local.depth += 1
+            try:
+                yield True
+            finally:
+                local.depth -= 1
+            return
+        path = self.guard_home / "storage-access.lock"
+        handle = None
+        acquired = False
+        try:
+            try:
+                handle = path.open("a+b")
+                if os.name == "nt":
+                    import msvcrt
+
+                    handle.seek(0)
+                    if not handle.read(1):
+                        handle.write(b"0")
+                        handle.flush()
+                    handle.seek(0)
+                    mode = msvcrt.LK_NBLCK if exclusive else msvcrt.LK_NBRLCK
+                    msvcrt.locking(handle.fileno(), mode, 1)
+                else:
+                    import fcntl
+
+                    mode = fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH
+                    fcntl.flock(handle.fileno(), mode | fcntl.LOCK_NB)
+                acquired = True
+            except OSError:
+                acquired = False
+            if not acquired:
+                yield False
+                return
+            local.owner = id(self)
+            local.depth = 1
+            local.exclusive = exclusive
+            try:
+                yield True
+            finally:
+                local.owner = None
+                local.depth = 0
+                local.exclusive = False
+                if handle is not None:
+                    if os.name == "nt":
+                        import msvcrt
+
+                        handle.seek(0)
+                        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+                    else:
+                        import fcntl
+
+                        fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+        finally:
+            if handle is not None:
+                handle.close()
+
     def _store_is_proven_unusable(self, error: BaseException) -> bool:
-        return sqlite_store_is_proven_unusable(
+        detail = sqlite_store_probe_detail(
             path=self.path,
             guard_home=self.guard_home,
             error=error,
             fatal_error=self._is_fatal_sqlite_error(error),
         )
+        self._storage_recovery_local.last_probe_detail = detail
+        return detail.proven_unusable
 
     def _recover_fatal_sqlite_store(
         self,
@@ -302,25 +381,51 @@ class StoreConnectionSchemaMixin:
                 return True
 
             if not self._store_is_proven_unusable(error):
+                self._storage_recovery_local.last_probe_detail = None
                 return False
 
-            stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+            # The decision above already ran the probe; reuse its detail for
+            # forensics so recovery holds the exclusive gate for one probe
+            # sequence, not two. A monkeypatched decision leaves this None.
+            probe_detail = getattr(self._storage_recovery_local, "last_probe_detail", None)
+            self._storage_recovery_local.last_probe_detail = None
+            quarantined_at = datetime.now(timezone.utc)
+            stamp = quarantined_at.strftime("%Y%m%dT%H%M%S%fZ")
             quarantine_id = f"{stamp}-{uuid4().hex[:8]}"
             quarantined = self.guard_home / f"guard.db.corrupt-{quarantine_id}"
+            try:
+                write_quarantine_forensics(
+                    guard_home=self.guard_home,
+                    quarantine_id=quarantine_id,
+                    quarantined_at=quarantined_at,
+                    error=error,
+                    probe=probe_detail,
+                    files=quarantine_file_stats(self.path),
+                )
+            except Exception as forensics_error:
+                _store_logger.warning(
+                    "Guard could not record quarantine forensics %s: %s",
+                    quarantine_id,
+                    forensics_error,
+                )
             for suffix in ("", "-wal", "-shm"):
                 source = Path(f"{self.path}{suffix}")
                 if not source.exists() or source.is_symlink():
                     continue
                 source.replace(self.guard_home / f"{quarantined.name}{suffix}")
             _store_logger.error(
-                "Guard quarantined an unusable SQLite store after a fatal storage error: %s",
+                "Guard quarantined an unusable SQLite store after a fatal storage error (quarantine %s): %s",
+                quarantine_id,
                 type(error).__name__,
             )
             self._storage_recovery_local.owner = id(self)
             try:
                 if restore_readable_sqlite_store(destination=self.path, quarantined=quarantined):
                     self._last_sqlite_recovery = "restored"
-                    _store_logger.error("Guard restored the quarantined SQLite store after it still opened cleanly.")
+                    _store_logger.error(
+                        "Guard restored the quarantined SQLite store %s after it still opened cleanly.",
+                        quarantine_id,
+                    )
                 else:
                     self._initialize_schema()
                     from .sqlite_cloud_review_recovery import salvage_cloud_review_state
@@ -336,6 +441,19 @@ class StoreConnectionSchemaMixin:
                         self._last_sqlite_recovery = "reinitialized"
             finally:
                 self._storage_recovery_local.owner = None
+            try:
+                update_quarantine_forensics_outcome(
+                    self.guard_home,
+                    quarantine_id,
+                    outcome=self._last_sqlite_recovery,
+                    salvage=self._last_sqlite_recovery_details,
+                )
+            except Exception as forensics_error:
+                _store_logger.warning(
+                    "Guard could not update quarantine forensics %s: %s",
+                    quarantine_id,
+                    forensics_error,
+                )
             return True
 
     def _sqlite_profiler(self) -> SQLiteProfiler:

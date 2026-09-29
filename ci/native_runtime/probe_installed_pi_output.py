@@ -252,6 +252,32 @@ def _canonical_content_digest(content: list[dict[str, Any]]) -> str:
 
 
 def _write_cli_wrapper(path: Path, *, python_path: Path, log_path: Path, negative: bool) -> None:
+    if negative and sys.platform != "win32":
+        compiler = shutil.which("cc")
+        if compiler is None:
+            raise ProbeError("negative CLI fixture requires the native build compiler")
+        # Synthetic malformed replies must fit the unchanged 300 ms CLI budget,
+        # without measuring Python interpreter startup on the hosted runner.
+        _run(
+            [
+                compiler,
+                "-std=c11",
+                "-O2",
+                "-Wall",
+                "-Wextra",
+                "-Werror",
+                f"-DPROBE_LOG_PATH={json.dumps(str(log_path), ensure_ascii=False)}",
+                str(Path(__file__).with_name("pi_negative_cli_fixture.c")),
+                "-o",
+                str(path),
+            ],
+            env={key: value for key, value in os.environ.items() if key in _ENV_ALLOWLIST},
+            cwd=path.parent,
+            timeout=30,
+            label="negative CLI fixture compilation",
+        )
+        path.chmod(0o700)
+        return
     source = f"""\
 #!/usr/bin/env python3
 import base64

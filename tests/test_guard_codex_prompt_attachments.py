@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 import os
-import tracemalloc
+import subprocess
+import sys
 import unittest
 from pathlib import Path
 from time import process_time
@@ -107,20 +109,45 @@ def test_repeated_attachment_windows_reuse_guarded_classification() -> None:
 
 def test_large_benign_codex_attachment_has_bounded_peak_memory(tmp_path: Path) -> None:
     attachment = _attachment(tmp_path, "Routine release note.\n" * 190_000)
+    # tracemalloc measures every thread in its process. Other tests can leave
+    # unrelated review work running, so measure this scanner in a fresh process.
+    measured = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            """
+import json
+import sys
+import tracemalloc
+from pathlib import Path
+from codex_plugin_scanner.guard.cli.commands_support_codex_prompt_attachments import (
+    _codex_prompt_attachment_artifact,
+)
 
-    tracemalloc.start()
-    try:
-        artifact = _codex_prompt_attachment_artifact(
-            prompt_text=f"Read {attachment} before continuing.",
-            home_dir=tmp_path,
-            config_path="<runtime>",
-        )
-        _, peak_bytes = tracemalloc.get_traced_memory()
-    finally:
-        tracemalloc.stop()
-
-    assert artifact is None
-    assert peak_bytes < 2 * 1024 * 1024
+attachment, home = map(Path, sys.argv[1:])
+tracemalloc.start()
+try:
+    artifact = _codex_prompt_attachment_artifact(
+        prompt_text=f"Read {attachment} before continuing.",
+        home_dir=home,
+        config_path="<runtime>",
+    )
+    _, peak_bytes = tracemalloc.get_traced_memory()
+finally:
+    tracemalloc.stop()
+print(json.dumps({"no_artifact": artifact is None, "peak_bytes": peak_bytes}))
+""",
+            str(attachment),
+            str(tmp_path),
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=30,
+    )
+    result = json.loads(measured.stdout)
+    assert result["no_artifact"] is True
+    assert result["peak_bytes"] < 2 * 1024 * 1024
 
 
 def test_prompt_injection_beyond_legacy_limit_requires_review(tmp_path: Path) -> None:

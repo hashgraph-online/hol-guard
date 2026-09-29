@@ -16,8 +16,11 @@ Security:
   mechanical emergency-safe action-class floor: local inspection may continue,
   while mutating, network, secret, destructive, and uncertain actions pause.
   Explicit off/shadow have no production semantic fallback. Native block
-  results stay mechanical. Native review pauses the tool and queues an
-  approval-center request; it never escapes to the Python semantic CLI path.
+  results stay mechanical. A command-policy authority block includes a local
+  repair link and does not rebuild protection from the hook. The current
+  action stays denied, and this worker never calls the CLI.
+  Native review pauses the tool and queues an approval-center request; it
+  never escapes to the Python semantic CLI path.
 """
 
 from __future__ import annotations

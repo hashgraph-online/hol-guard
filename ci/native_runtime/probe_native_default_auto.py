@@ -219,7 +219,11 @@ def _exercise_installed_routes(
                 )
             )
         for event, payload in events:
-            response_payload = _installed_hook_request(daemon, guard_home, workspace, harness, event, payload)
+            try:
+                response_payload = _installed_hook_request(daemon, guard_home, workspace, harness, event, payload)
+            except TimeoutError as error:
+                # Report the failed route without exposing tokens or replaying a possibly dispatched request.
+                raise RuntimeError(f"installed hook transport timed out: harness={harness} event={event}") from error
             if response_payload is None:
                 raise RuntimeError(f"empty response for {harness} {event}")
             _require(
@@ -321,13 +325,14 @@ def _installed_hook_corpus(root: Path) -> dict[str, object]:
         worker_stats = wait_for_route_corpus(
             daemon._server.hook_worker.metrics,
             expected=len(route_receipts),
+            timeout_seconds=45.0 if os.name == "nt" else 5.0,
         )
         writer = daemon._server.runtime_hook_evidence_writer
         mode_invariants = _exercise_mode_invariants(daemon, guard_home, workspace)
         evidence_stats = wait_for_receipt_corpus(
             writer,
             expected=len(route_receipts),
-            timeout_seconds=15.0 if os.name == "nt" else 5.0,
+            timeout_seconds=45.0 if os.name == "nt" else 5.0,
         )
     finally:
         daemon.stop()

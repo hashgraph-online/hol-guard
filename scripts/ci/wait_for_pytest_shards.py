@@ -15,7 +15,7 @@ from collections import Counter
 from collections.abc import Callable, Mapping
 from datetime import datetime
 
-SHARD_COUNT = 192
+SHARD_COUNT = 128
 # The planner and each dependent shard have separate five-minute watchdogs.
 # Include one minute for polling and scheduling overhead; this bound does not
 # delay successful producers or define the CI performance target.
@@ -125,7 +125,7 @@ def _snapshot(
     clock: Callable[[], float],
 ) -> tuple[str, ...]:
     states = ["absent"] * SHARD_COUNT
-    job_ids: set[int] = set()
+    jobs_by_id: dict[int, dict[str, object]] = {}
     seen_shards: set[int] = set()
     plan_seen = False
     total_count = 0
@@ -149,15 +149,23 @@ def _snapshot(
             job_id, name = job.get("id"), job.get("name")
             if type(job_id) is not int or job_id <= 0 or not isinstance(name, str):
                 raise ShardWaitError("GitHub jobs API returned an invalid job identity")
-            if job_id in job_ids:
-                if not plan_seen and not seen_shards:
-                    raise _SchedulingRaceError("GitHub jobs API paginated a changing job list")
-                raise ShardWaitError("GitHub jobs API returned a duplicate job")
-            job_ids.add(job_id)
             if type(job.get("run_id")) is not int or job["run_id"] != run_id:
                 raise ShardWaitError("GitHub jobs API returned a job from another run")
             if "run_attempt" in job and (type(job["run_attempt"]) is not int or job["run_attempt"] != attempt):
                 raise ShardWaitError("GitHub jobs API returned a job from another attempt")
+            if previous := jobs_by_id.get(job_id):
+                if previous["name"] == name:
+                    if previous.get("status") == job.get("status") == "completed" and previous.get(
+                        "conclusion"
+                    ) != job.get("conclusion"):
+                        raise ShardWaitError("GitHub jobs API returned conflicting duplicate job results")
+                    # Scheduling shifts offset pages even after matrix expansion.
+                    # Retry the whole snapshot; duplicates cannot fill missing shards.
+                    raise _SchedulingRaceError("GitHub jobs API paginated a changing job list")
+                if not plan_seen and not seen_shards:
+                    raise _SchedulingRaceError("GitHub jobs API paginated a changing job list")
+                raise ShardWaitError("GitHub jobs API returned a duplicate job")
+            jobs_by_id[job_id] = job
             if name == "coverage-plan":
                 if plan_seen:
                     raise ShardWaitError("GitHub jobs API returned duplicate coverage-plan jobs")
@@ -178,9 +186,9 @@ def _snapshot(
             states[index] = _job_state(job, label)
             if states[index] == "success":
                 _require_current_execution(job, label)
-        if len(job_ids) == total_count:
+        if len(jobs_by_id) == total_count:
             return tuple(states)
-        if len(jobs) != 100 or len(job_ids) > total_count:
+        if len(jobs) != 100 or len(jobs_by_id) > total_count:
             raise ShardWaitError("GitHub jobs API returned an incomplete job list")
     raise ShardWaitError("GitHub jobs API exceeded its pagination limit")
 

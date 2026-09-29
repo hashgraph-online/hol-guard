@@ -17,7 +17,7 @@ import sys
 from collections import Counter
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from functools import lru_cache
+from functools import cache
 from pathlib import Path
 from typing import Final, cast
 
@@ -71,6 +71,9 @@ _TRANSPORT_IDENTITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_resident_client.py",
         "src/codex_plugin_scanner/guard/native_runtime_resilience.py",
         "src/codex_plugin_scanner/guard/codex_hook_launch_runtime.py",
+        "src/codex_plugin_scanner/guard/daemon/discovery.py",
+        "src/codex_plugin_scanner/guard/daemon/manager.py",
+        "src/codex_plugin_scanner/guard/frozen_runtime_commands.py",
     }
 )
 _TRANSPORT_INTEGRITY_PATHS: Final = frozenset(
@@ -114,6 +117,7 @@ _PERSISTENCE_PATH_PREFIXES: Final = (
     "src/codex_plugin_scanner/guard/daemon/hook_metrics.py",
     "src/codex_plugin_scanner/guard/private_file_io.py",
     "src/codex_plugin_scanner/guard/local_dashboard_session.py",
+    "src/codex_plugin_scanner/guard/guard_home_state.py",
     "src/codex_plugin_scanner/guard/store_base.py",
     "src/codex_plugin_scanner/guard/store_mcp_catalog.py",
 )
@@ -146,7 +150,6 @@ _SERVICE_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/runtime/mcp_connection_identity.py",
         "src/codex_plugin_scanner/guard/extension_builder/io.py",
         "src/codex_plugin_scanner/guard/frozen_runtime_commands.py",
-        "src/codex_plugin_scanner/guard/guard_home_state.py",
         "src/codex_plugin_scanner/guard/live_process_identity.py",
         "src/codex_plugin_scanner/guard/mdm/acl.py",
         "src/codex_plugin_scanner/guard/mdm/network_credentials.py",
@@ -325,7 +328,7 @@ def _read(path: Path) -> str:
         raise RuntimeError(f"could not inspect {path}") from exc
 
 
-@lru_cache(maxsize=None)
+@cache
 def _parsed_module(path: Path) -> ast.Module:
     """Parse a source file once per process; inputs are read-only while validating."""
 

@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 
 from ..approval_gate import (
     ApprovalGateError,
+    ApprovalGateInput,
     consume_extension_control_grant,
     input_from_mapping,
     require_extension_control,
@@ -169,12 +170,22 @@ class ExtensionControlApiService:
             "items": items,
         }
 
-    def _require_action_grant(self, payload: dict[str, object], *, action: str, subject: str) -> None:
+    def _require_action_grant(
+        self,
+        payload: dict[str, object],
+        *,
+        action: str,
+        subject: str,
+        require_fresh_totp: bool = False,
+    ) -> None:
         session_nonce = required_request_string(payload, "session_nonce")
+        gate_input = input_from_mapping(payload)
+        if require_fresh_totp:
+            gate_input = replace(gate_input or ApprovalGateInput(), require_fresh_totp=True)
         try:
             grant = require_extension_control(
                 self._store.guard_home,
-                approval_gate_input=input_from_mapping(payload),
+                approval_gate_input=gate_input,
                 action=action,
                 subject=subject,
                 session_nonce=session_nonce,
@@ -189,7 +200,7 @@ class ExtensionControlApiService:
         except ApprovalGateError as exc:
             raise ExtensionControlApiError(exc.status, exc.code) from exc
 
-    def recover_authority(self, payload: dict[str, object]) -> dict[str, object]:
+    def recover_authority(self, payload: dict[str, object], *, require_fresh_totp: bool = False) -> dict[str, object]:
         current = self._store.read_extension_control_authority_for_registry(self._registry)
         if current.health not in {AuthorityHealth.TAMPERED, AuthorityHealth.RECOVERY_REQUIRED}:
             runtime = self._runtime.current()
@@ -206,7 +217,12 @@ class ExtensionControlApiService:
         _ = self._runtime.refresh(current)
         action = "recover-authority"
         subject = f"{action}:{current.health.value}:{current.revision}:{self._registry.catalog_digest}"
-        self._require_action_grant(payload, action=action, subject=subject)
+        self._require_action_grant(
+            payload,
+            action=action,
+            subject=subject,
+            require_fresh_totp=require_fresh_totp,
+        )
         try:
             view = self._store.recover_extension_control_authority(
                 catalog_digest=self._registry.catalog_digest,

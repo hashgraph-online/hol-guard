@@ -302,9 +302,10 @@ class TestPiInstall:
         assert "/v1/hooks/pi?" in text
         assert "approval_request_id?: string" in text
         assert "approvalBlockedReason" in text
-        assert "This exact tool call remains blocked" in text
-        assert "Retry the exact same tool call once" in text
-        assert "changing the command, arguments, or working directory creates a new action" in text
+        assert "The original action remains blocked" in text
+        assert "continue it unchanged without asking the model to replan" in text
+        assert "Retry the exact same tool call once" not in text
+        assert "changing the command, arguments, or working directory creates a new action" not in text
         assert "the saved HOL Guard approval should allow it" not in text
         assert "Do not call ask for this HOL Guard approval" in text
         assert 'option labeled "I\'ve approved this request in HOL Guard"' in text
