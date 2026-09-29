@@ -125,6 +125,7 @@ from ..local_dashboard_session import (
     LOCAL_DASHBOARD_SESSION_AUDIENCE,
     LOCAL_DASHBOARD_SESSION_STARTED_AT_CLAIM,
     MAX_LOCAL_DASHBOARD_SESSION_AGE_SECONDS,
+    PROTECTION_REPAIR_DASHBOARD_SURFACE,
     build_local_dashboard_session_token,
 )
 from ..local_supply_chain import (
@@ -2840,7 +2841,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 elif parsed.path.endswith("/acknowledge-degraded"):
                     response = self._daemon_server().extension_control_api.acknowledge_degraded(payload)
                 elif parsed.path.endswith("/recover-authority"):
-                    response = self._daemon_server().extension_control_api.recover_authority(payload)
+                    response = self._daemon_server().extension_control_api.recover_authority(
+                        payload,
+                        require_fresh_totp=self._request_uses_protection_repair_session(),
+                    )
                 else:
                     response = self._daemon_server().extension_control_api.refresh()
             except ExtensionControlApiError as error:
@@ -2913,6 +2917,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/v1/read-state":
             self._handle_read_state_update(payload)
+            return
+        if parsed.path == "/v1/protection/repair/approval-gate/setup":
+            self._handle_protection_repair_approval_gate_setup(payload)
             return
         if parsed.path == "/v1/settings":
             self._handle_settings_update(payload)
@@ -5138,6 +5145,30 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
     def _handle_settings_update(self, payload: dict[str, object]) -> None:
         self._apply_settings_payload(payload, missing_error="invalid_settings")
 
+    def _handle_protection_repair_approval_gate_setup(self, payload: dict[str, object]) -> None:
+        if not self._protection_repair_approval_gate_setup_payload_is_allowed(payload):
+            self._write_json({"error": "invalid_settings"}, status=400)
+            return
+        guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
+        gate_config = approval_gate_public_config(guard_home)
+        if gate_config.configured or gate_config.enabled:
+            self._write_json({"error": "approval_gate_setup_unavailable"}, status=409)
+            return
+        self._apply_settings_payload(payload, missing_error="invalid_settings")
+
+    def _protection_repair_approval_gate_setup_payload_is_allowed(self, payload: object) -> bool:
+        if not isinstance(payload, dict) or set(payload) != {"settings"}:
+            return False
+        settings = payload.get("settings")
+        if not isinstance(settings, dict) or set(settings) != {"approval_gate"}:
+            return False
+        gate_payload = settings.get("approval_gate")
+        return (
+            isinstance(gate_payload, dict)
+            and set(gate_payload) == {"enabled", "new_password", "confirm_password"}
+            and gate_payload.get("enabled") is True
+        )
+
     def _apply_settings_payload(self, payload: dict[str, object], *, missing_error: str) -> None:
         settings = payload.get("settings")
         if not isinstance(settings, dict):
@@ -6907,13 +6938,34 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         remaining_seconds = absolute_expires_at - time.time()
         if remaining_seconds < 1:
             return None
-        refreshed_surface = surface if surface in {"approval-center", "dashboard", "cloud-dashboard"} else "dashboard"
+        claim_surface = self._optional_string(claims.get("surface"))
+        if claim_surface == PROTECTION_REPAIR_DASHBOARD_SURFACE:
+            refreshed_surface = PROTECTION_REPAIR_DASHBOARD_SURFACE
+        elif surface in {"approval-center", "dashboard", "cloud-dashboard"}:
+            refreshed_surface = surface
+        else:
+            refreshed_surface = "dashboard"
         return build_local_dashboard_session_token(
             auth_token=self.server.auth_token,  # type: ignore[attr-defined]
             surface=refreshed_surface,
             expires_in_seconds=min(DEFAULT_LOCAL_DASHBOARD_SESSION_TTL_SECONDS, int(remaining_seconds)),
             session_started_at=started_at,
         )
+
+    def _request_uses_protection_repair_session(self) -> bool:
+        session_token = self.headers.get("X-Guard-Dashboard-Session")
+        authorization = self.headers.get("Authorization")
+        bearer_token = None
+        if isinstance(authorization, str) and authorization.lower().startswith("bearer "):
+            bearer_token = authorization[7:].strip()
+        candidates = [
+            candidate for candidate in (session_token, bearer_token) if isinstance(candidate, str) and candidate.strip()
+        ]
+        for candidate in candidates:
+            claims = self._dashboard_session_token_claims(candidate)
+            if claims is not None and claims.get("surface") == PROTECTION_REPAIR_DASHBOARD_SURFACE:
+                return True
+        return False
 
     def _refreshable_dashboard_session_claims(self) -> dict[str, object] | None:
         session_token = self.headers.get("X-Guard-Dashboard-Session")
@@ -6932,7 +6984,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             if claims is None:
                 continue
             surface = self._optional_string(claims.get("surface"))
-            if surface in {"approval-center", "dashboard", "cloud-dashboard"}:
+            if surface in {
+                "approval-center",
+                "dashboard",
+                "cloud-dashboard",
+                PROTECTION_REPAIR_DASHBOARD_SURFACE,
+            }:
                 return claims
         return None
 
@@ -6945,6 +7002,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         surface = self._optional_string(claims.get("surface"))
         path = urlparse(self.path).path
         path_parts = [part for part in path.split("/") if part]
+        if surface == PROTECTION_REPAIR_DASHBOARD_SURFACE:
+            return self._protection_repair_session_request_is_allowed(path, payload=payload)
         if surface in {"approval-center", "dashboard", "cloud-dashboard"}:
             return self._path_supports_dashboard_session(path, path_parts)
         action_path = self._optional_string(claims.get("action_path"))
@@ -7103,6 +7162,26 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             ):
                 return True
         return False
+
+    def _protection_repair_session_request_is_allowed(
+        self,
+        path: str,
+        *,
+        payload: dict[str, object] | None,
+    ) -> bool:
+        if self.command == "GET" and path in {
+            "/v1/runtime",
+            "/v1/settings",
+            "/v1/extension-controls/effective",
+            "/v1/update/status",
+        }:
+            return True
+        if self.command != "POST":
+            return False
+        return path in {
+            "/v1/initialize",
+            "/v1/extension-controls/recover-authority",
+        }
 
     def _path_supports_dashboard_session(self, path: str, path_parts: list[str]) -> bool:
         return self._is_hosted_dashboard_api_path(path, path_parts) or self._local_surface_session_request_is_allowed(
@@ -7375,6 +7454,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/receipts/latest",
             "/v1/runtime",
             "/v1/settings",
+            "/v1/protection/repair/approval-gate/setup",
             "/v1/settings/export",
             "/v1/settings/import",
             "/v1/settings/reset",
@@ -7951,6 +8031,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/approval-gate/totp/disable",
             "/v1/daemon/repair",
             "/v1/protection/repair",
+            "/v1/protection/repair/approval-gate/setup",
             "/v1/insights/share",
             "/v1/cloud/connect",
             "/v1/notifications/setup",
@@ -8110,6 +8191,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/feed-health",
             "/settings",
             "/about",
+            "/protection/repair",
             "/requests",
             "/approvals",
         }:
