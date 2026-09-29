@@ -9,7 +9,7 @@ import stat
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TextIO
+from typing import TextIO, cast
 
 from ...version import __version__
 from ..adapters.base import HarnessContext
@@ -125,25 +125,60 @@ def _configured_codex_hooks(context: HarnessContext) -> tuple[object, dict[str, 
     )
 
 
+def _hook_shape_counts(hooks: object) -> tuple[dict[str, int | None], dict[str, int | None]] | tuple[None, None]:
+    """Count configured shapes without attributing ownership or loaded-session state."""
+    if not isinstance(hooks, dict):
+        return None, None
+    hook_table = cast(dict[str, object], hooks)
+    groups_by_event: dict[str, int | None] = {}
+    handlers_by_event: dict[str, int | None] = {}
+    for event in _EVENTS:
+        groups = hook_table.get(event, [])
+        if not isinstance(groups, list):
+            groups_by_event[event] = None
+            handlers_by_event[event] = None
+            continue
+        typed_groups = cast(list[object], groups)
+        if any(not isinstance(group, dict) for group in typed_groups):
+            groups_by_event[event] = None
+            handlers_by_event[event] = None
+            continue
+        groups_by_event[event] = len(typed_groups)
+        handler_count = 0
+        valid_handlers = True
+        for group in typed_groups:
+            handlers = cast(dict[str, object], group).get("hooks")
+            if not isinstance(handlers, list):
+                valid_handlers = False
+                break
+            typed_handlers = cast(list[object], handlers)
+            if any(not isinstance(handler, dict) for handler in typed_handlers):
+                valid_handlers = False
+                break
+            handler_count += len(typed_handlers)
+        # A partial count would imply that malformed configured entries were absent.
+        handlers_by_event[event] = handler_count if valid_handlers else None
+    return groups_by_event, handlers_by_event
+
+
 def _workspace_hook_observation(context: HarnessContext) -> dict[str, object]:
     if context.workspace_dir is None:
         return {"selected": False}
     config_path, hooks_path = CodexHarnessAdapter._config_hook_pairs(context)[1]
     hooks, status = _read_codex_hook_files(config_path, hooks_path)
+    group_counts, handler_counts = _hook_shape_counts(hooks)
     return {
         "selected": True,
         **status,
         "authentication": "unverified_local_configuration",
-        "event_group_counts": {
-            event: len(groups) if isinstance((groups := hooks.get(event)), list) else 0 for event in _EVENTS
-        }
-        if isinstance(hooks, dict)
-        else None,
+        "event_group_counts": group_counts,
+        "event_handler_counts": handler_counts,
     }
 
 
 def codex_incident_report(context: HarnessContext) -> dict[str, object]:
     hooks, config = _configured_codex_hooks(context)
+    group_counts, handler_counts = _hook_shape_counts(hooks)
     hooks_unavailable = config.get("hooks_status") in {
         "unreadable",
         "malformed",
@@ -209,6 +244,8 @@ def codex_incident_report(context: HarnessContext) -> dict[str, object]:
         "cli_package_version": __version__,
         "configured": {
             **config,
+            "event_group_counts": group_counts,
+            "event_handler_counts": handler_counts,
             "manifest_integrity": status,
             "reason_code": reason,
             "integrity_probe_exception_class": probe_exception_class,
