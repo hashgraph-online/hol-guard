@@ -555,12 +555,13 @@ def _try_apply_onedir(
 
 def _onedir_regular_file_count(extracted: Path) -> int:
     count = 0
+    tree_root = (extracted / _ONEDIR_TREE_ROOT).resolve()
     for entry in extracted.rglob("*"):
-        if entry.is_symlink():
+        if entry.parts[len(extracted.parts)] != _ONEDIR_TREE_ROOT:
+            raise DesktopCoreUpdateError("desktop_core_install_failed")
+        if entry.is_symlink() and not entry.resolve().is_relative_to(tree_root):
             raise DesktopCoreUpdateError("desktop_core_install_failed")
         if entry.is_file():
-            if entry.parts[len(extracted.parts)] != _ONEDIR_TREE_ROOT:
-                raise DesktopCoreUpdateError("desktop_core_install_failed")
             count += 1
     return count
 
