@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import os
 import socket
+import stat
 import subprocess
 import time
 from urllib.error import HTTPError
@@ -9,11 +11,103 @@ from urllib.request import Request, urlopen
 
 import pytest
 
+from codex_plugin_scanner.guard import evaluation_witness as witness_module
 from codex_plugin_scanner.guard.evaluation_witness import (
     FileWitnessPair,
     LocalSideEffectWitness,
     NetworkWitnessPair,
+    _rmtree_at,
 )
+
+
+@pytest.mark.skipif(os.name == "nt", reason="directory descriptors require POSIX")
+def test_pinned_cleanup_fallback_keeps_symlink_target(tmp_path) -> None:
+    owned = tmp_path / "owned"
+    owned.mkdir()
+    (owned / "nested").mkdir()
+    (owned / "nested" / "file").write_bytes(b"owned")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "keep").write_bytes(b"keep")
+    (owned / "outside-link").symlink_to(outside, target_is_directory=True)
+    parent_fd = os.open(tmp_path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        _rmtree_at(parent_fd, owned.name)
+    finally:
+        os.close(parent_fd)
+    assert not owned.exists()
+    assert (outside / "keep").read_bytes() == b"keep"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="directory descriptors require POSIX")
+def test_pinned_cleanup_restores_owner_write_to_nested_directories(tmp_path) -> None:
+    owned = tmp_path / "owned"
+    nested = owned / "nested"
+    nested.mkdir(parents=True)
+    (nested / "file").write_bytes(b"owned")
+    nested.chmod(0o555)
+    owned.chmod(0o555)
+    parent_fd = os.open(tmp_path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        _rmtree_at(parent_fd, owned.name)
+    finally:
+        os.close(parent_fd)
+        if owned.exists():
+            owned.chmod(0o700)
+        if nested.exists():
+            nested.chmod(0o700)
+    assert not owned.exists()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="directory descriptors require POSIX")
+def test_pinned_cleanup_does_not_change_an_unopenable_directory(tmp_path, monkeypatch) -> None:
+    owned = tmp_path / "owned"
+    owned.mkdir(mode=0o700)
+    owned.chmod(0o555)
+    parent_fd = os.open(tmp_path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    real_open = os.open
+
+    def reject_directory_open(path, flags, mode=0o777, *, dir_fd=None):
+        if path == owned.name and dir_fd == parent_fd:
+            raise PermissionError("cannot pin directory")
+        return real_open(path, flags, mode, dir_fd=dir_fd)
+
+    monkeypatch.setattr(witness_module.os, "open", reject_directory_open)
+    try:
+        with pytest.raises(PermissionError, match="cannot pin directory"):
+            _rmtree_at(parent_fd, owned.name)
+        assert stat.S_IMODE(owned.stat().st_mode) == 0o555
+    finally:
+        os.close(parent_fd)
+        owned.chmod(0o700)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="directory descriptors require POSIX")
+def test_pinned_cleanup_fallback_rejects_directory_swap(tmp_path, monkeypatch) -> None:
+    owned = tmp_path / "owned"
+    owned.mkdir()
+    (owned / "original").write_bytes(b"original")
+    replacement = tmp_path / "replacement"
+    replacement.mkdir()
+    (replacement / "keep").write_bytes(b"keep")
+    held = tmp_path / "held"
+    parent_fd = os.open(tmp_path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    real_open = os.open
+
+    def swap_before_open(path, flags, mode=0o777, *, dir_fd=None):
+        if path == owned.name and dir_fd == parent_fd:
+            owned.rename(held)
+            replacement.rename(owned)
+        return real_open(path, flags, mode, dir_fd=dir_fd)
+
+    monkeypatch.setattr(witness_module.os, "open", swap_before_open)
+    try:
+        with pytest.raises(ValueError, match="changed before cleanup"):
+            _rmtree_at(parent_fd, owned.name)
+    finally:
+        os.close(parent_fd)
+    assert (owned / "keep").read_bytes() == b"keep"
+    assert (held / "original").read_bytes() == b"original"
 
 
 def _post(url: str) -> None:

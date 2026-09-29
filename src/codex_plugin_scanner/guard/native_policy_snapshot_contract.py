@@ -143,7 +143,11 @@ def _validate_snapshot_scope_v3(root: Mapping[str, object]) -> Mapping[str, obje
 
 
 def _validate_snapshot_policy_v3(root: Mapping[str, object]) -> Mapping[str, object]:
-    effective = _require_snapshot_mapping_fields_v3(root.get("effective_policy"), _EFFECTIVE_POLICY_FIELDS)
+    raw = root.get("effective_policy")
+    optional = (
+        frozenset({"mcp_tool_actions"}) if isinstance(raw, Mapping) and "mcp_tool_actions" in raw else frozenset()
+    )
+    effective = _require_snapshot_mapping_fields_v3(raw, _EFFECTIVE_POLICY_FIELDS | optional)
     for field in ("protection_posture", "security_level", "sandbox_analysis", "receipt_redaction_level"):
         if not _valid_bounded_string_v3(effective.get(field)):
             raise NativePolicySnapshotError("native_policy_snapshot_policy_invalid")
@@ -179,6 +183,9 @@ def _validate_snapshot_policy_v3(root: Mapping[str, object]) -> Mapping[str, obj
     _harness_action_map(harness_actions)
     _string_map(publisher_actions)
     _string_map(artifact_actions)
+    from .native_policy_snapshot_policy import _observed_mcp_action_map
+
+    _observed_mcp_action_map(effective.get("mcp_tool_actions"))
     return effective
 
 

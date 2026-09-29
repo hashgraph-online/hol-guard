@@ -45,7 +45,7 @@ def test_activity_read_only_authority_upgrade_is_unavailable(
         lambda *_args, **_kwargs: pytest.fail("native evaluation must not run without a read-only snapshot"),
     )
 
-    assert (
+    with pytest.raises(NativeCommandControlMutationRequiredError):
         activity._evaluate_payload_command(
             {"tool_name": "Shell", "tool_input": {"command": "git push origin main"}},
             store=store,
@@ -53,8 +53,6 @@ def test_activity_read_only_authority_upgrade_is_unavailable(
             cwd=tmp_path,
             home_dir=tmp_path,
         )
-        is None
-    )
 
 
 def test_workflow_native_unavailable_does_not_fabricate_allow(

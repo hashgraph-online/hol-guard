@@ -32,6 +32,7 @@ ALL_HARNESSES = (
     "grok",
     "pi",
     "zcode",
+    "devin",
 )
 _HARNESS_SET = frozenset(ALL_HARNESSES)
 NON_WINDOWS_PLATFORMS = frozenset(PLATFORMS - {"windows-x64"})

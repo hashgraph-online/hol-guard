@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import base64
 import json
+import subprocess
+import sys
 import threading
 from copy import deepcopy
 from pathlib import Path
@@ -70,6 +72,33 @@ def _preserved_result(case: dict[str, object]) -> dict[str, object]:
         "input_content_after_sha256": digest,
         "input_content_unchanged": True,
     }
+
+
+def test_negative_cli_wrapper_does_not_claim_daemon_recovery(tmp_path: Path) -> None:
+    wrapper = tmp_path / "hol-guard"
+    log = tmp_path / "cli.jsonl"
+    probe._write_cli_wrapper(wrapper, python_path=Path(sys.executable), log_path=log, negative=True)
+
+    completed = subprocess.run(
+        [str(wrapper), "daemon", "recover"],
+        input=b"",
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode != 0
+    assert completed.stdout == b""
+    assert probe._read_records(log)["unknown"][0]["returncode"] != 0
+
+    malformed = subprocess.run(
+        [str(wrapper), "hook", "--json"],
+        input=json.dumps({"tool_call_id": "negative-malformed"}).encode("utf-8"),
+        capture_output=True,
+        check=False,
+    )
+    assert malformed.returncode == 0
+    assert malformed.stdout == b"not-json\n"
+    assert probe._read_records(log)["negative-malformed"][0]["invocation_kind"] == "hook"
 
 
 def test_installed_origin_guard_rejects_checkout_package_only(tmp_path: Path) -> None:

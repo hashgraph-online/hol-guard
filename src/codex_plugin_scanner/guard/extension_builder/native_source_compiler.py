@@ -250,7 +250,7 @@ def _decode_output(
 @contextmanager
 def _verified_executable(raw: bytes):  # type: ignore[no-untyped-def]
     """Materialize exactly the verified bytes in a private execution directory."""
-    with tempfile.TemporaryDirectory(prefix="hol-guard-source-compiler-") as directory:
+    with tempfile.TemporaryDirectory(prefix="hol-guard-source-compiler-", ignore_cleanup_errors=True) as directory:
         name = "guard-command-source.exe" if os.name == "nt" else "guard-command-source"
         path = Path(directory) / name
         flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
