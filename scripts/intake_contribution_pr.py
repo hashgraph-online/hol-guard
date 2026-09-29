@@ -64,6 +64,13 @@ def main() -> int:
         action="store_true",
         help="allow refresh to run when the contribution modifies build/tooling files",
     )
+    parser.add_argument(
+        "--salvage",
+        action="store_true",
+        help="land only the contributor-owned diff: every path outside "
+        "contributions/ and tests/fixtures/ is reset to origin/main after the "
+        "merge, before refresh runs",
+    )
     args = parser.parse_args()
 
     contributions = []
@@ -120,22 +127,40 @@ def main() -> int:
         "tests/test_policy_bundle_delivery_runtime.py",
     )
     machine_touched: set[str] = set()
+    salvaged: set[str] = set()
 
     def managed(path: str) -> bool:
         return path.startswith(machine_dirs) or path in machine_files
 
     for (pr_number, _, _), contributor_head in zip(contributions, contributor_heads, strict=True):
         merge_base = _run(["git", "merge-base", contributor_head, "origin/main"])
-        changed = _run(["git", "diff", "--name-only", merge_base, contributor_head]).splitlines()
+        # --no-renames -z keeps literal paths: a renamed managed file must show
+        # its source path so the reset below restores it rather than leaving a
+        # trusted file deleted, and -z avoids quoted/octal-escaped names.
+        changed = [
+            p
+            for p in _run(["git", "diff", "--name-only", "--no-renames", "-z", merge_base, contributor_head]).split(
+                "\0"
+            )
+            if p
+        ]
         machine_touched.update(p for p in changed if managed(p))
         outside = [p for p in changed if not p.startswith(contributor_owned) and not managed(p)]
-        if outside and not (args.trust_tooling_changes or args.skip_regen):
-            raise SystemExit(
-                f"PR #{pr_number} changes files outside contributions/, tests/fixtures/, "
-                "and machine-managed paths; refresh executes src/, tests/, scripts/, and "
-                "build tooling from the merged tree with maintainer credentials. Review "
-                "the diff, then rerun with --trust-tooling-changes or --skip-regen:\n" + "\n".join(outside)
-            )
+        if outside:
+            if args.salvage:
+                # Non-contributor edits are reverted after the merge, before
+                # refresh runs: the contributor commits stay ancestors (so the
+                # original PR still marks merged), but only their
+                # contributions/ and tests/fixtures/ payload lands.
+                salvaged.update(outside)
+            elif not (args.trust_tooling_changes or args.skip_regen):
+                raise SystemExit(
+                    f"PR #{pr_number} changes files outside contributions/, tests/fixtures/, "
+                    "and machine-managed paths; refresh executes src/, tests/, scripts/, and "
+                    "build tooling from the merged tree with maintainer credentials. Review "
+                    "the diff, then rerun with --trust-tooling-changes, --skip-regen, or "
+                    "--salvage:\n" + "\n".join(outside)
+                )
 
     if _run(["git", "branch", "--list", branch]):
         _run(["git", "checkout", branch])
@@ -167,6 +192,33 @@ def main() -> int:
         _run(["git", "checkout", "-b", branch, contributor_heads[0]])
         pending_heads = contributor_heads[1:]
 
+    def salvage_conflicts() -> bool:
+        """Under --salvage, resolve conflicts on non-contributor paths to the
+        incoming side — the reset below normalizes them to origin/main anyway.
+        Conflicts inside contributor-owned paths stay manual."""
+        unmerged = [p for p in _run(["git", "diff", "--name-only", "--diff-filter=U", "-z"]).split("\0") if p]
+        resolvable = [p for p in unmerged if not p.startswith(contributor_owned)]
+        if len(resolvable) != len(unmerged):
+            return False
+        checked_out = []
+        for path in resolvable:
+            probe = subprocess.run(
+                ["git", "checkout", "--theirs", "--", path],
+                cwd=ROOT,
+                capture_output=True,
+                check=False,
+            )
+            if probe.returncode:
+                # modify/delete conflicts have no --theirs stage; the incoming
+                # side deleted it
+                _run(["git", "rm", "-f", "-q", "--ignore-unmatch", "--", path])
+            else:
+                checked_out.append(path)
+        if checked_out:
+            _run(["git", "add", "-A", "--", *checked_out])
+        _run(["git", "commit", "--no-edit"])
+        return True
+
     for contributor_head in pending_heads:
         head_merge = subprocess.run(
             ["git", "merge", "--no-edit", contributor_head],
@@ -175,7 +227,7 @@ def main() -> int:
             text=True,
             check=False,
         )
-        if head_merge.returncode:
+        if head_merge.returncode and not (args.salvage and salvage_conflicts()):
             print(
                 "conflicts merging a contributor head: resolve, commit, then rerun:\n"
                 "  git add -A && git commit && python scripts/intake_contribution_pr.py ...",
@@ -190,7 +242,7 @@ def main() -> int:
         text=True,
         check=False,
     )
-    if merge.returncode:
+    if merge.returncode and not (args.salvage and salvage_conflicts()):
         print(
             "merge conflicts: resolve generated artifacts by regeneration, then run\n"
             "  git checkout --theirs/ours as needed && git commit && "
@@ -205,8 +257,10 @@ def main() -> int:
     # files planted under managed directories are deleted.
     # The reset is sanitization, not regeneration — it applies even under
     # --skip-regen and --trust-tooling-changes, which concern tooling paths
-    # and the refresh step, not machine ownership.
-    for path in sorted(machine_touched):
+    # and the refresh step, not machine ownership. Under --salvage it also
+    # covers every non-contributor path the PRs touched.
+    reset_paths = machine_touched | salvaged
+    for path in sorted(reset_paths):
         probe = subprocess.run(
             ["git", "cat-file", "-e", f"origin/main:{path}"],
             cwd=ROOT,
@@ -217,13 +271,14 @@ def main() -> int:
             _run(["git", "checkout", "origin/main", "--", path])
         else:
             _run(["git", "rm", "-f", "-q", "--ignore-unmatch", "--", path])
-    if machine_touched and _run(["git", "status", "--porcelain"]):
+    if reset_paths and _run(["git", "status", "--porcelain"]):
         _run(
             [
                 "git",
                 "commit",
                 "-m",
-                f"chore(extensions): reset managed paths before regenerate artifacts for intake of PRs {pr_refs}",
+                "chore(extensions): reset managed and salvaged paths "
+                f"before regenerate artifacts for intake of PRs {pr_refs}",
             ]
         )
 

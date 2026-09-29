@@ -358,9 +358,7 @@ def _matcher_contract_registry() -> tuple[CommandSafetyExtensionRegistry, str]:
     extensions = BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions
     extension = next(item for item in extensions if item.extension_id == "command.container-runtime")
     rule_index = next(
-        index
-        for index, rule in enumerate(extension.rules)
-        if rule.rule_id.endswith("compose-destructive-cleanup")
+        index for index, rule in enumerate(extension.rules) if rule.rule_id.endswith("compose-destructive-cleanup")
     )
     rule = extension.rules[rule_index]
     changed_rule = replace(rule, matcher_contract_digest="0" * 64)
@@ -983,12 +981,11 @@ def test_explicit_macos_extension_authority_spends_one_interactive_read(
     interactive_reads: list[str] = []
     bounded_reads: list[str] = []
 
-    def tracked_interactive_read(_self: SystemKeyringSecretStore, secret_id: str) -> str | None:
+    def tracked_interactive_read(secret_id: str) -> str | None:
         interactive_reads.append(secret_id)
         return legacy_secrets.get_secret(secret_id)
 
     def tracked_bounded_read(
-        _self: SystemKeyringSecretStore,
         secret_id: str,
         *,
         timeout_seconds: float = 0.0,
@@ -997,9 +994,27 @@ def test_explicit_macos_extension_authority_spends_one_interactive_read(
         bounded_reads.append(secret_id)
         return legacy_secrets.get_secret(secret_id)
 
-    monkeypatch.setattr(SystemKeyringSecretStore, "get_secret", tracked_interactive_read)
-    monkeypatch.setattr(SystemKeyringSecretStore, "get_secret_with_timeout", tracked_bounded_read)
+    monkeypatch.setattr(
+        SystemKeyringSecretStore, "get_secret", lambda _self, secret_id: legacy_secrets.get_secret(secret_id)
+    )
+    monkeypatch.setattr(
+        SystemKeyringSecretStore,
+        "get_secret_with_timeout",
+        lambda _self, secret_id, **_kwargs: legacy_secrets.get_secret(secret_id),
+    )
     explicit_store = GuardStore(tmp_path, prime_policy_integrity=False, allow_system_keyring=True)
+    migrating = explicit_store._secret_store()
+    assert isinstance(migrating, MigratingFallbackSecretStore)
+    assert isinstance(migrating.primary, SystemKeyringSecretStore)
+    # Other shard tests can leave background stores reading their own homes.
+    # Track every read by this store without counting unrelated backend instances.
+    monkeypatch.setattr(migrating.primary, "get_secret", tracked_interactive_read)
+    monkeypatch.setattr(migrating.primary, "get_secret_with_timeout", tracked_bounded_read)
+    unrelated = SystemKeyringSecretStore(service_name="unrelated-test-store")
+    unrelated.get_secret("unrelated-key")
+    unrelated.get_secret_with_timeout("unrelated-anchor", timeout_seconds=0.5)
+    assert interactive_reads == []
+    assert bounded_reads == []
 
     assert explicit_store.migrate_legacy_extension_control_authority_secrets() is True
     assert interactive_reads == [legacy_store._key_ref()]
