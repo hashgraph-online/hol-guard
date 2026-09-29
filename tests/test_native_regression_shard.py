@@ -106,7 +106,7 @@ def test_platform_gates_require_complete_inventory_and_all_native_proofs() -> No
     jobs = yaml.safe_load((ROOT / ".github/workflows/native-wheel-ci.yml").read_text())["jobs"]
     for name in ["linux-x64", "windows-x64", "macos"]:
         job = jobs[name]
-        assert job["if"] == "always()"
+        assert job["if"] == "${{ !cancelled() }}"
         assert "native-regression-complete" in job["needs"]
         assert "test -n" in job["steps"][0]["run"]
         assert 'test "$result" = success || exit 1' in job["steps"][0]["run"]
@@ -152,3 +152,17 @@ def test_regression_action_installs_only_the_same_run_wheel() -> None:
     retry = next(step for step in steps if step.get("name") == "Retry uv setup after a transient download failure")
     assert retry["if"] == "steps.setup-uv-primary.outcome == 'failure'"
     assert not retry.get("continue-on-error")
+
+
+def test_superseded_runs_can_cancel_all_status_aggregators() -> None:
+    for filename, names in {
+        "ci.yml": ["ci-python-312"],
+        "native-wheel-ci.yml": ["linux-x64", "windows-x64", "macos", "native-regression-complete"],
+    }.items():
+        workflow = yaml.safe_load((ROOT / ".github/workflows" / filename).read_text())
+        assert workflow["concurrency"]["cancel-in-progress"] is True
+        for name in names:
+            gate = workflow["jobs"][name]
+            assert gate["if"] == "${{ !cancelled() }}"
+            assert gate["needs"]
+            assert any("success" in step.get("run", "") for step in gate["steps"])

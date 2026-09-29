@@ -508,7 +508,7 @@ jobs:
 
   ci-python-312:
     name: ci (3.12)
-    if: always()
+    if: ${{ !cancelled() }}
     needs: [quality, coverage-plan, coverage, compatibility, scheduling-sensitive]
     runs-on: ubuntu-latest
     timeout-minutes: 2

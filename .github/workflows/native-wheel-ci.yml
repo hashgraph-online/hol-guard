@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   linux-x64:
-    if: always()
+    if: ${{ !cancelled() }}
     needs:
       - linux-build
       - linux-proof
@@ -80,7 +80,7 @@ jobs:
           if-no-files-found: error
           compression-level: 0
   windows-x64:
-    if: always()
+    if: ${{ !cancelled() }}
     needs:
       - windows-build
       - windows-proof
@@ -732,7 +732,7 @@ jobs:
           shard-index: ${{ matrix.shard }}
           shard-count: '4'
   macos:
-    if: always()
+    if: ${{ !cancelled() }}
     needs:
       - macos-build
       - macos-proof
@@ -768,7 +768,7 @@ jobs:
           test -n "$RESULTS"
           for result in $RESULTS; do test "$result" = success || exit 1; done
   native-regression-complete:
-    if: always()
+    if: ${{ !cancelled() }}
     needs:
       - linux-regression
       - windows-regression
