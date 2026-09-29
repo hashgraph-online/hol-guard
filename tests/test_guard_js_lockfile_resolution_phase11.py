@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -181,7 +182,7 @@ def test_recursive_package_lock_deadline_raises_instead_of_returning_partial_ent
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     ticks = iter((0.0, 1.0))
-    monkeypatch.setattr(evaluator_module.time, "monotonic", lambda: next(ticks))
+    monkeypatch.setattr(evaluator_module, "time", SimpleNamespace(monotonic=lambda: next(ticks)))
     lockfile_text = json.dumps(
         {
             "dependencies": {

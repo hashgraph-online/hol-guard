@@ -24,13 +24,13 @@ This checklist implements the P0 requirements in the [HOL Guard MDM Compatibilit
 
 ## Current implementation status
 
-The baseline MDM runtime, managed policy, lifecycle CLI, native package sources, schemas, CI matrix, and administrator documentation were implemented in the original MDM compatibility work. The MDM-R005 completion slice is implemented in draft PR #2128, `fix/mdm-r005-enterprise-networking`, targeting `release/3.0`.
+The baseline MDM runtime, managed policy, lifecycle CLI, native package sources, schemas, CI matrix, and administrator documentation were implemented in the original MDM compatibility work. MDM-R005 networking PR [#2128](https://github.com/hashgraph-online/hol-guard/pull/2128) merged on August 9, 2026 as `8c83a4d757cd37c97f72993945f02d90ca91dfcf`; that commit is an ancestor of current `main`. Its transport, proxy, private-CA, diagnostics, and offline code are inherited implementation, not a draft proposal.
 
-Per this checklist's completion rule, MDM-T081 through MDM-T092 remain unchecked until that PR is merged with its release evidence. The unchecked state is therefore not a claim that the candidate implementation or portable conformance proof is missing.
+Per this checklist's completion rule, MDM-T081 through MDM-T092 remain unchecked pending release-bound reruns and certification evidence. The unchecked state is not a claim that the implementation is missing. A merged PR does not by itself prove the exact evaluation artifact, managed network, or fleet installation.
 
 Production certification still requires external inputs unavailable to the repository: Apple Developer ID/notarization credentials, Windows Authenticode credentials, representative MDM vendors and OS/architecture scope, test devices, Cloud enrollment choices, and security/release/support/pilot-organization sign-off. The evidence form is [mdm-release-evidence-template.md](./mdm-release-evidence-template.md).
 
-### MDM-R005 candidate evidence for PR #2128
+### MDM-R005 inherited implementation from PR #2128; rerun required
 
 | Task | Candidate implementation and proof |
 | --- | --- |

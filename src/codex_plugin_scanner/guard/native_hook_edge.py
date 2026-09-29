@@ -10,7 +10,10 @@ from typing import Any, cast
 
 from .native_approval_errors import FINITE_FAILURE_CODES
 from .native_decision_receipt import receipt_matches_edge
-from .native_resident_client import native_resident_client_request, record_native_resident_client_failure_code
+from .native_resident_client import (
+    native_resident_client_request,
+    record_native_resident_client_failure_code,
+)
 from .native_route_receipt import record_native_hook_result
 from .native_runtime import _isolated_environment, native_runtime_status
 from .native_runtime_resilience import (

@@ -16,6 +16,7 @@ from .runtime.local_cli_commands import (
 )
 from .runtime.local_cli_identity import UnlistedCliIdentity, is_local_cli_id
 from .store_local_cli_schema import ensure_local_cli_schema
+from .store_mcp_provider_permissions import ProviderUpdate, write_provider_choices
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,6 +32,7 @@ class CustomExtensionContinuityMutation:
     observation_preconditions: Mapping[str, object]
     requires_protected_extension_authority: bool = False
     required_negotiated_capability: str | None = None
+    provider_updates: Mapping[str, Sequence[ProviderUpdate]] | None = None
 
 
 class StoreCustomExtensionContinuityMixin:
@@ -48,6 +50,7 @@ class StoreCustomExtensionContinuityMixin:
         updated_at: str,
         sync_preconditions: Mapping[str, object] | None = None,
         observation_preconditions: Mapping[str, object] | None = None,
+        provider_updates: Mapping[str, Sequence[ProviderUpdate]] | None = None,
     ) -> int:
         """Commit exact local authority, continuity state, and receipts together."""
 
@@ -59,6 +62,7 @@ class StoreCustomExtensionContinuityMixin:
             updated_at=updated_at,
             sync_preconditions=sync_preconditions or {},
             observation_preconditions=observation_preconditions or {},
+            provider_updates=provider_updates,
         )
         with self._connect() as connection:
             _ = connection.execute("begin immediate")
@@ -81,6 +85,8 @@ def apply_custom_extension_continuity_mutation_locked(
     """Apply a preflighted mutation inside an existing immediate transaction."""
 
     _validate_authority_updates(mutation.authority_updates)
+    if set(mutation.provider_updates or {}) - {identity.cli_id for identity, _, _ in mutation.authority_updates}:
+        raise ValueError("provider choices require matching extension authority")
     ensure_local_cli_schema(connection)
     current_revision = _authority_revision(connection)
     if current_revision != mutation.expected_revision:
@@ -96,6 +102,17 @@ def apply_custom_extension_continuity_mutation_locked(
             updated_at=mutation.updated_at,
             command_states=command_states,
         )
+        updates = (mutation.provider_updates or {}).get(identity.cli_id, ())
+        if updates:
+            if state == "unset":
+                raise ValueError("provider choices cannot accompany removal")
+            write_provider_choices(
+                connection,
+                cli_id=identity.cli_id,
+                identity_hash=identity.identity_hash,
+                updates=updates,
+                updated_at=mutation.updated_at,
+            )
     boundary("after_authority")
     _write_sync_payloads(connection, mutation.sync_payloads, updated_at=mutation.updated_at)
     boundary("after_sync_state")
@@ -184,12 +201,27 @@ def _write_local_cli_grant(
 
     next_revision = current_revision + 1
     if state == "unset":
+        connection.execute("delete from local_mcp_provider_grant where cli_id = ?", (identity.cli_id,))
         _ = connection.execute("delete from local_cli_grant where cli_id = ?", (identity.cli_id,))
         _ = connection.execute("delete from local_cli_command_grant where cli_id = ?", (identity.cli_id,))
     else:
         _upsert_grant(connection, identity=identity, state=state, revision=next_revision, updated_at=updated_at)
         if command_states is not None:
-            _ = connection.execute("delete from local_cli_command_grant where cli_id = ?", (identity.cli_id,))
+            observation = connection.execute(
+                "select surface from local_cli_observation where cli_id = ?",
+                (identity.cli_id,),
+            ).fetchone()
+            if observation is not None and observation[0] == "mcp":
+                # The visible payload omits retired tools. Preserve their Deny
+                # and Ask tombstones while replacing choices for listed tools.
+                connection.execute(
+                    "delete from local_cli_command_grant where cli_id = ? "
+                    "and (state not in ('block', 'review') or command_id in "
+                    "(select command_id from local_cli_command where cli_id = ?))",
+                    (identity.cli_id, identity.cli_id),
+                )
+            else:
+                _ = connection.execute("delete from local_cli_command_grant where cli_id = ?", (identity.cli_id,))
             _write_command_states(connection, identity.cli_id, command_states)
     _ = connection.execute("update local_cli_authority set revision = ? where singleton = 1", (next_revision,))
     return next_revision

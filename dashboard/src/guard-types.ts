@@ -104,10 +104,18 @@ export type PackageExecutionContextEvidence = {
   changed_components?: string[];
 };
 
+export type GuardWatchOnlyScannerEvidence = {
+  source: "observe_mode_inbox";
+  observed_policy_action: GuardAction;
+  queued_policy_action: GuardAction;
+  authoritative_action: GuardAction;
+};
+
 export type GuardScannerEvidence =
   | RiskSignalV2
   | GuardSupplyChainScannerEvidence
-  | PackageExecutionContextEvidence;
+  | PackageExecutionContextEvidence
+  | GuardWatchOnlyScannerEvidence;
 
 export type GuardDecisionV2 = {
   /** Exact six-valued enforcement action. */
@@ -276,6 +284,9 @@ export type GuardApprovalRequest = {
   dedupe_count?: number;
   last_seen_at?: string | null;
   display_status?: string;
+  superseded_by_request_id?: string;
+  /** Explicit Core classification; absent on older daemons that only emit scanner evidence. */
+  watch_only_observation?: boolean;
   scanner_evidence?: GuardScannerEvidence[];
   temporary_mcp_approval?: GuardTemporaryMcpApproval | null;
   local_tool_approval?: GuardLocalToolApproval | null;
@@ -676,6 +687,7 @@ export type GuardReceipt = {
   diff_summary?: string | null;
   scanner_evidence?: GuardScannerEvidence[];
   action_envelope_json?: GuardActionEnvelope | null;
+  raw_command_text?: string | null;
   action_explanation?: GuardActionExplanationV1 | null;
   decision_contract_error?: string;
 };
