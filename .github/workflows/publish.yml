@@ -899,6 +899,7 @@ jobs:
           name: installed-canary-evidence-${{ runner.os }}
           path: |
             installed-canary/evidence.json
+            installed-canary/codex-outage-evidence.json
             installed-canary/command-extension-analytics.json
             .artifacts/command-extension-analytics/playwright-output/**/*.png
           if-no-files-found: error
