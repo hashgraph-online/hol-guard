@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import posixpath
 import re
 import zipfile
 from collections.abc import Mapping
@@ -143,6 +142,28 @@ def _onedir_launcher_path(tree: Path) -> Path:
     return launcher
 
 
+def _resolve(path: str, links: dict[str, str], depth: int = 0) -> str:
+    if depth > 40:
+        raise SystemExit("Onedir archive member is a symlink cycle")
+    out: list[str] = []
+    for part in path.split("/"):
+        if part in ("", "."):
+            continue
+        if part == "..":
+            if not out:
+                raise SystemExit("Onedir archive member is an escaping symlink")
+            out.pop()
+            continue
+        out.append(part)
+        key = "/".join(out)
+        if key in links:  # raw target text, relative to link's parent
+            target = links[key]
+            if target.startswith("/"):
+                raise SystemExit("Onedir archive member is an escaping symlink")
+            out = _resolve("/".join(out[:-1] + [target]), links, depth + 1).split("/")
+    return "/".join(out)
+
+
 def validate_onedir_zip_members(archive: Path) -> None:
     """Require a sealed, self-contained onedir zip before a manifest may bind it."""
     try:
@@ -161,34 +182,15 @@ def validate_onedir_zip_members(archive: Path) -> None:
                     target = zipped.read(info).decode("utf-8", errors="strict")
                     if not target:
                         raise SystemExit(f"Onedir archive member is an empty symlink: {name!r}")
-                    resolved = posixpath.normpath(posixpath.join(member.parent.as_posix(), target))
-                    link_targets[name] = resolved
+                    link_targets[name] = target
                     continue
                 if member.name.startswith("._") or "__MACOSX" in member.parts:
                     raise SystemExit(f"Onedir archive member is AppleDouble metadata: {name!r}")
                 names.add(name)
     except (OSError, zipfile.BadZipFile, UnicodeDecodeError) as error:
         raise SystemExit(f"Onedir archive is not a readable zip: {archive}") from error
-    for link_name, resolved in link_targets.items():
-        seen = {link_name}
-        current = resolved
-        while True:
-            parts = current.split("/")
-            next_link = ""
-            for depth in range(len(parts), 0, -1):
-                prefix = "/".join(parts[:depth])
-                if prefix in link_targets:
-                    next_link = prefix
-                    break
-            if not next_link:
-                break
-            if next_link in seen:
-                raise SystemExit(f"Onedir archive member is a symlink cycle: {link_name!r}")
-            seen.add(next_link)
-            remainder = parts[len(next_link.split("/")):]
-            current = link_targets[next_link]
-            if remainder:
-                current = posixpath.normpath(posixpath.join(current, *remainder))
+    for link_name in link_targets:
+        current = _resolve(link_name, link_targets)
         resolved_member = PurePosixPath(current)
         if (
             resolved_member.is_absolute()
