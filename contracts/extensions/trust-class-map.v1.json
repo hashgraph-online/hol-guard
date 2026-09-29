@@ -79,8 +79,11 @@
     ],
     "external": [
       "command.blitcp",
+      "command.cloudg",
       "command.cogext",
+      "command.digline",
       "command.genclave",
+      "command.gitsync",
       "command.kranz",
       "command.mcp-filesystem",
       "command.mcp-instapods",
@@ -90,6 +93,7 @@
       "command.probe",
       "command.remote.essh",
       "command.repo2nb",
+      "command.skill-base",
       "command.skill-sunset",
       "command.uivoid"
     ]
