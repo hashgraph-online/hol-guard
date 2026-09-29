@@ -6,7 +6,7 @@
     "canonical_diff_digest",
     "effective"
   ],
-  "catalog_digest": "417712a82f1799d268ab0ae3fb2ad22a839fbf93cc9768ec4d63f472d738398d",
+  "catalog_digest": "c2977b532e42ce2e2e4480ff0cc21703926fe3dabf212c5c7ff072fa300a1d06",
   "control_schema_version": "1.0.0",
   "daemon_api_schema": "guard.daemon.extension-controls.v1",
   "effective_shape": [
@@ -20,7 +20,7 @@
     "failures",
     "projection"
   ],
-  "extension_count": 81,
+  "extension_count": 82,
   "extension_ids": [
     "command.api-gateway",
     "command.backup.borg",
@@ -59,6 +59,7 @@
     "command.git",
     "command.github",
     "command.gitsync",
+    "command.golive",
     "command.guard-self-protection",
     "command.infrastructure-as-code",
     "command.kubernetes-operations",
@@ -107,7 +108,7 @@
   "extension_schema_version": 2,
   "installed_browser_config": "dashboard/playwright.installed.config.ts",
   "overview_route": "/extensions",
-  "permission_count": 280,
+  "permission_count": 283,
   "permission_examples": {
     "command.api-gateway.permission.delete": "aws apigateway delete-rest-api",
     "command.backup.borg.permission.mutation": "borg delete",
@@ -265,6 +266,9 @@
     "command.github.permission.write-local": "gh repo set-default owner/repo",
     "command.gitsync.permission.mirror-mutation": "gitsync sync",
     "command.gitsync.permission.operational-mutation": "gitsync hooks --remove",
+    "command.golive.permission.apply-confirm-destroy": "golive apply --plan 8f3c1d2a4b5e --yes --confirm-destroy",
+    "command.golive.permission.apply-confirm-dns": "golive apply --plan 8f3c1d2a4b5e --yes --confirm-dns",
+    "command.golive.permission.apply-confirm-live": "golive apply --plan 8f3c1d2a4b5e --yes --confirm-live",
     "command.guard-self-protection.permission.self-authorization": "hol-guard approvals approve",
     "command.infrastructure-as-code.permission.destroy": "terraform destroy",
     "command.kubernetes-operations.permission.annotate-resources": "kubectl annotate deployment api owner=platform --overwrite",
@@ -643,6 +647,9 @@
     "command.github.permission.write-local",
     "command.gitsync.permission.mirror-mutation",
     "command.gitsync.permission.operational-mutation",
+    "command.golive.permission.apply-confirm-destroy",
+    "command.golive.permission.apply-confirm-dns",
+    "command.golive.permission.apply-confirm-live",
     "command.guard-self-protection.permission.self-authorization",
     "command.infrastructure-as-code.permission.destroy",
     "command.kubernetes-operations.permission.annotate-resources",
@@ -778,7 +785,7 @@
     "controls",
     "semantic_preview"
   ],
-  "rule_count": 264,
+  "rule_count": 267,
   "rule_ids": [
     "command.api-gateway.delete",
     "command.backup.borg.mutation",
@@ -932,6 +939,9 @@
     "command.github.unknown",
     "command.gitsync.mirror-mutation",
     "command.gitsync.operational-mutation",
+    "command.golive.apply-confirm-destroy",
+    "command.golive.apply-confirm-live",
+    "command.golive.apply-confirm-dns",
     "command.guard-self-protection.self-authorization",
     "command.infrastructure-as-code.destroy",
     "command.kubernetes-operations.delete-resources",
