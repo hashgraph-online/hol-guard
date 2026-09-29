@@ -750,19 +750,17 @@ def _try_codex_daemon_bridge() -> bool:
     # input fails closed there too, so emit that response rather than replay a
     # truncated payload into the fallback path.
     try:
-        data = sys.stdin.read(_CODEX_HOOK_MAX_INPUT_BYTES + 1)
+        raw_stdin = sys.stdin.buffer.read(_CODEX_HOOK_MAX_INPUT_BYTES + 1)
+        if len(raw_stdin) > _CODEX_HOOK_MAX_INPUT_BYTES:
+            _codex_write_fail_closed()
+            return True
+        data = raw_stdin.decode("utf-8")
     except (AttributeError, OSError, ValueError, UnicodeError):
         _codex_write_fail_closed()
         return True
-    try:
-        if len(data.encode("utf-8")) > _CODEX_HOOK_MAX_INPUT_BYTES:
-            _codex_write_fail_closed()
-            return True
-    except UnicodeError:
-        _codex_write_fail_closed()
-        return True
-    # Replay stdin so a fall-through keeps the managed bridge's input intact.
-    sys.stdin = io.StringIO(data)
+    # Replay stdin as UTF-8 text over the original bytes so a fall-through
+    # keeps the managed bridge's input intact.
+    sys.stdin = io.TextIOWrapper(io.BytesIO(raw_stdin), encoding="utf-8")
     try:
         payload = json.loads(data)
     except (ValueError, json.JSONDecodeError):
