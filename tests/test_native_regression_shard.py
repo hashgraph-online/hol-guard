@@ -147,4 +147,8 @@ def test_regression_action_installs_only_the_same_run_wheel() -> None:
     assert "--frozen --no-dev --extra dev --no-install-project" in commands
     assert "native-dist/*.whl" in commands
     assert "native_regression_shard.py" in commands
-    assert all(not step.get("continue-on-error") for step in steps)
+    tolerated = [step for step in steps if step.get("continue-on-error")]
+    assert len(tolerated) == 1 and tolerated[0]["id"] == "setup-uv-primary"
+    retry = next(step for step in steps if step.get("name") == "Retry uv setup after a transient download failure")
+    assert retry["if"] == "steps.setup-uv-primary.outcome == 'failure'"
+    assert not retry.get("continue-on-error")

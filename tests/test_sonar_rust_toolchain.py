@@ -35,7 +35,8 @@ def test_sonar_preparation_precedes_analysis_and_fails_closed() -> None:
     clippy = "cargo clippy --manifest-path rust/Cargo.toml --locked --workspace"
 
     assert job["timeout-minutes"] == 20
-    assert job["needs"] == ["sonar-guard"]
+    assert "needs" not in job
+    assert steps[0]["id"] == "token-presence"
     assert job["permissions"] == {"contents": "read", "actions": "read"}
     assert wait_index < download_index < setup_index < scan_index
     assert "wait_for_pytest_shards.py" in steps[wait_index]["run"]
@@ -46,7 +47,7 @@ def test_sonar_preparation_precedes_analysis_and_fails_closed() -> None:
     assert steps[clippy_index]["run"] == clippy
     assert steps[clippy_index]["shell"] == "bash"
     assert not steps[clippy_index].get("continue-on-error", False)
-    assert "if" not in steps[clippy_index]
+    assert steps[clippy_index]["if"] == "steps.token-presence.outputs.has-token == 'true'"
     assert steps[clippy_index].get("env", {}) == {}
     assert "SONAR_TOKEN" not in job.get("env", {})
     assert "SONAR_TOKEN" not in workflow.get("env", {})
