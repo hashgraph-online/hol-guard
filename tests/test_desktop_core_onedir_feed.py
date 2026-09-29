@@ -33,6 +33,28 @@ TeamIdentifier=not set
 Signature=adhoc
 """
 
+CODESIGN_SAMPLE_DEVELOPER_ID = """\
+Executable=/opt/example/hol-guard/_internal/example.cpython-312-darwin.so
+Identifier=example.cpython-312-darwin
+Format=Mach-O thin (arm64)
+CodeDirectory v=20500 size=10441 flags=0x10000(runtime) hashes=315+2 location=embedded
+VersionPlatform=1
+Hash type=sha256 size=32
+CandidateCDHash sha256=6a0c1d1a4f4ad3d8cbb5d4d8ed3a2a8a1d1a7b61
+Executable Segment base=0
+Executable Segment limit=81920
+Executable Segment flags=0x0
+Page size=16384
+Authority=Developer ID Application: Example (ABCDEF1234)
+Authority=Developer ID Certification Authority
+Authority=Apple Root CA
+Timestamp=Sep 29, 2026 at 18:41:54
+TeamIdentifier=ABCDEF1234
+Runtime Version=14.0.0
+Sealed Resources=none
+Internal requirements count=1 size=180
+"""
+
 CODESIGN_SAMPLE_NO_RUNTIME = """\
 Executable=/opt/example/tool
 Identifier=tool-55554944ff4c9db32c6d920dbb6c6c5356defc59
@@ -328,6 +350,14 @@ class TestSignatureInfo:
         team, flags = module._signature_info(Path("/opt/example/hol-guard/hol-guard"))
         assert team == "not set"
         assert flags & 0x10002 == 0x10002
+
+    def test_executable_segment_flags_do_not_mask_runtime_flag(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        module = _load(SIGNING, "verify_pyinstaller_macos_signing")
+        completed = MagicMock(returncode=0, stderr=CODESIGN_SAMPLE_DEVELOPER_ID, stdout="")
+        monkeypatch.setattr(module.subprocess, "run", lambda *a, **k: completed)
+        team, flags = module._signature_info(Path("/opt/example/hol-guard/_internal/example.cpython-312-darwin.so"))
+        assert team == "ABCDEF1234"
+        assert flags & 0x10000 == 0x10000
 
     def test_parses_signed_without_runtime(self, monkeypatch: pytest.MonkeyPatch) -> None:
         module = _load(SIGNING, "verify_pyinstaller_macos_signing")
