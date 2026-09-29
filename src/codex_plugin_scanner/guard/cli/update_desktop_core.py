@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
@@ -9,14 +10,16 @@ import platform
 import re
 import shutil
 import stat
+import subprocess
 import sys
 import tempfile
 import urllib.error
 import urllib.request
+import zipfile
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import TypedDict
 
 from packaging.version import InvalidVersion, Version
@@ -26,8 +29,21 @@ from ..mdm.contracts import ManagedNetworkPolicy
 from ..mdm.network import ManagedNetworkError, managed_urlopen
 
 UPDATE_SCHEMA = "hol-guard-core-update.v1"
+ONEDIR_UPDATE_SCHEMA = "hol-guard-core-update.v2"
 INSTALL_SCHEMA = "hol-guard-core-install.v1"
 BOOTSTRAP_SCHEMA = "guard-desktop-bootstrap.v1"
+_ONEDIR_FORMAT = "onedir-zip"
+_ONEDIR_TREE_ROOT = "hol-guard"
+_MACHO_MAGICS = {
+    b"\xce\xfa\xed\xfe",
+    b"\xcf\xfa\xed\xfe",
+    b"\xfe\xed\xfa\xce",
+    b"\xfe\xed\xfa\xcf",
+    b"\xca\xfe\xba\xbe",
+    b"\xca\xfe\xba\xbf",
+    b"\xbe\xba\xfe\xca",
+    b"\xbf\xba\xfe\xca",
+}
 _RELEASE_DOWNLOAD_PREFIX = "https://github.com/hashgraph-online/hol-guard/releases/download/"
 _DESKTOP_APP_ID = "org.hol.guard.desktop"
 _MAX_MANIFEST_BYTES = 128 * 1024
@@ -53,6 +69,19 @@ class _ParsedCoreManifest(TypedDict):
     target: str
     sha256: str
     size: int
+    minimum_desktop_version: str
+
+
+class _ParsedOnedirManifest(TypedDict):
+    version: str
+    source_commit: str
+    target: str
+    artifact: str
+    sha256: str
+    size: int
+    launcher: str
+    launcher_sha256: str
+    file_count: int
     minimum_desktop_version: str
 
 
@@ -207,6 +236,17 @@ def apply_desktop_core_update(
         expected_channel=channel,
     )
     _enforce_minimum_desktop_version(manifest["minimum_desktop_version"])
+    if sys.platform == "darwin":
+        onedir_executable = _try_apply_onedir(
+            downloader,
+            tag=tag,
+            artifact=artifact,
+            channel=channel,
+            expected_version=normalized_target,
+            expected_target=target,
+        )
+        if onedir_executable is not None:
+            return DesktopCoreApplyResult(executable=onedir_executable, version=normalized_target, changed=True)
     binary = downloader(_release_url(tag, artifact), _MAX_BINARY_BYTES)
     if len(binary) != manifest["size"] or _sha256_hex(binary) != manifest["sha256"]:
         raise DesktopCoreUpdateError("desktop_core_integrity_mismatch")
@@ -289,6 +329,10 @@ def _download_bytes(url: str, limit: int, *, network_policy: ManagedNetworkPolic
     try:
         with managed_urlopen(request, timeout=60.0, policy=network_policy) as response:
             payload = response.read(limit + 1)
+    except urllib.error.HTTPError as error:
+        if error.code == 404:
+            raise DesktopCoreUpdateError("desktop_core_asset_missing") from error
+        raise DesktopCoreUpdateError("desktop_core_download_failed") from error
     except (ManagedNetworkError, OSError, TimeoutError, urllib.error.URLError) as error:
         raise DesktopCoreUpdateError("desktop_core_download_failed") from error
     if not payload or len(payload) > limit:
@@ -349,6 +393,71 @@ def _parse_manifest(
     }
 
 
+def _parse_onedir_manifest(
+    raw: bytes,
+    *,
+    expected_version: str,
+    expected_tag: str,
+    expected_target: str,
+    expected_artifact: str,
+    expected_channel: str,
+) -> _ParsedOnedirManifest:
+    try:
+        decoded = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise DesktopCoreUpdateError("desktop_core_manifest_invalid") from error
+    if not isinstance(decoded, dict):
+        raise DesktopCoreUpdateError("desktop_core_manifest_invalid")
+    payload: dict[object, object] = {key: value for key, value in decoded.items()}
+    sha256 = payload.get("sha256")
+    launcher_sha256 = payload.get("launcherSha256")
+    source_commit = payload.get("sourceCommit")
+    size = payload.get("size")
+    file_count = payload.get("fileCount")
+    minimum_desktop_version = payload.get("minimumDesktopVersion")
+    if (
+        payload.get("schema") != ONEDIR_UPDATE_SCHEMA
+        or payload.get("channel") != expected_channel
+        or payload.get("version") != expected_version
+        or payload.get("sourceTag") != expected_tag
+        or payload.get("target") != expected_target
+        or payload.get("format") != _ONEDIR_FORMAT
+        or payload.get("artifact") != expected_artifact
+        or payload.get("launcher") != f"{_ONEDIR_TREE_ROOT}/{_executable_name()}"
+        or payload.get("bootstrapSchema") != BOOTSTRAP_SCHEMA
+        or not isinstance(sha256, str)
+        or _SHA256_RE.fullmatch(sha256.lower()) is None
+        or not isinstance(launcher_sha256, str)
+        or _SHA256_RE.fullmatch(launcher_sha256.lower()) is None
+        or not isinstance(source_commit, str)
+        or _COMMIT_RE.fullmatch(source_commit.lower()) is None
+        or type(size) is not int
+        or size <= 0
+        or size > _MAX_BINARY_BYTES
+        or type(file_count) is not int
+        or file_count <= 0
+        or not isinstance(minimum_desktop_version, str)
+        or not minimum_desktop_version.strip()
+    ):
+        raise DesktopCoreUpdateError("desktop_core_manifest_invalid")
+    try:
+        _ = Version(minimum_desktop_version.strip())
+    except InvalidVersion as error:
+        raise DesktopCoreUpdateError("desktop_core_manifest_invalid") from error
+    return {
+        "version": expected_version,
+        "source_commit": source_commit.lower(),
+        "target": expected_target,
+        "artifact": expected_artifact,
+        "sha256": sha256.lower(),
+        "size": size,
+        "launcher": f"{_ONEDIR_TREE_ROOT}/{_executable_name()}",
+        "launcher_sha256": launcher_sha256.lower(),
+        "file_count": file_count,
+        "minimum_desktop_version": minimum_desktop_version.strip(),
+    }
+
+
 def _enforce_minimum_desktop_version(minimum: str) -> None:
     installed = os.environ.get("HOL_GUARD_DESKTOP_VERSION", "").strip()
     if not installed:
@@ -381,6 +490,223 @@ def _verify_candidate(path: Path, *, expected_team: str | None, expected_sha256:
     actual_team = _macos_signing_team(path)
     if expected_team is None or actual_team != expected_team:
         raise DesktopCoreUpdateError("desktop_core_signature_mismatch")
+
+
+def _try_apply_onedir(
+    downloader: FetchBytes,
+    *,
+    tag: str,
+    artifact: str,
+    channel: str,
+    expected_version: str,
+    expected_target: str,
+) -> Path | None:
+    try:
+        raw = downloader(_release_url(tag, f"{artifact}.onedir.json"), _MAX_MANIFEST_BYTES)
+    except DesktopCoreUpdateError as error:
+        if error.reason_code == "desktop_core_asset_missing":
+            return None
+        raise
+    manifest = _parse_onedir_manifest(
+        raw,
+        expected_version=expected_version,
+        expected_tag=tag,
+        expected_target=expected_target,
+        expected_artifact=f"{artifact}.onedir.zip",
+        expected_channel=channel,
+    )
+    try:
+        _enforce_minimum_desktop_version(manifest["minimum_desktop_version"])
+    except DesktopCoreUpdateError as error:
+        if error.reason_code == "desktop_core_desktop_too_old":
+            return None
+        raise
+    archive = downloader(_release_url(tag, manifest["artifact"]), _MAX_BINARY_BYTES)
+    if len(archive) != manifest["size"] or _sha256_hex(archive) != manifest["sha256"]:
+        raise DesktopCoreUpdateError("desktop_core_integrity_mismatch")
+    trusted_team = _macos_signing_team(Path(sys.executable))
+    root = desktop_core_root()
+    _reject_symlink(root)
+    root.mkdir(parents=True, exist_ok=True)
+    _reject_symlink(root)
+    try:
+        with tempfile.TemporaryDirectory(prefix=".onedir-update-", dir=root) as scratch:
+            scratch_root = Path(scratch)
+            archive_path = scratch_root / manifest["artifact"]
+            _ = archive_path.write_bytes(archive)
+            _validate_onedir_zip_members(archive_path)
+            extracted = scratch_root / "tree"
+            extracted.mkdir()
+            _extract_onedir_zip(archive_path, extracted)
+            tree = extracted / _ONEDIR_TREE_ROOT
+            launcher = tree / _executable_name()
+            if not launcher.is_file():
+                raise DesktopCoreUpdateError("desktop_core_install_failed")
+            _verify_candidate(launcher, expected_team=trusted_team, expected_sha256=manifest["launcher_sha256"])
+            _require_sealed_onedir(launcher)
+            _verify_onedir_tree_signatures(tree, expected_team=trusted_team)
+            installed = _install_managed_core_onedir(tree, manifest, expected_target)
+    except OSError as error:
+        raise DesktopCoreUpdateError("desktop_core_install_failed") from error
+    return installed
+
+
+_ONEDIR_REQUIRED_MEMBERS = (
+    f"{_ONEDIR_TREE_ROOT}/Info.plist",
+    f"{_ONEDIR_TREE_ROOT}/_CodeSignature/CodeResources",
+)
+_ONEDIR_INTERNAL_PREFIX = f"{_ONEDIR_TREE_ROOT}/_internal/"
+_ZIP_SYMLINK_MODE = 0o120000
+_ZIP_MODE_MASK = 0o170000
+
+
+def _validate_onedir_zip_members(archive: Path) -> None:
+    try:
+        with zipfile.ZipFile(archive) as zipped:
+            infos = zipped.infolist()
+    except (OSError, zipfile.BadZipFile) as error:
+        raise DesktopCoreUpdateError("desktop_core_install_failed") from error
+    names: set[str] = set()
+    for info in infos:
+        name = info.filename
+        member = PurePosixPath(name)
+        if member.is_absolute() or ".." in member.parts:
+            raise DesktopCoreUpdateError("desktop_core_install_failed")
+        if name != _ONEDIR_TREE_ROOT and not name.startswith(f"{_ONEDIR_TREE_ROOT}/"):
+            raise DesktopCoreUpdateError("desktop_core_install_failed")
+        if (info.external_attr >> 16) & _ZIP_MODE_MASK == _ZIP_SYMLINK_MODE:
+            raise DesktopCoreUpdateError("desktop_core_install_failed")
+        if member.name.startswith("._") or "__MACOSX" in member.parts:
+            raise DesktopCoreUpdateError("desktop_core_install_failed")
+        names.add(name)
+    launcher_member = f"{_ONEDIR_TREE_ROOT}/{_executable_name()}"
+    if launcher_member not in names or any(entry not in names for entry in _ONEDIR_REQUIRED_MEMBERS):
+        raise DesktopCoreUpdateError("desktop_core_install_failed")
+    if not any(name.startswith(_ONEDIR_INTERNAL_PREFIX) for name in names):
+        raise DesktopCoreUpdateError("desktop_core_install_failed")
+
+
+def _extract_onedir_zip(archive: Path, destination: Path) -> None:
+    if sys.platform == "darwin":
+        result = subprocess.run(
+            ["/usr/bin/ditto", "-x", "-k", str(archive), str(destination)],
+            check=False,
+            capture_output=True,
+        )
+        if result.returncode != 0:
+            raise DesktopCoreUpdateError("desktop_core_install_failed")
+        return
+    _extract_onedir_zip_portable(archive, destination)
+
+
+def _extract_onedir_zip_portable(archive: Path, destination: Path) -> None:
+    try:
+        with zipfile.ZipFile(archive) as zipped:
+            for info in zipped.infolist():
+                name = info.filename
+                if name.startswith("/") or ".." in Path(name).parts:
+                    raise DesktopCoreUpdateError("desktop_core_install_failed")
+                zipped.extract(info, destination)
+                extracted = destination / name
+                if info.external_attr >> 16 & stat.S_IXUSR and extracted.is_file():
+                    extracted.chmod(extracted.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    except zipfile.BadZipFile as error:
+        raise DesktopCoreUpdateError("desktop_core_install_failed") from error
+
+
+def _is_macho_file(path: Path) -> bool:
+    try:
+        with path.open("rb") as handle:
+            return handle.read(4) in _MACHO_MAGICS
+    except OSError:
+        return False
+
+
+def _require_sealed_onedir(launcher: Path) -> None:
+    if sys.platform != "darwin":
+        return
+    resources = launcher.parent / "_CodeSignature" / "CodeResources"
+    if not resources.is_file():
+        raise DesktopCoreUpdateError("desktop_core_signature_invalid")
+    result = subprocess.run(
+        ["/usr/bin/codesign", "--display", "--verbose=4", str(launcher)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    output = result.stderr + result.stdout
+    if result.returncode != 0 or "Format=app bundle" not in output or "Sealed Resources version=2" not in output:
+        raise DesktopCoreUpdateError("desktop_core_signature_invalid")
+
+
+def _verify_onedir_tree_signatures(tree: Path, *, expected_team: str) -> None:
+    internal = tree / "_internal"
+    if not internal.is_dir():
+        raise DesktopCoreUpdateError("desktop_core_install_failed")
+    for path in sorted(internal.rglob("*")):
+        if not path.is_file() or not _is_macho_file(path):
+            continue
+        if _macos_signing_team(path) != expected_team:
+            raise DesktopCoreUpdateError("desktop_core_signature_mismatch")
+
+
+def _install_managed_core_onedir(tree: Path, manifest: _ParsedOnedirManifest, target: str) -> Path:
+    root = desktop_core_root()
+    versions_root = root / "versions"
+    version_dir = versions_root / manifest["version"]
+    installed = version_dir / _executable_name()
+    current = root / "current.json"
+    for path in (root, versions_root, version_dir, installed, current):
+        _reject_symlink(path)
+    versions_root.mkdir(parents=True, exist_ok=True)
+    for path in (root, versions_root, version_dir, installed):
+        _reject_symlink(path)
+    partial = versions_root / f"{manifest['version']}.partial-{os.getpid()}"
+    _reject_symlink(partial)
+    if partial.exists():
+        shutil.rmtree(partial)
+    _ = shutil.move(str(tree), str(partial))
+    staged_launcher = partial / _executable_name()
+    retired: Path | None = None
+    try:
+        _reject_symlink(staged_launcher)
+        _make_executable(staged_launcher)
+        _verify_candidate(
+            staged_launcher,
+            expected_team=_macos_signing_team(Path(sys.executable)) if sys.platform == "darwin" else None,
+            expected_sha256=manifest["launcher_sha256"],
+        )
+        _require_sealed_onedir(staged_launcher)
+        if version_dir.exists():
+            retired = versions_root / f".{manifest['version']}.replaced-{os.getpid()}"
+            _reject_symlink(retired)
+            version_dir.rename(retired)
+        _ = partial.replace(version_dir)
+    except BaseException:
+        if retired is not None and not version_dir.exists():
+            with contextlib.suppress(OSError):
+                _ = retired.rename(version_dir)
+        shutil.rmtree(partial, ignore_errors=True)
+        raise
+    _reject_symlink(installed)
+    pointer = {
+        "schema": INSTALL_SCHEMA,
+        "version": manifest["version"],
+        "sourceCommit": manifest["source_commit"],
+        "target": target,
+        "relativePath": f"versions/{manifest['version']}/{_executable_name()}",
+        "sha256": manifest["launcher_sha256"],
+        "installedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+    }
+    _reject_symlink(current)
+    temporary = current.with_name(f".current.{os.getpid()}.tmp")
+    _reject_symlink(temporary)
+    _ = temporary.write_text(json.dumps(pointer, indent=2) + "\n", encoding="utf-8")
+    _ = temporary.replace(current)
+    _reject_symlink(current)
+    if retired is not None:
+        shutil.rmtree(retired, ignore_errors=True)
+    return installed
 
 
 def _macos_codesign_ok(path: Path) -> bool:
