@@ -41,15 +41,19 @@ def _configure_installed_native() -> None:
     # Resolve the same wheel's binaries in the pytest process. Separate python -c
     # probes paid the native package's import cost twice before pytest paid it again.
     _assert_installed_package()
-    from codex_plugin_scanner.guard.extension_builder.native_source_compiler import find_packaged_source_compiler
+    from codex_plugin_scanner.guard.extension_builder.native_source_compiler import (
+        NativeSourceCompilerError,
+        find_packaged_source_compiler,
+    )
     from codex_plugin_scanner.guard.native_runtime import native_runtime_status
 
     status = native_runtime_status()
-    compiler = find_packaged_source_compiler()
     if status.identity is None:
         raise pytest.UsageError("installed wheel has no native runtime identity")
-    if compiler is None:
-        raise pytest.UsageError("installed wheel has no native source compiler")
+    try:
+        compiler = find_packaged_source_compiler()
+    except NativeSourceCompilerError as error:
+        raise pytest.UsageError(f"installed wheel has no native source compiler: {error}") from error
     # Publish neither override until both checks pass. Never use a source-tree or
     # caller-provided binary as a fallback for an incomplete installed wheel.
     os.environ["HOL_GUARD_NATIVE_BINARY"] = str(status.identity.path)
