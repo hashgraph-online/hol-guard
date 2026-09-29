@@ -273,6 +273,9 @@ try:
 except (UnicodeDecodeError, json.JSONDecodeError):
     request = {{}}
 case_id = request.get("tool_call_id") or request.get("toolCallId") if isinstance(request, dict) else None
+if not isinstance(case_id, str) and isinstance(request, dict):
+    details = request.get("details")
+    case_id = details.get("probe") if isinstance(details, dict) else None
 if not isinstance(case_id, str):
     case_id = "unknown"
 is_recovery = sys.argv[1:3] == ["daemon", "recover"]
