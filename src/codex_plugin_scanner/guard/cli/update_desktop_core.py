@@ -501,6 +501,8 @@ def _try_apply_onedir(
     expected_version: str,
     expected_target: str,
 ) -> Path | None:
+    if not os.environ.get("HOL_GUARD_DESKTOP_VERSION", "").strip():
+        return None
     try:
         raw = downloader(_release_url(tag, f"{artifact}.onedir.json"), _MAX_MANIFEST_BYTES)
     except DesktopCoreUpdateError as error:
@@ -515,8 +517,6 @@ def _try_apply_onedir(
         expected_artifact=f"{artifact}.onedir.zip",
         expected_channel=channel,
     )
-    if not os.environ.get("HOL_GUARD_DESKTOP_VERSION", "").strip():
-        return None
     try:
         _enforce_minimum_desktop_version(manifest["minimum_desktop_version"])
     except DesktopCoreUpdateError as error:
@@ -542,7 +542,7 @@ def _try_apply_onedir(
             _extract_onedir_zip(archive_path, extracted)
             tree = extracted / _ONEDIR_TREE_ROOT
             launcher = tree / _executable_name()
-            if not launcher.is_file():
+            if not launcher.is_file() or _onedir_regular_file_count(extracted) != manifest["file_count"]:
                 raise DesktopCoreUpdateError("desktop_core_install_failed")
             _verify_candidate(launcher, expected_team=trusted_team, expected_sha256=manifest["launcher_sha256"])
             _require_sealed_onedir(launcher)
@@ -551,6 +551,18 @@ def _try_apply_onedir(
     except OSError as error:
         raise DesktopCoreUpdateError("desktop_core_install_failed") from error
     return installed
+
+
+def _onedir_regular_file_count(extracted: Path) -> int:
+    count = 0
+    for entry in extracted.rglob("*"):
+        if entry.is_symlink():
+            raise DesktopCoreUpdateError("desktop_core_install_failed")
+        if entry.is_file():
+            if entry.parts[len(extracted.parts)] != _ONEDIR_TREE_ROOT:
+                raise DesktopCoreUpdateError("desktop_core_install_failed")
+            count += 1
+    return count
 
 
 _ONEDIR_REQUIRED_MEMBERS = (
@@ -670,6 +682,8 @@ def _install_managed_core_onedir(tree: Path, manifest: _ParsedOnedirManifest, ta
     _ = shutil.move(str(tree), str(partial))
     staged_launcher = partial / _executable_name()
     retired: Path | None = None
+    replaced = False
+    temporary = current.with_name(f".current.{os.getpid()}.tmp")
     try:
         _reject_symlink(staged_launcher)
         _make_executable(staged_launcher)
@@ -684,27 +698,31 @@ def _install_managed_core_onedir(tree: Path, manifest: _ParsedOnedirManifest, ta
             _reject_symlink(retired)
             version_dir.rename(retired)
         _ = partial.replace(version_dir)
+        replaced = True
+        _reject_symlink(installed)
+        pointer = {
+            "schema": INSTALL_SCHEMA,
+            "version": manifest["version"],
+            "sourceCommit": manifest["source_commit"],
+            "target": target,
+            "relativePath": f"versions/{manifest['version']}/{_executable_name()}",
+            "sha256": manifest["launcher_sha256"],
+            "installedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        }
+        _reject_symlink(current)
+        _reject_symlink(temporary)
+        _ = temporary.write_text(json.dumps(pointer, indent=2) + "\n", encoding="utf-8")
+        _ = temporary.replace(current)
     except BaseException:
+        with contextlib.suppress(OSError):
+            temporary.unlink(missing_ok=True)
+        if replaced:
+            shutil.rmtree(version_dir, ignore_errors=True)
         if retired is not None and not version_dir.exists():
             with contextlib.suppress(OSError):
                 _ = retired.rename(version_dir)
         shutil.rmtree(partial, ignore_errors=True)
         raise
-    _reject_symlink(installed)
-    pointer = {
-        "schema": INSTALL_SCHEMA,
-        "version": manifest["version"],
-        "sourceCommit": manifest["source_commit"],
-        "target": target,
-        "relativePath": f"versions/{manifest['version']}/{_executable_name()}",
-        "sha256": manifest["launcher_sha256"],
-        "installedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-    }
-    _reject_symlink(current)
-    temporary = current.with_name(f".current.{os.getpid()}.tmp")
-    _reject_symlink(temporary)
-    _ = temporary.write_text(json.dumps(pointer, indent=2) + "\n", encoding="utf-8")
-    _ = temporary.replace(current)
     _reject_symlink(current)
     if retired is not None:
         shutil.rmtree(retired, ignore_errors=True)

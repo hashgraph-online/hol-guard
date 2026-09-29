@@ -13,14 +13,15 @@ import sys
 import tempfile
 import zipfile
 from collections.abc import Mapping, Sequence
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 _NATIVE_VERIFIER = Path(__file__).with_name("verify_pyinstaller_native_runtime.py")
 _MARKER_SCHEMA = "hol-guard-core-attestation.v3"
 _MANIFEST_SCHEMA = "hol-guard-core-update.v1"
 _ONEDIR_MANIFEST_SCHEMA = "hol-guard-core-update.v2"
 _ONEDIR_FORMAT = "onedir-zip"
-_ONEDIR_LAUNCHER = "hol-guard/hol-guard"
+_ONEDIR_ROOT = "hol-guard"
+_ONEDIR_LAUNCHER = f"{_ONEDIR_ROOT}/hol-guard"
 _SHA40 = re.compile(r"[0-9a-f]{40}\Z")
 _TOKEN = re.compile(r"^[A-Za-z0-9._:-]{1,160}\Z")
 _SIGNING_IDENTITY = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ._():,+-]{0,159}\Z")
@@ -205,11 +206,22 @@ def _extract_onedir_zip(archive: Path, destination: Path) -> Path:
     """Extract the onedir zip and return the launcher path (<dest>/hol-guard/hol-guard)."""
     try:
         with zipfile.ZipFile(archive) as zipped:
-            for info in zipped.infolist():
+            infos = zipped.infolist()
+            for info in infos:
                 name = info.filename
-                if name.startswith("/") or ".." in Path(name).parts:
-                    raise DesktopAttestationError(f"Unsafe zip member name: {name!r}")
+                member = PurePosixPath(name)
+                if (
+                    member.is_absolute()
+                    or ".." in member.parts
+                    or member.parts[:1] != (_ONEDIR_ROOT,)
+                    or (info.external_attr >> 16) & 0o170000 == 0o120000
+                    or member.name.startswith("._")
+                    or "__MACOSX" in member.parts
+                ):
+                    raise DesktopAttestationError(f"Onedir zip member is not allowed: {name!r}")
+            for info in infos:
                 zipped.extract(info, destination)
+                name = info.filename
                 extracted = destination / name
                 if info.external_attr >> 16 & stat.S_IXUSR and extracted.is_file():
                     extracted.chmod(extracted.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)

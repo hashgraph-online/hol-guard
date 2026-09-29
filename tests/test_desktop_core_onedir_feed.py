@@ -549,6 +549,17 @@ class TestVerifyArchiveAttestation:
         assert evidence["post_sign_verified"] is True
         assert evidence["binary"]["name"] == archive.name
 
+    @pytest.mark.parametrize("member", ["extra.txt", "hol-guard/._launcher", "__MACOSX/hol-guard/x"])
+    def test_rejects_members_outside_the_tree(self, tmp_path: Path, member: str) -> None:
+        module = _load(ATTEST, "verify_desktop_core_attestation")
+        archive = tmp_path / "core.onedir.zip"
+        with zipfile.ZipFile(archive, "w") as zipped:
+            zipped.writestr("hol-guard/hol-guard", b"launcher-bytes")
+            zipped.writestr(member, b"x")
+        with pytest.raises(module.DesktopAttestationError, match="not allowed"):
+            module._extract_onedir_zip(archive, tmp_path / "out")
+        assert not (tmp_path / "out" / "extra.txt").exists()
+
     def test_manifest_mismatch(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         module = _load(ATTEST, "verify_desktop_core_attestation")
         self._stub_verifier(module, monkeypatch)

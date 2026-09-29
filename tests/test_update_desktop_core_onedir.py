@@ -71,6 +71,7 @@ def _onedir_zip(tmp_path: Path, launcher: bytes = b"launcher-bytes") -> bytes:
 
 
 def _apply_mocks(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HOL_GUARD_DESKTOP_VERSION", "3.0.113")
     monkeypatch.setattr(update_desktop_core.sys, "platform", "darwin")
     monkeypatch.setattr(update_desktop_core, "platform_target", lambda: TARGET)
     monkeypatch.setattr(update_desktop_core, "desktop_core_root", lambda: tmp_path / "core")
@@ -132,6 +133,8 @@ class TestParseOnedirManifest:
 
 class TestTryApplyOnedirFallback:
     def test_missing_manifest_falls_back(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("HOL_GUARD_DESKTOP_VERSION", "3.0.113")
+
         def fetch(url: str, limit: int) -> bytes:
             raise DesktopCoreUpdateError("desktop_core_asset_missing")
 
@@ -171,7 +174,30 @@ class TestTryApplyOnedirFallback:
             is None
         )
 
+    def test_unknown_desktop_version_skips_onedir_manifest(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("HOL_GUARD_DESKTOP_VERSION", raising=False)
+        requested: list[str] = []
+
+        def fetch(url: str, limit: int) -> bytes:
+            requested.append(url)
+            raise DesktopCoreUpdateError("desktop_core_download_failed")
+
+        assert (
+            update_desktop_core._try_apply_onedir(
+                fetch,
+                tag=TAG,
+                artifact=ARTIFACT,
+                channel="alpha",
+                expected_version=VERSION,
+                expected_target=TARGET,
+            )
+            is None
+        )
+        assert requested == []
+
     def test_other_download_errors_propagate(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("HOL_GUARD_DESKTOP_VERSION", "3.0.113")
+
         def fetch(url: str, limit: int) -> bytes:
             raise DesktopCoreUpdateError("desktop_core_download_failed")
 
@@ -189,13 +215,18 @@ class TestTryApplyOnedirFallback:
 
 class TestApplyOnedir:
     def _fetcher(
-        self, tmp_path: Path, *, launcher: bytes = b"launcher-bytes", tampered_zip: bool = False
+        self,
+        tmp_path: Path,
+        *,
+        launcher: bytes = b"launcher-bytes",
+        tampered_zip: bool = False,
+        file_count: int = 4,
     ) -> tuple[dict[str, bytes], object]:
         archive = _onedir_zip(tmp_path, launcher=launcher)
         v2 = _v2_manifest(
             archive=archive,
             launcher_sha256=update_desktop_core._sha256_hex(launcher),
-            file_count=2,
+            file_count=file_count,
         )
         if tampered_zip:
             archive = archive + b"tamper"
@@ -257,6 +288,47 @@ class TestApplyOnedir:
         assert (existing / "hol-guard").read_bytes() == b"launcher-bytes"
         assert (existing / "_internal" / "a.txt").is_file()
 
+    def test_file_count_mismatch(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        _apply_mocks(tmp_path, monkeypatch)
+        _urls, fetch = self._fetcher(tmp_path, file_count=5)
+        with pytest.raises(DesktopCoreUpdateError) as error:
+            update_desktop_core.apply_desktop_core_update(
+                current_version="3.0.0a138",
+                target_version=VERSION,
+                include_alpha=True,
+                fetch_bytes=fetch,
+            )
+        assert error.value.reason_code == "desktop_core_install_failed"
+        assert not (tmp_path / "core" / "current.json").exists()
+
+    def test_pointer_failure_restores_previous_tree(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        _apply_mocks(tmp_path, monkeypatch)
+        existing = tmp_path / "core" / "versions" / VERSION
+        existing.mkdir(parents=True)
+        (existing / "hol-guard").write_bytes(b"old-onefile")
+        _urls, fetch = self._fetcher(tmp_path)
+        original_replace = Path.replace
+
+        def failing_replace(self: Path, target: Path) -> Path:
+            if Path(target).name == "current.json":
+                raise OSError("pointer write failed")
+            return original_replace(self, target)
+
+        monkeypatch.setattr(Path, "replace", failing_replace)
+        with pytest.raises(DesktopCoreUpdateError) as error:
+            update_desktop_core.apply_desktop_core_update(
+                current_version="3.0.0a138",
+                target_version=VERSION,
+                include_alpha=True,
+                fetch_bytes=fetch,
+            )
+        assert error.value.reason_code == "desktop_core_install_failed"
+        assert (existing / "hol-guard").read_bytes() == b"old-onefile"
+        assert not (existing / "_internal").exists()
+        versions = tmp_path / "core" / "versions"
+        assert sorted(entry.name for entry in versions.iterdir()) == [VERSION]
+        assert not (tmp_path / "core" / "current.json").exists()
+
     def test_zip_integrity_mismatch(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         _apply_mocks(tmp_path, monkeypatch)
         _urls, fetch = self._fetcher(tmp_path, tampered_zip=True)
@@ -275,7 +347,7 @@ class TestApplyOnedir:
         v2 = _v2_manifest(
             archive=archive,
             launcher_sha256=update_desktop_core._sha256_hex(b"different"),
-            file_count=2,
+            file_count=4,
         )
         urls = {
             update_desktop_core._release_url(TAG, f"{ARTIFACT}.json"): json.dumps(

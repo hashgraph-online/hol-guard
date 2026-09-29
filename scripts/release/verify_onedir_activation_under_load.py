@@ -10,9 +10,11 @@ Build-mode contract test for the Desktop Core feed: times a warm ``--version`` a
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import re
+import shlex
 import signal
 import subprocess
 import time
@@ -129,8 +131,13 @@ def _stop_scratch_processes(home: Path) -> list[int]:
     return stopped
 
 
+def _signal_group(process: subprocess.Popen[bytes], signum: signal.Signals) -> None:
+    with contextlib.suppress(ProcessLookupError):
+        os.killpg(process.pid, signum)
+
+
 def _noise_loop_script(onefile: Path, flag: Path) -> str:
-    return f"while [ -e {flag} ]; do '{onefile}' --version >/dev/null 2>&1; done"
+    return f"while [ -e {shlex.quote(str(flag))} ]; do {shlex.quote(str(onefile))} --version >/dev/null 2>&1; done"
 
 
 def _timed(argv: list[str], *, env: dict[str, str] | None = None, timeout: float) -> tuple[int, float, str, str]:
@@ -184,6 +191,7 @@ def run_contract(
                     ["bash", "-c", _noise_loop_script(onefile, flag)],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
+                    start_new_session=True,
                 )
             )
         time.sleep(5)
@@ -244,12 +252,12 @@ def run_contract(
             try:
                 process.wait(timeout=30)
             except subprocess.TimeoutExpired:
-                process.terminate()
+                _signal_group(process, signal.SIGTERM)
         for process in noise_processes:
             try:
                 process.wait(timeout=30)
             except subprocess.TimeoutExpired:
-                process.kill()
+                _signal_group(process, signal.SIGKILL)
         stopped = _stop_scratch_processes(home)
         if stopped:
             record["stopped_scratch_pids"] = stopped
