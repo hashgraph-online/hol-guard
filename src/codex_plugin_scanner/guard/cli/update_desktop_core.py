@@ -575,25 +575,25 @@ _ZIP_SYMLINK_MODE = 0o120000
 _ZIP_MODE_MASK = 0o170000
 
 
-def _resolve_onedir_link(path: str, links: dict[str, str], depth: int = 0) -> str:
-    if depth > 40:
-        raise DesktopCoreUpdateError("desktop_core_symlink_cycle")
+def _resolve_onedir_link(path: str, links: dict[str, str], visited: frozenset[str] = frozenset()) -> str:
     out: list[str] = []
     for part in path.split("/"):
         if part in ("", "."):
             continue
         if part == "..":
-            if not out:
+            if len(out) <= 1:
                 raise DesktopCoreUpdateError("desktop_core_symlink_escape")
             out.pop()
             continue
         out.append(part)
         key = "/".join(out)
         if key in links:  # raw target text, relative to link's parent
+            if key in visited:
+                raise DesktopCoreUpdateError("desktop_core_symlink_cycle")
             target = links[key]
             if target.startswith("/"):
                 raise DesktopCoreUpdateError("desktop_core_symlink_absolute")
-            out = _resolve_onedir_link("/".join([*out[:-1], target]), links, depth + 1).split("/")
+            out = _resolve_onedir_link("/".join([*out[:-1], target]), links, visited | {key}).split("/")
     return "/".join(out)
 
 
@@ -621,6 +621,7 @@ def _validate_onedir_zip_members(archive: Path) -> None:
                 names.add(name)
     except (OSError, zipfile.BadZipFile, UnicodeDecodeError) as error:
         raise DesktopCoreUpdateError("desktop_core_install_failed") from error
+    all_names = names | link_targets.keys()
     for link_name in link_targets:
         resolved = _resolve_onedir_link(link_name, link_targets)
         resolved_member = PurePosixPath(resolved)
@@ -630,7 +631,7 @@ def _validate_onedir_zip_members(archive: Path) -> None:
             or not resolved.startswith(f"{_ONEDIR_TREE_ROOT}/")
         ):
             raise DesktopCoreUpdateError("desktop_core_symlink_escape")
-        if resolved not in names and not any(name.startswith(f"{resolved}/") for name in names):
+        if resolved not in all_names and not any(name.startswith(f"{resolved}/") for name in all_names):
             raise DesktopCoreUpdateError("desktop_core_symlink_dangling")
     launcher_member = f"{_ONEDIR_TREE_ROOT}/{_executable_name()}"
     if launcher_member not in names or any(entry not in names for entry in _ONEDIR_REQUIRED_MEMBERS):

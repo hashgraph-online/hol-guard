@@ -142,25 +142,25 @@ def _onedir_launcher_path(tree: Path) -> Path:
     return launcher
 
 
-def _resolve(path: str, links: dict[str, str], depth: int = 0) -> str:
-    if depth > 40:
-        raise SystemExit("Onedir archive member is a symlink cycle")
+def _resolve(path: str, links: dict[str, str], visited: frozenset[str] = frozenset()) -> str:
     out: list[str] = []
     for part in path.split("/"):
         if part in ("", "."):
             continue
         if part == "..":
-            if not out:
+            if len(out) <= 1:
                 raise SystemExit("Onedir archive member is an escaping symlink")
             out.pop()
             continue
         out.append(part)
         key = "/".join(out)
         if key in links:  # raw target text, relative to link's parent
+            if key in visited:
+                raise SystemExit("Onedir archive member is a symlink cycle")
             target = links[key]
             if target.startswith("/"):
                 raise SystemExit("Onedir archive member is an escaping symlink")
-            out = _resolve("/".join([*out[:-1], target]), links, depth + 1).split("/")
+            out = _resolve("/".join([*out[:-1], target]), links, visited | {key}).split("/")
     return "/".join(out)
 
 
@@ -189,6 +189,7 @@ def validate_onedir_zip_members(archive: Path) -> None:
                 names.add(name)
     except (OSError, zipfile.BadZipFile, UnicodeDecodeError) as error:
         raise SystemExit(f"Onedir archive is not a readable zip: {archive}") from error
+    all_names = names | link_targets.keys()
     for link_name in link_targets:
         current = _resolve(link_name, link_targets)
         resolved_member = PurePosixPath(current)
@@ -198,7 +199,7 @@ def validate_onedir_zip_members(archive: Path) -> None:
             or not current.startswith(f"{ONEDIR_TREE_ROOT}/")
         ):
             raise SystemExit(f"Onedir archive member is an escaping symlink: {link_name!r}")
-        if current not in names and not any(name.startswith(f"{current}/") for name in names):
+        if current not in all_names and not any(name.startswith(f"{current}/") for name in all_names):
             raise SystemExit(f"Onedir archive member is a dangling symlink: {link_name!r}")
     required = (
         ONEDIR_LAUNCHER,
