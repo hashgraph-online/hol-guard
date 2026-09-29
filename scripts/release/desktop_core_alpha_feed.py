@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import posixpath
 import re
 import zipfile
 from collections.abc import Mapping
@@ -147,21 +148,56 @@ def validate_onedir_zip_members(archive: Path) -> None:
     try:
         with zipfile.ZipFile(archive) as zipped:
             infos = zipped.infolist()
-    except (OSError, zipfile.BadZipFile) as error:
+            names: set[str] = set()
+            link_targets: dict[str, str] = {}
+            for info in infos:
+                name = info.filename
+                member = PurePosixPath(name)
+                if member.is_absolute() or ".." in member.parts:
+                    raise SystemExit(f"Onedir archive member escapes the tree: {name!r}")
+                if name != ONEDIR_TREE_ROOT and not name.startswith(f"{ONEDIR_TREE_ROOT}/"):
+                    raise SystemExit(f"Onedir archive member is outside {ONEDIR_TREE_ROOT}/: {name!r}")
+                if (info.external_attr >> 16) & 0o170000 == 0o120000:
+                    target = zipped.read(info).decode("utf-8", errors="strict")
+                    if not target:
+                        raise SystemExit(f"Onedir archive member is an empty symlink: {name!r}")
+                    resolved = posixpath.normpath(posixpath.join(member.parent.as_posix(), target))
+                    link_targets[name] = resolved
+                    continue
+                if member.name.startswith("._") or "__MACOSX" in member.parts:
+                    raise SystemExit(f"Onedir archive member is AppleDouble metadata: {name!r}")
+                names.add(name)
+    except (OSError, zipfile.BadZipFile, UnicodeDecodeError) as error:
         raise SystemExit(f"Onedir archive is not a readable zip: {archive}") from error
-    names: set[str] = set()
-    for info in infos:
-        name = info.filename
-        member = PurePosixPath(name)
-        if member.is_absolute() or ".." in member.parts:
-            raise SystemExit(f"Onedir archive member escapes the tree: {name!r}")
-        if name != ONEDIR_TREE_ROOT and not name.startswith(f"{ONEDIR_TREE_ROOT}/"):
-            raise SystemExit(f"Onedir archive member is outside {ONEDIR_TREE_ROOT}/: {name!r}")
-        if (info.external_attr >> 16) & 0o170000 == 0o120000:
-            raise SystemExit(f"Onedir archive member is a symlink: {name!r}")
-        if member.name.startswith("._") or "__MACOSX" in member.parts:
-            raise SystemExit(f"Onedir archive member is AppleDouble metadata: {name!r}")
-        names.add(name)
+    for link_name, resolved in link_targets.items():
+        seen = {link_name}
+        current = resolved
+        while True:
+            parts = current.split("/")
+            next_link = ""
+            for depth in range(len(parts), 0, -1):
+                prefix = "/".join(parts[:depth])
+                if prefix in link_targets:
+                    next_link = prefix
+                    break
+            if not next_link:
+                break
+            if next_link in seen:
+                raise SystemExit(f"Onedir archive member is a symlink cycle: {link_name!r}")
+            seen.add(next_link)
+            remainder = parts[len(next_link.split("/")):]
+            current = link_targets[next_link]
+            if remainder:
+                current = posixpath.normpath(posixpath.join(current, *remainder))
+        resolved_member = PurePosixPath(current)
+        if (
+            resolved_member.is_absolute()
+            or ".." in resolved_member.parts
+            or not current.startswith(f"{ONEDIR_TREE_ROOT}/")
+        ):
+            raise SystemExit(f"Onedir archive member is an escaping symlink: {link_name!r}")
+        if current not in names and f"{current}/" not in names:
+            raise SystemExit(f"Onedir archive member is a dangling symlink: {link_name!r}")
     required = (
         ONEDIR_LAUNCHER,
         f"{ONEDIR_TREE_ROOT}/Info.plist",

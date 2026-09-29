@@ -219,10 +219,52 @@ class TestOnedirZipMembers:
         with pytest.raises(SystemExit):
             namespace.validate_onedir_zip_members(archive)
 
-    def test_rejects_symlink_member(self, tmp_path: Path) -> None:
+    def test_rejects_dangling_symlink_member(self, tmp_path: Path) -> None:
         namespace = _feed()
         archive = _sealed_zip(tmp_path / "core.onedir.zip", extra=[("hol-guard/_internal/link", b"target", 0o120777)])
         with pytest.raises(SystemExit, match="symlink"):
+            namespace.validate_onedir_zip_members(archive)
+
+    def test_accepts_symlink_resolving_inside_tree(self, tmp_path: Path) -> None:
+        namespace = _feed()
+        archive = _sealed_zip(
+            tmp_path / "core.onedir.zip",
+            extra=[
+                ("hol-guard/_internal/Python", b"Python.framework/Versions/Current/Python", 0o120777),
+                ("hol-guard/_internal/Python.framework/Versions/Current", b"3.12", 0o120777),
+                ("hol-guard/_internal/Python.framework/Versions/3.12/", b"", 0o40755),
+                ("hol-guard/_internal/Python.framework/Versions/3.12/Python", MACHO64 + b"py", 0o755),
+            ],
+        )
+        namespace.validate_onedir_zip_members(archive)
+
+    @pytest.mark.parametrize(
+        "target",
+        [
+            "../../outside",
+            "/etc/passwd",
+            "../root",
+        ],
+    )
+    def test_rejects_escaping_symlink_member(self, tmp_path: Path, target: str) -> None:
+        namespace = _feed()
+        archive = _sealed_zip(
+            tmp_path / "core.onedir.zip",
+            extra=[("hol-guard/_internal/link", target.encode(), 0o120777)],
+        )
+        with pytest.raises(SystemExit, match="symlink"):
+            namespace.validate_onedir_zip_members(archive)
+
+    def test_rejects_symlink_cycle(self, tmp_path: Path) -> None:
+        namespace = _feed()
+        archive = _sealed_zip(
+            tmp_path / "core.onedir.zip",
+            extra=[
+                ("hol-guard/_internal/a", b"b", 0o120777),
+                ("hol-guard/_internal/b", b"a", 0o120777),
+            ],
+        )
+        with pytest.raises(SystemExit, match="cycle"):
             namespace.validate_onedir_zip_members(archive)
 
     @pytest.mark.parametrize(
