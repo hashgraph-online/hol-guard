@@ -143,7 +143,7 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
     assert "vars.SONAR_CI_ENABLED == 'true'" in sonar_job
     gate = jobs["ci-python-312"]
     assert gate["name"] == "ci (3.12)"
-    assert gate["if"] == "${{ !cancelled() }}"
+    assert gate["if"] == "always()"
     assert set(gate["needs"]) == {
         "quality",
         "coverage-plan",

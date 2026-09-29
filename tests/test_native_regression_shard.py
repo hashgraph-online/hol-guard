@@ -106,7 +106,7 @@ def test_platform_gates_require_complete_inventory_and_all_native_proofs() -> No
     jobs = yaml.safe_load((ROOT / ".github/workflows/native-wheel-ci.yml").read_text())["jobs"]
     for name in ["linux-x64", "windows-x64", "macos"]:
         job = jobs[name]
-        assert job["if"] == "${{ !cancelled() }}"
+        assert job["if"] == "always()"
         assert "native-regression-complete" in job["needs"]
         assert "test -n" in job["steps"][0]["run"]
         assert 'test "$result" = success || exit 1' in job["steps"][0]["run"]
