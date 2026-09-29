@@ -58,6 +58,7 @@ def main() -> int:
             "test_guard_evaluation_cli.py",
             "test_guard_evaluation_cli_package.py",
             "test_guard_evaluation_preflight.py",
+            "test_guard_evaluation_witness_ownership.py",
             "test_opencode_hook_python.py",
             "test_opencode_hook_python_isolation.py",
         ):

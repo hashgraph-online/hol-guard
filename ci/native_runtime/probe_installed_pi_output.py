@@ -275,7 +275,12 @@ except (UnicodeDecodeError, json.JSONDecodeError):
 case_id = request.get("tool_call_id") or request.get("toolCallId") if isinstance(request, dict) else None
 if not isinstance(case_id, str):
     case_id = "unknown"
-if {negative!s}:
+is_recovery = sys.argv[1:3] == ["daemon", "recover"]
+if {negative!s} and is_recovery:
+    # This wrapper does not start a daemon. A successful recovery result would
+    # make the extension retry a daemon that cannot exist before CLI fallback.
+    returncode, stdout, stderr = 1, b"", b""
+elif {negative!s}:
     mismatch = "0" * 64
     responses = {{
         "negative-empty": (0, b"", b""),
@@ -310,6 +315,7 @@ else:
         returncode, stdout, stderr = 127, b"", str(exc).encode("utf-8", errors="replace")
 record({{
     "case_id": case_id,
+    "invocation_kind": "recovery" if is_recovery else "hook",
     "returncode": returncode,
     "stdin_b64": base64.b64encode(stdin_bytes).decode("ascii"),
     "stdout_b64": base64.b64encode(stdout).decode("ascii"),
@@ -696,7 +702,14 @@ def _assert_negative_results(
     for case_id, result in by_id.items():
         matching = records.get(case_id, [])
         if not matching:
-            raise ProbeError(f"negative CLI wrapper was not invoked for {case_id}")
+            recorded_cases = sorted(recorded_id for recorded_id in records if recorded_id in expected_ids)
+            raise ProbeError(
+                f"negative CLI wrapper was not invoked for {case_id}; "
+                f"recorded_cases={recorded_cases}, "
+                f"unknown_invocations={len(records.get('unknown', []))}, "
+                f"preserved={result.get('preserved') is True}, "
+                f"is_error={isinstance(result.get('result'), dict) and result['result'].get('isError') is True}"
+            )
         record = matching[-1]
         if case_id == "negative-nonzero-allow" and record.get("returncode") == 0:
             raise ProbeError("negative nonzero CLI case unexpectedly exited zero")

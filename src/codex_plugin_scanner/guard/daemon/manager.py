@@ -1427,6 +1427,13 @@ def _guard_daemon_pid_for_guard_home_port(guard_home: Path, port: int) -> int | 
     return None
 
 
+def _daemon_state_executable() -> str:
+    try:
+        return str(Path(sys.executable).resolve(strict=True))
+    except OSError:
+        return sys.executable
+
+
 def write_guard_daemon_state(
     guard_home: Path,
     port: int,
@@ -1449,6 +1456,7 @@ def write_guard_daemon_state(
             "port": port,
             "compatibility_version": GUARD_DAEMON_COMPATIBILITY_VERSION,
             "package_version": __version__,
+            "executable": _daemon_state_executable(),
             "source_root": _current_guard_daemon_source_root(),
             "runtime_fingerprint": _current_guard_daemon_runtime_fingerprint(),
             "pid": pid if isinstance(pid, int) and pid > 0 else os.getpid(),
