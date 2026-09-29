@@ -81,7 +81,10 @@ def main() -> int:
     report = cast(Path, args.report)
     # Retain the exact manifest, pytest configuration, assertions and exit status.
     exit_code = int(
-        pytest.main(["@" + str(ROOT / "ci/native_runtime/regression-tests.txt")], plugins=[shard, _AssertInstalled()])
+        pytest.main(
+            ["@" + str(ROOT / "ci/native_runtime/regression-tests.txt"), "--durations=10"],
+            plugins=[shard, _AssertInstalled()],
+        )
     )
     report.parent.mkdir(parents=True, exist_ok=True)
     report.write_text(

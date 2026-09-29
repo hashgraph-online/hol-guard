@@ -360,7 +360,7 @@ def test_sonar_accepts_only_complete_coverage_from_successful_current_attempt() 
     root = Path(__file__).resolve().parents[1]
     workflow = yaml.safe_load((root / ".github/workflows/ci.yml").read_text())
     jobs = workflow["jobs"]
-    assert barrier.SHARD_COUNT == 64
+    assert barrier.SHARD_COUNT == 128
     assert jobs["coverage"]["name"] == "coverage (3.12, ${{ matrix.shard-index }})"
     assert jobs["coverage"]["strategy"]["matrix"]["shard-index"] == list(range(barrier.SHARD_COUNT))
     producer = next(
@@ -378,7 +378,7 @@ def test_sonar_accepts_only_complete_coverage_from_successful_current_attempt() 
     assert waiter["env"] == {"GITHUB_TOKEN": "${{ github.token }}"}
     assert waiter["run"].endswith("--poll-seconds 1")
     assert jobs["sonar"]["permissions"] == {"contents": "read", "actions": "read"}
-    assert 'test "${#reports[@]}" -eq 64' in (root / "scripts/ci/prepare_sonar_analysis.sh").read_text()
+    assert 'test "${#reports[@]}" -eq 128' in (root / "scripts/ci/prepare_sonar_analysis.sh").read_text()
 
 
 def test_sonar_installs_same_pinned_scanner_before_wait_without_analysis_credentials() -> None:

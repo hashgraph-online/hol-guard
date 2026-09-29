@@ -23,7 +23,7 @@ from scripts.ci.pytest_shard import discover_test_nodes
 PLAN_SCHEMA_VERSION = 1
 UNKNOWN_NODE_DURATION_SECONDS = 1.0
 MAX_UNSPLIT_FILE_TARGET_MULTIPLIER = 1.15
-MAX_NODES_PER_AFFINITY_GROUP = 32
+MAX_NODES_PER_AFFINITY_GROUP = 8
 SCHEDULING_ONLY_NODE_IDS = frozenset(
     {
         "tests/test_guard_hook_process_runner.py::"

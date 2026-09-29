@@ -145,7 +145,7 @@ def test_affinity_plan_caps_large_files_without_duration_telemetry() -> None:
 
     large_nodes_per_shard = [sum(node_file(node_id) == "tests/test_slow.py" for node_id in shard) for shard in shards]
     assert max(large_nodes_per_shard) <= 32
-    assert sum(count > 0 for count in large_nodes_per_shard) == 5
+    assert sum(count > 0 for count in large_nodes_per_shard) == 8
 
 
 def test_affinity_plan_rejects_duplicate_or_invalid_nodes() -> None:
@@ -196,7 +196,7 @@ def test_write_shard_plan_emits_response_files_and_metadata(tmp_path: Path) -> N
     }
 
 
-def test_large_matrix_response_names_match_three_digit_workflow_format(tmp_path: Path) -> None:
+def test_write_shard_plan_uses_three_digits_for_large_shard_counts(tmp_path: Path) -> None:
     shards = [[f"tests/test_matrix.py::test_case_{index}"] for index in range(192)]
 
     write_shard_plan(tmp_path, shards=shards, estimated_loads=[1.0] * 192, manifest_used=True)
@@ -230,3 +230,10 @@ def test_live_coverage_matrix_opens_every_generated_response_file(tmp_path: Path
     assert [
         (tmp_path / (match.group(1) % index)).read_text(encoding="utf-8").splitlines() for index in indices
     ] == shards
+
+
+def test_unmeasured_native_file_cannot_remain_one_large_serial_group() -> None:
+    nodes = [f"tests/test_unmeasured_native.py::test_case_{index:02d}" for index in range(28)]
+    shards, _loads = build_affinity_node_shards(nodes, 4, {})
+    assert sorted(node for shard in shards for node in shard) == nodes
+    assert all(0 < len(shard) <= 8 for shard in shards)

@@ -113,7 +113,7 @@ def test_platform_gates_require_complete_inventory_and_all_native_proofs() -> No
     for platform in ["linux", "windows", "macos"]:
         regression = jobs[f"{platform}-regression"]
         assert regression["needs"] == f"{platform}-build"
-        assert regression["strategy"]["matrix"]["shard"] == list(range(4))
+        assert regression["strategy"]["matrix"]["shard"] == list(range(8))
         assert regression["strategy"]["fail-fast"] is False
         assert "if" not in regression
         assert "continue-on-error" not in regression
@@ -166,3 +166,13 @@ def test_required_status_aggregators_run_after_cancellation() -> None:
             assert gate["if"] == "always()"
             assert gate["needs"]
             assert any("success" in step.get("run", "") for step in gate["steps"])
+
+
+def test_every_native_runner_and_reconciler_use_the_same_shard_count() -> None:
+    jobs = yaml.safe_load((ROOT / ".github/workflows/native-wheel-ci.yml").read_text())["jobs"]
+    for platform in ("linux", "windows", "macos"):
+        job = jobs[f"{platform}-regression"]
+        count = len(job["strategy"]["matrix"]["shard"])
+        action = next(step for step in job["steps"] if step.get("uses") == "./.github/actions/native-regression")
+        assert int(action["with"]["shard-count"]) == count == 8
+    assert any("--shard-count 8" in step.get("run", "") for step in jobs["native-regression-complete"]["steps"])
