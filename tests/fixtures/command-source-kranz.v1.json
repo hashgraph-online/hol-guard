@@ -13142,6 +13142,7 @@
           "command.blitcp",
           "command.cloudg",
           "command.cogext",
+          "command.ctty",
           "command.digline",
           "command.genclave",
           "command.gitsync",
