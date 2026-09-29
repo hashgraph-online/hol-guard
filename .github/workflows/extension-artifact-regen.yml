@@ -12,7 +12,8 @@ name: Extension artifact regen
 # caused by the default GITHUB_TOKEN do not trigger workflows, so a
 # GITHUB_TOKEN-created regen PR would sit without checks.
 
-permissions: {}
+permissions:
+  contents: read
 
 on:
   push:
