@@ -1,21 +1,22 @@
 name: Retire superseded PR checks
 
 on:
-  pull_request_target:
-    branches: [main, release/3.2]
-    types: [opened, reopened, synchronize]
+  workflow_run:
+    workflows: [CI, Native wheel CI]
+    types: [requested, in_progress]
 
-# Metadata only: do not check out a PR, download its artifacts, or execute its code.
+# Only trusted default-branch code runs. Never consume PR code, caches or artifacts.
 permissions:
   actions: write
   pull-requests: read
 
 concurrency:
-  group: ci-superseded-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+  group: ci-superseded-${{ github.event.workflow_run.id }}
+  cancel-in-progress: false
 
 jobs:
   retire:
+    if: github.event.workflow_run.event == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
@@ -31,82 +32,109 @@ jobs:
           from urllib.parse import urlencode
           from urllib.request import Request, urlopen
 
-          WORKFLOWS = ("ci.yml", "native-wheel-ci.yml")
-          ACTIVE = {"queued", "in_progress"}
+          WORKFLOWS = {".github/workflows/ci.yml", ".github/workflows/native-wheel-ci.yml"}
+          ACTIVE = {"queued", "in_progress", "pending", "waiting", "requested"}
+          MAX_PAGES = 5
+          MAX_CANCELLATIONS = 10
 
-          def eligible(run, pr, repo, number):
+
+          def same_pr(run, pr, repo, number):
+              head = pr.get("head") or {}
+              head_repo = head.get("repo") or {}
               return (
-                  run.get("status") in ACTIVE
-                  and run.get("event") == "pull_request"
-                  and run.get("path") in {f".github/workflows/{name}" for name in WORKFLOWS}
+                  run.get("event") == "pull_request"
+                  and run.get("path") in WORKFLOWS
                   and (run.get("repository") or {}).get("full_name") == repo
-                  and (run.get("head_repository") or {}).get("id") == pr["head"]["repo"]["id"]
-                  and run.get("head_branch") == pr["head"]["ref"]
-                  and bool(run.get("head_sha"))
-                  and run["head_sha"] != pr["head"]["sha"]
-                  and (
-                      any(item.get("number") == number for item in run.get("pull_requests") or [])
-                      or (not run.get("pull_requests")
-                          and pr["head"]["repo"]["id"] != pr["base"]["repo"]["id"])
-                  )
+                  and bool(head_repo.get("id"))
+                  and (run.get("head_repository") or {}).get("id") == head_repo["id"]
+                  and run.get("head_branch") == head.get("ref")
+                  and any(item.get("number") == number for item in run.get("pull_requests") or [])
               )
 
-          def retire(repo, number, event_head, request, pause=time.sleep):
-              def current():
-                  pr = request("GET", f"pulls/{number}")
-                  if (pr.get("state") != "open" or pr["head"]["sha"] != event_head
-                          or pr["head"].get("repo") is None):
-                      return None
-                  return pr
 
-              pr = current()
-              if pr is None:
+          def eligible(run, pr, replacement, repo, number):
+              return (
+                  same_pr(run, pr, repo, number)
+                  and run.get("status") in ACTIVE
+                  and type(run.get("id")) is int
+                  and 0 < run["id"] < replacement["id"]
+                  and run.get("workflow_id") == replacement["workflow_id"]
+                  and run.get("path") == replacement["path"]
+                  and bool(run.get("head_sha"))
+                  and run["head_sha"] != pr["head"]["sha"]
+              )
+
+
+          def retire(repo, number, replacement_id, request, pause=time.sleep):
+              def current():
+                  replacement = request("GET", f"actions/runs/{replacement_id}")
+                  pr = request("GET", f"pulls/{number}")
+                  if (
+                      pr.get("state") != "open"
+                      or (pr.get("base", {}).get("repo") or {}).get("full_name") != repo
+                      or not same_pr(replacement, pr, repo, number)
+                      or replacement.get("id") != replacement_id
+                      or type(replacement.get("workflow_id")) is not int
+                      or not replacement.get("head_sha")
+                      or replacement["head_sha"] != pr["head"].get("sha")
+                      or not (
+                          replacement.get("status") in ACTIVE
+                          or (replacement.get("status") == "completed" and replacement.get("conclusion") == "success")
+                      )
+                  ):
+                      return None
+                  return pr, replacement
+
+              state = current()
+              if state is None:
                   return
-              candidates = {}
-              for workflow in WORKFLOWS:
-                  for status in sorted(ACTIVE):
-                      page = 1
-                      while True:
-                          query = urlencode({"event": "pull_request", "branch": pr["head"]["ref"],
-                                             "status": status, "per_page": 100, "page": page})
-                          rows = request("GET", f"actions/workflows/{workflow}/runs?{query}")["workflow_runs"]
-                          for run in rows:
-                              if eligible(run, pr, repo, number):
-                                  candidates[run["id"]] = run
-                          if len(rows) < 100:
-                              break
-                          page += 1
-              for run_id in sorted(candidates):
-                  path = f"actions/runs/{run_id}"
-                  pr = current()
-                  run = request("GET", path)
-                  if pr is None:
-                      return
-                  if not eligible(run, pr, repo, number):
+              pr, replacement = state
+              candidates = set()
+              for page in range(1, MAX_PAGES + 1):
+                  query = urlencode({"event": "pull_request", "branch": pr["head"]["ref"], "per_page": 100, "page": page})
+                  rows = request("GET", f"actions/workflows/{replacement['workflow_id']}/runs?{query}")["workflow_runs"]
+                  candidates.update(run["id"] for run in rows if eligible(run, pr, replacement, repo, number))
+                  if len(rows) < 100:
+                      break
+
+              def still_obsolete(run_id):
+                  run = request("GET", f"actions/runs/{run_id}")
+                  state = current()  # The live PR head is the last read before either write.
+                  return state is not None and eligible(run, *state, repo, number)
+
+              cancelled = []
+              for run_id in sorted(candidates, reverse=True)[:MAX_CANCELLATIONS]:
+                  if not still_obsolete(run_id):
                       continue
                   try:
-                      request("POST", path + "/cancel")
+                      request("POST", f"actions/runs/{run_id}/cancel")
                   except HTTPError as error:
                       if error.code != 409:
                           raise
-                  # Give normal cancellation a chance before bypassing always().
-                  pause(15)
-                  pr = current()
-                  run = request("GET", path)
-                  if pr is None:
-                      return
-                  if eligible(run, pr, repo, number):
-                      try:
-                          request("POST", path + "/force-cancel")
-                      except HTTPError as error:
-                          if error.code != 409:
-                              raise
-                  print(f"Requested cancellation of superseded workflow run {run_id}")
+                  cancelled.append(run_id)
+              if not cancelled:
+                  return
+              # One shared grace period, not fifteen seconds for each obsolete run.
+              pause(15)
+              for run_id in cancelled:
+                  if not still_obsolete(run_id):
+                      continue
+                  try:
+                      request("POST", f"actions/runs/{run_id}/force-cancel")
+                  except HTTPError as error:
+                      if error.code != 409:
+                          raise
+                  print(f"Retirement requested for superseded run {run_id}; replacement {replacement_id}")
+
 
           def main():
               repo = os.environ["GITHUB_REPOSITORY"]
               with open(os.environ["GITHUB_EVENT_PATH"], encoding="utf-8") as stream:
                   event = json.load(stream)
+              trigger = event["workflow_run"]
+              if trigger.get("event") != "pull_request":
+                  return
+
               def request(method, path):
                   req = Request(
                       f"https://api.github.com/repos/{repo}/{path}",
@@ -114,13 +142,23 @@ jobs:
                       method=method,
                       headers={"Authorization": "Bearer " + os.environ["GH_TOKEN"],
                                "Accept": "application/vnd.github+json",
-                               "X-GitHub-Api-Version": "2026-03-10",
+                               "X-GitHub-Api-Version": "2022-11-28",
                                "User-Agent": "hol-guard-superseded-ci"},
                   )
-                  with urlopen(req, timeout=20) as response:
+                  with urlopen(req, timeout=10) as response:
                       body = response.read()
                   return json.loads(body) if body else None
-              retire(repo, event["number"], event["pull_request"]["head"]["sha"], request)
+
+              # Some fork runs omit PR associations. Never guess from a fork branch name:
+              # one branch can back PRs against multiple base branches with different heads.
+              numbers = {item.get("number") for item in trigger.get("pull_requests") or []}
+              if len(numbers) != 1:
+                  print("Skipping cleanup without one explicit PR association")
+                  return
+              number = numbers.pop()
+              if type(number) is int and number > 0:
+                  retire(repo, number, trigger["id"], request)
+
 
           if __name__ == "__main__":
               main()
