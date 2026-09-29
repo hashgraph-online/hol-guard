@@ -129,6 +129,12 @@ def test_network_witness_requires_reachable_receiver_and_allowed_counterpart() -
         assert not observation.receiver_conditions_met
 
 
+def test_file_only_witness_does_not_start_network_receiver() -> None:
+    with LocalSideEffectWitness(network_enabled=False) as witness:
+        assert witness._server is None
+        assert witness.check_file_ready()
+
+
 def test_file_and_tool_witnesses_require_allowed_side_effect(tmp_path) -> None:
     with LocalSideEffectWitness() as witness:
         file_pair = witness.new_file_pair()
