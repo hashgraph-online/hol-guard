@@ -9,7 +9,7 @@ use guard_rules::{
 };
 use guard_scanner::scan_text;
 use guard_secure_fs::{classify_source_path, read_bounded, sensitive_path_family};
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
 use std::path::Path;
@@ -231,7 +231,8 @@ fn allow_inline_output(reason_code: &str, text: &str) -> HookReviewResponseV1 {
 fn canonical_hex_digest(value: Option<&Value>) -> Option<String> {
     let text = value?.as_str()?;
     if text.len() == 64 && text.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-        Some(text.to_owned())
+        // Receipt validation canonicalizes digests to lowercase hex.
+        Some(text.to_ascii_lowercase())
     } else {
         None
     }
@@ -257,9 +258,21 @@ pub fn canonical_observed_output_sha256(payload: &Value) -> Option<String> {
     ) {
         return Some(digest);
     }
-    let tool_response = record.get("tool_response")?;
-    let extracted = extract_payload_output(&json!({ "tool_response": tool_response.clone() }));
-    if extracted.truncated {
+    // Hash the same output surface `review_inline` scans: every supported
+    // output key, not just `tool_response`. A secret in `stdout`/`stderr` must
+    // still yield a proof digest so observe mode can record the decision.
+    let extracted = extract_payload_output(payload);
+    if extracted.truncated || !has_output_key(payload) {
+        return None;
+    }
+    // A payload that declares excerpted output only proves the excerpt —
+    // never fabricate a digest for truncated output.
+    if record
+        .get("tool_response_summary")
+        .and_then(|value| value.get("excerpt_truncated"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
         return None;
     }
     Some(sha256_text(&extracted.text))

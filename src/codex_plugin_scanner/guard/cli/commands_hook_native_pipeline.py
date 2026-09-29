@@ -43,7 +43,11 @@ from .commands_hook_native_review import review_native_artifact_hook
 from .commands_hook_native_state import NativeArtifactHookState
 from .commands_parser_helpers import *
 from .commands_support import *
-from .commands_support_claude_approval import _persist_claude_guard_question_decision
+from .commands_support_claude_approval import (
+    _is_claude_guard_approval_question,
+    _persist_claude_guard_question_decision,
+)
+from .commands_support_hook_state import _load_single_claude_pending_permission
 from .commands_support_connect import _synced_policy_payload
 from .commands_support_hook_payload import _hook_action_envelope, _normalize_hook_payload
 from .commands_support_interaction import _emit
@@ -142,6 +146,12 @@ def run_native_hook_pipeline(
     if cursor_result is not None:
         return cursor_result
 
+    if _canonical_harness_name(args.harness) == "claude-code" and _hook_event_name(payload) == "PostToolUse":
+        pending_pair = _load_single_claude_pending_permission(store, payload)
+        if pending_pair is not None and _is_claude_guard_approval_question(payload, pending_pair[1]):
+            _persist_claude_guard_question_decision(store, payload)
+            return 0
+
     edge = worker.review_native_edge_decision(
         payload=payload,
         harness=args.harness,
@@ -193,6 +203,7 @@ def run_native_hook_pipeline(
         runtime_workspace=runtime_workspace,
         store=store,
         fresh_tool_call_authority_provider=fresh_copilot_tool_call_authority,
+        native_edge_result=edge_result if isinstance(edge_result, Mapping) else None,
     )
     if result is not None:
         return result
@@ -267,10 +278,6 @@ def run_native_hook_pipeline(
             _now(),
         )
         return 0
-    if _canonical_harness_name(args.harness) == "claude-code" and _persist_claude_guard_question_decision(
-        store, payload
-    ):
-        return 0
     if runtime_artifact is not None:
         return _run_native_artifact_hook_flow(
             args,
@@ -315,6 +322,8 @@ def run_native_hook_pipeline(
             runtime_artifact_checked=True,
             runtime_workspace=runtime_workspace,
             store=store,
+            native_edge_result=edge_result if isinstance(edge_result, Mapping) else None,
+            native_edge_receipt=edge_receipt if isinstance(edge_receipt, Mapping) else None,
             _claimed_saved_allow_hash=claimed_artifact_hash,
             _claim_saved_approval=False,
         )
@@ -330,6 +339,8 @@ def run_native_hook_pipeline(
         runtime_workspace=runtime_workspace,
         store=store,
         post_claim_revalidator=revalidate_generic_after_claim,
+        native_edge_result=edge_result if isinstance(edge_result, Mapping) else None,
+        native_edge_receipt=edge_receipt if isinstance(edge_receipt, Mapping) else None,
         _claimed_saved_allow_hash=_claimed_saved_allow_hash,
         _claim_saved_approval=_claim_saved_approval,
     )

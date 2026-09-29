@@ -14,10 +14,10 @@
 //! observed intrinsic action.
 
 use guard_contracts::{
-    GuardHookPayloadKindV2, HookReviewResponseV1, NativeHookRequestV1, NativePromptRiskClassV1,
-    PreToolActionTypeV1, PreToolResultV1,
+    GuardHookPayloadKindV2, HookReviewResponseV1, NativeHookRequestV1, PreToolActionTypeV1,
+    PreToolResultV1,
 };
-use guard_policy_snapshot::{EffectiveNativePolicyV3, PolicySnapshotV3};
+use guard_policy_snapshot::PolicySnapshotV3;
 use serde_json::Value;
 
 #[path = "policy_enforcement_facts.rs"]
@@ -33,11 +33,12 @@ mod policy_enforcement_policy;
 pub(crate) use policy_enforcement_matrix::{validate_pre_tool_result_matrix, ActionFloor};
 
 use policy_enforcement_facts::{
-    classify_tool_name, collect_fact_maps, payload_facts, preferred_tool_name, risk_classes,
-    PolicyFacts, PATH_KEYS,
+    classify_tool_name, collect_fact_maps, payload_facts, preferred_tool_name, PATH_KEYS,
 };
-use policy_enforcement_helpers::{action_rank, join_action, normalized_harness};
-use policy_enforcement_policy::{policy_map_action, CompiledEffectivePolicy};
+use policy_enforcement_helpers::{
+    action_rank, join_action, normalized_harness, policy_floor, FloorInput,
+};
+use policy_enforcement_policy::CompiledEffectivePolicy;
 
 #[path = "policy_enforcement_admission.rs"]
 mod policy_enforcement_admission;
@@ -78,88 +79,6 @@ const VALID_RISK_KEYS: &[&str] = &[
 const MAX_SELECTOR_VALUE_BYTES: usize = 4 * 1024;
 const MAX_FACT_DEPTH: usize = 32;
 const MAX_FACT_NODES: usize = 2_048;
-
-/// The intrinsic-result inputs a policy floor can consult.  Grouped so the
-/// floor signature stays small and so a caller cannot accidentally swap the
-/// reason code for a different result's class list.
-struct FloorInput<'a> {
-    facts: &'a PolicyFacts,
-    reason_code: &'a str,
-    prompt_classes: &'a [NativePromptRiskClassV1],
-    benign_prompt: bool,
-}
-
-fn policy_floor(
-    policy: &EffectiveNativePolicyV3,
-    compiled: &CompiledEffectivePolicy,
-    harness: &str,
-    action_type: PreToolActionTypeV1,
-    input: &FloorInput<'_>,
-) -> Result<String, String> {
-    let facts = input.facts;
-    let mut floor = if input.benign_prompt
-        && matches!(
-            policy.default_action.as_str(),
-            "review" | "require-reapproval"
-        ) {
-        "warn".to_owned()
-    } else {
-        policy.default_action.clone()
-    };
-    if let Some(action) = compiled.harness_actions.get(harness) {
-        floor = join_action(&floor, action)?;
-    }
-    if matches!(
-        action_type,
-        PreToolActionTypeV1::Command | PreToolActionTypeV1::ProcessService
-    ) {
-        floor = join_action(&floor, &policy.subprocess_action)?;
-    }
-    if matches!(
-        action_type,
-        PreToolActionTypeV1::Network | PreToolActionTypeV1::Browser
-    ) {
-        floor = join_action(&floor, &policy.new_network_domain_action)?;
-    }
-    if action_type == PreToolActionTypeV1::Unknown {
-        // An unknown PostToolUse operation has no safe automatic allow
-        // proof, even when the configured default is permissive.
-        floor = join_action(&floor, "review")?;
-    }
-    if facts.changed_hash {
-        floor = join_action(&floor, &policy.changed_hash_action)?;
-    }
-    if facts.publisher_relevant && facts.publisher.is_none() {
-        floor = join_action(&floor, &policy.unknown_publisher_action)?;
-    }
-    if let Some(artifact) = facts.artifact.as_deref() {
-        if let Some(action) = policy_map_action(&policy.artifact_actions, artifact)? {
-            floor = join_action(&floor, &action)?;
-        }
-    }
-    if let Some(publisher) = facts.publisher.as_deref() {
-        if let Some(action) = policy_map_action(&policy.publisher_actions, publisher)? {
-            floor = join_action(&floor, &action)?;
-        }
-    }
-    let harness_risks = compiled.harness_risk_actions.get(harness);
-    for risk in risk_classes(
-        action_type,
-        facts.sensitive_target,
-        input.reason_code,
-        input.prompt_classes,
-    ) {
-        if let Some(action) = policy_map_action(&policy.risk_actions, risk)? {
-            floor = join_action(&floor, &action)?;
-        }
-        if let Some(harness_map) = harness_risks {
-            if let Some(action) = policy_map_action(harness_map, risk)? {
-                floor = join_action(&floor, &action)?;
-            }
-        }
-    }
-    Ok(floor)
-}
 
 fn policy_override_reason(action: &str) -> (&'static str, &'static str) {
     match action {

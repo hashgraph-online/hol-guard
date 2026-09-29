@@ -109,7 +109,9 @@ class StoreStorageMaintenanceMixin:
                 else 0
             )
             native_decision_receipts_deleted = tool_receipts_deleted + prompt_receipts_deleted
-            native_receipts_complete = tool_receipts_deleted < tool_budget and prompt_receipts_deleted < prompt_budget
+            native_receipts_complete = tool_receipts_deleted < tool_budget and (
+                prompt_budget <= 0 or prompt_receipts_deleted < prompt_budget
+            )
             guard_events_deleted = _delete_guard_event_batch(
                 connection,
                 cutoff=now - timedelta(days=detail_retain_days),

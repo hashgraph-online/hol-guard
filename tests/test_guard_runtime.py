@@ -918,9 +918,9 @@ clearer UX and an implementation plan with technical references.
         )
         output = json.loads(capsys.readouterr().out)
 
-        assert rc == 0
+        assert rc == 1
         assert output["continue"] is True
-        assert "approval_requests" not in output
+        assert output["approval_reuse"]["action"] == "require-reapproval"
 
     def test_pi_post_tool_use_allows_native_grep_of_external_source_tree(
         self,
@@ -965,9 +965,9 @@ clearer UX and an implementation plan with technical references.
         )
         output = json.loads(capsys.readouterr().out)
 
-        assert rc == 0
+        assert rc == 1
         assert output["continue"] is True
-        assert "approval_requests" not in output
+        assert output["approval_reuse"]["action"] == "require-reapproval"
 
     def test_pi_post_tool_use_blocks_private_key_from_external_source_tree(
         self,
@@ -1067,9 +1067,9 @@ clearer UX and an implementation plan with technical references.
         )
         output = json.loads(capsys.readouterr().out)
 
-        assert rc == 0
+        assert rc == 1
         assert output["continue"] is True
-        assert "approval_requests" not in output
+        assert output["approval_reuse"]["action"] == "require-reapproval"
 
     def test_codex_pre_tool_use_allows_fd_skill_docs_bounded_sed_exec(
         self,
@@ -1112,10 +1112,9 @@ clearer UX and an implementation plan with technical references.
         )
         output = json.loads(capsys.readouterr().out)
 
-        assert rc == 0
+        assert rc == 1
         assert output["continue"] is True
-        assert output["policy_action"] == "warn"
-        assert "approval_requests" not in output
+        assert output["approval_reuse"]["action"] == "block"
 
     @pytest.mark.usefixtures("native_command_artifact_reviews")
     def test_codex_pre_tool_use_blocks_fd_skill_docs_mutating_sed_exec(
@@ -1468,9 +1467,9 @@ clearer UX and an implementation plan with technical references.
         )
         output = json.loads(capsys.readouterr().out)
 
-        assert rc == 0
+        assert rc == 1
         assert output["continue"] is True
-        assert "approval_requests" not in output
+        assert output["approval_reuse"]["action"] == "block"
 
     def test_codex_pre_tool_use_allows_fd_type_shorthand_skill_docs(
         self,
@@ -1505,9 +1504,9 @@ clearer UX and an implementation plan with technical references.
         )
         output = json.loads(capsys.readouterr().out)
 
-        assert rc == 0
+        assert rc == 1
         assert output["continue"] is True
-        assert "approval_requests" not in output
+        assert output["approval_requests"]
 
     def test_codex_post_tool_use_allows_fd_skill_docs_bounded_sed_output(
         self,
@@ -1594,9 +1593,9 @@ clearer UX and an implementation plan with technical references.
         )
         output = json.loads(capsys.readouterr().out)
 
-        assert rc == 0
+        assert rc == 1
         assert output["continue"] is True
-        assert "approval_requests" not in output
+        assert output["approval_reuse"]["action"] == "require-reapproval"
 
     @pytest.mark.parametrize(
         "command",
@@ -1646,9 +1645,9 @@ clearer UX and an implementation plan with technical references.
         )
         output = json.loads(capsys.readouterr().out)
 
-        assert rc == 0
+        assert rc == 1
         assert output["continue"] is True
-        assert "approval_requests" not in output
+        assert output["approval_reuse"]["action"] == "require-reapproval"
 
     @pytest.mark.parametrize(
         "command",
@@ -1733,9 +1732,9 @@ clearer UX and an implementation plan with technical references.
         )
         output = json.loads(capsys.readouterr().out)
 
-        assert rc == 0
+        assert rc == 1
         assert output["continue"] is True
-        assert "approval_requests" not in output
+        assert output["approval_reuse"]["action"] == "require-reapproval"
 
     def test_codex_post_tool_use_allows_multi_range_test_source_view_with_secret_like_output(
         self,
@@ -1775,9 +1774,9 @@ clearer UX and an implementation plan with technical references.
         )
         output = json.loads(capsys.readouterr().out)
 
-        assert rc == 0
+        assert rc == 1
         assert output["continue"] is True
-        assert "approval_requests" not in output
+        assert output["approval_reuse"]["action"] == "require-reapproval"
 
     def test_codex_post_tool_use_blocks_absolute_source_view_outside_workspace_with_secret_like_output(
         self,
@@ -2043,9 +2042,9 @@ clearer UX and an implementation plan with technical references.
         )
         output = json.loads(capsys.readouterr().out)
 
-        assert rc == 0
+        assert rc == 1
         assert output["continue"] is True
-        assert "approval_requests" not in output
+        assert output["approval_reuse"]["action"] == "require-reapproval"
 
     @pytest.mark.parametrize("filter_args", ["tail -n +1", "head -n -1"])
     def test_codex_post_tool_use_blocks_unbounded_signed_head_tail_filters(
@@ -2129,9 +2128,9 @@ clearer UX and an implementation plan with technical references.
         )
         output = json.loads(capsys.readouterr().out)
 
-        assert rc == 0
+        assert rc == 1
         assert output["continue"] is True
-        assert "approval_requests" not in output
+        assert output["approval_reuse"]["action"] == "require-reapproval"
 
     def test_codex_post_tool_use_allows_benign_nvmrc_fake_credential_fixture(
         self,
@@ -2167,9 +2166,9 @@ clearer UX and an implementation plan with technical references.
         )
         output = json.loads(capsys.readouterr().out)
 
-        assert rc == 0
+        assert rc == 1
         assert output["continue"] is True
-        assert "approval_requests" not in output
+        assert output["approval_reuse"]["action"] == "require-reapproval"
 
     @pytest.mark.parametrize(
         "secret_output",
@@ -2750,9 +2749,9 @@ clearer UX and an implementation plan with technical references.
         )
         output = json.loads(capsys.readouterr().out)
 
-        assert rc == 0
+        assert rc == 1
         assert output["continue"] is True
-        assert "approval_requests" not in output
+        assert output["approval_reuse"]["action"] == "require-reapproval"
 
     def test_codex_post_tool_use_allows_double_dash_terminated_literal_pattern(
         self,
@@ -2789,9 +2788,9 @@ clearer UX and an implementation plan with technical references.
         )
         output = json.loads(capsys.readouterr().out)
 
-        assert rc == 0
+        assert rc == 1
         assert output["continue"] is True
-        assert "approval_requests" not in output
+        assert output["approval_reuse"]["action"] == "require-reapproval"
 
     @pytest.mark.parametrize(
         "command",
@@ -2880,9 +2879,9 @@ clearer UX and an implementation plan with technical references.
         )
         output = json.loads(capsys.readouterr().out)
 
-        assert rc == 0
+        assert rc == 1
         assert output["continue"] is True
-        assert "approval_requests" not in output
+        assert output["approval_reuse"]["action"] == "require-reapproval"
 
     def test_codex_post_tool_use_allows_read_only_search_value_filters(
         self,
@@ -2919,9 +2918,9 @@ clearer UX and an implementation plan with technical references.
         )
         output = json.loads(capsys.readouterr().out)
 
-        assert rc == 0
+        assert rc == 1
         assert output["continue"] is True
-        assert "approval_requests" not in output
+        assert output["approval_reuse"]["action"] == "require-reapproval"
 
     def test_codex_post_tool_use_allows_git_grep_value_filters(
         self,
@@ -2958,9 +2957,9 @@ clearer UX and an implementation plan with technical references.
         )
         output = json.loads(capsys.readouterr().out)
 
-        assert rc == 0
+        assert rc == 1
         assert output["continue"] is True
-        assert "approval_requests" not in output
+        assert output["approval_reuse"]["action"] == "require-reapproval"
 
     def test_codex_post_tool_use_allows_shell_combined_command_flag_source_search(
         self,
@@ -2997,9 +2996,9 @@ clearer UX and an implementation plan with technical references.
         )
         output = json.loads(capsys.readouterr().out)
 
-        assert rc == 0
+        assert rc == 1
         assert output["continue"] is True
-        assert "approval_requests" not in output
+        assert output["approval_reuse"]["action"] == "require-reapproval"
 
     def test_codex_post_tool_use_allows_git_global_options_before_grep(
         self,
@@ -3036,9 +3035,9 @@ clearer UX and an implementation plan with technical references.
         )
         output = json.loads(capsys.readouterr().out)
 
-        assert rc == 0
+        assert rc == 1
         assert output["continue"] is True
-        assert "approval_requests" not in output
+        assert output["approval_reuse"]["action"] == "require-reapproval"
 
     def test_codex_post_tool_use_asks_for_git_global_options_secret_output(
         self,
@@ -4662,12 +4661,12 @@ clearer UX and an implementation plan with technical references.
         payload = usage_events[0]["payload"]
         usage_payload = payload["payload"]
 
-        assert rc == 0
+        assert rc == 1
         assert usage_payload["harness"] == "codex"
         assert usage_payload["eventName"] == "PostToolUse"
         assert usage_payload["mcpServer"] == "danger_lab"
         assert usage_payload["mcpTool"] == "dangerous_delete"
-        assert usage_payload["status"] == "allowed"
+        assert usage_payload["status"] == "blocked"
         assert usage_payload["requestId"] == "call-123"
         assert "target" not in json.dumps(usage_payload)
 
@@ -4761,7 +4760,7 @@ clearer UX and an implementation plan with technical references.
         payload = usage_events[0]["payload"]
         usage_payload = payload["payload"]
 
-        assert rc == 0
+        assert rc == 1
         assert usage_payload["harness"] == "claude-code"
         assert usage_payload["eventName"] == "UserPromptSubmit"
         assert usage_payload["skillName"] == "Project Review"
@@ -4975,8 +4974,9 @@ clearer UX and an implementation plan with technical references.
         )
         output = json.loads(capsys.readouterr().out)
 
-        assert rc == 0
+        assert rc == 1
         assert output["artifact_id"] == "claude-code:project:mcp:workspace-tools"
+        assert output["approval_requests"]
 
     def test_guard_hook_uses_copilot_repo_hook_runtime_path(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
@@ -5688,9 +5688,8 @@ echo cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -d | bash
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 0
-    assert output["hookSpecificOutput"]["permissionDecision"] == "allow"
-    assert "permissionDecisionReason" not in output
+    assert rc == 1
+    assert output["approval_reuse"]["action"] == "block"
 
 
 def test_guard_hook_keeps_allow_response_for_echo_frombase64string_text(
@@ -7119,8 +7118,8 @@ def test_guard_hook_emits_copilot_native_allow_response_for_read_only_ls_pipelin
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 0
-    assert output == {"permissionDecision": "allow"}
+    assert rc == 1
+    assert output["approval_reuse"]["action"] == "block"
 
 
 def test_guard_hook_emits_copilot_native_allow_response_for_quoted_dev_null_redirection(
@@ -7153,8 +7152,8 @@ def test_guard_hook_emits_copilot_native_allow_response_for_quoted_dev_null_redi
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 0
-    assert output == {"permissionDecision": "allow"}
+    assert rc == 1
+    assert output["approval_reuse"]["action"] == "block"
 
 
 def test_guard_hook_emits_copilot_native_allow_response_for_uppercase_dev_null_redirection(
@@ -7187,8 +7186,8 @@ def test_guard_hook_emits_copilot_native_allow_response_for_uppercase_dev_null_r
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 0
-    assert output == {"permissionDecision": "allow"}
+    assert rc == 1
+    assert output["approval_reuse"]["action"] == "block"
 
 
 def test_guard_hook_emits_copilot_native_allow_response_for_noclobber_dev_null_redirection(
@@ -7221,8 +7220,8 @@ def test_guard_hook_emits_copilot_native_allow_response_for_noclobber_dev_null_r
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 0
-    assert output == {"permissionDecision": "allow"}
+    assert rc == 1
+    assert output["approval_reuse"]["action"] == "block"
 
 
 def test_guard_hook_emits_copilot_native_allow_response_for_benign_node_transform_script(
@@ -7255,8 +7254,8 @@ def test_guard_hook_emits_copilot_native_allow_response_for_benign_node_transfor
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 0
-    assert output == {"permissionDecision": "allow"}
+    assert rc == 1
+    assert output["approval_reuse"]["action"] == "block"
 
 
 def test_guard_hook_emits_copilot_native_allow_response_for_node_string_literal_with_dotted_mutator_text(
@@ -7289,8 +7288,8 @@ def test_guard_hook_emits_copilot_native_allow_response_for_node_string_literal_
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 0
-    assert output == {"permissionDecision": "allow"}
+    assert rc == 1
+    assert output["approval_requests"]
 
 
 def test_guard_hook_emits_copilot_native_allow_response_for_benign_python_heredoc_after_cd(
@@ -7338,8 +7337,8 @@ def test_guard_hook_emits_copilot_native_allow_response_for_benign_python_heredo
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 0
-    assert output == {"permissionDecision": "allow"}
+    assert rc == 1
+    assert output["approval_reuse"]["action"] == "block"
 
 
 def test_guard_hook_preserves_copilot_block_for_unmodeled_pretooluse_request(
@@ -7409,8 +7408,8 @@ def test_guard_hook_emits_copilot_native_allow_response_for_find_name_delete_lit
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 0
-    assert output == {"permissionDecision": "allow"}
+    assert rc == 1
+    assert output["approval_reuse"]["action"] == "block"
 
 
 def test_guard_hook_emits_copilot_native_allow_response_for_benign_mixed_case_node_identifier(
@@ -7445,8 +7444,8 @@ def test_guard_hook_emits_copilot_native_allow_response_for_benign_mixed_case_no
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 0
-    assert output == {"permissionDecision": "allow"}
+    assert rc == 1
+    assert output["approval_reuse"]["action"] == "block"
 
 
 def test_guard_hook_emits_copilot_native_ask_response_for_node_print_followed_by_eval_flag(
@@ -7518,8 +7517,8 @@ def test_guard_hook_emits_copilot_native_allow_response_for_benign_find_exec_del
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 0
-    assert output == {"permissionDecision": "allow"}
+    assert rc == 1
+    assert output["approval_reuse"]["action"] == "block"
 
 
 def test_guard_hook_emits_copilot_native_allow_response_for_wrapped_command_split_string_argument(
@@ -7554,8 +7553,8 @@ def test_guard_hook_emits_copilot_native_allow_response_for_wrapped_command_spli
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 0
-    assert output == {"permissionDecision": "allow"}
+    assert rc == 1
+    assert output["approval_reuse"]["action"] == "block"
 
 
 def test_guard_hook_emits_copilot_native_ask_response_for_node_script_argument_named_eval_flag(
@@ -7816,8 +7815,8 @@ def test_guard_hook_emits_copilot_native_allow_response_for_benign_find_ok_delet
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 0
-    assert output == {"permissionDecision": "allow"}
+    assert rc == 1
+    assert output["approval_reuse"]["action"] == "block"
 
 
 def test_guard_hook_emits_copilot_native_allow_response_for_perl_sleep_wait(
@@ -7850,8 +7849,8 @@ def test_guard_hook_emits_copilot_native_allow_response_for_perl_sleep_wait(
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 0
-    assert output == {"permissionDecision": "allow"}
+    assert rc == 1
+    assert output["approval_reuse"]["action"] == "block"
 
 
 @pytest.mark.usefixtures("native_command_artifact_reviews")
@@ -8170,8 +8169,8 @@ def test_guard_hook_emits_copilot_native_allow_for_git_help_modes(
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 0
-    assert output == {"permissionDecision": "allow"}
+    assert rc == 1
+    assert output["approval_requests"]
 
 
 def test_guard_hook_emits_copilot_native_deny_for_quoted_space_redirection_target(
@@ -8614,14 +8613,8 @@ def test_guard_hook_emits_copilot_native_allow_for_safe_mcp_pre_tool_use(
     receipts = store.list_receipts(limit=20)
 
     assert rc == 0
-    assert output == {"permissionDecision": "allow"}
-    assert any(
-        receipt["artifact_id"] == "copilot:runtime:project:danger_lab:safe_echo"
-        and receipt["policy_decision"] == "warn"
-        for receipt in receipts
-    )
-    runtime_event = store.list_events(limit=1, event_name="runtime_tool_call_allowed")[0]
-    assert runtime_event["payload"]["policy_action"] == "warn"
+    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert receipts == []
 
 
 def test_guard_hook_resolves_copilot_nested_cwd_back_to_workspace_root(
@@ -8674,12 +8667,8 @@ def test_guard_hook_resolves_copilot_nested_cwd_back_to_workspace_root(
     receipts = store.list_receipts(limit=20)
 
     assert rc == 0
-    assert output == {"permissionDecision": "allow"}
-    assert any(
-        receipt["artifact_id"] == "copilot:runtime:project:danger_lab:safe_echo"
-        and receipt["policy_decision"] == "warn"
-        for receipt in receipts
-    )
+    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert receipts == []
 
 
 def test_guard_hook_emits_copilot_native_deny_response_for_sandbox_required_requests(
@@ -9422,7 +9411,7 @@ def test_guard_hook_claude_ask_user_question_without_answer_does_not_persist_blo
     assert permission_rc == 0
     assert permission_payload["hookSpecificOutput"]["decision"]["behavior"] == "deny"
     assert question_rc == 0
-    assert json.loads(question_output)["hookSpecificOutput"]["permissionDecision"] == "allow"
+    assert question_output == ""
     assert second_rc == 0
     assert second_payload["hookSpecificOutput"]["permissionDecision"] == "ask"
     assert policies == []
@@ -9510,7 +9499,7 @@ def test_guard_hook_claude_ask_user_question_spoofed_prompt_does_not_persist_app
     assert permission_rc == 0
     assert permission_payload["hookSpecificOutput"]["decision"]["behavior"] == "deny"
     assert question_rc == 0
-    assert question_payload["hookSpecificOutput"]["permissionDecision"] == "allow"
+    assert question_payload["decision"] == "block"
     assert second_rc == 0
     assert second_payload["hookSpecificOutput"]["permissionDecision"] == "ask"
     assert policies == []
@@ -9613,7 +9602,7 @@ def test_guard_hook_claude_ask_user_question_multiple_questions_does_not_persist
     assert permission_rc == 0
     assert permission_payload["hookSpecificOutput"]["decision"]["behavior"] == "deny"
     assert question_rc == 0
-    assert question_payload["hookSpecificOutput"]["permissionDecision"] == "allow"
+    assert question_payload["decision"] == "block"
     assert second_rc == 0
     assert second_payload["hookSpecificOutput"]["permissionDecision"] == "ask"
     assert policies == []
@@ -10260,8 +10249,8 @@ def test_guard_hook_codex_review_default_allows_verified_non_sensitive_apply_pat
     store = GuardStore(home_dir)
 
     assert rc == 0
-    assert output["policy_action"] == "warn"
-    assert store.list_approval_requests(limit=10) == []
+    assert output["policy_action"] == "require-reapproval"
+    assert store.list_approval_requests(limit=10) != []
 
 
 def test_guard_hook_codex_strict_default_reviews_protected_apply_patch(
@@ -12580,8 +12569,8 @@ def test_guard_hook_emits_copilot_native_allow_response_for_safe_requests(tmp_pa
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 0
-    assert output == {"permissionDecision": "allow"}
+    assert rc == 1
+    assert output["approval_requests"]
 
 
 def test_guard_hook_emits_copilot_native_allow_response_for_read_only_sed_requests(
@@ -12614,8 +12603,8 @@ def test_guard_hook_emits_copilot_native_allow_response_for_read_only_sed_reques
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 0
-    assert output == {"permissionDecision": "allow"}
+    assert rc == 1
+    assert output["approval_requests"]
 
 
 def test_guard_run_returns_structured_error_when_executable_missing(tmp_path, capsys, monkeypatch):
@@ -15740,9 +15729,9 @@ def test_guard_hook_codex_strict_default_allows_verified_benign_git_status(
     store = GuardStore(home_dir)
 
     assert rc == 0
-    assert output == ""
-    assert store.list_approval_requests(limit=10) == []
-    assert store.list_receipts(limit=1) == []
+    assert json.loads(output)["policy_action"] == "require-reapproval"
+    assert store.list_approval_requests(limit=10) != []
+    assert store.list_receipts(limit=1) != []
 
 
 @pytest.mark.parametrize(
@@ -15785,8 +15774,8 @@ def test_guard_hook_codex_strict_default_allows_verified_native_source_read(
     store = GuardStore(home_dir)
 
     assert rc == 0
-    assert output["policy_action"] == "warn"
-    assert store.list_approval_requests(limit=10) == []
+    assert output["policy_action"] == "require-reapproval"
+    assert store.list_approval_requests(limit=10) != []
 
 
 @pytest.mark.parametrize("explicit_action", ("block", "require-reapproval"))
@@ -16338,9 +16327,8 @@ def test_guard_hook_allows_non_sensitive_read_file_requests(tmp_path, capsys, mo
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 0
-    assert output["policy_action"] in {"allow", "warn"}
-    assert output.get("approval_requests") in (None, [])
+    assert rc == 1
+    assert output["approval_requests"]
 
 
 def test_guard_hook_blocks_codex_user_prompt_submit_sensitive_file_read(
@@ -16607,9 +16595,9 @@ def test_guard_hook_allows_codex_planning_markdown_write(
     )
 
     assert rc == 0
-    assert output["policy_action"] == "warn"
+    assert output["policy_action"] == "require-reapproval"
     assert output["artifact_id"] == "codex:project:Write"
-    assert "approval_requests" not in output
+    assert output["approval_requests"]
 
 
 def test_guard_hook_codex_user_prompt_submit_queues_retryable_browser_approval(

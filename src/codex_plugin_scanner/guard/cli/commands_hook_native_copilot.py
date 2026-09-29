@@ -34,6 +34,7 @@ if TYPE_CHECKING:
     from .commands_support_runtime_resolution import _canonical_harness_name, _runtime_detection
 
 
+from ..action_lattice import coerce_guard_action, most_restrictive_guard_action
 from ..mcp_tool_calls import resolve_tool_call_policy_action
 from ..models import GuardAction
 from ..runtime.command_activity_contract import ActivityApprovalReuseStatus
@@ -108,6 +109,7 @@ def run_native_copilot_pretool(
     fresh_tool_call_authority_provider: (
         Callable[[], tuple[GuardConfig, GuardArtifact, str, object] | None] | None
     ) = None,
+    native_edge_result: Mapping[str, object] | None = None,
 ) -> int | None:
     if copilot_runtime_tool_call is None or copilot_hook_stage != "pretooluse":
         return None
@@ -126,6 +128,16 @@ def run_native_copilot_pretool(
         runtime_artifact_hash = decision.post_claim_authority.artifact_hash
         runtime_arguments = decision.post_claim_authority.arguments
     policy_action = resolve_tool_call_policy_action(decision)
+    if isinstance(native_edge_result, Mapping):
+        native_edge_action = coerce_guard_action(
+            native_edge_result.get("policy_action") or native_edge_result.get("minimum_action")
+        )
+        if native_edge_action is None and native_edge_result.get("decision") == "deny":
+            native_edge_action = "block"
+        if native_edge_action is not None:
+            # The native edge verdict is a non-bypassable floor on the
+            # emitted Copilot decision.
+            policy_action = most_restrictive_guard_action(policy_action, native_edge_action)
     approval_reuse = _copilot_approval_reuse_evidence(decision)
     decision_scanner_evidence = _copilot_tool_decision_scanner_evidence(decision)
     saved_policy_blocks = decision.saved_action == "block"

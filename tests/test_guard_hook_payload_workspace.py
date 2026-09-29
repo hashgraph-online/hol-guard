@@ -90,7 +90,7 @@ def test_run_guard_hook_uses_payload_cwd_when_cli_workspace_omitted(
     event = {
         "hook_event_name": "PreToolUse",
         "tool_name": "run_terminal_command",
-        "toolInput": {"command": "git diff --cached --check"},
+        "toolInput": {"command": "git rev-parse --show-toplevel"},
         "cwd": str(repository),
     }
 

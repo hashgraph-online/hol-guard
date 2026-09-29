@@ -388,7 +388,10 @@ fn test_existing_observe_mode_is_preserved_during_rewrite() {
     let result = observe_post_tool(payload, native);
 
     assert!(result.observe_mode);
-    assert!(result.reviewed_output_sha256.is_none());
+    assert_eq!(
+        result.reviewed_output_sha256.as_deref(),
+        Some(guard_hook_core::sha256_text("bounded excerpt").as_str())
+    );
 }
 
 #[test]

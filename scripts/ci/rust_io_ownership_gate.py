@@ -115,6 +115,7 @@ _PERSISTENCE_PATH_PREFIXES: Final = (
     "src/codex_plugin_scanner/guard/private_file_io.py",
     "src/codex_plugin_scanner/guard/local_dashboard_session.py",
     "src/codex_plugin_scanner/guard/store_base.py",
+    "src/codex_plugin_scanner/guard/store_mcp_catalog.py",
 )
 _PRESENTATION_PATHS: Final = frozenset(
     {
@@ -141,6 +142,8 @@ _SERVICE_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/daemon/lifecycle_journal.py",
         "src/codex_plugin_scanner/guard/daemon/manager.py",
         "src/codex_plugin_scanner/guard/daemon/runtime_peer.py",
+        "src/codex_plugin_scanner/guard/daemon/start_classification.py",
+        "src/codex_plugin_scanner/guard/runtime/mcp_connection_identity.py",
         "src/codex_plugin_scanner/guard/extension_builder/io.py",
         "src/codex_plugin_scanner/guard/frozen_runtime_commands.py",
         "src/codex_plugin_scanner/guard/guard_home_state.py",

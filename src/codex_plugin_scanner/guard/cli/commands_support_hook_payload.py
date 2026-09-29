@@ -311,7 +311,6 @@ def _emit_native_post_tool_envelope(
     as_json: bool = False,
 ) -> None:
     """Emit a PostToolUse outcome; the action already ran so it never pauses."""
-    del output_stream
     blocking = policy_action in {"review", "require-reapproval", "sandbox-required", "block"}
     edge_masked = (
         response_payload.get("native_edge_decision") == "deny"
@@ -341,11 +340,14 @@ def _emit_native_post_tool_envelope(
         masked = _redact_payload(protected, command="hook")
         restored = _restore_ephemeral_approval_tokens(masked, tokens)
         # stdout is the harness delivery channel; the ephemeral approval
-        # link must reach the operator intact.
-        sys.stdout.write(  # codeql[py/clear-text-logging-sensitive-data]
+        # link must reach the operator intact. An explicit output stream (used
+        # by in-process callers such as _run_guard_hook_command) takes
+        # precedence over process stdout.
+        stream = output_stream if output_stream is not None else sys.stdout
+        stream.write(  # codeql[py/clear-text-logging-sensitive-data]
             _render_redacted_json_payload(restored)
         )
-        sys.stdout.write("\n")
+        stream.write("\n")
         return
     from .render import emit_guard_payload
 
