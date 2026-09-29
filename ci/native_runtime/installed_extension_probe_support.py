@@ -238,10 +238,9 @@ def await_persisted_native_receipt(
 
     deadline = time.monotonic() + max(0.0, timeout_seconds)
     writer_progress = (
-        (writer, receipt_processed_before)
-        if writer is not None and receipt_processed_before is not None
-        else None
+        (writer, receipt_processed_before) if writer is not None and receipt_processed_before is not None else None
     )
+    next_reader_poll: float | None = None
     while time.monotonic() < deadline:
         should_read = writer_progress is None
         if writer_progress is not None:
@@ -253,6 +252,8 @@ def await_persisted_native_receipt(
             elif processed > processed_mark:
                 writer_progress = (progress_writer, processed)
                 should_read = True
+            elif next_reader_poll is not None and time.monotonic() >= next_reader_poll:
+                should_read = True
         if should_read:
             new_ids = persisted_native_receipt_ids(store) - known_ids
             if len(new_ids) > 1:
@@ -261,6 +262,8 @@ def await_persisted_native_receipt(
                 receipt = store.get_native_decision_receipt(next(iter(new_ids)))
                 if receipt is not None:
                     return receipt
+            if writer_progress is not None:
+                next_reader_poll = time.monotonic() + 0.25
         time.sleep(0.02)
     raise RuntimeError("installed_native_extensions_failed:receipt_persistence_missing")
 

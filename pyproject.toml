@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "hol-guard"
-version = "3.6.1"
+version = "3.9.0"
 description = "Open-source antivirus and runtime protection for AI agents, tools, MCP servers, plugins, skills, and package installs."
 readme = "README.md"
 license = "Apache-2.0"
@@ -151,6 +151,7 @@ packages = ["src/codex_plugin_scanner"]
 "contracts/mcp-servers/contribution.v1.schema.json" = "codex_plugin_scanner/guard/contracts/data/mcp_servers/contribution.v1.schema.json"
 "contributions/mcp-servers/mcp.filesystem.json" = "codex_plugin_scanner/guard/contracts/data/mcp_servers/contributions/mcp.filesystem.json"
 "contributions/mcp-servers/mcp.instapods.json" = "codex_plugin_scanner/guard/contracts/data/mcp_servers/contributions/mcp.instapods.json"
+"contributions/mcp-servers/mcp.pr-ui-compare.json" = "codex_plugin_scanner/guard/contracts/data/mcp_servers/contributions/mcp.pr-ui-compare.json"
 
 [tool.hatch.build]
 artifacts = [

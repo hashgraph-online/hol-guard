@@ -10,6 +10,7 @@ on:
       - tests/test_seal_pyinstaller_native_manifest.py
       - scripts/release/desktop_core_alpha_feed.py
       - scripts/release/authorize_macos_core_source.sh
+      - scripts/release/read_publish_attestation_commit.py
       - scripts/release/stage_native_runtime_for_desktop_core.py
       - scripts/release/seal_pyinstaller_native_manifest.py
       - scripts/release/fix_pyinstaller_macos_exe_headers.py
@@ -21,6 +22,7 @@ on:
       - .github/workflows/desktop-core-alpha-feed.yml
       - scripts/release/desktop_core_alpha_feed.py
       - scripts/release/authorize_macos_core_source.sh
+      - scripts/release/read_publish_attestation_commit.py
       - scripts/release/stage_native_runtime_for_desktop_core.py
       - scripts/release/seal_pyinstaller_native_manifest.py
       - scripts/release/fix_pyinstaller_macos_exe_headers.py
@@ -315,6 +317,7 @@ jobs:
               --collect-submodules codex_plugin_scanner --collect-data codex_plugin_scanner \
               --add-data "$NATIVE_RUNTIME:codex_plugin_scanner/_native" \
               --add-data "$NATIVE_MANIFEST:codex_plugin_scanner/_native" \
+              --add-data "$SOURCE/src/codex_plugin_scanner/version.py:." \
               --distpath "$DIST" --workpath "$RUNNER_TEMP/pyinstaller" --specpath "$RUNNER_TEMP/spec" \
               scripts/mdm/hol-guard-entry.py
           )
