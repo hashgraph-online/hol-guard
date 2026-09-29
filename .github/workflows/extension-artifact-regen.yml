@@ -1,0 +1,96 @@
+name: Extension artifact regen
+
+# Contributors own canonical contribution sources. The generated projections
+# derived from them (command catalog, native command program, trust map,
+# baselines, digest vectors, directory render) are maintainer-owned and
+# regenerated here after merges so contribution PRs never conflict on them.
+#
+# NOTE: a commit pushed with the default GITHUB_TOKEN does not trigger
+# push-triggered workflows such as ci.yml. Provision a PAT as the
+# GUARD_AUTOMATION_TOKEN secret so regen commits get full main-branch CI.
+
+permissions: {}
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - contributions/**
+      - contracts/extensions/**
+      - tests/fixtures/command-source-*.v1.json
+      - scripts/refresh_extension_artifacts.py
+      - .github/workflows/extension-artifact-regen.yml
+  workflow_dispatch:
+
+# Serialized so back-to-back merges batch: each run regenerates against the
+# HEAD it checks out, so a queued run absorbs intermediate merges.
+concurrency:
+  group: extension-artifact-regen-main
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  regen:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          token: ${{ secrets.GUARD_AUTOMATION_TOKEN }}
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.13"
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - name: Install the locked development environment
+        run: uv sync --frozen --extra dev
+      - name: Install the pinned Rust toolchain
+        run: rustup toolchain install 1.88.0 --profile minimal
+      - name: Regenerate, commit, and push refreshed artifacts
+        env:
+          PUSH_TOKEN: ${{ secrets.GUARD_AUTOMATION_TOKEN }}
+        run: |
+          if [ -z "${PUSH_TOKEN}" ]; then
+            echo "GUARD_AUTOMATION_TOKEN is not set; refusing to publish generated" >&2
+            echo "artifacts without a token whose pushes trigger main-branch CI." >&2
+            exit 1
+          fi
+          export GIT_CONFIG_COUNT=3
+          export GIT_CONFIG_KEY_0="http.https://github.com/.extraheader"
+          export GIT_CONFIG_VALUE_0="AUTHORIZATION: Bearer ${PUSH_TOKEN}"
+          export GIT_CONFIG_KEY_1="user.name"
+          export GIT_CONFIG_VALUE_1="github-actions[bot]"
+          export GIT_CONFIG_KEY_2="user.email"
+          export GIT_CONFIG_VALUE_2="41898282+github-actions[bot]@users.noreply.github.com"
+          for attempt in 1 2 3; do
+            git fetch origin main
+            git reset --hard origin/main
+            uv run --no-sync python scripts/refresh_extension_artifacts.py
+            git add -A contracts/extensions contracts/managed-controls docs/guard/extensions \
+              contributions/extensions \
+              src/codex_plugin_scanner/guard/contracts/data/extensions \
+              src/codex_plugin_scanner/guard/extension_builder tests/fixtures/extension-controls \
+              tests/fixtures/command-source-*.v1.json \
+              tests/fixtures/guard-command-corpus/decision-diff-report.json \
+              tests/test_guard_extension_trust.py tests/test_policy_bundle_delivery_runtime.py
+            if git diff --cached --quiet; then
+              echo "artifacts already current"
+              exit 0
+            fi
+            git commit -m "chore(extensions): regenerate contribution artifacts"
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+            echo "push rejected (main moved); retrying regen against new head (attempt $attempt)"
+          done
+          echo "regen push did not converge after 3 attempts" >&2
+          exit 1
