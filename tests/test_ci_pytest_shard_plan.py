@@ -205,3 +205,28 @@ def test_large_matrix_response_names_match_three_digit_workflow_format(tmp_path:
     assert [
         (tmp_path / f"shard-{index:03d}.txt").read_text(encoding="utf-8").splitlines() for index in range(192)
     ] == shards
+
+
+def test_live_coverage_matrix_opens_every_generated_response_file(tmp_path: Path) -> None:
+    import re
+
+    import yaml
+
+    root = Path(__file__).resolve().parents[1]
+    jobs = yaml.safe_load((root / ".github/workflows/ci.yml").read_text(encoding="utf-8"))["jobs"]
+    planner = next(
+        step for step in jobs["coverage-plan"]["steps"] if step.get("uses") == "./.github/actions/plan-pytest"
+    )
+    count = int(planner["with"]["shard-count"])
+    indices = jobs["coverage"]["strategy"]["matrix"]["shard-index"]
+    assert indices == list(range(count))
+    command = next(
+        step["run"] for step in jobs["coverage"]["steps"] if step.get("name", "").startswith("Run coverage shard")
+    )
+    match = re.search(r"printf '([^']+)'", command)
+    assert match is not None
+    shards = [[f"tests/test_matrix.py::test_case_{index}"] for index in indices]
+    write_shard_plan(tmp_path / "pytest-shards", shards=shards, estimated_loads=[1.0] * count, manifest_used=True)
+    assert [
+        (tmp_path / (match.group(1) % index)).read_text(encoding="utf-8").splitlines() for index in indices
+    ] == shards
