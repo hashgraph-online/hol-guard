@@ -1,0 +1,1539 @@
+{
+  "extension": {
+    "action_classes": [
+      "GoLive confirmed resource deletion",
+      "GoLive confirmed live write",
+      "GoLive confirmed DNS change"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "dependencies": [],
+    "description": "Reviews the GoLive plan executions that carry an explicit destructive or live confirmation flag. GoLive already refuses account writes without an approved plan id, recomputes that plan's identity before running, and deletes only resources it recorded as its own; the confirmation flags themselves are passed by the caller on the human's behalf, so `golive apply` with --confirm-destroy, --confirm-live or --confirm-dns is where an independent review adds something. The read-only surface (`golive help`, `version`, `update-check`, `detect`, `menu`, `doctor`, `plan`, `teardown`, `verify`, `status`, `handoff`) is outside these rules: `teardown` is the inverse plan and deletes nothing, and `plan` is what prints the plan id a human approves.",
+    "ecosystem_ids": [],
+    "executables": [
+      "golive",
+      "golive.cmd",
+      "golive.exe"
+    ],
+    "extension_id": "command.golive",
+    "homepage": "https://github.com/mikehasa/golive-skill",
+    "icon": {
+      "kind": "none"
+    },
+    "license": "MIT",
+    "name": "GoLive deployment CLI protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "GoLive confirmed resource deletion"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `golive apply` with --confirm-destroy, the only invocation that deletes resources GoLive recorded as its own (a host project it created, DNS records it wrote, webhook endpoints and sending keys it issued). GoLive refuses those deletions without an approved teardown plan id and this flag, and reports every resource it cannot prove it created as a manual handoff instead of deleting it.",
+        "example_command": "golive apply --plan 8f3c1d2a4b5e --yes --confirm-destroy",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "GoLive teardown execution",
+        "permission_id": "command.golive.permission.apply-confirm-destroy",
+        "replacement_permission_id": null,
+        "risk_tier": "critical",
+        "safer_guidance": [
+          "Pause for the human before the deletion: show the teardown plan (`golive teardown`) and the exact plan id, and let them say whether this deletion happens now."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "GoLive confirmed live write"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `golive apply` with --confirm-live: live-mode payments, production data, a real account (a seeded test user or a signup probe), a password rotation, or a project's first production deploy. GoLive keeps this separate from plan approval on purpose, so plan approval alone never authorizes the first write to a live destination.",
+        "example_command": "golive apply --plan 8f3c1d2a4b5e --yes --confirm-live",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "GoLive live write execution",
+        "permission_id": "command.golive.permission.apply-confirm-live",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Pause for the human: name the live-mode destination the step preview lists (payments, production data, the first production deploy) and let them approve that specific write."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "GoLive confirmed DNS change"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `golive apply` with --confirm-dns: creating or changing DNS records at an automated DNS provider, including records that make a domain resolve to the new deployment. GoLive refuses these writes without the flag and shows every record in the step preview first.",
+        "example_command": "golive apply --plan 8f3c1d2a4b5e --yes --confirm-dns",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "GoLive DNS change execution",
+        "permission_id": "command.golive.permission.apply-confirm-dns",
+        "replacement_permission_id": null,
+        "risk_tier": "critical",
+        "safer_guidance": [
+          "Pause for the human: show the records the plan prints, including any record it would replace, and confirm the zone and domain before they answer."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [
+      "golive.yaml"
+    ],
+    "publisher": {
+      "display_name": "mikehasa",
+      "id": "community.mikehasa",
+      "url": "https://github.com/mikehasa/golive-skill"
+    },
+    "reference_urls": [
+      "https://github.com/mikehasa/golive-skill/blob/main/docs/TRUST.md",
+      "https://github.com/mikehasa/golive-skill/blob/main/docs/ARCHITECTURE.md",
+      "https://github.com/mikehasa/golive-skill/blob/main/skills/golive/SKILL.md",
+      "https://github.com/mikehasa/golive-skill/blob/main/src/cli.ts"
+    ],
+    "required": false,
+    "risk_classes": [
+      "destructive_shell",
+      "network_egress"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "GoLive confirmed resource deletion"
+        ],
+        "default_mode": "review",
+        "description": "Matches `golive apply` carrying --confirm-destroy: the deletion of resources GoLive recorded as its own, after an approved teardown plan.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "golive",
+                  "golive.cmd",
+                  "golive.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--yes",
+                  "--force",
+                  "--json"
+                ],
+                "interspersed_options_with_values": [
+                  "--plan",
+                  "--only",
+                  "--cwd"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [
+                  "--confirm-destroy"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "apply"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.golive.permission.apply-confirm-destroy",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.golive.apply-confirm-destroy",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "golive",
+                      "golive.cmd",
+                      "golive.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--yes",
+                      "--force",
+                      "--json"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--plan",
+                      "--only",
+                      "--cwd"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "apply"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "GoLive help output",
+            "variant_id": "apply-help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "golive",
+                      "golive.cmd",
+                      "golive.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--yes",
+                      "--force",
+                      "--json"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--plan",
+                      "--only",
+                      "--cwd"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "help"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "golive",
+                      "golive.cmd",
+                      "golive.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--yes",
+                      "--force",
+                      "--json"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--plan",
+                      "--only",
+                      "--cwd"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "version"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "golive",
+                      "golive.cmd",
+                      "golive.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--yes",
+                      "--force",
+                      "--json"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--plan",
+                      "--only",
+                      "--cwd"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "update-check"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "golive",
+                      "golive.cmd",
+                      "golive.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--yes",
+                      "--force",
+                      "--json"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--plan",
+                      "--only",
+                      "--cwd"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "detect"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "golive",
+                      "golive.cmd",
+                      "golive.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--yes",
+                      "--force",
+                      "--json"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--plan",
+                      "--only",
+                      "--cwd"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "menu"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "golive",
+                      "golive.cmd",
+                      "golive.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--yes",
+                      "--force",
+                      "--json"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--plan",
+                      "--only",
+                      "--cwd"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "doctor"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "golive",
+                      "golive.cmd",
+                      "golive.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--yes",
+                      "--force",
+                      "--json"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--plan",
+                      "--only",
+                      "--cwd"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "plan"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "golive",
+                      "golive.cmd",
+                      "golive.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--yes",
+                      "--force",
+                      "--json"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--plan",
+                      "--only",
+                      "--cwd"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "teardown"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "golive",
+                      "golive.cmd",
+                      "golive.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--yes",
+                      "--force",
+                      "--json"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--plan",
+                      "--only",
+                      "--cwd"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "verify"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "golive",
+                      "golive.cmd",
+                      "golive.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--yes",
+                      "--force",
+                      "--json"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--plan",
+                      "--only",
+                      "--cwd"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "status"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "golive",
+                      "golive.cmd",
+                      "golive.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--yes",
+                      "--force",
+                      "--json"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--plan",
+                      "--only",
+                      "--cwd"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "handoff"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "GoLive read-only commands",
+            "variant_id": "read-only-commands"
+          }
+        ],
+        "safer_alternatives": [
+          "Review the intent first: `golive teardown` prints the inverse plan of the resources golive itself created and deletes nothing, `golive plan` prints the plan id to approve and is read-only, and `golive status`, `golive handoff`, `golive verify` and `golive doctor` only read state and providers. Ask the human to approve the plan id, then run `golive apply --plan <id> --yes` with the confirmation flag only when they gave that specific approval."
+        ],
+        "severity": "critical",
+        "title": "GoLive teardown execution"
+      },
+      {
+        "action_classes": [
+          "GoLive confirmed live write"
+        ],
+        "default_mode": "review",
+        "description": "Matches `golive apply` carrying --confirm-live: live-mode payments, production data, a real account, or a project's first production deploy.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "golive",
+                  "golive.cmd",
+                  "golive.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--yes",
+                  "--force",
+                  "--json"
+                ],
+                "interspersed_options_with_values": [
+                  "--plan",
+                  "--only",
+                  "--cwd"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [
+                  "--confirm-live"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "apply"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.golive.permission.apply-confirm-live",
+        "risk_classes": [
+          "network_egress"
+        ],
+        "rule_id": "command.golive.apply-confirm-live",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "golive",
+                      "golive.cmd",
+                      "golive.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--yes",
+                      "--force",
+                      "--json"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--plan",
+                      "--only",
+                      "--cwd"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "apply"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "GoLive help output",
+            "variant_id": "apply-help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "golive",
+                      "golive.cmd",
+                      "golive.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--yes",
+                      "--force",
+                      "--json"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--plan",
+                      "--only",
+                      "--cwd"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "help"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "golive",
+                      "golive.cmd",
+                      "golive.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--yes",
+                      "--force",
+                      "--json"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--plan",
+                      "--only",
+                      "--cwd"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "version"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "golive",
+                      "golive.cmd",
+                      "golive.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--yes",
+                      "--force",
+                      "--json"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--plan",
+                      "--only",
+                      "--cwd"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "update-check"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "golive",
+                      "golive.cmd",
+                      "golive.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--yes",
+                      "--force",
+                      "--json"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--plan",
+                      "--only",
+                      "--cwd"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "detect"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "golive",
+                      "golive.cmd",
+                      "golive.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--yes",
+                      "--force",
+                      "--json"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--plan",
+                      "--only",
+                      "--cwd"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "menu"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "golive",
+                      "golive.cmd",
+                      "golive.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--yes",
+                      "--force",
+                      "--json"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--plan",
+                      "--only",
+                      "--cwd"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "doctor"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "golive",
+                      "golive.cmd",
+                      "golive.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--yes",
+                      "--force",
+                      "--json"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--plan",
+                      "--only",
+                      "--cwd"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "plan"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "golive",
+                      "golive.cmd",
+                      "golive.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--yes",
+                      "--force",
+                      "--json"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--plan",
+                      "--only",
+                      "--cwd"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "teardown"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "golive",
+                      "golive.cmd",
+                      "golive.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--yes",
+                      "--force",
+                      "--json"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--plan",
+                      "--only",
+                      "--cwd"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "verify"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "golive",
+                      "golive.cmd",
+                      "golive.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--yes",
+                      "--force",
+                      "--json"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--plan",
+                      "--only",
+                      "--cwd"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "status"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "golive",
+                      "golive.cmd",
+                      "golive.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--yes",
+                      "--force",
+                      "--json"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--plan",
+                      "--only",
+                      "--cwd"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "handoff"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "GoLive read-only commands",
+            "variant_id": "read-only-commands"
+          }
+        ],
+        "safer_alternatives": [
+          "Review the intent first: `golive teardown` prints the inverse plan of the resources golive itself created and deletes nothing, `golive plan` prints the plan id to approve and is read-only, and `golive status`, `golive handoff`, `golive verify` and `golive doctor` only read state and providers. Ask the human to approve the plan id, then run `golive apply --plan <id> --yes` with the confirmation flag only when they gave that specific approval."
+        ],
+        "severity": "high",
+        "title": "GoLive live write execution"
+      },
+      {
+        "action_classes": [
+          "GoLive confirmed DNS change"
+        ],
+        "default_mode": "review",
+        "description": "Matches `golive apply` carrying --confirm-dns: creating or changing DNS records at an automated provider.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "golive",
+                  "golive.cmd",
+                  "golive.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--yes",
+                  "--force",
+                  "--json"
+                ],
+                "interspersed_options_with_values": [
+                  "--plan",
+                  "--only",
+                  "--cwd"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [
+                  "--confirm-dns"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "apply"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.golive.permission.apply-confirm-dns",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.golive.apply-confirm-dns",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "golive",
+                      "golive.cmd",
+                      "golive.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--yes",
+                      "--force",
+                      "--json"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--plan",
+                      "--only",
+                      "--cwd"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "apply"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "GoLive help output",
+            "variant_id": "apply-help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "golive",
+                      "golive.cmd",
+                      "golive.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--yes",
+                      "--force",
+                      "--json"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--plan",
+                      "--only",
+                      "--cwd"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "help"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "golive",
+                      "golive.cmd",
+                      "golive.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--yes",
+                      "--force",
+                      "--json"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--plan",
+                      "--only",
+                      "--cwd"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "version"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "golive",
+                      "golive.cmd",
+                      "golive.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--yes",
+                      "--force",
+                      "--json"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--plan",
+                      "--only",
+                      "--cwd"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "update-check"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "golive",
+                      "golive.cmd",
+                      "golive.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--yes",
+                      "--force",
+                      "--json"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--plan",
+                      "--only",
+                      "--cwd"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "detect"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "golive",
+                      "golive.cmd",
+                      "golive.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--yes",
+                      "--force",
+                      "--json"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--plan",
+                      "--only",
+                      "--cwd"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "menu"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "golive",
+                      "golive.cmd",
+                      "golive.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--yes",
+                      "--force",
+                      "--json"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--plan",
+                      "--only",
+                      "--cwd"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "doctor"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "golive",
+                      "golive.cmd",
+                      "golive.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--yes",
+                      "--force",
+                      "--json"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--plan",
+                      "--only",
+                      "--cwd"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "plan"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "golive",
+                      "golive.cmd",
+                      "golive.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--yes",
+                      "--force",
+                      "--json"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--plan",
+                      "--only",
+                      "--cwd"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "teardown"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "golive",
+                      "golive.cmd",
+                      "golive.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--yes",
+                      "--force",
+                      "--json"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--plan",
+                      "--only",
+                      "--cwd"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "verify"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "golive",
+                      "golive.cmd",
+                      "golive.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--yes",
+                      "--force",
+                      "--json"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--plan",
+                      "--only",
+                      "--cwd"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "status"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "golive",
+                      "golive.cmd",
+                      "golive.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--yes",
+                      "--force",
+                      "--json"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--plan",
+                      "--only",
+                      "--cwd"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "handoff"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "GoLive read-only commands",
+            "variant_id": "read-only-commands"
+          }
+        ],
+        "safer_alternatives": [
+          "Review the intent first: `golive teardown` prints the inverse plan of the resources golive itself created and deletes nothing, `golive plan` prints the plan id to approve and is read-only, and `golive status`, `golive handoff`, `golive verify` and `golive doctor` only read state and providers. Ask the human to approve the plan id, then run `golive apply --plan <id> --yes` with the confirmation flag only when they gave that specific approval."
+        ],
+        "severity": "critical",
+        "title": "GoLive DNS change execution"
+      }
+    ],
+    "safer_alternatives": [
+      "Review the intent first: `golive teardown` prints the inverse plan of the resources golive itself created and deletes nothing, `golive plan` prints the plan id to approve and is read-only, and `golive status`, `golive handoff`, `golive verify` and `golive doctor` only read state and providers. Ask the human to approve the plan id, then run `golive apply --plan <id> --yes` with the confirmation flag only when they gave that specific approval."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}
