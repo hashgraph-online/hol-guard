@@ -168,7 +168,7 @@ class TestDuplicatePendingRequestCollapse:
         assert count_approval_requests(conn, exclude_watch_only=True) == 0
 
 
-def test_watch_only_schema_migration_backfills_only_unambiguous_observations(tmp_path: Path) -> None:
+def test_watch_only_schema_migration_backfills_all_observations(tmp_path: Path) -> None:
     guard_home = tmp_path / "guard-home"
     store = GuardStore(guard_home)
     unambiguous = _make_request(
@@ -204,7 +204,7 @@ def test_watch_only_schema_migration_backfills_only_unambiguous_observations(tmp
         )
 
     assert values[unambiguous.request_id] == 1
-    assert values[ambiguous.request_id] == 0
+    assert values[ambiguous.request_id] == 1
 
 
 class TestDifferentWorkspacesGetSeparateRows:

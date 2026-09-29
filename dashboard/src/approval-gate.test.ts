@@ -1,6 +1,9 @@
 import { readFileSync } from "node:fs";
 import type { GuardApprovalGatePublicConfig, GuardSettings } from "./guard-types";
-import { approvalGateCooldownLabel, requiresApprovalPasswordPrompt } from "./approval-gate-utils";
+import {
+  approvalGateCooldownLabel,
+  requiresApprovalPasswordPrompt,
+} from "./approval-gate-utils";
 import { approvalGateProofReady, buildApprovalProofCredentials, isApprovalProofSubmitDisabled } from "./approval-proof-inline";
 import { applyApprovalGateDraft, effectiveApprovalGateCooldownSeconds, hasUnsavedChanges } from "./settings-workspace";
 import { cloudReviewConfirmationError, cloudReviewProofIncomplete } from "./settings/cloud-review-settings";

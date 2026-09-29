@@ -10091,30 +10091,29 @@
       {
         "extension": {
           "action_classes": [
-            "cogext commitment mutation"
+            "Skill Base publication"
           ],
           "aliases": [],
           "conflicts": [],
-          "delegated_protection": null,
           "dependencies": [],
-          "description": "Reviews the cogext CLI's mutating commitment operations (add, fulfill, fail). Read-only commands (extract, list, get, stats) are not matched and remain automatic. Note: `cogext add` may initialize ~/.cogext on a fresh machine; that side effect is covered structurally because `add` is in the reviewed set.",
+          "description": "Reviews authenticated Skill Base CLI publications before local Skill files are uploaded as a new version.",
           "ecosystem_ids": [],
           "executables": [
-            "cogext",
-            "cogext.cmd",
-            "cogext.exe"
+            "skb",
+            "skb.cmd",
+            "skb.exe"
           ],
-          "extension_id": "command.cogext",
-          "homepage": "https://cogextai.com",
+          "extension_id": "command.skill-base",
+          "homepage": "https://github.com/ginuim/skill-base",
           "icon": {
             "kind": "none"
           },
           "license": "MIT",
-          "name": "COGEXT command protection",
+          "name": "Skill Base CLI",
           "permissions": [
             {
               "action_classes": [
-                "cogext commitment mutation"
+                "Skill Base publication"
               ],
               "baseline_floor": "review",
               "configurable": true,
@@ -10122,469 +10121,231 @@
               "default_enabled": true,
               "dependencies": [],
               "deprecated": false,
-              "description": "Identifies `cogext add`, which creates a tracked commitment and may initialize the local ~/.cogext store on a fresh machine.",
-              "example_command": "cogext add \"Send the report by Friday\"",
-              "family": null,
-              "fixed_reason": null,
+              "description": "Reviews upload of a local Skill directory to Skill Base, where it creates a public Skill or publishes a new version.",
+              "example_command": "skb publish ./my-skill --changelog 'Initial release'",
               "implementation_version": "1.0.0",
               "implied_permissions": [],
               "introduced_version": "1.0.0",
-              "label": "cogext commitment creation",
-              "permission_id": "command.cogext.permission.add",
-              "replacement_permission_id": null,
+              "label": "Publish a Skill version",
+              "permission_id": "command.skill-base.permission.publish",
               "risk_tier": "high",
               "safer_guidance": [
-                "Run `cogext list` first to confirm the target store before adding a commitment."
-              ],
-              "typed_capabilities": []
-            },
-            {
-              "action_classes": [
-                "cogext commitment mutation"
-              ],
-              "baseline_floor": "review",
-              "configurable": true,
-              "conflicts": [],
-              "default_enabled": true,
-              "dependencies": [],
-              "deprecated": false,
-              "description": "Identifies `cogext fulfill <id>`, which marks a tracked commitment as fulfilled and writes its terminal state.",
-              "example_command": "cogext fulfill abc-123",
-              "family": null,
-              "fixed_reason": null,
-              "implementation_version": "1.0.0",
-              "implied_permissions": [],
-              "introduced_version": "1.0.0",
-              "label": "cogext commitment fulfillment",
-              "permission_id": "command.cogext.permission.fulfill",
-              "replacement_permission_id": null,
-              "risk_tier": "high",
-              "safer_guidance": [
-                "Confirm the commitment ID with `cogext get <id>` before fulfilling it."
-              ],
-              "typed_capabilities": []
-            },
-            {
-              "action_classes": [
-                "cogext commitment mutation"
-              ],
-              "baseline_floor": "review",
-              "configurable": true,
-              "conflicts": [],
-              "default_enabled": true,
-              "dependencies": [],
-              "deprecated": false,
-              "description": "Identifies `cogext fail <id>`, which marks a tracked commitment as failed and writes its terminal state.",
-              "example_command": "cogext fail abc-123",
-              "family": null,
-              "fixed_reason": null,
-              "implementation_version": "1.0.0",
-              "implied_permissions": [],
-              "introduced_version": "1.0.0",
-              "label": "cogext commitment failure",
-              "permission_id": "command.cogext.permission.fail",
-              "replacement_permission_id": null,
-              "risk_tier": "high",
-              "safer_guidance": [
-                "Confirm the commitment ID with `cogext get <id>` before failing it."
+                "Run `skb publish --dry-run` and confirm the directory, Skill ID, and included files.",
+                "Check the name, description, and changelog flags; new Skills are public by default."
               ],
               "typed_capabilities": []
             }
           ],
           "project_markers": [],
           "publisher": {
-            "display_name": "COGEXT AI",
-            "id": "community.cogext",
-            "url": "https://github.com/yaminbinyoosuf/cogext-primitive"
+            "display_name": "Skill Base",
+            "id": "ginuim",
+            "url": "https://github.com/ginuim/skill-base"
           },
           "reference_urls": [
-            "https://cogextai.com/standard",
-            "https://github.com/yaminbinyoosuf/cogext-primitive"
+            "https://github.com/ginuim/skill-base/blob/main/cli/lib/commands/publish.js",
+            "https://github.com/ginuim/skill-base/blob/main/docs/zh/cli.md"
           ],
           "required": false,
           "risk_classes": [
-            "destructive_shell",
-            "execution"
+            "data_flow_exfiltration",
+            "execution",
+            "network_egress"
           ],
           "rules": [
             {
               "action_classes": [
-                "cogext commitment mutation"
+                "Skill Base publication"
               ],
               "default_mode": "review",
-              "description": "Identifies `cogext add`, which creates a tracked commitment.",
-              "family": null,
+              "description": "Identifies `skb publish`, which packages the selected local directory and uploads it with the saved Skill Base credential to create a Skill or publish a new version.",
               "matcher": {
-                "config": {},
-                "matchers": [
-                  {
-                    "config": {
-                      "allow_leading_options": false,
-                      "executables": [
-                        "cogext",
-                        "cogext.cmd",
-                        "cogext.exe"
-                      ],
-                      "fail_secure_unknown_options": false,
-                      "forbidden_flags": [],
-                      "interspersed_flags": [],
-                      "interspersed_options_with_values": [],
-                      "inverse_flag_pairs": [],
-                      "leading_options_with_values": [],
-                      "options_with_values": [],
-                      "required_flags": [],
-                      "required_flags_in_all_arguments": false,
-                      "required_option_values": [],
-                      "subcommands": [
-                        "add"
-                      ]
-                    },
-                    "op": "executable.v1"
-                  }
-                ],
-                "op": "any.v1"
+                "config": {
+                  "allow_leading_options": true,
+                  "executables": [
+                    "skb",
+                    "skb.cmd",
+                    "skb.exe"
+                  ],
+                  "fail_secure_unknown_options": true,
+                  "forbidden_flags": [],
+                  "interspersed_flags": [
+                    "--dry-run",
+                    "--help",
+                    "--no-gitignore",
+                    "-h"
+                  ],
+                  "interspersed_options_with_values": [
+                    "--changelog",
+                    "--description",
+                    "--ignore",
+                    "--name"
+                  ],
+                  "inverse_flag_pairs": [],
+                  "leading_options_with_values": [
+                    "--changelog",
+                    "--description",
+                    "--ignore",
+                    "--name"
+                  ],
+                  "required_flags": [],
+                  "required_flags_in_all_arguments": false,
+                  "required_option_values": [],
+                  "subcommands": [
+                    "publish"
+                  ]
+                },
+                "op": "executable.v1"
               },
-              "native_capability": null,
-              "permission_id": "command.cogext.permission.add",
+              "permission_id": "command.skill-base.permission.publish",
               "risk_classes": [
-                "destructive_shell",
-                "execution"
+                "data_flow_exfiltration",
+                "execution",
+                "network_egress"
               ],
-              "rule_id": "command.cogext.add",
+              "rule_id": "command.skill-base.publish",
               "rule_version": "1.0.0",
               "safe_variants": [
                 {
                   "matcher": {
-                    "config": {},
-                    "matchers": [
-                      {
-                        "config": {
-                          "allow_leading_options": false,
-                          "executables": [
-                            "cogext",
-                            "cogext.cmd",
-                            "cogext.exe"
-                          ],
-                          "fail_secure_unknown_options": false,
-                          "forbidden_flags": [],
-                          "interspersed_flags": [],
-                          "interspersed_options_with_values": [],
-                          "inverse_flag_pairs": [],
-                          "leading_options_with_values": [],
-                          "options_with_values": [],
-                          "required_flags": [
-                            "--help"
-                          ],
-                          "required_flags_in_all_arguments": true,
-                          "required_option_values": [],
-                          "subcommands": [
-                            "add"
-                          ]
-                        },
-                        "op": "executable.v1"
-                      }
-                    ],
-                    "op": "any.v1"
-                  },
-                  "title": "cogext add command help (--help)",
-                  "variant_id": "help"
-                },
-                {
-                  "matcher": {
-                    "config": {},
-                    "matchers": [
-                      {
-                        "config": {
-                          "allow_leading_options": false,
-                          "executables": [
-                            "cogext",
-                            "cogext.cmd",
-                            "cogext.exe"
-                          ],
-                          "fail_secure_unknown_options": false,
-                          "forbidden_flags": [],
-                          "interspersed_flags": [],
-                          "interspersed_options_with_values": [],
-                          "inverse_flag_pairs": [],
-                          "leading_options_with_values": [],
-                          "options_with_values": [],
-                          "required_flags": [
-                            "-h"
-                          ],
-                          "required_flags_in_all_arguments": true,
-                          "required_option_values": [],
-                          "subcommands": [
-                            "add"
-                          ]
-                        },
-                        "op": "executable.v1"
-                      }
-                    ],
-                    "op": "any.v1"
-                  },
-                  "title": "cogext add command help (-h)",
-                  "variant_id": "short-help"
-                }
-              ],
-              "safer_alternatives": [
-                "Run `cogext list` first to confirm the target store."
-              ],
-              "severity": "high",
-              "title": "cogext commitment creation"
-            },
-            {
-              "action_classes": [
-                "cogext commitment mutation"
-              ],
-              "default_mode": "review",
-              "description": "Identifies `cogext fulfill`, which marks a commitment as fulfilled.",
-              "family": null,
-              "matcher": {
-                "config": {},
-                "matchers": [
-                  {
                     "config": {
-                      "allow_leading_options": false,
+                      "allow_leading_options": true,
                       "executables": [
-                        "cogext",
-                        "cogext.cmd",
-                        "cogext.exe"
+                        "skb",
+                        "skb.cmd",
+                        "skb.exe"
                       ],
-                      "fail_secure_unknown_options": false,
+                      "fail_secure_unknown_options": true,
                       "forbidden_flags": [],
-                      "interspersed_flags": [],
-                      "interspersed_options_with_values": [],
+                      "interspersed_flags": [
+                        "--dry-run",
+                        "--no-gitignore"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--changelog",
+                        "--description",
+                        "--ignore",
+                        "--name"
+                      ],
                       "inverse_flag_pairs": [],
-                      "leading_options_with_values": [],
-                      "options_with_values": [],
-                      "required_flags": [],
-                      "required_flags_in_all_arguments": false,
+                      "leading_options_with_values": [
+                        "--changelog",
+                        "--description",
+                        "--ignore",
+                        "--name"
+                      ],
+                      "required_flags": [
+                        "--dry-run"
+                      ],
+                      "required_flags_in_all_arguments": true,
                       "required_option_values": [],
                       "subcommands": [
-                        "fulfill"
+                        "publish"
                       ]
                     },
                     "op": "executable.v1"
-                  }
-                ],
-                "op": "any.v1"
-              },
-              "native_capability": null,
-              "permission_id": "command.cogext.permission.fulfill",
-              "risk_classes": [
-                "destructive_shell",
-                "execution"
-              ],
-              "rule_id": "command.cogext.fulfill",
-              "rule_version": "1.0.0",
-              "safe_variants": [
-                {
-                  "matcher": {
-                    "config": {},
-                    "matchers": [
-                      {
-                        "config": {
-                          "allow_leading_options": false,
-                          "executables": [
-                            "cogext",
-                            "cogext.cmd",
-                            "cogext.exe"
-                          ],
-                          "fail_secure_unknown_options": false,
-                          "forbidden_flags": [],
-                          "interspersed_flags": [],
-                          "interspersed_options_with_values": [],
-                          "inverse_flag_pairs": [],
-                          "leading_options_with_values": [],
-                          "options_with_values": [],
-                          "required_flags": [
-                            "--help"
-                          ],
-                          "required_flags_in_all_arguments": true,
-                          "required_option_values": [],
-                          "subcommands": [
-                            "fulfill"
-                          ]
-                        },
-                        "op": "executable.v1"
-                      }
-                    ],
-                    "op": "any.v1"
                   },
-                  "title": "cogext fulfill command help (--help)",
-                  "variant_id": "help"
+                  "title": "List the files without uploading",
+                  "variant_id": "dry-run"
                 },
                 {
                   "matcher": {
-                    "config": {},
-                    "matchers": [
-                      {
-                        "config": {
-                          "allow_leading_options": false,
-                          "executables": [
-                            "cogext",
-                            "cogext.cmd",
-                            "cogext.exe"
-                          ],
-                          "fail_secure_unknown_options": false,
-                          "forbidden_flags": [],
-                          "interspersed_flags": [],
-                          "interspersed_options_with_values": [],
-                          "inverse_flag_pairs": [],
-                          "leading_options_with_values": [],
-                          "options_with_values": [],
-                          "required_flags": [
-                            "-h"
-                          ],
-                          "required_flags_in_all_arguments": true,
-                          "required_option_values": [],
-                          "subcommands": [
-                            "fulfill"
-                          ]
-                        },
-                        "op": "executable.v1"
-                      }
-                    ],
-                    "op": "any.v1"
-                  },
-                  "title": "cogext fulfill command help (-h)",
-                  "variant_id": "short-help"
-                }
-              ],
-              "safer_alternatives": [
-                "Confirm the commitment ID with `cogext get <id>`."
-              ],
-              "severity": "high",
-              "title": "cogext commitment fulfillment"
-            },
-            {
-              "action_classes": [
-                "cogext commitment mutation"
-              ],
-              "default_mode": "review",
-              "description": "Identifies `cogext fail`, which marks a commitment as failed.",
-              "family": null,
-              "matcher": {
-                "config": {},
-                "matchers": [
-                  {
                     "config": {
-                      "allow_leading_options": false,
+                      "allow_leading_options": true,
                       "executables": [
-                        "cogext",
-                        "cogext.cmd",
-                        "cogext.exe"
+                        "skb",
+                        "skb.cmd",
+                        "skb.exe"
                       ],
-                      "fail_secure_unknown_options": false,
+                      "fail_secure_unknown_options": true,
                       "forbidden_flags": [],
-                      "interspersed_flags": [],
-                      "interspersed_options_with_values": [],
+                      "interspersed_flags": [
+                        "--dry-run",
+                        "--help",
+                        "--no-gitignore",
+                        "-h"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--changelog",
+                        "--description",
+                        "--ignore",
+                        "--name"
+                      ],
                       "inverse_flag_pairs": [],
-                      "leading_options_with_values": [],
-                      "options_with_values": [],
-                      "required_flags": [],
-                      "required_flags_in_all_arguments": false,
+                      "leading_options_with_values": [
+                        "--changelog",
+                        "--description",
+                        "--ignore",
+                        "--name"
+                      ],
+                      "required_flags": [
+                        "--help"
+                      ],
+                      "required_flags_in_all_arguments": true,
                       "required_option_values": [],
                       "subcommands": [
-                        "fail"
+                        "publish"
                       ]
                     },
                     "op": "executable.v1"
-                  }
-                ],
-                "op": "any.v1"
-              },
-              "native_capability": null,
-              "permission_id": "command.cogext.permission.fail",
-              "risk_classes": [
-                "destructive_shell",
-                "execution"
-              ],
-              "rule_id": "command.cogext.fail",
-              "rule_version": "1.0.0",
-              "safe_variants": [
-                {
-                  "matcher": {
-                    "config": {},
-                    "matchers": [
-                      {
-                        "config": {
-                          "allow_leading_options": false,
-                          "executables": [
-                            "cogext",
-                            "cogext.cmd",
-                            "cogext.exe"
-                          ],
-                          "fail_secure_unknown_options": false,
-                          "forbidden_flags": [],
-                          "interspersed_flags": [],
-                          "interspersed_options_with_values": [],
-                          "inverse_flag_pairs": [],
-                          "leading_options_with_values": [],
-                          "options_with_values": [],
-                          "required_flags": [
-                            "--help"
-                          ],
-                          "required_flags_in_all_arguments": true,
-                          "required_option_values": [],
-                          "subcommands": [
-                            "fail"
-                          ]
-                        },
-                        "op": "executable.v1"
-                      }
-                    ],
-                    "op": "any.v1"
                   },
-                  "title": "cogext fail command help (--help)",
+                  "title": "Publish command help (--help)",
                   "variant_id": "help"
                 },
                 {
                   "matcher": {
-                    "config": {},
-                    "matchers": [
-                      {
-                        "config": {
-                          "allow_leading_options": false,
-                          "executables": [
-                            "cogext",
-                            "cogext.cmd",
-                            "cogext.exe"
-                          ],
-                          "fail_secure_unknown_options": false,
-                          "forbidden_flags": [],
-                          "interspersed_flags": [],
-                          "interspersed_options_with_values": [],
-                          "inverse_flag_pairs": [],
-                          "leading_options_with_values": [],
-                          "options_with_values": [],
-                          "required_flags": [
-                            "-h"
-                          ],
-                          "required_flags_in_all_arguments": true,
-                          "required_option_values": [],
-                          "subcommands": [
-                            "fail"
-                          ]
-                        },
-                        "op": "executable.v1"
-                      }
-                    ],
-                    "op": "any.v1"
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "skb",
+                        "skb.cmd",
+                        "skb.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--dry-run",
+                        "--help",
+                        "--no-gitignore",
+                        "-h"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--changelog",
+                        "--description",
+                        "--ignore",
+                        "--name"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--changelog",
+                        "--description",
+                        "--ignore",
+                        "--name"
+                      ],
+                      "required_flags": [
+                        "-h"
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "publish"
+                      ]
+                    },
+                    "op": "executable.v1"
                   },
-                  "title": "cogext fail command help (-h)",
+                  "title": "Publish command help (-h)",
                   "variant_id": "short-help"
                 }
               ],
               "safer_alternatives": [
-                "Confirm the commitment ID with `cogext get <id>`."
+                "Run `skb publish --dry-run` for the same directory and ignore rules, then review the included files before publishing."
               ],
               "severity": "high",
-              "title": "cogext commitment failure"
+              "title": "Skill Base publication"
             }
           ],
           "safer_alternatives": [
-            "Run `cogext list` or `cogext get <id>` before mutating commitment state."
+            "Run `skb publish --dry-run` for the same directory and ignore rules, then review the included files before publishing."
           ],
           "source": "built-in",
           "version": "1.0.0"
@@ -10697,111 +10458,179 @@
   },
   "cases": [
     {
-      "command": "cogext add \"Send the report by Friday\"",
+      "command": "skb publish ./my-skill --dry-run --ignore '.cursor/'",
       "disabled_permissions": [],
       "enabled_extensions": [
-        "command.cogext"
+        "command.skill-base"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "publish-dry-run-safe",
+      "rule_id": "command.skill-base.publish"
+    },
+    {
+      "command": "skb publish ./my-skill --ignore '.cursor/' --no-gitignore",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.skill-base"
       ],
       "expected_action": "review",
       "expected_effective_segments": [
         0
       ],
-      "id": "add-basic",
-      "rule_id": "command.cogext.add"
+      "id": "publish-with-ignore-still-reviewable",
+      "rule_id": "command.skill-base.publish"
     },
     {
-      "command": "cogext add \"Call Sarah tomorrow\"",
+      "command": "skb publish",
       "disabled_permissions": [],
       "enabled_extensions": [
-        "command.cogext"
+        "command.skill-base"
       ],
       "expected_action": "review",
       "expected_effective_segments": [
         0
       ],
-      "id": "add-call",
-      "rule_id": "command.cogext.add"
+      "id": "publish-current-directory",
+      "rule_id": "command.skill-base.publish"
     },
     {
-      "command": "cogext fulfill abc-123",
+      "command": "skb publish ./my-skill --name \"My Skill\" --description \"A useful skill\" --changelog \"Initial release\"",
       "disabled_permissions": [],
       "enabled_extensions": [
-        "command.cogext"
+        "command.skill-base"
       ],
       "expected_action": "review",
       "expected_effective_segments": [
         0
       ],
-      "id": "fulfill-basic",
-      "rule_id": "command.cogext.fulfill"
+      "id": "publish-relative-directory-with-metadata",
+      "rule_id": "command.skill-base.publish"
     },
     {
-      "command": "cogext fail abc-123",
+      "command": "skb --name \"My Skill\" --changelog \"Release\" publish /tmp/my-skill",
       "disabled_permissions": [],
       "enabled_extensions": [
-        "command.cogext"
+        "command.skill-base"
       ],
       "expected_action": "review",
       "expected_effective_segments": [
         0
       ],
-      "id": "fail-basic",
-      "rule_id": "command.cogext.fail"
+      "id": "publish-global-options-before-subcommand",
+      "rule_id": "command.skill-base.publish"
     },
     {
-      "command": "cogext extract \"I'll call you tomorrow\"",
+      "command": "skb publish --help",
       "disabled_permissions": [],
       "enabled_extensions": [
-        "command.cogext"
+        "command.skill-base"
       ],
       "expected_action": "review",
       "expected_effective_segments": [],
-      "id": "extract-automatic",
-      "rule_id": "command.cogext.add"
+      "id": "publish-help-long-safe",
+      "rule_id": "command.skill-base.publish"
     },
     {
-      "command": "cogext list",
+      "command": "skb publish -h",
       "disabled_permissions": [],
       "enabled_extensions": [
-        "command.cogext"
+        "command.skill-base"
       ],
       "expected_action": "review",
       "expected_effective_segments": [],
-      "id": "list-basic",
-      "rule_id": "command.cogext.add"
+      "id": "publish-help-short-safe",
+      "rule_id": "command.skill-base.publish"
     },
     {
-      "command": "cogext list --status open",
+      "command": "skb publish --name \"My Skill\" --help",
       "disabled_permissions": [],
       "enabled_extensions": [
-        "command.cogext"
+        "command.skill-base"
       ],
       "expected_action": "review",
       "expected_effective_segments": [],
-      "id": "list-status-open",
-      "rule_id": "command.cogext.add"
+      "id": "publish-with-extra-flag-and-help-safe",
+      "rule_id": "command.skill-base.publish"
     },
     {
-      "command": "cogext get abc-123",
+      "command": "skb publish ./my-skill",
+      "disabled_permissions": [],
+      "enabled_extensions": [],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "extension-inactive",
+      "rule_id": "command.skill-base.publish"
+    },
+    {
+      "command": "skb publish ./my-skill",
+      "disabled_permissions": [
+        "command.skill-base.permission.publish"
+      ],
+      "enabled_extensions": [
+        "command.skill-base"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "permission-disabled",
+      "rule_id": "command.skill-base.publish"
+    },
+    {
+      "command": "skb install team-rules",
       "disabled_permissions": [],
       "enabled_extensions": [
-        "command.cogext"
+        "command.skill-base"
       ],
       "expected_action": "review",
       "expected_effective_segments": [],
-      "id": "get-basic",
-      "rule_id": "command.cogext.add"
+      "id": "skb-install-is-outside-publish-rule",
+      "rule_id": "command.skill-base.publish"
     },
     {
-      "command": "cogext stats",
+      "command": "skb search vue",
       "disabled_permissions": [],
       "enabled_extensions": [
-        "command.cogext"
+        "command.skill-base"
       ],
       "expected_action": "review",
       "expected_effective_segments": [],
-      "id": "stats-basic",
-      "rule_id": "command.cogext.add"
+      "id": "skb-search-is-outside-publish-rule",
+      "rule_id": "command.skill-base.publish"
+    },
+    {
+      "command": "skb import-github owner/repo",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.skill-base"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "skb-import-github-is-outside-publish-rule",
+      "rule_id": "command.skill-base.publish"
+    },
+    {
+      "command": "skb publishx ./my-skill",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.skill-base"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "similar-subcommand-does-not-match",
+      "rule_id": "command.skill-base.publish"
+    },
+    {
+      "command": "skb --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.skill-base"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "root-help-is-outside-publish-rule",
+      "rule_id": "command.skill-base.publish"
     }
   ],
   "schema": "guard.command-extension-fixtures.v1"
