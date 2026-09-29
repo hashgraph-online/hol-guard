@@ -81,9 +81,7 @@ class CommandActivityWriter(Protocol):
     ) -> bool: ...
 
 
-_NATIVE_POLICY_READY_TIMEOUT_SECONDS = (
-    25.0 if sys.platform in {"darwin", "win32"} else _PUBLISH_TIMEOUT_SECONDS
-)
+_NATIVE_POLICY_READY_TIMEOUT_SECONDS = 25.0 if sys.platform in {"darwin", "win32"} else _PUBLISH_TIMEOUT_SECONDS
 _TRANSIENT_RESIDENT_PUBLICATION_ERRORS = frozenset(
     {"native_policy_snapshot_resident_changed", "native_resident_restart_budget_busy"}
 )
