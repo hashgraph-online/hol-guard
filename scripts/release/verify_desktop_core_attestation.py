@@ -10,12 +10,20 @@ import json
 import re
 import stat
 import sys
+import tempfile
+import zipfile
 from collections.abc import Mapping, Sequence
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 _NATIVE_VERIFIER = Path(__file__).with_name("verify_pyinstaller_native_runtime.py")
 _MARKER_SCHEMA = "hol-guard-core-attestation.v3"
 _MANIFEST_SCHEMA = "hol-guard-core-update.v1"
+_ONEDIR_MANIFEST_SCHEMA = "hol-guard-core-update.v2"
+_ONEDIR_FORMAT = "onedir-zip"
+_ONEDIR_ROOT = "hol-guard"
+_ONEDIR_LAUNCHER = f"{_ONEDIR_ROOT}/hol-guard"
+_ZIP_MODE_MASK = 0o170000
+_ZIP_SYMLINK_MODE = 0o120000
 _SHA40 = re.compile(r"[0-9a-f]{40}\Z")
 _TOKEN = re.compile(r"^[A-Za-z0-9._:-]{1,160}\Z")
 _SIGNING_IDENTITY = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ._():,+-]{0,159}\Z")
@@ -158,22 +166,172 @@ def verify(
         verifier.verify(binary, expected_team_id=native_team_id)
     except (OSError, ValueError, SystemExit) as error:
         raise DesktopAttestationError("post-sign native sidecar verification failed") from error
+    return _evidence(
+        binary,
+        manifest,
+        marker,
+        expected_marker,
+        version=version,
+        source_commit=source_commit,
+        source_tag=source_tag,
+        target=target,
+        recorded_team_id=recorded_team_id,
+    )
+
+
+def _evidence(
+    subject: Path,
+    manifest: Path,
+    marker: Path,
+    expected_marker: Mapping[str, object],
+    *,
+    version: str,
+    source_commit: str,
+    source_tag: str,
+    target: str,
+    recorded_team_id: str,
+) -> dict[str, object]:
     return {
         "schema": "hol-guard-desktop-core-evidence.v1",
         "version": version,
         "source_commit": source_commit,
         "source_tag": source_tag,
         "target": target,
-        "binary": {"name": binary.name, "sha256": expected_marker["binarySha256"], "size": binary.stat().st_size},
+        "binary": {"name": subject.name, "sha256": expected_marker["binarySha256"], "size": subject.stat().st_size},
         "manifest": {"name": manifest.name, "sha256": expected_marker["manifestSha256"]},
         "attestation": {"name": marker.name, "sha256": sha256_file(marker), "team_id": recorded_team_id},
         "post_sign_verified": True,
     }
 
 
+def _extract_onedir_zip(archive: Path, destination: Path) -> Path:
+    """Extract the onedir zip and return the launcher path (<dest>/hol-guard/hol-guard)."""
+    try:
+        with zipfile.ZipFile(archive) as zipped:
+            infos = zipped.infolist()
+            for info in infos:
+                name = info.filename
+                member = PurePosixPath(name)
+                if (
+                    member.is_absolute()
+                    or ".." in member.parts
+                    or member.parts[:1] != (_ONEDIR_ROOT,)
+                    or (info.external_attr >> 16) & _ZIP_MODE_MASK == _ZIP_SYMLINK_MODE
+                    or member.name.startswith("._")
+                    or "__MACOSX" in member.parts
+                ):
+                    raise DesktopAttestationError(f"Onedir zip member is not allowed: {name!r}")
+            for info in infos:
+                zipped.extract(info, destination)
+                name = info.filename
+                extracted = destination / name
+                if (info.external_attr >> 16) & stat.S_IXUSR and extracted.is_file():
+                    extracted.chmod(extracted.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    except zipfile.BadZipFile as error:
+        raise DesktopAttestationError("Desktop Core onedir archive is not a readable zip") from error
+    launcher = destination / _ONEDIR_LAUNCHER
+    if not launcher.is_file():
+        raise DesktopAttestationError("Desktop Core onedir archive is missing its launcher")
+    return launcher
+
+
+def verify_archive(
+    archive: Path,
+    manifest: Path,
+    marker: Path,
+    *,
+    version: str,
+    source_commit: str,
+    source_tag: str,
+    target: str,
+    expected_team_id: str,
+) -> dict[str, object]:
+    """Verify a signed onedir zip, its v2 manifest, and the attestation marker."""
+
+    _regular_file(archive, label="Desktop Core onedir archive", maximum=_MAX_BINARY_BYTES)
+    manifest_payload = _json(manifest, label="Desktop Core onedir manifest")
+    marker_payload = _json(marker, label="Desktop Core onedir attestation marker")
+    _require_token(version, label="release version")
+    _require_token(source_tag, label="source tag")
+    _require_token(target, label="release target")
+    if not _SHA40.fullmatch(source_commit):
+        raise DesktopAttestationError("source commit must be a full lowercase Git SHA")
+    if target == _LINUX_SIDECAR_TARGET:
+        raise DesktopAttestationError("Onedir Desktop Core attestation is macOS-only")
+    expected_manifest: Mapping[str, object] = {
+        "schema": _ONEDIR_MANIFEST_SCHEMA,
+        "channel": "stable",
+        "version": version,
+        "sourceCommit": source_commit,
+        "sourceTag": source_tag,
+        "target": target,
+        "format": _ONEDIR_FORMAT,
+        "artifact": archive.name,
+        "sha256": sha256_file(archive),
+        "size": archive.stat().st_size,
+        "launcher": _ONEDIR_LAUNCHER,
+        "bootstrapSchema": "guard-desktop-bootstrap.v1",
+    }
+    for key, expected in expected_manifest.items():
+        if manifest_payload.get(key) != expected:
+            raise DesktopAttestationError(f"Desktop Core onedir manifest mismatch for {key}")
+    launcher_sha = manifest_payload.get("launcherSha256")
+    if not isinstance(launcher_sha, str) or not re.fullmatch(r"[0-9a-f]{64}", launcher_sha):
+        raise DesktopAttestationError("Desktop Core onedir manifest launcherSha256 is not a digest")
+    expected_marker: Mapping[str, object] = {
+        "schema": _MARKER_SCHEMA,
+        "version": version,
+        "sourceCommit": source_commit,
+        "sourceTag": source_tag,
+        "target": target,
+        "binarySha256": sha256_file(archive),
+        "manifestSha256": sha256_file(manifest),
+    }
+    for key, expected in expected_marker.items():
+        if marker_payload.get(key) != expected:
+            raise DesktopAttestationError(f"Desktop Core onedir attestation mismatch for {key}")
+    _require_signing_identity(marker_payload.get("appleSigningIdentity"), label="attestation appleSigningIdentity")
+    for key in ("appleTeamId", "workflowRun", "attestedAt"):
+        _require_token(marker_payload.get(key), label=f"attestation {key}")
+    _require_token(expected_team_id, label="expected Apple team ID")
+    if marker_payload["appleTeamId"] != expected_team_id:
+        raise DesktopAttestationError("Desktop Core onedir attestation team identity mismatch")
+    recorded_team_id = marker_payload["appleTeamId"]
+    if not isinstance(recorded_team_id, str):
+        raise DesktopAttestationError("attestation appleTeamId is not a string")
+    verifier = _native_verifier()
+    with tempfile.TemporaryDirectory(prefix="hol-guard-onedir-attestation-") as tmp:
+        launcher = _extract_onedir_zip(archive, Path(tmp))
+        if sha256_file(launcher) != launcher_sha:
+            raise DesktopAttestationError("Desktop Core onedir launcher digest mismatch")
+        signing = verifier._load_signing_module()
+        if signing._team_id(launcher) != expected_team_id:
+            raise DesktopAttestationError("Desktop Core onedir launcher team identity mismatch")
+        try:
+            signing.require_onedir_seal(launcher.parent)
+        except (OSError, ValueError) as error:
+            raise DesktopAttestationError("Desktop Core onedir tree is not a sealed bundle") from error
+        try:
+            verifier.verify_onedir(launcher.parent, expected_team_id=expected_team_id)
+        except (OSError, ValueError, SystemExit) as error:
+            raise DesktopAttestationError("post-sign onedir native sidecar verification failed") from error
+    return _evidence(
+        archive,
+        manifest,
+        marker,
+        expected_marker,
+        version=version,
+        source_commit=source_commit,
+        source_tag=source_tag,
+        target=target,
+        recorded_team_id=recorded_team_id,
+    )
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--binary", type=Path, required=True)
+    parser.add_argument("--binary", type=Path)
+    parser.add_argument("--archive", type=Path)
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--marker", type=Path, required=True)
     parser.add_argument("--version", required=True)
@@ -187,17 +345,32 @@ def _parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
+    if (args.binary is None) == (args.archive is None):
+        raise SystemExit("exactly one of --binary or --archive is required")
     try:
-        evidence = verify(
-            args.binary,
-            args.manifest,
-            args.marker,
-            version=args.version,
-            source_commit=args.source_commit,
-            source_tag=args.source_tag,
-            target=args.target,
-            expected_team_id=args.team_id,
-        )
+        if args.archive is not None:
+            evidence = verify_archive(
+                args.archive,
+                args.manifest,
+                args.marker,
+                version=args.version,
+                source_commit=args.source_commit,
+                source_tag=args.source_tag,
+                target=args.target,
+                expected_team_id=args.team_id,
+            )
+        else:
+            assert args.binary is not None
+            evidence = verify(
+                args.binary,
+                args.manifest,
+                args.marker,
+                version=args.version,
+                source_commit=args.source_commit,
+                source_tag=args.source_tag,
+                target=args.target,
+                expected_team_id=args.team_id,
+            )
     except DesktopAttestationError as error:
         print(f"Desktop Core attestation failed: {error}", file=sys.stderr)
         return 1

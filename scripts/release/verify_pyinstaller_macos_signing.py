@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import struct
 import subprocess
 import tempfile
@@ -125,7 +126,7 @@ def _entry_bytes(
     return zlib.decompress(data) if compressed else data
 
 
-def _team_id(path: Path) -> str:
+def _signature_info(path: Path) -> tuple[str, int]:
     result = subprocess.run(
         ["codesign", "--display", "--verbose=4", str(path)],
         check=False,
@@ -133,11 +134,26 @@ def _team_id(path: Path) -> str:
         text=True,
     )
     if result.returncode != 0:
-        raise ValueError(f"Embedded Mach-O is not code signed: {path.name}: {result.stderr.strip()}")
+        raise ValueError(f"Mach-O is not code signed: {path.name}: {result.stderr.strip()}")
+    team_id: str | None = None
+    flags = 0
     for line in result.stderr.splitlines():
         if line.startswith("TeamIdentifier="):
-            return line.split("=", 1)[1]
-    raise ValueError(f"Embedded Mach-O has no TeamIdentifier: {path.name}")
+            team_id = line.split("=", 1)[1]
+        flags_match = re.search(r"\bflags=0x([0-9a-fA-F]+)", line)
+        if flags_match is not None:
+            flags = int(flags_match.group(1), 16)
+    if team_id is None:
+        raise ValueError(f"Mach-O has no TeamIdentifier: {path.name}")
+    return team_id, flags
+
+
+_CS_RUNTIME_FLAG = 0x10000
+
+
+def _team_id(path: Path) -> str:
+    team_id, _flags = _signature_info(path)
+    return team_id
 
 
 def _unique_entry(
@@ -266,17 +282,88 @@ def verify(binary: Path, expected_team_id: str) -> None:
     )
 
 
+def _is_macho_file(path: Path) -> bool:
+    try:
+        with path.open("rb") as handle:
+            return handle.read(4) in MACHO_MAGICS
+    except OSError:
+        return False
+
+
+def _sealed_bundle_output(launcher: Path) -> str:
+    result = subprocess.run(
+        ["codesign", "--display", "--verbose=4", str(launcher)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise ValueError(f"Onedir launcher is not code signed: {result.stderr.strip()}")
+    return result.stderr
+
+
+def require_onedir_seal(tree: Path) -> None:
+    """Require the onedir tree to be a codesign-sealed bundle (seals non-Mach-O files too)."""
+    launcher = tree / "hol-guard"
+    if not launcher.is_file():
+        raise ValueError(f"Onedir tree is missing its launcher: {launcher}")
+    if not (tree / "_CodeSignature" / "CodeResources").is_file():
+        raise ValueError(f"Onedir tree is missing _CodeSignature/CodeResources: {tree}")
+    display = _sealed_bundle_output(launcher)
+    if "Format=app bundle" not in display:
+        raise ValueError(f"Onedir launcher is not sealed as an app bundle: {launcher}")
+    if "Sealed Resources version=2" not in display:
+        raise ValueError(f"Onedir launcher does not declare sealed resources: {launcher}")
+    result = subprocess.run(
+        ["codesign", "--verify", "--strict", str(launcher)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise ValueError(f"Onedir launcher failed sealed-resource verification: {result.stderr.strip()}")
+
+
+def verify_onedir(tree: Path, expected_team_id: str) -> None:
+    """Walk a PyInstaller onedir tree and require every Mach-O to share one Team ID."""
+    if not tree.is_dir():
+        raise ValueError(f"Onedir tree does not exist: {tree}")
+    require_onedir_seal(tree)
+    macho_paths = [path for path in sorted(tree.rglob("*")) if path.is_file() and _is_macho_file(path)]
+    if not macho_paths:
+        raise ValueError("Onedir tree contained no Mach-O binaries")
+    for path in macho_paths:
+        team_id, flags = _signature_info(path)
+        if team_id != expected_team_id:
+            raise ValueError(
+                f"Onedir Mach-O {path.relative_to(tree)!r} has TeamIdentifier={team_id!r}; "
+                f"expected {expected_team_id!r}"
+            )
+        if not flags & _CS_RUNTIME_FLAG:
+            raise ValueError(f"Onedir Mach-O {path.relative_to(tree)!r} lacks the hardened-runtime flag")
+    print(
+        f"verified {len(macho_paths)} onedir Mach-O binaries with TeamIdentifier={expected_team_id} "
+        "and hardened runtime"
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--binary", type=Path, required=True)
+    parser.add_argument("--binary", type=Path)
+    parser.add_argument("--onedir", type=Path)
     parser.add_argument("--team-id", required=True)
     args = parser.parse_args()
-    if not args.binary.is_file():
+    if (args.binary is None) == (args.onedir is None):
+        raise SystemExit("exactly one of --binary or --onedir is required")
+    if args.binary is not None and not args.binary.is_file():
         raise SystemExit(f"Binary does not exist: {args.binary}")
     if not args.team_id or any(ch.isspace() for ch in args.team_id):
         raise SystemExit("team-id must be a non-empty token")
     try:
-        verify(args.binary, args.team_id)
+        if args.onedir is not None:
+            verify_onedir(args.onedir, args.team_id)
+        elif args.binary is not None:
+            verify(args.binary, args.team_id)
     except (OSError, ValueError, zlib.error) as exc:
         raise SystemExit(str(exc)) from exc
 
