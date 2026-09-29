@@ -486,7 +486,7 @@ class TestValidateOnedirZipMembers:
             zipped.writestr(info, b"target")
         with pytest.raises(DesktopCoreUpdateError) as error:
             update_desktop_core._validate_onedir_zip_members(archive)
-        assert error.value.reason_code == "desktop_core_install_failed"
+        assert error.value.reason_code == "desktop_core_symlink_dangling"
 
     @staticmethod
     def _link(zipped: zipfile.ZipFile, name: str, target: str) -> None:
@@ -512,7 +512,7 @@ class TestValidateOnedirZipMembers:
             self._link(zipped, "hol-guard/_internal/link", "../../escape")
         with pytest.raises(DesktopCoreUpdateError) as error:
             update_desktop_core._validate_onedir_zip_members(archive)
-        assert error.value.reason_code == "desktop_core_install_failed"
+        assert error.value.reason_code == "desktop_core_symlink_escape"
 
     def test_rejects_symlink_cycle(self, tmp_path: Path) -> None:
         archive = tmp_path / "bad.zip"
@@ -522,7 +522,7 @@ class TestValidateOnedirZipMembers:
             self._link(zipped, "hol-guard/_internal/loop", "loop")
         with pytest.raises(DesktopCoreUpdateError) as error:
             update_desktop_core._validate_onedir_zip_members(archive)
-        assert error.value.reason_code == "desktop_core_install_failed"
+        assert error.value.reason_code == "desktop_core_symlink_cycle"
 
     @pytest.mark.parametrize(
         "missing",
