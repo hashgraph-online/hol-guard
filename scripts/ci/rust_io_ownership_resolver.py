@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 from collections.abc import Mapping
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import Protocol, TypeVar
 
@@ -25,6 +26,13 @@ def _read(path: Path) -> str:
         return path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError) as exc:
         raise RuntimeError(f"could not inspect {path}") from exc
+
+
+@lru_cache(maxsize=None)
+def _parsed_module(path: Path) -> ast.Module:
+    """Parse a source file once per process; inputs are read-only while validating."""
+
+    return ast.parse(_read(path), filename=str(path))
 
 
 def _local_binding_names(record: FunctionRecordLike) -> frozenset[str]:
@@ -147,7 +155,7 @@ def _module_level_names(root: Path, record: FunctionRecordLike) -> frozenset[str
     """Return names bound at module top level that could shadow builtins."""
 
     names: set[str] = set()
-    tree = ast.parse(_read(root / record.path), filename=record.path)
+    tree = _parsed_module(root / record.path)
     for statement in tree.body:
         if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
             names.add(statement.name)
@@ -309,7 +317,7 @@ def _resolve_exported_symbol(
     if identity in seen:
         return None
     seen.add(identity)
-    tree = ast.parse(_read(root / module_path), filename=module_path)
+    tree = _parsed_module(root / module_path)
     for item in tree.body:
         if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)) and item.name == name:
             return module_path
@@ -338,7 +346,7 @@ def _resolve_exported_symbol(
             if resolved is not None:
                 return resolved
     for member_path in _union_source_modules(root, module_path, tree):
-        member_tree = ast.parse(_read(root / member_path), filename=member_path)
+        member_tree = _parsed_module(root / member_path)
         exported = _module_dunder_all(member_tree)
         if exported is not None:
             if name not in exported:
@@ -369,7 +377,7 @@ def _class_definition_path(
     if identity in seen:
         return None
     seen.add(identity)
-    tree = ast.parse(_read(root / module_path), filename=module_path)
+    tree = _parsed_module(root / module_path)
     for item in tree.body:
         if isinstance(item, ast.ClassDef) and item.name == name:
             return module_path
@@ -463,7 +471,7 @@ def _scope_imports(body: list[ast.stmt]) -> tuple[ast.Import | ast.ImportFrom, .
 def _visible_imports(root: Path, record: FunctionRecordLike) -> tuple[_VisibleImport, ...]:
     """Return module and enclosing-function imports visible to ``record``."""
 
-    tree = ast.parse(_read(root / record.path), filename=record.path)
+    tree = _parsed_module(root / record.path)
     visible = [_VisibleImport(node, 0) for node in _scope_imports(tree.body)]
     for scope, function in enumerate(_function_scopes(tree, record.qualname), start=1):
         visible.extend(_VisibleImport(node, scope) for node in _scope_imports(function.body))

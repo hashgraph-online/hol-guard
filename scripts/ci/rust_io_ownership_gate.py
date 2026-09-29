@@ -17,6 +17,7 @@ import sys
 from collections import Counter
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import Final, cast
 
@@ -321,6 +322,13 @@ def _read(path: Path) -> str:
         raise RuntimeError(f"could not inspect {path}") from exc
 
 
+@lru_cache(maxsize=None)
+def _parsed_module(path: Path) -> ast.Module:
+    """Parse a source file once per process; inputs are read-only while validating."""
+
+    return ast.parse(_read(path), filename=str(path))
+
+
 def _relative(path: Path, root: Path) -> str:
     return path.relative_to(root).as_posix()
 
@@ -361,7 +369,7 @@ def _function_map(root: Path) -> dict[tuple[str, str], list[FunctionRecord]]:
     source_root = root / "src/codex_plugin_scanner/guard"
     for path in sorted(source_root.rglob("*.py")):
         relative = _relative(path, root)
-        tree = ast.parse(_read(path), filename=relative)
+        tree = _parsed_module(path)
         for record in _functions(tree, relative):
             result.setdefault((relative, record.name), []).append(record)
     return result
@@ -544,7 +552,7 @@ def _inventory(root: Path, reachable: tuple[FunctionRecord, ...]) -> list[IoObse
     source_root = root / "src/codex_plugin_scanner/guard"
     for path in sorted(source_root.rglob("*.py")):
         relative = _relative(path, root)
-        tree = ast.parse(_read(path), filename=relative)
+        tree = _parsed_module(path)
         module_records = tuple(_functions(tree, relative))
         for record in module_records:
             for observation in _observations(record):
