@@ -81,6 +81,10 @@ class CommandActivityWriter(Protocol):
     ) -> bool: ...
 
 
+# Startup priming keeps the publish bound so a slow first publication never
+# delays worker construction. Requests that arrive during a resident restart
+# wait on the readiness bound instead, which needs a wider window on macOS
+# and Windows where republication is slower.
 _NATIVE_POLICY_STARTUP_READY_TIMEOUT_SECONDS = _PUBLISH_TIMEOUT_SECONDS
 _NATIVE_POLICY_READY_TIMEOUT_SECONDS = 25.0 if sys.platform in {"darwin", "win32"} else _PUBLISH_TIMEOUT_SECONDS
 _TRANSIENT_RESIDENT_PUBLICATION_ERRORS = frozenset(
