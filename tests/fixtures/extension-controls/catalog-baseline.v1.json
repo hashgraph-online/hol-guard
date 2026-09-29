@@ -6,7 +6,7 @@
     "canonical_diff_digest",
     "effective"
   ],
-  "catalog_digest": "6b87e56dd952c06dad9a875445445ea9ec7b263ff93cd24fd0d08fcd24ea4036",
+  "catalog_digest": "7562536730e27dcf852859983a9fd29fb9574a046d481267ee3f07b01595d25a",
   "control_schema_version": "1.0.0",
   "daemon_api_schema": "guard.daemon.extension-controls.v1",
   "effective_shape": [
@@ -20,7 +20,7 @@
     "failures",
     "projection"
   ],
-  "extension_count": 74,
+  "extension_count": 75,
   "extension_ids": [
     "command.api-gateway",
     "command.backup.borg",
@@ -62,6 +62,7 @@
     "command.load-balancer",
     "command.mcp-filesystem",
     "command.mcp-instapods",
+    "command.mcp-pr-ui-compare",
     "command.messaging.kafka",
     "command.messaging.nats",
     "command.messaging.rabbitmq",
@@ -100,7 +101,7 @@
   "extension_schema_version": 2,
   "installed_browser_config": "dashboard/playwright.installed.config.ts",
   "overview_route": "/extensions",
-  "permission_count": 259,
+  "permission_count": 260,
   "permission_examples": {
     "command.api-gateway.permission.delete": "aws apigateway delete-rest-api",
     "command.backup.borg.permission.mutation": "borg delete",
@@ -274,6 +275,7 @@
     "command.load-balancer.permission.delete": "aws elb delete-load-balancer",
     "command.mcp-filesystem.permission.mcp-filesystem-tool": "npx -y @modelcontextprotocol/server-filesystem",
     "command.mcp-instapods.permission.mcp-instapods-tool": "https://app.instapods.com/api/mcp",
+    "command.mcp-pr-ui-compare.permission.mcp-prxhuixhcompare-tool": "npx -y pr-ui-compare",
     "command.messaging.kafka.permission.delete": "kafka-topics --delete",
     "command.messaging.nats.permission.delete": "nats str rm ORDERS",
     "command.messaging.rabbitmq.permission.delete": "rabbitmqctl delete_queue jobs",
@@ -631,6 +633,7 @@
     "command.load-balancer.permission.delete",
     "command.mcp-filesystem.permission.mcp-filesystem-tool",
     "command.mcp-instapods.permission.mcp-instapods-tool",
+    "command.mcp-pr-ui-compare.permission.mcp-prxhuixhcompare-tool",
     "command.messaging.kafka.permission.delete",
     "command.messaging.nats.permission.delete",
     "command.messaging.rabbitmq.permission.delete",

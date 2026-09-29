@@ -175,6 +175,15 @@ def test_current_unmapped_contribution_gets_reviewed_mapping_instructions() -> N
     assert MODULE.MARKER not in body
 
 
+def test_updated_existing_unmapped_contribution_does_not_repeat_claim_guidance() -> None:
+    client = FakeGitHub()
+    contribution_path = configure_unmapped_contribution(client, "command.unmapped")
+    client.file_payloads[(BEFORE_SHA, contribution_path)] = {"schemaVersion": "v1"}
+
+    assert MODULE.process(client, 7, MODULE.DEFAULT_STUDIO_URL) == 0
+    assert client.posted == []
+
+
 def test_guidance_is_idempotent_only_for_the_trusted_bot() -> None:
     client = FakeGitHub()
     configure_unmapped_contribution(client, "command.unmapped")
