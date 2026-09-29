@@ -6,10 +6,6 @@ on:
     types: [requested, in_progress]
 
 # Only trusted default-branch code runs. Never consume PR code, caches or artifacts.
-permissions:
-  actions: write
-  pull-requests: read
-
 concurrency:
   group: ci-superseded-${{ github.event.workflow_run.id }}
   cancel-in-progress: false
@@ -17,6 +13,9 @@ concurrency:
 jobs:
   retire:
     if: github.event.workflow_run.event == 'pull_request'
+    permissions:
+      actions: write
+      pull-requests: read
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
