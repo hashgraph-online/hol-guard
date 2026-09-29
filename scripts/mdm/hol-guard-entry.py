@@ -726,21 +726,28 @@ def _try_codex_daemon_bridge() -> bool:
             return False
         response, hook_input = request_result
         if _codex_daemon_worker_failed(response):
-            response = _codex_sent_hook_failure_response(event_name)
-        elif event_name == "PreToolUse":
+            return False
+        if event_name == "PreToolUse":
             hook_output = response.get("hookSpecificOutput")
             if isinstance(hook_output, dict) and hook_output.get("permissionDecision") == "deny":
-                from codex_plugin_scanner.guard.adapters.codex_daemon_hook_resume import (
-                    apply_browser_approval_wait,
+                reason = hook_output.get("permissionDecisionReason")
+                has_approval_request = (
+                    response.get("guardApprovalRequestId")
+                    or response.get("guardApprovalUrl")
+                    or (isinstance(reason, str) and "/requests/" in reason)
                 )
+                if has_approval_request:
+                    from codex_plugin_scanner.guard.adapters.codex_daemon_hook_resume import (
+                        apply_browser_approval_wait,
+                    )
 
-                response = apply_browser_approval_wait(
-                    response,
-                    event_name=event_name,
-                    hook_input=hook_input,
-                    state_path=str(config["state_path"]),
-                    deadline=deadline,
-                )
+                    response = apply_browser_approval_wait(
+                        response,
+                        event_name=event_name,
+                        hook_input=hook_input,
+                        state_path=str(config["state_path"]),
+                        deadline=deadline,
+                    )
     sys.stdout.write(
         json.dumps(
             _codex_normalize_hook_response(response, event_name=event_name),
