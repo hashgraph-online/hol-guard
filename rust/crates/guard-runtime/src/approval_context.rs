@@ -265,6 +265,7 @@ pub(super) fn derive_context_with_snapshot(
         None,
         None,
         Some(envelope.source.home_dir.as_str()),
+        envelope.source.cwd.as_deref(),
     );
     if result.action != intrinsic.action
         || action_rank(&intrinsic.minimum_action).is_none()

@@ -340,6 +340,7 @@ fn evaluate_validated_envelope(
                         ),
                 ),
                 Some(envelope.source.home_dir.as_str()),
+                envelope.source.cwd.as_deref(),
             );
             let evaluated = if let Some(snapshot) = policy_snapshot {
                 crate::policy_enforcement::apply_pre_tool_policy(

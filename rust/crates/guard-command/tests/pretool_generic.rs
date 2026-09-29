@@ -201,6 +201,7 @@ fn devin(payload: Value) -> PreToolResultV1 {
         None,
         None,
         Some("/Users/tester"),
+        Some("/Users/tester"),
     )
 }
 
