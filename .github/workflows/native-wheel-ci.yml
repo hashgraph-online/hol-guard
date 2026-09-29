@@ -360,8 +360,12 @@ jobs:
                 break
               fi
               if [[ ! -f "$output_path" ]]; then
-                echo "::warning::Intel macOS SLO attempt ${attempt}/3 crashed without a report (transient hard failure); retrying the same installed wheel."
-                continue
+                if grep -Eq 'native_installed_slo_failed: recovery sample [0-9]+ failed' "${output_path}.stderr"; then
+                  echo "::warning::Intel macOS SLO attempt ${attempt}/3 hit transient recovery routing crash; retrying."
+                  continue
+                fi
+                echo "Intel macOS SLO crashed without a report for a non-retryable reason." >&2
+                exit "$slo_status"
               fi
               cp "$output_path" native-installed-slo.json
               if ! retryable_intel_latency_miss "$output_path"; then
