@@ -113,7 +113,7 @@ def test_platform_gates_require_complete_inventory_and_all_native_proofs() -> No
     for platform in ["linux", "windows", "macos"]:
         regression = jobs[f"{platform}-regression"]
         assert regression["needs"] == f"{platform}-build"
-        assert regression["strategy"]["matrix"]["shard"] == list(range(16))
+        assert regression["strategy"]["matrix"]["shard"] == list(range(4))
         assert regression["strategy"]["fail-fast"] is False
         assert "if" not in regression
         assert "continue-on-error" not in regression

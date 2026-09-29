@@ -314,18 +314,6 @@ jobs:
           - 1
           - 2
           - 3
-          - 4
-          - 5
-          - 6
-          - 7
-          - 8
-          - 9
-          - 10
-          - 11
-          - 12
-          - 13
-          - 14
-          - 15
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
@@ -335,7 +323,7 @@ jobs:
           artifact-name: hol-guard-native-build-linux-x64
           platform: x86_64-unknown-linux-musl
           shard-index: ${{ matrix.shard }}
-          shard-count: '16'
+          shard-count: '4'
   windows-build:
     runs-on: windows-latest
     timeout-minutes: 10
@@ -352,8 +340,6 @@ jobs:
           enable-cache: true
       - run: uv sync --frozen --no-dev --extra dev --python 3.12
       - uses: ./.github/actions/setup-rust
-        with:
-          cache-key: native-wheel-windows-release
       - name: Build pure Python wheel
         run: uv build --wheel --out-dir pure-dist
       - name: Build native runtime
@@ -527,18 +513,6 @@ jobs:
           - 1
           - 2
           - 3
-          - 4
-          - 5
-          - 6
-          - 7
-          - 8
-          - 9
-          - 10
-          - 11
-          - 12
-          - 13
-          - 14
-          - 15
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
@@ -548,7 +522,7 @@ jobs:
           artifact-name: hol-guard-native-build-windows-x64
           platform: x86_64-pc-windows-msvc
           shard-index: ${{ matrix.shard }}
-          shard-count: '16'
+          shard-count: '4'
   macos-proof:
     needs: macos-build
     strategy:
@@ -739,18 +713,6 @@ jobs:
           - 1
           - 2
           - 3
-          - 4
-          - 5
-          - 6
-          - 7
-          - 8
-          - 9
-          - 10
-          - 11
-          - 12
-          - 13
-          - 14
-          - 15
         include:
           - runner: macos-15-intel
             target: x86_64-apple-darwin
@@ -768,7 +730,7 @@ jobs:
           artifact-name: hol-guard-native-wheel-${{ matrix.target }}
           platform: ${{ matrix.target }}
           shard-index: ${{ matrix.shard }}
-          shard-count: '16'
+          shard-count: '4'
   macos:
     if: always()
     needs:
@@ -832,4 +794,4 @@ jobs:
           path: native-regression-reports
       - name: Prove the shards ran every collected test exactly once
         run: python scripts/ci/verify_native_regression_shards.py --root native-regression-reports --shard-count
-          16
+          4
