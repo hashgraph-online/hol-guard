@@ -42,12 +42,19 @@ CONTRIBUTION_PREFIXES = (
 EXTENSION_ID_RE = re.compile(r"^(?:command|mcp)\.[a-z0-9]+(?:[.-][a-z0-9]+)*$")
 TAG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 GITHUB_ID_RE = re.compile(r"^[1-9][0-9]{0,19}$")
+GITHUB_LOGIN_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,98}[A-Za-z0-9])?$")
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 TRUSTED_NOTICE_ACTOR_ID = 41898282
 MAX_LISTING_BYTES = 16_384
+LISTING_SCHEMA_V1 = "guard.extension-listing.v1"
+LISTING_SCHEMA_V2 = "guard.extension-listing.v2"
 LISTING_REQUIRED_KEYS = frozenset({"schemaVersion", "extensionId", "tagline", "category", "limitations"})
 LISTING_ALLOWED_KEYS = LISTING_REQUIRED_KEYS | frozenset({"documentationUrl", "tags", "maintainerGithubIds"})
+LISTING_V2_REQUIRED_KEYS = LISTING_REQUIRED_KEYS | frozenset(
+    {"summary", "contributors", "originalContributions", "upstream"}
+)
+LISTING_V2_ALLOWED_KEYS = LISTING_V2_REQUIRED_KEYS | frozenset({"documentationUrl", "tags", "maintainerGithubIds"})
 LISTING_CATEGORIES = frozenset(
     {
         "core-safety",
@@ -60,6 +67,8 @@ LISTING_CATEGORIES = frozenset(
         "other",
     }
 )
+CONTRIBUTOR_ROLES = frozenset({"author", "co-author", "reviewer", "maintainer"})
+ORIGINAL_CONTRIBUTION_KINDS = frozenset({"pull-request", "issue", "commit", "discussion"})
 
 
 class ClaimNoticeError(RuntimeError):
@@ -280,13 +289,84 @@ def _public_https(value: object) -> None:
         raise ClaimNoticeError("listing documentationUrl must use public HTTPS without credentials") from error
 
 
+def _public_reference(value: object, *, field: str) -> None:
+    try:
+        _public_https(value)
+    except ClaimNoticeError as error:
+        raise ClaimNoticeError(f"listing {field} must use public HTTPS without credentials") from error
+
+
+def _validate_v2_credit_fields(listing: dict[str, Any], extension_id: str) -> None:
+    _plain_text(listing["summary"], minimum=20, maximum=2048, field="summary")
+
+    contributors = listing["contributors"]
+    if not isinstance(contributors, list) or len(contributors) > 8:
+        raise ClaimNoticeError(f"{extension_id}: contributors must be an array of at most eight entries")
+    contributor_ids: set[str] = set()
+    for contributor in contributors:
+        if not isinstance(contributor, dict) or frozenset(contributor) != {
+            "githubId",
+            "githubLogin",
+            "roles",
+        }:
+            raise ClaimNoticeError(f"{extension_id}: contributor fields do not match the canonical schema")
+        github_id = contributor["githubId"]
+        if not isinstance(github_id, str) or not GITHUB_ID_RE.fullmatch(github_id):
+            raise ClaimNoticeError(f"{extension_id}: contributor GitHub ID is invalid")
+        if github_id in contributor_ids:
+            raise ClaimNoticeError(f"{extension_id}: contributor GitHub IDs must be unique")
+        contributor_ids.add(github_id)
+        github_login = _plain_text(contributor["githubLogin"], minimum=1, maximum=100, field="contributors.githubLogin")
+        if not GITHUB_LOGIN_RE.fullmatch(github_login):
+            raise ClaimNoticeError(f"{extension_id}: contributor GitHub login is invalid")
+        roles = contributor["roles"]
+        if not isinstance(roles, list) or not 1 <= len(roles) <= 3:
+            raise ClaimNoticeError(f"{extension_id}: contributor roles are invalid")
+        if any(not isinstance(role, str) or role not in CONTRIBUTOR_ROLES for role in roles):
+            raise ClaimNoticeError(f"{extension_id}: contributor roles are invalid")
+        if len(set(roles)) != len(roles):
+            raise ClaimNoticeError(f"{extension_id}: contributor roles must be unique")
+
+    references = listing["originalContributions"]
+    if not isinstance(references, list) or len(references) > 8:
+        raise ClaimNoticeError(f"{extension_id}: original contribution references are invalid")
+    reference_urls: set[str] = set()
+    for reference in references:
+        if not isinstance(reference, dict) or frozenset(reference) != {"kind", "url"}:
+            raise ClaimNoticeError(f"{extension_id}: original contribution fields do not match the canonical schema")
+        if reference["kind"] not in ORIGINAL_CONTRIBUTION_KINDS:
+            raise ClaimNoticeError(f"{extension_id}: original contribution kind is invalid")
+        url = reference["url"]
+        _public_reference(url, field="originalContributions.url")
+        if not isinstance(url, str):  # Static narrowing after _public_https validates the value.
+            raise ClaimNoticeError(f"{extension_id}: original contribution URL is invalid")
+        if url in reference_urls:
+            raise ClaimNoticeError(f"{extension_id}: original contribution URLs must be unique")
+        reference_urls.add(url)
+
+    upstream = listing["upstream"]
+    if upstream is None:
+        return
+    if not isinstance(upstream, dict) or frozenset(upstream) != {"name", "url"}:
+        raise ClaimNoticeError(f"{extension_id}: upstream fields do not match the canonical schema")
+    _plain_text(upstream["name"], minimum=2, maximum=160, field="upstream.name")
+    _public_reference(upstream["url"], field="upstream.url")
+
+
 def accepted_github_ids(listing: dict[str, Any], extension_id: str) -> tuple[str, ...]:
     """Validate the complete listing contract, then return its reviewed claimant IDs."""
     keys = frozenset(listing)
-    if not keys.issuperset(LISTING_REQUIRED_KEYS) or not keys.issubset(LISTING_ALLOWED_KEYS):
-        raise ClaimNoticeError(f"{extension_id}: listing fields do not match the canonical schema")
-    if listing.get("schemaVersion") != "guard.extension-listing.v1":
+    schema_version = listing.get("schemaVersion")
+    if schema_version == LISTING_SCHEMA_V1:
+        required_keys = LISTING_REQUIRED_KEYS
+        allowed_keys = LISTING_ALLOWED_KEYS
+    elif schema_version == LISTING_SCHEMA_V2:
+        required_keys = LISTING_V2_REQUIRED_KEYS
+        allowed_keys = LISTING_V2_ALLOWED_KEYS
+    else:
         raise ClaimNoticeError(f"{extension_id}: unsupported extension listing schema")
+    if not keys.issuperset(required_keys) or not keys.issubset(allowed_keys):
+        raise ClaimNoticeError(f"{extension_id}: listing fields do not match the canonical schema")
     listed_id = listing.get("extensionId")
     if (
         listed_id != extension_id
@@ -316,6 +396,9 @@ def accepted_github_ids(listing: dict[str, Any], extension_id: str) -> tuple[str
             raise ClaimNoticeError(f"{extension_id}: listing tags are invalid")
         if len(set(tags)) != len(tags):
             raise ClaimNoticeError(f"{extension_id}: listing tags must be unique")
+
+    if schema_version == LISTING_SCHEMA_V2:
+        _validate_v2_credit_fields(listing, extension_id)
 
     values = listing.get("maintainerGithubIds", [])
     if not isinstance(values, list) or len(values) > 8:

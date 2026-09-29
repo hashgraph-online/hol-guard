@@ -62,7 +62,7 @@ def test_critical_daemon_liveness_does_not_wait_for_locked_storage(
     store = GuardStore(tmp_path / "guard-home")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
-    blocker = sqlite3.connect(store.path, timeout=0.1, isolation_level=None)
+    blocker = sqlite3.connect(store.path, timeout=2.0, isolation_level=None)
 
     try:
         initial_runtime = store.get_runtime_state()

@@ -6,6 +6,7 @@ import json
 import sys
 import time
 from collections.abc import Mapping, Sequence
+from contextlib import suppress
 from pathlib import Path
 
 if __package__:
@@ -14,6 +15,7 @@ if __package__:
     from ..codex_hook_bridge_runtime import bridge_config_from_argv as _parse_bridge_config
     from ..config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS
     from ..daemon.hook_availability_policy import hook_event_is_permission_request
+    from ..daemon.hook_launcher_recovery import hook_action_is_launcher_recovery_safe
     from ..live_process_identity import (
         CODEX_BROWSER_WAIT_PROCESS_KEY,
         CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY,
@@ -44,6 +46,9 @@ else:  # pragma: no cover - exercised by subprocess integration tests
     from codex_plugin_scanner.guard.daemon.hook_availability_policy import (
         hook_event_is_permission_request,
     )
+    from codex_plugin_scanner.guard.daemon.hook_launcher_recovery import (
+        hook_action_is_launcher_recovery_safe,
+    )
     from codex_plugin_scanner.guard.live_process_identity import (
         CODEX_BROWSER_WAIT_PROCESS_KEY,
         CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY,
@@ -53,6 +58,7 @@ else:  # pragma: no cover - exercised by subprocess integration tests
 _HOOK_TIMEOUT_GRACE_SECONDS = 2
 _DISCOVERY_PROTOCOL_VERSION = 1
 _MAX_HOOK_INPUT_BYTES = 1_000_000
+_BRIDGE_FAILURE_SCHEMA = "hol-guard.codex-bridge-failure.v1"
 _FAIL_CLOSED_REASON = "HOL Guard could not authenticate the local daemon. Run `hol-guard daemon repair`, then retry."
 _LAUNCH_INTEGRITY_REASON = (
     "HOL Guard could not authenticate its managed Codex hook launcher. Run `hol-guard install codex`, then retry."
@@ -220,6 +226,7 @@ def main(
     else:
         event_name, data, timeout_seconds = hook_input
         deadline = time.monotonic() + timeout_seconds
+        failure_causes = []
         response, daemon_overloaded, launch_integrity_failed = bridge_review_response(
             state_path=state_path,
             fallback_command=fallback_command,
@@ -229,10 +236,23 @@ def main(
             deadline=deadline,
             manifest_path=manifest_path,
             config_json=config_json,
+            failure_causes=failure_causes,
         )
         if response is None:
             if launch_integrity_failed:
-                response = _fail_closed(event_name, _LAUNCH_INTEGRITY_REASON)
+                # Diagnostic delivery must not interrupt the denial response.
+                with suppress(OSError, ValueError, TypeError):
+                    sys.stderr.write(
+                        json.dumps(
+                            {
+                                "schema": _BRIDGE_FAILURE_SCHEMA,
+                                "causes": failure_causes,
+                            },
+                            separators=(",", ":"),
+                        )
+                        + "\n"
+                    )
+                response = _launcher_integrity_response(event_name, data)
             else:
                 failure_reason = _OVERLOAD_REASON if daemon_overloaded else _FAIL_CLOSED_REASON
                 response = _unavailable_response(event_name, failure_reason, data)
@@ -246,6 +266,17 @@ def main(
             )
         )
     return 0
+
+
+def _launcher_integrity_response(event_name: str, data: str) -> dict[str, object]:
+    """Keep a bad launcher from approving work, without locking out its repair."""
+
+    payload = _json_object(data)
+    if event_name == "PreToolUse" and payload is not None and hook_action_is_launcher_recovery_safe(payload):
+        return _unavailable_response(event_name, _LAUNCH_INTEGRITY_REASON, data)
+    if event_name in {"PreToolUse", "PermissionRequest"}:
+        return _fail_closed(event_name, _LAUNCH_INTEGRITY_REASON)
+    return _unavailable_response(event_name, _LAUNCH_INTEGRITY_REASON, data)
 
 
 def _bridge_output(

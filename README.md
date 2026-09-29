@@ -11,6 +11,7 @@
 [![Publish](https://img.shields.io/github/actions/workflow/status/hashgraph-online/hol-guard/publish.yml?branch=main&label=Publish&logo=githubactions&logoColor=white)](https://github.com/hashgraph-online/hol-guard/actions/workflows/publish.yml)
 [![Container Image](https://img.shields.io/badge/ghcr-hol--guard-2496ED?logo=docker&logoColor=white)](https://github.com/hashgraph-online/hol-guard/pkgs/container/hol-guard)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/hashgraph-online/hol-guard/badge)](https://scorecard.dev/viewer/?uri=github.com/hashgraph-online/hol-guard)
+[![Vercel OSS Program](https://vercel.com/oss/program-badge.svg)](https://vercel.com/oss)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](./LICENSE)
 [![GitHub Stars](https://img.shields.io/github/stars/hashgraph-online/hol-guard?style=social)](https://github.com/hashgraph-online/hol-guard/stargazers)
 [![Lint: ruff](https://img.shields.io/badge/lint-ruff-D7FF64.svg)](https://github.com/astral-sh/ruff)
@@ -23,6 +24,9 @@ HOL Guard reviews agent actions before they run: shell commands, file access, pa
 Run it locally without an account. Use the CLI and local dashboard to manage protection, resolve approvals, and inspect decision history. Optional [Guard Cloud](docs/guard/local-vs-cloud.md) adds shared history, team policy, and fleet management.
 
 [Get started](#install-hol-guard) · [Supported agents](#supported-ai-agents) · [Plugin scanner](#plugin-scanner) · [Documentation](#documentation) · [Contribute an extension](#contribute-a-new-extension) · [Development](#development)
+
+<!-- hol-sponsors:start -->
+<!-- hol-sponsors:end -->
 
 ## Install HOL Guard
 
@@ -48,7 +52,7 @@ To update an existing installation:
 hol-guard update
 ```
 
-For manual setup, see the [installation guide](docs/guard/get-started.md). Release details and prereleases are on the [releases page](https://github.com/hashgraph-online/hol-guard/releases).
+For manual setup, see the [installation guide](docs/guard/get-started.md). Annotated release notes with upgrade context live at [hol.org/guard/releases](https://hol.org/guard/releases); raw releases and prereleases are on the [GitHub releases page](https://github.com/hashgraph-online/hol-guard/releases).
 
 ## What HOL Guard Protects
 
@@ -65,7 +69,7 @@ Guard connects through native agent hooks, managed MCP proxies, and launch integ
 
 ## Supported AI Agents
 
-Codex, Claude Code, GitHub Copilot CLI, Cursor, Cline, Gemini CLI, Grok, Hermes, Kimi Code, Pi, oh-my-pi, OpenClaw, OpenCode, Antigravity, and ZCode. [Paseo](docs/guard/paseo.md) is supported through these native provider integrations, with per-provider coverage.
+Codex, Claude Code, GitHub Copilot CLI, Cursor, Cline, Gemini CLI, Grok, Hermes, Kimi Code, Pi, oh-my-pi, OpenClaw, OpenCode, Antigravity, ZCode, and Devin. [Paseo](docs/guard/paseo.md) is supported through these native provider integrations, with per-provider coverage.
 
 For example, to set up Codex explicitly:
 
@@ -344,7 +348,7 @@ Yes. Local protection, CLI commands, approvals, and receipts work without signin
 
 ### Which AI agents does HOL Guard support?
 
-Guard includes adapters for Codex, Claude Code, GitHub Copilot CLI, Cursor, Cline, Gemini CLI, Grok, Hermes, Kimi Code, Pi, oh-my-pi, OpenClaw, OpenCode, Antigravity, and ZCode. [Paseo](docs/guard/paseo.md) is supported through these native provider integrations, with per-provider coverage. The [support matrix](docs/guard/harness-support.md) explains which events and enforcement paths each adapter supports.
+Guard includes adapters for Codex, Claude Code, GitHub Copilot CLI, Cursor, Cline, Gemini CLI, Grok, Hermes, Kimi Code, Pi, oh-my-pi, OpenClaw, OpenCode, Antigravity, ZCode, and Devin. [Paseo](docs/guard/paseo.md) is supported through these native provider integrations, with per-provider coverage. The [support matrix](docs/guard/harness-support.md) explains which events and enforcement paths each adapter supports.
 
 ### What is the difference between HOL Guard and Plugin Scanner?
 
@@ -359,6 +363,8 @@ Guard inspects MCP server configuration and reviews supported MCP tool calls thr
 The action may need approval under your active policy, or its tools or artifacts may have changed. Start with `hol-guard approvals`, inspect the command with `hol-guard command explain '<command>'`, and use `hol-guard receipts` to review the recorded decision.
 
 ## Documentation
+
+For enrollment or stale native authority errors, see [extension-control recovery](docs/guard/extension-control-recovery.md).
 
 | Guide | Contents |
 | :--- | :--- |
@@ -388,7 +394,13 @@ The Rust compiler generates command descriptors, the catalog, and the native mat
 
 The **Extension Builder CLI** can create those command sources and portable fixtures from exported command metadata. It also supports MCP inventories. It works offline and reads the export without importing or running the target tool.
 
-**1. Propose the coverage.** Check the [Extension directory](docs/guard/extensions/README.md) for existing coverage. For a new capability, open an [Extension proposal](https://github.com/hashgraph-online/hol-guard/issues/new?template=command-extension-proposal.yml) with the proposed `command.<name>` ID, supported operations, destructive examples, safe counterparts, and upstream references. Extend an existing extension when it already owns the operation.
+Use the Builder's plan-and-apply flow to create the canonical source and fixture. Open a draft
+PR early for scope review. Before marking that PR ready for review, run
+`scripts/prepare_extension_contribution.py --source ... --fixture ...` to synchronize deterministic
+projections, then run `hol-guard extensions handoff --repo . --source ... --fixture ...`. The handoff
+check catches missing generated descriptors, catalog entries, and source bindings before final review.
+
+**1. Define the coverage in the PR.** Check the [Extension directory](docs/guard/extensions/README.md) and current [open pull requests](https://github.com/hashgraph-online/hol-guard/pulls) for existing or overlapping coverage. For a new capability, open a draft PR with the **Command extension** template and include the proposed `command.<name>` ID, supported operations, destructive examples, safe counterparts, and upstream references. Scope review happens on the PR; a separate issue is not required. Extend an existing extension when it already owns the operation.
 
 Follow the [development setup](#development), then run the examples below from your HOL Guard checkout. `uv run --no-sync` uses that checkout's installed development version.
 
@@ -467,7 +479,7 @@ uv run --no-sync python scripts/render_command_extension_directory.py --check
 git diff --check
 ```
 
-Add fixture cases for destructive operations, safe previews, aliases, reordered flags, quoting, malformed input, and compound commands. Run the Rust checks when changing native semantics and the relevant Python checks when changing tooling. Inspect the final diff, commit the canonical inputs, generated projections, fixtures, and authoring records, and open a PR against `main` linking the proposal and test results. Keep scratch kit directories and raw upstream exports out of the PR.
+Add fixture cases for destructive operations, safe previews, aliases, reordered flags, quoting, malformed input, and compound commands. Run the Rust checks when changing native semantics and the relevant Python checks when changing tooling. Inspect the final diff, commit the canonical inputs, generated projections, fixtures, and authoring records, and update the existing draft PR against `main` with the test results. Mark it ready for review after the handoff check passes. Keep scratch kit directories and raw upstream exports out of the PR.
 
 **Community contributions remain External and off by default.** Tests must prove they are inert until a local administrator enables them. Generating, applying, or merging a contribution does not activate it, and its rules cannot weaken Guard's required protections.
 
@@ -527,7 +539,9 @@ For optional Cisco coverage, use the dependency group command above. See [CONTRI
 Maintained by [Hashgraph Online](https://github.com/hashgraph-online).
 
 - [Report a bug or request a feature](https://github.com/hashgraph-online/hol-guard/issues)
-- [Browse releases](https://github.com/hashgraph-online/hol-guard/releases)
+- [Browse release notes](https://hol.org/guard/releases)
+- [See who builds Guard](https://hol.org/guard/contributors)
+- [Browse raw GitHub releases](https://github.com/hashgraph-online/hol-guard/releases)
 - [Explore the plugin security dataset](https://huggingface.co/datasets/HashgraphOnline/hol-plugin-security)
 
 ## License

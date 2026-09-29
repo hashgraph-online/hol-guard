@@ -11,7 +11,7 @@ maintainer checks across supported AI plugin ecosystems.
 
 ## Before you start
 
-- Search existing [issues](https://github.com/hashgraph-online/hol-guard/issues) and the
+- Search current [open pull requests](https://github.com/hashgraph-online/hol-guard/pulls) and the
   [Extension directory](docs/guard/extensions/README.md) for overlapping work.
 - Use [discussions](https://github.com/hashgraph-online/hol-guard/discussions) for design questions
   and broader feedback. Report vulnerabilities through [SECURITY.md](SECURITY.md).
@@ -30,9 +30,33 @@ maintainer checks across supported AI plugin ecosystems.
 
 Command source files under `contributions/command-sources/` own extension metadata, permissions,
 rules, and typed matcher trees. Rust validates and compiles them into descriptors, the catalog,
-and the native program. Edit the source and regenerate those projections together. Existing
-Python detector modules are retained for migration or reference coverage; do not copy their
-registration pattern to add an extension.
+and the native program. Use the Extension Builder to write the source, portable fixture, reviewed
+external trust-map entry, and deterministic projections together; do not hand-edit generated
+artifacts. Existing Python detector modules are retained for migration or reference coverage; do
+not copy their registration pattern to add an extension.
+
+## Fast path for command extensions
+
+1. Generate and review an offline Builder kit, then preview and apply it with
+   `hol-guard extensions apply ... --repo .`.
+2. Run `scripts/prepare_extension_contribution.py` for the source and fixture, then verify the
+   complete handoff with `hol-guard extensions handoff --repo . --source ... --fixture ...`.
+3. Open a PR using the **Command extension** template. Ready PRs receive Gitar's managed label,
+   which enables automatic repair for mechanical schema, binding, and generated-projection issues.
+
+The canonical source, portable fixture, and external trust entry are the contributor-owned inputs.
+Generated projections are mechanical closure work: Gitar or maintainers may regenerate them after
+the capability boundary is accepted, so projection drift alone should not bounce a contributor.
+
+Gitar does not choose command semantics, trust, claim authority, or safe variants. Contributors
+can request analysis without changes at any time with `gitar auto-apply:off`.
+
+For a PR from a personal fork, enable [Allow edits from
+maintainers](https://docs.github.com/en/pull-requests/how-tos/work-with-forks/allowing-changes-to-a-pull-request-branch-created-from-a-fork)
+if you want Gitar to commit a mechanical repair. GitHub requires the fork owner to grant that
+permission; this repository cannot enable it for the contributor. If GitHub instead offers
+**Allow edits and access to secrets by maintainers**, leave it disabled and apply Gitar's
+suggestion yourself.
 
 ## Development setup
 
@@ -91,9 +115,11 @@ cargo +1.88.0 clippy --locked --manifest-path rust/Cargo.toml --workspace --all-
 cargo +1.88.0 test --locked --manifest-path rust/Cargo.toml --workspace --all-targets
 ```
 
-Command source changes also need native fixture evaluation, generated-artifact checks, and
-catalog/directory validation. Follow the [extension validation steps](docs/guard/extensions/contributing.md#local-validation);
-a passing Python reference test alone does not establish native behavior.
+Command source changes need native fixture evaluation and generated-artifact checks. Contributors
+submit the source, its portable fixture, and the reviewed trust-map entry; maintainers run the
+documented preparation command to synchronize descriptors and public catalogs. Follow the
+[extension validation steps](docs/guard/extensions/contributing.md#local-validation); a passing
+Python reference test alone does not establish native behavior.
 
 For Python changes, run the relevant test files and the repository's quality checks:
 
@@ -126,12 +152,13 @@ checks authoring outside the checkout. Include the relevant CI results in the PR
 ## Contribution process
 
 1. Fork the repository and create a feature branch from `main`.
-2. For a new extension or material authority change, open an
-   [Extension proposal](https://github.com/hashgraph-online/hol-guard/issues/new?template=command-extension-proposal.yml)
-   and agree on the capability boundary and stable IDs.
+2. For a new extension or material authority change, describe the capability boundary and stable
+   IDs in a draft pull request using the **Command extension** template. Keep the PR draft until the
+   scope is reviewable; maintainers can redirect overlapping IDs there before implementation is complete.
 3. Make one coherent change, with native behavior fixtures and generated outputs when applicable.
 4. Run the relevant validation and inspect the complete diff, including generated files.
-5. Open a PR describing the problem, resulting behavior, exact validation commands, and any
+5. For a command extension, run `hol-guard extensions handoff` and use the **Command extension**
+   PR template. Describe the problem, resulting behavior, exact validation commands, and any
    remaining limitations. Wait for the applicable CI checks and maintainer review.
 
 Community extensions are reviewed as external contributions and remain off until enabled by a

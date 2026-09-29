@@ -11,7 +11,8 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts/notify_merged_extension_claimants.py"
 WORKFLOW = ROOT / ".github/workflows/extension-claim-notice.yml"
-SCHEMA = ROOT / "contracts/extensions/listing.v1.schema.json"
+SCHEMA_V1 = ROOT / "contracts/extensions/listing.v1.schema.json"
+SCHEMA_V2 = ROOT / "contracts/extensions/listing.v2.schema.json"
 SPEC = importlib.util.spec_from_file_location("guard_extension_claim_notice", SCRIPT)
 assert SPEC is not None and SPEC.loader is not None
 MODULE = importlib.util.module_from_spec(SPEC)
@@ -31,6 +32,22 @@ def listing(extension_id: str, ids: list[str]) -> dict[str, Any]:
         "limitations": ["Coverage is limited to the reviewed operations and the surrounding Guard policy."],
         "maintainerGithubIds": ids,
     }
+
+
+def listing_v2(extension_id: str, ids: list[str]) -> dict[str, Any]:
+    result = listing(extension_id, ids)
+    result.update(
+        {
+            "schemaVersion": "guard.extension-listing.v2",
+            "summary": "Bounded public credit for the reviewed declarative extension contribution.",
+            "contributors": [{"githubId": "900", "githubLogin": "credit-author", "roles": ["author"]}],
+            "originalContributions": [
+                {"kind": "pull-request", "url": "https://github.com/hashgraph-online/hol-guard/pull/3020"}
+            ],
+            "upstream": {"name": "Example upstream", "url": "https://github.com/example/project"},
+        }
+    )
+    return result
 
 
 class FakeGitHub:
@@ -255,14 +272,30 @@ def test_non_ascii_and_duplicate_github_ids_fail_closed() -> None:
         MODULE.accepted_github_ids(listing(extension_id, ["600", "600"]), extension_id)
 
 
+def test_v2_credit_never_becomes_claim_authority() -> None:
+    extension_id = "command.v2-credit"
+    v2 = listing_v2(extension_id, [])
+    assert MODULE.accepted_github_ids(v2, extension_id) == ()
+    v2["maintainerGithubIds"] = ["500"]
+    assert MODULE.accepted_github_ids(v2, extension_id) == ("500",)
+
+
+def test_v2_credit_contract_fails_closed() -> None:
+    v2 = listing_v2("command.invalid-v2-credit", ["500"])
+    v2["contributors"] = [{"githubId": "900", "githubLogin": "credit-author", "roles": ["owner"]}]
+    with pytest.raises(MODULE.ClaimNoticeError, match="contributor roles are invalid"):
+        MODULE.accepted_github_ids(v2, "command.invalid-v2-credit")
+
+
 def test_worker_authority_constants_match_public_schema() -> None:
-    schema = json.loads(SCHEMA.read_text(encoding="utf-8"))
-    required = frozenset(schema["required"])
-    allowed = frozenset(schema["properties"])
-    categories = frozenset(schema["properties"]["category"]["enum"])
-    github_id_pattern = schema["properties"]["maintainerGithubIds"]["items"]["pattern"]
-    assert required == MODULE.LISTING_REQUIRED_KEYS
-    assert allowed == MODULE.LISTING_ALLOWED_KEYS
+    v1 = json.loads(SCHEMA_V1.read_text(encoding="utf-8"))
+    v2 = json.loads(SCHEMA_V2.read_text(encoding="utf-8"))
+    categories = frozenset(v1["properties"]["category"]["enum"])
+    github_id_pattern = v1["properties"]["maintainerGithubIds"]["items"]["pattern"]
+    assert frozenset(v1["required"]) == MODULE.LISTING_REQUIRED_KEYS
+    assert frozenset(v1["properties"]) == MODULE.LISTING_ALLOWED_KEYS
+    assert frozenset(v2["required"]) == MODULE.LISTING_V2_REQUIRED_KEYS
+    assert frozenset(v2["properties"]) == MODULE.LISTING_V2_ALLOWED_KEYS
     assert categories == MODULE.LISTING_CATEGORIES
     assert github_id_pattern == MODULE.GITHUB_ID_RE.pattern
 

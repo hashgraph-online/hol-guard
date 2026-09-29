@@ -643,6 +643,7 @@ jobs:
           $work = Join-Path $env:RUNNER_TEMP "hol-guard-frozen-work"
           $spec = Join-Path $env:RUNNER_TEMP "hol-guard-frozen-spec"
           $versionFile = Join-Path $env:RUNNER_TEMP "hol-guard-version-info.txt"
+          $versionModule = Join-Path (Get-Location).Path "src/codex_plugin_scanner/version.py"
           New-Item -ItemType Directory -Force -Path $dist, $work, $spec | Out-Null
           uv sync --frozen --extra dev --extra mdm-build --python ${{ matrix.python-version }}
           $version = (uv run --no-sync python scripts/sync_repo_version.py --check).Trim()
@@ -655,6 +656,7 @@ jobs:
           }
           uv run --no-sync pyinstaller --clean --noconfirm --onedir --name hol-guard `
             --collect-submodules codex_plugin_scanner --collect-data codex_plugin_scanner `
+            --add-data "$versionModule;." `
             --version-file $versionFile `
             --distpath $dist --workpath $work --specpath $spec `
             scripts/mdm/hol-guard-entry.py

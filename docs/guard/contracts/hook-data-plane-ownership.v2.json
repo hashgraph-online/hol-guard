@@ -17,6 +17,7 @@
     "codex",
     "copilot",
     "cursor",
+    "devin",
     "gemini",
     "grok",
     "hermes",
@@ -39,6 +40,7 @@
     "codex": {"pre_tool_use": "installed_canonical", "post_tool_use": "installed_canonical"},
     "copilot": {"pre_tool_use": "installed_alias_requires_native_normalization", "post_tool_use": "installed_alias_requires_native_normalization"},
     "cursor": {"pre_tool_use": "installed_alias_requires_native_normalization", "post_tool_use": "installed_alias_requires_native_normalization"},
+    "devin": {"pre_tool_use": "installed_canonical", "post_tool_use": "installed_canonical"},
     "gemini": {"pre_tool_use": "detected_external_only", "post_tool_use": "unavailable"},
     "grok": {"pre_tool_use": "installed_cli_bridge", "post_tool_use": "unavailable"},
     "hermes": {"pre_tool_use": "installed_cli_bridge", "post_tool_use": "unavailable"},
@@ -221,6 +223,7 @@
         "src/codex_plugin_scanner/guard/adapters/codex.py",
         "src/codex_plugin_scanner/guard/adapters/contracts.py",
         "src/codex_plugin_scanner/guard/adapters/copilot.py",
+        "src/codex_plugin_scanner/guard/adapters/devin.py",
         "src/codex_plugin_scanner/guard/adapters/grok.py",
         "src/codex_plugin_scanner/guard/adapters/hermes.py",
         "src/codex_plugin_scanner/guard/adapters/hook_payloads.py",
@@ -284,6 +287,7 @@
         "src/codex_plugin_scanner/guard/daemon/hook_worker_responses.py",
         "src/codex_plugin_scanner/guard/daemon/hook_availability_policy.py",
         "src/codex_plugin_scanner/guard/daemon/hook_availability_floor.py",
+        "src/codex_plugin_scanner/guard/daemon/hook_launcher_recovery.py",
         "src/codex_plugin_scanner/guard/native_approval_bridge.py",
         "src/codex_plugin_scanner/guard/native_approval_bridge_v3.py",
         "src/codex_plugin_scanner/guard/native_approval_errors.py",
@@ -331,12 +335,10 @@
         "src/codex_plugin_scanner/guard/native_runtime.py",
         "src/codex_plugin_scanner/guard/native_runtime_admission.py",
         "src/codex_plugin_scanner/guard/native_route_receipt.py",
-        "src/codex_plugin_scanner/guard/native_runtime_resident.py",
-        "src/codex_plugin_scanner/guard/native_runtime_resident_transport.py",
         "src/codex_plugin_scanner/guard/native_runtime_resilience.py",
         "src/codex_plugin_scanner/guard/native_mode.py"
       ],
-      "current": "binary identity and mechanical client launch remain Python; authentication, framing, process and peer attestation, bounded generation retirement, supervisor liveness, reconnect, restart, and generation state are Rust-owned; the legacy Python resident module is unreachable from the ordinary graph",
+      "current": "Python performs binary identity checks and minimal client launch. Rust owns authentication, framing, process and peer attestation, bounded retirement, liveness, reconnect, restart, and generation state. Both superseded Python resident implementations are physically deleted.",
       "target": "binary identity and minimal Rust client launch only"
     },
     {
@@ -413,7 +415,11 @@
         "tests/test_rust_io_privacy_gate.py",
         ".github/workflows/decision-critical-io.yml",
         "tests/test_native_hook_edge.py",
-        "tests/test_native_pretool_generic.py"
+        "tests/test_native_pretool_generic.py",
+        "scripts/ci/python_runtime_retirement.py",
+        "tests/test_python_runtime_retirement.py",
+        "docs/guard/contracts/runtime-retirement-ledger.v1.json",
+        "docs/guard/adr/0013-native-resident-retirement.md"
       ],
       "current": "installed evidence and ownership enforcement",
       "target": "same"

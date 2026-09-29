@@ -326,6 +326,35 @@ def test_typed_transient_overload_retries_once_when_deadline_fits(
     assert "permissionDecision" not in payload["hookSpecificOutput"]
 
 
+def test_daemon_rpc_budget_stays_below_approval_wait(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[float] = []
+
+    def fake_daemon(**kwargs: object) -> None:
+        timeout = kwargs["timeout_seconds"]
+        assert isinstance(timeout, float)
+        seen.append(timeout)
+        raise OSError("down")
+
+    monkeypatch.setattr(bridge_flow, "_daemon_response", fake_daemon)
+    monkeypatch.setattr(bridge_flow, "_trusted_launch_for_fallback", lambda **_kwargs: (None, True))
+
+    response, overloaded, integrity_failed = bridge_flow.bridge_review_response(
+        state_path="state.json",
+        fallback_command=["/bin/echo", "fallback"],
+        start_command=["/bin/echo", "start"],
+        query="probe",
+        data="{}",
+        deadline=time.monotonic() + 300,
+        manifest_path="hooks.manifest.json",
+        config_json="{}",
+    )
+
+    assert response is None
+    assert overloaded is False
+    assert integrity_failed is True
+    assert seen == [float(bridge_flow._DAEMON_RPC_TIMEOUT_SECONDS)]
+
+
 def test_daemon_failure_kind_separates_overload_transport_and_control_plane() -> None:
     assert (
         bridge_flow._daemon_failure_kind(

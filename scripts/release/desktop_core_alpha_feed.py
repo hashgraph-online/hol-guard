@@ -12,8 +12,7 @@ from pathlib import Path
 BOOTSTRAP_SCHEMA = "guard-desktop-bootstrap.v1"
 MANIFEST_SCHEMA = "hol-guard-core-update.v1"
 MARKER_SCHEMA = "hol-guard-core-attestation.v3"
-SUPPORTED_TRAINS = frozenset({"3.0"})
-_STABLE_TAG = re.compile(r"^v(3\.(\d+)\.(\d+))$")
+_STABLE_TAG = re.compile(r"^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 
 
 def _sha256(path: Path) -> str:
@@ -39,17 +38,17 @@ def _emit(key: str, value: str | bool) -> None:
 
 
 def discover_release(tags_file: Path, requested_version: str = "") -> None:
-    candidates: list[tuple[tuple[int, int], str, str, str]] = []
+    """Select a Release Please stable tag. The version is not pinned."""
+    candidates: list[tuple[tuple[int, int, int], str, str, str]] = []
     for raw in tags_file.read_text(encoding="utf-8").splitlines():
         tag = raw.strip()
         match = _STABLE_TAG.fullmatch(tag)
         if match is None:
             continue
-        train = f"3.{match.group(2)}"
-        if train not in SUPPORTED_TRAINS:
-            continue
-        order = (int(match.group(2)), int(match.group(3)))
-        candidates.append((order, match.group(1), tag, train))
+        major, minor, patch = (int(match.group(1)), int(match.group(2)), int(match.group(3)))
+        version = f"{major}.{minor}.{patch}"
+        train = f"{major}.{minor}"
+        candidates.append(((major, minor, patch), version, tag, train))
     if requested_version:
         requested = [candidate for candidate in candidates if candidate[1] == requested_version]
         if not requested:

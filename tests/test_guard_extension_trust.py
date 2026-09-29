@@ -83,15 +83,23 @@ def test_trust_map_covers_every_builtin_extension() -> None:
     assert mapped_ids() == registry_ids
     assert ids_for_class("external") == {
         "command.blitcp",
+        "command.cloudg",
+        "command.cogext",
+        "command.digline",
+        "command.genclave",
+        "command.gitsync",
         "command.master-of",
         "command.mcp-filesystem",
         "command.mcp-instapods",
+        "command.mcp-pr-ui-compare",
         "command.noodle",
         "command.ollama",
         "command.probe",
         "command.remote.essh",
         "command.repo2nb",
+        "command.skill-base",
         "command.skill-sunset",
+        "command.uivoid",
     }
     assert trust_class_for("command.git") == "first-party"
     assert trust_class_for("command.cloud.aws") == "trusted-library"

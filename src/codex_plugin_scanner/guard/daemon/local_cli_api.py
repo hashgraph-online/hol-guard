@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 import time
+from contextlib import suppress
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -49,6 +50,7 @@ from ..runtime.local_mcp_probe import (
     mcp_launch_tokens,
     probe_stdio_mcp_server,
 )
+from ..runtime.observed_mcp_tools import discover_observed_mcp_tools
 from ..runtime.package_json_script_memory import (
     _package_item_available,
     operator_working_directory,
@@ -95,6 +97,18 @@ class LocalCliApiService:
         GET listing stays a store read. This write path is for Add custom
         extension so project scripts reappear without blocking the overview.
         """
+        # Connector history and configured launch discovery are independent.
+        with suppress(
+            OSError,
+            RuntimeError,
+            TypeError,
+            ValueError,
+            KeyError,
+            UnicodeError,
+            sqlite3.Error,
+            AttributeError,
+        ):
+            discover_observed_mcp_tools(self._store, seen_at=utc_now())
         try:
             labels = self._observe_harness_mcp_servers()
             items = apply_source_labels(
@@ -341,6 +355,11 @@ class LocalCliApiService:
         except ApprovalGateError as exc:
             raise LocalCliApiError(exc.status, exc.code, str(exc)) from exc
         command_states = self._command_states_from_payload(payload)
+        from ..native_policy_snapshot import notify_native_policy_mutation
+
+        # Retire acknowledged authority before writing. The final notification
+        # also rejects publications raced with a commit or rollback.
+        notify_native_policy_mutation(self._store.guard_home)
         try:
             revision = record_local_custom_extension_mutation(
                 self._store,
@@ -354,6 +373,8 @@ class LocalCliApiService:
             if str(exc) == "local_cli_revision_conflict":
                 raise LocalCliApiError(409, "revision_conflict") from exc
             raise LocalCliApiError(400, "invalid_local_cli_mutation", str(exc)) from exc
+        finally:
+            notify_native_policy_mutation(self._store.guard_home)
         return {
             "schema_version": _LOCAL_CLI_API_SCHEMA,
             "status": "applied",

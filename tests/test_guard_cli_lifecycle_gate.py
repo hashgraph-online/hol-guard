@@ -407,3 +407,25 @@ def test_desktop_child_env_is_cleared_when_the_gate_is_disabled(
     )
 
     assert "HOL_GUARD_APPROVAL_PASSWORD" not in os.environ
+
+
+def test_approval_prompt_tells_the_user_it_is_waiting(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from codex_plugin_scanner.guard.cli.approval_gate_prompt import prompt_for_approval_gate
+
+    password = "correct horse battery staple"
+    _ = update_settings(
+        tmp_path,
+        {"enabled": True, "new_password": password, "confirm_password": password},
+    )
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("getpass.getpass", lambda _prompt: password)
+
+    result = prompt_for_approval_gate(tmp_path)
+
+    assert result is not None
+    assert result.password == password
+    assert "waiting for your approval password" in capsys.readouterr().err

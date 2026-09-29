@@ -36,14 +36,16 @@ def _request(request_id: str) -> GuardApprovalRequest:
     )
 
 
-def _post_json(port: int, token: str, path: str, payload: dict[str, object]) -> dict[str, object]:
+def _post_json(
+    port: int, token: str, path: str, payload: dict[str, object], *, timeout: float = 5
+) -> dict[str, object]:
     request = urllib.request.Request(
         f"http://127.0.0.1:{port}{path}",
         data=json.dumps(payload).encode("utf-8"),
         headers={"Content-Type": "application/json", "X-Guard-Token": token},
         method="POST",
     )
-    with urllib.request.urlopen(request, timeout=5) as response:
+    with urllib.request.urlopen(request, timeout=timeout) as response:
         return json.loads(response.read().decode("utf-8"))
 
 
@@ -178,6 +180,7 @@ def test_codex_block_does_not_resume_codex_thread(
             daemon._server.auth_token,
             "/v1/requests/req-block/block",
             {"scope": "artifact", "reason": "blocked"},
+            timeout=15,
         )
     finally:
         daemon.stop()

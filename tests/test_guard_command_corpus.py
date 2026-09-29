@@ -399,23 +399,34 @@ def test_full_native_evaluation_matches_contract_and_reports_original_oracle_dif
 
 
 def test_windows_peak_rss_uses_process_working_set(monkeypatch: pytest.MonkeyPatch) -> None:
+    import ctypes
+    from ctypes import wintypes
+    from types import SimpleNamespace
+
     peak_bytes = 128 * 1024 * 1024
 
-    def fake_run(
-        command: list[str],
-        *,
-        check: bool,
-        capture_output: bool,
-        text: bool,
-        timeout: int,
-    ) -> subprocess.CompletedProcess[str]:
-        assert command[-1] == "(Get-Process -Id 4242).PeakWorkingSet64"
-        assert check and capture_output and text and timeout == 10
-        return subprocess.CompletedProcess(command, 0, stdout=f"{peak_bytes}\n", stderr="")
+    def fake_get_current_process() -> int:
+        return 4242
+
+    def fake_get_process_memory_info(handle: int, counters: object, size: int) -> int:
+        assert handle == 4242
+        word_size = ctypes.sizeof(ctypes.c_size_t)
+        peak_index = (2 * ctypes.sizeof(wintypes.DWORD) + word_size - 1) // word_size
+        assert size >= (peak_index + 1) * word_size
+        native_counters = ctypes.cast(cast(ctypes.c_void_p, counters), ctypes.POINTER(ctypes.c_size_t))
+        native_counters[peak_index] = peak_bytes
+        return 1
 
     monkeypatch.setattr(sys, "platform", "win32")
-    monkeypatch.setattr(os, "getpid", lambda: 4242)
-    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    def fake_win_dll(name: str, *, use_last_error: bool) -> SimpleNamespace:
+        assert use_last_error
+        if name == "kernel32":
+            return SimpleNamespace(GetCurrentProcess=fake_get_current_process)
+        assert name == "psapi"
+        return SimpleNamespace(GetProcessMemoryInfo=fake_get_process_memory_info)
+
+    monkeypatch.setattr(ctypes, "WinDLL", fake_win_dll, raising=False)
 
     assert peak_rss_mib() == 128.0
 
