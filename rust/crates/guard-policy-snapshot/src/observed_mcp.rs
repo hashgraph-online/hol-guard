@@ -50,7 +50,8 @@ pub(crate) fn validate_mcp_tool_actions(actions: &BTreeMap<String, String>) -> b
             let candidate = format!("{prefix}probe");
             return action == "block" && mcp_tool_namespace(&candidate) == Some(prefix);
         }
-        matches!(action.as_str(), "allow" | "block") && mcp_tool_namespace(tool).is_some()
+        matches!(action.as_str(), "allow" | "review" | "block")
+            && mcp_tool_namespace(tool).is_some()
     })
 }
 
@@ -64,6 +65,59 @@ pub fn observed_mcp_tool_action<'a>(
         .get(&format!("{harness}:{tool}"))
         .or_else(|| actions.get(&format!("{harness}:{namespace}*")))
         .map(String::as_str)
+}
+
+pub(crate) fn validate_mcp_provider_actions(actions: &BTreeMap<String, String>) -> bool {
+    if actions.len() > super::POLICY_SNAPSHOT_MAX_MCP_TOOL_ACTIONS {
+        return false;
+    }
+    actions.iter().all(|(selector, action)| {
+        let parts: Vec<_> = selector.split(':').collect();
+        if parts.len() != 5
+            || parts[2] != "composio"
+            || parts[3] != "all-accounts"
+            || !matches!(action.as_str(), "review" | "block")
+            || super::normalized_harness_selector(parts[0]).as_deref() != Some(parts[0])
+            || parts[4].is_empty()
+            || parts[4].len() > 128
+            || !parts[4]
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || b"_.-".contains(&byte))
+            || !parts[4].as_bytes()[0].is_ascii_alphanumeric()
+        {
+            return false;
+        }
+        mcp_tool_namespace(&format!("{}probe", parts[1])) == Some(parts[1])
+    })
+}
+
+pub fn mcp_provider_action_choice<'a>(
+    actions: &'a BTreeMap<String, String>,
+    harness: &str,
+    tool: &str,
+    slug: &str,
+) -> Option<&'a str> {
+    let namespace = mcp_tool_namespace(tool)?;
+    actions
+        .get(&format!(
+            "{harness}:{namespace}:composio:all-accounts:{slug}"
+        ))
+        .map(String::as_str)
+}
+
+pub fn mcp_provider_namespace_has_deny(
+    actions: &BTreeMap<String, String>,
+    harness: &str,
+    tool: &str,
+) -> bool {
+    let Some(namespace) = mcp_tool_namespace(tool) else {
+        return false;
+    };
+    let prefix = format!("{harness}:{namespace}:composio:all-accounts:");
+    actions
+        .range(prefix.clone()..)
+        .take_while(|(key, _)| key.starts_with(&prefix))
+        .any(|(_, state)| state == "block")
 }
 
 #[cfg(test)]

@@ -12,8 +12,9 @@ from dataclasses import dataclass
 from hashlib import sha256
 from typing import TYPE_CHECKING
 
+from ..local_cli_errors import LocalCliCatalogLimitError
 from ..native_policy_snapshot_codec import _normalized_harness_selector_v3
-from ..native_policy_snapshot_constants import POLICY_SNAPSHOT_MAX_MCP_TOOL_ACTIONS
+from ..native_policy_snapshot_constants import POLICY_SNAPSHOT_MAX_MCP_TOOL_ACTIONS, NativePolicySnapshotError
 from .local_cli_commands import MAX_LOCAL_CLI_COMMANDS, OTHER_COMMAND_ID, LocalCliCommand
 from .local_cli_identity import UnlistedCliIdentity
 from .mcp_protection import McpServerIdentity, build_mcp_server_identity
@@ -110,7 +111,7 @@ def tools_from_receipts(receipts: Sequence[Mapping[str, object]]) -> tuple[Obser
     return tuple(tools.values())
 
 
-def discover_observed_mcp_tools(store: GuardStore, *, seen_at: str) -> None:
+def discover_observed_mcp_tools(store: GuardStore, *, seen_at: str) -> int:
     """Backfill connector suggestions. Existing grants and tool states survive."""
 
     groups: dict[tuple[str, str], list[ObservedMcpTool]] = {}
@@ -128,6 +129,7 @@ def discover_observed_mcp_tools(store: GuardStore, *, seen_at: str) -> None:
         group = groups.setdefault(key, [])
         if tool not in group and len(group) < MAX_OBSERVED_MCP_TOOLS:
             group.append(tool)
+    saturated = 0
     for tools in groups.values():
         first = tools[0]
         server = first.server_identity
@@ -150,7 +152,14 @@ def discover_observed_mcp_tools(store: GuardStore, *, seen_at: str) -> None:
         ]
         # There is no allow-all fallback for an observed connector. Its catalog
         # is incomplete; unseen tools must retain their normal review.
-        store.merge_local_cli_commands(cli_id, catalog, limit=MAX_OBSERVED_MCP_TOOLS)
+        try:
+            store.merge_local_cli_commands(cli_id, catalog, limit=MAX_OBSERVED_MCP_TOOLS)
+        except LocalCliCatalogLimitError:
+            # Keep this connector's prior choices, continue other connectors,
+            # and let the caller report incomplete coverage.
+            saturated += 1
+            continue
+    return saturated
 
 
 def native_observed_mcp_tool_actions(store: GuardStore) -> dict[str, str]:
@@ -199,7 +208,7 @@ def native_observed_mcp_tool_actions(store: GuardStore) -> dict[str, str]:
             if tool is None or tool.namespace != namespace or tool.command_id != command.command_id:
                 continue
             state = states.get(command.command_id)
-            if state in {"allow", "block"}:
+            if state in {"allow", "review", "block"}:
                 actions[f"{harness}:{tool.qualified_name}"] = str(state)
     return bound_native_mcp_tool_actions(actions)
 
@@ -209,12 +218,15 @@ def bound_native_mcp_tool_actions(
     *,
     required_blocks: frozenset[str] = frozenset(),
 ) -> dict[str, str]:
-    """Keep configured restrictions, then namespace blocks, tool blocks and allows."""
+    """Retain every restriction; reject capacity that would discard a floor."""
+
+    if sum(action in {"block", "review"} for action in actions.values()) > POLICY_SNAPSHOT_MAX_MCP_TOOL_ACTIONS:
+        raise NativePolicySnapshotError("native_mcp_permission_capacity_exceeded")
 
     ordered = sorted(
         actions,
         key=lambda key: (
-            actions[key] != "block",
+            actions[key] not in {"block", "review"},
             key not in required_blocks,
             not key.endswith("*"),
             key,

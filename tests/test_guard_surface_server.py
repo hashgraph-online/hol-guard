@@ -222,6 +222,7 @@ class TestGuardSurfaceServer:
             "repair_scope": "local_integrity",
             "check_ids": ["policy_engine", "rule_packs", "tamper_checks"],
             "pending_check_ids": [],
+            "check_reasons": {},
             "message": "Integrity protection restored.",
         }
         assert authenticated_state is not None
@@ -270,6 +271,11 @@ class TestGuardSurfaceServer:
             GuardStore, "get_command_activity_persistence_health", lambda self: SimpleNamespace(active_error_count=0)
         )
         monkeypatch.setattr(GuardStore, "count_command_activities", lambda self: 0)
+        monkeypatch.setattr(
+            daemon_server_module,
+            "_repair_command_activity_persistence_health",
+            lambda _store: None,
+        )
         monkeypatch.setattr(daemon_server_module, "repair_failing_managed_harness_hooks", lambda _store: ((), ()))
         monkeypatch.setattr(GuardStore, "list_managed_installs", lambda self: [{"harness": "codex", "active": True}])
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
@@ -290,6 +296,7 @@ class TestGuardSurfaceServer:
             daemon.stop()
         assert payload["repaired"] is True
         assert payload["check_ids"] == [
+            "daemon",
             "policy_engine",
             "rule_packs",
             "tamper_checks",
@@ -300,6 +307,7 @@ class TestGuardSurfaceServer:
             "decision_stream",
         ]
         assert payload["pending_check_ids"] == []
+        assert payload["check_reasons"] == {}
         assert payload["message"] == "Integrity protection restored."
         assert maintained
         assert containment_probes == [True]

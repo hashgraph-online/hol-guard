@@ -107,10 +107,10 @@ def _request_timeout(event_name: str, hook_timeouts: Mapping[str, int]) -> float
 
 
 def _fail_closed(event_name: str, reason: str = _FAIL_CLOSED_REASON) -> dict[str, object]:
-    if event_name == "PermissionRequest":
+    if hook_event_is_permission_request(event_name):
         return {
             "hookSpecificOutput": {
-                "hookEventName": event_name,
+                "hookEventName": "PermissionRequest",
                 "decision": {
                     "behavior": "deny",
                     "message": reason,
@@ -136,19 +136,17 @@ def _unavailable_response(
     reason: str,
     data: str | None = None,
 ) -> dict[str, object]:
-    del data
-    if hook_event_is_permission_request(event_name):
-        return {
-            "continue": True,
-            "systemMessage": reason,
-            "hookSpecificOutput": {"hookEventName": event_name},
-        }
     if event_name == "PreToolUse":
+        payload = _json_object(data) if data is not None else None
+        if payload is None or not hook_action_is_launcher_recovery_safe(payload):
+            return _fail_closed(event_name, reason)
         return {
             "continue": True,
             "systemMessage": reason,
             "hookSpecificOutput": {"hookEventName": event_name},
         }
+    if hook_event_is_permission_request(event_name):
+        return _fail_closed(event_name, reason)
     return {
         "continue": True,
         "systemMessage": reason,

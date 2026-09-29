@@ -1,4 +1,4 @@
-import { aN as fetchLocalCliApi, r as reactExports, aO as fetchExtensionControlApi, j as jsxRuntimeExports, B as HiMiniSparkles, s as HiMiniCheckCircle, aP as HiMiniNoSymbol, af as HiMiniLockClosed, P as HiMiniExclamationTriangle, aQ as useResolvedApprovalGate, al as HiMiniArrowPath, w as HiMiniShieldCheck, aR as HiMiniInformationCircle, an as isApprovalProofSubmitDisabled, C as HiMiniXMark, am as ApprovalProofFieldInputs, ao as buildApprovalProofCredentials, aS as GenIcon, Q as HiMiniBolt, aT as HiMiniGlobeAlt, aU as HiMiniCube, K as HiMiniCloud, aV as HiMiniServerStack, b as HiMiniCommandLine, aW as HiMiniFolder, aX as FaWindows, aY as FaAws, c as HiMiniChevronRight, I as HiMiniChevronDown, aZ as approvalProofRecentlySatisfied, a_ as isBulkApproveGateReady, a$ as HiMiniArrowLeft, b0 as HiMiniPlus, a8 as HiMiniClipboardDocumentCheck, a9 as HiMiniClipboard, ah as HiMiniAdjustmentsHorizontal, b1 as HiMiniCheck, aH as HiMiniMagnifyingGlass, b2 as startGuardCloudConnect, b3 as HiMiniArrowTopRightOnSquare, aG as WorkspacePageHeader, b4 as guardAwareHref } from "../guard-dashboard.js";
+import { aT as fetchLocalCliApi, r as reactExports, aU as fetchExtensionControlApi, j as jsxRuntimeExports, B as HiMiniSparkles, s as HiMiniCheckCircle, aV as HiMiniNoSymbol, al as HiMiniLockClosed, P as HiMiniExclamationTriangle, aW as useResolvedApprovalGate, ar as HiMiniArrowPath, w as HiMiniShieldCheck, aX as HiMiniInformationCircle, at as isApprovalProofSubmitDisabled, C as HiMiniXMark, as as ApprovalProofFieldInputs, au as buildApprovalProofCredentials, aY as GenIcon, Q as HiMiniBolt, aZ as HiMiniGlobeAlt, a_ as HiMiniCube, K as HiMiniCloud, a$ as HiMiniServerStack, b as HiMiniCommandLine, b0 as HiMiniFolder, b1 as FaWindows, b2 as FaAws, c as HiMiniChevronRight, I as HiMiniChevronDown, b3 as approvalProofRecentlySatisfied, b4 as isBulkApproveGateReady, b5 as HiMiniArrowLeft, b6 as HiMiniPlus, ae as HiMiniClipboardDocumentCheck, af as HiMiniClipboard, b7 as guardAwareHref, an as HiMiniAdjustmentsHorizontal, b8 as HiMiniCheck, aN as HiMiniMagnifyingGlass, b9 as startGuardCloudConnect, ba as HiMiniArrowTopRightOnSquare, aM as WorkspacePageHeader } from "../guard-dashboard.js";
 import { A as ApprovalProofModal } from "./approval-proof-modal.js";
 import { u as useConfirmDialog } from "./confirm-dialog.js";
 const EXTENSION_ID_PATTERN = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
@@ -231,13 +231,6 @@ function parseProtectionRoute(pathname) {
 function localCliHref(cliId) {
   return `/extensions/local-cli/${encodeURIComponent(cliId)}`;
 }
-class LocalCliApiError extends Error {
-  code;
-  constructor(code, message) {
-    super(message);
-    this.code = code;
-  }
-}
 const CLI_ID_PATTERN = /^local-cli\.[a-z0-9]+(?:-[a-z0-9]+){0,8}$/;
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 function isRecord(value) {
@@ -259,8 +252,249 @@ function optionalString$1(value) {
 function isLocalCliId(value) {
   return CLI_ID_PATTERN.test(value);
 }
-function addedCustomExtensions(items) {
-  return items.filter((item) => item.state !== "unset");
+function normalizeMcpClassification(value) {
+  if (!isRecord(value) || value.schema_version !== "guard.mcp-classification.v1" || value.advisory_only !== true || !["reviewed-mapping", "limited"].includes(String(value.confidence))) return void 0;
+  const labels = [value.effect, value.data, value.destination, value.reversibility];
+  if (!labels.every((label) => typeof label === "string" && /^[a-z-]{1,40}$/.test(label))) return void 0;
+  const codes = (list) => Array.isArray(list) && list.length <= 16 && list.every((code) => typeof code === "string" && /^[a-z0-9:-]{1,80}$/.test(code));
+  if (!codes(value.evidence) || !codes(value.warnings)) return void 0;
+  return {
+    effect: value.effect,
+    data: value.data,
+    destination: value.destination,
+    reversibility: value.reversibility,
+    confidence: value.confidence,
+    evidence: value.evidence,
+    warnings: value.warnings
+  };
+}
+function normalizeLocalCliItem(value) {
+  if (!isRecord(value)) throw new Error("Invalid local CLI item");
+  const cliId = requiredString(value.cli_id, "id");
+  if (!isLocalCliId(cliId)) throw new Error("Invalid local CLI id");
+  const identityHash = requiredString(value.identity_hash, "identity");
+  if (!SHA256_PATTERN.test(identityHash)) throw new Error("Invalid local CLI identity");
+  const kind = value.kind;
+  if (kind !== "executable" && kind !== "script") throw new Error("Invalid local CLI kind");
+  const state = value.state;
+  if (state !== "unset" && state !== "allowed" && state !== "blocked") throw new Error("Invalid local CLI state");
+  const catalog = normalizeMcpCatalog(value.mcp_catalog);
+  const providerCatalog = normalizeProviderCatalog(value.provider_catalog);
+  return {
+    cli_id: cliId,
+    name: requiredString(value.name, "name").slice(0, 120),
+    kind,
+    identity_hash: identityHash,
+    example_label: requiredString(value.example_label, "example").slice(0, 160),
+    interpreter_name: optionalString$1(value.interpreter_name),
+    observed_count: requiredInt(value.observed_count, "count"),
+    last_seen_at: optionalString$1(value.last_seen_at),
+    source_path: optionalString$1(value.source_path),
+    help_status: normalizeHelpStatus(value.help_status),
+    surface: normalizeSurface(value.surface),
+    server_identity_hash: normalizeIdentityHash(value.server_identity_hash),
+    source_label: optionalSourceLabel(value.source_label),
+    state,
+    stale: value.stale === true,
+    grant_revision: value.grant_revision === null || value.grant_revision === void 0 ? null : requiredInt(value.grant_revision, "grant revision"),
+    authority_revision: requiredInt(value.authority_revision, "revision"),
+    suggestable: value.suggestable === true,
+    suggestion_score: optionalScore(value.suggestion_score),
+    commands: Array.isArray(value.commands) ? value.commands.map(normalizeLocalCliCommand) : [],
+    continuity: normalizeContinuity(value.continuity),
+    ...catalog ? { mcp_catalog: catalog } : {},
+    ...providerCatalog ? { provider_catalog: providerCatalog } : {},
+    ...["configured-connection", "host-namespace", "legacy-device"].includes(String(value.permission_scope)) ? { permission_scope: value.permission_scope } : {}
+  };
+}
+function normalizeMcpCatalog(value) {
+  if (!isRecord(value) || typeof value.complete !== "boolean" || typeof value.stale !== "boolean") return null;
+  const count = (candidate) => typeof candidate === "number" && Number.isSafeInteger(candidate) && candidate >= 0 && candidate <= 1e4;
+  if (!count(value.pages) || !count(value.listed_count) || !count(value.known_count)) return null;
+  if (value.listed_count > value.known_count) return null;
+  if (typeof value.revision !== "number" || !Number.isSafeInteger(value.revision) || value.revision < 1) return null;
+  if (typeof value.updated_at !== "string" || !Number.isFinite(Date.parse(value.updated_at))) return null;
+  const reason = typeof value.reason === "string" ? value.reason.slice(0, 80) : null;
+  if (value.complete && reason !== null) return null;
+  const changes = normalizeMcpCatalogChanges(value.changes);
+  const skills = value.skills_catalog;
+  const skillsCatalog = isRecord(skills) && typeof skills.declared === "boolean" && typeof skills.complete === "boolean" && typeof skills.stale === "boolean" && count(skills.known_count) && skills.known_count <= 1e3 && skills.activation_supported === false ? {
+    declared: skills.declared,
+    complete: skills.complete,
+    stale: skills.stale,
+    known_count: skills.known_count,
+    reason: typeof skills.reason === "string" ? skills.reason.slice(0, 80) : null
+  } : void 0;
+  return {
+    complete: value.complete,
+    stale: value.stale,
+    reason,
+    pages: value.pages,
+    listed_count: value.listed_count,
+    known_count: value.known_count,
+    protocol_version: typeof value.protocol_version === "string" ? value.protocol_version.slice(0, 40) : null,
+    revision: value.revision,
+    updated_at: value.updated_at.slice(0, 64),
+    last_complete_at: typeof value.last_complete_at === "string" && Number.isFinite(Date.parse(value.last_complete_at)) ? value.last_complete_at.slice(0, 64) : null,
+    ...changes ? { changes } : {},
+    ...skillsCatalog ? { skills_catalog: skillsCatalog } : {},
+    ...typeof value.fresh_until === "string" && Number.isFinite(Date.parse(value.fresh_until)) ? { fresh_until: value.fresh_until } : {},
+    ...value.cache_scope === "private" || value.cache_scope === "public" ? { cache_scope: value.cache_scope } : {}
+  };
+}
+function normalizeProviderCatalog(value) {
+  if (!isRecord(value) || value.provider !== "composio" || value.coverage !== "discovery-subset" || value.account_binding !== "unverified" || typeof value.known_count !== "number" || !Number.isSafeInteger(value.known_count) || value.known_count < 1 || value.known_count > 1e4 || typeof value.full_schema_count !== "number" || !Number.isSafeInteger(value.full_schema_count) || value.full_schema_count < 0 || value.full_schema_count > value.known_count || typeof value.updated_at !== "string" || !Number.isFinite(Date.parse(value.updated_at))) return void 0;
+  return {
+    provider: "composio",
+    known_count: value.known_count,
+    full_schema_count: value.full_schema_count,
+    updated_at: value.updated_at.slice(0, 64),
+    coverage: "discovery-subset",
+    account_binding: "unverified"
+  };
+}
+function normalizeMcpCatalogChanges(value) {
+  if (!isRecord(value)) return void 0;
+  const result = { added: [], changed: [], removed: [], stale: [] };
+  for (const key of ["added", "changed", "removed", "stale"]) {
+    const names = value[key];
+    if (!Array.isArray(names) || names.length > 1e4 || !names.every(
+      (name) => typeof name === "string" && name.length > 0 && name.length <= 256 && name.trim() === name
+    )) return void 0;
+    result[key] = [...new Set(names)];
+  }
+  return result;
+}
+function normalizeContinuity(value) {
+  if (!isRecord(value)) return null;
+  const status = value.status;
+  if (status !== "applied" && status !== "pending_observation" && status !== "changed_identity" && status !== "locally_overridden" && status !== "removed" && status !== "stale") return null;
+  return {
+    status,
+    reason: typeof value.reason === "string" ? value.reason : "",
+    cloud_revision: typeof value.cloud_revision === "number" && Number.isInteger(value.cloud_revision) ? value.cloud_revision : null,
+    surface: value.surface === "cli" || value.surface === "mcp" || value.surface === "package-scripts" ? value.surface : null
+  };
+}
+function normalizeSurface(value) {
+  if (value === "mcp") return "mcp";
+  if (value === "package-scripts") return "package-scripts";
+  return "cli";
+}
+function normalizeHelpStatus(value) {
+  if (value === "ok" || value === "empty" || value === "failed") return value;
+  return null;
+}
+function normalizeIdentityHash(value) {
+  if (value === null || value === void 0 || value === "") return null;
+  if (typeof value !== "string" || !SHA256_PATTERN.test(value)) return null;
+  return value;
+}
+function optionalScore(value) {
+  if (value === null || value === void 0) return 0;
+  if (typeof value !== "number" || !Number.isInteger(value)) {
+    throw new Error("Invalid local CLI suggestion score");
+  }
+  return value;
+}
+function optionalSourceLabel(value) {
+  if (value === null || value === void 0 || value === "") return null;
+  if (typeof value !== "string") return null;
+  return value.trim().slice(0, 120) || null;
+}
+function normalizeLocalCliCommand(value) {
+  if (!isRecord(value)) throw new Error("Invalid local CLI command");
+  const state = value.state;
+  if (state !== "inherit" && state !== "allow" && state !== "review" && state !== "block") {
+    throw new Error("Invalid local CLI command state");
+  }
+  const parent = value.parent_id;
+  if (parent !== null && parent !== void 0 && typeof parent !== "string") {
+    throw new Error("Invalid local CLI command parent");
+  }
+  return {
+    command_id: requiredString(value.command_id, "command").slice(0, 80),
+    name: requiredString(value.name, "command name").slice(0, 120),
+    usage: requiredString(value.usage, "command usage").slice(0, 160),
+    description: typeof value.description === "string" ? value.description.slice(0, 240) : "",
+    parent_id: typeof parent === "string" && parent.trim() ? parent : null,
+    state,
+    classification: normalizeMcpClassification(value.classification)
+  };
+}
+function normalizeLocalCliList(value) {
+  if (!isRecord(value)) throw new Error("Invalid local CLI list");
+  const cloud = isRecord(value.cloud) ? value.cloud : {};
+  const items = Array.isArray(value.items) ? value.items.flatMap((entry) => {
+    try {
+      return [normalizeLocalCliItem(entry)];
+    } catch {
+      return [];
+    }
+  }) : [];
+  const revision = requiredInt(value.revision, "revision");
+  const publication = value.native_publication;
+  const discoveryIssue = value.discovery_issue;
+  let nativePublication;
+  if (isRecord(publication) && publication.revision === revision && (publication.state === "pending" || publication.state === "failed" || publication.state === "unavailable")) {
+    nativePublication = { state: publication.state, revision };
+  } else if (isRecord(publication) && publication.state === "acknowledged" && publication.revision === revision && typeof publication.generation === "number" && Number.isSafeInteger(publication.generation) && publication.generation > 0 && typeof publication.policy_digest === "string" && /^[a-f0-9]{64}$/.test(publication.policy_digest)) {
+    nativePublication = { state: "acknowledged", revision, generation: publication.generation };
+  }
+  return {
+    schema_version: requiredString(value.schema_version, "schema"),
+    revision,
+    ...discoveryIssue === "catalog_limit_reached" || discoveryIssue === "observed_provider_scan_failed" || discoveryIssue === "configured_host_scan_failed" || discoveryIssue === "package_catalog_refresh_failed" ? { discovery_issue: discoveryIssue } : {},
+    ...nativePublication ? { native_publication: nativePublication } : {},
+    items,
+    cloud: {
+      sync_local_only: cloud.sync_local_only !== false,
+      continuity_enabled: cloud.continuity_enabled === true,
+      summary: typeof cloud.summary === "string" ? cloud.summary : "Custom Extensions remain local to this device until portable continuity is enabled."
+    }
+  };
+}
+async function startCancelableDiscoveryJob(signal, start) {
+  if (signal.aborted) return null;
+  const clientJobId = globalThis.crypto.randomUUID().replaceAll("-", "");
+  let cancelSent = false;
+  const cancel = () => {
+    if (cancelSent) return;
+    cancelSent = true;
+    void fetchLocalCliApi("/v1/local-clis/refresh-job", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ job_id: clientJobId, cancel: true })
+    }).catch(() => void 0);
+  };
+  signal.addEventListener("abort", cancel, { once: true });
+  try {
+    const result = await start(clientJobId);
+    return signal.aborted ? null : result;
+  } catch (error) {
+    if (signal.aborted) return null;
+    throw error;
+  } finally {
+    signal.removeEventListener("abort", cancel);
+    if (signal.aborted) cancel();
+  }
+}
+class LocalCliApiError extends Error {
+  code;
+  constructor(code, message) {
+    super(message);
+    this.code = code;
+  }
+}
+function connectorWorkspaceItems(items, query = "") {
+  const needle = query.trim().toLowerCase();
+  const attention = (item) => item.stale || item.state === "unset" || item.mcp_catalog?.stale || item.mcp_catalog?.complete === false || Boolean(item.mcp_catalog?.changes?.added.length) || Boolean(item.mcp_catalog?.changes?.changed.length);
+  return items.filter((item) => item.state !== "unset" || item.surface === "mcp" && item.suggestable).filter((item) => !needle || [
+    item.name,
+    item.source_label,
+    item.surface,
+    ...item.commands.flatMap((command) => [command.name, command.usage, command.description])
+  ].some((value) => value?.toLowerCase().includes(needle))).sort((a, b) => Number(attention(b)) - Number(attention(a)) || (Date.parse(b.last_seen_at ?? "") || 0) - (Date.parse(a.last_seen_at ?? "") || 0) || a.name.localeCompare(b.name) || a.cli_id.localeCompare(b.cli_id));
 }
 function suggestedCustomExtensions(items) {
   return items.filter((item) => item.state === "unset" && item.suggestable);
@@ -399,117 +633,6 @@ function suggestionMatchesQuery(item, needle) {
   if (item.surface !== "package-scripts") return false;
   return item.commands.some((command) => commandMatchesQuery(command, compact));
 }
-function normalizeLocalCliItem(value) {
-  if (!isRecord(value)) throw new Error("Invalid local CLI item");
-  const cliId = requiredString(value.cli_id, "id");
-  if (!isLocalCliId(cliId)) throw new Error("Invalid local CLI id");
-  const identityHash = requiredString(value.identity_hash, "identity");
-  if (!SHA256_PATTERN.test(identityHash)) throw new Error("Invalid local CLI identity");
-  const kind = value.kind;
-  if (kind !== "executable" && kind !== "script") throw new Error("Invalid local CLI kind");
-  const state = value.state;
-  if (state !== "unset" && state !== "allowed" && state !== "blocked") throw new Error("Invalid local CLI state");
-  return {
-    cli_id: cliId,
-    name: requiredString(value.name, "name").slice(0, 120),
-    kind,
-    identity_hash: identityHash,
-    example_label: requiredString(value.example_label, "example").slice(0, 160),
-    interpreter_name: optionalString$1(value.interpreter_name),
-    observed_count: requiredInt(value.observed_count, "count"),
-    last_seen_at: optionalString$1(value.last_seen_at),
-    source_path: optionalString$1(value.source_path),
-    help_status: normalizeHelpStatus(value.help_status),
-    surface: normalizeSurface(value.surface),
-    server_identity_hash: normalizeIdentityHash(value.server_identity_hash),
-    source_label: optionalSourceLabel(value.source_label),
-    state,
-    stale: value.stale === true,
-    grant_revision: value.grant_revision === null || value.grant_revision === void 0 ? null : requiredInt(value.grant_revision, "grant revision"),
-    authority_revision: requiredInt(value.authority_revision, "revision"),
-    suggestable: value.suggestable === true,
-    suggestion_score: optionalScore(value.suggestion_score),
-    commands: Array.isArray(value.commands) ? value.commands.map(normalizeLocalCliCommand) : [],
-    continuity: normalizeContinuity(value.continuity)
-  };
-}
-function normalizeContinuity(value) {
-  if (!isRecord(value)) return null;
-  const status = value.status;
-  if (status !== "applied" && status !== "pending_observation" && status !== "changed_identity" && status !== "locally_overridden" && status !== "removed" && status !== "stale") return null;
-  return {
-    status,
-    reason: typeof value.reason === "string" ? value.reason : "",
-    cloud_revision: typeof value.cloud_revision === "number" && Number.isInteger(value.cloud_revision) ? value.cloud_revision : null,
-    surface: value.surface === "cli" || value.surface === "mcp" || value.surface === "package-scripts" ? value.surface : null
-  };
-}
-function normalizeSurface(value) {
-  if (value === "mcp") return "mcp";
-  if (value === "package-scripts") return "package-scripts";
-  return "cli";
-}
-function normalizeHelpStatus(value) {
-  if (value === "ok" || value === "empty" || value === "failed") return value;
-  return null;
-}
-function normalizeIdentityHash(value) {
-  if (value === null || value === void 0 || value === "") return null;
-  if (typeof value !== "string" || !SHA256_PATTERN.test(value)) return null;
-  return value;
-}
-function optionalScore(value) {
-  if (value === null || value === void 0) return 0;
-  if (typeof value !== "number" || !Number.isInteger(value)) {
-    throw new Error("Invalid local CLI suggestion score");
-  }
-  return value;
-}
-function optionalSourceLabel(value) {
-  if (value === null || value === void 0 || value === "") return null;
-  if (typeof value !== "string") return null;
-  return value.trim().slice(0, 120) || null;
-}
-function normalizeLocalCliCommand(value) {
-  if (!isRecord(value)) throw new Error("Invalid local CLI command");
-  const state = value.state;
-  if (state !== "inherit" && state !== "allow" && state !== "block") {
-    throw new Error("Invalid local CLI command state");
-  }
-  const parent = value.parent_id;
-  if (parent !== null && parent !== void 0 && typeof parent !== "string") {
-    throw new Error("Invalid local CLI command parent");
-  }
-  return {
-    command_id: requiredString(value.command_id, "command").slice(0, 80),
-    name: requiredString(value.name, "command name").slice(0, 120),
-    usage: requiredString(value.usage, "command usage").slice(0, 160),
-    description: typeof value.description === "string" ? value.description.slice(0, 240) : "",
-    parent_id: typeof parent === "string" && parent.trim() ? parent : null,
-    state
-  };
-}
-function normalizeLocalCliList(value) {
-  if (!isRecord(value)) throw new Error("Invalid local CLI list");
-  const cloud = isRecord(value.cloud) ? value.cloud : {};
-  const items = Array.isArray(value.items) ? value.items.flatMap((entry) => {
-    try {
-      return [normalizeLocalCliItem(entry)];
-    } catch {
-      return [];
-    }
-  }) : [];
-  return {
-    schema_version: requiredString(value.schema_version, "schema"),
-    revision: requiredInt(value.revision, "revision"),
-    items,
-    cloud: {
-      sync_local_only: cloud.sync_local_only !== false,
-      continuity_enabled: cloud.continuity_enabled === true,
-      summary: typeof cloud.summary === "string" ? cloud.summary : "Custom Extensions remain local to this device until portable continuity is enabled."
-    }
-  };
-}
 async function readJson(response) {
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
@@ -541,7 +664,8 @@ async function recognizeLocalCli(command, options) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       command,
-      ...options?.cliId ? { cli_id: options.cliId } : {}
+      ...options?.cliId ? { cli_id: options.cliId } : {},
+      ...options?.refresh ? { refresh: true } : {}
     })
   }));
   if (!isRecord(body)) throw new Error("Invalid local CLI recognition");
@@ -559,6 +683,122 @@ async function applyLocalCliMutation(payload) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload)
   }));
+}
+async function refreshMcpInventory(cliId, signal, configuredConnections = false, forceRefresh = false) {
+  if (signal.aborted) return;
+  const initialJob = await startCancelableDiscoveryJob(signal, async (clientJobId) => readJson(await fetchLocalCliApi(
+    "/v1/local-clis/refresh-job",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal,
+      body: JSON.stringify(configuredConnections ? { operation: "configured-connections", client_job_id: clientJobId, ...forceRefresh ? { force_refresh: true } : {} } : { cli_id: cliId, confirm_process_start: true, client_job_id: clientJobId })
+    }
+  )));
+  if (initialJob === null) return;
+  await waitForMcpDiscoveryJob(cliId, initialJob, signal);
+}
+async function waitForMcpDiscoveryJob(cliId, initialJob, signal) {
+  const normalize = (body) => {
+    if (!isRecord(body) || typeof body.job_id !== "string" || !/^[a-f0-9]{32}$/.test(body.job_id) || body.cli_id !== cliId || !["running", "cancelling", "complete", "cancelled", "failed"].includes(String(body.state))) {
+      throw new Error("Invalid discovery progress");
+    }
+    return body;
+  };
+  const request2 = async (payload) => {
+    const body = await readJson(await fetchLocalCliApi("/v1/local-clis/refresh-job", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    }));
+    const next = normalize(body);
+    if (payload.job_id !== next.job_id) throw new Error("Discovery identity changed");
+    return next;
+  };
+  let job = normalize(initialJob);
+  let finished = false;
+  try {
+    for (let poll = 0; poll < 120; poll += 1) {
+      if (signal.aborted) return;
+      if (job.state === "complete" || job.state === "cancelled") {
+        finished = true;
+        return;
+      }
+      if (job.state === "failed") {
+        finished = true;
+        let message;
+        switch (job.error) {
+          case "mcp_refresh_unavailable":
+            message = "Guard cannot list this connection directly. Refresh it in its host app.";
+            break;
+          case "catalog_revision_conflict":
+            message = "A newer discovery finished first. Reload the inventory.";
+            break;
+          case "configured_host_scan_failed":
+            message = "Guard could not read the host's configured connections. Check the host app and retry.";
+            break;
+          case "observed_provider_scan_failed":
+            message = "Guard could not merge observed provider tools. Known tools and choices were kept; retry discovery.";
+            break;
+          case "catalog_limit_reached":
+            message = "This connector has more tools than Guard can catalog safely. Existing choices were kept.";
+            break;
+          default:
+            console.warn("Unknown discovery error code:", job.error);
+            message = "Discovery did not finish. Known tools and choices were kept. Try again shortly.";
+        }
+        throw new Error(message);
+      }
+      await new Promise((resolve) => {
+        const done = () => {
+          window.clearTimeout(timer);
+          signal.removeEventListener("abort", done);
+          resolve();
+        };
+        const timer = window.setTimeout(done, 500);
+        signal.addEventListener("abort", done, { once: true });
+      });
+      if (!signal.aborted) job = await request2({ job_id: job.job_id });
+    }
+    throw new Error("Discovery took too long. Known tools and choices were kept.");
+  } finally {
+    if (!finished) await request2({ job_id: job.job_id, cancel: true });
+  }
+}
+async function fetchMcpProviderActions(cliId, options) {
+  const body = await readJson(await fetchLocalCliApi("/v1/local-clis/provider-actions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    signal: options.signal,
+    body: JSON.stringify({
+      cli_id: cliId,
+      search: options.search,
+      offset: options.offset,
+      limit: 50,
+      ...options.catalogToken ? { catalog_token: options.catalogToken } : {}
+    })
+  }));
+  if (!isRecord(body) || body.cli_id !== cliId || body.coverage !== "discovery-subset" || !Array.isArray(body.actions) || body.actions.length > 50 || typeof body.catalog_token !== "string" || !SHA256_PATTERN.test(body.catalog_token)) throw new Error("Invalid provider action inventory");
+  const actions = body.actions.map((entry) => {
+    if (!isRecord(entry) || typeof entry.tool_slug !== "string" || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(entry.tool_slug) || typeof entry.toolkit !== "string" || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(entry.toolkit) || typeof entry.description !== "string" || entry.description.length > 2e3 || typeof entry.full_schema !== "boolean" || !["review", "block"].includes(String(entry.permission_state)) || entry.allow_supported !== false || entry.account_binding !== "unverified" || typeof entry.revision !== "number" || !Number.isSafeInteger(entry.revision) || entry.revision < 1 || typeof entry.updated_at !== "string" || !Number.isFinite(Date.parse(entry.updated_at))) {
+      throw new Error("Invalid provider action evidence");
+    }
+    return {
+      tool_slug: entry.tool_slug,
+      toolkit: entry.toolkit,
+      description: entry.description,
+      full_schema: entry.full_schema,
+      revision: entry.revision,
+      updated_at: entry.updated_at,
+      permission_state: entry.permission_state,
+      allow_supported: false,
+      account_binding: "unverified",
+      classification: normalizeMcpClassification(entry.classification)
+    };
+  });
+  const nextOffset = body.next_offset;
+  if (nextOffset !== null && (typeof nextOffset !== "number" || !Number.isSafeInteger(nextOffset) || nextOffset !== options.offset + 50 || nextOffset > 1e4)) throw new Error("Invalid provider inventory page");
+  return { actions, nextOffset, catalogToken: body.catalog_token };
 }
 const FOCUSABLE_SELECTOR = [
   "a[href]",
@@ -712,7 +952,7 @@ const PERMISSION_ID$1 = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*\.permission\.[a-z
 const MAX_EXTENSIONS = 512;
 const MAX_PERMISSIONS = 4096;
 const MAX_REASONS = 64;
-function record$3(value, label) {
+function record$4(value, label) {
   if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error(`Invalid ${label}`);
   return value;
 }
@@ -720,7 +960,7 @@ function text(value, label, max = 256) {
   if (typeof value !== "string" || value.length === 0 || value.length > max) throw new Error(`Invalid ${label}`);
   return value;
 }
-function integer$2(value, label) {
+function integer$4(value, label) {
   if (!Number.isSafeInteger(value) || value < 0) throw new Error(`Invalid ${label}`);
   return value;
 }
@@ -743,7 +983,7 @@ function reasons(value, label) {
   return value.map((item, index) => text(item, `${label}[${index}]`, 128));
 }
 function extensionItem(value, label) {
-  const item = record$3(value, label);
+  const item = record$4(value, label);
   return {
     extension_id: id$1(item.extension_id, `${label}.extension_id`, EXTENSION_ID$1),
     effective_state: enumValue$1(item.effective_state, `${label}.effective_state`, ["allowed", "blocked"]),
@@ -754,7 +994,7 @@ function extensionItem(value, label) {
   };
 }
 function permissionItem(value, label) {
-  const item = record$3(value, label);
+  const item = record$4(value, label);
   return {
     permission_id: id$1(item.permission_id, `${label}.permission_id`, PERMISSION_ID$1),
     extension_id: id$1(item.extension_id, `${label}.extension_id`, EXTENSION_ID$1),
@@ -767,7 +1007,7 @@ function permissionItem(value, label) {
   };
 }
 function normalizeEffectiveExtensionControlProjection(value) {
-  const root = record$3(value, "extension projection");
+  const root = record$4(value, "extension projection");
   const schemaVersion = text(root.schema_version, "projection.schema_version", 128);
   if (schemaVersion !== "guard.daemon.extension-control-projection.v1") throw new Error("Invalid extension projection schema");
   const digest2 = text(root.catalog_digest, "projection.catalog_digest", 64);
@@ -780,7 +1020,7 @@ function normalizeEffectiveExtensionControlProjection(value) {
   if (new Set(permissions.map((item) => item.permission_id)).size !== permissions.length) throw new Error("Duplicate projection permission ID");
   return {
     schema_version: "guard.daemon.extension-control-projection.v1",
-    revision: integer$2(root.revision, "projection.revision"),
+    revision: integer$4(root.revision, "projection.revision"),
     catalog_digest: digest2,
     health: enumValue$1(root.health, "projection.health", ["unenrolled", "protected", "tampered", "degraded-unacknowledged", "degraded-acknowledged", "recovery-required"]),
     extensions,
@@ -807,7 +1047,7 @@ class ExtensionControlProtocolError extends Error {
     super(`Invalid extension-control response: ${message}`);
   }
 }
-function record$2(value, label) {
+function record$3(value, label) {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new ExtensionControlProtocolError(`${label} must be an object`);
   }
@@ -832,7 +1072,7 @@ function catalogText(value) {
   return typeof value === "string" && value.trim() ? value : null;
 }
 function publisher(value, label) {
-  const item = record$2(value, label);
+  const item = record$3(value, label);
   const url = item.url;
   return {
     id: string$1(item.id, `${label}.id`),
@@ -842,7 +1082,7 @@ function publisher(value, label) {
 }
 function icon(value, label) {
   if (value === void 0 || value === null) return { kind: "none" };
-  const item = record$2(value, label);
+  const item = record$3(value, label);
   const kind = enumValue(item.kind, `${label}.kind`, ["react-icon", "svg-ref", "none"]);
   const name = item.name === void 0 ? void 0 : string$1(item.name, `${label}.name`);
   const background = item.background === void 0 ? void 0 : string$1(item.background, `${label}.background`);
@@ -852,7 +1092,7 @@ function bool$1(value, label) {
   if (typeof value !== "boolean") throw new ExtensionControlProtocolError(`${label} must be boolean`);
   return value;
 }
-function integer$1(value, label, min = 0) {
+function integer$3(value, label, min = 0) {
   if (!Number.isSafeInteger(value) || value < min) {
     throw new ExtensionControlProtocolError(`${label} must be an integer >= ${min}`);
   }
@@ -868,7 +1108,7 @@ function id(value, label, pattern) {
   if (!pattern.test(candidate)) throw new ExtensionControlProtocolError(`${label} is not canonical`);
   return candidate;
 }
-function digest$1(value, label) {
+function digest$2(value, label) {
   const candidate = string$1(value, label).trim().toLowerCase();
   if (!DIGEST$1.test(candidate)) throw new ExtensionControlProtocolError(`${label} must be a SHA-256 digest`);
   return candidate;
@@ -880,7 +1120,7 @@ function version(value, label) {
 }
 function terminalCommands(value) {
   if (value === void 0) return void 0;
-  const item = record$2(value, "effective.terminal_commands");
+  const item = record$3(value, "effective.terminal_commands");
   return {
     ...item.shell === void 0 ? {} : { shell: enumValue(item.shell, "effective.terminal_commands.shell", ["powershell"]) },
     enroll: string$1(item.enroll, "effective.terminal_commands.enroll"),
@@ -896,7 +1136,7 @@ function idList$1(value, label, pattern, max = EXTENSION_CLIENT_LIMITS.relations
   return items;
 }
 function safeVariant(value, label) {
-  const item = record$2(value, label);
+  const item = record$3(value, label);
   return {
     variant_id: string$1(item.variant_id, `${label}.variant_id`),
     title: string$1(item.title, `${label}.title`),
@@ -904,7 +1144,7 @@ function safeVariant(value, label) {
   };
 }
 function rule(value, extensionId, label) {
-  const item = record$2(value, label);
+  const item = record$3(value, label);
   const ruleId = id(item.rule_id, `${label}.rule_id`, RULE_ID);
   if (!ruleId.startsWith(`${extensionId}.`)) throw new ExtensionControlProtocolError(`${label}.rule_id belongs to another extension`);
   const rawVersion = item.rule_version;
@@ -927,7 +1167,7 @@ function rule(value, extensionId, label) {
   };
 }
 function permission(value, extensionId, label) {
-  const item = record$2(value, label);
+  const item = record$3(value, label);
   const permissionId = id(item.permission_id, `${label}.permission_id`, PERMISSION_ID);
   const owner = id(item.extension_id, `${label}.extension_id`, EXTENSION_ID);
   if (owner !== extensionId || !permissionId.startsWith(`${extensionId}.permission.`)) {
@@ -936,7 +1176,7 @@ function permission(value, extensionId, label) {
   const replacement = item.replacement_permission_id === null ? null : id(item.replacement_permission_id, `${label}.replacement_permission_id`, PERMISSION_ID);
   return {
     permission_id: permissionId,
-    schema_version: integer$1(item.schema_version, `${label}.schema_version`, 1),
+    schema_version: integer$3(item.schema_version, `${label}.schema_version`, 1),
     extension_id: owner,
     implementation_version: version(item.implementation_version, `${label}.implementation_version`),
     label: string$1(item.label, `${label}.label`),
@@ -961,7 +1201,7 @@ function permission(value, extensionId, label) {
   };
 }
 function mcpLaunch(value, label) {
-  const item = record$2(value, label);
+  const item = record$3(value, label);
   const kind = enumValue(item.kind, `${label}.kind`, ["package-launcher", "remote-http"]);
   if (kind === "package-launcher") {
     return {
@@ -977,7 +1217,7 @@ function mcpLaunch(value, label) {
   };
 }
 function mcpTool(value, label) {
-  const item = record$2(value, label);
+  const item = record$3(value, label);
   return {
     name: string$1(item.name, `${label}.name`),
     state: enumValue(item.state, `${label}.state`, ["inherit", "allow", "review", "block"])
@@ -995,7 +1235,7 @@ function mcpCatalogFields(item, label) {
   };
 }
 function extension(value, label) {
-  const item = record$2(value, label);
+  const item = record$3(value, label);
   const extensionId = id(item.extension_id, `${label}.extension_id`, EXTENSION_ID);
   const rules = array(item.rules, `${label}.rules`, EXTENSION_CLIENT_LIMITS.rulesPerExtension).map((entry, index) => rule(entry, extensionId, `${label}.rules[${index}]`));
   const permissions = array(item.permissions, `${label}.permissions`, EXTENSION_CLIENT_LIMITS.permissionsPerExtension).map((entry, index) => permission(entry, extensionId, `${label}.permissions[${index}]`));
@@ -1009,13 +1249,13 @@ function extension(value, label) {
       if (!knownRules.has(ruleId)) throw new ExtensionControlProtocolError(`${label} permission references unknown rule ${ruleId}`);
     }
   }
-  const ruleCount = integer$1(item.rule_count, `${label}.rule_count`);
-  const permissionCount = integer$1(item.permission_count, `${label}.permission_count`);
+  const ruleCount = integer$3(item.rule_count, `${label}.rule_count`);
+  const permissionCount = integer$3(item.permission_count, `${label}.permission_count`);
   if (ruleCount !== rules.length || permissionCount !== permissions.length) {
     throw new ExtensionControlProtocolError(`${label} count metadata does not match payload`);
   }
   return {
-    schema_version: integer$1(item.schema_version, `${label}.schema_version`, 1),
+    schema_version: integer$3(item.schema_version, `${label}.schema_version`, 1),
     extension_id: extensionId,
     name: string$1(item.name, `${label}.name`),
     description: string$1(item.description, `${label}.description`),
@@ -1046,9 +1286,9 @@ function extension(value, label) {
   };
 }
 function normalizeExtensionControlLayer(value, label = "layer") {
-  const item = record$2(value, label);
+  const item = record$3(value, label);
   const controls = array(item.controls, `${label}.controls`, EXTENSION_CLIENT_LIMITS.controls).map((entry, index) => {
-    const raw = record$2(entry, `${label}.controls[${index}]`);
+    const raw = record$3(entry, `${label}.controls[${index}]`);
     const kind = enumValue(raw.target_kind, `${label}.controls[${index}].target_kind`, ["extension", "permission"]);
     return {
       target_kind: kind,
@@ -1061,34 +1301,34 @@ function normalizeExtensionControlLayer(value, label = "layer") {
   return {
     schema_version: string$1(item.schema_version, `${label}.schema_version`),
     kind: enumValue(item.kind, `${label}.kind`, ["local-admin", "signed-cloud"]),
-    catalog_digest: digest$1(item.catalog_digest, `${label}.catalog_digest`),
+    catalog_digest: digest$2(item.catalog_digest, `${label}.catalog_digest`),
     global_lockdown: bool$1(item.global_lockdown, `${label}.global_lockdown`),
     controls
   };
 }
 function normalizeExtensionCatalog(value) {
-  const root = record$2(value, "catalog");
+  const root = record$3(value, "catalog");
   const extensions = array(root.extensions, "catalog.extensions", EXTENSION_CLIENT_LIMITS.extensions).map((entry, index) => extension(entry, `catalog.extensions[${index}]`));
   const ids = extensions.map((entry) => entry.extension_id);
   if (new Set(ids).size !== ids.length) throw new ExtensionControlProtocolError("catalog.extensions contains duplicate extension IDs");
-  const limits = root.limits === void 0 ? void 0 : record$2(root.limits, "catalog.limits");
+  const limits = root.limits === void 0 ? void 0 : record$3(root.limits, "catalog.limits");
   return {
     schema_version: string$1(root.schema_version, "catalog.schema_version"),
     control_schema_version: root.control_schema_version === void 0 ? void 0 : string$1(root.control_schema_version, "catalog.control_schema_version"),
-    catalog_digest: digest$1(root.catalog_digest, "catalog.catalog_digest"),
+    catalog_digest: digest$2(root.catalog_digest, "catalog.catalog_digest"),
     extensions,
     limits: limits === void 0 ? void 0 : {
-      max_body_bytes: limits.max_body_bytes === void 0 ? void 0 : integer$1(limits.max_body_bytes, "catalog.limits.max_body_bytes", 1),
-      max_controls: limits.max_controls === void 0 ? void 0 : integer$1(limits.max_controls, "catalog.limits.max_controls", 1),
-      max_observations: limits.max_observations === void 0 ? void 0 : integer$1(limits.max_observations, "catalog.limits.max_observations", 1)
+      max_body_bytes: limits.max_body_bytes === void 0 ? void 0 : integer$3(limits.max_body_bytes, "catalog.limits.max_body_bytes", 1),
+      max_controls: limits.max_controls === void 0 ? void 0 : integer$3(limits.max_controls, "catalog.limits.max_controls", 1),
+      max_observations: limits.max_observations === void 0 ? void 0 : integer$3(limits.max_observations, "catalog.limits.max_observations", 1)
     }
   };
 }
 function normalizeEffectiveExtensionControls(value) {
-  const root = record$2(value, "effective");
+  const root = record$3(value, "effective");
   const controls = array(root.controls, "effective.controls", EXTENSION_CLIENT_LIMITS.controls).map((entry, index) => {
-    const raw = record$2(entry, `effective.controls[${index}]`);
-    const target2 = record$2(raw.target, `effective.controls[${index}].target`);
+    const raw = record$3(entry, `effective.controls[${index}]`);
+    const target2 = record$3(raw.target, `effective.controls[${index}].target`);
     const kind = enumValue(target2.kind, `effective.controls[${index}].target.kind`, ["extension", "permission"]);
     return {
       target: {
@@ -1102,7 +1342,7 @@ function normalizeEffectiveExtensionControls(value) {
   if (new Set(keys).size !== keys.length) throw new ExtensionControlProtocolError("effective.controls contains duplicate targets");
   const layers = array(root.layers, "effective.layers", EXTENSION_CLIENT_LIMITS.layers).map((entry, index) => normalizeExtensionControlLayer(entry, `effective.layers[${index}]`));
   const failures = array(root.failures, "effective.failures", EXTENSION_CLIENT_LIMITS.failures).map((entry, index) => {
-    const raw = record$2(entry, `effective.failures[${index}]`);
+    const raw = record$3(entry, `effective.failures[${index}]`);
     return {
       code: string$1(raw.code, `effective.failures[${index}].code`),
       detail: raw.detail === void 0 ? void 0 : string$1(raw.detail, `effective.failures[${index}].detail`, true),
@@ -1110,8 +1350,8 @@ function normalizeEffectiveExtensionControls(value) {
     };
   });
   const managedControls = root.managed_controls === void 0 ? void 0 : (() => {
-    const managed = record$2(root.managed_controls, "effective.managed_controls");
-    const acknowledgement = record$2(
+    const managed = record$3(root.managed_controls, "effective.managed_controls");
+    const acknowledgement = record$3(
       managed.acknowledgement,
       "effective.managed_controls.acknowledgement"
     );
@@ -1133,16 +1373,16 @@ function normalizeEffectiveExtensionControls(value) {
         "effective.managed_controls.authority_mode",
         ["personal-shared", "workspace-shared", "managed-restrictive"]
       ),
-      catalog_digest: digest$1(managed.catalog_digest, "effective.managed_controls.catalog_digest"),
+      catalog_digest: digest$2(managed.catalog_digest, "effective.managed_controls.catalog_digest"),
       issued_at: managed.issued_at === void 0 ? void 0 : string$1(managed.issued_at, "effective.managed_controls.issued_at"),
       expires_at: managed.expires_at === void 0 ? void 0 : string$1(managed.expires_at, "effective.managed_controls.expires_at"),
       acknowledgement: {
-        extension_authority_revision: integer$1(
+        extension_authority_revision: integer$3(
           acknowledgement.extension_authority_revision,
           "effective.managed_controls.acknowledgement.extension_authority_revision"
         ),
         policy_revision: policyRevision,
-        effective_projection_digest: acknowledgement.effective_projection_digest === void 0 ? void 0 : digest$1(
+        effective_projection_digest: acknowledgement.effective_projection_digest === void 0 ? void 0 : digest$2(
           acknowledgement.effective_projection_digest,
           "effective.managed_controls.acknowledgement.effective_projection_digest"
         ),
@@ -1153,8 +1393,8 @@ function normalizeEffectiveExtensionControls(value) {
   return {
     schema_version: string$1(root.schema_version, "effective.schema_version"),
     health: enumValue(root.health, "effective.health", ["unenrolled", "protected", "tampered", "degraded-unacknowledged", "degraded-acknowledged", "recovery-required"]),
-    revision: integer$1(root.revision, "effective.revision"),
-    catalog_digest: digest$1(root.catalog_digest, "effective.catalog_digest"),
+    revision: integer$3(root.revision, "effective.revision"),
+    catalog_digest: digest$2(root.catalog_digest, "effective.catalog_digest"),
     global_lockdown: bool$1(root.global_lockdown, "effective.global_lockdown"),
     controls,
     layers,
@@ -1170,7 +1410,7 @@ const MAX_CHANGED_TARGETS = 4096;
 const MAX_AFFECTED_IDS = 4096;
 const MAX_WARNINGS = 64;
 const MAX_TEXT = 8192;
-function record$1(value, label) {
+function record$2(value, label) {
   if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error(`Invalid extension-control ${label}: expected object`);
   return value;
 }
@@ -1178,7 +1418,7 @@ function string(value, label, max = MAX_TEXT) {
   if (typeof value !== "string" || value.length === 0 || value.length > max) throw new Error(`Invalid extension-control ${label}`);
   return value;
 }
-function integer(value, label) {
+function integer$2(value, label) {
   if (!Number.isSafeInteger(value) || value < 0) throw new Error(`Invalid extension-control ${label}`);
   return value;
 }
@@ -1186,7 +1426,7 @@ function bool(value, label) {
   if (typeof value !== "boolean") throw new Error(`Invalid extension-control ${label}`);
   return value;
 }
-function digest(value, label) {
+function digest$1(value, label) {
   const candidate = string(value, label, 64);
   if (!DIGEST.test(candidate)) throw new Error(`Invalid extension-control ${label}`);
   return candidate;
@@ -1215,17 +1455,17 @@ function optionalStringList(value, label) {
   return items;
 }
 function warning(value, label) {
-  const item = record$1(value, label);
+  const item = record$2(value, label);
   return {
     code: string(item.code, `${label}.code`, 128),
     message: string(item.message, `${label}.message`, 1024),
     ...item.target_id === void 0 ? {} : { target_id: targetId(item.target_id, `${label}.target_id`) },
-    ...item.count === void 0 ? {} : { count: integer(item.count, `${label}.count`) }
+    ...item.count === void 0 ? {} : { count: integer$2(item.count, `${label}.count`) }
   };
 }
 function target(value, label) {
-  const item = record$1(value, label);
-  const rawTarget = record$1(item.target, `${label}.target`);
+  const item = record$2(value, label);
+  const rawTarget = record$2(item.target, `${label}.target`);
   const kind = string(rawTarget.kind, `${label}.target.kind`, 32);
   if (kind !== "extension" && kind !== "permission") throw new Error(`Invalid extension-control ${label}.target.kind`);
   const beforeExplicit = string(item.before_explicit, `${label}.before_explicit`, 32);
@@ -1261,12 +1501,12 @@ function target(value, label) {
   };
 }
 function normalizeExtensionSemanticPreview(value) {
-  const root = record$1(value, "semantic preview");
+  const root = record$2(value, "semantic preview");
   if (string(root.schema_version, "semantic_preview.schema_version", 128) !== "guard.daemon.extension-control-semantic-preview.v1") throw new Error("Invalid extension-control semantic preview schema");
-  const lockdown = record$1(root.global_lockdown, "semantic_preview.global_lockdown");
-  const summary = record$1(root.summary, "semantic_preview.summary");
+  const lockdown = record$2(root.global_lockdown, "semantic_preview.global_lockdown");
+  const summary = record$2(root.summary, "semantic_preview.summary");
   const changedTargets = boundedArray(root.changed_targets, "semantic_preview.changed_targets", MAX_CHANGED_TARGETS).map((entry, index) => target(entry, `semantic_preview.changed_targets[${index}]`));
-  const changedTargetCount = integer(root.changed_target_count, "semantic_preview.changed_target_count");
+  const changedTargetCount = integer$2(root.changed_target_count, "semantic_preview.changed_target_count");
   if (changedTargetCount !== changedTargets.length) throw new Error("Invalid extension-control semantic preview target count");
   return {
     schema_version: "guard.daemon.extension-control-semantic-preview.v1",
@@ -1276,39 +1516,39 @@ function normalizeExtensionSemanticPreview(value) {
       changed: bool(lockdown.changed, "semantic_preview.global_lockdown.changed")
     },
     changed_target_count: changedTargetCount,
-    affected_permission_count: integer(root.affected_permission_count, "semantic_preview.affected_permission_count"),
-    affected_rule_count: integer(root.affected_rule_count, "semantic_preview.affected_rule_count"),
+    affected_permission_count: integer$2(root.affected_permission_count, "semantic_preview.affected_permission_count"),
+    affected_rule_count: integer$2(root.affected_rule_count, "semantic_preview.affected_rule_count"),
     changed_targets: changedTargets,
     ...root.approval_required === void 0 ? {} : { approval_required: bool(root.approval_required, "semantic_preview.approval_required") },
     summary: {
-      newly_blocked_permissions: integer(summary.newly_blocked_permissions, "semantic_preview.summary.newly_blocked_permissions"),
-      newly_allowed_permissions: integer(summary.newly_allowed_permissions, "semantic_preview.summary.newly_allowed_permissions"),
-      effective_change_count: integer(summary.effective_change_count, "semantic_preview.summary.effective_change_count")
+      newly_blocked_permissions: integer$2(summary.newly_blocked_permissions, "semantic_preview.summary.newly_blocked_permissions"),
+      newly_allowed_permissions: integer$2(summary.newly_allowed_permissions, "semantic_preview.summary.newly_allowed_permissions"),
+      effective_change_count: integer$2(summary.effective_change_count, "semantic_preview.summary.effective_change_count")
     }
   };
 }
 function normalizeExtensionMutationPreview(value) {
-  const root = record$1(value, "mutation preview");
+  const root = record$2(value, "mutation preview");
   return {
     schema_version: string(root.schema_version, "preview.schema_version", 128),
-    previous_revision: integer(root.previous_revision, "preview.previous_revision"),
-    next_revision: integer(root.next_revision, "preview.next_revision"),
-    catalog_digest: digest(root.catalog_digest, "preview.catalog_digest"),
-    canonical_diff_digest: digest(root.canonical_diff_digest, "preview.canonical_diff_digest"),
+    previous_revision: integer$2(root.previous_revision, "preview.previous_revision"),
+    next_revision: integer$2(root.next_revision, "preview.next_revision"),
+    catalog_digest: digest$1(root.catalog_digest, "preview.catalog_digest"),
+    canonical_diff_digest: digest$1(root.canonical_diff_digest, "preview.canonical_diff_digest"),
     global_lockdown: bool(root.global_lockdown, "preview.global_lockdown"),
-    controls: integer(root.controls, "preview.controls"),
+    controls: integer$2(root.controls, "preview.controls"),
     semantic_preview: normalizeExtensionSemanticPreview(root.semantic_preview),
     ...root.proof_id === void 0 ? {} : { proof_id: string(root.proof_id, "preview.proof_id", 256) }
   };
 }
 function normalizeExtensionMutationApply(value) {
-  const root = record$1(value, "mutation apply");
+  const root = record$2(value, "mutation apply");
   if (string(root.status, "apply.status", 32) !== "applied") throw new Error("Invalid extension-control apply status");
   return {
     schema_version: string(root.schema_version, "apply.schema_version", 128),
     status: "applied",
-    revision: integer(root.revision, "apply.revision"),
-    catalog_digest: digest(root.catalog_digest, "apply.catalog_digest")
+    revision: integer$2(root.revision, "apply.revision"),
+    catalog_digest: digest$1(root.catalog_digest, "apply.catalog_digest")
   };
 }
 class ExtensionControlApiError extends Error {
@@ -1322,7 +1562,7 @@ class ExtensionControlApiError extends Error {
   code;
   recoveryAction;
 }
-async function request(path, init) {
+async function request$1(path, init) {
   const response = await fetchExtensionControlApi(path, init);
   let payload;
   try {
@@ -1342,10 +1582,10 @@ async function request(path, init) {
   return payload;
 }
 async function fetchExtensionCatalog() {
-  return normalizeExtensionCatalog(await request("/v1/extension-controls/catalog"));
+  return normalizeExtensionCatalog(await request$1("/v1/extension-controls/catalog"));
 }
 async function fetchEffectiveExtensionControls() {
-  const raw = await request("/v1/extension-controls/effective");
+  const raw = await request$1("/v1/extension-controls/effective");
   const normalized = normalizeEffectiveExtensionControls(raw);
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return normalized;
   const projectionValue = raw.projection;
@@ -1357,7 +1597,7 @@ async function fetchEffectiveExtensionControls() {
   return { ...normalized, projection };
 }
 async function fetchExtensionControlHistory() {
-  const raw = await request("/v1/extension-controls/history");
+  const raw = await request$1("/v1/extension-controls/history");
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) throw new ExtensionControlApiError("Guard returned invalid settings history", 502);
   const root = raw;
   if (root.schema_version !== "guard.daemon.extension-control-history.v1") throw new ExtensionControlApiError("Guard returned unsupported settings history", 502);
@@ -1384,7 +1624,7 @@ async function fetchExtensionControlHistory() {
   };
 }
 async function recoverExtensionControlAuthority(credentials) {
-  const raw = await request("/v1/extension-controls/recover-authority", {
+  const raw = await request$1("/v1/extension-controls/recover-authority", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -1399,7 +1639,7 @@ async function recoverExtensionControlAuthority(credentials) {
   return normalized;
 }
 async function acknowledgeDegradedExtensionControlAuthority(credentials) {
-  const raw = await request("/v1/extension-controls/acknowledge-degraded", {
+  const raw = await request$1("/v1/extension-controls/acknowledge-degraded", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -1415,7 +1655,7 @@ async function acknowledgeDegradedExtensionControlAuthority(credentials) {
 }
 async function previewExtensionMutation(payload) {
   try {
-    return normalizeExtensionMutationPreview(await request("/v1/extension-controls/preview", {
+    return normalizeExtensionMutationPreview(await request$1("/v1/extension-controls/preview", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
@@ -1427,7 +1667,7 @@ async function previewExtensionMutation(payload) {
 }
 async function applyExtensionMutation(payload) {
   try {
-    return normalizeExtensionMutationApply(await request("/v1/extension-controls/apply", {
+    return normalizeExtensionMutationApply(await request$1("/v1/extension-controls/apply", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
@@ -2754,9 +2994,10 @@ function CatalogPreview(props) {
 }
 function BulkPolicyPicker(props) {
   const choices = [
-    { value: "inherit", label: "Recommended" },
+    { value: "inherit", label: props.mcpPolicy ? "Use policy" : "Recommended" },
     { value: "allow", label: props.allowLabel ?? "Allow all" },
-    { value: "block", label: "Block all" }
+    ...props.mcpPolicy ? [{ value: "review", label: "Ask listed" }] : [],
+    { value: "block", label: props.blockLabel ?? "Block all" }
   ];
   const mixed = props.value === "mixed";
   const selected = mixed ? "inherit" : props.value;
@@ -2776,7 +3017,7 @@ function BulkPolicyPicker(props) {
         role: "radiogroup",
         "aria-label": mixed ? `${groupLabel}. Custom mix` : groupLabel,
         "aria-describedby": mixed ? "bulk-policy-mixed" : void 0,
-        className: "guard-segmented w-fit",
+        className: props.mcpPolicy ? "guard-segmented w-fit !grid grid-cols-2 sm:!flex [&_[role=radio]]:!min-h-11" : "guard-segmented w-fit",
         children: choices.map((choice, index) => /* @__PURE__ */ jsxRuntimeExports.jsx(
           BulkPolicyChoice,
           {
@@ -2817,6 +3058,89 @@ function BulkPolicyChoice(props) {
     }
   );
 }
+function mcpToolCanReceiveDirectAllow(command) {
+  if (command.command_id === "other") return false;
+  const name = command.usage.split("__").at(-1)?.toLowerCase();
+  return !name?.startsWith("composio_") || ["composio_search_tools", "composio_get_tool_schemas"].includes(name);
+}
+function mcpCatalogCopy(item) {
+  if (item.surface !== "mcp") return null;
+  const catalog = item.mcp_catalog;
+  if (!catalog) return {
+    title: "Inventory not checked",
+    description: "Guard knows observed tools from this connector. Its full inventory has not been verified."
+  };
+  const count = `${catalog.known_count} ${catalog.known_count === 1 ? "tool" : "tools"}`;
+  if (catalog.complete && catalog.fresh_until && Date.parse(catalog.fresh_until) <= Date.now()) return {
+    title: `${count} cached · Refresh available`,
+    description: "This inventory's freshness window ended. Existing choices are kept; list tools again to check for changes."
+  };
+  if (catalog.complete) return {
+    title: `${count} listed`,
+    description: "Discovery finished. Permission choices apply separately to each tool."
+  };
+  if (catalog.reason === "catalog_changed") return {
+    title: "Inventory changed during discovery",
+    description: "Guard kept your choices. List tools again to review a consistent inventory."
+  };
+  if (catalog.reason === "refresh_failed" || catalog.reason === "list_failed") return {
+    title: catalog.stale ? `${count} cached · Refresh failed` : "Discovery did not finish",
+    description: catalog.known_count > 0 ? "Known tools and choices are still available. Retry discovery to check the current inventory." : "Guard could not finish listing tools. Retry discovery to check this connector."
+  };
+  return {
+    title: `${count} known · Inventory incomplete`,
+    description: "Discovery reached a limit or returned an incomplete inventory. Unknown tools still need review."
+  };
+}
+function rebaseCommandDraft(current, previous, next, changedToolNames = []) {
+  const changed = new Set(changedToolNames);
+  const previousStates = new Map(previous.map((command) => [command.command_id, command.state]));
+  const edits = new Map(current.filter((command) => previousStates.has(command.command_id) && command.state !== previousStates.get(command.command_id)).map((command) => [command.command_id, command.state]));
+  return next.map((command) => edits.has(command.command_id) && !(edits.get(command.command_id) === "allow" && (changed.has(command.command_id) || changed.has(command.usage))) ? { ...command, state: edits.get(command.command_id) } : command);
+}
+function commandPermissionChanges(previous, next) {
+  const states = new Map(previous.map((command) => [command.command_id, command.state]));
+  return next.filter((command) => command.state !== states.get(command.command_id)).map((command) => ({
+    commandId: command.command_id,
+    name: command.name,
+    before: states.get(command.command_id) ?? null,
+    after: command.state
+  }));
+}
+const words = (code) => code.replaceAll("-", " ");
+const explanations = {
+  "reviewed-provider-mapping:v1": "Reviewed provider contract",
+  "schema:content-fields": "Schema accepts content",
+  "schema:credential-fields": "Schema accepts credentials",
+  "schema:destination-fields": "Schema accepts a recipient or endpoint",
+  "schema:execution-fields": "Schema accepts executable content",
+  "provider-annotations:unverified": "Provider behavior claims, not verified by Guard"
+};
+function McpClassificationEvidence({ value }) {
+  if (!value) return null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "mt-2 text-xs leading-5 text-brand-dark/75", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("summary", { className: "min-h-11 cursor-pointer py-3 font-semibold", children: [
+      value.effect === "unknown" ? "Effect not resolved" : `Suggested effect: ${words(value.effect)}`,
+      " · View evidence"
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("dl", { className: "grid gap-x-4 gap-y-2 sm:grid-cols-2", children: [
+      ["Effect", value.effect],
+      ["Data", value.data],
+      ["Destination", value.destination],
+      ["Reversibility", value.reversibility]
+    ].map(([label, content]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "font-semibold", children: label }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { children: words(content) })
+    ] }, label)) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-3", children: [
+      "Evidence quality: ",
+      value.confidence === "reviewed-mapping" ? "reviewed contract" : "limited",
+      ". These suggestions do not verify behavior, account, or permission."
+    ] }),
+    value.evidence.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-2 list-disc pl-5", children: value.evidence.map((code) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: explanations[code] ?? "Unrecognized evidence" }, code)) }) : null,
+    value.warnings.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 font-semibold", children: value.warnings.map(words).join(" · ") }) : null
+  ] });
+}
 function commandStatesPayload(commands) {
   return commands.map((command) => ({ command_id: command.command_id, state: command.state }));
 }
@@ -2842,6 +3166,7 @@ function CustomExtensionCommandList(props) {
     {
       command,
       disabled: props.disabled,
+      surface: props.surface,
       onChange: props.onChange
     },
     command.command_id
@@ -2871,7 +3196,9 @@ function CustomExtensionCommandRow(props) {
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 pr-3", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-sm font-semibold text-brand-dark", children: props.command.name }),
           commandRowUsage(props.command.name, props.command.usage) ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "guard-pattern-example mt-1", title: props.command.usage, children: props.command.usage }) : null,
-          props.command.description ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1.5 text-xs leading-5 text-brand-dark/70", children: props.command.description }) : null
+          props.command.description ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1.5 text-xs leading-5 text-brand-dark/70", children: props.command.description }) : null,
+          /* @__PURE__ */ jsxRuntimeExports.jsx(McpClassificationEvidence, { value: props.command.classification }),
+          props.surface === "mcp" && !mcpToolCanReceiveDirectAllow(props.command) ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1.5 text-xs leading-5 text-brand-dark/75", children: props.command.command_id === "other" ? "New tools require review. You can deny tools outside this inventory." : "Review the actions and account inside this tool. A wrapper permission cannot allow execution." }) : null
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           CommandDraftControl,
@@ -2879,6 +3206,8 @@ function CustomExtensionCommandRow(props) {
             label: props.command.name,
             state: props.command.state,
             disabled: props.disabled,
+            mcpPolicy: props.surface === "mcp",
+            allowDisabled: props.surface === "mcp" && !mcpToolCanReceiveDirectAllow(props.command),
             onChange: handleChange
           }
         )
@@ -2888,9 +3217,10 @@ function CustomExtensionCommandRow(props) {
 }
 function CommandDraftControl(props) {
   const choices = [
-    { value: "inherit", label: "Recommended" },
-    { value: "allow", label: "Allow" },
-    { value: "block", label: "Block" }
+    { value: "inherit", label: props.mcpPolicy ? "Policy" : "Recommended" },
+    { value: "allow", label: "Allow", disabled: props.allowDisabled },
+    ...props.mcpPolicy ? [{ value: "review", label: "Ask" }] : [],
+    { value: "block", label: props.mcpPolicy ? "Deny" : "Block" }
   ];
   const tabStopIndex = extensionPolicyRadioTabStop(choices, props.state, props.disabled);
   const chooseAdjacent = (event, index) => {
@@ -2900,19 +3230,27 @@ function CommandDraftControl(props) {
     props.onChange(choices[next].value);
     event.currentTarget.parentElement?.querySelectorAll('[role="radio"]')[next]?.focus();
   };
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { role: "radiogroup", "aria-label": `${props.label} protection setting`, className: "guard-segmented", children: choices.map((choice, index) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-    CommandChoiceButton,
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "div",
     {
-      choice,
-      checked: props.state === choice.value,
-      tabIndex: !props.disabled && index === tabStopIndex ? 0 : -1,
-      disabled: props.disabled,
-      index,
-      onChoose: props.onChange,
-      onAdjacent: chooseAdjacent
-    },
-    choice.value
-  )) });
+      role: "radiogroup",
+      "aria-label": `${props.label} protection setting`,
+      className: props.mcpPolicy ? "guard-segmented !grid grid-cols-2 sm:!flex [&_[role=radio]]:!min-h-11" : "guard-segmented",
+      children: choices.map((choice, index) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+        CommandChoiceButton,
+        {
+          choice,
+          checked: props.state === choice.value,
+          tabIndex: !props.disabled && index === tabStopIndex ? 0 : -1,
+          disabled: props.disabled || choice.disabled === true,
+          index,
+          onChoose: props.onChange,
+          onAdjacent: chooseAdjacent
+        },
+        choice.value
+      ))
+    }
+  );
 }
 function CommandChoiceButton(props) {
   const handleClick = reactExports.useCallback(() => {
@@ -2935,6 +3273,162 @@ function CommandChoiceButton(props) {
       children: props.choice.label
     }
   );
+}
+const object$2 = (value) => Boolean(value) && typeof value === "object" && !Array.isArray(value);
+const integer$1 = (value) => typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+async function fetchMcpSkillMetadata(options) {
+  const response = await fetchLocalCliApi("/v1/local-clis/mcp-skills", {
+    method: "POST",
+    signal: options.signal,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      cli_id: options.cliId,
+      offset: options.offset,
+      search: options.search,
+      ...options.revision === void 0 ? {} : { revision: options.revision }
+    })
+  });
+  const body = await response.json();
+  if (!response.ok) throw new Error(object$2(body) && typeof body.message === "string" ? body.message : "Could not load remote workflow metadata.");
+  if (!object$2(body) || body.cli_id !== options.cliId || body.activation_supported !== false || !Array.isArray(body.entries) || body.entries.length > 50 || !integer$1(body.revision) || body.revision < 1 || body.next_offset !== null && body.next_offset !== options.offset + 50) throw new Error("Invalid remote workflow catalog");
+  const entries = body.entries.map((entry) => {
+    if (!object$2(entry) || entry.origin !== "mcp-served-skill" || entry.connection_identity_hash !== options.identityHash || entry.activation_supported !== false || entry.permissions_granted !== false || typeof entry.uri !== "string" || entry.uri.length > 8192 || !entry.uri.endsWith("/SKILL.md") || typeof entry.name !== "string" || entry.name.length > 64 || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(entry.name) || typeof entry.description !== "string" || entry.description.length > 1024 || typeof entry.dynamic !== "boolean" || (entry.dynamic ? entry.manifest_digest !== null || entry.resource_count !== null : typeof entry.manifest_digest !== "string" || !/^sha256:[a-f0-9]{64}$/.test(entry.manifest_digest) || !integer$1(entry.resource_count) || entry.resource_count < 1 || entry.resource_count > 512)) {
+      throw new Error("Invalid remote workflow provenance");
+    }
+    return {
+      uri: entry.uri,
+      name: entry.name,
+      description: entry.description,
+      dynamic: entry.dynamic,
+      manifest_digest: entry.manifest_digest,
+      resource_count: entry.resource_count
+    };
+  });
+  return { entries, revision: body.revision, nextOffset: body.next_offset };
+}
+function McpDeclaredSkills(props) {
+  const [open, setOpen] = reactExports.useState(false);
+  const [search, setSearch] = reactExports.useState("");
+  const [input, setInput] = reactExports.useState("");
+  const [offset, setOffset] = reactExports.useState(0);
+  const [retry, setRetry] = reactExports.useState(0);
+  const [page, setPage] = reactExports.useState(null);
+  const [busy, setBusy] = reactExports.useState(false);
+  const [error, setError] = reactExports.useState(null);
+  const revision = reactExports.useRef(void 0);
+  reactExports.useEffect(() => {
+    if (input === search) return;
+    const timer = window.setTimeout(() => {
+      setSearch(input);
+      setOffset(0);
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [input, search]);
+  reactExports.useEffect(() => {
+    if (!open) return;
+    const controller = new AbortController();
+    setBusy(true);
+    setError(null);
+    void fetchMcpSkillMetadata({
+      cliId: props.cliId,
+      identityHash: props.identityHash,
+      offset,
+      search,
+      revision: offset > 0 ? revision.current : void 0,
+      signal: controller.signal
+    }).then((next) => {
+      if (!controller.signal.aborted) {
+        setPage(next);
+        revision.current = next.revision;
+      }
+    }).catch((caught) => {
+      if (!controller.signal.aborted) setError(caught instanceof Error ? caught.message : "Could not load workflows.");
+    }).finally(() => {
+      if (!controller.signal.aborted) setBusy(false);
+    });
+    return () => controller.abort();
+  }, [open, props.cliId, props.identityHash, props.revision, offset, search, retry]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "mt-6 border-b border-slate-200 pb-5", onToggle: (event) => setOpen(event.currentTarget.open), children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("summary", { className: "min-h-11 cursor-pointer py-3 text-base font-semibold text-brand-dark", children: [
+      "Remote workflows · ",
+      props.knownCount,
+      " cached"
+    ] }),
+    open ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": "Remote workflow metadata", "aria-busy": busy, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "max-w-2xl text-sm leading-6 text-brand-dark/75", children: [
+        "This connection declares MCP Skills. ",
+        props.complete ? "Its workflow metadata was listed." : "Its workflow inventory is incomplete.",
+        "Instructions are not loaded. Guard has not enabled skill activation in this host; tool permissions remain separate."
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "mt-4 block max-w-xl text-sm font-semibold text-brand-dark", children: [
+        "Find a remote workflow",
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "input",
+          {
+            type: "search",
+            value: input,
+            onChange: (event) => setInput(event.target.value),
+            className: "mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 font-normal"
+          }
+        )
+      ] }),
+      error ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { role: "alert", className: "mt-3 text-sm text-red-700", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: error }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            onClick: () => {
+              setOffset(0);
+              setRetry((current) => current + 1);
+            },
+            className: "mt-2 min-h-11 rounded-xl border border-slate-300 px-4 font-semibold text-brand-dark",
+            children: "Reload workflow metadata"
+          }
+        )
+      ] }) : null,
+      !busy && !error && page?.entries.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 text-sm text-brand-dark/75", children: "No workflow metadata matches this search." }) : null,
+      !busy && !error && page ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-4 divide-y divide-slate-200", children: page.entries.map((entry) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "py-4", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-sm font-semibold text-brand-dark", children: entry.name }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 max-w-2xl text-sm leading-6 text-brand-dark/75", children: entry.description }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2 break-all text-xs text-brand-dark/75", children: [
+            "Origin: this MCP connection · ",
+            entry.uri
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-xs text-brand-dark/75", children: entry.dynamic ? "Dynamic content cannot carry persisted content approval." : `${entry.resource_count} files in the declared manifest. Files must be verified when read.` })
+        ] }, entry.uri)) }),
+        offset > 0 || page.nextOffset !== null ? /* @__PURE__ */ jsxRuntimeExports.jsxs("nav", { "aria-label": "Remote workflow pages", className: "mt-3 flex flex-wrap items-center gap-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              disabled: offset === 0,
+              onClick: () => setOffset(Math.max(0, offset - 50)),
+              className: "min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold disabled:opacity-50",
+              children: "Previous"
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-sm text-brand-dark/75", children: [
+            "Page ",
+            offset / 50 + 1
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              disabled: page.nextOffset === null,
+              onClick: () => {
+                if (page.nextOffset !== null) setOffset(page.nextOffset);
+              },
+              className: "min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold disabled:opacity-50",
+              children: "Next"
+            }
+          )
+        ] }) : null
+      ] }) : null
+    ] }) : null
+  ] });
 }
 const EXTENSION_PANEL_CLASS = "guard-extensions-panel p-5 sm:p-6";
 const EXTENSION_CHIP_CLASS = "guard-extensions-chip";
@@ -3588,7 +4082,872 @@ function customExtensionContinuityView(state) {
       };
   }
 }
+function actionTitle(action) {
+  const prefix = `${action.toolkit.toUpperCase()}_`;
+  const name = action.tool_slug.startsWith(prefix) ? action.tool_slug.slice(prefix.length) : action.tool_slug;
+  const words2 = name.replaceAll("_", " ").toLowerCase();
+  return words2.charAt(0).toUpperCase() + words2.slice(1);
+}
+function McpProviderActions(props) {
+  const [input, setInput] = reactExports.useState("");
+  const [search, setSearch] = reactExports.useState("");
+  const [offset, setOffset] = reactExports.useState(0);
+  const [page, setPage] = reactExports.useState(null);
+  const [busy, setBusy] = reactExports.useState(true);
+  const [error, setError] = reactExports.useState(null);
+  const [retry, setRetry] = reactExports.useState(0);
+  const catalogToken = reactExports.useRef(void 0);
+  reactExports.useEffect(() => {
+    if (input === search) return;
+    const timer = window.setTimeout(() => {
+      setSearch(input);
+      setOffset(0);
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [input, search]);
+  reactExports.useEffect(() => {
+    const controller = new AbortController();
+    setBusy(true);
+    setError(null);
+    void fetchMcpProviderActions(props.cliId, {
+      search,
+      offset,
+      signal: controller.signal,
+      catalogToken: offset > 0 ? catalogToken.current : void 0
+    }).then((next) => {
+      if (!controller.signal.aborted) {
+        catalogToken.current = next.catalogToken;
+        setPage(next);
+      }
+    }).catch((caught) => {
+      if (!controller.signal.aborted) setError(caught instanceof Error ? caught.message : "Could not load discovered actions.");
+    }).finally(() => {
+      if (!controller.signal.aborted) setBusy(false);
+    });
+    return () => controller.abort();
+  }, [props.cliId, props.authorityRevision, search, offset, retry]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "mt-6 border-b border-slate-200 pb-5", "aria-labelledby": "mcp-provider-heading", "aria-busy": busy, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "mcp-provider-heading", className: "text-base font-semibold text-brand-dark", children: "Discovered app actions" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2 max-w-2xl text-sm leading-6 text-brand-dark/75", children: [
+      props.knownCount,
+      " actions cached from discovery results. This is a partial inventory. Allow requires a verified account and enforcement of the action inside its execution wrapper. Deny applies to this action across all accounts in this host connection. Opaque workbench execution is blocked while any action is denied."
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "mt-4 block text-sm font-semibold text-brand-dark", htmlFor: "mcp-provider-search", children: "Search actions or apps" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "input",
+      {
+        id: "mcp-provider-search",
+        type: "search",
+        maxLength: 128,
+        value: input,
+        onChange: (event) => setInput(event.target.value),
+        className: "mt-2 min-h-11 w-full max-w-xl rounded-xl border border-slate-300 bg-white px-3 text-sm text-brand-dark"
+      }
+    ),
+    busy ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mt-3 text-sm text-brand-dark/75", children: "Loading discovered actions…" }) : null,
+    error ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { role: "alert", className: "mt-3 text-sm text-red-700", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: error }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          className: "mt-2 min-h-11 rounded-xl border border-slate-300 px-4 font-semibold text-brand-dark",
+          onClick: () => {
+            setOffset(0);
+            setRetry((value) => value + 1);
+          },
+          children: "Reload action inventory"
+        }
+      )
+    ] }) : null,
+    !busy && !error && page?.actions.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 text-sm leading-6 text-brand-dark/75", children: "No discovered actions match this search. Discovery may find more during use." }) : null,
+    !error && page && !busy ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-4 divide-y divide-slate-200", children: page.actions.map((action) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "py-4", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-start justify-between gap-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-sm font-semibold text-brand-dark", children: actionTitle(action) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-xs text-brand-dark/75", children: [
+              action.toolkit,
+              " · Account not verified"
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex items-center gap-2 text-xs font-semibold text-brand-dark", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "sr-only", children: [
+              "Permission for ",
+              actionTitle(action)
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs(
+              "select",
+              {
+                disabled: props.disabled,
+                "aria-label": `Permission for ${actionTitle(action)}`,
+                value: props.drafts[action.tool_slug]?.state ?? action.permission_state,
+                onChange: (event) => props.onChange(action, event.target.value),
+                className: "min-h-11 rounded-xl border border-slate-300 bg-white px-3 text-sm",
+                children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "review", children: "Ask" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "block", children: "Deny" })
+                ]
+              }
+            )
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 max-w-2xl break-words text-sm leading-6 text-brand-dark/75", children: action.description.slice(0, 260) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(McpClassificationEvidence, { value: action.classification }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "mt-1 text-xs text-brand-dark/75", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "min-h-11 cursor-pointer py-3 font-semibold", children: "Action details" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "break-all font-mono", children: action.tool_slug }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2", children: [
+            "Schema ",
+            action.full_schema ? "available" : "incomplete",
+            " · Revision ",
+            action.revision
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2", children: "Observed provider metadata. Execution permission has not been granted." })
+        ] })
+      ] }, action.tool_slug)) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 flex flex-wrap items-center gap-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            disabled: offset === 0,
+            onClick: () => setOffset(Math.max(0, offset - 50)),
+            className: "min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-brand-dark disabled:opacity-50",
+            children: "Previous page"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-sm text-brand-dark/75", children: [
+          "Page ",
+          offset / 50 + 1
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            disabled: page.nextOffset === null,
+            onClick: () => {
+              if (page.nextOffset !== null) setOffset(page.nextOffset);
+            },
+            className: "min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-brand-dark disabled:opacity-50",
+            children: "Next page"
+          }
+        )
+      ] })
+    ] }) : null
+  ] });
+}
+function object$1(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+async function fetchProviderWorkflows(cliId, offset, signal) {
+  const response = await fetchLocalCliApi("/v1/local-clis/provider-workflows", {
+    method: "POST",
+    signal,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ cli_id: cliId, offset })
+  });
+  const body = await response.json();
+  if (!response.ok) throw new Error(object$1(body) && typeof body.message === "string" ? body.message : "Could not load workflow suggestions.");
+  if (!object$1(body) || body.cli_id !== cliId || !Array.isArray(body.proposals) || body.proposals.length > 10 || body.next_offset !== null && body.next_offset !== offset + 10) throw new Error("Invalid workflow suggestions");
+  const proposals = body.proposals.map((entry) => {
+    if (!object$1(entry) || typeof entry.proposal_id !== "string" || !/^[a-f0-9]{64}$/.test(entry.proposal_id) || entry.source !== "composio-search-guidance" || entry.permissions_granted !== false || entry.requirements_complete !== false || entry.account_binding !== "unverified" || typeof entry.guidance_present !== "boolean" || !Array.isArray(entry.requirements) || entry.requirements.length > 50) throw new Error("Invalid workflow provenance");
+    const requirements = entry.requirements.map((part) => {
+      if (!object$1(part) || typeof part.tool_slug !== "string" || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(part.tool_slug) || !["primary", "supporting"].includes(String(part.role)) || !["ask", "saved-deny", "unresolved"].includes(String(part.state)) || typeof part.schema_observed !== "boolean") throw new Error("Invalid workflow dependency");
+      return {
+        slug: part.tool_slug,
+        role: part.role,
+        state: part.state,
+        schemaObserved: part.schema_observed
+      };
+    });
+    return { proposalId: entry.proposal_id, guidancePresent: entry.guidance_present, requirements };
+  });
+  return { proposals, nextOffset: body.next_offset };
+}
+const requirementLabels = { "saved-deny": "Saved Deny", unresolved: "Not observed", ask: "Needs review" };
+function ProviderWorkflows({ cliId }) {
+  const [open, setOpen] = reactExports.useState(false);
+  const [offset, setOffset] = reactExports.useState(0);
+  const [retry, setRetry] = reactExports.useState(0);
+  const [busy, setBusy] = reactExports.useState(false);
+  const [error, setError] = reactExports.useState(null);
+  const [page, setPage] = reactExports.useState(null);
+  reactExports.useEffect(() => {
+    if (!open) return;
+    const controller = new AbortController();
+    setBusy(true);
+    setError(null);
+    setPage(null);
+    void fetchProviderWorkflows(cliId, offset, controller.signal).then((result) => {
+      if (!controller.signal.aborted) setPage(result);
+    }).catch((caught) => {
+      if (!controller.signal.aborted) setError(caught instanceof Error ? caught.message : "Could not load suggestions.");
+    }).finally(() => {
+      if (!controller.signal.aborted) setBusy(false);
+    });
+    return () => controller.abort();
+  }, [cliId, open, offset, retry]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "mt-5 border-b border-slate-200 pb-5", onToggle: (event) => setOpen(event.currentTarget.open), children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "min-h-11 cursor-pointer py-3 text-base font-semibold text-brand-dark", children: "Suggested action workflows" }),
+    open ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": "Composio workflow suggestions", "aria-busy": busy, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "max-w-2xl text-sm leading-6 text-brand-dark/75", children: "Suggestions from observed Composio search results. They are not MCP Skills, account verification, or permission grants. Search may omit a workflow, and each action still needs its own review." }),
+      busy ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mt-3 text-sm text-brand-dark/75", children: "Loading suggestions…" }) : null,
+      error ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { role: "alert", className: "mt-3 text-sm text-red-700", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: error }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            onClick: () => {
+              setOffset(0);
+              setRetry((value) => value + 1);
+            },
+            className: "mt-2 min-h-11 rounded-xl border border-slate-300 px-4 font-semibold text-brand-dark",
+            children: "Reload suggestions"
+          }
+        )
+      ] }) : null,
+      !busy && !error && page?.proposals.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-sm text-brand-dark/75", children: "No workflow suggestion was observed. Search Composio for a specific task to discover one." }) : null,
+      !busy && !error && page ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("ol", { start: offset + 1, className: "mt-4 space-y-4", children: page.proposals.map((proposal) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "li",
+          {
+            className: "rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-brand-dark",
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "font-semibold", children: [
+                "Suggested workflow ",
+                offset + page.proposals.indexOf(proposal) + 1
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-brand-dark/75", children: proposal.guidancePresent ? "Composio also returned plan guidance; Guard kept only suggested action IDs." : "Action suggestions only; no plan guidance was returned." }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-2 space-y-1", children: proposal.requirements.map((part) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "break-words", children: [
+                part.slug.replaceAll("_", " ").toLowerCase(),
+                " · ",
+                part.role === "primary" ? "Primary" : "Supporting",
+                " · ",
+                requirementLabels[part.state],
+                !part.schemaObserved && part.state !== "unresolved" ? " · Schema incomplete" : ""
+              ] }, part.slug)) })
+            ]
+          },
+          proposal.proposalId
+        )) }),
+        offset > 0 || page.nextOffset !== null ? /* @__PURE__ */ jsxRuntimeExports.jsxs("nav", { "aria-label": "Suggestion pages", className: "mt-3 flex items-center gap-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              disabled: offset === 0,
+              onClick: () => setOffset(Math.max(0, offset - 10)),
+              className: "min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold disabled:opacity-50",
+              children: "Previous"
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-sm text-brand-dark/75", children: [
+            "Page ",
+            offset / 10 + 1
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              disabled: page.nextOffset === null,
+              onClick: () => {
+                if (page.nextOffset !== null) setOffset(page.nextOffset);
+              },
+              className: "min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold disabled:opacity-50",
+              children: "Next"
+            }
+          )
+        ] }) : null
+      ] }) : null
+    ] }) : null
+  ] });
+}
 function randomToken$2() {
+  return crypto.randomUUID().replaceAll("-", "");
+}
+function customExtensionRowDescription(item, catalogTitle) {
+  if (catalogTitle) return [item.source_label, catalogTitle].filter(Boolean).join(" · ");
+  if (item.source_label) return `${item.example_label} · ${item.source_label}`;
+  return item.example_label;
+}
+function nativePublicationMessage(publication, permissionScope) {
+  if (permissionScope === "configured-connection") {
+    return publication?.state === "failed" ? "Your choices are stored, but policy publication failed. Guard has not confirmed enforcement for this connection." : "Your choices are stored for this configured connection. Native host-hook calls use separately observed tool permissions until Guard verifies a binding to this connection.";
+  }
+  if (publication?.state === "acknowledged") {
+    return `Native policy acknowledged saved revision ${publication.revision}. Live calls still check host namespace and tool authority.`;
+  }
+  if (publication?.state === "pending") {
+    return "Your choices are stored. Waiting for the native runtime to acknowledge this revision before showing them as enforced.";
+  }
+  if (publication?.state === "failed") {
+    return "Your choices are stored, but native publication failed. Enforcement readiness is not confirmed.";
+  }
+  return "Your choices are stored. Native enforcement readiness has not been confirmed.";
+}
+function mcpPermissionStatusLabel(publication, permissionScope) {
+  if (permissionScope === "configured-connection") return "Connection choices stored · host binding unverified";
+  if (publication?.state === "acknowledged") return "Tool permissions saved and acknowledged";
+  if (publication?.state === "pending") return "Waiting for policy confirmation";
+  return "Policy confirmation unavailable";
+}
+function detailPolicyCopy(surface) {
+  if (surface === "mcp") {
+    return "Ask requires approval. Allow and Deny apply within the scope shown in Connection details. Allow does not override stricter Guard policy, so protected MCP actions may still need fresh approval. Execution wrappers require review of their underlying actions.";
+  }
+  if (surface === "package-scripts") {
+    return "Recommended keeps Guard's usual review. Allow or block applies to that npm, pnpm, yarn, or bun script in this project. Nested names such as guard:audit stay grouped.";
+  }
+  return "Recommended keeps Guard's usual review. Allow or block applies to that command from this file. Pipes, wrappers, and destructive commands stay under Guard's usual rules.";
+}
+function detailCatalogHeading(surface) {
+  if (surface === "mcp") return "MCP tools";
+  if (surface === "package-scripts") return "Package scripts";
+  return "Command patterns";
+}
+function detailCatalogHelper(surface) {
+  if (surface === "mcp") {
+    return "Choose Allow, Ask, or Deny for each tool. Policy follows Guard's existing rules.";
+  }
+  if (surface === "package-scripts") {
+    return "Same settings as built-in tools. Nested scripts stay indented under their prefix.";
+  }
+  return "Same settings as built-in tools. Recommended is the safe default.";
+}
+function bulkPolicyCopy(surface) {
+  if (surface === "mcp") {
+    return {
+      groupLabel: "Listed tools with direct permissions",
+      mixedCopy: "Custom mix. Use policy, allow, ask, or deny the listed tools with direct permissions."
+    };
+  }
+  if (surface === "package-scripts") {
+    return {
+      groupLabel: "All scripts protection setting",
+      mixedCopy: "Custom mix. Pick Recommended, Allow all, or Block all to reset every script."
+    };
+  }
+  return {
+    groupLabel: "All commands protection setting",
+    mixedCopy: "Custom mix. Pick Recommended, Allow all, or Block all to reset every command."
+  };
+}
+function reviewTitle(name, state) {
+  if (state === "allowed") return `Save ${name} command settings`;
+  if (state === "blocked") return `Block ${name}`;
+  return `Remove ${name}`;
+}
+function reviewModalDetail(gate) {
+  if (approvalProofRecentlySatisfied(gate)) {
+    return "Recently confirmed with your authenticator. A new code is not needed yet.";
+  }
+  if (gate?.totp_enabled === true) {
+    return "Enter the current authenticator code to save these settings on this device.";
+  }
+  return "This custom Extension remains local to this device until portable continuity is enabled.";
+}
+function customExtensionUnits(surface) {
+  if (surface === "mcp") return { unit: "tool", units: "tools", source: "this server" };
+  if (surface === "package-scripts") return { unit: "script", units: "scripts", source: "this project" };
+  return { unit: "command", units: "commands", source: "this file" };
+}
+function customExtensionStateLabel(item) {
+  const { unit, units, source } = customExtensionUnits(item.surface);
+  if (item.stale) {
+    if (item.surface === "mcp") return "This connection changed. Review its permissions again.";
+    return item.surface === "package-scripts" ? "package.json scripts changed. Review the extension again." : "This file changed. Review the extension again.";
+  }
+  if (item.state === "blocked") return `Every ${unit} from ${source} is blocked.`;
+  if (item.state === "allowed") {
+    if (item.surface === "mcp") {
+      const tools = item.commands.filter((command) => command.command_id !== "other");
+      if (tools.length === 0) return "No tools allowed yet. List the inventory to choose permissions.";
+      const allowed2 = tools.filter((command) => command.state === "allow" && mcpToolCanReceiveDirectAllow(command)).length;
+      const denied = tools.filter((command) => command.state === "block").length;
+      const ask = tools.filter((command) => command.state === "review" || !mcpToolCanReceiveDirectAllow(command) && command.state !== "block").length;
+      return `${allowed2} allowed · ${ask} ask · ${denied} denied. New tools require review.`;
+    }
+    if (item.commands.length === 0) {
+      return `Matching ${units} from ${source} are allowed.`;
+    }
+    const allowed = item.commands.filter((command) => command.state === "allow").length;
+    if (allowed > 0) return `${allowed} ${allowed === 1 ? unit : units} allowed. The rest follow Recommended.`;
+    return `${units.charAt(0).toUpperCase()}${units.slice(1)} follow Recommended until you allow or block them.`;
+  }
+  return item.surface === "mcp" ? "Detected · Permissions not configured. Inspect this connection." : item.example_label;
+}
+function continuityCopy(item) {
+  const status = item.continuity?.status;
+  if (status === "applied") {
+    const view = customExtensionContinuityView("identity-matched");
+    return { title: view.title, description: view.description };
+  }
+  if (status === "pending_observation") return customExtensionContinuityView("pending-observation");
+  if (status === "changed_identity") return customExtensionContinuityView("changed-identity");
+  if (status === "locally_overridden") return customExtensionContinuityView("locally-overridden");
+  if (status === "removed") return customExtensionContinuityView("removed");
+  if (status === "stale") return customExtensionContinuityView("stale");
+  return null;
+}
+function CustomExtensionReviewModal(props) {
+  const [password, setPassword] = reactExports.useState("");
+  const [totp, setTotp] = reactExports.useState("");
+  const dialogRef = useModalDialog(props.onCancel, !props.busy);
+  const title = props.providerUpdates.length > 0 ? "Review app action permissions" : reviewTitle(props.item.name, props.nextState);
+  const handlePassword = reactExports.useCallback((event) => {
+    setPassword(event.target.value);
+  }, []);
+  const handleTotp = reactExports.useCallback((event) => {
+    const digits = event.target.value.replace(/\D/g, "").slice(0, 6);
+    event.target.value = digits;
+    setTotp(digits);
+  }, []);
+  const handleSubmit = reactExports.useCallback((event) => {
+    event.preventDefault();
+    props.onConfirm(buildApprovalProofCredentials(props.approvalGate, {
+      approvalPassword: password,
+      approvalTotpCode: totp
+    }));
+  }, [password, props, totp]);
+  const submitDisabled = isApprovalProofSubmitDisabled(
+    props.approvalGate,
+    { approvalPassword: password, approvalTotpCode: totp },
+    props.busy,
+    false,
+    true
+  );
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4 backdrop-blur-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("form", { ref: dialogRef, tabIndex: -1, role: "dialog", "aria-modal": "true", "aria-labelledby": "custom-extension-review-title", onSubmit: handleSubmit, className: "max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl focus:outline-none", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "custom-extension-review-title", className: "text-xl font-semibold text-brand-dark", children: title }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-brand-dark/80", children: reviewModalDetail(props.approvalGate) }),
+    props.item.surface === "mcp" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 text-sm leading-6 text-brand-dark", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
+        props.item.source_label || "This host",
+        " · This configured connection"
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: connectionReviewMessage(props.nextState) })
+    ] }) : null,
+    props.commandChanges.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": "Permission changes", className: "mt-4 text-sm leading-6 text-brand-dark", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "font-semibold", children: [
+        props.commandChanges.length,
+        " ",
+        props.item.surface === "mcp" ? "tool" : "command",
+        " changes"
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-2 max-h-48 space-y-2 overflow-y-auto", children: props.commandChanges.map((change) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "break-words", children: [
+        change.name,
+        ": ",
+        permissionLabel(change.before),
+        " → ",
+        permissionLabel(change.after)
+      ] }, change.commandId)) })
+    ] }) : null,
+    props.providerUpdates.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 max-h-48 overflow-y-auto text-sm leading-6 text-brand-dark", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
+        props.providerUpdates.length,
+        " action changes for this host connection, across all accounts."
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-2 space-y-1", children: props.providerUpdates.map((update) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "break-words", children: [
+        update.tool_slug.replaceAll("_", " ").toLowerCase(),
+        " → ",
+        update.state === "block" ? "Deny" : "Ask"
+      ] }, update.tool_slug)) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2", children: "Any Deny also blocks opaque workbench execution. Allow is unavailable until the account is verified." })
+    ] }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+      ApprovalProofFieldInputs,
+      {
+        approvalGate: props.approvalGate,
+        approvalPassword: password,
+        approvalTotpCode: totp,
+        requireGate: true,
+        onApprovalPasswordChange: handlePassword,
+        onApprovalTotpCodeChange: handleTotp
+      }
+    ) }),
+    props.error ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(InlineError, { message: props.error }) }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 flex justify-end gap-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: props.busy, onClick: props.onCancel, className: "min-h-11 rounded-xl px-4 text-sm font-semibold text-brand-dark", children: "Cancel" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "submit", disabled: submitDisabled, className: "min-h-11 rounded-xl bg-brand-blue px-5 text-sm font-semibold text-white disabled:opacity-60", children: props.busy ? "Saving…" : "Confirm" })
+    ] })
+  ] }) });
+}
+function permissionLabel(state) {
+  if (state === null) return "Not previously listed";
+  const labels = {
+    allow: "Allow",
+    block: "Deny",
+    review: "Ask",
+    inherit: "Policy"
+  };
+  return labels[state];
+}
+function connectionReviewMessage(state) {
+  if (state === "blocked") return "The connection will deny every tool, including tools listed as Allow.";
+  if (state === "unset") return "Saved connection permissions will be removed. Future calls return to Guard policy.";
+  return "Unknown and future tools still require review. These choices do not verify the provider account.";
+}
+const object = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+async function registrySearch(query, signal) {
+  const response = await fetchLocalCliApi("/v1/local-clis/registry-search", {
+    method: "POST",
+    signal,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ search: query })
+  });
+  const body = await response.json();
+  if (!response.ok) throw new Error(object(body) && typeof body.message === "string" ? body.message : "Registry search failed.");
+  if (!object(body) || body.source !== "official-mcp-registry" || body.coverage !== "search-page" || !Array.isArray(body.results) || body.results.length > 20 || typeof body.more_available !== "boolean") {
+    throw new Error("Invalid registry response");
+  }
+  const entries = body.results.map((entry) => {
+    if (!object(entry) || entry.provenance !== "official-mcp-registry" || entry.verified_package !== false || entry.configured !== false || entry.installed !== false || !["active", "deprecated", "unknown"].includes(String(entry.status)) || typeof entry.name !== "string" || entry.name.length > 256 || typeof entry.title !== "string" || entry.title.length > 120 || typeof entry.version !== "string" || entry.version.length > 80 || typeof entry.description !== "string" || entry.description.length > 500 || !Array.isArray(entry.remote_endpoints) || entry.remote_endpoints.length > 8 || !Array.isArray(entry.package_options) || entry.package_options.length > 8 || typeof entry.package_count !== "number" || !Number.isSafeInteger(entry.package_count) || entry.package_count < 0 || entry.package_count > 100) {
+      throw new Error("Invalid registry provenance");
+    }
+    const endpoints = entry.remote_endpoints.map((remote) => {
+      if (!object(remote) || typeof remote.url !== "string" || !remote.url.startsWith("https://") || !["streamable-http", "sse"].includes(String(remote.transport))) throw new Error("Invalid registry endpoint");
+      return { url: remote.url, transport: remote.transport };
+    });
+    const packages = entry.package_options.map((option) => {
+      if (!object(option) || !["npm", "pypi"].includes(String(option.registry_type)) || typeof option.identifier !== "string" || option.identifier.length > 160 || typeof option.version !== "string" || option.version.length > 80 || !["npx", "uvx"].includes(String(option.command)) || option.transport !== "stdio" || option.verified_package !== false || !Array.isArray(option.arguments) || option.arguments.length > (option.registry_type === "pypi" ? 17 : 18) || !option.arguments.every((argument) => typeof argument === "string" && argument.length <= 160)) {
+        throw new Error("Invalid registry package option");
+      }
+      return option;
+    });
+    return {
+      name: entry.name,
+      version: entry.version,
+      title: entry.title,
+      description: entry.description,
+      status: entry.status,
+      remote_endpoints: endpoints,
+      package_count: entry.package_count,
+      package_options: packages,
+      verified_package: false,
+      configured: false,
+      installed: false
+    };
+  });
+  return { entries, moreAvailable: body.more_available };
+}
+function McpRegistrySearch({ items, approvalGate, onOpenChange, onConfigured }) {
+  const [open, setOpen] = reactExports.useState(false);
+  const [query, setQuery] = reactExports.useState("");
+  const [entries, setEntries] = reactExports.useState(null);
+  const [moreAvailable, setMoreAvailable] = reactExports.useState(false);
+  const [busy, setBusy] = reactExports.useState(false);
+  const [error, setError] = reactExports.useState(null);
+  const controller = reactExports.useRef(null);
+  const operation = reactExports.useRef(null);
+  const interactionGeneration = reactExports.useRef(0);
+  const [candidate, setCandidate] = reactExports.useState(null);
+  const [configured, setConfigured] = reactExports.useState(null);
+  const [password, setPassword] = reactExports.useState("");
+  const [totp, setTotp] = reactExports.useState("");
+  reactExports.useEffect(() => () => controller.current?.abort(), []);
+  async function search() {
+    if (query.trim().length < 2 || busy || operation.current) return;
+    interactionGeneration.current += 1;
+    operation.current = "search";
+    const next = new AbortController();
+    controller.current = next;
+    setBusy(true);
+    setError(null);
+    setEntries(null);
+    setCandidate(null);
+    setConfigured(null);
+    try {
+      const result = await registrySearch(query, next.signal);
+      if (!next.signal.aborted) {
+        setEntries(result.entries);
+        setMoreAvailable(result.moreAvailable);
+      }
+    } catch (caught) {
+      if (!next.signal.aborted) setError(caught instanceof Error ? caught.message : "Registry unavailable.");
+    } finally {
+      operation.current = null;
+      if (controller.current === next) controller.current = null;
+      if (!next.signal.aborted) setBusy(false);
+    }
+  }
+  async function preview(entry, target2) {
+    if (operation.current) return;
+    interactionGeneration.current += 1;
+    operation.current = "preview";
+    setBusy(true);
+    setError(null);
+    setCandidate(null);
+    setConfigured(null);
+    const setupName = entry.name.split("/").at(-1)?.toLowerCase().replace(/[^a-z0-9_-]/g, "-") ?? "mcp-server";
+    try {
+      const response = await fetchLocalCliApi("/v1/local-clis/registry-setup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          operation: "preview",
+          registry_name: entry.name,
+          version: entry.version,
+          setup_name: setupName,
+          ..."endpoint" in target2 ? { kind: "remote", endpoint: target2.endpoint } : {
+            kind: "package",
+            package_identifier: target2.packageOption.identifier,
+            package_version: target2.packageOption.version
+          }
+        })
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(object(body) && typeof body.message === "string" ? body.message : "Could not review setup.");
+      if (!object(body) || body.host !== "codex" || body.registry_name !== entry.name || body.version !== entry.version || body.setup_name !== setupName || body.permissions_granted !== false || body.host_change_applied !== false || typeof body.selection_digest !== "string" || !/^[a-f0-9]{64}$/.test(body.selection_digest)) throw new Error("Invalid Codex setup preview");
+      if ("endpoint" in target2) {
+        if (body.endpoint !== target2.endpoint || body.kind !== "remote") throw new Error("Invalid Codex endpoint preview");
+      } else if (body.kind !== "package" || body.package_identifier !== target2.packageOption.identifier || body.package_version !== target2.packageOption.version || typeof body.command !== "string" || !Array.isArray(body.arguments) || !body.arguments.every((argument) => typeof argument === "string") || body.verified_package !== false) throw new Error("Invalid Codex package preview");
+      setCandidate(body);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not review setup.");
+    } finally {
+      operation.current = null;
+      setBusy(false);
+    }
+  }
+  async function apply() {
+    if (!candidate || busy || operation.current || isApprovalProofSubmitDisabled(
+      approvalGate,
+      { approvalPassword: password, approvalTotpCode: totp },
+      false
+    )) return;
+    const generation = ++interactionGeneration.current;
+    operation.current = "apply";
+    setBusy(true);
+    setError(null);
+    try {
+      const proof = buildApprovalProofCredentials(
+        approvalGate,
+        { approvalPassword: password, approvalTotpCode: totp }
+      );
+      const response = await fetchLocalCliApi("/v1/local-clis/registry-setup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          operation: "apply",
+          registry_name: candidate.registry_name,
+          version: candidate.version,
+          setup_name: candidate.setup_name,
+          ...candidate.kind === "package" ? {
+            kind: "package",
+            package_identifier: candidate.package_identifier,
+            package_version: candidate.package_version
+          } : { kind: "remote", endpoint: candidate.endpoint },
+          selection_digest: candidate.selection_digest,
+          confirm_host_change: true,
+          session_nonce: crypto.randomUUID().replaceAll("-", ""),
+          ...proof
+        })
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(object(body) && typeof body.message === "string" ? body.message : "Codex setup did not finish.");
+      if (!object(body) || body.host !== "codex" || body.setup_name !== candidate.setup_name || body.kind !== (candidate.kind === "package" ? "package" : "remote") || body.host_change_applied !== true || body.permissions_granted !== false) throw new Error("Codex setup outcome is uncertain.");
+      setConfigured({ name: candidate.setup_name, kind: candidate.kind === "package" ? "package" : "remote" });
+      setCandidate(null);
+      setPassword("");
+      setTotp("");
+      void Promise.resolve().then(onConfigured).then((outcome) => {
+        if (outcome === "partial" && interactionGeneration.current === generation) setError("Codex was configured, but Guard could not fully rescan host connections. Existing connections remain visible. Retry discovery in Extensions.");
+      }).catch(() => {
+        if (interactionGeneration.current === generation) setError("Codex was configured, but Guard could not fully rescan host connections. Retry discovery in Extensions.");
+      });
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Codex setup did not finish.");
+    } finally {
+      operation.current = null;
+      setBusy(false);
+    }
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "mt-6 rounded-2xl border border-slate-200 bg-white p-4", onToggle: (event) => {
+    setOpen(event.currentTarget.open);
+    onOpenChange(event.currentTarget.open);
+    if (!event.currentTarget.open && operation.current === "search") {
+      controller.current?.abort();
+      setBusy(false);
+    }
+  }, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "min-h-11 cursor-pointer py-3 font-semibold text-brand-dark", children: "Find an MCP server in the public registry" }),
+    open ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": "Public MCP registry search", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm leading-6 text-brand-dark/75", children: "Search official listing metadata. Review a pinned package or HTTPS endpoint before adding it to Codex. A listing does not verify package safety, connect an account, or enable tools. App-owned connections stay in their host." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 flex flex-wrap items-end gap-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block min-w-56 flex-1 text-sm font-semibold text-brand-dark", children: [
+          "Server or app name",
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "input",
+            {
+              type: "search",
+              minLength: 2,
+              maxLength: 80,
+              value: query,
+              onChange: (event) => setQuery(event.target.value),
+              onKeyDown: (event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  void search();
+                }
+              },
+              className: "mt-2 min-h-11 w-full rounded-xl border border-slate-300 px-3 font-normal"
+            }
+          )
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            onClick: () => {
+              void search();
+            },
+            disabled: busy || query.trim().length < 2,
+            className: "min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white disabled:opacity-50",
+            children: "Search registry"
+          }
+        )
+      ] }),
+      busy ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mt-3 text-sm text-brand-dark/75", children: {
+        search: "Searching public listings…",
+        preview: "Checking the exact registry listing…",
+        apply: "Adding the reviewed connection to Codex…"
+      }[operation.current ?? "apply"] }) : null,
+      error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-3 text-sm text-red-700", children: error }) : null,
+      configured ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { role: "status", className: "mt-3 text-sm text-brand-dark", children: [
+        configured.name,
+        " was added to Codex. Restart Codex and complete any provider-owned sign-in there.",
+        configured.kind === "package" ? " Codex may download and run the pinned package on first use." : null,
+        " ",
+        "Review each tool in Extensions after Codex loads it. No tool permission was granted."
+      ] }) : null,
+      candidate ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": "Review Codex MCP setup", className: "mt-4 rounded-xl border border-slate-200 p-4 text-sm text-brand-dark", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "font-semibold", children: "Review Codex connection" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2", children: [
+          candidate.registry_name,
+          " · version ",
+          candidate.version
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 break-all", children: [
+          "Codex name: ",
+          candidate.setup_name
+        ] }),
+        candidate.kind === "package" ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2", children: [
+            "Unverified registry package: ",
+            candidate.package_identifier,
+            " · pinned version ",
+            candidate.package_version
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 break-all font-mono text-xs", children: [
+            "Launch: ",
+            [candidate.command, ...candidate.arguments].map((part) => JSON.stringify(part)).join(" ")
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2", children: "This changes Codex configuration. Codex may download and execute this package on first use. It does not authenticate an account or allow tools in Guard." })
+        ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 break-all", children: [
+            "HTTPS endpoint: ",
+            candidate.endpoint
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2", children: "This changes Codex configuration. It does not download a package, authenticate an account, activate this session, or allow tools in Guard." })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 max-w-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+          ApprovalProofFieldInputs,
+          {
+            approvalGate,
+            approvalPassword: password,
+            approvalTotpCode: totp,
+            onApprovalPasswordChange: (event) => setPassword(event.target.value),
+            onApprovalTotpCodeChange: (event) => setTotp(event.target.value.replace(/\D/g, "").slice(0, 6))
+          }
+        ) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 flex gap-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              disabled: busy || isApprovalProofSubmitDisabled(
+                approvalGate,
+                { approvalPassword: password, approvalTotpCode: totp },
+                false
+              ),
+              onClick: () => {
+                void apply();
+              },
+              className: "min-h-11 rounded-xl bg-brand-blue px-4 font-semibold text-white disabled:opacity-50",
+              children: "Add to Codex"
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              disabled: busy,
+              onClick: () => {
+                setCandidate(null);
+                setPassword("");
+                setTotp("");
+              },
+              className: "min-h-11 rounded-xl border border-slate-300 px-4 font-semibold",
+              children: "Cancel"
+            }
+          )
+        ] })
+      ] }) : null,
+      entries?.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-sm text-brand-dark/75", children: "No listing on this search page. Try another name." }) : null,
+      moreAvailable && entries ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-sm text-brand-dark/75", children: "More listings match. Refine the name to find a specific server; this page is not the complete registry." }) : null,
+      entries ? /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-4 divide-y divide-slate-200", children: entries.map((entry) => {
+        const basename = entry.name.split("/").at(-1)?.toLowerCase();
+        const possibleExisting = items.some((item) => item.surface === "mcp" && (item.name.toLowerCase() === entry.title.toLowerCase() || item.name.toLowerCase() === basename));
+        return /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "py-4 text-sm text-brand-dark", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "font-semibold", children: [
+            entry.title,
+            " · ",
+            entry.version
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-brand-dark/75", children: entry.description }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 break-all text-xs text-brand-dark/75", children: entry.name }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2 text-xs text-brand-dark/75", children: [
+            entry.status,
+            " listing · ",
+            entry.remote_endpoints.length,
+            " HTTPS endpoint(s) · ",
+            entry.package_options.length,
+            " reviewed launch option(s) of ",
+            entry.package_count,
+            " package listing(s) · Packages unverified"
+          ] }),
+          possibleExisting ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-xs font-semibold text-brand-dark", children: "Possible existing connection. Inspect it before adding another." }) : null,
+          entry.status === "active" && !possibleExisting && entry.remote_endpoints.some((remote) => remote.transport === "streamable-http") ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: busy, onClick: () => {
+            const endpoint = entry.remote_endpoints.find((remote) => remote.transport === "streamable-http");
+            if (endpoint) void preview(entry, { endpoint: endpoint.url });
+          }, className: "mt-3 min-h-11 rounded-xl border border-slate-300 px-4 font-semibold text-brand-dark", children: "Review HTTPS setup" }) : null,
+          entry.status === "active" && !possibleExisting ? entry.package_options.map((option) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "button",
+            {
+              type: "button",
+              disabled: busy,
+              onClick: () => {
+                void preview(entry, { packageOption: option });
+              },
+              className: "ml-2 mt-3 min-h-11 rounded-xl border border-slate-300 px-4 font-semibold text-brand-dark",
+              children: [
+                "Review ",
+                option.registry_type,
+                " package · ",
+                option.identifier,
+                "@",
+                option.version
+              ]
+            },
+            `${option.registry_type}/${option.identifier}/${option.version}`
+          )) : null
+        ] }, `${entry.name}/${entry.version}`);
+      }) }) : null
+    ] }) : null
+  ] });
+}
+function randomToken$1() {
   return crypto.randomUUID().replaceAll("-", "");
 }
 function AddCustomExtensionWorkspace(props) {
@@ -3605,6 +4964,7 @@ function AddCustomExtensionWorkspace(props) {
   const [error, setError] = reactExports.useState(null);
   const [reviewingScripts, setReviewingScripts] = reactExports.useState(false);
   const [toolQuery, setToolQuery] = reactExports.useState("");
+  const [registryOpen, setRegistryOpen] = reactExports.useState(false);
   const recognizeGeneration = reactExports.useRef(0);
   const autoRecognizedCommand = reactExports.useRef("");
   const didAutoSelect = reactExports.useRef(false);
@@ -3780,7 +5140,7 @@ function AddCustomExtensionWorkspace(props) {
         interpreter_name: recognized.interpreter_name,
         state: pending,
         previous_revision: props.revision,
-        session_nonce: randomToken$2(),
+        session_nonce: randomToken$1(),
         commands: enrollmentCommandStates(commands, pending, recognized.surface),
         ...buildApprovalProofCredentials(resolvedApprovalGate, {
           approvalPassword: password,
@@ -3830,9 +5190,9 @@ function AddCustomExtensionWorkspace(props) {
   } else if (showingMcpCatalog) {
     visibleCommands = commands.filter((entry) => `${entry.name} ${entry.description}`.toLowerCase().includes(toolQuery.trim().toLowerCase()));
   }
-  let confirmTitle = allowActionLabel(recognized?.surface);
+  let confirmTitle = allowActionLabel(recognized?.surface ?? "cli");
   if (pending === "blocked") {
-    confirmTitle = blockActionLabel(recognized?.surface);
+    confirmTitle = blockActionLabel(recognized?.surface ?? "cli");
   } else if (observedMcp) {
     confirmTitle = "Save tool permissions";
   }
@@ -3967,21 +5327,32 @@ function AddCustomExtensionWorkspace(props) {
                 onChange: handleCommandState
               }
             ) }) : null
-          ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx(
-            SuggestionPanel,
-            {
-              query: command,
-              discovering: props.discovering === true,
-              hasSuggestions,
-              packageScriptSuggestions,
-              harnessSuggestions,
-              seenSuggestions,
-              onSelect: selectSuggestion
-            }
-          )
+          ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              SuggestionPanel,
+              {
+                query: command,
+                discovering: props.discovering === true,
+                hasSuggestions,
+                packageScriptSuggestions,
+                harnessSuggestions,
+                seenSuggestions,
+                onSelect: selectSuggestion
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              McpRegistrySearch,
+              {
+                items: props.items,
+                approvalGate: resolvedApprovalGate,
+                onOpenChange: setRegistryOpen,
+                onConfigured: props.onConfigured
+              }
+            )
+          ] })
         ] }),
         error ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 max-w-xl", children: /* @__PURE__ */ jsxRuntimeExports.jsx(InlineError, { message: error }) }) : null,
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "sticky bottom-0 mt-auto border-t border-slate-200 bg-white py-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `${registryOpen && !recognized ? "relative" : "sticky bottom-0"} mt-auto border-t border-slate-200 bg-white py-4`, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-3", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "submit", disabled: submitDisabled, className: "min-h-11 rounded-xl bg-brand-blue px-5 text-sm font-semibold text-white disabled:opacity-60", children: addDialogSubmitLabel({ recognized, busy, pending, step: recognized ? step : "pick" }) }),
           recognized && confirming && pending === "allowed" ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: requestBlock, className: "min-h-11 rounded-xl px-4 text-sm font-semibold text-brand-dark", children: blockActionLabel(recognized.surface) }) : null,
           recognized && confirming && pending === "blocked" ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: requestAllow, className: "min-h-11 rounded-xl px-4 text-sm font-semibold text-brand-dark", children: allowActionLabel(recognized.surface) }) : null
@@ -4002,13 +5373,29 @@ async function fetchLocalCliDiscover() {
   }
   return normalizeLocalCliList(payload);
 }
+function discoveryIssueMessage(issue) {
+  switch (issue) {
+    case "catalog_limit_reached":
+      return "Some connectors have more tools than Guard can catalog safely. Existing choices were kept.";
+    case "configured_host_scan_failed":
+      return "Guard could not read configured host connections. Check the host app and retry.";
+    case "observed_provider_scan_failed":
+      return "Guard could not merge observed provider tools. Existing choices were kept; retry discovery.";
+    case "package_catalog_refresh_failed":
+      return "Guard could not refresh project scripts. Existing custom extensions were kept; retry discovery.";
+    default:
+      return null;
+  }
+}
 function useLocalCliCatalog() {
   const [data, setData] = reactExports.useState(null);
   const [error, setError] = reactExports.useState(null);
+  const [discoveryNotice, setDiscoveryNotice] = reactExports.useState(null);
   const [discovering, setDiscovering] = reactExports.useState(false);
   const [catalogReady, setCatalogReady] = reactExports.useState(false);
   const loadGeneration = reactExports.useRef(0);
-  const load = reactExports.useCallback(async () => {
+  const publicationPoll = reactExports.useRef({ revision: -1, attempts: 0 });
+  const load = reactExports.useCallback(async (preserveDiscoveryNotice = false) => {
     const generation = loadGeneration.current + 1;
     loadGeneration.current = generation;
     try {
@@ -4016,6 +5403,7 @@ function useLocalCliCatalog() {
       if (loadGeneration.current !== generation) return;
       setData(next);
       setError(null);
+      if (!preserveDiscoveryNotice) setDiscoveryNotice(null);
     } catch (caught) {
       if (loadGeneration.current !== generation) return;
       setError(caught instanceof Error ? caught.message : "Guard could not load custom extensions.");
@@ -4028,18 +5416,23 @@ function useLocalCliCatalog() {
     setCatalogReady(false);
     try {
       const next = await fetchLocalCliDiscover();
-      if (loadGeneration.current !== generation) return;
+      if (loadGeneration.current !== generation) return "superseded";
       setData(next);
       setError(null);
-    } catch {
+      setDiscoveryNotice(discoveryIssueMessage(next.discovery_issue));
+      return next.discovery_issue ? "partial" : "refreshed";
+    } catch (error2) {
       try {
         const next = await fetchLocalCliList();
-        if (loadGeneration.current !== generation) return;
+        if (loadGeneration.current !== generation) return "superseded";
         setData(next);
         setError(null);
+        setDiscoveryNotice(error2 instanceof Error ? error2.message : "Guard could not refresh custom extensions.");
+        return "partial";
       } catch (caught) {
-        if (loadGeneration.current !== generation) return;
+        if (loadGeneration.current !== generation) return "superseded";
         setError(caught instanceof Error ? caught.message : "Guard could not load custom extensions.");
+        return "partial";
       }
     } finally {
       if (loadGeneration.current === generation) {
@@ -4051,114 +5444,82 @@ function useLocalCliCatalog() {
   reactExports.useEffect(() => {
     void load();
   }, [load]);
-  return { data, error, load, discover, discovering, catalogReady };
-}
-function randomToken$1() {
-  return crypto.randomUUID().replaceAll("-", "");
-}
-function detailPolicyCopy(surface) {
-  if (surface === "mcp") {
-    return "Recommended keeps Guard's usual review. Allow or block applies to that tool from this MCP server. Destructive tools stay under Guard's usual rules.";
-  }
-  if (surface === "package-scripts") {
-    return "Recommended keeps Guard's usual review. Allow or block applies to that npm, pnpm, yarn, or bun script in this project. Nested names such as guard:audit stay grouped.";
-  }
-  return "Recommended keeps Guard's usual review. Allow or block applies to that command from this file. Pipes, wrappers, and destructive commands stay under Guard's usual rules.";
-}
-function detailCatalogHeading(surface) {
-  if (surface === "mcp") return "MCP tools";
-  if (surface === "package-scripts") return "Package scripts";
-  return "Command patterns";
-}
-function detailCatalogHelper(surface) {
-  if (surface === "mcp") {
-    return "Same settings as built-in tools. Recommended is the safe default for each MCP tool.";
-  }
-  if (surface === "package-scripts") {
-    return "Same settings as built-in tools. Nested scripts stay indented under their prefix.";
-  }
-  return "Same settings as built-in tools. Recommended is the safe default.";
-}
-function bulkPolicyCopy(surface) {
-  if (surface === "mcp") {
-    return {
-      groupLabel: "All tools protection setting",
-      mixedCopy: "Custom mix. Pick Recommended, Allow all, or Block all to reset every tool."
-    };
-  }
-  if (surface === "package-scripts") {
-    return {
-      groupLabel: "All scripts protection setting",
-      mixedCopy: "Custom mix. Pick Recommended, Allow all, or Block all to reset every script."
-    };
-  }
-  return {
-    groupLabel: "All commands protection setting",
-    mixedCopy: "Custom mix. Pick Recommended, Allow all, or Block all to reset every command."
-  };
-}
-function reviewTitle(name, state) {
-  if (state === "allowed") return `Save ${name} command settings`;
-  if (state === "blocked") return `Block ${name}`;
-  return `Remove ${name}`;
-}
-function reviewModalDetail(gate) {
-  if (approvalProofRecentlySatisfied(gate)) {
-    return "Recently confirmed with your authenticator. A new code is not needed yet.";
-  }
-  if (gate?.totp_enabled === true) {
-    return "Enter the current authenticator code to save these settings on this device.";
-  }
-  return "This custom Extension remains local to this device until portable continuity is enabled.";
-}
-function customExtensionUnits(surface) {
-  if (surface === "mcp") return { unit: "tool", units: "tools", source: "this server" };
-  if (surface === "package-scripts") return { unit: "script", units: "scripts", source: "this project" };
-  return { unit: "command", units: "commands", source: "this file" };
-}
-function customExtensionStateLabel(item) {
-  const { unit, units, source } = customExtensionUnits(item.surface);
-  if (item.stale) {
-    return item.surface === "package-scripts" ? "package.json scripts changed. Review the extension again." : "This file changed. Review the extension again.";
-  }
-  if (item.state === "blocked") return `Every ${unit} from ${source} is blocked.`;
-  if (item.state === "allowed") {
-    if (item.commands.length === 0) {
-      return `Matching ${units} from ${source} are allowed.`;
+  reactExports.useEffect(() => {
+    if (discovering || data?.native_publication?.state !== "pending") return;
+    if (publicationPoll.current.revision !== data.revision) {
+      publicationPoll.current = { revision: data.revision, attempts: 0 };
     }
-    const allowed = item.commands.filter((command) => command.state === "allow").length;
-    if (allowed > 0) return `${allowed} ${allowed === 1 ? unit : units} allowed. The rest follow Recommended.`;
-    return `${units.charAt(0).toUpperCase()}${units.slice(1)} follow Recommended until you allow or block them.`;
-  }
-  return item.example_label;
-}
-function continuityCopy(item) {
-  const status = item.continuity?.status;
-  if (status === "applied") {
-    const view = customExtensionContinuityView("identity-matched");
-    return { title: view.title, description: view.description };
-  }
-  if (status === "pending_observation") return customExtensionContinuityView("pending-observation");
-  if (status === "changed_identity") return customExtensionContinuityView("changed-identity");
-  if (status === "locally_overridden") return customExtensionContinuityView("locally-overridden");
-  if (status === "removed") return customExtensionContinuityView("removed");
-  if (status === "stale") return customExtensionContinuityView("stale");
-  return null;
+    if (publicationPoll.current.attempts >= 20) return;
+    const timer = window.setTimeout(() => {
+      publicationPoll.current.attempts += 1;
+      void load(true);
+    }, 1500);
+    return () => window.clearTimeout(timer);
+  }, [data, discovering, load]);
+  return { data, error, discoveryNotice, load, discover, discovering, catalogReady };
 }
 function CustomExtensionsSection(props) {
-  const added = addedCustomExtensions(props.items);
+  const [search, setSearch] = reactExports.useState("");
+  const [page, setPage] = reactExports.useState(0);
+  const added = connectorWorkspaceItems(props.items, search);
+  const currentPage = Math.min(page, Math.max(0, Math.ceil(added.length / 25) - 1));
+  const visible = added.slice(currentPage * 25, (currentPage + 1) * 25);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "mt-10", "aria-labelledby": "custom-extensions-heading", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "custom-extensions-heading", className: "text-xl font-semibold tracking-tight text-brand-dark", children: "Custom extensions" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: "Your own scripts, binaries, and MCP servers, not Guard's built-in catalog." })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: "Detected connectors and your own tools. Inspect a connection to choose its permissions." })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", onClick: props.onAdd, className: "inline-flex min-h-11 items-center gap-2 rounded-xl px-3 text-sm font-semibold text-brand-blue", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniPlus, { className: "size-4", "aria-hidden": "true" }),
         "Add custom extension"
       ] })
     ] }),
-    added.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 text-sm leading-6 text-brand-dark/75", children: "None yet. Add one by pasting the command, or pick an MCP server Guard found in your apps." }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: added.map((item) => /* @__PURE__ */ jsxRuntimeExports.jsx(CustomExtensionRow, { item, onOpen: props.onOpen }, item.cli_id)) })
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "mt-4 block max-w-xl text-sm font-semibold text-brand-dark", children: [
+      "Find a connector or custom tool",
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "input",
+        {
+          type: "search",
+          value: search,
+          onChange: (event) => {
+            setSearch(event.target.value);
+            setPage(0);
+          },
+          placeholder: "Name, host, or tool identifier",
+          className: "mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 font-normal"
+        }
+      )
+    ] }),
+    added.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 text-sm leading-6 text-brand-dark/75", children: search ? "No connections match this search." : "No connectors found yet. Add a connection or refresh its inventory in your host app." }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: visible.map((item) => /* @__PURE__ */ jsxRuntimeExports.jsx(CustomExtensionRow, { item, onOpen: props.onOpen }, item.cli_id)) }),
+    added.length > 25 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("nav", { "aria-label": "Custom extension pages", className: "mt-4 flex flex-wrap items-center gap-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          disabled: currentPage === 0,
+          onClick: () => setPage(currentPage - 1),
+          className: "min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold disabled:opacity-50",
+          children: "Previous"
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-sm text-brand-dark/75", children: [
+        "Page ",
+        currentPage + 1,
+        " of ",
+        Math.ceil(added.length / 25)
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          disabled: (currentPage + 1) * 25 >= added.length,
+          onClick: () => setPage(currentPage + 1),
+          className: "min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold disabled:opacity-50",
+          children: "Next"
+        }
+      )
+    ] }) : null
   ] });
 }
 function AddCustomExtensionButton(props) {
@@ -4168,16 +5529,19 @@ function AddCustomExtensionButton(props) {
   ] });
 }
 function CustomExtensionRow(props) {
+  const cliId = props.item.cli_id;
+  const onOpen = props.onOpen;
   const handleOpen = reactExports.useCallback(() => {
-    props.onOpen(props.item.cli_id);
-  }, [props]);
+    onOpen(cliId);
+  }, [cliId, onOpen]);
   const continuity = continuityCopy(props.item);
+  const catalog = mcpCatalogCopy(props.item);
   return /* @__PURE__ */ jsxRuntimeExports.jsx(
     ProtectionModuleRow,
     {
       extensionId: props.item.cli_id,
       name: props.item.name,
-      description: props.item.source_label ? `${props.item.example_label} · ${props.item.source_label}` : props.item.example_label,
+      description: customExtensionRowDescription(props.item, catalog?.title ?? null),
       behavior: continuity ? `${continuity.title}. ${continuity.description}` : customExtensionStateLabel(props.item),
       custom: true,
       executables: [props.item.name],
@@ -4189,13 +5553,34 @@ function LocalCliDetail(props) {
   const { resolvedApprovalGate, resolveApprovalGate, refreshApprovalGate } = useResolvedApprovalGate(null);
   const [pending, setPending] = reactExports.useState(null);
   const [commands, setCommands] = reactExports.useState(props.item.commands);
+  const [providerDrafts, setProviderDrafts] = reactExports.useState({});
+  const previousItem = reactExports.useRef(props.item);
   const [busy, setBusy] = reactExports.useState(false);
+  const [catalogBusy, setCatalogBusy] = reactExports.useState(false);
+  const [catalogError, setCatalogError] = reactExports.useState(null);
+  const catalogController = reactExports.useRef(null);
+  reactExports.useEffect(() => () => catalogController.current?.abort(), []);
   const [error, setError] = reactExports.useState(null);
   const added = props.item.state !== "unset";
-  const commandsDirty = commands.some((command, index) => command.state !== props.item.commands[index]?.state);
+  const commandChanges = commandPermissionChanges(props.item.commands, commands);
+  const commandsDirty = commandChanges.length > 0;
   reactExports.useEffect(() => {
-    setCommands(props.item.commands);
-  }, [props.item.cli_id, props.item.grant_revision]);
+    const previous = previousItem.current;
+    if (previous.cli_id !== props.item.cli_id || previous.identity_hash !== props.item.identity_hash) {
+      setPending(null);
+      setProviderDrafts({});
+      setCatalogError(null);
+      setError(previous.cli_id === props.item.cli_id ? "This extension changed. Review its permissions again." : null);
+    }
+    setCommands((current) => {
+      if (previous.cli_id !== props.item.cli_id || previous.identity_hash !== props.item.identity_hash) {
+        return props.item.commands;
+      }
+      const changed = previous.mcp_catalog?.revision !== props.item.mcp_catalog?.revision ? props.item.mcp_catalog?.changes?.changed : [];
+      return rebaseCommandDraft(current, previous.commands, props.item.commands, changed);
+    });
+    previousItem.current = props.item;
+  }, [props.item]);
   const openPending = reactExports.useCallback(async (state) => {
     await refreshApprovalGate();
     setPending(state);
@@ -4211,16 +5596,37 @@ function LocalCliDetail(props) {
     setCommands((current) => withCommandState(current, commandId, state));
   }, []);
   const applyBulk = reactExports.useCallback((state) => {
-    setCommands((current) => applyBulkCommandState(
-      current,
-      state,
-      props.item.surface === "package-scripts" ? /* @__PURE__ */ new Set(["root", "other"]) : /* @__PURE__ */ new Set()
-    ));
+    setCommands((current) => {
+      let excluded = /* @__PURE__ */ new Set();
+      if (props.item.surface === "package-scripts") excluded = /* @__PURE__ */ new Set(["root", "other"]);
+      if (props.item.surface === "mcp") {
+        excluded = new Set(current.filter((command) => !mcpToolCanReceiveDirectAllow(command)).map((command) => command.command_id));
+      }
+      return applyBulkCommandState(current, state, excluded);
+    });
   }, [props.item.surface]);
-  const bulkTargets = props.item.surface === "package-scripts" ? enrollablePackageScriptCommands(commands) : commands;
+  let bulkTargets = commands;
+  if (props.item.surface === "package-scripts") bulkTargets = enrollablePackageScriptCommands(commands);
+  if (props.item.surface === "mcp") bulkTargets = commands.filter(mcpToolCanReceiveDirectAllow);
   const bulkState = bulkCommandState(bulkTargets);
   const bulkCopy = bulkPolicyCopy(props.item.surface);
   const continuity = customExtensionContinuityView("local-only");
+  const catalog = mcpCatalogCopy(props.item);
+  const refreshCatalog = reactExports.useCallback(async () => {
+    const controller = new AbortController();
+    catalogController.current = controller;
+    setCatalogBusy(true);
+    setCatalogError(null);
+    try {
+      await refreshMcpInventory(props.item.cli_id, controller.signal);
+      if (!controller.signal.aborted) await props.onRefresh();
+    } catch (caught) {
+      if (!controller.signal.aborted) setCatalogError(caught instanceof Error ? caught.message : "Guard could not refresh this connector. Try again.");
+    } finally {
+      setCatalogBusy(false);
+      if (catalogController.current === controller) catalogController.current = null;
+    }
+  }, [props.item.cli_id, props.onRefresh]);
   const clearPending = reactExports.useCallback(() => {
     if (!busy) setPending(null);
   }, [busy]);
@@ -4238,12 +5644,14 @@ function LocalCliDetail(props) {
         interpreter_name: props.item.interpreter_name,
         state: pending,
         previous_revision: props.revision,
-        session_nonce: randomToken$1(),
+        session_nonce: randomToken$2(),
         commands: commandStatesPayload(commands),
+        ...pending !== "unset" && Object.keys(providerDrafts).length > 0 ? { provider_actions: Object.values(providerDrafts) } : {},
         ...credentials
       };
       await previewLocalCliMutation(payload);
       await applyLocalCliMutation(payload);
+      setProviderDrafts({});
       await props.onRefresh();
       await refreshApprovalGate();
       setPending(null);
@@ -4252,7 +5660,7 @@ function LocalCliDetail(props) {
     } finally {
       setBusy(false);
     }
-  }, [commands, pending, props, refreshApprovalGate]);
+  }, [commands, providerDrafts, pending, props, refreshApprovalGate]);
   reactExports.useEffect(() => {
     void resolveApprovalGate({ failClosed: true }).catch(() => {
       setError("Guard could not load the local approval settings yet.");
@@ -4264,8 +5672,9 @@ function LocalCliDetail(props) {
       "Extensions"
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { className: "mt-4 border-b border-slate-200 pb-6", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-mono text-xs font-semibold tracking-[0.14em] text-slate-400", children: props.item.example_label }),
+      props.item.surface !== "mcp" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-mono text-xs font-semibold tracking-[0.14em] text-slate-400", children: props.item.example_label }) : null,
       /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "mt-2 text-2xl font-semibold tracking-tight text-brand-dark", children: props.item.name }),
+      props.item.surface === "mcp" && props.item.source_label ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-slate-600", children: props.item.source_label }) : null,
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 max-w-2xl text-sm leading-6 text-slate-500", children: customExtensionStateLabel(props.item) }),
       continuityCopy(props.item) ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 max-w-2xl rounded-xl border border-slate-200 bg-slate-50 p-3", "data-testid": "custom-extension-continuity", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: continuityCopy(props.item)?.title }),
@@ -4273,11 +5682,143 @@ function LocalCliDetail(props) {
       ] }) : null,
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 max-w-2xl text-sm leading-6 text-brand-dark/75", children: detailPolicyCopy(props.item.surface) }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5 flex flex-wrap gap-3", children: added ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-        props.item.state === "allowed" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "inline-flex min-h-11 items-center rounded-xl bg-slate-100 px-4 text-sm font-semibold text-brand-dark", children: "Allowed on this device" }) : /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white", onClick: requestAllow, children: "Allow this extension's commands" }),
+        props.item.state === "allowed" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "inline-flex min-h-11 items-center rounded-xl bg-slate-100 px-4 text-sm font-semibold text-brand-dark", children: props.item.surface === "mcp" ? mcpPermissionStatusLabel(props.nativePublication, props.item.permission_scope) : "Allowed on this device" }) : /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white", onClick: requestAllow, children: props.item.surface === "mcp" ? "Enable tool permissions" : "Allow this extension's commands" }),
         props.item.state === "blocked" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "inline-flex min-h-11 items-center rounded-xl bg-slate-100 px-4 text-sm font-semibold text-brand-dark", children: "Blocked" }) : /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-brand-dark", onClick: requestBlock, children: "Block this extension" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "min-h-11 rounded-xl px-4 text-sm font-semibold text-brand-dark/80", onClick: requestRemove, children: "Remove custom extension" })
       ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white", onClick: requestAdd, children: "Add custom extension" }) })
     ] }),
+    props.item.surface === "mcp" && added ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "mt-5 rounded-xl border border-slate-200 p-4", "aria-labelledby": "mcp-publication-heading", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "mcp-publication-heading", className: "text-sm font-semibold text-brand-dark", children: props.item.permission_scope === "configured-connection" ? "Policy status" : "Enforcement status" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mt-2 text-sm leading-6 text-brand-dark/75", children: nativePublicationMessage(props.nativePublication, props.item.permission_scope) }),
+      props.nativePublication?.state !== "acknowledged" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          className: "mt-3 min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-brand-dark",
+          disabled: busy || catalogBusy,
+          onClick: () => void props.onRefresh(),
+          children: "Check enforcement status"
+        }
+      ) : null
+    ] }) : null,
+    catalog ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "mt-6 border-b border-slate-200 pb-5", "aria-labelledby": "mcp-inventory-heading", "aria-busy": catalogBusy, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "mcp-inventory-heading", className: "text-sm font-semibold text-brand-dark", children: catalog.title }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 max-w-2xl text-sm leading-6 text-brand-dark/75", children: catalog.description }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-xs leading-5 text-brand-dark/75", children: "Refresh starts this connection’s configured server to list tools. It does not grant execution permission." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          onClick: refreshCatalog,
+          disabled: busy || catalogBusy || pending !== null,
+          className: "mt-3 inline-flex min-h-11 items-center rounded-xl border border-slate-300 px-4 text-sm font-semibold text-brand-dark disabled:cursor-wait disabled:opacity-50",
+          children: catalogBusy ? "Refreshing inventory…" : "Refresh inventory"
+        }
+      ),
+      catalogBusy ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          onClick: () => catalogController.current?.abort(),
+          className: "ml-3 min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-brand-dark",
+          children: "Cancel refresh"
+        }
+      ) : null,
+      catalogError ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-3 max-w-2xl text-sm leading-6 text-red-700", children: catalogError }) : null,
+      props.item.mcp_catalog ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2 text-xs leading-5 text-brand-dark/75", children: [
+        "Last discovery attempt: ",
+        /* @__PURE__ */ jsxRuntimeExports.jsx("time", { dateTime: props.item.mcp_catalog.updated_at, children: new Date(props.item.mcp_catalog.updated_at).toLocaleString() })
+      ] }) : null,
+      props.item.mcp_catalog?.changes && Object.values(props.item.mcp_catalog.changes).some((names) => names.length > 0) ? /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "mt-3 text-sm text-brand-dark/75", open: true, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "min-h-11 cursor-pointer py-3 font-semibold", children: "Changes from the last inventory" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "max-w-2xl leading-6", children: "New and changed tools need review. Removed tools lose Allow; their Deny choices remain. Stale tools have not been confirmed by this discovery attempt." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dl", { className: "mt-3 grid gap-3 sm:grid-cols-2", children: [
+          ["added", "New tools"],
+          ["changed", "Changed authority"],
+          ["removed", "Removed tools"],
+          ["stale", "Not confirmed"]
+        ].map(([key, label]) => {
+          const names = props.item.mcp_catalog?.changes?.[key] ?? [];
+          return names.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("dt", { className: "font-semibold", children: [
+              label,
+              " · ",
+              names.length
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("dd", { className: "mt-1 break-words leading-6", children: [
+              names.slice(0, 10).join(", "),
+              names.length > 10 ? ` and ${names.length - 10} more` : ""
+            ] })
+          ] }, key) : null;
+        }) })
+      ] }) : null,
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "mt-3 text-sm text-brand-dark/75", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "min-h-11 cursor-pointer py-3 font-semibold", children: "Connection details" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "break-all font-mono text-xs leading-6", children: props.item.example_label }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2", children: [
+          "Protocol: ",
+          props.item.mcp_catalog?.protocol_version ?? "Not verified"
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2", children: [
+          "Permission scope: ",
+          props.item.permission_scope === "configured-connection" ? "This configured host connection. Provider account and native host-hook binding are not verified." : props.item.permission_scope === "host-namespace" ? "This connector namespace in its host. Account changes cannot currently be verified." : props.item.permission_scope === "legacy-device" ? "This server identity across this device. This is a legacy setting." : "Not verified. Prefer Ask while the connection is unresolved."
+        ] })
+      ] })
+    ] }) : null,
+    props.item.mcp_catalog?.skills_catalog?.declared ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      McpDeclaredSkills,
+      {
+        cliId: props.item.cli_id,
+        identityHash: props.item.identity_hash,
+        revision: props.item.mcp_catalog.revision,
+        knownCount: props.item.mcp_catalog.skills_catalog.known_count,
+        complete: props.item.mcp_catalog.skills_catalog.complete
+      }
+    ) : null,
+    props.item.provider_catalog ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        McpProviderActions,
+        {
+          cliId: props.item.cli_id,
+          knownCount: props.item.provider_catalog.known_count,
+          disabled: busy,
+          authorityRevision: props.revision,
+          drafts: providerDrafts,
+          onChange: (action, state) => {
+            if (!(action.tool_slug in providerDrafts) && Object.keys(providerDrafts).length >= 100) {
+              setError("Review and save these 100 action changes before changing more.");
+              return;
+            }
+            setProviderDrafts((current) => ({
+              ...current,
+              [action.tool_slug]: { tool_slug: action.tool_slug, state, revision: action.revision }
+            }));
+          }
+        },
+        props.item.cli_id + props.item.identity_hash
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        ProviderWorkflows,
+        {
+          cliId: props.item.cli_id
+        },
+        `workflow-${props.item.cli_id}-${props.item.identity_hash}`
+      ),
+      Object.keys(providerDrafts).length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "button",
+        {
+          type: "button",
+          disabled: busy,
+          className: "mt-4 min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white",
+          onClick: requestSaveCommands,
+          children: [
+            "Review ",
+            Object.keys(providerDrafts).length,
+            " action changes"
+          ]
+        }
+      ) : null
+    ] }) : null,
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4", "aria-labelledby": "custom-extension-continuity-heading", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "custom-extension-continuity-heading", className: "text-sm font-semibold text-brand-dark", children: continuity.title }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-brand-dark/75", children: props.continuity.summary || continuity.description }),
@@ -4293,9 +5834,19 @@ function LocalCliDetail(props) {
           disabled: busy,
           onChange: applyBulk,
           groupLabel: bulkCopy.groupLabel,
+          allowLabel: props.item.surface === "mcp" ? "Allow listed" : void 0,
+          blockLabel: props.item.surface === "mcp" ? "Deny listed" : void 0,
+          mcpPolicy: props.item.surface === "mcp",
           mixedCopy: bulkCopy.mixedCopy
         }
       ) : null,
+      props.item.surface === "mcp" && bulkTargets.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2 text-xs leading-5 text-brand-dark/75", children: [
+        "Bulk choices apply to ",
+        bulkTargets.length,
+        " listed ",
+        bulkTargets.length === 1 ? "tool" : "tools",
+        " with direct permissions. Execution wrappers and unlisted tools keep their separate review settings."
+      ] }) : null,
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
         CustomExtensionCommandList,
         {
@@ -4305,7 +5856,13 @@ function LocalCliDetail(props) {
           onChange: handleCommandState
         }
       ) }),
-      commandsDirty ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "mt-4 min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white", onClick: requestSaveCommands, children: "Review command changes" }) : null
+      commandsDirty ? /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "mt-4 min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white", onClick: requestSaveCommands, children: [
+        "Review ",
+        commandChanges.length,
+        " ",
+        props.item.surface === "mcp" ? "tool" : "command",
+        " changes"
+      ] }) : null
     ] }) : null,
     error && !pending ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(InlineError, { message: error }) }) : null,
     pending ? /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -4313,6 +5870,8 @@ function LocalCliDetail(props) {
       {
         item: props.item,
         nextState: pending,
+        commandChanges: pending === "unset" ? [] : commandChanges,
+        providerUpdates: pending === "unset" ? [] : Object.values(providerDrafts),
         busy,
         error,
         approvalGate: resolvedApprovalGate,
@@ -4321,54 +5880,6 @@ function LocalCliDetail(props) {
       }
     ) : null
   ] });
-}
-function CustomExtensionReviewModal(props) {
-  const [password, setPassword] = reactExports.useState("");
-  const [totp, setTotp] = reactExports.useState("");
-  const dialogRef = useModalDialog(props.onCancel, !props.busy);
-  const title = reviewTitle(props.item.name, props.nextState);
-  const handlePassword = reactExports.useCallback((event) => {
-    setPassword(event.target.value);
-  }, []);
-  const handleTotp = reactExports.useCallback((event) => {
-    const digits = event.target.value.replace(/\D/g, "").slice(0, 6);
-    event.target.value = digits;
-    setTotp(digits);
-  }, []);
-  const handleSubmit = reactExports.useCallback((event) => {
-    event.preventDefault();
-    props.onConfirm(buildApprovalProofCredentials(props.approvalGate, {
-      approvalPassword: password,
-      approvalTotpCode: totp
-    }));
-  }, [password, props, totp]);
-  const submitDisabled = isApprovalProofSubmitDisabled(
-    props.approvalGate,
-    { approvalPassword: password, approvalTotpCode: totp },
-    props.busy,
-    false,
-    true
-  );
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4 backdrop-blur-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("form", { ref: dialogRef, tabIndex: -1, role: "dialog", "aria-modal": "true", "aria-labelledby": "custom-extension-review-title", onSubmit: handleSubmit, className: "w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl focus:outline-none", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "custom-extension-review-title", className: "text-xl font-semibold text-brand-dark", children: title }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-brand-dark/80", children: reviewModalDetail(props.approvalGate) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-      ApprovalProofFieldInputs,
-      {
-        approvalGate: props.approvalGate,
-        approvalPassword: password,
-        approvalTotpCode: totp,
-        requireGate: true,
-        onApprovalPasswordChange: handlePassword,
-        onApprovalTotpCodeChange: handleTotp
-      }
-    ) }),
-    props.error ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(InlineError, { message: props.error }) }) : null,
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 flex justify-end gap-3", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: props.busy, onClick: props.onCancel, className: "min-h-11 rounded-xl px-4 text-sm font-semibold text-brand-dark", children: "Cancel" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "submit", disabled: submitDisabled, className: "min-h-11 rounded-xl bg-brand-blue px-5 text-sm font-semibold text-white disabled:opacity-60", children: props.busy ? "Saving…" : "Confirm" })
-    ] })
-  ] }) });
 }
 const PROTECTION_TERMS = {
   pageTitle: "Extensions"
@@ -4663,6 +6174,367 @@ function ProtectionAuthorityNotice(props) {
         }
       }
     ) : null
+  ] });
+}
+const digest = (value) => typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
+const record$1 = (value) => Boolean(value) && typeof value === "object" && !Array.isArray(value);
+const integer = (value) => typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+async function request(payload, signal) {
+  const response = await fetchLocalCliApi("/v1/local-clis/skills", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+    signal
+  });
+  const body = await response.json();
+  if (!response.ok) throw new Error(record$1(body) && typeof body.message === "string" ? body.message : "Could not read skill metadata.");
+  if (!record$1(body)) throw new Error("Invalid skill metadata response");
+  return body;
+}
+async function fetchLocalSkillRoots(signal) {
+  const body = await request({ operation: "roots" }, signal);
+  if (!Array.isArray(body.roots) || body.roots.length > 16 || body.permissions_granted !== false) throw new Error("Invalid skill roots");
+  return body.roots.map((root) => {
+    if (!record$1(root) || !digest(root.root_id) || typeof root.path !== "string" || root.path.length > 4096 || typeof root.available !== "boolean") throw new Error("Invalid skill root");
+    return { root_id: root.root_id, path: root.path, available: root.available };
+  });
+}
+async function scanLocalSkillMetadata(rootIds, signal) {
+  if (signal.aborted) return;
+  const job = await startCancelableDiscoveryJob(signal, (clientJobId) => request(
+    { operation: "scan", confirm_metadata_read: true, approved_root_ids: rootIds, client_job_id: clientJobId },
+    signal
+  ));
+  if (job === null) return;
+  await waitForMcpDiscoveryJob("inventory:skills", job, signal);
+}
+async function fetchLocalSkillPage(options) {
+  const body = await request({
+    operation: "list",
+    offset: options.offset,
+    search: options.search,
+    ...options.revision === void 0 ? {} : { revision: options.revision }
+  }, options.signal);
+  if (!Array.isArray(body.skills) || body.skills.length > 50 || body.permissions_granted !== false || !integer(body.known_count) || body.known_count > 1e3 || !integer(body.matched_count) || body.matched_count > body.known_count || !integer(body.revision) || !integer(body.issue_count) || typeof body.complete !== "boolean" || body.next_offset !== null && body.next_offset !== options.offset + 50) {
+    throw new Error("Invalid skill inventory");
+  }
+  const skills = body.skills.map((skill) => {
+    if (!record$1(skill) || !digest(skill.skill_id) || !digest(skill.root_id) || !digest(skill.metadata_digest) || skill.origin !== "local-agent-skill" || skill.permission_state !== "not-granted" || skill.requirements_complete !== false || skill.instruction_content_loaded !== false || typeof skill.name !== "string" || skill.name.length > 64 || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(skill.name) || typeof skill.description !== "string" || skill.description.length > 1024 || typeof skill.uri !== "string" || !skill.uri.startsWith("file://") || skill.uri.length > 8192 || typeof skill.compatibility !== "string" || skill.compatibility.length > 500 || typeof skill.requested_tools !== "string" || skill.requested_tools.length > 2048 || typeof skill.duplicate_name !== "boolean") throw new Error("Invalid local skill evidence");
+    return {
+      skill_id: skill.skill_id,
+      root_id: skill.root_id,
+      metadata_digest: skill.metadata_digest,
+      name: skill.name,
+      description: skill.description,
+      uri: skill.uri,
+      compatibility: skill.compatibility,
+      requested_tools: skill.requested_tools,
+      duplicate_name: skill.duplicate_name
+    };
+  });
+  return {
+    skills,
+    known_count: body.known_count,
+    matched_count: body.matched_count,
+    revision: body.revision,
+    next_offset: body.next_offset,
+    complete: body.complete,
+    issue_count: body.issue_count
+  };
+}
+async function prepareSkillWorkflow(skillId, signal) {
+  if (signal.aborted) return null;
+  const job = await startCancelableDiscoveryJob(signal, (clientJobId) => request(
+    { operation: "preflight", skill_id: skillId, confirm_directory_read: true, client_job_id: clientJobId },
+    signal
+  ));
+  if (job === null) return null;
+  await waitForMcpDiscoveryJob(`skill:${skillId}`, job, signal);
+  if (signal.aborted) return null;
+  const body = await request({ operation: "preflight-result", skill_id: skillId }, signal);
+  if (body.skill_id !== skillId || body.schema_version !== "guard.workflow-preflight.v1" || body.dependency_source !== "guard-extension" || !["absent", "invalid", "declared"].includes(String(body.dependency_status)) || !integer(body.authority_revision) || !integer(body.expires_in_seconds) || body.expires_in_seconds > 30 || body.requirements_complete !== false || body.permissions_granted !== false || body.runtime_checks_required !== true || !Array.isArray(body.requirements) || body.requirements.length > 50 || !record$1(body.inspection) || !["complete", "incomplete"].includes(String(body.inspection.status)) || !integer(body.inspection.entry_count) || body.inspection.permissions_granted !== false || body.inspection.status === "complete" && (typeof body.inspection.manifest_digest !== "string" || !/^sha256:[a-f0-9]{64}$/.test(body.inspection.manifest_digest))) throw new Error("Invalid workflow preflight");
+  const requirements = body.requirements.map((entry) => {
+    if (!record$1(entry) || typeof entry.connection_id !== "string" || !isLocalCliId(entry.connection_id) || typeof entry.tool_name !== "string" || !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,255}$/.test(entry.tool_name) || !["saved-allow", "deny", "ask", "unresolved"].includes(String(entry.state))) throw new Error("Invalid workflow requirement");
+    return {
+      connection_id: entry.connection_id,
+      tool_name: entry.tool_name,
+      state: entry.state
+    };
+  });
+  const native = normalizeLocalCliList({
+    schema_version: "guard.daemon.local-clis.v1",
+    revision: body.authority_revision,
+    items: [],
+    native_publication: body.native_publication
+  }).native_publication;
+  return {
+    skill_id: skillId,
+    dependency_status: body.dependency_status,
+    authority_revision: body.authority_revision,
+    requirements,
+    native_state: native?.state ?? "unavailable",
+    inspection: {
+      status: body.inspection.status,
+      entry_count: body.inspection.entry_count,
+      manifest_digest: typeof body.inspection.manifest_digest === "string" ? body.inspection.manifest_digest : null
+    },
+    expires_at: performance.now() + body.expires_in_seconds * 1e3
+  };
+}
+function LocalSkillsWorkspace() {
+  const [open, setOpen] = reactExports.useState(false);
+  const [roots, setRoots] = reactExports.useState([]);
+  const [selected, setSelected] = reactExports.useState([]);
+  const [page, setPage] = reactExports.useState(null);
+  const [offset, setOffset] = reactExports.useState(0);
+  const [input, setInput] = reactExports.useState("");
+  const [search, setSearch] = reactExports.useState("");
+  const [reload, setReload] = reactExports.useState(0);
+  const [busy, setBusy] = reactExports.useState(false);
+  const [loading, setLoading] = reactExports.useState(false);
+  const [error, setError] = reactExports.useState(null);
+  const [preparing, setPreparing] = reactExports.useState(null);
+  const [preflights, setPreflights] = reactExports.useState({});
+  const revision = reactExports.useRef(void 0);
+  const scan = reactExports.useRef(null);
+  reactExports.useEffect(() => () => scan.current?.abort(), []);
+  reactExports.useEffect(() => {
+    if (input === search) return;
+    const timer = window.setTimeout(() => {
+      setSearch(input);
+      setOffset(0);
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [input, search]);
+  reactExports.useEffect(() => {
+    if (!open) return;
+    const controller = new AbortController();
+    setLoading(true);
+    setError(null);
+    void Promise.all([
+      fetchLocalSkillRoots(controller.signal),
+      fetchLocalSkillPage({ offset, search, revision: offset > 0 ? revision.current : void 0, signal: controller.signal })
+    ]).then(([nextRoots, nextPage]) => {
+      if (!controller.signal.aborted) {
+        setRoots(nextRoots);
+        setPage(nextPage);
+        revision.current = nextPage.revision;
+      }
+    }).catch((caught) => {
+      if (!controller.signal.aborted) setError(caught instanceof Error ? caught.message : "Could not load skill metadata.");
+    }).finally(() => {
+      if (!controller.signal.aborted) setLoading(false);
+    });
+    return () => controller.abort();
+  }, [open, offset, search, reload]);
+  const readMetadata = async () => {
+    const controller = new AbortController();
+    scan.current = controller;
+    setBusy(true);
+    setError(null);
+    try {
+      await scanLocalSkillMetadata(selected, controller.signal);
+      if (!controller.signal.aborted) {
+        setOffset(0);
+        setPreflights({});
+        setReload((value) => value + 1);
+      }
+    } catch (caught) {
+      if (!controller.signal.aborted) setError(caught instanceof Error ? caught.message : "Skill discovery did not finish.");
+    } finally {
+      setBusy(false);
+      if (scan.current === controller) scan.current = null;
+    }
+  };
+  const prepareWorkflow = async (skillId) => {
+    const controller = new AbortController();
+    scan.current = controller;
+    setPreparing(skillId);
+    setError(null);
+    try {
+      const result = await prepareSkillWorkflow(skillId, controller.signal);
+      if (result) setPreflights((current) => ({ ...current, [skillId]: result }));
+    } catch (caught) {
+      if (!controller.signal.aborted) setError(caught instanceof Error ? caught.message : "Could not prepare this workflow.");
+    } finally {
+      setPreparing(null);
+      if (scan.current === controller) scan.current = null;
+    }
+  };
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "mt-8 border-b border-slate-200 pb-5", onToggle: (event) => setOpen(event.currentTarget.open), children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "min-h-11 cursor-pointer py-3 text-base font-semibold text-brand-dark", children: "Local skills and workflows" }),
+    open ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": "Local skill metadata", "aria-busy": busy || loading || preparing !== null, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "max-w-2xl text-sm leading-6 text-brand-dark/75", children: "Choose the skill folders Guard may inspect. This reads bounded names and descriptions. Instructions and scripts stay unloaded; declared tools remain requests for permission." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("fieldset", { disabled: busy || loading || preparing !== null, className: "mt-4", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("legend", { className: "text-sm font-semibold text-brand-dark", children: "Folders to read" }),
+        roots.map((root) => /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "mt-2 flex min-h-11 items-center gap-3 text-sm text-brand-dark/75", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "input",
+            {
+              type: "checkbox",
+              checked: selected.includes(root.root_id),
+              disabled: !root.available,
+              onChange: (event) => setSelected((current) => event.target.checked ? [...current, root.root_id] : current.filter((id2) => id2 !== root.root_id))
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "break-all", children: [
+            root.path,
+            root.available ? "" : " · Not available"
+          ] })
+        ] }, root.root_id))
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 flex flex-wrap gap-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            disabled: busy || loading || preparing !== null || selected.length === 0,
+            onClick: () => void readMetadata(),
+            className: "min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-brand-dark disabled:opacity-50",
+            children: busy ? "Reading skill metadata…" : "Read selected skill metadata"
+          }
+        ),
+        busy ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            onClick: () => scan.current?.abort(),
+            className: "min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-brand-dark",
+            children: "Cancel skill scan"
+          }
+        ) : null
+      ] }),
+      error ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { role: "alert", className: "mt-3 text-sm leading-6 text-red-700", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: error }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            onClick: () => {
+              setOffset(0);
+              setReload((value) => value + 1);
+            },
+            className: "mt-2 min-h-11 rounded-xl border border-slate-300 px-4 font-semibold text-brand-dark",
+            children: "Reload skill metadata"
+          }
+        )
+      ] }) : null,
+      page && page.revision > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { role: "status", className: "mt-4 text-sm leading-6 text-brand-dark/75", children: [
+          page.known_count,
+          " skills indexed.",
+          page.complete ? "" : ` ${page.issue_count} discovery gaps; some metadata could not be indexed.`,
+          " No permissions granted."
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "mt-4 block max-w-xl text-sm font-semibold text-brand-dark", children: [
+          "Find a local skill",
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "input",
+            {
+              type: "search",
+              value: input,
+              onChange: (event) => setInput(event.target.value),
+              className: "mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 font-normal"
+            }
+          )
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-4 divide-y divide-slate-200", children: page.skills.map((skill) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "py-4", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-sm font-semibold text-brand-dark", children: skill.name }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 max-w-2xl text-sm leading-6 text-brand-dark/75", children: skill.description }),
+          skill.duplicate_name ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-xs font-semibold text-brand-dark/75", children: "Same name found in another origin. Each copy keeps its own identity and review." }) : null,
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "mt-2 text-xs leading-5 text-brand-dark/75", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "min-h-11 cursor-pointer py-3 font-semibold", children: "Origin and requirements" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "break-all", children: skill.uri }),
+            skill.compatibility ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2", children: [
+              "Declared compatibility: ",
+              skill.compatibility
+            ] }) : null,
+            skill.requested_tools ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2 break-words", children: [
+              "Requested tools: ",
+              skill.requested_tools
+            ] }) : null,
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2", children: "Requirements are incomplete. Loading this skill cannot allow its tools." })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 max-w-2xl text-xs leading-5 text-brand-dark/75", children: "Prepare inspects files in this skill directory to identify its revision and check declared dependencies. It does not run scripts or activate the skill." }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              disabled: busy || preparing !== null,
+              onClick: () => void prepareWorkflow(skill.skill_id),
+              className: "mt-2 min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-brand-dark disabled:opacity-50",
+              children: preparing === skill.skill_id ? "Preparing workflow…" : `Prepare ${skill.name}`
+            }
+          ),
+          preparing === skill.skill_id ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              onClick: () => scan.current?.abort(),
+              className: "ml-3 min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-brand-dark",
+              children: "Cancel preparation"
+            }
+          ) : null,
+          preflights[skill.skill_id] ? /* @__PURE__ */ jsxRuntimeExports.jsx(SkillPreflightPreview, { plan: preflights[skill.skill_id] }) : null
+        ] }, skill.skill_id)) }),
+        page.matched_count === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-sm text-brand-dark/75", children: "No skills match this search." }) : null,
+        page.matched_count > 50 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("nav", { "aria-label": "Local skill pages", className: "mt-4 flex flex-wrap items-center gap-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              disabled: offset === 0 || loading,
+              onClick: () => setOffset(Math.max(0, offset - 50)),
+              className: "min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold disabled:opacity-50",
+              children: "Previous"
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-sm text-brand-dark/75", children: [
+            "Page ",
+            offset / 50 + 1
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: page.next_offset === null || loading, onClick: () => {
+            if (page.next_offset !== null) setOffset(page.next_offset);
+          }, className: "min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold disabled:opacity-50", children: "Next" })
+        ] }) : null
+      ] }) : null
+    ] }) : null
+  ] });
+}
+function SkillPreflightPreview({ plan }) {
+  const [expired, setExpired] = reactExports.useState(false);
+  reactExports.useEffect(() => {
+    const remaining = plan.expires_at - performance.now();
+    setExpired(remaining <= 0);
+    const timer = window.setTimeout(() => setExpired(true), Math.max(0, remaining));
+    return () => window.clearTimeout(timer);
+  }, [plan.expires_at]);
+  if (expired) return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mt-4 text-xs leading-5 text-brand-dark/75", children: "This workflow preview expired. Prepare it again to check current evidence." });
+  const stateLabel = { "saved-allow": "Saved Allow · runtime checks required", deny: "Denied", ask: "Needs review", unresolved: "Not resolved" };
+  const dependencyLabel = {
+    declared: "Guard dependency manifest (nonstandard extension)",
+    invalid: "Invalid Guard dependency manifest; review the skill's metadata.",
+    absent: "No Guard dependency manifest. Requirements remain unresolved."
+  }[plan.dependency_status];
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": "Workflow preflight", className: "mt-4 border-l-2 border-brand-blue pl-4 text-xs leading-5 text-brand-dark/75", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-semibold", children: plan.inspection.status === "complete" ? "Skill revision inspected" : "Skill revision could not be fully inspected" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2", children: [
+      "Dependencies: ",
+      dependencyLabel
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2", children: [
+      "Permissions checked at revision ",
+      plan.authority_revision,
+      ". Native publication: ",
+      plan.native_state,
+      "."
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-3 divide-y divide-slate-200", children: plan.requirements.map((requirement) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "py-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "break-all font-mono", children: requirement.tool_name }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 font-semibold", children: stateLabel[requirement.state] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("a", { href: guardAwareHref(localCliHref(requirement.connection_id)), className: "mt-2 inline-flex min-h-11 items-center font-semibold text-brand-blue", children: "Review connection permissions" })
+    ] }, `${requirement.connection_id}:${requirement.tool_name}`)) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2", children: "This is a preview of current evidence. Preparing grants nothing; every runtime call still checks its permissions." })
   ] });
 }
 const PROTECTION_CATEGORIES = [
@@ -5596,6 +7468,30 @@ function CatalogFilterEmpty(props) {
 }
 function ExtensionsOverview(props) {
   const [query, setQuery] = reactExports.useState("");
+  const discoveryStarted = reactExports.useRef(false);
+  const reloadConnections = reactExports.useRef(props.onReloadConnections);
+  reloadConnections.current = props.onReloadConnections;
+  const [discoveryError, setDiscoveryError] = reactExports.useState(null);
+  const [discovering, setDiscovering] = reactExports.useState(false);
+  const [discoveryAttempt, setDiscoveryAttempt] = reactExports.useState(0);
+  reactExports.useEffect(() => {
+    if (!props.active || discoveryStarted.current) return;
+    discoveryStarted.current = true;
+    const controller = new AbortController();
+    setDiscovering(true);
+    setDiscoveryError(null);
+    void refreshMcpInventory("inventory:configured", controller.signal, true, discoveryAttempt > 0).then(async () => {
+      if (!controller.signal.aborted) await reloadConnections.current();
+    }).catch(() => {
+      if (!controller.signal.aborted) setDiscoveryError("Could not check host configuration. Known connections remain available.");
+    }).finally(() => {
+      if (!controller.signal.aborted) setDiscovering(false);
+    });
+    return () => {
+      controller.abort();
+      discoveryStarted.current = false;
+    };
+  }, [props.active, discoveryAttempt]);
   const [filters, setFilters] = reactExports.useState(EMPTY_CATALOG_FILTERS);
   reactExports.useEffect(() => {
     setFilters((current) => {
@@ -5613,7 +7509,7 @@ function ExtensionsOverview(props) {
   const handleClearFilters = reactExports.useCallback(() => {
     setFilters(EMPTY_CATALOG_FILTERS);
   }, []);
-  const addedCustomItems = addedCustomExtensions(props.localCliItems).filter(
+  const addedCustomItems = connectorWorkspaceItems(props.localCliItems).filter(
     (item) => customItemMatchesFilters(item, filters)
   );
   const addedCustomCount = addedCustomItems.length;
@@ -5638,6 +7534,7 @@ function ExtensionsOverview(props) {
     ] }),
     props.mutationError ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(InlineError, { message: props.mutationError }) }) : null,
     props.localCliError ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(InlineError, { message: props.localCliError }) }) : null,
+    props.localCliNotice ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mt-4 rounded-xl border border-brand-blue/20 bg-brand-blue/5 p-3 text-sm text-brand-dark", children: props.localCliNotice }) : null,
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       PatternSearchConsole,
       {
@@ -5660,6 +7557,19 @@ function ExtensionsOverview(props) {
       }
     ),
     searching ? null : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4", role: "status", children: [
+        discovering ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/75", children: "Checking host configuration for connectors…" }) : null,
+        discoveryError ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/75", children: discoveryError }) : null,
+        !discovering ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            onClick: () => setDiscoveryAttempt((attempt) => attempt + 1),
+            className: "mt-2 min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-brand-dark",
+            children: discoveryError ? "Check for connectors again" : "Check host connections"
+          }
+        ) : null
+      ] }),
       addedCustomCount ? /* @__PURE__ */ jsxRuntimeExports.jsx(
         CustomExtensionsSection,
         {
@@ -5668,6 +7578,7 @@ function ExtensionsOverview(props) {
           onAdd: props.onAddCustom
         }
       ) : null,
+      /* @__PURE__ */ jsxRuntimeExports.jsx(LocalSkillsWorkspace, {}),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "mt-10", "aria-labelledby": "all-tools-heading", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
@@ -6838,6 +8749,7 @@ function ProtectionCenterWorkspace(props) {
         effective: state.effective,
         localCliItems: localClis.data?.items ?? [],
         localCliError: localClis.error,
+        localCliNotice: localClis.discoveryNotice,
         mutationError: mutationError && !pending ? mutationError : null,
         recoveryStatus,
         healthBroken,
@@ -6845,6 +8757,7 @@ function ProtectionCenterWorkspace(props) {
         active: showOverview,
         onPrimaryStatusAction: handlePrimaryStatusAction,
         onRefresh: refreshProtection,
+        onReloadConnections: localClis.load,
         onOpenExtension: openExtension,
         onOpenLocalCli: openLocalCliDetail,
         onAddCustom: openAddCustom
@@ -6859,6 +8772,7 @@ function ProtectionCenterWorkspace(props) {
       }
     ) : null,
     showLocalCli && localClis.error && localClis.data ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mb-3 text-sm font-medium text-rose-800", children: localClis.error }) : null,
+    (showLocalCli || routeState.route.kind === "add-custom") && localClis.discoveryNotice && localClis.data ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mb-3 rounded-xl border border-brand-blue/20 bg-brand-blue/5 p-3 text-sm text-brand-dark", children: localClis.discoveryNotice }) : null,
     showLocalCli && !localClis.data && !localClis.error ? /* @__PURE__ */ jsxRuntimeExports.jsx(ExtensionsLoadingState, { label: "Loading custom extension" }) : null,
     routeState.route.kind === "add-custom" && state.kind === "ready" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
       AddCustomExtensionWorkspace,
@@ -6867,7 +8781,8 @@ function ProtectionCenterWorkspace(props) {
         revision: localClis.data?.revision ?? 0,
         discovering: localClis.discovering || !localClis.catalogReady,
         onBack: closeExtension,
-        onAdded: handleCustomExtensionAdded
+        onAdded: handleCustomExtensionAdded,
+        onConfigured: localClis.discover
       }
     ) : null,
     showLocalCli && selectedLocalCli && localClis.data ? /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -6876,6 +8791,7 @@ function ProtectionCenterWorkspace(props) {
         item: selectedLocalCli,
         revision: localClis.data.revision,
         continuity: localClis.data.cloud,
+        nativePublication: localClis.data.native_publication,
         onBack: closeExtension,
         onRefresh: localClis.load
       }

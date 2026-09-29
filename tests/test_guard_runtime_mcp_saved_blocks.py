@@ -34,6 +34,7 @@ from codex_plugin_scanner.guard.runtime.package_intent import (
 )
 from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import evaluate_package_request_artifact
 from codex_plugin_scanner.guard.store import GuardStore
+from codex_plugin_scanner.guard.store_mcp_catalog import tool_definition_authority_hash
 
 pytestmark = pytest.mark.usefixtures("bundle_first_cloud")
 
@@ -46,6 +47,34 @@ def _context(tmp_path: Path) -> HarnessContext:
     workspace_dir.mkdir()
     guard_home.mkdir()
     return HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=guard_home)
+
+
+def test_complete_proxy_catalog_binds_advertised_tool_definition(tmp_path: Path) -> None:
+    context = _context(tmp_path)
+    assert context.workspace_dir is not None
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace-tools",
+        command=[sys.executable],
+        context=context,
+        store=GuardStore(context.guard_home),
+        config=GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir, mode="observe"),
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex/config.toml"),
+    )
+    definition = {
+        "name": "safe_echo",
+        "description": "Echo a value",
+        "inputSchema": {"type": "object", "properties": {"value": {"type": "string"}}},
+    }
+    proxy._capture_tools_catalog({"result": {"tools": [definition]}})
+
+    authority = proxy._resolve_tool_call_authority(tool_name="safe_echo", arguments={"value": "ok"})
+
+    assert proxy._tool_catalog_state == "complete"
+    assert authority.artifact.metadata.get("mcp_tool_authority_hash") is None
+    assert authority.artifact.runtime_private_metadata["mcp_tool_authority_hash"] == tool_definition_authority_hash(
+        definition
+    )
 
 
 def _child_command(marker_path: Path) -> list[str]:

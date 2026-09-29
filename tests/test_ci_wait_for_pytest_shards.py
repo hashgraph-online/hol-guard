@@ -186,6 +186,21 @@ def test_rejects_duplicate_job_id_across_pages() -> None:
         _run([jobs])
 
 
+def test_retries_pagination_race_before_coverage_matrix_exists() -> None:
+    other_jobs = [dict(_job(index + 1000), name=f"quality-{index}") for index in range(101)]
+    other_jobs[-1]["id"] = other_jobs[0]["id"]
+    calls, logs = _run([other_jobs, _jobs()], timeout_seconds=20)
+    assert len(calls) == 4
+    assert logs[-1] == f"All {barrier.SHARD_COUNT} Python coverage shards succeeded in run {_RUN_ID}, attempt 2"
+
+
+def test_retries_unexpanded_matrix_name_before_planning() -> None:
+    pending = [dict(_job(1000), name="coverage (3.12, ${{ matrix.shard }})")]
+    calls, logs = _run([pending, _jobs()], timeout_seconds=20)
+    assert len(calls) == 3
+    assert logs[-1] == f"All {barrier.SHARD_COUNT} Python coverage shards succeeded in run {_RUN_ID}, attempt 2"
+
+
 @pytest.mark.parametrize("field,value", [("run_id", 99), ("run_id", True), ("run_attempt", 1)])
 @pytest.mark.parametrize("index", [0, barrier.SHARD_COUNT - 1])
 def test_rejects_jobs_from_another_run_or_attempt(field: str, value: object, index: int) -> None:

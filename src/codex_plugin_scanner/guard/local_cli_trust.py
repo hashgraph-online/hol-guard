@@ -111,6 +111,12 @@ def apply_local_mcp_extension_decision(
             "local-mcp-extension",
             "This MCP tool is allowed by a custom extension on this device.",
         )
+    if matched == "review":
+        return (
+            "review",
+            "local-mcp-extension",
+            "This tool is not in the reviewed catalog. Review its authority before execution.",
+        )
     from .runtime.mcp_server_grants import apply_contributed_mcp_decision
 
     contributed = apply_contributed_mcp_decision(store, artifact, current_action)
@@ -128,7 +134,7 @@ def matching_local_mcp_grant(
     store: object,
     artifact: GuardArtifact,
     current_action: GuardAction,
-) -> LocalCliGrantState | None:
+) -> LocalCliGrantState | Literal["review"] | None:
     """Return a this-device MCP extension grant for a live tools/call."""
 
     if current_action not in {"allow", "review", "require-reapproval", "warn"}:
@@ -151,6 +157,7 @@ def matching_local_mcp_grant(
         command, args_hash = observed.server_identity.command, observed.server_identity.args_hash
     else:
         command, args_hash = _mcp_server_launch(artifact)
+    connection_identity_hash = _configured_mcp_connection_hash(artifact, identity_hash) if observed is None else None
     grant = lookup(
         identity_hash,
         command=command,
@@ -158,6 +165,9 @@ def matching_local_mcp_grant(
         package_name=_mcp_server_package_field(artifact, "package_name"),
         package_version=_mcp_server_package_field(artifact, "package_version"),
         package_source=_mcp_server_package_field(artifact, "package_source"),
+        env_values_hash=_mcp_server_package_field(artifact, "env_values_hash"),
+        connection_identity_hash=connection_identity_hash,
+        tool_name=_mcp_tool_name(artifact),
     )
     if not isinstance(grant, Mapping):
         return None
@@ -167,27 +177,66 @@ def matching_local_mcp_grant(
     if raw_state == "blocked":
         return "blocked"
     commands = grant.get("commands")
-    if not isinstance(commands, list) or not commands:
-        # Observed connectors have incomplete catalogs. An empty catalog cannot
-        # grant authority to a tool the operator has never reviewed.
-        return None if observed is not None else "allowed"
     command_id = observed.command_id if observed is not None else slug_local_cli_command_id(_mcp_tool_name(artifact))
-    known = {item.command_id for item in commands if isinstance(item, LocalCliCommand)}
+    known = (
+        {item.command_id for item in commands if isinstance(item, LocalCliCommand)}
+        if isinstance(commands, list)
+        else set()
+    )
     states = grant.get("command_states")
-    if observed is not None and command_id not in known:
-        return "blocked" if isinstance(states, dict) and states.get(OTHER_COMMAND_ID) == "block" else None
     if command_id not in known:
-        command_id = OTHER_COMMAND_ID
+        # Enrollment cannot grant unseen tools. Retired exact denies survive a
+        # removal, including removal of every tool in the inventory.
+        if isinstance(states, dict) and (states.get(command_id) == "block" or states.get(OTHER_COMMAND_ID) == "block"):
+            return "blocked"
+        return "review"
     if not isinstance(states, dict):
         return None
     tool_state = states.get(command_id, "inherit")
+    if tool_state == "review":
+        return "review"
     if tool_state == "allow":
-        if observed is not None and current_action == "require-reapproval":
+        from .runtime.composio_contract import composio_requires_action_review
+
+        if composio_requires_action_review(_mcp_tool_name(artifact)):
             return None
+        if current_action == "require-reapproval":
+            return None
+        if grant.get("catalog") is not None or (
+            connection_identity_hash is not None and grant.get("identity_hash") == connection_identity_hash
+        ):
+            from .store_mcp_catalog import catalog_tool_authority_matches
+
+            public_hash = artifact.metadata.get("mcp_tool_authority_hash")
+            # An explicitly empty or invalid public hash must fail closed.
+            authority_hash = (
+                public_hash
+                if public_hash is not None
+                else artifact.runtime_private_metadata.get("mcp_tool_authority_hash")
+            )
+            if not catalog_tool_authority_matches(
+                grant.get("catalog"),
+                _mcp_tool_name(artifact),
+                authority_hash,
+            ):
+                return "review"
         return "allowed"
     if tool_state == "block":
         return "blocked"
     return None
+
+
+def _configured_mcp_connection_hash(artifact: GuardArtifact, server_hash: str) -> str:
+    from .runtime.mcp_connection_identity import build_mcp_connection_identity
+
+    server_name = artifact.metadata.get("server_name")
+    return build_mcp_connection_identity(
+        host=artifact.harness,
+        source_scope=artifact.source_scope,
+        config_path=artifact.config_path,
+        server_name=server_name if isinstance(server_name, str) else "",
+        server_identity_hash=server_hash,
+    ).identity_hash
 
 
 def _mcp_server_launch(artifact: GuardArtifact) -> tuple[str | None, str | None]:

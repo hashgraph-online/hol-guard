@@ -183,6 +183,15 @@ def test_persisted_receipt_correlation_does_not_read_before_writer_progress(
         )
 
 
+def test_persisted_receipt_correlation_recovers_when_writer_counter_stalls(tmp_path: Path) -> None:
+    store = _ReceiptStore(tmp_path / "receipts.sqlite3", ("prior", "current"))
+    writer = SimpleNamespace(stats=lambda: {"receipt_processed": 0})
+
+    assert probe.await_persisted_native_receipt(
+        store, {"prior"}, writer=writer, receipt_processed_before=0, timeout_seconds=1.0
+    ) == {"decision_id": "current", "authority": "rust"}
+
+
 @pytest.mark.parametrize("reason", sorted(NATIVE_COMMAND_CONTROL_ERROR_CODES))
 def test_diagnostic_keeps_the_exact_approved_command_control_reason(reason: str) -> None:
     assert probe.receipt_binding_diagnostic({"reason_code": reason}, {}, {}, [])["http_reason_code"] == reason

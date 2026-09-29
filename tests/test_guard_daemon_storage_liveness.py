@@ -193,6 +193,7 @@ def test_runtime_heartbeat_writer_coalesces_pending_updates() -> None:
             session_id: str,
             last_heartbeat_at: str,
             timeout_seconds: float,
+            registration: object = None,
         ) -> bool:
             assert session_id == "session"
             assert timeout_seconds == 0.01

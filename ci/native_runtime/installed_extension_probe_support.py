@@ -240,7 +240,9 @@ def await_persisted_native_receipt(
     writer_progress = (
         (writer, receipt_processed_before) if writer is not None and receipt_processed_before is not None else None
     )
-    next_reader_poll: float | None = None
+    # Writer progress avoids early SQLite churn on Windows. If its counter
+    # stalls after a durable receipt lands, make one bounded fallback read.
+    next_reader_poll: float | None = time.monotonic() + 0.5
     while time.monotonic() < deadline:
         should_read = writer_progress is None
         if writer_progress is not None:
