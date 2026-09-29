@@ -5,6 +5,8 @@ on:
     workflows: [CI, Native wheel CI]
     types: [requested, in_progress]
 
+permissions: {}
+
 # Only trusted default-branch code runs. Never consume PR code, caches or artifacts.
 concurrency:
   group: ci-superseded-${{ github.event.workflow_run.id }}
