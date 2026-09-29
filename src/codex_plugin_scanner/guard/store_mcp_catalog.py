@@ -308,7 +308,8 @@ def _skill_metadata_snapshot(
 
 
 def _fresh_until(seen_at: str | None, ttl_ms: int) -> str | None:
-    if not isinstance(seen_at, str) or type(ttl_ms) is not int or not 0 <= ttl_ms <= 86_400_000:
+    # A zero TTL provides no freshness window, rather than an expired deadline.
+    if not isinstance(seen_at, str) or type(ttl_ms) is not int or not 0 < ttl_ms <= 86_400_000:
         return None
     try:
         received = datetime.fromisoformat(seen_at.replace("Z", "+00:00"))
