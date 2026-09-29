@@ -574,25 +574,63 @@ _ZIP_SYMLINK_MODE = 0o120000
 _ZIP_MODE_MASK = 0o170000
 
 
+def _resolve_onedir_link(path: str, links: dict[str, str], depth: int = 0) -> str:
+    if depth > 40:
+        raise DesktopCoreUpdateError("desktop_core_install_failed")
+    out: list[str] = []
+    for part in path.split("/"):
+        if part in ("", "."):
+            continue
+        if part == "..":
+            if not out:
+                raise DesktopCoreUpdateError("desktop_core_install_failed")
+            out.pop()
+            continue
+        out.append(part)
+        key = "/".join(out)
+        if key in links:  # raw target text, relative to link's parent
+            target = links[key]
+            if target.startswith("/"):
+                raise DesktopCoreUpdateError("desktop_core_install_failed")
+            out = _resolve_onedir_link("/".join([*out[:-1], target]), links, depth + 1).split("/")
+    return "/".join(out)
+
+
 def _validate_onedir_zip_members(archive: Path) -> None:
     try:
         with zipfile.ZipFile(archive) as zipped:
             infos = zipped.infolist()
-    except (OSError, zipfile.BadZipFile) as error:
+            names: set[str] = set()
+            link_targets: dict[str, str] = {}
+            for info in infos:
+                name = info.filename
+                member = PurePosixPath(name)
+                if member.is_absolute() or ".." in member.parts:
+                    raise DesktopCoreUpdateError("desktop_core_install_failed")
+                if name != _ONEDIR_TREE_ROOT and not name.startswith(f"{_ONEDIR_TREE_ROOT}/"):
+                    raise DesktopCoreUpdateError("desktop_core_install_failed")
+                if (info.external_attr >> 16) & _ZIP_MODE_MASK == _ZIP_SYMLINK_MODE:
+                    target = zipped.read(info).decode("utf-8", errors="strict")
+                    if not target:
+                        raise DesktopCoreUpdateError("desktop_core_install_failed")
+                    link_targets[name] = target
+                    continue
+                if member.name.startswith("._") or "__MACOSX" in member.parts:
+                    raise DesktopCoreUpdateError("desktop_core_install_failed")
+                names.add(name)
+    except (OSError, zipfile.BadZipFile, UnicodeDecodeError) as error:
         raise DesktopCoreUpdateError("desktop_core_install_failed") from error
-    names: set[str] = set()
-    for info in infos:
-        name = info.filename
-        member = PurePosixPath(name)
-        if member.is_absolute() or ".." in member.parts:
+    for link_name in link_targets:
+        resolved = _resolve_onedir_link(link_name, link_targets)
+        resolved_member = PurePosixPath(resolved)
+        if (
+            resolved_member.is_absolute()
+            or ".." in resolved_member.parts
+            or not resolved.startswith(f"{_ONEDIR_TREE_ROOT}/")
+        ):
             raise DesktopCoreUpdateError("desktop_core_install_failed")
-        if name != _ONEDIR_TREE_ROOT and not name.startswith(f"{_ONEDIR_TREE_ROOT}/"):
+        if resolved not in names and not any(name.startswith(f"{resolved}/") for name in names):
             raise DesktopCoreUpdateError("desktop_core_install_failed")
-        if (info.external_attr >> 16) & _ZIP_MODE_MASK == _ZIP_SYMLINK_MODE:
-            raise DesktopCoreUpdateError("desktop_core_install_failed")
-        if member.name.startswith("._") or "__MACOSX" in member.parts:
-            raise DesktopCoreUpdateError("desktop_core_install_failed")
-        names.add(name)
     launcher_member = f"{_ONEDIR_TREE_ROOT}/{_executable_name()}"
     if launcher_member not in names or any(entry not in names for entry in _ONEDIR_REQUIRED_MEMBERS):
         raise DesktopCoreUpdateError("desktop_core_install_failed")

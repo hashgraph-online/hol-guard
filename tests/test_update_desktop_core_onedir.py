@@ -488,6 +488,42 @@ class TestValidateOnedirZipMembers:
             update_desktop_core._validate_onedir_zip_members(archive)
         assert error.value.reason_code == "desktop_core_install_failed"
 
+    @staticmethod
+    def _link(zipped: zipfile.ZipFile, name: str, target: str) -> None:
+        info = zipfile.ZipInfo(name)
+        info.external_attr = 0o120777 << 16
+        zipped.writestr(info, target.encode())
+
+    def test_accepts_in_tree_symlink(self, tmp_path: Path) -> None:
+        archive = tmp_path / "linked.zip"
+        good = self._good(tmp_path)
+        archive.write_bytes(good.read_bytes())
+        with zipfile.ZipFile(archive, "a") as zipped:
+            self._link(zipped, "hol-guard/_internal/Python", "Python.framework/Versions/Current/Python")
+            self._link(zipped, "hol-guard/_internal/Python.framework/Versions/Current", "3.12")
+            zipped.writestr("hol-guard/_internal/Python.framework/Versions/3.12/Python", b"dylib")
+        update_desktop_core._validate_onedir_zip_members(archive)
+
+    def test_rejects_escaping_symlink(self, tmp_path: Path) -> None:
+        archive = tmp_path / "bad.zip"
+        good = self._good(tmp_path)
+        archive.write_bytes(good.read_bytes())
+        with zipfile.ZipFile(archive, "a") as zipped:
+            self._link(zipped, "hol-guard/_internal/link", "../../escape")
+        with pytest.raises(DesktopCoreUpdateError) as error:
+            update_desktop_core._validate_onedir_zip_members(archive)
+        assert error.value.reason_code == "desktop_core_install_failed"
+
+    def test_rejects_symlink_cycle(self, tmp_path: Path) -> None:
+        archive = tmp_path / "bad.zip"
+        good = self._good(tmp_path)
+        archive.write_bytes(good.read_bytes())
+        with zipfile.ZipFile(archive, "a") as zipped:
+            self._link(zipped, "hol-guard/_internal/loop", "loop")
+        with pytest.raises(DesktopCoreUpdateError) as error:
+            update_desktop_core._validate_onedir_zip_members(archive)
+        assert error.value.reason_code == "desktop_core_install_failed"
+
     @pytest.mark.parametrize(
         "missing",
         [

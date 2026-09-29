@@ -160,7 +160,7 @@ def _resolve(path: str, links: dict[str, str], depth: int = 0) -> str:
             target = links[key]
             if target.startswith("/"):
                 raise SystemExit("Onedir archive member is an escaping symlink")
-            out = _resolve("/".join(out[:-1] + [target]), links, depth + 1).split("/")
+            out = _resolve("/".join([*out[:-1], target]), links, depth + 1).split("/")
     return "/".join(out)
 
 
@@ -198,7 +198,7 @@ def validate_onedir_zip_members(archive: Path) -> None:
             or not current.startswith(f"{ONEDIR_TREE_ROOT}/")
         ):
             raise SystemExit(f"Onedir archive member is an escaping symlink: {link_name!r}")
-        if current not in names and f"{current}/" not in names:
+        if current not in names and not any(name.startswith(f"{current}/") for name in names):
             raise SystemExit(f"Onedir archive member is a dangling symlink: {link_name!r}")
     required = (
         ONEDIR_LAUNCHER,

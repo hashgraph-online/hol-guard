@@ -267,6 +267,30 @@ class TestOnedirZipMembers:
         with pytest.raises(SystemExit, match="cycle"):
             namespace.validate_onedir_zip_members(archive)
 
+    def test_resolves_parent_steps_through_link_target(self, tmp_path: Path) -> None:
+        namespace = _feed()
+        archive = _sealed_zip(
+            tmp_path / "core.onedir.zip",
+            extra=[
+                ("hol-guard/a", b"_internal/d", 0o120777),
+                ("hol-guard/link", b"a/../target", 0o120777),
+                ("hol-guard/target", MACHO64 + b"x", 0o755),
+            ],
+        )
+        with pytest.raises(SystemExit, match="dangling"):
+            namespace.validate_onedir_zip_members(archive)
+
+    def test_accepts_symlink_to_implied_directory(self, tmp_path: Path) -> None:
+        namespace = _feed()
+        archive = _sealed_zip(
+            tmp_path / "core.onedir.zip",
+            extra=[
+                ("hol-guard/_internal/link", b"d", 0o120777),
+                ("hol-guard/_internal/d/file", MACHO64 + b"x", 0o755),
+            ],
+        )
+        namespace.validate_onedir_zip_members(archive)
+
     @pytest.mark.parametrize(
         "missing",
         [
