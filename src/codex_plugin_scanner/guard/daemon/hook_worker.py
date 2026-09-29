@@ -81,6 +81,7 @@ class CommandActivityWriter(Protocol):
     ) -> bool: ...
 
 
+_NATIVE_POLICY_STARTUP_READY_TIMEOUT_SECONDS = _PUBLISH_TIMEOUT_SECONDS
 _NATIVE_POLICY_READY_TIMEOUT_SECONDS = 25.0 if sys.platform in {"darwin", "win32"} else _PUBLISH_TIMEOUT_SECONDS
 _TRANSIENT_RESIDENT_PUBLICATION_ERRORS = frozenset(
     {"native_policy_snapshot_resident_changed", "native_resident_restart_budget_busy"}
@@ -151,7 +152,7 @@ class HookWorker(HookWorkerNativeMixin):
         if wait_for_native_policy and mode in {"auto", "force"}:
             wait_until_ready = getattr(self.policy_snapshot_publisher, "wait_until_ready", None)
             if callable(wait_until_ready):
-                _ = wait_until_ready(time.monotonic() + _NATIVE_POLICY_READY_TIMEOUT_SECONDS)
+                _ = wait_until_ready(time.monotonic() + _NATIVE_POLICY_STARTUP_READY_TIMEOUT_SECONDS)
 
     @property
     def test_oracle(self) -> PythonOracle | None:
