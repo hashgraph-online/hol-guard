@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import sys
 from pathlib import Path
 from typing import cast
@@ -20,22 +21,45 @@ from scripts.ci.pytest_shard import build_node_shards  # noqa: E402
 
 
 def select_nodes(node_ids: list[str], index: int, count: int) -> list[str]:
-    """Partition the collected platform inventory, rejecting empty or ambiguous shards."""
+    """Delegate complete, disjoint inventory partitioning to build_node_shards."""
     if not 0 <= index < count:
         raise ValueError("shard index must be in [0, shard count)")
     return build_node_shards(node_ids, count)[index]
 
 
+def _assert_installed_package() -> None:
+    import sysconfig
+
+    import codex_plugin_scanner
+
+    site = Path(sysconfig.get_paths()["purelib"]).resolve()
+    if site not in Path(codex_plugin_scanner.__file__).resolve().parents:
+        raise pytest.UsageError("native regression must import the installed wheel")
+
+
+def _configure_installed_native() -> None:
+    # Resolve the same wheel's binaries in the pytest process. Separate python -c
+    # probes paid the native package's import cost twice before pytest paid it again.
+    _assert_installed_package()
+    from codex_plugin_scanner.guard.extension_builder.native_source_compiler import find_packaged_source_compiler
+    from codex_plugin_scanner.guard.native_runtime import native_runtime_status
+
+    status = native_runtime_status()
+    compiler = find_packaged_source_compiler()
+    if status.identity is None:
+        raise pytest.UsageError("installed wheel has no native runtime identity")
+    if compiler is None:
+        raise pytest.UsageError("installed wheel has no native source compiler")
+    # Publish neither override until both checks pass. Never use a source-tree or
+    # caller-provided binary as a fallback for an incomplete installed wheel.
+    os.environ["HOL_GUARD_NATIVE_BINARY"] = str(status.identity.path)
+    os.environ["HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER"] = str(compiler)
+
+
 class _AssertInstalled:
     @pytest.hookimpl(trylast=True)
     def pytest_collection_finish(self, session: pytest.Session) -> None:
-        import sysconfig
-
-        import codex_plugin_scanner
-
-        site = Path(sysconfig.get_paths()["purelib"]).resolve()
-        if site not in Path(codex_plugin_scanner.__file__).resolve().parents:
-            raise pytest.UsageError("native regression must import the installed wheel")
+        _assert_installed_package()
 
 
 class NativeShard:
@@ -79,13 +103,19 @@ def main() -> int:
     args = parser.parse_args()
     shard = NativeShard(cast(int, args.shard_index), cast(int, args.shard_count))
     report = cast(Path, args.report)
-    # Retain the exact manifest, pytest configuration, assertions and exit status.
-    exit_code = int(
-        pytest.main(
-            ["@" + str(ROOT / "ci/native_runtime/regression-tests.txt"), "--durations=10"],
-            plugins=[shard, _AssertInstalled()],
+    try:
+        _configure_installed_native()
+    except pytest.UsageError as error:
+        print(str(error), file=sys.stderr)
+        exit_code = int(pytest.ExitCode.USAGE_ERROR)
+    else:
+        # Retain the exact manifest, pytest configuration, assertions and exit status.
+        exit_code = int(
+            pytest.main(
+                ["@" + str(ROOT / "ci/native_runtime/regression-tests.txt"), "--durations=10"],
+                plugins=[shard, _AssertInstalled()],
+            )
         )
-    )
     report.parent.mkdir(parents=True, exist_ok=True)
     report.write_text(
         json.dumps({**shard.report(exit_code), "platform": args.platform}, sort_keys=True) + "\n", encoding="utf-8"
