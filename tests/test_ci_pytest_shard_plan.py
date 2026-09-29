@@ -175,8 +175,8 @@ def test_write_shard_plan_emits_response_files_and_metadata(tmp_path: Path) -> N
         manifest_used=True,
     )
 
-    assert (tmp_path / "shard-00.txt").read_text(encoding="utf-8") == "tests/test_a.py::test_a\n"
-    assert (tmp_path / "shard-01.txt").read_text(encoding="utf-8") == (
+    assert (tmp_path / "shard-000.txt").read_text(encoding="utf-8") == "tests/test_a.py::test_a\n"
+    assert (tmp_path / "shard-001.txt").read_text(encoding="utf-8") == (
         "tests/test_b.py::test_b\ntests/test_b.py::test_c\n"
     )
     response_nodes = [
@@ -197,20 +197,23 @@ def test_write_shard_plan_emits_response_files_and_metadata(tmp_path: Path) -> N
     }
 
 
-def test_write_shard_plan_uses_three_digits_for_large_shard_counts(tmp_path: Path) -> None:
-    shards = [[f"tests/test_matrix.py::test_case_{index}"] for index in range(192)]
+@pytest.mark.parametrize("count", [2, 64, 100, 101, 128, 192, 1001])
+def test_write_shard_plan_uses_stable_minimum_width_at_every_matrix_size(tmp_path: Path, count: int) -> None:
+    shards = [[f"tests/test_matrix.py::test_case_{index}"] for index in range(count)]
 
-    write_shard_plan(tmp_path, shards=shards, estimated_loads=[1.0] * 192, manifest_used=True)
+    write_shard_plan(tmp_path, shards=shards, estimated_loads=[1.0] * count, manifest_used=True)
 
-    assert len(list(tmp_path.glob("shard-*.txt"))) == 192
+    assert len(list(tmp_path.glob("shard-*.txt"))) == count
     assert [
-        (tmp_path / f"shard-{index:03d}.txt").read_text(encoding="utf-8").splitlines() for index in range(192)
+        (tmp_path / f"shard-{index:03d}.txt").read_text(encoding="utf-8").splitlines() for index in range(count)
     ] == shards
 
 
 def _printf_format(command: str) -> str:
     # Tokenize the shell instead of assuming one quoting style for its format.
-    tokens = iter(shlex.shlex(command, posix=True, punctuation_chars=True))
+    lexer = shlex.shlex(command, posix=True, punctuation_chars=True)
+    lexer.whitespace_split = True
+    tokens = iter(lexer)
     for token in tokens:
         if token == "printf":
             return next(tokens)
@@ -224,6 +227,7 @@ def _printf_format(command: str) -> str:
         ('shard_file=$(printf "shard-%03d.txt" 7)', "shard-%03d.txt"),
         ('printf "path with spaces/shard-%03d.txt" 7', "path with spaces/shard-%03d.txt"),
         (r"printf 'shard-'\''%03d.txt' 7", "shard-'%03d.txt"),
+        ("shard_file=$(printf shard-%03d.txt 7)", "shard-%03d.txt"),
     ],
 )
 def test_printf_format_respects_shell_quoting(command: str, expected: str) -> None:
@@ -236,7 +240,6 @@ def test_printf_format_requires_a_printf_command() -> None:
 
 
 def test_live_coverage_matrix_opens_every_generated_response_file(tmp_path: Path) -> None:
-
     import yaml
 
     root = Path(__file__).resolve().parents[1]

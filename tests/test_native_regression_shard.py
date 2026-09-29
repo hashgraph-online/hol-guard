@@ -185,3 +185,45 @@ def test_invalid_inventory_count_identifies_the_platform(count: object) -> None:
     platform = reports[0]["platform"]
     with pytest.raises(ValueError, match=f"invalid native inventory count: {platform}"):
         VERIFY.verify_reports(reports, 4)
+
+
+@pytest.mark.parametrize("count", [0, -1, -16])
+def test_nonpositive_shard_counts_have_a_clear_error(count: int) -> None:
+    with pytest.raises(ValueError, match="shard count must be positive"):
+        SHARD.select_nodes(["test_example"], 0, count)
+    with pytest.raises(ValueError, match="shard count must be positive"):
+        VERIFY.verify_reports([], count)
+
+
+@pytest.mark.parametrize("platform", sorted(VERIFY.PLATFORMS))
+def test_inventory_count_errors_identify_the_platform(platform: str) -> None:
+    reports = _reports()
+    report = next(report for report in reports if report["platform"] == platform)
+    report["collected_count"] = 0
+    with pytest.raises(ValueError, match=f"invalid native inventory count: {platform}"):
+        VERIFY.verify_reports(reports, 4)
+
+
+@pytest.mark.parametrize("platform", sorted(VERIFY.PLATFORMS))
+def test_failed_shard_errors_identify_platform_and_index(platform: str) -> None:
+    reports = _reports()
+    report = next(report for report in reports if report["platform"] == platform and report["shard_index"] == 2)
+    report["exit_code"] = 1
+    with pytest.raises(ValueError, match=f"{platform}, shard=2"):
+        VERIFY.verify_reports(reports, 4)
+
+
+def test_missing_report_error_identifies_expected_and_actual_counts() -> None:
+    with pytest.raises(ValueError, match="expected 16, got 15"):
+        VERIFY.verify_reports(_reports()[:-1], 4)
+
+
+def test_windows_native_build_keeps_the_warm_main_only_cache() -> None:
+    action = yaml.safe_load((ROOT / ".github/actions/setup-rust/action.yml").read_text())
+    jobs = yaml.safe_load((ROOT / ".github/workflows/native-wheel-ci.yml").read_text())["jobs"]
+    setup = next(step for step in jobs["windows-build"]["steps"] if step.get("uses") == "./.github/actions/setup-rust")
+    default_key = action["inputs"]["cache-key"]["default"]
+    assert setup.get("with", {}).get("cache-key", default_key) == default_key == "native-wheel"
+    cache = next(step for step in action["runs"]["steps"] if step.get("name") == "Cache Rust compilation")
+    assert cache["with"]["prefix-key"] == "v0-rust"
+    assert cache["with"]["save-if"] == "${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}"

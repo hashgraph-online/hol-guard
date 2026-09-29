@@ -21,7 +21,9 @@ from scripts.ci.pytest_shard import build_node_shards  # noqa: E402
 
 
 def select_nodes(node_ids: list[str], index: int, count: int) -> list[str]:
-    """Delegate complete, disjoint inventory partitioning to build_node_shards."""
+    """Validate the request and delegate partitioning to shared build_node_shards."""
+    if count < 1:
+        raise ValueError("shard count must be positive")
     if not 0 <= index < count:
         raise ValueError("shard index must be in [0, shard count)")
     return build_node_shards(node_ids, count)[index]

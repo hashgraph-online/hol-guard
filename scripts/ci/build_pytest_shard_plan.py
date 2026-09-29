@@ -185,7 +185,9 @@ def write_shard_plan(
     if len(shards) != len(estimated_loads) or not shards:
         raise ValueError("shards and estimated loads must be non-empty and aligned")
     output_directory.mkdir(parents=True, exist_ok=True)
-    width = max(2, len(str(len(shards) - 1)))
+    # Keep a stable minimum width at every matrix size, matching printf %03d.
+    # Both formatters naturally expand for indices larger than three digits.
+    width = 3
     for index, shard in enumerate(shards):
         path = output_directory / f"shard-{index:0{width}d}.txt"
         path.write_text("\n".join(shard) + "\n", encoding="utf-8")

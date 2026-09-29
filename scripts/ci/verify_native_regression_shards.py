@@ -20,8 +20,13 @@ PLATFORMS = frozenset(
 
 
 def verify_reports(reports: list[dict[str, object]], shard_count: int) -> dict[str, int]:
-    if shard_count < 1 or len(reports) != len(PLATFORMS) * shard_count:
-        raise ValueError("missing or unexpected native regression reports")
+    if shard_count < 1:
+        raise ValueError("shard count must be positive")
+    expected_reports = len(PLATFORMS) * shard_count
+    if len(reports) != expected_reports:
+        raise ValueError(
+            f"missing or unexpected native regression reports: expected {expected_reports}, got {len(reports)}"
+        )
     counts: dict[str, int] = {}
     for platform in sorted(PLATFORMS):
         group = [r for r in reports if r.get("platform") == platform]
@@ -32,7 +37,7 @@ def verify_reports(reports: list[dict[str, object]], shard_count: int) -> dict[s
         expected_count = group[0].get("collected_count")
         expected_digest = group[0].get("inventory_sha256")
         if type(expected_count) is not int or expected_count < shard_count:
-            raise ValueError(f"invalid native inventory count: {platform}")
+            raise ValueError(f"invalid native inventory count: {platform}, got {expected_count!r}")
         for report in group:
             index = report.get("shard_index")
             nodes = report.get("selected")
@@ -50,7 +55,7 @@ def verify_reports(reports: list[dict[str, object]], shard_count: int) -> dict[s
                 or not nodes
                 or not all(isinstance(node, str) and node for node in nodes)
             ):
-                raise ValueError(f"invalid or failed native shard: {platform}")
+                raise ValueError(f"invalid or failed native shard: {platform}, shard={index!r}")
             indices.add(index)
             selected.extend(cast(list[str], nodes))
         if len(selected) != expected_count or len(set(selected)) != expected_count:

@@ -12,7 +12,9 @@ inputs:
     description: Optional space-separated compilation targets.
     default: ""
   cache-key:
-    description: Cache family; publishing must use its own trusted build cache.
+    # Preserve the warm native-wheel namespace for Windows and other host builds.
+    # Publishing explicitly selects a separate trusted build cache.
+    description: Shared native build cache family; keep the established namespace.
     default: native-wheel
 
 runs:
