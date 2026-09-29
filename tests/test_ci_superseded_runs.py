@@ -268,10 +268,12 @@ def test_entrypoint_does_not_guess_an_ambiguous_pr(monkeypatch, tmp_path, associ
 def test_privileged_workflow_only_executes_trusted_inline_code():
     workflow = yaml.load((ROOT / ".github/workflows/ci-superseded-runs.yml").read_text(), Loader=yaml.BaseLoader)
     assert workflow["on"] == {"workflow_run": {"workflows": ["CI", "Native wheel CI"], "types": ["requested", "in_progress"]}}
-    assert workflow["permissions"] == {"actions": "write", "pull-requests": "read"}
+    assert workflow["permissions"] == {}
     assert workflow["concurrency"]["cancel-in-progress"] == "false"
     assert "workflow_run.id" in workflow["concurrency"]["group"]
+    assert set(workflow["jobs"]) == {"retire"}
     job = workflow["jobs"]["retire"]
+    assert job["permissions"] == {"actions": "write", "pull-requests": "read"}
     assert job["if"] == "github.event.workflow_run.event == 'pull_request'"
     steps = job["steps"]
     assert len(steps) == 1 and "uses" not in steps[0]
