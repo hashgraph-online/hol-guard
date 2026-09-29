@@ -515,6 +515,8 @@ def _try_apply_onedir(
         expected_artifact=f"{artifact}.onedir.zip",
         expected_channel=channel,
     )
+    if not os.environ.get("HOL_GUARD_DESKTOP_VERSION", "").strip():
+        return None
     try:
         _enforce_minimum_desktop_version(manifest["minimum_desktop_version"])
     except DesktopCoreUpdateError as error:
