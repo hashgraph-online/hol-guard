@@ -335,9 +335,12 @@ def test_codex_bridge_proxy_falls_through_on_pending_approval(tmp_path: Path) ->
         )
     finally:
         fake.server.shutdown()  # type: ignore[union-attr]
-    # Pending approvals need the full bridge's browser wait and finalize flow.
-    assert result.returncode != 0
+    # Pending approvals trigger the browser wait flow, which lazily imports
+    # the Guard package — the poisoned import proves the early path engaged it.
+    assert result.returncode == 0
     assert marker.is_file()
+    response = json.loads(result.stdout)
+    assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
 def test_codex_bridge_proxy_fails_closed_on_oversized_input(tmp_path: Path) -> None:

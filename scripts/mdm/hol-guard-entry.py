@@ -291,6 +291,11 @@ _CODEX_FAIL_CLOSED_REASON = (
 _CODEX_APPROVAL_REQUEST_ID_KEY = "guardApprovalRequestId"
 _CODEX_APPROVAL_URL_KEY = "guardApprovalUrl"
 _CODEX_REQUEST_URL_RE = re.compile(r"(https?://[^\s]+/requests/([A-Za-z0-9_-]{8,128}))", re.IGNORECASE)
+_CODEX_SENT_HOOK_REASON = "HOL Guard did not return a decision for this action. Retry the action."
+
+
+class _CodexHookRequestSentError(Exception):
+    """The daemon hook request was sent but no usable response was received."""
 
 
 def _codex_bridge_request_config() -> dict[str, object] | None:
@@ -537,7 +542,7 @@ def _codex_daemon_hook_request(
     event_name: str,
     deadline: float,
     rpc_deadline: float,
-) -> dict[str, object] | None:
+) -> tuple[dict[str, object], str] | None:
     """Run one authenticated hook round-trip against the resident daemon."""
 
     state, discovery_key, token = identity
@@ -547,6 +552,7 @@ def _codex_daemon_hook_request(
         return None
     nonce = secrets.token_hex(32)
     connection = http.client.HTTPConnection(host, port, timeout=max(0.5, rpc_deadline - time.monotonic()))
+    hook_request_started = False
     try:
         connection.request(
             "POST",
@@ -597,6 +603,7 @@ def _codex_daemon_hook_request(
             deadline=deadline,
             rpc_deadline=rpc_deadline,
         )
+        hook_request_started = True
         connection.request(
             "POST",
             f"/v1/hooks/codex?{query}",
@@ -609,11 +616,18 @@ def _codex_daemon_hook_request(
                 "X-Guard-Daemon-Proof": proof,
             },
         )
-        return _codex_daemon_json_body(
+        payload = _codex_daemon_json_body(
             connection.getresponse(),
             connection=connection,
             deadline=rpc_deadline,
         )
+        if payload is None:
+            raise _CodexHookRequestSentError
+        return payload, hinted_data
+    except (OSError, ValueError, http.client.HTTPException, TimeoutError) as error:
+        if hook_request_started:
+            raise _CodexHookRequestSentError from error
+        raise
     finally:
         connection.close()
 
@@ -765,7 +779,7 @@ def _try_codex_daemon_bridge() -> bool:
     if identity is None:
         return False
     try:
-        response = _codex_daemon_hook_request(
+        request_result = _codex_daemon_hook_request(
             state_path=str(config["state_path"]),
             identity=identity,
             query=str(config["query"]),
@@ -774,14 +788,56 @@ def _try_codex_daemon_bridge() -> bool:
             deadline=deadline,
             rpc_deadline=rpc_deadline,
         )
+    except _CodexHookRequestSentError:
+        # The hook request reached the daemon, so falling through would send it
+        # again. Deny this turn instead of duplicating the recorded decision.
+        response: dict[str, object]
+        if event_name == "PreToolUse":
+            response = {
+                "hookSpecificOutput": {
+                    "hookEventName": event_name,
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": _CODEX_SENT_HOOK_REASON,
+                }
+            }
+        elif event_name == "PermissionRequest":
+            response = {
+                "hookSpecificOutput": {
+                    "hookEventName": event_name,
+                    "decision": {"behavior": "deny", "message": _CODEX_SENT_HOOK_REASON},
+                }
+            }
+        else:
+            response = {"continue": True, "systemMessage": _CODEX_SENT_HOOK_REASON}
+        sys.stdout.write(
+            json.dumps(_codex_normalize_hook_response(response, event_name=event_name), separators=(",", ":"))
+        )
+        return True
     except (OSError, ValueError, http.client.HTTPException, TimeoutError):
         return False
-    if (
-        response is None
-        or _codex_daemon_worker_failed(response)
-        or _codex_pending_pretool_approval(response, event_name=event_name)
-    ):
+    if request_result is None:
         return False
+    response, hook_input = request_result
+    if _codex_daemon_worker_failed(response):
+        return False
+    if _codex_pending_pretool_approval(response, event_name=event_name):
+        # The managed bridge waits on pending approvals and finalizes the
+        # recorded decision. Run that same flow for this response instead of
+        # sending the hook a second time or denying it outright.
+        try:
+            from codex_plugin_scanner.guard.adapters.codex_daemon_hook_resume import (
+                apply_browser_approval_wait,
+            )
+
+            response = apply_browser_approval_wait(
+                response,
+                event_name=event_name,
+                hook_input=hook_input,
+                state_path=str(config["state_path"]),
+                deadline=deadline,
+            )
+        except Exception:
+            pass
     sys.stdout.write(
         json.dumps(
             _codex_normalize_hook_response(response, event_name=event_name),
