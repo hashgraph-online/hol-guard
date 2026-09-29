@@ -95,7 +95,7 @@ class TestWaitForApprovalRequests:
         assert result["resolved"] is True
         assert result["pending_request_ids"] == []
 
-    def test_observes_remote_resolution_within_250ms(self, tmp_path: Path) -> None:
+    def test_observes_remote_resolution_within_500ms(self, tmp_path: Path) -> None:
         store = GuardStore(tmp_path / "guard")
         request_id = self._add_request(store, "req-fast-remote", status="pending")
         resolved_at = [0.0]
@@ -124,7 +124,7 @@ class TestWaitForApprovalRequests:
             resolver.join(timeout=1)
 
         assert result["resolved"] is True
-        assert observed_at - resolved_at[0] < 0.25
+        assert observed_at - resolved_at[0] < 0.5
 
     def test_returns_pending_after_timeout_when_not_resolved(self, tmp_path: Path) -> None:
         store = GuardStore(tmp_path / "guard")

@@ -99,6 +99,7 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
         self._epoch = 0
         self._last_error: str | None = None
         self._published_config_digest: str | None = None
+        self._published_local_cli_revision: int | None = None
         self._published_policy_fingerprint: tuple[str, str, str] | None = None
         self._observed_policy_fingerprint: tuple[str, str, str] | None = None
         self._renewal_due_monotonic: float | None = None
@@ -276,6 +277,32 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
                 binding["command_extensions_bound"] = True
             return binding
 
+    def local_cli_publication_receipt(self, revision: int) -> dict[str, object] | None:
+        """Bind control-plane status to an ACK for this exact saved revision."""
+        with self._condition:
+            self._mark_expired_locked()
+            if (
+                not self._acked
+                or self._closed
+                or self._snapshot is None
+                or self._published_local_cli_revision != revision
+            ):
+                return None
+            return {
+                "revision": revision,
+                "generation": self._snapshot["generation"],
+                "policy_digest": self._snapshot["policy_digest"],
+            }
+
+    def _current_local_cli_revision(self) -> int | None:
+        reader = getattr(self.store, "read_local_cli_revision", None)
+        if not callable(reader):
+            return None
+        revision = reader()
+        if type(revision) is not int or revision < 0:
+            raise NativePolicySnapshotError("native_local_cli_revision_invalid")
+        return revision
+
     @property
     def last_error(self) -> str | None:
         with self._condition:
@@ -409,6 +436,9 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
             for _ in range(2):
                 with self._condition:
                     publish_epoch = self._epoch
+                local_cli_revision = self._current_local_cli_revision()
+                provider_reader = getattr(self.store, "read_mcp_provider_authority_hash", None)
+                provider_authority_hash = provider_reader() if callable(provider_reader) else None
                 context = self._publication_context()
                 if context is None:
                     return
@@ -446,6 +476,14 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
                 with self._condition:
                     self._acked = False
                 raise NativePolicySnapshotError("native_command_control_binding_changed")
+            if self._current_local_cli_revision() != local_cli_revision:
+                with self._condition:
+                    self._acked = False
+                raise NativePolicySnapshotError("native_local_cli_revision_changed")
+            if callable(provider_reader) and provider_reader() != provider_authority_hash:
+                with self._condition:
+                    self._acked = False
+                raise NativePolicySnapshotError("native_provider_catalog_changed")
             with self._condition:
                 # A mutation may have invalidated the barrier while this
                 # request was in flight. Do not let an older ACK make that
@@ -474,6 +512,7 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
                     self._input_fingerprint = (self._input_fingerprint[0], resident_fingerprint_confirmed)
                 self._snapshot = snapshot
                 self._published_config_digest = cast(str, snapshot["config_digest"])
+                self._published_local_cli_revision = local_cli_revision
                 self._published_policy_fingerprint = (
                     cast(str, snapshot["config_digest"]),
                     cast(str, snapshot["mode"]),

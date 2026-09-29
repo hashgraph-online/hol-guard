@@ -1045,7 +1045,7 @@ export async function fetchExtensionControlApi(input: RequestInfo, init?: Reques
 export async function fetchLocalCliApi(input: RequestInfo, init?: RequestInit): Promise<Response> {
   const approvedPath =
     typeof input === "string" &&
-    /^\/v1\/local-clis(?:\/(?:preview|apply|recognize|discover))?$/.test(input);
+    /^\/v1\/local-clis(?:\/(?:preview|apply|recognize|discover|provider-actions|provider-workflows|registry-search|registry-setup|refresh-job|skills|mcp-skills))?$/.test(input);
   if (!approvedPath) {
     throw new Error("Invalid local CLI API path");
   }
@@ -1512,6 +1512,10 @@ export function normalizeApprovalRequest(item: RawGuardApprovalRequest): GuardAp
   const scopeRestrictions = parseStringList(item.scope_restrictions);
   return {
     ...baseItem,
+    superseded_by_request_id: item.status === "expired"
+      && typeof item.superseded_by_request_id === "string"
+      && /^[A-Za-z0-9-]{1,64}$/.test(item.superseded_by_request_id)
+      ? item.superseded_by_request_id : undefined,
     policy_action: failClosedPolicyAction,
     recommended_scope: isDecisionScope(item.recommended_scope) ? item.recommended_scope : null,
     allowed_scopes: allowedScopes ?? undefined,

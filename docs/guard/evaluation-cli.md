@@ -29,6 +29,26 @@ because this CLI does not verify private directory and token ACL ownership. The 
 never printed. The command reports the owned setup scope and that cleanup is
 available; preserve that scope for the cleanup stage.
 
+## Built-in synthetic adapters
+
+Run the fixed disposable shell/file and loopback receiver adapters declared by
+the profile:
+
+```shell
+hol-guard-eval run --profile profile.json \
+  --case eval.shell.disposable_delete \
+  --case eval.egress.loopback
+```
+
+The runner accepts only these built-in case IDs. It generates its own witness
+paths and loopback endpoints, applies the profile's duration and output
+limits, checks receiver readiness before each attempt, and removes its owned
+setup in a final cleanup step. The report uses the
+`synthetic_adapter_test` proof boundary and `blocked_environment` status
+because it is fixture-only: it does not invoke an installed host or bind a
+Guard decision to a host event. It does not create an evaluation result or
+evidence package.
+
 ## Evidence verification
 
 Verify the canonical records and hashes in a package created by the existing
@@ -79,5 +99,6 @@ checks match. A missing or mismatched token returns `blocked_environment`; no
 directory scan or token reconstruction is attempted.
 
 All input and contract failures use stable `error.code` and `error.message`
-fields. The CLI never accepts scenario text and has no run or live-proof
-command.
+fields. The CLI accepts no arbitrary scenario text, command, path, endpoint,
+or package input for the synthetic adapters. A live installed-host proof path
+requires separate host-event and Guard-decision binding.

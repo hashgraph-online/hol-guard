@@ -70,9 +70,12 @@ jobs:
             echo "artifacts without a token whose events trigger workflows." >&2
             exit 1
           fi
+          # git smart-HTTP needs Basic x-access-token auth (Bearer is API-only).
+          git_auth=$(printf 'x-access-token:%s' "${PUSH_TOKEN}" | base64 | tr -d '\n')
+          echo "::add-mask::${git_auth}"
           export GIT_CONFIG_COUNT=3
           export GIT_CONFIG_KEY_0="http.https://github.com/.extraheader"
-          export GIT_CONFIG_VALUE_0="AUTHORIZATION: Bearer ${PUSH_TOKEN}"
+          export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic ${git_auth}"
           export GIT_CONFIG_KEY_1="user.name"
           export GIT_CONFIG_VALUE_1="github-actions[bot]"
           export GIT_CONFIG_KEY_2="user.email"

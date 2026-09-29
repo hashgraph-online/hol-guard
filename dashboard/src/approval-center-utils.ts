@@ -180,8 +180,8 @@ export function resolveActionEnvelopeDetailText(
   }
   // All canonical details above take precedence. This JSON input fallback never changes Rust's action kind.
   if (envelope.action_type === "mcp_tool" || envelope.event_name === "PreToolUse") {
-    const baseText =
-      resolveEnvelopeDisplayText(envelope) ?? envelope.mcp_tool ?? envelope.tool_name ?? envelope.action_type;
+    const baseText = friendlyMcpToolName(envelope.tool_name) ?? friendlyMcpToolName(envelope.mcp_tool)
+      ?? resolveEnvelopeDisplayText(envelope) ?? envelope.mcp_tool ?? envelope.tool_name ?? envelope.action_type;
     const inputSummary = serializeMcpInput(envelope.raw_payload_redacted, options.mcpInputMaxLength ?? null);
     if (inputSummary !== null) return `${baseText}\n\nInput:\n${inputSummary}`;
     return envelope.action_type === "shell_command" ? null : baseText;
@@ -376,6 +376,11 @@ export function requestResolutionBlockReason(item: GuardApprovalRequest): string
   }
   if (item.policy_action === "block") {
     return "Policy terminally blocked this action. This queue record is diagnostic and cannot be overridden by an approval.";
+  }
+  if (item.status === "expired") {
+    return item.superseded_by_request_id
+      ? "This request expired and was superseded by a fresh review."
+      : "This request expired. Rerun the action to create a fresh review.";
   }
   return null;
 }
@@ -574,7 +579,25 @@ export function harnessDisplayName(harness: string): string {
 }
 
 export function displayArtifactName(item: GuardApprovalRequest): string {
+  if (item.artifact_type === "tool_call") {
+    const friendly = friendlyMcpToolName(item.artifact_name);
+    if (friendly) return friendly;
+  }
   return item.artifact_name || item.artifact_id || "this action";
+}
+
+export function friendlyMcpToolName(raw: string | null | undefined): string | null {
+  if (!raw || raw.length > 256) return null;
+  const parts = raw.startsWith("mcp__") ? raw.slice(5).split("__") : [];
+  if (parts.length < 2 || parts.some((part) => !/^[a-zA-Z0-9_-]{1,80}$/.test(part))) return null;
+  const codexApp = parts[0] === "codex_apps" && parts.length > 2;
+  const connector = codexApp ? parts[1] : parts[0];
+  const tool = parts.slice(codexApp ? 2 : 1).join("__");
+  const humanize = (part: string) => part.replaceAll("_", " ").replaceAll("-", " ")
+    .toLowerCase().replace(/\s+/g, " ").replace(/\b[a-z]/g, (letter) => letter.toUpperCase());
+  const shortTool = tool.toLowerCase().startsWith(`${connector.toLowerCase()}_`)
+    ? tool.slice(connector.length + 1) : tool;
+  return `${humanize(connector)} · ${humanize(shortTool)}`;
 }
 
 export function formatNumber(n: number): string {
@@ -774,7 +797,7 @@ export function buildCodexResumeUx(resume: GuardCodexResumeResult): CodexResumeU
   }
   return {
     headline: "Guard could not locate the Codex chat.",
-    body: resume.message ?? "Return to Codex and retry the same request.",
+    body: resume.message ?? "Return to Codex and retry. A new tool call may need fresh approval.",
     showRetry: false
   };
 }

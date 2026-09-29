@@ -63,6 +63,7 @@ class FakeGitHub:
         self.comment_rows: list[dict[str, Any]] = []
         self.logins: dict[str, str | None] = {}
         self.posted: list[tuple[int, str]] = []
+        self.updated: list[tuple[int, str]] = []
 
     def repo_metadata(self) -> dict[str, Any]:
         return {"default_branch": self.default_branch}
@@ -102,6 +103,9 @@ class FakeGitHub:
     def post_comment(self, number: int, body: str) -> None:
         self.posted.append((number, body))
 
+    def update_comment(self, comment_id: int, body: str) -> None:
+        self.updated.append((comment_id, body))
+
 
 def configure_new_contribution(
     client: FakeGitHub,
@@ -117,6 +121,7 @@ def configure_new_contribution(
         {"status": "added", "filename": listing_path},
     ]
     client.file_payloads[(MERGE_SHA, contribution_path)] = {"schemaVersion": "v1"}
+    client.file_payloads[(client.default_branch, contribution_path)] = {"schemaVersion": "v1"}
     client.file_payloads[(MERGE_SHA, listing_path)] = listing(extension_id, ids)
     # Current canonical state used by the delayed/backfill revalidation pass.
     client.file_payloads[(client.default_branch, listing_path)] = listing(
@@ -149,6 +154,15 @@ def test_new_contribution_notifies_only_reviewed_numeric_ids() -> None:
     assert "extension=command.example" not in body
     assert "PR author" not in body
     assert "runtime trust" in body
+    assert "## Claim your extension" in body
+    assert "continue with GitHub" in body
+    assert "public publisher page" in body
+    assert "launch story" in body
+    assert "setup guide and blog content" in body
+    assert "verified publisher badge toolkit" in body
+    assert "claiming alone does not publish" in body
+    assert "trust score" not in body
+    assert "installs" not in body
 
 
 def test_pr_authorship_never_creates_claim_authority() -> None:
@@ -251,6 +265,7 @@ def test_listing_change_notifies_only_newly_accepted_ids() -> None:
     client.files = [{"status": "modified", "filename": listing_path}]
     client.file_payloads[(MERGE_SHA, contribution_path)] = {"schemaVersion": "v1"}
     client.file_payloads[(BEFORE_SHA, contribution_path)] = {"schemaVersion": "v1"}
+    client.file_payloads[(client.default_branch, contribution_path)] = {"schemaVersion": "v1"}
     client.file_payloads[(MERGE_SHA, listing_path)] = listing(extension_id, ["100", "200"])
     client.file_payloads[(BEFORE_SHA, listing_path)] = listing(extension_id, ["100"])
     client.file_payloads[(client.default_branch, listing_path)] = listing(extension_id, ["100", "200"])
@@ -285,14 +300,154 @@ def test_existing_marker_from_trusted_actions_identity_is_idempotent() -> None:
     assert client.posted == []
 
 
+def test_explicit_refresh_updates_only_existing_trusted_notice() -> None:
+    client = FakeGitHub()
+    configure_new_contribution(client, "command.refresh", ["400"])
+    client.logins = {"400": "reviewed-maintainer"}
+    client.comment_rows = [
+        {
+            "id": 123,
+            "body": f"{MODULE.MARKER}\nOld notice",
+            "user": {"id": MODULE.TRUSTED_NOTICE_ACTOR_ID, "type": "Bot"},
+        }
+    ]
+
+    assert MODULE.process(client, 9, MODULE.DEFAULT_STUDIO_URL, refresh_existing=True, dry_run=True) == 0
+    assert client.updated == []
+    assert MODULE.process(client, 9, MODULE.DEFAULT_STUDIO_URL, refresh_existing=True) == 0
+    assert client.posted == []
+    assert len(client.updated) == 1
+    assert client.updated[0][0] == 123
+    assert "@reviewed-maintainer" in client.updated[0][1]
+    assert "launch story" in client.updated[0][1]
+
+    client.comment_rows[0]["body"] = client.updated[0][1]
+    assert MODULE.process(client, 9, MODULE.DEFAULT_STUDIO_URL, refresh_existing=True) == 0
+    assert len(client.updated) == 1
+
+
+def test_refresh_rejects_trusted_comment_without_valid_id() -> None:
+    client = FakeGitHub()
+    configure_new_contribution(client, "command.refresh", ["400"])
+    client.comment_rows = [{"body": MODULE.MARKER, "user": {"id": MODULE.TRUSTED_NOTICE_ACTOR_ID, "type": "Bot"}}]
+
+    with pytest.raises(MODULE.ClaimNoticeError, match="comment ID is invalid"):
+        MODULE.process(client, 9, MODULE.DEFAULT_STUDIO_URL, refresh_existing=True)
+
+
+def test_refresh_withdraws_link_after_claim_authority_is_removed() -> None:
+    client = FakeGitHub()
+    configure_new_contribution(client, "command.withdrawn", ["400"], tip_ids=[])
+    client.comment_rows = [
+        {
+            "id": 123,
+            "body": f"{MODULE.MARKER}\n[Old claim link](https://example.com)",
+            "user": {"id": MODULE.TRUSTED_NOTICE_ACTOR_ID, "type": "Bot"},
+        }
+    ]
+
+    assert MODULE.process(client, 9, MODULE.DEFAULT_STUDIO_URL, refresh_existing=True) == 0
+    assert client.posted == []
+    assert client.updated == [(123, MODULE.build_withdrawn_comment())]
+    assert "no longer current" in client.updated[0][1]
+    assert "?claim=" not in client.updated[0][1]
+
+
+def test_refresh_retains_existing_link_during_portal_outage(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = FakeGitHub()
+    configure_new_contribution(client, "command.portal-gated", ["400"])
+    client.comment_rows = [
+        {
+            "id": 123,
+            "body": f"{MODULE.MARKER}\nOld claim notice",
+            "user": {"id": MODULE.TRUSTED_NOTICE_ACTOR_ID, "type": "Bot"},
+        }
+    ]
+    monkeypatch.setattr(MODULE, "portal_readiness", lambda _url: ("provider_unavailable", "portal unreachable"))
+
+    assert (
+        MODULE.process(
+            client,
+            9,
+            MODULE.DEFAULT_STUDIO_URL,
+            refresh_existing=True,
+            portal_readiness_url="https://portal.example/ready",
+        )
+        == 0
+    )
+    assert client.posted == []
+    assert client.updated == []
+
+
+def test_refresh_does_not_withdraw_rename_backfill_without_opt_in() -> None:
+    client = FakeGitHub()
+    configure_new_contribution(client, "command.unmapped", [])
+    client.files.append(
+        {
+            "status": "renamed",
+            "filename": "contributions/extensions/command.renamed.json",
+            "previous_filename": "contributions/extensions/command.old.json",
+        }
+    )
+    client.comment_rows = [
+        {
+            "id": 123,
+            "body": f"{MODULE.MARKER}\nEarlier rename claim link",
+            "user": {"id": MODULE.TRUSTED_NOTICE_ACTOR_ID, "type": "Bot"},
+        }
+    ]
+
+    assert MODULE.process(client, 9, MODULE.DEFAULT_STUDIO_URL, refresh_existing=True) == 0
+    assert client.updated == []
+
+
+def test_refresh_keeps_rename_link_when_another_extension_is_eligible() -> None:
+    client = FakeGitHub()
+    configure_new_contribution(client, "command.eligible", ["400"])
+    client.files.append(
+        {
+            "status": "renamed",
+            "filename": "contributions/extensions/command.renamed.json",
+            "previous_filename": "contributions/extensions/command.old.json",
+        }
+    )
+    client.comment_rows = [
+        {
+            "id": 123,
+            "body": f"{MODULE.MARKER}\nEarlier rename claim link",
+            "user": {"id": MODULE.TRUSTED_NOTICE_ACTOR_ID, "type": "Bot"},
+        }
+    ]
+
+    assert MODULE.process(client, 9, MODULE.DEFAULT_STUDIO_URL, refresh_existing=True) == 0
+    assert client.updated == []
+
+
+def test_refresh_withdraws_link_after_native_contribution_is_removed() -> None:
+    client = FakeGitHub()
+    configure_new_contribution(client, "command.removed", ["400"])
+    client.file_payloads.pop((client.default_branch, "contributions/extensions/command.removed.json"))
+    client.comment_rows = [
+        {
+            "id": 123,
+            "body": f"{MODULE.MARKER}\nEarlier claim link",
+            "user": {"id": MODULE.TRUSTED_NOTICE_ACTOR_ID, "type": "Bot"},
+        }
+    ]
+
+    assert MODULE.process(client, 9, MODULE.DEFAULT_STUDIO_URL, refresh_existing=True) == 0
+    assert client.updated == [(123, MODULE.build_withdrawn_comment())]
+
+
 def test_contributor_cannot_spoof_notice_marker() -> None:
     client = FakeGitHub()
     configure_new_contribution(client, "command.marker-spoof", ["400"])
     client.logins = {"400": "real-maintainer"}
     client.comment_rows = [{"body": MODULE.MARKER, "user": {"id": 1234, "type": "User"}}]
 
-    assert MODULE.process(client, 13, MODULE.DEFAULT_STUDIO_URL) == 0
+    assert MODULE.process(client, 13, MODULE.DEFAULT_STUDIO_URL, refresh_existing=True) == 0
     assert len(client.posted) == 1
+    assert client.updated == []
 
 
 def test_renamed_contributions_require_explicit_maintainer_backfill() -> None:
@@ -310,6 +465,7 @@ def test_renamed_contributions_require_explicit_maintainer_backfill() -> None:
     client.file_payloads[(BEFORE_SHA, old_contribution)] = {"schemaVersion": "v1"}
     client.file_payloads[(BEFORE_SHA, old_listing)] = listing(old_id, ["700"])
     client.file_payloads[(MERGE_SHA, new_contribution)] = {"schemaVersion": "v1"}
+    client.file_payloads[(client.default_branch, new_contribution)] = {"schemaVersion": "v1"}
     client.file_payloads[(MERGE_SHA, new_listing)] = listing(new_id, ["700"])
     client.file_payloads[(client.default_branch, new_listing)] = listing(new_id, ["700"])
     client.logins = {"700": "renamed-maintainer"}
@@ -434,12 +590,14 @@ def test_workflow_is_merge_only_and_supports_reviewed_rename_backfill() -> None:
     assert "pr_number:" in text
     assert "allow_renames:" in text
     assert "dry_run:" in text
+    assert "refresh_existing:" in text
     assert "contributions/extension-listings/**" in text
     assert "pull-requests: write" in text
     assert "issues: write" not in text
     assert "persist-credentials: false" in text
     assert "--allow-renames" in text
     assert "--dry-run" in text
+    assert "--refresh-existing" in text
     assert "notify_merged_extension_claimants.py" in text
     assert "https://hol.org/guard/extension-studio" in text
 
@@ -556,7 +714,7 @@ def test_readiness_report_uses_first_entry_for_mixed_noneligible_statuses(
         *,
         allow_renames: bool = False,
         records: list[Any] | None = None,
-    ) -> tuple[list[Any], str]:
+    ) -> tuple[list[Any], str, bool]:
         assert records is not None
         records.extend(
             [
@@ -564,7 +722,7 @@ def test_readiness_report_uses_first_entry_for_mixed_noneligible_statuses(
                 MODULE.ExtensionReadiness("command.no-mapping", "no_mapping"),
             ]
         )
-        return [], "source_not_current"
+        return [], "source_not_current", False
 
     monkeypatch.setattr(MODULE, "_plan_notice_items", mixed_statuses)
     report = MODULE.readiness_report(client, 40)

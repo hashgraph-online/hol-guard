@@ -284,6 +284,7 @@ export type GuardApprovalRequest = {
   dedupe_count?: number;
   last_seen_at?: string | null;
   display_status?: string;
+  superseded_by_request_id?: string;
   /** Explicit Core classification; absent on older daemons that only emit scanner evidence. */
   watch_only_observation?: boolean;
   scanner_evidence?: GuardScannerEvidence[];

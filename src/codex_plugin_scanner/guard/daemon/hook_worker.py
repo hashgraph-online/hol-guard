@@ -419,6 +419,10 @@ class HookWorker(HookWorkerNativeMixin):
         succeeded: bool,
     ) -> None:
         if self.activity_writer is not None:
+            discovery_writer = getattr(self.activity_writer, "submit_composio_discovery", None)
+            if callable(discovery_writer):
+                with suppress(Exception):
+                    discovery_writer(harness=harness, payload=payload, succeeded=succeeded)
             _ = self.activity_writer.submit_command_activity(
                 harness=harness,
                 event="PostToolUse",

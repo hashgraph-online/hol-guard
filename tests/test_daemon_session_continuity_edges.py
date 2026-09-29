@@ -388,13 +388,14 @@ def test_bounded_cli_cannot_finish_without_policy_action_allows_write() -> None:
     assert json.loads(invalid_stdout)["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
-def test_codex_unavailable_permission_request_continues_without_auto_allow() -> None:
+def test_codex_unavailable_permission_request_denies_without_review() -> None:
     from codex_plugin_scanner.guard.adapters import codex_daemon_hook_bridge as bridge
 
     permission = bridge._unavailable_response("PermissionRequest", "review failed")
-    assert permission["continue"] is True
-    assert permission["hookSpecificOutput"] == {"hookEventName": "PermissionRequest"}
-    assert "behavior" not in permission["hookSpecificOutput"]
+    assert permission["hookSpecificOutput"]["decision"] == {
+        "behavior": "deny",
+        "message": "review failed",
+    }
 
 
 def test_claude_oversized_forged_notification_still_denies(
@@ -428,4 +429,3 @@ def test_claude_oversized_forged_notification_still_denies(
     prompt = json.loads(capsys.readouterr().out)
     assert prompt_result == 0
     assert prompt["decision"] == "block"
-

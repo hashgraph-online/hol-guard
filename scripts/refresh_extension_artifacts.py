@@ -108,23 +108,25 @@ def sync_trust_map() -> bool:
 
 
 def build_native_binaries() -> None:
-    _run(
-        [
-            "cargo",
-            f"+{TOOLCHAIN}",
-            "build",
-            "--locked",
-            "--release",
-            "--manifest-path",
-            str(ROOT / "rust/Cargo.toml"),
-            "-p",
-            "guard-command",
-            "--bin",
-            "guard-command-source",
-            "-p",
-            "hol-guard-runtime",
-        ]
-    )
+    for package, binary in (
+        ("guard-command", "guard-command-source"),
+        ("hol-guard-runtime", "hol-guard-runtime"),
+    ):
+        _run(
+            [
+                "cargo",
+                f"+{TOOLCHAIN}",
+                "build",
+                "--locked",
+                "--release",
+                "--manifest-path",
+                str(ROOT / "rust/Cargo.toml"),
+                "-p",
+                package,
+                "--bin",
+                binary,
+            ]
+        )
 
 
 def regenerate_projections() -> None:

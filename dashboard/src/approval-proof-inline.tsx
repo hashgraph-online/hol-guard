@@ -3,7 +3,7 @@ import type { ChangeEvent, KeyboardEvent, RefObject } from "react";
 import { HiMiniKey } from "react-icons/hi2";
 import { ActionButton } from "./approval-center-primitives";
 import type { GuardApprovalGatePublicConfig } from "./guard-types";
-import { isBulkApproveGateReady as approvalGateProofReady } from "./queue-bulk-approve-flow";
+import { isBulkApproveGateReady as approvalGateProofReady } from "./queue-bulk-approval-credentials";
 import { approvalGateIsLocked, approvalGateLockRemainingSeconds } from "./approval-gate-utils";
 export { approvalGateProofReady };
 

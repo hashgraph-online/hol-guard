@@ -344,6 +344,13 @@ _LOCAL_CLI_PATHS = frozenset(
         "/v1/local-clis/apply",
         "/v1/local-clis/recognize",
         "/v1/local-clis/discover",
+        "/v1/local-clis/provider-actions",
+        "/v1/local-clis/provider-workflows",
+        "/v1/local-clis/registry-search",
+        "/v1/local-clis/registry-setup",
+        "/v1/local-clis/refresh-job",
+        "/v1/local-clis/skills",
+        "/v1/local-clis/mcp-skills",
     }
 )
 
@@ -8480,6 +8487,12 @@ class GuardDaemonServer:
         self._owned_service_ready = False
         self._shutdown_started.set()
         contained = True
+        close_discovery = getattr(getattr(self._server, "local_cli_api", None), "close_discovery", None)
+        if callable(close_discovery):
+            try:
+                contained = close_discovery() is not False and contained
+            except Exception:
+                contained = False
         stop_request_executors = getattr(self._server, "_stop_request_executors", None)
         if callable(stop_request_executors):
             try:

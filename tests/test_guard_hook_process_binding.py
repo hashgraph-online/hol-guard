@@ -148,7 +148,7 @@ def test_codex_approve_without_resume_binding_returns_honest_manual_fallback(tmp
     assert payload["codexResume"]["supported"] is False
     assert payload["codexResume"]["strategy"] == "manual-only"
     assert "could not find the original Codex chat" in payload["resolution_summary"]
-    assert "approval is now saved" in payload["copy"]["body"]
+    assert "a new tool call may require fresh approval" in payload["copy"]["body"]
 
 
 @pytest.mark.parametrize("process_state", ["missing", "reused"])

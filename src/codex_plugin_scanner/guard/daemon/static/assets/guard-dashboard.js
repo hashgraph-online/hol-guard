@@ -14905,7 +14905,7 @@ function resolveActionEnvelopeDetailText(envelope, options = {}) {
     }
   }
   if (envelope.action_type === "mcp_tool" || envelope.event_name === "PreToolUse") {
-    const baseText = resolveEnvelopeDisplayText(envelope) ?? envelope.mcp_tool ?? envelope.tool_name ?? envelope.action_type;
+    const baseText = friendlyMcpToolName(envelope.tool_name) ?? friendlyMcpToolName(envelope.mcp_tool) ?? resolveEnvelopeDisplayText(envelope) ?? envelope.mcp_tool ?? envelope.tool_name ?? envelope.action_type;
     const inputSummary = serializeMcpInput(envelope.raw_payload_redacted, options.mcpInputMaxLength ?? null);
     if (inputSummary !== null) return `${baseText}
 
@@ -15005,6 +15005,9 @@ function requestResolutionBlockReason(item) {
   }
   if (item.policy_action === "block") {
     return "Policy terminally blocked this action. This queue record is diagnostic and cannot be overridden by an approval.";
+  }
+  if (item.status === "expired") {
+    return item.superseded_by_request_id ? "This request expired and was superseded by a fresh review." : "This request expired. Rerun the action to create a fresh review.";
   }
   return null;
 }
@@ -15112,7 +15115,22 @@ function harnessDisplayName(harness) {
   }
 }
 function displayArtifactName(item) {
+  if (item.artifact_type === "tool_call") {
+    const friendly = friendlyMcpToolName(item.artifact_name);
+    if (friendly) return friendly;
+  }
   return item.artifact_name || item.artifact_id || "this action";
+}
+function friendlyMcpToolName(raw) {
+  if (!raw || raw.length > 256) return null;
+  const parts = raw.startsWith("mcp__") ? raw.slice(5).split("__") : [];
+  if (parts.length < 2 || parts.some((part) => !/^[a-zA-Z0-9_-]{1,80}$/.test(part))) return null;
+  const codexApp = parts[0] === "codex_apps" && parts.length > 2;
+  const connector = codexApp ? parts[1] : parts[0];
+  const tool = parts.slice(codexApp ? 2 : 1).join("__");
+  const humanize = (part) => part.replaceAll("_", " ").replaceAll("-", " ").toLowerCase().replace(/\s+/g, " ").replace(/\b[a-z]/g, (letter) => letter.toUpperCase());
+  const shortTool = tool.toLowerCase().startsWith(`${connector.toLowerCase()}_`) ? tool.slice(connector.length + 1) : tool;
+  return `${humanize(connector)} · ${humanize(shortTool)}`;
 }
 function formatNumber(n) {
   if (n >= 1e6) return `${(n / 1e6).toFixed(1).replace(/\.0$/, "")}M`;
@@ -15229,7 +15247,7 @@ function buildCodexResumeUx(resume) {
   }
   return {
     headline: "Guard could not locate the Codex chat.",
-    body: resume.message ?? "Return to Codex and retry the same request.",
+    body: resume.message ?? "Return to Codex and retry. A new tool call may need fresh approval.",
     showRetry: false
   };
 }
@@ -16659,7 +16677,7 @@ async function fetchExtensionControlApi(input, init) {
   return fetchWithGuardAuth(input, init);
 }
 async function fetchLocalCliApi(input, init) {
-  const approvedPath = typeof input === "string" && /^\/v1\/local-clis(?:\/(?:preview|apply|recognize|discover))?$/.test(input);
+  const approvedPath = typeof input === "string" && /^\/v1\/local-clis(?:\/(?:preview|apply|recognize|discover|provider-actions|provider-workflows|registry-search|registry-setup|refresh-job|skills|mcp-skills))?$/.test(input);
   if (!approvedPath) {
     throw new Error("Invalid local CLI API path");
   }
@@ -16989,6 +17007,7 @@ function normalizeApprovalRequest(item) {
   const scopeRestrictions = parseStringList(item.scope_restrictions);
   return {
     ...baseItem,
+    superseded_by_request_id: item.status === "expired" && typeof item.superseded_by_request_id === "string" && /^[A-Za-z0-9-]{1,64}$/.test(item.superseded_by_request_id) ? item.superseded_by_request_id : void 0,
     policy_action: failClosedPolicyAction,
     recommended_scope: isDecisionScope(item.recommended_scope) ? item.recommended_scope : null,
     allowed_scopes: allowedScopes ?? void 0,
@@ -19945,405 +19964,6 @@ function buildBulkGateCredentials(gate, password, totpCode) {
     approval_password: password.trim(),
     approval_gate_use_cooldown: false
   };
-}
-const TIER_LABEL = {
-  low: "Low risk",
-  elevated: "Elevated risk",
-  high: "High risk"
-};
-function toneRing(tone) {
-  if (tone === "attention") {
-    return "border-brand-attention/30 bg-brand-attention/[0.06]";
-  }
-  if (tone === "amber") {
-    return "border-amber-300/60 bg-amber-50/70";
-  }
-  return "border-brand-green/30 bg-brand-green-bg/40";
-}
-function toneChip(tone) {
-  if (tone === "attention") {
-    return "bg-brand-attention/10 text-brand-attention";
-  }
-  if (tone === "amber") {
-    return "bg-amber-100 text-amber-800";
-  }
-  return "bg-brand-green/15 text-brand-green-text";
-}
-function toneIcon(tone) {
-  if (tone === "attention" || tone === "amber") {
-    return HiMiniExclamationTriangle;
-  }
-  return HiMiniShieldCheck;
-}
-function QueueBulkStickyBar(props) {
-  if (!props.visible) return null;
-  const unit = props.selectedActionCount === 1 ? "read" : "reads";
-  const ChipIcon = toneIcon(props.riskTone);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-    "div",
-    {
-      className: "sticky top-2 z-20 mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white/95 px-4 py-3 shadow-md backdrop-blur",
-      role: "region",
-      "aria-label": "Bulk approval selection",
-      children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs(
-          "span",
-          {
-            className: `inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] ${toneChip(props.riskTone)}`,
-            children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx(ChipIcon, { className: "h-3.5 w-3.5", "aria-hidden": "true" }),
-              TIER_LABEL[props.riskTier]
-            ]
-          }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "min-w-0 flex-1 text-sm font-medium text-brand-dark", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-mono text-base font-semibold", children: props.selectedActionCount }),
-          " ",
-          unit,
-          " selected · approve once"
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "button",
-            {
-              type: "button",
-              onClick: props.onStartReview,
-              className: "inline-flex min-h-9 items-center rounded-full bg-brand-blue px-4 py-1.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-blue/90",
-              children: "Review & approve"
-            }
-          ),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "button",
-            {
-              type: "button",
-              onClick: props.onClearSelection,
-              className: "inline-flex min-h-9 items-center rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-slate-50 hover:text-brand-dark",
-              children: "Clear"
-            }
-          )
-        ] })
-      ]
-    }
-  );
-}
-function QueueBulkStatusBanner(props) {
-  if (!props.visible) return null;
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mb-4 rounded-lg border border-brand-attention/20 bg-brand-attention/[0.04] px-3 py-2", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-brand-attention", children: [
-    props.sensitiveFileReadCount,
-    " sensitive file",
-    " ",
-    props.sensitiveFileReadCount === 1 ? "read" : "reads",
-    " in queue — review each path before approving."
-  ] }) });
-}
-function QueueBulkGatePrompt(props) {
-  if (!props.visible) return null;
-  const unit = props.eligibleActionCount === 1 ? "read" : "reads";
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mb-4 rounded-xl border border-brand-blue/20 bg-brand-blue/[0.04] px-4 py-3", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-start gap-3", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm font-semibold text-brand-dark", children: [
-        "Approve ",
-        props.eligibleActionCount,
-        " ",
-        unit,
-        " at once"
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-5 text-brand-dark/70", children: "Set up a local approval password to unlock bulk approval for read-only file reads. Bulk approval always approves once and never remembers future reads." })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      "a",
-      {
-        href: props.settingsHref,
-        className: "inline-flex shrink-0 rounded-full border border-brand-blue/30 bg-white px-4 py-2 text-sm font-medium text-brand-blue no-underline transition-colors hover:bg-brand-blue/5",
-        children: "Open Settings"
-      }
-    )
-  ] }) });
-}
-function QueueBulkDrawer(props) {
-  if (!props.open) return null;
-  if (props.step === "completed") {
-    const approved = props.completedActionCount ?? 0;
-    const unit2 = approved === 1 ? "action was" : "actions were";
-    const doneFooter = /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex justify-end", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-      "button",
-      {
-        type: "button",
-        onClick: props.onCancel,
-        className: "min-h-11 rounded-full bg-brand-blue px-6 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-blue/90",
-        children: "Done"
-      }
-    ) });
-    return /* @__PURE__ */ jsxRuntimeExports.jsx(BulkDrawerShell, { onClose: props.onCancel, labelledBy: "guard-bulk-drawer-title", footer: doneFooter, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3 rounded-xl border border-brand-green/25 bg-brand-green-bg/30 p-4", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "mt-0.5 h-5 w-5 shrink-0 text-brand-green", "aria-hidden": "true" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { id: "guard-bulk-drawer-title", className: "text-base font-semibold text-brand-dark", children: [
-          approved,
-          " ",
-          unit2,
-          " approved"
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-muted-foreground", children: "Each approved once. This bulk approval cannot be repeated. Reload the queue to see the latest state." })
-      ] })
-    ] }) });
-  }
-  const disclosure = props.riskDisclosure;
-  const DisclosureIcon = toneIcon(disclosure.tone);
-  const riskLines = summarizeBulkApproveSelection(props.selectedGroups);
-  const unit = props.selectedActionCount === 1 ? "action" : "actions";
-  const submitLabel = props.step === "submitting" ? "Approving…" : `Approve once (${props.selectedActionCount} ${unit})`;
-  const PREVIEW_LIMIT = 8;
-  const shownGroups = reactExports.useMemo(() => {
-    const map = /* @__PURE__ */ new Map();
-    for (const line of riskLines.slice(0, PREVIEW_LIMIT)) {
-      const bucket = map.get(line.categoryLabel) ?? [];
-      bucket.push(line);
-      map.set(line.categoryLabel, bucket);
-    }
-    return Array.from(map.entries());
-  }, [riskLines]);
-  const hiddenCount = Math.max(0, riskLines.length - PREVIEW_LIMIT);
-  const gateReady = isBulkApproveGateReady(props.approvalGate);
-  const actionFooter = /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-end gap-2", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      "button",
-      {
-        type: "button",
-        onClick: props.onCancel,
-        disabled: props.step === "submitting",
-        className: "min-h-11 rounded-full border border-slate-300 px-5 py-2 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-50 disabled:opacity-50",
-        children: "Cancel"
-      }
-    ),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      "button",
-      {
-        type: "button",
-        onClick: props.onConfirmApprove,
-        disabled: props.step === "submitting" || !props.canConfirm,
-        className: "min-h-11 rounded-full bg-brand-blue px-6 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-blue/90 disabled:cursor-not-allowed disabled:opacity-50",
-        children: submitLabel
-      }
-    )
-  ] });
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs(BulkDrawerShell, { onClose: props.onCancel, labelledBy: "guard-bulk-drawer-title", footer: actionFooter, children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { className: "flex items-start justify-between gap-4", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "span",
-            {
-              className: `inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${toneChip(disclosure.tone)}`,
-              children: TIER_LABEL[disclosure.tier]
-            }
-          ),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-mono text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground", children: "Bulk approval" })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { id: "guard-bulk-drawer-title", className: "mt-2 text-xl font-semibold tracking-tight text-brand-dark", children: [
-          "Review ",
-          props.selectedActionCount,
-          " selected ",
-          unit
-        ] })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "button",
-        {
-          type: "button",
-          onClick: props.onCancel,
-          "aria-label": "Close bulk approval",
-          className: "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-brand-dark",
-          children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "h-4 w-4", "aria-hidden": "true" })
-        }
-      )
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      "section",
-      {
-        "aria-label": "Risk disclosure",
-        className: `mt-6 rounded-2xl border p-5 ${toneRing(disclosure.tone)}`,
-        children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "span",
-            {
-              className: `inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${disclosure.tone === "attention" ? "bg-brand-attention/10" : disclosure.tone === "amber" ? "bg-amber-100" : "bg-brand-green/10"}`,
-              children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-                DisclosureIcon,
-                {
-                  className: `h-5 w-5 ${disclosure.tone === "attention" ? "text-brand-attention" : disclosure.tone === "amber" ? "text-amber-600" : "text-brand-green"}`,
-                  "aria-hidden": "true"
-                }
-              )
-            }
-          ),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-sm font-semibold text-brand-dark", children: disclosure.headline }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1.5 text-[13px] leading-relaxed text-brand-dark/75", children: disclosure.body }),
-            disclosure.bullets.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-3 space-y-1.5", children: disclosure.bullets.map((bullet) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
-              "li",
-              {
-                className: "flex items-start gap-2 text-xs leading-5 text-brand-dark/85",
-                children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-1.5 h-1 w-1 shrink-0 rounded-full bg-current opacity-50", "aria-hidden": "true" }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: bullet })
-                ]
-              },
-              bullet
-            )) })
-          ] })
-        ] })
-      }
-    ),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": "Selected actions", className: "mt-6", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-baseline justify-between", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground", children: "What you are approving" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "font-mono text-[11px] text-muted-foreground", children: [
-          props.selectedActionCount,
-          " ",
-          unit
-        ] })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2.5 space-y-3 rounded-xl bg-slate-50/80 px-4 py-3", children: [
-        shownGroups.map(([categoryLabel, lines]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-[11px] font-semibold text-brand-dark/70", children: [
-            categoryLabel,
-            " ",
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "font-normal text-muted-foreground", children: [
-              "(",
-              lines.length + lines.reduce((sum, l) => sum + l.duplicateCount, 0),
-              ")"
-            ] })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("ul", { className: "mt-1.5 space-y-1.5", children: [
-            lines.slice(0, 3).map((line) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "text-xs text-brand-dark", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium", children: line.harnessLabel }),
-              line.path !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block truncate font-mono text-[11px] text-brand-dark/60", children: line.path }) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block text-brand-dark/60", children: line.title })
-            ] }, line.requestId)),
-            lines.length > 3 && /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "text-[11px] text-muted-foreground", children: [
-              "+ ",
-              lines.length - 3,
-              " more"
-            ] })
-          ] })
-        ] }, categoryLabel)),
-        hiddenCount > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-[11px] text-muted-foreground", children: [
-          "and ",
-          hiddenCount,
-          " more selected ",
-          unit
-        ] })
-      ] })
-    ] }),
-    props.sensitiveFileReadCount > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-3 text-[11px] leading-5 text-brand-attention", children: [
-      props.sensitiveFileReadCount,
-      " sensitive",
-      " ",
-      props.sensitiveFileReadCount === 1 ? "action stays" : "actions stay",
-      " in the queue for individual review."
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": "Confirm approval", className: "mt-6", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground", children: "Step 2 of 2" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-px flex-1 bg-slate-200", "aria-hidden": "true" })
-      ] }),
-      gateReady ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 space-y-3 rounded-xl border border-slate-200 bg-white p-4", children: [
-        props.approvalGate?.totp_enabled !== true && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniKey, { className: "h-4 w-4 text-brand-blue", "aria-hidden": "true" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "guard-bulk-approval-password", className: "text-sm font-semibold text-brand-dark", children: "Approval password" })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "input",
-            {
-              id: "guard-bulk-approval-password",
-              type: "password",
-              value: props.bulkApprovePassword,
-              onChange: props.onBulkApprovePasswordChange,
-              placeholder: "Enter your approval password",
-              autoComplete: "current-password",
-              disabled: props.step === "submitting",
-              className: "min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 disabled:opacity-60"
-            }
-          )
-        ] }),
-        props.approvalGate?.totp_enabled === true && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniKey, { className: "h-4 w-4 text-brand-blue", "aria-hidden": "true" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "guard-bulk-approval-totp", className: "text-sm font-semibold text-brand-dark", children: "Authenticator code" })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "input",
-            {
-              id: "guard-bulk-approval-totp",
-              type: "text",
-              inputMode: "numeric",
-              pattern: "[0-9]*",
-              value: props.bulkApproveTotpCode,
-              onChange: props.onBulkApproveTotpCodeChange,
-              placeholder: "6-digit code",
-              disabled: props.step === "submitting",
-              className: "min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 disabled:opacity-60"
-            }
-          )
-        ] }),
-        disclosure.requiresTypedConfirm && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-lg bg-brand-attention/[0.05] px-3 py-2.5", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { htmlFor: "guard-bulk-typed-confirm", className: "block text-xs font-semibold text-brand-dark", children: [
-            "Type",
-            " ",
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-mono font-bold text-brand-attention", children: disclosure.confirmPhrase }),
-            " ",
-            "to confirm"
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "input",
-            {
-              id: "guard-bulk-typed-confirm",
-              type: "text",
-              value: props.typedConfirm,
-              onChange: props.onTypedConfirmChange,
-              autoComplete: "off",
-              spellCheck: false,
-              disabled: props.step === "submitting",
-              "aria-invalid": props.typedConfirm.length > 0 && !props.confirmMatches,
-              className: "mt-2 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 font-mono text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 disabled:opacity-60",
-              placeholder: disclosure.confirmPhrase
-            }
-          )
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] leading-4 text-muted-foreground", children: buildBulkApproveConsequenceCopy(props.selectedActionCount) })
-      ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 rounded-xl border border-brand-attention/20 bg-brand-attention/[0.04] px-4 py-3", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Approval password required" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-5 text-brand-dark/70", children: "Set up your local approval gate before approving multiple actions at once." }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "a",
-          {
-            href: props.settingsHref,
-            className: "mt-2.5 inline-flex rounded-full border border-brand-blue/30 bg-white px-3.5 py-1.5 text-xs font-medium text-brand-blue no-underline transition-colors hover:bg-brand-blue/5",
-            children: "Open Settings"
-          }
-        )
-      ] }),
-      props.errorMessage !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-xs text-brand-purple", role: "alert", children: props.errorMessage })
-    ] })
-  ] });
-}
-function BulkDrawerShell(props) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(
-    "div",
-    {
-      className: "fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-0 backdrop-blur-sm sm:items-center sm:p-4",
-      role: "dialog",
-      "aria-modal": "true",
-      "aria-labelledby": props.labelledBy,
-      onClick: (event) => {
-        if (event.target === event.currentTarget) props.onClose();
-      },
-      children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "guard-fade-in flex max-h-[92vh] w-full max-w-xl flex-col overflow-hidden rounded-t-2xl border border-slate-200 bg-white shadow-2xl sm:rounded-2xl", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex-1 overflow-y-auto px-5 py-6 sm:px-7", children: props.children }),
-        props.footer ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "border-t border-slate-100 bg-white/95 px-5 py-3.5 backdrop-blur sm:px-7", children: props.footer }) : null
-      ] })
-    }
-  );
 }
 function approvalGateLockRemainingSeconds(gate, nowMs = Date.now()) {
   if (gate?.enabled === false) return 0;
@@ -28603,6 +28223,426 @@ function useRequestReadState() {
   );
 }
 const REQUEST_READ_STATE_LIMIT = 5e4;
+function BulkDrawerShell(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "div",
+    {
+      className: "fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-0 backdrop-blur-sm sm:items-center sm:p-4",
+      role: "dialog",
+      "aria-modal": "true",
+      "aria-labelledby": props.labelledBy,
+      onClick: (event) => {
+        if (event.target === event.currentTarget) props.onClose();
+      },
+      children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "form",
+        {
+          onSubmit: (event) => {
+            event.preventDefault();
+            props.onSubmit?.(event);
+          },
+          className: "guard-fade-in flex max-h-[92vh] w-full max-w-xl flex-col overflow-hidden rounded-t-2xl border border-slate-200 bg-white shadow-2xl sm:rounded-2xl",
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex-1 overflow-y-auto px-5 py-6 sm:px-7", children: props.children }),
+            props.footer ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "border-t border-slate-100 bg-white/95 px-5 py-3.5 backdrop-blur sm:px-7", children: props.footer }) : null
+          ]
+        }
+      )
+    }
+  );
+}
+function toneRing(tone) {
+  if (tone === "attention") {
+    return "border-brand-attention/30 bg-brand-attention/[0.06]";
+  }
+  if (tone === "amber") {
+    return "border-amber-300/60 bg-amber-50/70";
+  }
+  return "border-brand-green/30 bg-brand-green-bg/40";
+}
+function toneChip(tone) {
+  if (tone === "attention") {
+    return "bg-brand-attention/10 text-brand-attention";
+  }
+  if (tone === "amber") {
+    return "bg-amber-100 text-amber-800";
+  }
+  return "bg-brand-green/15 text-brand-green-text";
+}
+function toneIcon(tone) {
+  if (tone === "attention" || tone === "amber") {
+    return HiMiniExclamationTriangle;
+  }
+  return HiMiniShieldCheck;
+}
+const TIER_LABEL = {
+  low: "Low risk",
+  elevated: "Elevated risk",
+  high: "High risk"
+};
+function QueueBulkStickyBar(props) {
+  if (!props.visible) return null;
+  const unit = props.selectedActionCount === 1 ? "read" : "reads";
+  const ChipIcon = toneIcon(props.riskTone);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      className: "sticky top-2 z-20 mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white/95 px-4 py-3 shadow-md backdrop-blur",
+      role: "region",
+      "aria-label": "Bulk approval selection",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "span",
+          {
+            className: `inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] ${toneChip(props.riskTone)}`,
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(ChipIcon, { className: "h-3.5 w-3.5", "aria-hidden": "true" }),
+              TIER_LABEL[props.riskTier]
+            ]
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "min-w-0 flex-1 text-sm font-medium text-brand-dark", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-mono text-base font-semibold", children: props.selectedActionCount }),
+          " ",
+          unit,
+          " selected · approve once"
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              onClick: props.onStartReview,
+              className: "inline-flex min-h-9 items-center rounded-full bg-brand-blue px-4 py-1.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-blue/90",
+              children: "Review & approve"
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              onClick: props.onClearSelection,
+              className: "inline-flex min-h-9 items-center rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-slate-50 hover:text-brand-dark",
+              children: "Clear"
+            }
+          )
+        ] })
+      ]
+    }
+  );
+}
+function QueueBulkStatusBanner(props) {
+  if (!props.visible) return null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mb-4 rounded-lg border border-brand-attention/20 bg-brand-attention/[0.04] px-3 py-2", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-brand-attention", children: [
+    props.sensitiveFileReadCount,
+    " sensitive file",
+    " ",
+    props.sensitiveFileReadCount === 1 ? "read" : "reads",
+    " in queue — review each path before approving."
+  ] }) });
+}
+function QueueBulkGatePrompt(props) {
+  if (!props.visible) return null;
+  const unit = props.eligibleActionCount === 1 ? "read" : "reads";
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mb-4 rounded-xl border border-brand-blue/20 bg-brand-blue/[0.04] px-4 py-3", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-start gap-3", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm font-semibold text-brand-dark", children: [
+        "Approve ",
+        props.eligibleActionCount,
+        " ",
+        unit,
+        " at once"
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-5 text-brand-dark/70", children: "Set up a local approval password to unlock bulk approval for read-only file reads. Bulk approval always approves once and never remembers future reads." })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "a",
+      {
+        href: props.settingsHref,
+        className: "inline-flex shrink-0 rounded-full border border-brand-blue/30 bg-white px-4 py-2 text-sm font-medium text-brand-blue no-underline transition-colors hover:bg-brand-blue/5",
+        children: "Open Settings"
+      }
+    )
+  ] }) });
+}
+function QueueBulkDrawer(props) {
+  if (!props.open) return null;
+  if (props.step === "completed") {
+    const approved = props.completedActionCount ?? 0;
+    const unit2 = approved === 1 ? "action was" : "actions were";
+    const doneFooter = /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex justify-end", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "button",
+      {
+        type: "button",
+        onClick: props.onCancel,
+        className: "min-h-11 rounded-full bg-brand-blue px-6 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-blue/90",
+        children: "Done"
+      }
+    ) });
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(BulkDrawerShell, { onClose: props.onCancel, labelledBy: "guard-bulk-drawer-title", footer: doneFooter, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3 rounded-xl border border-brand-green/25 bg-brand-green-bg/30 p-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "mt-0.5 h-5 w-5 shrink-0 text-brand-green", "aria-hidden": "true" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { id: "guard-bulk-drawer-title", className: "text-base font-semibold text-brand-dark", children: [
+          approved,
+          " ",
+          unit2,
+          " approved"
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-muted-foreground", children: "Each approved once. This bulk approval cannot be repeated. Reload the queue to see the latest state." })
+      ] })
+    ] }) });
+  }
+  const disclosure = props.riskDisclosure;
+  const DisclosureIcon = toneIcon(disclosure.tone);
+  const riskLines = summarizeBulkApproveSelection(props.selectedGroups);
+  const unit = props.selectedActionCount === 1 ? "action" : "actions";
+  const submitLabel = props.step === "submitting" ? "Approving…" : `Approve once (${props.selectedActionCount} ${unit})`;
+  const PREVIEW_LIMIT = 8;
+  const shownGroups = reactExports.useMemo(() => {
+    const map = /* @__PURE__ */ new Map();
+    for (const line of riskLines.slice(0, PREVIEW_LIMIT)) {
+      const bucket = map.get(line.categoryLabel) ?? [];
+      bucket.push(line);
+      map.set(line.categoryLabel, bucket);
+    }
+    return Array.from(map.entries());
+  }, [riskLines]);
+  const hiddenCount = Math.max(0, riskLines.length - PREVIEW_LIMIT);
+  const gateReady = isBulkApproveGateReady(props.approvalGate);
+  const actionFooter = /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-end gap-2", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "button",
+      {
+        type: "button",
+        onClick: props.onCancel,
+        disabled: props.step === "submitting",
+        className: "min-h-11 rounded-full border border-slate-300 px-5 py-2 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-50 disabled:opacity-50",
+        children: "Cancel"
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "button",
+      {
+        type: "submit",
+        disabled: props.step === "submitting" || !props.canConfirm,
+        className: "min-h-11 rounded-full bg-brand-blue px-6 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-blue/90 disabled:cursor-not-allowed disabled:opacity-50",
+        children: submitLabel
+      }
+    )
+  ] });
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    BulkDrawerShell,
+    {
+      onClose: props.onCancel,
+      labelledBy: "guard-bulk-drawer-title",
+      footer: actionFooter,
+      onSubmit: (event) => {
+        event.preventDefault();
+        if (props.step !== "submitting" && props.canConfirm) props.onConfirmApprove();
+      },
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { className: "flex items-start justify-between gap-4", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "span",
+                {
+                  className: `inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${toneChip(disclosure.tone)}`,
+                  children: TIER_LABEL[disclosure.tier]
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-mono text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground", children: "Bulk approval" })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { id: "guard-bulk-drawer-title", className: "mt-2 text-xl font-semibold tracking-tight text-brand-dark", children: [
+              "Review ",
+              props.selectedActionCount,
+              " selected ",
+              unit
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              onClick: props.onCancel,
+              "aria-label": "Close bulk approval",
+              className: "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-brand-dark",
+              children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "h-4 w-4", "aria-hidden": "true" })
+            }
+          )
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "section",
+          {
+            "aria-label": "Risk disclosure",
+            className: `mt-6 rounded-2xl border p-5 ${toneRing(disclosure.tone)}`,
+            children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "span",
+                {
+                  className: `inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${disclosure.tone === "attention" ? "bg-brand-attention/10" : disclosure.tone === "amber" ? "bg-amber-100" : "bg-brand-green/10"}`,
+                  children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    DisclosureIcon,
+                    {
+                      className: `h-5 w-5 ${disclosure.tone === "attention" ? "text-brand-attention" : disclosure.tone === "amber" ? "text-amber-600" : "text-brand-green"}`,
+                      "aria-hidden": "true"
+                    }
+                  )
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-sm font-semibold text-brand-dark", children: disclosure.headline }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1.5 text-[13px] leading-relaxed text-brand-dark/75", children: disclosure.body }),
+                disclosure.bullets.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-3 space-y-1.5", children: disclosure.bullets.map((bullet) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                  "li",
+                  {
+                    className: "flex items-start gap-2 text-xs leading-5 text-brand-dark/85",
+                    children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-1.5 h-1 w-1 shrink-0 rounded-full bg-current opacity-50", "aria-hidden": "true" }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: bullet })
+                    ]
+                  },
+                  bullet
+                )) })
+              ] })
+            ] })
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": "Selected actions", className: "mt-6", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-baseline justify-between", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground", children: "What you are approving" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "font-mono text-[11px] text-muted-foreground", children: [
+              props.selectedActionCount,
+              " ",
+              unit
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2.5 space-y-3 rounded-xl bg-slate-50/80 px-4 py-3", children: [
+            shownGroups.map(([categoryLabel, lines]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-[11px] font-semibold text-brand-dark/70", children: [
+                categoryLabel,
+                " ",
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "font-normal text-muted-foreground", children: [
+                  "(",
+                  lines.length + lines.reduce((sum, l) => sum + l.duplicateCount, 0),
+                  ")"
+                ] })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("ul", { className: "mt-1.5 space-y-1.5", children: [
+                lines.slice(0, 3).map((line) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "text-xs text-brand-dark", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium", children: line.harnessLabel }),
+                  line.path !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block truncate font-mono text-[11px] text-brand-dark/60", children: line.path }) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block text-brand-dark/60", children: line.title })
+                ] }, line.requestId)),
+                lines.length > 3 && /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "text-[11px] text-muted-foreground", children: [
+                  "+ ",
+                  lines.length - 3,
+                  " more"
+                ] })
+              ] })
+            ] }, categoryLabel)),
+            hiddenCount > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-[11px] text-muted-foreground", children: [
+              "and ",
+              hiddenCount,
+              " more selected ",
+              unit
+            ] })
+          ] })
+        ] }),
+        props.sensitiveFileReadCount > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-3 text-[11px] leading-5 text-brand-attention", children: [
+          props.sensitiveFileReadCount,
+          " sensitive",
+          " ",
+          props.sensitiveFileReadCount === 1 ? "action stays" : "actions stay",
+          " in the queue for individual review."
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": "Confirm approval", className: "mt-6", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground", children: "Step 2 of 2" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-px flex-1 bg-slate-200", "aria-hidden": "true" })
+          ] }),
+          gateReady ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 space-y-3 rounded-xl border border-slate-200 bg-white p-4", children: [
+            props.approvalGate?.totp_enabled !== true && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniKey, { className: "h-4 w-4 text-brand-blue", "aria-hidden": "true" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "guard-bulk-approval-password", className: "text-sm font-semibold text-brand-dark", children: "Approval password" })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "input",
+                {
+                  id: "guard-bulk-approval-password",
+                  type: "password",
+                  value: props.bulkApprovePassword,
+                  onChange: props.onBulkApprovePasswordChange,
+                  placeholder: "Enter your approval password",
+                  autoComplete: "current-password",
+                  disabled: props.step === "submitting",
+                  className: "min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 disabled:opacity-60"
+                }
+              )
+            ] }),
+            props.approvalGate?.totp_enabled === true && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniKey, { className: "h-4 w-4 text-brand-blue", "aria-hidden": "true" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "guard-bulk-approval-totp", className: "text-sm font-semibold text-brand-dark", children: "Authenticator code" })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "input",
+                {
+                  id: "guard-bulk-approval-totp",
+                  type: "text",
+                  inputMode: "numeric",
+                  pattern: "[0-9]*",
+                  value: props.bulkApproveTotpCode,
+                  onChange: props.onBulkApproveTotpCodeChange,
+                  placeholder: "6-digit code",
+                  disabled: props.step === "submitting",
+                  className: "min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 disabled:opacity-60"
+                }
+              )
+            ] }),
+            disclosure.requiresTypedConfirm && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-lg bg-brand-attention/[0.05] px-3 py-2.5", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { htmlFor: "guard-bulk-typed-confirm", className: "block text-xs font-semibold text-brand-dark", children: [
+                "Type",
+                " ",
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-mono font-bold text-brand-attention", children: disclosure.confirmPhrase }),
+                " ",
+                "to confirm"
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "input",
+                {
+                  id: "guard-bulk-typed-confirm",
+                  type: "text",
+                  value: props.typedConfirm,
+                  onChange: props.onTypedConfirmChange,
+                  autoComplete: "off",
+                  spellCheck: false,
+                  disabled: props.step === "submitting",
+                  "aria-invalid": props.typedConfirm.length > 0 && !props.confirmMatches,
+                  className: "mt-2 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 font-mono text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 disabled:opacity-60",
+                  placeholder: disclosure.confirmPhrase
+                }
+              )
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] leading-4 text-muted-foreground", children: buildBulkApproveConsequenceCopy(props.selectedActionCount) })
+          ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 rounded-xl border border-brand-attention/20 bg-brand-attention/[0.04] px-4 py-3", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Approval password required" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-5 text-brand-dark/70", children: "Set up your local approval gate before approving multiple actions at once." }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "a",
+              {
+                href: props.settingsHref,
+                className: "mt-2.5 inline-flex rounded-full border border-brand-blue/30 bg-white px-3.5 py-1.5 text-xs font-medium text-brand-blue no-underline transition-colors hover:bg-brand-blue/5",
+                children: "Open Settings"
+              }
+            )
+          ] }),
+          props.errorMessage !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-xs text-brand-purple", role: "alert", children: props.errorMessage })
+        ] })
+      ]
+    }
+  );
+}
 const BULK_LOW_TIER_THRESHOLD = 5;
 const BULK_HIGH_TIER_THRESHOLD = 10;
 function resolveBulkRiskTier(stats) {
@@ -30201,6 +30241,7 @@ function ReviewDecisionCard(props) {
         /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: watchOnlyObservation ? "info" : actionPresentation.tone, children: watchOnlyObservation ? "Would have stopped" : actionPresentation.label })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(PrimaryActionCard, { item }),
+      item.scope_restrictions?.includes("provider_account_unverified_once_only") ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 text-sm leading-6 text-brand-dark", children: "Guard cannot verify this provider account. Approval applies once to this exact call; remembered approvals are unavailable." }) : null,
       resolutionBlockReason !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5 rounded-xl border border-brand-attention/30 bg-brand-attention/[0.06] p-4", role: "alert", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           HiMiniExclamationTriangle,
@@ -30211,7 +30252,15 @@ function ReviewDecisionCard(props) {
         ),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-attention", children: "This decision cannot be overridden" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-dark", children: resolutionBlockReason })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-dark", children: resolutionBlockReason }),
+          item.superseded_by_request_id ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "a",
+            {
+              className: "mt-3 inline-flex min-h-11 items-center font-semibold text-brand-blue underline",
+              href: guardAwareHref(`/requests/${encodeURIComponent(item.superseded_by_request_id)}`),
+              children: "Open the fresh review"
+            }
+          ) : null
         ] })
       ] }) }),
       topAlertItems.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5 rounded-xl border border-slate-100 bg-slate-50/50 p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ConsolidatedEvidenceAlert, { items: topAlertItems }, item.request_id) }),
@@ -31596,7 +31645,7 @@ function ApprovalCenterLayout(props) {
     onUpdateGuard,
     onReinstallGuard,
     onSetUpdateChannel
-  } = useGuardUpdate({ onReconnected: props.onGuardReconnected, enabled: props.enableUpdateStatus });
+  } = useGuardUpdate({ onReconnected: props.onGuardReconnected });
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-h-screen bg-white text-brand-dark", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       ShellNavigation,
@@ -32731,10 +32780,10 @@ export {
   HiMiniCommandLine as b,
   HiMiniUsers as b$,
   HiMiniPlus as b0,
-  HiMiniCheck as b1,
-  startGuardCloudConnect as b2,
-  HiMiniArrowTopRightOnSquare as b3,
-  guardAwareHref as b4,
+  guardAwareHref as b1,
+  HiMiniCheck as b2,
+  startGuardCloudConnect as b3,
+  HiMiniArrowTopRightOnSquare as b4,
   GuardModalLayer as b5,
   runHarnessAction as b6,
   GuardHarnessActionError as b7,

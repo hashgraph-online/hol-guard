@@ -26,6 +26,8 @@ mod policy_enforcement_facts;
 mod policy_enforcement_helpers;
 #[path = "policy_enforcement_matrix.rs"]
 mod policy_enforcement_matrix;
+#[path = "policy_enforcement_mcp_provider.rs"]
+mod policy_enforcement_mcp_provider;
 #[path = "policy_enforcement_policy.rs"]
 mod policy_enforcement_policy;
 pub(crate) use policy_enforcement_matrix::{validate_pre_tool_result_matrix, ActionFloor};
@@ -202,6 +204,117 @@ pub(crate) fn apply_pre_tool_policy(
         && result.explicitly_benign
         && result.reason_code == "native_prompt_benign"
         && !facts.sensitive_target;
+    if result.action.action_type == PreToolActionTypeV1::McpTool {
+        // Tool arguments can themselves contain `tool_name` (dispatchers are
+        // common). They are data, never the outer tool's authority selector.
+        let tool = match payload.as_object() {
+            Some(record) => {
+                let mut envelopes = vec![record];
+                for key in ["tool_call", "toolCall", "preToolUse", "pre_tool_use"] {
+                    if let Some(envelope) = record.get(key).and_then(Value::as_object) {
+                        envelopes.push(envelope);
+                    }
+                }
+                preferred_tool_name(&envelopes)?.or_else(|| {
+                    ["action", "operation"]
+                        .into_iter()
+                        .find_map(|key| record.get(key).and_then(Value::as_str).map(str::to_owned))
+                })
+            }
+            None => None,
+        };
+        if let Some(tool) = tool {
+            let composio_name = tool
+                .rsplit("__")
+                .next()
+                .unwrap_or(&tool)
+                .to_ascii_lowercase();
+            let composio_execution = composio_name.starts_with("composio_")
+                && !matches!(
+                    composio_name.as_str(),
+                    "composio_search_tools" | "composio_get_tool_schemas"
+                );
+            if composio_execution && action_rank(&result.minimum_action) < action_rank("review") {
+                result.minimum_action = "review".into();
+                result.policy_action = "review".into();
+                result.decision = "deny".into();
+                result.explicitly_benign = false;
+                result.reason_code = "native_composio_action_review".into();
+                result.reason =
+                    "Review the underlying Composio actions and account before execution.".into();
+            }
+            if let Some(reason) = policy_enforcement_mcp_provider::denied_provider_execution(
+                &snapshot.effective_policy.mcp_provider_actions,
+                &harness,
+                &tool,
+                payload,
+            ) {
+                result.minimum_action = "block".into();
+                result.policy_action = "block".into();
+                result.decision = "deny".into();
+                result.explicitly_benign = false;
+                result.reason_code = reason.into();
+                result.reason = if reason == "native_composio_denied_batch_member" {
+                    "This batch includes an action denied for this connection. No batch member may execute."
+                } else {
+                    "Guard cannot enforce this connection's action denies inside opaque execution. Use an explicit batch."
+                }.into();
+            }
+            let choice = guard_policy_snapshot::observed_mcp_tool_action(
+                &snapshot.effective_policy.mcp_tool_actions,
+                &harness,
+                &tool,
+            );
+            if choice == Some("block") && result.minimum_action != "block" {
+                result.minimum_action = "block".into();
+                result.policy_action = "block".into();
+                result.decision = "deny".into();
+                result.explicitly_benign = false;
+                result.reason_code = "native_custom_mcp_tool_block".into();
+                result.reason =
+                    "This MCP tool is blocked by a custom extension on this device.".into();
+            } else if choice == Some("review")
+                && action_rank(&result.minimum_action) < action_rank("review")
+            {
+                result.minimum_action = "review".into();
+                result.policy_action = "review".into();
+                result.decision = "deny".into();
+                result.explicitly_benign = false;
+                result.reason_code = "native_custom_mcp_tool_review".into();
+                result.reason =
+                    "This MCP tool requires approval under its custom extension settings.".into();
+            } else if choice == Some("allow")
+                && !composio_execution
+                && result.minimum_action == "review"
+                && result.reason_code == "native_mcp_tool_review"
+                && result.action.bounded
+                && !facts.sensitive_target
+                && !facts.changed_hash
+                && result.command_extensions.as_ref().is_none_or(|evidence| {
+                    evidence.binding.observation_count == 0 && evidence.evaluation_error.is_none()
+                })
+            {
+                // Only explicit operator authority in the admitted, authenticated
+                // snapshot can replace the unknown-tool review. Independent
+                // native findings and every installed policy floor still apply.
+                result.minimum_action = "allow".into();
+                result.policy_action = "allow".into();
+                result.decision = "allow".into();
+                result.explicitly_benign = true;
+                result.reason_code = "native_custom_mcp_tool_allow".into();
+                result.reason =
+                    "This exact MCP tool is allowed by a custom extension on this device.".into();
+                // The explicit operator choice satisfies the generic unknown
+                // publisher review for this namespace. Stronger publisher
+                // actions and independent MCP risk policies remain floors.
+                if facts.publisher.is_none()
+                    && snapshot.effective_policy.unknown_publisher_action == "review"
+                {
+                    facts.publisher_relevant = false;
+                }
+            }
+        }
+    }
     let policy_floor = policy_floor(
         &snapshot.effective_policy,
         &snapshot.compiled,

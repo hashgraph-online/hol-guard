@@ -185,8 +185,9 @@ class WitnessObservation:
 class LocalSideEffectWitness:
     """Own an isolated temporary directory and an ephemeral loopback receiver."""
 
-    def __init__(self, *, setup: EvaluationSetup | None = None) -> None:
+    def __init__(self, *, setup: EvaluationSetup | None = None, network_enabled: bool = True) -> None:
         self._setup = setup
+        self._network_enabled = network_enabled
         self._temporary: TemporaryDirectory[str] | _PinnedWitnessDirectory | None = None
         self._server: ThreadingHTTPServer | None = None
         self._thread: Thread | None = None
@@ -306,13 +307,14 @@ class LocalSideEffectWitness:
                 finally:
                     self._slots.release()
 
-        try:
-            self._server = BoundedReceiver()
-            self._thread = Thread(target=self._server.serve_forever, daemon=True)
-            self._thread.start()
-        except BaseException:
-            self.__exit__(None, None, None)
-            raise
+        if self._network_enabled:
+            try:
+                self._server = BoundedReceiver()
+                self._thread = Thread(target=self._server.serve_forever, daemon=True)
+                self._thread.start()
+            except BaseException:
+                self.__exit__(None, None, None)
+                raise
         return self
 
     def __exit__(self, _type: object, _value: object, _traceback: object) -> None:
@@ -344,10 +346,12 @@ class LocalSideEffectWitness:
             marker.unlink(missing_ok=True)
         return self._file_ready
 
-    def check_network_ready(self) -> bool:
+    def check_network_ready(self, *, timeout_seconds: float = 2.0) -> bool:
         if self._server is None:
             raise RuntimeError("Witness is not active")
-        connection = HTTPConnection("127.0.0.1", self._server.server_port, timeout=2)
+        if isinstance(timeout_seconds, bool) or not 0 < timeout_seconds <= 2.0:
+            raise ValueError("witness readiness timeout must be a non-boolean number in (0, 2.0] seconds")
+        connection = HTTPConnection("127.0.0.1", self._server.server_port, timeout=timeout_seconds)
         try:
             connection.request("GET", "/health")
             response = connection.getresponse()
