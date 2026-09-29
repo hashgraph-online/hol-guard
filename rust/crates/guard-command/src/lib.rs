@@ -99,6 +99,10 @@ pub fn parse_command(request: &CommandModelRequestV1) -> Result<CanonicalCommand
     if raw.is_empty() {
         return Err("command_text_empty".to_owned());
     }
+    // Unquoted Windows paths keep backslash separators. Quoted POSIX escapes
+    // stay intact, and cmd/PowerShell stay uncertain until they have their own
+    // separator and quoting rules.
+    let preserve_unquoted_backslash = cfg!(windows) && request.dialect == "posix";
     if request.dialect != "posix" || request.transport != "shell_string" {
         return Ok(uncertain(request, raw, "unsupported_dialect_or_transport"));
     }
@@ -109,7 +113,7 @@ pub fn parse_command(request: &CommandModelRequestV1) -> Result<CanonicalCommand
     let raw_segments = if let Some(value) = contained_compile_check_segments(raw) {
         value
     } else {
-        match split_execution_segments(raw) {
+        match split_execution_segments(raw, preserve_unquoted_backslash) {
             Ok(value) => value,
             Err(reason) => return Ok(uncertain(request, raw, reason)),
         }
@@ -123,7 +127,7 @@ pub fn parse_command(request: &CommandModelRequestV1) -> Result<CanonicalCommand
     let mut total_tokens = 0usize;
     for raw_segment in raw_segments {
         let text: String = chars[raw_segment.start..raw_segment.end].iter().collect();
-        let tokens = match shell_tokens(&text) {
+        let tokens = match shell_tokens(&text, preserve_unquoted_backslash) {
             Ok(value) => value,
             Err(reason) => return Ok(uncertain(request, raw, reason)),
         };
@@ -239,7 +243,10 @@ fn uncertain(request: &CommandModelRequestV1, raw: &str, reason: &str) -> Canoni
     }
 }
 
-fn split_execution_segments(command: &str) -> Result<Vec<RawSegment>, &'static str> {
+fn split_execution_segments(
+    command: &str,
+    preserve_unquoted_backslash: bool,
+) -> Result<Vec<RawSegment>, &'static str> {
     let chars: Vec<char> = command.chars().collect();
     let mut quote = Quote::None;
     let mut escaped = false;
@@ -281,6 +288,7 @@ fn split_execution_segments(command: &str) -> Result<Vec<RawSegment>, &'static s
         match current {
             '\'' => quote = Quote::Single,
             '"' => quote = Quote::Double,
+            '\\' if preserve_unquoted_backslash => {}
             '\\' => escaped = true,
             '`' => return Err("command_substitution_not_yet_supported"),
             '$' if chars.get(index + 1) == Some(&'(') => {
@@ -396,8 +404,8 @@ fn contained_compile_check_segments(command: &str) -> Option<Vec<RawSegment>> {
     let (find_start, find_end) = trimmed_bounds(&chars, and_index + 2, chars.len())?;
     let cd: String = chars[cd_start..cd_end].iter().collect();
     let find: String = chars[find_start..find_end].iter().collect();
-    let cd_tokens = shell_tokens(&cd).ok()?;
-    let find_tokens = shell_tokens(&find).ok()?;
+    let cd_tokens = shell_tokens(&cd, false).ok()?;
+    let find_tokens = shell_tokens(&find, false).ok()?;
     if cd_tokens.len() != 2
         || cd_tokens.first().map(String::as_str) != Some("cd")
         || !is_plain_cd_target(&cd_tokens[1])
@@ -492,7 +500,7 @@ fn push_segment(
     Ok(())
 }
 
-fn shell_tokens(command: &str) -> Result<Vec<String>, &'static str> {
+fn shell_tokens(command: &str, preserve_backslash: bool) -> Result<Vec<String>, &'static str> {
     let mut tokens = Vec::new();
     let mut token = String::new();
     let mut token_started = false;
@@ -536,6 +544,10 @@ fn shell_tokens(command: &str) -> Result<Vec<String>, &'static str> {
                 }
                 '"' => {
                     quote = Quote::Double;
+                    token_started = true;
+                }
+                '\\' if preserve_backslash => {
+                    token.push('\\');
                     token_started = true;
                 }
                 '\\' => {
@@ -784,6 +796,18 @@ mod tests {
                 "x\u{00a0}y"
             ]
         );
+    }
+
+    #[test]
+    fn unquoted_backslash_preservation_keeps_quoted_escapes() {
+        let tokens = shell_tokens(r#"printf "%s" "a\q" "a\$b" "a\"b" "a\\b""#, true).unwrap();
+        assert_eq!(tokens, ["printf", "%s", "a\\q", "a\\$b", "a\"b", "a\\b"]);
+        let path = shell_tokens(r"cmd /c echo C:\Work\file.txt", true).unwrap();
+        assert_eq!(path, ["cmd", "/c", "echo", r"C:\Work\file.txt"]);
+        let segments = split_execution_segments(r"dir C:\Work\", true).unwrap();
+        assert_eq!(segments.len(), 1);
+        let trailing = shell_tokens(r"dir C:\Work\", true).unwrap();
+        assert_eq!(trailing, ["dir", r"C:\Work\"]);
     }
 
     #[test]

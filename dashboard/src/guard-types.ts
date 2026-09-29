@@ -676,6 +676,7 @@ export type GuardReceipt = {
   diff_summary?: string | null;
   scanner_evidence?: GuardScannerEvidence[];
   action_envelope_json?: GuardActionEnvelope | null;
+  raw_command_text?: string | null;
   action_explanation?: GuardActionExplanationV1 | null;
   decision_contract_error?: string;
 };

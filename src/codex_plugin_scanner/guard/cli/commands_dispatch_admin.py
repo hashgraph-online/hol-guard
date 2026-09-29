@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+from contextlib import nullcontext
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -27,6 +28,7 @@ if TYPE_CHECKING:
     )
 
 
+from ..adapters.diagnostic_probes import without_command_probes
 from ..daemon.bounded_http import daemon_admission_snapshot
 from ..native_runtime_admission import native_resident_admission_snapshot
 from ..runtime.command_queue import command_queue_status, repair_command_queue_state
@@ -34,6 +36,7 @@ from ..shims import package_shim_dashboard_status
 from ._commands_shared import *
 from .commands_dispatch_trust import build_trust_doctor_payload
 from .commands_parser_helpers import *
+from .doctor_readiness import doctor_runtime_readiness
 
 
 def _run_guard_exceptions_command(
@@ -297,14 +300,24 @@ def _run_guard_doctor_command(
     if args.harness:
         adapter = get_adapter(args.harness)
         payload: dict[str, object] = adapter.diagnostics(context)
+        payload["runtime_readiness"] = doctor_runtime_readiness(payload)
         payload["runtime_detector_registry"] = _runtime_detector_registry_payload(config)
         payload["connect_health"] = _guard_doctor_connect_health_payload(store)
         if args.harness == "codex":
             payload["codex_resume"] = inspect_codex_resume_capabilities(store)
     else:
+        detected_harnesses = []
+        with without_command_probes():
+            for detection in detect_all(context):
+                item = detection.to_dict()
+                diagnostics = get_adapter(detection.harness).diagnostics(context)
+                item["setup_status"] = diagnostics.get("setup_status")
+                item["warnings"] = diagnostics.get("warnings", [])
+                item["runtime_readiness"] = doctor_runtime_readiness(diagnostics)
+                detected_harnesses.append(item)
         payload = {
             "tables": store.list_table_names(),
-            "adapters": [detection.to_dict() for detection in detect_all(context)],
+            "adapters": detected_harnesses,
             "runtime_detector_registry": _runtime_detector_registry_payload(config),
         }
     if getattr(args, "perf", False):
@@ -356,7 +369,8 @@ def _run_guard_doctor_command(
     }
     payload["trust"] = build_trust_doctor_payload(store)
     payload["supply_chain"] = build_local_supply_chain_posture(store, config, now=_now())
-    payload["aibom"] = build_aibom_status_payload(store, context, generated_at=_now())
+    with nullcontext() if args.harness else without_command_probes():
+        payload["aibom"] = build_aibom_status_payload(store, context, generated_at=_now())
     from ..protection_posture import protection_status_fields
 
     payload.update(protection_status_fields(posture=config.protection_posture, mode=config.mode))

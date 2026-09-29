@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { MutableRefObject } from "react";
 import {
+  chooseSupplyChainAuditFolder,
   derivePackageWorkbenchFromReceipts,
   fetchReceipts,
   normalizeSupplyChainAuditSnapshot,
 } from "./guard-api";
-import { resolveSupplyChainAuditFailure } from "./supply-chain-audit-connect";
+import { supplyChainAuditUserMessage, resolveSupplyChainAuditFailure } from "./supply-chain-audit-connect";
 import type { AuditConnectGateViewState } from "./supply-chain-firewall-panel";
 import type { GuardRuntimeSnapshot, SupplyChainAuditSnapshot } from "./guard-types";
 
@@ -17,6 +18,8 @@ export type SupplyChainAuditSession = {
   auditError: string | null;
   auditWorkspaceDir: string;
   auditWorkspaceSelectionRequired: boolean;
+  folderPickerBusy: boolean;
+  folderPickerError: string | null;
   auditConnectGate: AuditConnectGateViewState | null;
   auditPhase: AuditRunPhase;
   runAuditRef: MutableRefObject<(() => void) | null>;
@@ -26,6 +29,8 @@ export type SupplyChainAuditSession = {
   handleAuditErrorChange: (message: string | null) => void;
   handleAuditWorkspaceRequired: () => void;
   setAuditWorkspaceDir: (workspaceDir: string) => void;
+  adoptDiscoveredAuditWorkspace: (workspaceDir: string | null | undefined) => void;
+  handleChooseAuditWorkspace: () => void;
   handleAuditRunningChange: (running: boolean) => void;
   handleRunAudit: () => void;
 };
@@ -42,8 +47,11 @@ export function useSupplyChainAuditSession({
   const [auditSnapshot, setAuditSnapshot] = useState<SupplyChainAuditSnapshot | null>(null);
   const [auditRunning, setAuditRunning] = useState(false);
   const [auditError, setAuditError] = useState<string | null>(null);
-  const [auditWorkspaceDir, setAuditWorkspaceDir] = useState("");
+  const [auditWorkspaceDir, setAuditWorkspaceDirState] = useState("");
   const [auditWorkspaceSelectionRequired, setAuditWorkspaceSelectionRequired] = useState(false);
+  const [folderPickerBusy, setFolderPickerBusy] = useState(false);
+  const [folderPickerError, setFolderPickerError] = useState<string | null>(null);
+  const userEditedWorkspaceRef = useRef(false);
   const [auditConnectGate, setAuditConnectGate] = useState<AuditConnectGateViewState | null>(null);
   const [auditPhase, setAuditPhase] = useState<AuditRunPhase>("idle");
   const runAuditRef = useRef<(() => void) | null>(null);
@@ -139,6 +147,49 @@ export function useSupplyChainAuditSession({
     setAuditWorkspaceSelectionRequired(true);
   }, []);
 
+  const setAuditWorkspaceDir = useCallback((workspaceDir: string) => {
+    userEditedWorkspaceRef.current = true;
+    setAuditWorkspaceDirState(workspaceDir);
+    setFolderPickerError(null);
+    if (workspaceDir.trim()) {
+      setAuditWorkspaceSelectionRequired(false);
+    }
+  }, []);
+
+  const adoptDiscoveredAuditWorkspace = useCallback((workspaceDir: string | null | undefined) => {
+    const next = workspaceDir?.trim() ?? "";
+    if (!next || userEditedWorkspaceRef.current) {
+      return;
+    }
+    setAuditWorkspaceDirState((current) => (current.trim() ? current : next));
+  }, []);
+
+  const handleChooseAuditWorkspace = useCallback(() => {
+    if (folderPickerBusy) {
+      return;
+    }
+    setFolderPickerBusy(true);
+    setFolderPickerError(null);
+    void chooseSupplyChainAuditFolder()
+      .then((result) => {
+        if (result.workspaceDir) {
+          userEditedWorkspaceRef.current = true;
+          setAuditWorkspaceDirState(result.workspaceDir);
+          setAuditWorkspaceSelectionRequired(false);
+          setAuditError(null);
+        }
+      })
+      .catch((error: unknown) => {
+        setFolderPickerError(
+          supplyChainAuditUserMessage(error) ??
+            "Folder selection is unavailable right now. Paste the project folder path instead.",
+        );
+      })
+      .finally(() => {
+        setFolderPickerBusy(false);
+      });
+  }, [folderPickerBusy]);
+
   const handleAuditRunningChange = useCallback(
     (running: boolean) => {
       setAuditRunning(running);
@@ -160,6 +211,8 @@ export function useSupplyChainAuditSession({
     auditError,
     auditWorkspaceDir,
     auditWorkspaceSelectionRequired,
+    folderPickerBusy,
+    folderPickerError,
     auditConnectGate,
     auditPhase,
     runAuditRef,
@@ -169,6 +222,8 @@ export function useSupplyChainAuditSession({
     handleAuditErrorChange,
     handleAuditWorkspaceRequired,
     setAuditWorkspaceDir,
+    adoptDiscoveredAuditWorkspace,
+    handleChooseAuditWorkspace,
     handleAuditRunningChange,
     handleRunAudit,
   };

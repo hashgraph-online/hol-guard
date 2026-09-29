@@ -5,9 +5,36 @@ import {
   fetchCloudReviewSettings,
   type CloudReviewSettingsStatus,
 } from "../guard-api";
-import { ApprovalProofFieldInputs, isApprovalProofSubmitDisabled } from "../approval-proof-inline";
+import {
+  ApprovalProofFieldInputs,
+  buildApprovalProofCredentials,
+  isApprovalProofSubmitDisabled,
+} from "../approval-proof-inline";
 import { useFocusTrap } from "../use-focus-trap";
 import { ConnectGuardCloudButton } from "../connect-guard-cloud-button";
+
+export function cloudReviewProofIncomplete(
+  gate: CloudReviewSettingsStatus["approval_gate"] | null | undefined,
+  password: string,
+  totp: string,
+  requireFreshTotp: boolean,
+): boolean {
+  if (!gate?.enabled) return false;
+  if (isApprovalProofSubmitDisabled(
+    gate, { approvalPassword: password, approvalTotpCode: totp }, false, requireFreshTotp,
+  )) return true;
+  return requireFreshTotp && totp.trim().length !== 6;
+}
+
+export function cloudReviewConfirmationError(message: string): string {
+  if (message === "TOTP code is required.") {
+    return "Enter the current six-digit code from your authenticator.";
+  }
+  if (message === "Approval password is required.") {
+    return "Enter your approval password to continue.";
+  }
+  return message;
+}
 
 export function cloudReviewStatusCopy(status: CloudReviewSettingsStatus): string {
   if (!status.connected) return "Connect Guard Cloud on this device to review its requests in the cloud.";
@@ -83,9 +110,13 @@ export function CloudReviewSettings() {
 
   async function confirm() {
     if (!status || !action || pending) return;
-    if (status.approval_gate.enabled && isApprovalProofSubmitDisabled(
-      status.approval_gate, { approvalPassword: password, approvalTotpCode: totp }, false,
-    )) return;
+    const requireFreshTotp = status.approval_gate.totp_enabled === true;
+    if (cloudReviewProofIncomplete(status.approval_gate, password, totp, requireFreshTotp)) return;
+    const proof = status.approval_gate.enabled
+      ? buildApprovalProofCredentials(
+        status.approval_gate, { approvalPassword: password, approvalTotpCode: totp }, requireFreshTotp,
+      )
+      : {};
     revision.current += 1;
     setPending(true);
     setError(null);
@@ -93,8 +124,7 @@ export function CloudReviewSettings() {
       const result = await changeCloudReviewSettings({
         action, workspace_id: status.workspace_id, source: status.source,
         include_held_requests: action === "enable" && includeHeld,
-        ...(password ? { approval_password: password } : {}),
-        ...(totp ? { approval_totp_code: totp } : {}),
+        ...proof,
       });
       setStatus(result);
       setAction(null);
@@ -109,9 +139,8 @@ export function CloudReviewSettings() {
   }
 
   const needsRecovery = Boolean(status?.activation_error || status?.held_events || status?.delivery_state === "error");
-  const disabled = pending || Boolean(status?.approval_gate.enabled && isApprovalProofSubmitDisabled(
-    status.approval_gate, { approvalPassword: password, approvalTotpCode: totp }, false,
-  ));
+  const requireFreshTotp = status?.approval_gate.totp_enabled === true;
+  const disabled = pending || cloudReviewProofIncomplete(status?.approval_gate, password, totp, requireFreshTotp);
   let confirmLabel = "Turn off Cloud Review";
   if (action === "enable") confirmLabel = "Authorize this device";
   if (pending) confirmLabel = "Saving...";
@@ -207,10 +236,11 @@ export function CloudReviewSettings() {
             {status.approval_gate.enabled ? (
               <div className="mt-4">
                 <ApprovalProofFieldInputs approvalGate={status.approval_gate} approvalPassword={password} approvalTotpCode={totp}
+                  requireFreshTotp={requireFreshTotp}
                   onApprovalPasswordChange={(event) => setPassword(event.target.value)} onApprovalTotpCodeChange={(event) => setTotp(event.target.value)} />
               </div>
             ) : null}
-            {error ? <p role="alert" className="mt-3 text-sm text-red-700">{error}</p> : null}
+            {error ? <p role="alert" className="mt-3 text-sm text-red-700">{cloudReviewConfirmationError(error)}</p> : null}
             <div className="mt-5 flex flex-wrap justify-end gap-2">
               <button type="button" onClick={close} disabled={pending} className="min-h-10 rounded-md border border-slate-200 px-4 py-2 text-sm text-brand-dark">Cancel</button>
               <button type="button" onClick={() => void confirm()} disabled={disabled}

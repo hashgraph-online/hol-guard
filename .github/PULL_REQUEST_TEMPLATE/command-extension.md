@@ -4,7 +4,15 @@
 
 ### What changed
 
-<!-- Name the extension and the command families covered. Link a proposal only when the boundary is new or materially changes authority. -->
+<!-- Name the extension and the command families covered. This PR is the scope-review surface; no separate issue is required. -->
+
+### Upstream source and version
+
+<!-- Link the authoritative upstream repository/docs and pin the version, tag, or commit used for this boundary. -->
+
+### Capability boundary
+
+<!-- List the state-changing/destructive operations that need review and the safe/read-only counterparts that must stay automatic. -->
 
 ### Fast validation
 
@@ -19,7 +27,7 @@ uv run --no-sync hol-guard extensions handoff --repo . \
 ### Checklist
 
 - [ ] The source, fixture, and external trust-map entry use the same extension ID.
-- [ ] Generated descriptor, native program, catalog, and package resources are included.
+- [ ] The canonical source, portable fixture, and external trust entry are included. Generated projections may be synchronized by the Builder, Gitar, or a maintainer after scope review.
 - [ ] Cases cover the intended destructive operations and their safe counterparts.
 - [ ] Optional public listing data contains no private email, secrets, or inferred claim authority.
 - [ ] For a personal-fork PR, I enabled **Allow edits from maintainers** if I want Gitar to commit mechanical repairs. If GitHub says this also grants access to secrets, I left it disabled and will apply suggestions myself.

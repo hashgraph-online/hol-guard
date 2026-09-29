@@ -11,7 +11,7 @@ maintainer checks across supported AI plugin ecosystems.
 
 ## Before you start
 
-- Search existing [issues](https://github.com/hashgraph-online/hol-guard/issues) and the
+- Search current [open pull requests](https://github.com/hashgraph-online/hol-guard/pulls) and the
   [Extension directory](docs/guard/extensions/README.md) for overlapping work.
 - Use [discussions](https://github.com/hashgraph-online/hol-guard/discussions) for design questions
   and broader feedback. Report vulnerabilities through [SECURITY.md](SECURITY.md).
@@ -43,6 +43,10 @@ not copy their registration pattern to add an extension.
    complete handoff with `hol-guard extensions handoff --repo . --source ... --fixture ...`.
 3. Open a PR using the **Command extension** template. Ready PRs receive Gitar's managed label,
    which enables automatic repair for mechanical schema, binding, and generated-projection issues.
+
+The canonical source, portable fixture, and external trust entry are the contributor-owned inputs.
+Generated projections are mechanical closure work: Gitar or maintainers may regenerate them after
+the capability boundary is accepted, so projection drift alone should not bounce a contributor.
 
 Gitar does not choose command semantics, trust, claim authority, or safe variants. Contributors
 can request analysis without changes at any time with `gitar auto-apply:off`.
@@ -148,9 +152,9 @@ checks authoring outside the checkout. Include the relevant CI results in the PR
 ## Contribution process
 
 1. Fork the repository and create a feature branch from `main`.
-2. For a new extension or material authority change, open an
-   [Extension proposal](https://github.com/hashgraph-online/hol-guard/issues/new?template=command-extension-proposal.yml)
-   and agree on the capability boundary and stable IDs.
+2. For a new extension or material authority change, describe the capability boundary and stable
+   IDs in a draft pull request using the **Command extension** template. Keep the PR draft until the
+   scope is reviewable; maintainers can redirect overlapping IDs there before implementation is complete.
 3. Make one coherent change, with native behavior fixtures and generated outputs when applicable.
 4. Run the relevant validation and inspect the complete diff, including generated files.
 5. For a command extension, run `hol-guard extensions handoff` and use the **Command extension**

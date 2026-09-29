@@ -14,6 +14,7 @@ fn policy() -> EffectiveNativePolicyV3 {
         harness_actions: BTreeMap::new(),
         publisher_actions: BTreeMap::new(),
         artifact_actions: BTreeMap::new(),
+        mcp_tool_actions: BTreeMap::new(),
         sandbox_analysis: "off".into(),
         receipt_redaction_level: "full".into(),
     }

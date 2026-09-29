@@ -27,7 +27,7 @@ from codex_plugin_scanner.guard.config import resolve_guard_home
 from codex_plugin_scanner.guard.launcher import merge_guard_launcher_env
 from codex_plugin_scanner.guard.store import GuardStore
 
-LEGACY_OMP_BASE_SOURCE_SHA256 = "1ece8ea273833b4a9d237a9fad4cb6ca6c217d36b2b3d0e616152c0185890d10"
+LEGACY_OMP_BASE_SOURCE_SHA256 = "d3acaeaa3c4906c38ad1087ee7bc93f789dcd4628b237bd0ef25f569160022f3"
 
 
 def _legacy_omp_base_source_sha256(source: str) -> str:

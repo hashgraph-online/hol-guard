@@ -1221,8 +1221,11 @@ export function parseActionEnvelope(raw: unknown): GuardActionEnvelope | null {
   const packageTargets = raw["package_targets"];
   const preExecutionResult = aliasedPreExecutionResult.value;
   const policyAction = aliasedPolicyAction.value;
-  const scriptName = raw["script_name"];
-  const rawPayloadRedacted = raw["raw_payload_redacted"];
+  // Native reviews queued before the envelope carried these presentation fields
+  // omitted them. Absence is not an action contradiction. A present value with
+  // the wrong type still fails closed below.
+  const scriptName = raw["script_name"] === undefined ? null : raw["script_name"];
+  const rawPayloadRedacted = raw["raw_payload_redacted"] === undefined ? {} : raw["raw_payload_redacted"];
   if (
     typeof schemaVersion !== "number" ||
     typeof actionId !== "string" ||
@@ -4028,6 +4031,35 @@ export async function runAuditRemediation(input: AuditRemediationInput): Promise
     );
   }
   return normalizePackageFirewallAction(payload);
+}
+
+export async function chooseSupplyChainAuditFolder(): Promise<{
+  workspaceDir: string | null;
+  cancelled: boolean;
+}> {
+  const response = await fetchGuardApi("/v1/supply-chain/choose-folder", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...guardAuthHeaders(),
+    },
+    body: "{}",
+  });
+  const payloadBody = (await response.json().catch(() => null)) as unknown;
+  if (!response.ok) {
+    throw new GuardHarnessActionError(
+      response.status,
+      isGuardHarnessActionErrorPayload(payloadBody) ? payloadBody : null,
+    );
+  }
+  const record = payloadBody !== null && typeof payloadBody === "object" ? payloadBody as Record<string, unknown> : {};
+  const workspaceDir = typeof record.workspace_dir === "string" && record.workspace_dir.trim()
+    ? record.workspace_dir.trim()
+    : null;
+  return {
+    workspaceDir,
+    cancelled: record.cancelled === true || workspaceDir === null,
+  };
 }
 
 export async function runPackageAudit(input?: {

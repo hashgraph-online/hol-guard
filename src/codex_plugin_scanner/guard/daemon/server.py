@@ -158,6 +158,11 @@ from ..policy_bundle_trusted_keys import (
     validate_synced_policy_bundle,
 )
 from ..policy_bundle_v2 import POLICY_BUNDLE_V2_CONTRACT
+from ..project_folder_picker import (
+    ProjectFolderPickerBusyError,
+    ProjectFolderPickerUnavailableError,
+    choose_project_folder,
+)
 from ..protection_posture import protection_is_off
 from ..receipts.manager import build_receipt
 from ..runtime.approval_attention import ApprovalAttentionCoordinator
@@ -435,6 +440,7 @@ _DAEMON_CRITICAL_PATHS = frozenset(
     {
         "/healthz",
         "/v1/daemon/identity-challenge",
+        "/v1/desktop/bootstrap",
     }
 )
 
@@ -2187,6 +2193,39 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         self._write_empty(status=200, extra_headers=headers)
 
+    def _serve_desktop_bootstrap(self, store: GuardStore) -> None:
+        """Return the desktop bootstrap document without queueing behind hook traffic.
+
+        The token is accepted only as a header. A query-string token is rejected
+        the same way as the other v1 routes. Failure is a 503 so the CLI falls
+        through to the full bootstrap command.
+        """
+
+        parsed = urlparse(self.path)
+        if self._query_has_guard_token(parsed.query):
+            self._record_query_token_rejection()
+            self._write_unauthorized(extra_headers=self._cors_headers_for_request())
+            return
+        if not self._header_token_is_valid():
+            self._write_unauthorized(extra_headers=self._cors_headers_for_request())
+            return
+        try:
+            from ..cli.commands_dispatch_desktop import desktop_bootstrap_document_for_running_daemon
+
+            document = desktop_bootstrap_document_for_running_daemon(
+                store=store,
+                home_dir=self.server.home_dir,
+                daemon_url=f"http://127.0.0.1:{self.server.daemon_port()}",
+                auth_token=self.server.auth_token,
+            )
+        except Exception:
+            diagnostics = getattr(self.server, "diagnostics", None)
+            if diagnostics is not None:
+                diagnostics.record_exception("desktop_bootstrap_unavailable")
+            self._write_json({"error": "desktop_bootstrap_unavailable"}, status=503)
+            return
+        self._write_json(document)
+
     def do_GET(self) -> None:
         store = self.server.store  # type: ignore[attr-defined]
         parsed = urlparse(self.path)
@@ -2203,6 +2242,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 self._write_unauthorized(extra_headers=self._cors_headers_for_request())
                 return
             self._write_json(self._detailed_healthz_payload())
+            return
+        if parsed.path == "/v1/desktop/bootstrap":
+            self._serve_desktop_bootstrap(store)
             return
         if parsed.path == "/v1/events/stream":
             if self._query_has_guard_token(parsed.query):
@@ -2911,6 +2953,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 self._run_package_firewall_mutation(action, handle_package_action)
             else:
                 handle_package_action()
+            return
+        if parsed.path == "/v1/supply-chain/choose-folder":
+            self._handle_supply_chain_choose_folder()
             return
         if len(path_parts) == 3 and path_parts[:2] == ["v1", "supply-chain"] and path_parts[2] in {"audit", "sync"}:
             action = path_parts[2]
@@ -3902,6 +3947,54 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             )
         raise ValueError("unsupported_supply_chain_operation")
 
+    def _handle_supply_chain_choose_folder(self) -> None:
+        try:
+            selected = choose_project_folder()
+        except ProjectFolderPickerBusyError:
+            self._write_json(
+                {
+                    "error": "folder_picker_busy",
+                    "message": "A folder selection is already open.",
+                    "operation": "choose-folder",
+                },
+                status=409,
+            )
+            return
+        except ProjectFolderPickerUnavailableError:
+            self._write_json(
+                {
+                    "error": "folder_picker_unavailable",
+                    "message": "Folder selection is unavailable. Paste a project folder path instead.",
+                    "operation": "choose-folder",
+                },
+                status=503,
+            )
+            return
+        if selected is None:
+            self._write_json({"cancelled": True, "operation": "choose-folder", "workspace_dir": None})
+            return
+        try:
+            resolved = self._resolve_supply_chain_workspace_dir(
+                {"workspace_dir": selected},
+                reject_invalid_explicit=True,
+            )
+        except ValueError as error:
+            self._write_json(self._supply_chain_value_error_payload("choose-folder", str(error)), status=400)
+            return
+        if resolved is None:
+            self._write_json(
+                self._supply_chain_value_error_payload("choose-folder", "workspace_dir_invalid"),
+                status=400,
+            )
+            return
+        self._write_json(
+            {
+                "cancelled": False,
+                "operation": "choose-folder",
+                "workspace_dir": str(resolved),
+            }
+        )
+
     def _resolve_supply_chain_workspace_dir(
         self,
         payload: dict[str, object],
@@ -3943,9 +4036,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         error_payload: dict[str, object] = {"error": error_code, "operation": operation}
         if error_code == "workspace_dir_required":
             error_payload["message"] = (
-                "Guard needs a project folder with package manifests before it can run "
-                "the workspace audit. Open Guard from a connected app workspace or pass "
-                "workspace_dir in the audit request."
+                "Guard needs a project folder with package manifests before it can run the workspace audit. "
+                "Choose a local project folder and try again."
             )
         elif error_code == "workspace_dir_invalid":
             error_payload["message"] = (
@@ -8144,6 +8236,7 @@ class GuardDaemonServer:
                 raise RuntimeError("Guard daemon serve thread did not become ready")
             self._publish_listen_state()
             self._diagnostics.record("daemon_listen_ready")
+            self._warm_desktop_bootstrap_cache()
             if not continue_after_listen:
                 return
         self._complete_owned_service_after_listen(generation, already_locked=True)
@@ -8194,6 +8287,31 @@ class GuardDaemonServer:
             return
         with self._finish_service_lock:
             start_post_listen_workers()
+
+    def _warm_desktop_bootstrap_cache(self) -> None:
+        """Fill the bootstrap document before Desktop's first open poll.
+
+        This runs beside artifact reconciliation. A failure leaves the cache
+        empty; the request path builds the document or returns 503.
+        """
+
+        server = self._server
+
+        def warm() -> None:
+            try:
+                from ..cli.commands_dispatch_desktop import desktop_bootstrap_document_for_running_daemon
+
+                desktop_bootstrap_document_for_running_daemon(
+                    store=server.store,
+                    home_dir=server.home_dir,
+                    daemon_url=f"http://127.0.0.1:{server.daemon_port()}",
+                    auth_token=server.auth_token,
+                )
+            except Exception:
+                self._diagnostics.record_exception("desktop_bootstrap_warmup_failed")
+                return
+
+        threading.Thread(target=warm, name="desktop-bootstrap-warm", daemon=True).start()
 
     def refresh_command_queue_worker(self) -> dict[str, object]:
         """Apply changed Cloud connectivity and consent without a daemon restart."""

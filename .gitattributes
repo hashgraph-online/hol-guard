@@ -1,5 +1,8 @@
 /tests/guard_command_corpus*.py text eol=lf
 /tests/fixtures/guard-command-corpus/*.json text eol=lf
+# The native corpus contract hashes these Rust sources as checkout bytes.
+/rust/crates/guard-command/src/*.rs text eol=lf
+/rust/crates/guard-command/src/command_compatibility/*.rs text eol=lf
 /src/codex_plugin_scanner/guard/daemon/static/index.html text eol=lf
 /contracts/guard-cloud-review/v2/*.json text eol=lf
 /docs/guard/contracts/guard-cloud-review-v2.md text eol=lf
