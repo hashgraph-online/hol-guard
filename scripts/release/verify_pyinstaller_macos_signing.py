@@ -329,7 +329,9 @@ def verify_onedir(tree: Path, expected_team_id: str) -> None:
     if not tree.is_dir():
         raise ValueError(f"Onedir tree does not exist: {tree}")
     require_onedir_seal(tree)
-    macho_paths = [path for path in sorted(tree.rglob("*")) if path.is_file() and _is_macho_file(path)]
+    macho_paths = [
+        path for path in sorted(tree.rglob("*")) if not path.is_symlink() and path.is_file() and _is_macho_file(path)
+    ]
     if not macho_paths:
         raise ValueError("Onedir tree contained no Mach-O binaries")
     for path in macho_paths:

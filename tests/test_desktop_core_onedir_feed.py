@@ -5,12 +5,17 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import os
+import subprocess
+import sys
 import zipfile
 from pathlib import Path
 from types import ModuleType
 from unittest.mock import MagicMock
 
 import pytest
+
+from codex_plugin_scanner.guard.cli import update_desktop_core
 
 ROOT = Path(__file__).resolve().parents[1]
 FEED = ROOT / "scripts" / "release" / "desktop_core_alpha_feed.py"
@@ -219,11 +224,101 @@ class TestOnedirZipMembers:
         with pytest.raises(SystemExit):
             namespace.validate_onedir_zip_members(archive)
 
-    def test_rejects_symlink_member(self, tmp_path: Path) -> None:
+    def test_accepts_framework_symlinks(self, tmp_path: Path) -> None:
         namespace = _feed()
-        archive = _sealed_zip(tmp_path / "core.onedir.zip", extra=[("hol-guard/_internal/link", b"target", 0o120777)])
-        with pytest.raises(SystemExit, match="symlink"):
+        archive = _sealed_zip(
+            tmp_path / "core.onedir.zip",
+            extra=[
+                ("hol-guard/_internal/Python.framework/Versions/3.12/Python", b"py", 0o755),
+                ("hol-guard/_internal/Python", b"Python.framework/Versions/3.12/Python", 0o120777),
+                ("hol-guard/_internal/Python.framework/Versions/Current", b"3.12", 0o120777),
+            ],
+        )
+        namespace.validate_onedir_zip_members(archive)
+
+    @pytest.mark.parametrize(
+        "target",
+        [
+            b"/abs/path",
+            b"../../x",
+            b"..",
+            b"../../../etc/passwd",
+            b"",
+            b"x" * 1025,
+            b"a\x00b",
+            b"\xff\xfe",
+        ],
+    )
+    def test_rejects_unsafe_symlink_target(self, tmp_path: Path, target: bytes) -> None:
+        namespace = _feed()
+        archive = _sealed_zip(
+            tmp_path / "core.onedir.zip",
+            extra=[("hol-guard/_internal/link", target, 0o120777)],
+        )
+        with pytest.raises(SystemExit):
             namespace.validate_onedir_zip_members(archive)
+
+    def test_rejects_member_nested_under_symlink(self, tmp_path: Path) -> None:
+        namespace = _feed()
+        archive = _sealed_zip(
+            tmp_path / "core.onedir.zip",
+            extra=[
+                ("hol-guard/_internal/link", b"target-file", 0o120777),
+                ("hol-guard/_internal/link/x", b"x", 0o644),
+            ],
+        )
+        with pytest.raises(SystemExit):
+            namespace.validate_onedir_zip_members(archive)
+
+    @pytest.mark.parametrize(
+        "member",
+        [
+            "hol-guard/_internal/./link/x",
+            "hol-guard/./x",
+            "hol-guard//x",
+        ],
+    )
+    def test_rejects_dot_and_empty_components(self, tmp_path: Path, member: str) -> None:
+        namespace = _feed()
+        archive = _sealed_zip(
+            tmp_path / "core.onedir.zip",
+            extra=[
+                ("hol-guard/_internal/link", b"target-file", 0o120777),
+                (member, b"x", 0o644),
+            ],
+        )
+        with pytest.raises(SystemExit):
+            namespace.validate_onedir_zip_members(archive)
+
+    @pytest.mark.parametrize(
+        "member",
+        [
+            "hol-guard/hol-guard",
+            "hol-guard/Info.plist",
+            "hol-guard/_CodeSignature/CodeResources",
+        ],
+    )
+    def test_rejects_required_member_as_symlink(self, tmp_path: Path, member: str) -> None:
+        namespace = _feed()
+        archive = _sealed_zip(
+            tmp_path / "core.onedir.zip",
+            extra=[(member, b"elsewhere", 0o120777)],
+        )
+        with pytest.raises(SystemExit):
+            namespace.validate_onedir_zip_members(archive)
+
+    @pytest.mark.skipif(os.name != "posix", reason="needs POSIX symlink creation")
+    def test_file_count_counts_links_once(self, tmp_path: Path) -> None:
+        namespace = _feed()
+        tree = tmp_path / "tree"
+        internal = tree / "hol-guard" / "_internal"
+        internal.mkdir(parents=True)
+        (tree / "hol-guard" / "hol-guard").write_bytes(b"bin")
+        (internal / "a.txt").write_bytes(b"data")
+        os.symlink("a.txt", internal / "file-link")
+        os.symlink("_internal", tree / "hol-guard" / "dir-link")
+        # files 2 + links 2; the dir link is never descended.
+        assert namespace._onedir_file_count(tree) == 4
 
     @pytest.mark.parametrize(
         "missing",
@@ -249,6 +344,45 @@ class TestOnedirZipMembers:
                     zipped.writestr(name, data)
         with pytest.raises(SystemExit, match="missing required member"):
             namespace.validate_onedir_zip_members(archive)
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="ditto only exists on macOS")
+def test_framework_symlink_round_trip(tmp_path: Path) -> None:
+    """Real ditto archive → feed validation + count → installer extraction + R6 walk."""
+    namespace = _feed()
+    tree = tmp_path / "src" / "hol-guard"
+    framework = tree / "_internal" / "Python.framework" / "Versions" / "3.12"
+    framework.mkdir(parents=True)
+    (tree / "hol-guard").write_bytes(b"launcher")
+    (tree / "Info.plist").write_bytes(b"<plist/>")
+    (tree / "_CodeSignature").mkdir()
+    (tree / "_CodeSignature" / "CodeResources").write_bytes(b"<resources/>")
+    (framework / "Python").write_bytes(b"py")
+    os.symlink("Python.framework/Versions/3.12/Python", tree / "_internal" / "Python")
+    os.symlink("3.12", framework.parent / "Current")
+    archive = tmp_path / "core.onedir.zip"
+    subprocess.run(
+        [
+            "/usr/bin/ditto",
+            "-c",
+            "-k",
+            "--norsrc",
+            "--noextattr",
+            "--keepParent",
+            str(tree),
+            str(archive),
+        ],
+        check=True,
+    )
+    namespace.validate_onedir_zip_members(archive)
+    update_desktop_core._validate_onedir_zip_members(archive)
+    # hol-guard, Info.plist, CodeResources, Python file, + 2 links.
+    assert namespace._onedir_file_count(tmp_path / "src") == 6
+    extracted = tmp_path / "out"
+    extracted.mkdir()
+    update_desktop_core._extract_onedir_zip(archive, extracted)
+    assert (extracted / "hol-guard" / "_internal" / "Python").is_symlink()
+    assert update_desktop_core._onedir_file_count(extracted) == 6
 
 
 class TestOnedirMarker:
@@ -503,6 +637,9 @@ class TestVerifyArchiveAttestation:
         native.mkdir(parents=True)
         launcher.parent.mkdir(parents=True, exist_ok=True)
         launcher.write_bytes(b"launcher-bytes")
+        (tree / "hol-guard" / "Info.plist").write_text("<plist/>", encoding="utf-8")
+        (tree / "hol-guard" / "_CodeSignature").mkdir()
+        (tree / "hol-guard" / "_CodeSignature" / "CodeResources").write_text("<resources/>", encoding="utf-8")
         (native / "hol-guard-runtime").write_bytes(b"runtime")
         archive = tmp_path / "core.onedir.zip"
         with zipfile.ZipFile(archive, "w") as zipped:
@@ -526,7 +663,7 @@ class TestVerifyArchiveAttestation:
                     "size": archive.stat().st_size,
                     "launcher": "hol-guard/hol-guard",
                     "launcherSha256": hashlib.sha256(b"launcher-bytes").hexdigest(),
-                    "fileCount": 2,
+                    "fileCount": 4,
                     "bootstrapSchema": "guard-desktop-bootstrap.v1",
                     "minimumDesktopVersion": "3.0.113",
                 }
@@ -589,6 +726,92 @@ class TestVerifyArchiveAttestation:
         with pytest.raises(module.DesktopAttestationError, match="not allowed"):
             module._extract_onedir_zip(archive, tmp_path / "out")
         assert not (tmp_path / "out" / "extra.txt").exists()
+
+    def _zip_with_links(self, tmp_path: Path, links: list[tuple[str, bytes]], extra=()) -> Path:
+        archive = tmp_path / "links.onedir.zip"
+        with zipfile.ZipFile(archive, "w") as zipped:
+            for name in (
+                "hol-guard/hol-guard",
+                "hol-guard/Info.plist",
+                "hol-guard/_CodeSignature/CodeResources",
+                "hol-guard/_internal/a.txt",
+            ):
+                zipped.writestr(name, b"x")
+            for name in extra:
+                zipped.writestr(name, b"x")
+            for name, target in links:
+                info = zipfile.ZipInfo(name)
+                info.external_attr = 0o120777 << 16
+                zipped.writestr(info, target)
+        return archive
+
+    def test_extract_accepts_framework_symlinks(self, tmp_path: Path) -> None:
+        module = _load(ATTEST, "verify_desktop_core_attestation")
+        archive = self._zip_with_links(
+            tmp_path,
+            [
+                ("hol-guard/_internal/Python", b"Python.framework/Versions/3.12/Python"),
+                ("hol-guard/_internal/Python.framework/Versions/Current", b"3.12"),
+            ],
+            extra=("hol-guard/_internal/Python.framework/Versions/3.12/Python",),
+        )
+        launcher = module._extract_onedir_zip(archive, tmp_path / "out")
+        assert launcher.is_file()
+        link = tmp_path / "out" / "hol-guard" / "_internal" / "Python"
+        if sys.platform == "darwin":
+            assert link.is_symlink()
+            assert os.readlink(link) == "Python.framework/Versions/3.12/Python"
+        else:
+            # zipfile materializes link members as regular files in tests.
+            assert link.is_file()
+
+    @pytest.mark.parametrize("target", [b"/abs/x", b"../../x", b"", b"x" * 1025])
+    def test_extract_rejects_unsafe_symlink_target(self, tmp_path: Path, target: bytes) -> None:
+        module = _load(ATTEST, "verify_desktop_core_attestation")
+        archive = self._zip_with_links(tmp_path, [("hol-guard/_internal/link", target)])
+        with pytest.raises(module.DesktopAttestationError):
+            module._extract_onedir_zip(archive, tmp_path / "out")
+
+    def test_extract_rejects_member_nested_under_symlink(self, tmp_path: Path) -> None:
+        module = _load(ATTEST, "verify_desktop_core_attestation")
+        archive = self._zip_with_links(
+            tmp_path,
+            [("hol-guard/_internal/link", b"target-file")],
+            extra=("hol-guard/_internal/link/x",),
+        )
+        with pytest.raises(module.DesktopAttestationError):
+            module._extract_onedir_zip(archive, tmp_path / "out")
+
+    @pytest.mark.parametrize(
+        "member",
+        [
+            "hol-guard/_internal/./link/x",
+            "hol-guard/./x",
+            "hol-guard//x",
+        ],
+    )
+    def test_extract_rejects_dot_and_empty_components(self, tmp_path: Path, member: str) -> None:
+        module = _load(ATTEST, "verify_desktop_core_attestation")
+        archive = self._zip_with_links(
+            tmp_path,
+            [("hol-guard/_internal/link", b"target-file")],
+            extra=(member,),
+        )
+        with pytest.raises(module.DesktopAttestationError):
+            module._extract_onedir_zip(archive, tmp_path / "out")
+
+    def test_extract_rejects_launcher_symlink(self, tmp_path: Path) -> None:
+        module = _load(ATTEST, "verify_desktop_core_attestation")
+        archive = tmp_path / "links.onedir.zip"
+        with zipfile.ZipFile(archive, "w") as zipped:
+            zipped.writestr("hol-guard/Info.plist", b"x")
+            zipped.writestr("hol-guard/_CodeSignature/CodeResources", b"x")
+            zipped.writestr("hol-guard/_internal/a.txt", b"x")
+            info = zipfile.ZipInfo("hol-guard/hol-guard")
+            info.external_attr = 0o120777 << 16
+            zipped.writestr(info, b"_internal/real-launcher")
+        with pytest.raises(module.DesktopAttestationError):
+            module._extract_onedir_zip(archive, tmp_path / "out")
 
     def test_manifest_mismatch(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         module = _load(ATTEST, "verify_desktop_core_attestation")
