@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard.js","assets/chunks/home-protection-module.js","assets/chunks/fleet-workspace.js","assets/chunks/app-catalog.js","assets/chunks/harness-detection.js","assets/chunks/connect-guard-cloud-button.js","assets/chunks/settings-workspace.js","assets/chunks/confirm-dialog.js","assets/chunks/extensions-workspace.js","assets/chunks/approval-proof-modal.js","assets/chunks/app-detail-workspace.js","assets/chunks/supply-chain-hub-workspace.js","assets/chunks/policy-workspace-page.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard.js","assets/chunks/home-protection-module.js","assets/chunks/fleet-workspace.js","assets/chunks/app-catalog.js","assets/chunks/harness-detection.js","assets/chunks/connect-guard-cloud-button.js","assets/chunks/settings-workspace.js","assets/chunks/confirm-dialog.js","assets/chunks/extensions-workspace.js","assets/chunks/extension-controls-api.js","assets/chunks/approval-proof-modal.js","assets/chunks/app-detail-workspace.js","assets/chunks/supply-chain-hub-workspace.js","assets/chunks/policy-workspace-page.js","assets/chunks/protection-repair-page.js"])))=>i.map(i=>d[i]);
 (function polyfill() {
   const relList = document.createElement("link").relList;
   if (relList && relList.supports && relList.supports("modulepreload")) return;
@@ -21038,6 +21038,7 @@ const NAVIGATION_GROUPS = [
 function canonicalNavigationView(view) {
   if (view === "app-detail") return "fleet";
   if (view === "audit" || view === "feed-health") return "supply-chain";
+  if (view === "protection-repair") return "extensions";
   return view;
 }
 function navigationItemForView(view) {
@@ -31664,6 +31665,9 @@ function renderViewContent(props) {
   if (props.view === "extensions") {
     return props.extensionsContent;
   }
+  if (props.view === "protection-repair") {
+    return props.protectionRepairContent ?? null;
+  }
   if (props.view === "settings") {
     return props.settingsContent;
   }
@@ -31962,21 +31966,25 @@ const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() =
 const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace.js"), true ? __vite__mapDeps([6,3,7,5]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
 const ExtensionsWorkspace = lazyWorkspace(
   "extensions-workspace",
-  () => __vitePreload(() => import("./chunks/extensions-workspace.js"), true ? __vite__mapDeps([8,9,7]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
+  () => __vitePreload(() => import("./chunks/extensions-workspace.js"), true ? __vite__mapDeps([8,9,10,7]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
 );
-const AppDetailWorkspace = lazyWorkspace("app-detail-workspace", () => __vitePreload(() => import("./chunks/app-detail-workspace.js"), true ? __vite__mapDeps([10,9,4]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
+const AppDetailWorkspace = lazyWorkspace("app-detail-workspace", () => __vitePreload(() => import("./chunks/app-detail-workspace.js"), true ? __vite__mapDeps([11,10,4]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
 const HelpModal = lazyWorkspace("help-modal", () => __vitePreload(() => import("./chunks/help-modal.js"), true ? [] : void 0).then((m) => ({ default: m.HelpModal })));
 const SupplyChainHubWorkspace = lazyWorkspace(
   "supply-chain-hub-workspace",
-  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace.js").then((n) => n.d), true ? __vite__mapDeps([11,9]) : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
+  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace.js").then((n) => n.d), true ? __vite__mapDeps([12,10]) : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
 );
 const PolicyWorkspacePage = lazyWorkspace(
   "policy-workspace-page",
-  () => __vitePreload(() => import("./chunks/policy-workspace-page.js"), true ? __vite__mapDeps([12,5]) : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
+  () => __vitePreload(() => import("./chunks/policy-workspace-page.js"), true ? __vite__mapDeps([13,5]) : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
 );
 const AboutWorkspace = lazyWorkspace(
   "about-workspace",
   () => __vitePreload(() => import("./chunks/about-workspace.js"), true ? [] : void 0).then((m) => ({ default: m.AboutWorkspace }))
+);
+const ProtectionRepairPage = lazyWorkspace(
+  "protection-repair-page",
+  () => __vitePreload(() => import("./chunks/protection-repair-page.js"), true ? __vite__mapDeps([14,10,9]) : void 0).then((m) => ({ default: m.ProtectionRepairPage }))
 );
 function LazyFallback() {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex min-h-[200px] items-center justify-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-8 w-48" }) });
@@ -32018,6 +32026,7 @@ function viewTitle(view) {
   if (view === "feed-health") return "Feed Health";
   if (view === "about") return "About";
   if (view === "extensions") return "Extensions";
+  if (view === "protection-repair") return "Repair protection";
   return "App detail";
 }
 function parseAppDetail(pathname) {
@@ -32040,6 +32049,9 @@ function resolveView(pathname) {
   }
   if (pathname === "/extensions" || pathname.startsWith("/extensions/")) {
     return "extensions";
+  }
+  if (pathname === "/protection/repair") {
+    return "protection-repair";
   }
   if (pathname === "/settings") {
     return "settings";
@@ -32758,6 +32770,7 @@ function App() {
         ) }) : null,
         appDetailContent: /* @__PURE__ */ jsxRuntimeExports.jsx(ErrorBoundary, { onReset: handleGoHome, children: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: appDetailContent }) }),
         extensionsContent: /* @__PURE__ */ jsxRuntimeExports.jsx(ErrorBoundary, { onReset: handleGoHome, children: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(ExtensionsWorkspace, { runtime: runtime.kind === "ready" ? runtime.snapshot : null, onRefreshRuntime: refreshStateAfterAction, onNavigate: navigate }) }) }),
+        protectionRepairContent: /* @__PURE__ */ jsxRuntimeExports.jsx(ErrorBoundary, { onReset: handleGoHome, children: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(ProtectionRepairPage, { onNavigate: navigate }) }) }),
         settingsContent: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(SettingsWorkspace, { onApprovalGateChange: setApprovalGate }) }),
         supplyChainHubContent: runtime.kind === "ready" ? /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(
           SupplyChainHubWorkspace,
@@ -32828,7 +32841,7 @@ export {
   hasRepairableProtectionGap as Z,
   remainingProtectionRepairParts as _,
   EvidenceActivityHeatmapMini as a,
-  HiMiniServerStack as a$,
+  HiMiniFolder as a$,
   repairOutcomeIsStalled as a0,
   ProtectionRepairFlowError as a1,
   nextProtectionRepairOutcome as a2,
@@ -32859,13 +32872,13 @@ export {
   Tag as aR,
   approvalGateCooldownLabel as aS,
   fetchLocalCliApi as aT,
-  fetchExtensionControlApi as aU,
-  HiMiniNoSymbol as aV,
-  useResolvedApprovalGate as aW,
-  HiMiniInformationCircle as aX,
-  GenIcon as aY,
-  HiMiniGlobeAlt as aZ,
-  HiMiniCube as a_,
+  HiMiniNoSymbol as aU,
+  useResolvedApprovalGate as aV,
+  HiMiniInformationCircle as aW,
+  GenIcon as aX,
+  HiMiniGlobeAlt as aY,
+  HiMiniCube as aZ,
+  HiMiniServerStack as a_,
   HiMiniWrenchScrewdriver as aa,
   ProofStrip as ab,
   HiMiniEye as ac,
@@ -32894,16 +32907,16 @@ export {
   clearPolicy as az,
   HiMiniCommandLine as b,
   __vitePreload as b$,
-  HiMiniFolder as b0,
-  FaWindows as b1,
-  FaAws as b2,
-  approvalProofRecentlySatisfied as b3,
-  isBulkApproveGateReady as b4,
-  HiMiniArrowLeft as b5,
-  HiMiniPlus as b6,
-  guardAwareHref as b7,
-  HiMiniCheck as b8,
-  startGuardCloudConnect as b9,
+  FaWindows as b0,
+  FaAws as b1,
+  approvalProofRecentlySatisfied as b2,
+  isBulkApproveGateReady as b3,
+  HiMiniArrowLeft as b4,
+  HiMiniPlus as b5,
+  guardAwareHref as b6,
+  HiMiniCheck as b7,
+  startGuardCloudConnect as b8,
+  HiMiniArrowTopRightOnSquare as b9,
   isSupplyChainAuditIncomplete as bA,
   isSupplyChainAuditEvidence as bB,
   readString$1 as bC,
@@ -32931,7 +32944,7 @@ export {
   chooseSupplyChainAuditFolder as bY,
   fetchReceipts as bZ,
   lazyWorkspace as b_,
-  HiMiniArrowTopRightOnSquare as ba,
+  fetchExtensionControlApi as ba,
   GuardModalLayer as bb,
   runHarnessAction as bc,
   GuardHarnessActionError as bd,
@@ -32978,21 +32991,22 @@ export {
   HiMiniQueueList as ch,
   Surface as ci,
   HiMiniCheckBadge as cj,
-  fetchMcpPolicyRequest as ck,
-  resolveMcpPolicyRequest as cl,
-  HiMiniDocumentPlus as cm,
-  HiMiniDocumentMagnifyingGlass as cn,
-  fetchSupplyChainBundle as co,
-  isSupplyChainScannerEvidence as cp,
-  isBlockedGuardAction as cq,
-  HiMiniShieldExclamation as cr,
-  HiMiniComputerDesktop as cs,
-  HiMiniChevronLeft as ct,
-  HiMiniFunnel as cu,
-  HiMiniArrowDown as cv,
-  HiMiniArrowUp as cw,
-  runAuditRemediation as cx,
-  HiMiniSignal as cy,
+  fetchResolvedApprovalGate as ck,
+  fetchMcpPolicyRequest as cl,
+  resolveMcpPolicyRequest as cm,
+  HiMiniDocumentPlus as cn,
+  HiMiniDocumentMagnifyingGlass as co,
+  fetchSupplyChainBundle as cp,
+  isSupplyChainScannerEvidence as cq,
+  isBlockedGuardAction as cr,
+  HiMiniShieldExclamation as cs,
+  HiMiniComputerDesktop as ct,
+  HiMiniChevronLeft as cu,
+  HiMiniFunnel as cv,
+  HiMiniArrowDown as cw,
+  HiMiniArrowUp as cx,
+  runAuditRemediation as cy,
+  HiMiniSignal as cz,
   createCommandActivityClient as d,
   updateSettings as e,
   fetchCommandActivityApi as f,
