@@ -338,7 +338,8 @@ def list_approval_requests(
                 normalized_identity_key, action_identity, queue_group_id, dedupe_count, last_seen_at, transport,
                 risk_summary, risk_signals_json, artifact_label, source_label, trigger_summary, why_now,
                 launch_summary, risk_headline, action_envelope_json, decision_v2_json,
-                fallback_cli_command, scanner_evidence_json, browser_intent_json, continuation_snapshot_json,
+                fallback_cli_command, scanner_evidence_json, watch_only_observation,
+                browser_intent_json, continuation_snapshot_json,
                 review_command,
                 approval_url, status, resolution_action, resolution_scope, reason, created_at, resolved_at,
                 raw_command_text, guard_version, first_seen_guard_version, last_seen_guard_version
@@ -374,6 +375,7 @@ def get_approval_request(connection: sqlite3.Connection, request_id: str) -> dic
                 {_column_expr(columns, "first_seen_guard_version", "NULL")},
                 {_column_expr(columns, "last_seen_guard_version", "NULL")},
                 {_column_expr(columns, "scanner_evidence_json", "'[]'")},
+                {_column_expr(columns, "watch_only_observation", "0")},
                 {_column_expr(columns, "browser_intent_json", "NULL")}, review_command,
                 {_column_expr(columns, "continuation_snapshot_json", "NULL")},
                 approval_url, status, resolution_action, resolution_scope, reason, created_at, resolved_at
@@ -531,6 +533,7 @@ def _row_to_payload(row: sqlite3.Row) -> dict[str, object]:
         "guard_version": row["guard_version"],
         "first_seen_guard_version": row["first_seen_guard_version"],
         "last_seen_guard_version": row["last_seen_guard_version"],
+        "watch_only_observation": bool(row["watch_only_observation"]),
         "scanner_evidence": _json_object_list(row["scanner_evidence_json"]),
         "browser_intent": _json_object(row["browser_intent_json"]),
         "continuation_snapshot": _json_object(row["continuation_snapshot_json"]),
@@ -713,6 +716,7 @@ def _row_to_approval_summary(row: sqlite3.Row) -> dict[str, object]:
         "action_identity": row["action_identity"],
         "queue_group_id": row["queue_group_id"],
         "dedupe_count": int(row["dedupe_count"] or 1),
+        "watch_only_observation": bool(row["watch_only_observation"]),
         "created_at": str(row["created_at"]),
         "last_seen_at": row["last_seen_at"],
         "display_status": str(row["status"]),
@@ -744,7 +748,8 @@ def list_approval_request_summary_rows(
                decision_v2_json, action_envelope_json,
                changed_fields_json, source_scope, config_path, workspace, launch_target,
                risk_summary, risk_headline, action_identity, queue_group_id, dedupe_count,
-               raw_command_text, fallback_cli_command, review_command, created_at, last_seen_at, status
+               raw_command_text, fallback_cli_command, watch_only_observation,
+               review_command, created_at, last_seen_at, status
         from approval_requests
         {where_clause}
         order by last_seen_at desc, request_id desc

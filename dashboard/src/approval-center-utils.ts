@@ -1,6 +1,8 @@
 import type {
   GuardActionEnvelope,
+  GuardAction,
   GuardApprovalRequest,
+  GuardWatchOnlyScannerEvidence,
   GuardArtifactDiff,
   GuardCodexResumeResult,
   GuardReceipt,
@@ -9,7 +11,7 @@ import type {
 import { guardAwareHref } from "./guard-api";
 import { resolveQueueCategory } from "./queue-state";
 import { whyPaused } from "./evidence/plain-english";
-import { guardActionPresentation } from "./guard-action";
+import { guardActionPresentation, isGuardAction } from "./guard-action";
 import {
   isApplyPatchEnvelope,
   resolveDecisionV2Detail,
@@ -32,6 +34,9 @@ export type DataFlowEvidenceSummary = {
 };
 
 export function isWatchOnlyObservation(item: GuardApprovalRequest): boolean {
+  if (typeof item.watch_only_observation === "boolean") {
+    return item.watch_only_observation;
+  }
   return (item.scanner_evidence as unknown[] | undefined ?? []).some(
     (evidence) =>
       typeof evidence === "object" &&
@@ -39,6 +44,37 @@ export function isWatchOnlyObservation(item: GuardApprovalRequest): boolean {
       "source" in evidence &&
       evidence.source === "observe_mode_inbox",
   );
+}
+
+export function watchObservedPolicyAction(item: GuardApprovalRequest): GuardAction | null {
+  if (!isWatchOnlyObservation(item)) return null;
+  const evidence = item.scanner_evidence?.find(
+    (entry): entry is GuardWatchOnlyScannerEvidence =>
+      typeof entry === "object" &&
+      entry !== null &&
+      "source" in entry &&
+      entry.source === "observe_mode_inbox",
+  );
+  const observedAction = evidence?.observed_policy_action;
+  return isGuardAction(observedAction) ? observedAction : null;
+}
+
+export function watchProtectedOutcome(item: GuardApprovalRequest): string {
+  switch (watchObservedPolicyAction(item)) {
+    case "allow":
+    case "warn":
+      return "In Protected mode, Guard would have allowed it to continue.";
+    case "review":
+      return "In Protected mode, Guard would have sent it for review.";
+    case "require-reapproval":
+      return "In Protected mode, Guard would have required fresh approval before allowing it to continue.";
+    case "sandbox-required":
+      return "In Protected mode, Guard would have required a sandbox before allowing it to continue.";
+    case "block":
+      return "In Protected mode, Guard would have blocked it.";
+    default:
+      return "In Protected mode, Guard would have applied its policy before allowing it to continue.";
+  }
 }
 
 export function deriveDataFlowEvidence(item: GuardApprovalRequest): DataFlowEvidenceSummary | null {
@@ -194,7 +230,7 @@ export function buildPauseLine(item: GuardApprovalRequest): string {
     return resolutionBlockReason;
   }
   if (isWatchOnlyObservation(item)) {
-    return "Would have stopped. Guard recorded this because Protected would have blocked it.";
+    return `Would have stopped. ${watchProtectedOutcome(item)}`;
   }
   if (item.changed_fields.length === 1 && item.changed_fields[0] === "first_seen") {
     return `${harnessDisplayName(item.harness)} has not run this exact action here before, so HOL Guard paused it for you to review.`;

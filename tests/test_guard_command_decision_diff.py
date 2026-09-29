@@ -28,6 +28,7 @@ from tests.guard_command_decision_diff import (
     report_framed_sha256,
     source_binding_id,
 )
+from tests.support.extension_freshness import requires_fresh_projections
 
 _OPAQUE_ID = re.compile(r"c-[0-9a-f]{24}")
 
@@ -126,6 +127,7 @@ def test_decision_diff_import_restores_preloaded_package_bindings() -> None:
         assert completed.returncode == 0, completed.stderr
 
 
+@requires_fresh_projections
 def test_report_is_exactly_reproducible_and_source_bound() -> None:
     report = generate_decision_diff_report()
     assert REPORT_PATH.read_bytes() == canonical_json_bytes(report)

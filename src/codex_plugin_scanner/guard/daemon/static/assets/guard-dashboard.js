@@ -14787,9 +14787,37 @@ function isDisplayableHarness(harness) {
   return normalizeHarnessSlug(harness) !== null;
 }
 function isWatchOnlyObservation(item) {
+  if (typeof item.watch_only_observation === "boolean") {
+    return item.watch_only_observation;
+  }
   return (item.scanner_evidence ?? []).some(
     (evidence) => typeof evidence === "object" && evidence !== null && "source" in evidence && evidence.source === "observe_mode_inbox"
   );
+}
+function watchObservedPolicyAction(item) {
+  if (!isWatchOnlyObservation(item)) return null;
+  const evidence = item.scanner_evidence?.find(
+    (entry) => typeof entry === "object" && entry !== null && "source" in entry && entry.source === "observe_mode_inbox"
+  );
+  const observedAction = evidence?.observed_policy_action;
+  return isGuardAction(observedAction) ? observedAction : null;
+}
+function watchProtectedOutcome(item) {
+  switch (watchObservedPolicyAction(item)) {
+    case "allow":
+    case "warn":
+      return "In Protected mode, Guard would have allowed it to continue.";
+    case "review":
+      return "In Protected mode, Guard would have sent it for review.";
+    case "require-reapproval":
+      return "In Protected mode, Guard would have required fresh approval before allowing it to continue.";
+    case "sandbox-required":
+      return "In Protected mode, Guard would have required a sandbox before allowing it to continue.";
+    case "block":
+      return "In Protected mode, Guard would have blocked it.";
+    default:
+      return "In Protected mode, Guard would have applied its policy before allowing it to continue.";
+  }
 }
 function deriveDataFlowEvidence(item) {
   const signals = item.decision_v2_json?.signals ?? [];
@@ -19918,6 +19946,34 @@ function buildBulkGateCredentials(gate, password, totpCode) {
     approval_gate_use_cooldown: false
   };
 }
+function approvalGateLockRemainingSeconds(gate, nowMs = Date.now()) {
+  if (gate?.enabled === false) return 0;
+  if (!gate?.locked_until) return 0;
+  const lockedUntilMs = Date.parse(gate.locked_until);
+  if (!Number.isFinite(lockedUntilMs)) return 0;
+  return Math.max(0, Math.ceil((lockedUntilMs - nowMs) / 1e3));
+}
+function approvalGateIsLocked(gate, nowMs = Date.now()) {
+  return approvalGateLockRemainingSeconds(gate, nowMs) > 0;
+}
+function approvalGateRequiredForResolution(gate, action, scope) {
+  return gate?.enabled === true && (action === "allow" || scope === "global" || gate.strict_all_decisions === true);
+}
+function approvalGateCooldownLabel(seconds) {
+  if (seconds === 0) return "Every approval";
+  if (seconds === 900) return "15 minutes";
+  if (seconds === 3600) return "1 hour";
+  return `${seconds} seconds`;
+}
+function requiresApprovalPasswordPrompt(cooldownActive, strictAllDecisions, selectedScope) {
+  if (selectedScope === "global") {
+    return true;
+  }
+  if (!cooldownActive) {
+    return true;
+  }
+  return strictAllDecisions;
+}
 function approvalProofRecentlySatisfied(gate) {
   return gate?.totp_enabled === true && gate.totp_recent_satisfied === true;
 }
@@ -19938,6 +19994,9 @@ function isApprovalProofSubmitDisabled(gate, credentials, busy, requireFreshTotp
   if (busy) {
     return true;
   }
+  if (approvalGateIsLocked(gate)) {
+    return true;
+  }
   if (requireGate && gate == null) {
     return true;
   }
@@ -19954,6 +20013,9 @@ function isApprovalProofSubmitDisabled(gate, credentials, busy, requireFreshTotp
   return credentials.approvalTotpCode.trim() === "";
 }
 function buildApprovalProofCredentials(gate, credentials, requireFreshTotp = false) {
+  if (approvalGateIsLocked(gate)) {
+    return {};
+  }
   if (gate != null && !isBulkApproveGateReady(gate)) {
     return {};
   }
@@ -20025,6 +20087,14 @@ function ApprovalProofFieldInputs(props) {
 }
 function ApprovalProofInline(props) {
   const passwordRef = reactExports.useRef(null);
+  const [now2, setNow] = reactExports.useState(() => Date.now());
+  const lockRemainingSeconds = approvalGateLockRemainingSeconds(props.approvalGate, now2);
+  const gateLocked = lockRemainingSeconds > 0;
+  reactExports.useEffect(() => {
+    if (!gateLocked) return void 0;
+    const timer = window.setInterval(() => setNow(Date.now()), 1e3);
+    return () => window.clearInterval(timer);
+  }, [gateLocked]);
   reactExports.useEffect(() => {
     const timer = window.setTimeout(() => {
       passwordRef.current?.focus();
@@ -28982,35 +29052,29 @@ function useQueueBulkApprove(props) {
     }
   };
 }
-function approvalGateCooldownLabel(seconds) {
-  if (seconds === 0) return "Every approval";
-  if (seconds === 900) return "15 minutes";
-  if (seconds === 3600) return "1 hour";
-  return `${seconds} seconds`;
-}
-function requiresApprovalPasswordPrompt(cooldownActive, strictAllDecisions, selectedScope) {
-  if (selectedScope === "global") {
-    return true;
-  }
-  if (!cooldownActive) {
-    return true;
-  }
-  return strictAllDecisions;
-}
-function approvalProofModalTitle(recentlySatisfied, needsPassword) {
+function approvalProofModalTitle(locked, recentlySatisfied, needsPassword) {
+  if (locked) return "Approval gate temporarily locked";
   if (recentlySatisfied) return "Recently confirmed";
   if (needsPassword) return "Approval password required";
   return "Authenticator code required";
 }
 function ApprovalPasswordModal(props) {
   const passwordRef = reactExports.useRef(null);
+  const [now2, setNow] = reactExports.useState(() => Date.now());
   const recentlySatisfied = approvalProofRecentlySatisfied(props.gate);
   const needsPassword = approvalProofRequiresPassword(props.gate);
+  const lockRemainingSeconds = approvalGateLockRemainingSeconds(props.gate, now2);
+  const gateLocked = lockRemainingSeconds > 0;
   const submitDisabled = isApprovalProofSubmitDisabled(
     props.gate,
     { approvalPassword: props.approvalPassword, approvalTotpCode: props.approvalTotpCode },
     false
   );
+  reactExports.useEffect(() => {
+    if (!gateLocked) return void 0;
+    const timer = window.setInterval(() => setNow(Date.now()), 1e3);
+    return () => window.clearInterval(timer);
+  }, [gateLocked]);
   reactExports.useEffect(() => {
     if (recentlySatisfied) return void 0;
     const timer = setTimeout(() => {
@@ -29018,6 +29082,13 @@ function ApprovalPasswordModal(props) {
     }, 50);
     return () => window.clearTimeout(timer);
   }, [recentlySatisfied]);
+  let modalDescription = "Guard needs a fresh proof before it can save this decision.";
+  if (recentlySatisfied) {
+    modalDescription = "A new authenticator code is not needed yet.";
+  }
+  if (gateLocked) {
+    modalDescription = `Approval gate is temporarily locked. Try again in ${lockRemainingSeconds} seconds.`;
+  }
   const showCooldownOption = props.gate.cooldown_seconds > 0 && !props.gate.cooldown_active && props.gate.totp_enabled !== true;
   const handleBackdropClick = reactExports.useCallback(
     (e) => {
@@ -29052,13 +29123,13 @@ function ApprovalPasswordModal(props) {
               {
                 id: "approval-password-modal-title",
                 className: "text-lg font-semibold tracking-tight text-brand-dark",
-                children: approvalProofModalTitle(recentlySatisfied, needsPassword)
+                children: approvalProofModalTitle(gateLocked, recentlySatisfied, needsPassword)
               }
             ),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/70", children: recentlySatisfied ? "A new authenticator code is not needed yet." : "Guard needs a fresh proof before it can save this decision." })
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/70", children: modalDescription })
           ] })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 space-y-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5 space-y-3", children: gateLocked ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "rounded-xl border border-brand-attention/25 bg-brand-attention/[0.06] px-4 py-3 text-sm leading-relaxed text-brand-dark", role: "status", children: "Guard will accept a new approval proof after the lock expires. No decision was saved." }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             ApprovalProofFieldInputs,
             {
@@ -29084,7 +29155,7 @@ function ApprovalPasswordModal(props) {
             approvalGateCooldownLabel(props.gate.cooldown_seconds).toLowerCase(),
             " (use cooldown)"
           ] })
-        ] }),
+        ] }) }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             "button",
@@ -29410,7 +29481,7 @@ function ScannerEvidenceSection(props) {
 function buildTopAlertItems(item) {
   const items = [];
   const secondaryRiskSummary = resolveSecondaryRiskSummary(item);
-  const pauseReason = whyPaused(item);
+  const pauseReason = isWatchOnlyObservation(item) ? null : whyPaused(item);
   if (secondaryRiskSummary) {
     items.push({
       id: "secondary-risk",
@@ -29740,23 +29811,26 @@ function ReviewEmptyState({ runtime, resolutionMessage, codexResume, onRetryResu
 function PrimaryActionCard({ item }) {
   const action = buildPrimaryReviewAction(item);
   const workingDirectory = resolveRequestWorkingDirectory(item);
+  const watchOnlyObservation = isWatchOnlyObservation(item);
+  const actionDescription = watchOnlyObservation ? "observed action" : "stopped action";
+  const actionLabel = watchOnlyObservation ? "Would have stopped" : action.label;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "What was stopped" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: watchOnlyObservation ? "What Watch observed" : "What was stopped" }),
         action.detail !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-dark/70", children: action.detail })
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "rounded-full border border-brand-blue/15 bg-brand-blue/[0.04] px-3 py-1 font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-brand-blue", children: action.label })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "rounded-full border border-brand-blue/15 bg-brand-blue/[0.04] px-3 py-1 font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-brand-blue", children: actionLabel })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(
         LoggedActionPanel,
         {
-          label: action.label,
+          label: actionLabel,
           text: action.text,
-          copyAriaLabel: "Copy full stopped action to clipboard",
-          expandAriaLabel: "Expand full stopped action",
-          collapseAriaLabel: "Collapse full stopped action"
+          copyAriaLabel: `Copy full ${actionDescription} to clipboard`,
+          expandAriaLabel: `Expand full ${actionDescription}`,
+          collapseAriaLabel: `Collapse full ${actionDescription}`
         },
         item.request_id
       ),
@@ -29769,6 +29843,9 @@ function PrimaryActionCard({ item }) {
   ] });
 }
 function buildWhatWouldHappen(item) {
+  if (isWatchOnlyObservation(item)) {
+    return `Watch allowed this action to continue. ${watchProtectedOutcome(item)}`;
+  }
   const type = item.artifact_type;
   if (type?.includes("file_write") || type?.includes("file_read")) {
     return `Without Guard, ${harnessDisplayName(item.harness)} would access "${item.artifact_name ?? item.artifact_id}" immediately. Guard paused it so you can review first.`;
@@ -29806,6 +29883,9 @@ function resolvedActionCopy(item, action, persistedExactAction) {
   if (action === "allow") return "Approved: action can proceed";
   return "Blocked: action stopped";
 }
+function approvalGateRefreshFailureMessage(message) {
+  return `${message} Unable to refresh approval settings. Retry to refresh.`;
+}
 function ReviewDecisionCard(props) {
   const detail = props.detail;
   const item = detail?.item ?? null;
@@ -29824,7 +29904,9 @@ function ReviewDecisionCard(props) {
   const [pendingAction, setPendingAction] = reactExports.useState(null);
   const [pendingContractKey, setPendingContractKey] = reactExports.useState(null);
   const [rememberExactAction, setRememberExactAction] = reactExports.useState(false);
+  const [effectiveApprovalGate, setEffectiveApprovalGate] = reactExports.useState(props.approvalGate);
   const allowButtonRef = reactExports.useRef(null);
+  const approvalGate = effectiveApprovalGate;
   const availableScopeChoices = reactExports.useMemo(
     () => item ? standardScopeChoicesForRequest(item, "allow") : [],
     [item]
@@ -29850,6 +29932,9 @@ function ReviewDecisionCard(props) {
   const hasAllowScope = availableScopeChoices.length + advancedScopeOptions.length > 0;
   const decisionContractKey = item ? approvalDecisionContractKey(item) : null;
   const decisionSubjectKey = item ? approvalDecisionSubjectKey(item) : null;
+  reactExports.useEffect(() => {
+    setEffectiveApprovalGate(props.approvalGate);
+  }, [props.approvalGate]);
   reactExports.useEffect(() => {
     if (item) {
       setAllowScope(recommendedScopeForAction(item, "allow") ?? "artifact");
@@ -29881,18 +29966,29 @@ function ReviewDecisionCard(props) {
   const handleResolve = reactExports.useCallback(
     async (action) => {
       if (!item || resolutionBlockReason !== null) return;
+      const requestedScope = action === "allow" ? allowScope : blockScope;
+      const gate = approvalGate;
+      const gateRequired = approvalGateRequiredForResolution(gate, action, requestedScope);
+      if (gateRequired && approvalGateIsLocked(gate)) {
+        setErrorMessage(
+          `Approval gate is temporarily locked. Try again in ${approvalGateLockRemainingSeconds(gate)} seconds.`
+        );
+        return;
+      }
       setSubmitting(action);
       setErrorMessage(null);
       try {
-        const requestedScope = action === "allow" ? allowScope : blockScope;
         const persistExactAction = willPersistExactAction(
           item,
           action,
           requestedScope,
           action === "allow" ? rememberExactAction : watchOnlyObservation
         );
-        const gate = props.approvalGate;
-        const includeGateFields = gate?.enabled === true && gate?.configured === true && requiresApprovalPasswordPrompt(gate.cooldown_active, gate.strict_all_decisions, requestedScope);
+        const includeGateFields = gateRequired && gate?.configured === true && requiresApprovalPasswordPrompt(
+          gate.cooldown_active,
+          gate.strict_all_decisions,
+          requestedScope
+        );
         const proof = includeGateFields ? buildApprovalProofCredentials(gate, { approvalPassword, approvalTotpCode }) : {};
         await props.onResolve({
           ...buildDecisionPayload({
@@ -29912,7 +30008,17 @@ function ReviewDecisionCard(props) {
         setPendingAction(null);
         setPendingContractKey(null);
       } catch (err) {
-        setErrorMessage(err instanceof Error ? err.message : "Something went wrong. Try again.");
+        const message = err instanceof Error ? err.message : "Something went wrong. Try again.";
+        setErrorMessage(message);
+        if (err instanceof GuardRequestResolutionError && err.status === 423 && err.payload?.["error"] === "approval_gate_locked") {
+          setSubmitting(null);
+          try {
+            const refreshedGate = await fetchResolvedApprovalGate();
+            setEffectiveApprovalGate(refreshedGate);
+          } catch {
+            setErrorMessage(approvalGateRefreshFailureMessage(message));
+          }
+        }
       } finally {
         setSubmitting(null);
       }
@@ -29924,7 +30030,7 @@ function ReviewDecisionCard(props) {
       watchOnlyObservation,
       rememberExactAction,
       props.onResolve,
-      props.approvalGate,
+      approvalGate,
       approvalPassword,
       approvalTotpCode,
       useCooldown,
@@ -29944,8 +30050,19 @@ function ReviewDecisionCard(props) {
       }
       setLastAction(action);
       const requestedScope = action === "allow" ? allowScope : blockScope;
-      const gate = props.approvalGate;
-      const gateEnabled = gate?.enabled === true && gate?.configured === true && requiresApprovalPasswordPrompt(gate.cooldown_active, gate.strict_all_decisions, requestedScope);
+      const gate = approvalGate;
+      const gateRequired = approvalGateRequiredForResolution(gate, action, requestedScope);
+      if (gateRequired && approvalGateIsLocked(gate)) {
+        setErrorMessage(
+          `Approval gate is temporarily locked. Try again in ${approvalGateLockRemainingSeconds(gate)} seconds.`
+        );
+        return;
+      }
+      const gateEnabled = gateRequired && gate?.configured === true && requiresApprovalPasswordPrompt(
+        gate.cooldown_active,
+        gate.strict_all_decisions,
+        requestedScope
+      );
       if (!gateEnabled) {
         void handleResolve(action);
         return;
@@ -29973,7 +30090,7 @@ function ReviewDecisionCard(props) {
       decisionContractKey,
       handleResolve,
       hasAllowScope,
-      props.approvalGate,
+      approvalGate,
       resolutionBlockReason
     ]
   );
@@ -30129,7 +30246,7 @@ function ReviewDecisionCard(props) {
             "aria-expanded": showConsequences,
             children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniInformationCircle, { className: "h-4 w-4", "aria-hidden": "true" }),
-              "What would happen without Guard?",
+              watchOnlyObservation ? "What Protected mode would do" : "What would happen without Guard?",
               showConsequences ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronUp, { className: "h-3 w-3", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronDown, { className: "h-3 w-3", "aria-hidden": "true" })
             ]
           }
@@ -30237,10 +30354,10 @@ function ReviewDecisionCard(props) {
         ] }, field)) })
       ] })
     ] }),
-    pendingAction !== null && props.approvalGate !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(
+    pendingAction !== null && approvalGate !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(
       ApprovalPasswordModal,
       {
-        gate: props.approvalGate,
+        gate: approvalGate,
         approvalPassword,
         approvalTotpCode,
         useCooldown,

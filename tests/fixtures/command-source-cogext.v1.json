@@ -10602,7 +10602,6 @@
           "command.digline",
           "command.genclave",
           "command.gitsync",
-          "command.kranz",
           "command.mcp-filesystem",
           "command.mcp-instapods",
           "command.mcp-pr-ui-compare",

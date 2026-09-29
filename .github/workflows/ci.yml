@@ -105,7 +105,12 @@ jobs:
           cargo build --manifest-path rust/Cargo.toml --locked --release -p guard-command --bin guard-command-source
           cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime
       - name: Verify generated native command catalogs before pytest fan-out
-        run: python3 scripts/build_native_command_program.py --compiler rust/target/release/guard-command-source --check
+        run: |
+          arguments=(--compiler rust/target/release/guard-command-source)
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            arguments+=(--changed-from "${{ github.event.pull_request.base.sha }}")
+          fi
+          python3 scripts/ci/verify_native_command_program.py "${arguments[@]}"
       - name: Upload native command evaluators
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
