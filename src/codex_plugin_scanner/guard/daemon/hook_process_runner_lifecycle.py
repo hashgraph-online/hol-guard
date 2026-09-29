@@ -14,7 +14,7 @@ from .hook_process_capacity import AdaptiveHookProcessCapacity, process_tree_rss
 from .hook_process_metrics import increment_bounded_metric
 from .hook_process_worker import HookProcessReview, HookWorkerSlot, retire_worker_slot, worker_retirement_thread
 
-_HOOK_PROCESS_READY_TIMEOUT_SECONDS = 14.0
+_HOOK_PROCESS_READY_TIMEOUT_SECONDS = 30.0
 _HOOK_PROCESS_START_TIMEOUT_SECONDS = 30.0
 
 
