@@ -38,6 +38,7 @@ export function cloudReviewConfirmationError(message: string): string {
 
 export function cloudReviewStatusCopy(status: CloudReviewSettingsStatus): string {
   if (!status.connected) return "Connect Guard Cloud on this device to review its requests in the cloud.";
+  if (status.reconnect_required) return "Guard Cloud sign-in needs repair. Reconnect to resume uploads and cloud decisions; local review is still available.";
   if (!status.enabled) return "Cloud sync is connected. Cloud decisions still need this device's authorization. Confirm it here to update pending requests; you do not need to reconnect.";
   if (status.activation_error) return "Authorization is saved. Request delivery needs another attempt.";
   if (status.held_events > 0) return "Cloud Review is enabled. Some earlier requests need your confirmation before upload.";
@@ -45,6 +46,13 @@ export function cloudReviewStatusCopy(status: CloudReviewSettingsStatus): string
   if (status.delivery_state === "error") return "Cloud Review is enabled. Uploads are retrying; local review is still available.";
   if (status.pending_uploads > 0) return "Cloud Review is enabled. Pending requests are being uploaded.";
   return "Cloud Review is enabled for this device. Each cloud decision applies only to its exact request.";
+}
+
+export function cloudReviewRecoveryAction(status: CloudReviewSettingsStatus): "connect" | "authorize" | "restore" | "none" {
+  if (!status.connected || status.reconnect_required) return "connect";
+  if (!status.enabled) return "authorize";
+  if (status.activation_error || status.held_events > 0) return "restore";
+  return "none";
 }
 
 export function CloudReviewSettings() {
@@ -138,7 +146,7 @@ export function CloudReviewSettings() {
     }
   }
 
-  const needsRecovery = Boolean(status?.activation_error || status?.held_events || status?.delivery_state === "error");
+  const recoveryAction = status ? cloudReviewRecoveryAction(status) : "none";
   const requireFreshTotp = status?.approval_gate.totp_enabled === true;
   const disabled = pending || cloudReviewProofIncomplete(status?.approval_gate, password, totp, requireFreshTotp);
   let confirmLabel = "Turn off Cloud Review";
@@ -172,11 +180,11 @@ export function CloudReviewSettings() {
         <dl className="mt-3 grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-3">
           <div className="min-w-0">
             <dt className="text-xs text-slate-600">Cloud connection</dt>
-            <dd className="mt-1 font-medium text-brand-dark">{status.connected ? "Connected" : "Not connected"}</dd>
+            <dd className="mt-1 font-medium text-brand-dark">{status.reconnect_required ? "Reconnect needed" : status.connected ? "Connected" : "Not connected"}</dd>
           </div>
           <div className="min-w-0">
             <dt className="text-xs text-slate-600">Cloud decisions</dt>
-            <dd className="mt-1 font-medium text-brand-dark">{status.enabled ? "Enabled" : "Confirmation needed"}</dd>
+            <dd className="mt-1 font-medium text-brand-dark">{status.reconnect_required ? "Paused until sign-in" : status.enabled ? "Enabled" : "Confirmation needed"}</dd>
           </div>
           <div className="min-w-0">
             <dt className="text-xs text-slate-600">Last activity delivered</dt>
@@ -188,12 +196,16 @@ export function CloudReviewSettings() {
           </div>
         </dl>
       ) : null}
-      {status?.connected ? (
-        <div className="mt-3 flex flex-wrap gap-2">
-          {!status.enabled || needsRecovery ? (
+      {status ? (
+        <div className="mt-3 flex flex-wrap items-start gap-2">
+          {recoveryAction === "connect" ? (
+            <ConnectGuardCloudButton label={status.reconnect_required ? "Reconnect Guard Cloud" : "Connect Guard Cloud"}
+              variant={status.reconnect_required ? "primary" : "secondary"} />
+          ) : null}
+          {recoveryAction === "authorize" || recoveryAction === "restore" ? (
             <button type="button" disabled={loading || pending} onClick={() => openConfirmation("enable")}
               className="min-h-10 rounded-md bg-brand-blue px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">
-              {status.enabled ? "Restore Cloud Review" : "Enable Cloud Review"}
+              {recoveryAction === "restore" ? "Restore Cloud Review" : "Enable Cloud Review"}
             </button>
           ) : null}
           {status.enabled ? (
@@ -204,7 +216,6 @@ export function CloudReviewSettings() {
           ) : null}
         </div>
       ) : null}
-      {status && !status.connected ? <ConnectGuardCloudButton className="mt-3" /> : null}
       {action && status ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/30 p-4"
           onKeyDown={(event) => { if (event.key === "Escape") close(); }}>

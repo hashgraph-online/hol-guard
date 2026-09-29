@@ -88,7 +88,7 @@ def _prepare_sync_batch_state(
     state = _load_sync_state(store)
     binding_key = _batch_binding_key(delivery_binding)
     limits = persisted_review_batch_limits(state, binding_key)
-    state.update({"state": "syncing", "last_sync_attempt_at": _now(), "last_error": None})
+    state.update({"state": "syncing", "last_sync_attempt_at": _now(), "last_error": None, "last_error_code": None})
     _save_sync_state(store, state)
     return state, binding_key, limits
 

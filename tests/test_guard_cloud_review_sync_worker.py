@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import threading
+import urllib.error
 from pathlib import Path
 
 import pytest
@@ -13,6 +15,7 @@ from codex_plugin_scanner.guard.runtime.cloud_review_sync import (
     start_cloud_sync_sync_worker,
     stop_cloud_sync_sync_worker,
 )
+from codex_plugin_scanner.guard.runtime.runner import GuardSyncAuthorizationExpiredError
 
 
 class Store:
@@ -137,6 +140,41 @@ class TestIndependentWorker:
         assert calls == [
             ("review", {"access_token": "token-1", "workspace_id": "workspace-1"}),
         ]
+
+    @pytest.mark.parametrize(
+        "failure",
+        [
+            GuardSyncAuthorizationExpiredError(
+                "Guard authorization expired. Run `hol-guard connect` to sign in again."
+            ),
+            urllib.error.HTTPError("https://hol.org/guard", 401, "Unauthorized", {}, None),
+        ],
+    )
+    def test_worker_records_reconnectable_auth_failure(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure: Exception
+    ) -> None:
+        store = Store(tmp_path)
+        stopped = threading.Event()
+
+        class StopOnWait:
+            def generation(self) -> int:
+                return 0
+
+            def wait(self, generation: int, timeout: float) -> int:
+                del generation, timeout
+                stopped.set()
+                return 0
+
+        def fail(_store: Store) -> dict[str, object]:
+            raise failure
+
+        monkeypatch.setattr(cloud_review_sync_module, "_resolve_cloud_review_sync_auth_context", fail)
+        cloud_review_sync_worker._cloud_sync_sync_loop(store, stopped, StopOnWait(), poll_interval=1, error_backoff=1)
+
+        state = store.get_sync_payload("guard_cloud_review_sync_state")
+        assert isinstance(state, dict)
+        assert state["state"] == "error"
+        assert state["last_error_code"] == "cloud_auth_expired"
 
     def test_connected_daemon_starts_cloud_review_worker(
         self,
