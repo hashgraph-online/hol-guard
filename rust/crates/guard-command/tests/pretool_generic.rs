@@ -1,4 +1,4 @@
-use guard_command::pretool::evaluate_pre_tool_envelope;
+use guard_command::pretool::{evaluate_pre_tool_envelope, evaluate_pre_tool_envelope_with_source};
 use guard_command::MAX_COMMAND_BYTES;
 use guard_contracts::{PreToolActionTypeV1, PreToolResultV1};
 use serde_json::{json, Value};
@@ -191,6 +191,116 @@ fn allows_one_non_sensitive_file_read() {
     assert_eq!(credentials.minimum_action, "review");
     let aliased = generic(json!({"toolName": "read_file", "path": "/./proc/self/environ"}));
     assert_eq!(aliased.minimum_action, "review");
+}
+
+fn devin(payload: Value) -> PreToolResultV1 {
+    evaluate_pre_tool_envelope_with_source(
+        "devin",
+        "PreToolUse",
+        &payload,
+        None,
+        None,
+        Some("/Users/tester"),
+    )
+}
+
+#[test]
+fn devin_exec_uses_the_command_model() {
+    let pwd = devin(json!({
+        "hook_event_name": "PreToolUse",
+        "tool_name": "exec",
+        "tool_input": {"command": "pwd"}
+    }));
+    assert_eq!(pwd.action.action_type, PreToolActionTypeV1::Command);
+    assert_eq!(pwd.minimum_action, "allow");
+
+    let destructive = devin(json!({
+        "tool_name": "exec",
+        "tool_input": {"command": "rm -rf /"}
+    }));
+    assert_eq!(destructive.minimum_action, "block");
+
+    let compound = devin(json!({
+        "tool_name": "exec",
+        "tool_input": {"command": "pwd; rm -rf ~"}
+    }));
+    assert_ne!(compound.minimum_action, "allow");
+}
+
+#[test]
+fn devin_reads_allow_only_bounded_non_sensitive_targets() {
+    let home_relative = devin(json!({
+        "tool_name": "read",
+        "tool_input": {"file_path": "~/project/state/current_run.json"}
+    }));
+    assert_eq!(
+        home_relative.action.action_type,
+        PreToolActionTypeV1::FileRead
+    );
+    assert_eq!(home_relative.minimum_action, "allow");
+
+    let absolute = devin(json!({
+        "tool_name": "read",
+        "tool_input": {"file_path": "/Users/tester/project/pyproject.toml"}
+    }));
+    assert_eq!(absolute.minimum_action, "allow");
+
+    let grep = devin(json!({
+        "tool_name": "grep",
+        "tool_input": {"pattern": "fixture", "path": "~/project/scripts"}
+    }));
+    assert_eq!(grep.action.action_type, PreToolActionTypeV1::FileRead);
+    assert_eq!(grep.minimum_action, "allow");
+
+    let glob = devin(json!({
+        "tool_name": "glob",
+        "tool_input": {"pattern": "hol-guard*", "path": "~/project"}
+    }));
+    assert_eq!(glob.minimum_action, "allow");
+
+    for sensitive in [
+        "~/project/.env",
+        "~/.ssh/id_rsa",
+        "~/.aws/credentials",
+        "~/.hol-guard/config.toml",
+        "~/project/.git/config",
+        "/etc/passwd",
+        "/var/root/.ssh/id_rsa",
+        "~root/project/file.json",
+    ] {
+        let result = devin(json!({
+            "tool_name": "read",
+            "tool_input": {"file_path": sensitive}
+        }));
+        assert_eq!(result.action.action_type, PreToolActionTypeV1::FileRead);
+        assert_ne!(
+            result.minimum_action, "allow",
+            "{sensitive} must not auto-allow"
+        );
+    }
+
+    // Without a verified home directory, `~/` targets cannot be proven
+    // bounded and must stay under review.
+    let no_home = evaluate_pre_tool_envelope(
+        "devin",
+        "PreToolUse",
+        &json!({"tool_name": "read", "tool_input": {"file_path": "~/project/file.json"}}),
+    );
+    assert_ne!(no_home.minimum_action, "allow");
+
+    let write = devin(json!({
+        "tool_name": "write",
+        "tool_input": {"file_path": "~/project/state/out.json", "content": "{}"}
+    }));
+    assert_eq!(write.action.action_type, PreToolActionTypeV1::FileWrite);
+    assert_eq!(write.minimum_action, "review");
+
+    let mcp = devin(json!({
+        "tool_name": "mcp__composio__COMPOSIO_MANAGE_CONNECTIONS",
+        "tool_input": {"toolkits": []}
+    }));
+    assert_eq!(mcp.action.action_type, PreToolActionTypeV1::McpTool);
+    assert_eq!(mcp.minimum_action, "review");
 }
 
 #[test]

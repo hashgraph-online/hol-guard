@@ -207,6 +207,7 @@ fn is_command_tool(tool: &str) -> bool {
             "run_terminal_command",
             "execute_command",
             "execute_command_line",
+            "exec",
         ],
     )
 }
@@ -317,6 +318,21 @@ pub fn evaluate_pre_tool_envelope_with_extensions(
     controls: Option<&CompiledNativeCommandControls>,
     deadline: Option<Instant>,
 ) -> PreToolResultV1 {
+    evaluate_pre_tool_envelope_with_source(harness, event, payload, controls, deadline, None)
+}
+
+/// Like [`evaluate_pre_tool_envelope_with_extensions`] but additionally
+/// carries the envelope's verified `home_dir` so harness tool calls that
+/// report `~/`-relative paths (Devin sends `~/...` verbatim) can be checked
+/// against the same non-sensitive read floor as workspace-relative reads.
+pub fn evaluate_pre_tool_envelope_with_source(
+    harness: &str,
+    event: &str,
+    payload: &Value,
+    controls: Option<&CompiledNativeCommandControls>,
+    deadline: Option<Instant>,
+    home_dir: Option<&str>,
+) -> PreToolResultV1 {
     let signals = match extract_generic_signals(payload) {
         Ok(value) => value,
         Err(error) => return generic_error_result(harness, event, error),
@@ -329,7 +345,13 @@ pub fn evaluate_pre_tool_envelope_with_extensions(
             extraction_provenance: "pre-tool-generic".to_owned(),
         })
     });
-    let result = evaluate_signals(harness, event, &signals, command_decision.as_ref());
+    let result = evaluate_signals(
+        harness,
+        event,
+        &signals,
+        command_decision.as_ref(),
+        home_dir,
+    );
     match (controls, command_decision) {
         (Some(controls), Some(Ok(decision))) => controls.apply_with_tool(
             Some(&decision.command_model),
@@ -354,6 +376,7 @@ fn evaluate_signals(
     event: &str,
     signals: &GenericSignals,
     command_decision: Option<&Result<PreToolDecisionV1, String>>,
+    home_dir: Option<&str>,
 ) -> PreToolResultV1 {
     let (mut action_type, mut operation) = infer_action_type(
         event,
@@ -462,7 +485,7 @@ fn evaluate_signals(
         && !signals.sensitive_target
         && signals.url_values.is_empty()
         && signals.path_values.len() == 1
-        && bounded_workspace_read_path(&signals.path_values[0])
+        && bounded_file_read_target(&signals.path_values[0], home_dir)
     {
         return generic_result(
             action,
@@ -475,7 +498,11 @@ fn evaluate_signals(
     generic_result(action, "review", reason_code, reason)
 }
 
-fn bounded_workspace_read_path(value: &str) -> bool {
+/// File-tool read targets may be workspace-relative, absolute, or
+/// `~/`-relative (Devin). Absolute and home-relative candidates must pass
+/// the stricter sensitive-root, credential-family, and hidden-directory
+/// checks in `safe_absolute_read_target`.
+fn bounded_file_read_target(value: &str, home_dir: Option<&str>) -> bool {
     let path = value.trim();
     if path.is_empty() || path.len() > 4096 {
         return false;
@@ -488,5 +515,21 @@ fn bounded_workspace_read_path(value: &str) -> bool {
     if path.split(['/', '\\']).any(|part| part == "..") {
         return false;
     }
-    super::safe_reads::safe_read_target(path)
+    if super::safe_reads::safe_read_target(path) {
+        return true;
+    }
+    let expanded = expand_home_read_path(path, home_dir);
+    super::safe_reads::safe_absolute_read_target(expanded.as_deref().unwrap_or(path))
+}
+
+fn expand_home_read_path(path: &str, home_dir: Option<&str>) -> Option<String> {
+    let rest = path.strip_prefix('~')?;
+    if !rest.is_empty() && !rest.starts_with('/') {
+        return None;
+    }
+    let home = home_dir?.trim().trim_end_matches('/');
+    if home.is_empty() || !home.starts_with('/') {
+        return None;
+    }
+    Some(format!("{home}{rest}"))
 }

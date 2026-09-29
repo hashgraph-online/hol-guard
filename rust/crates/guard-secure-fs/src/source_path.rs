@@ -418,6 +418,14 @@ pub fn sensitive_path_family(path: &Path) -> Option<(&'static str, &'static str)
     None
 }
 
+/// True when every hidden (`.`-prefixed) path component is on the benign
+/// dotfile list or the `.github/workflows` prefix. Used by the native
+/// PreToolUse floor so absolute/home-relative reads cannot silently enter
+/// dot-directories such as `.hol-guard`, `.git`, or `.config`.
+pub fn hidden_read_parts_allowed(path: &Path) -> bool {
+    hidden_parts_allowed(&lowered_parts(path))
+}
+
 pub fn source_like(path: &Path) -> bool {
     let parts = lowered_parts(path);
     if parts

@@ -78,6 +78,32 @@ pub(super) fn safe_read_target(argument: &str) -> bool {
     true
 }
 
+/// Like [`safe_read_target`] but for already-absolute paths reported by
+/// structured file tools (Devin `read`/`grep`/`glob`, Cursor `read_file`,
+/// and similar callers that send `~/`-expanded or `/`-rooted targets).
+/// Absolute targets must stay outside the sensitive roots, avoid credential
+/// families, and not descend into hidden directories; `~` expansion happens
+/// in the caller against the envelope's verified `home_dir`.
+pub(super) fn safe_absolute_read_target(argument: &str) -> bool {
+    let Some(normalized) = lexical_read_path(argument) else {
+        return false;
+    };
+    let lowered = normalized.to_ascii_lowercase();
+    const ROOTS: [&str; 6] = ["/etc", "/dev", "/proc", "/sys", "/var", "/private/etc"];
+    if !lowered.starts_with('/')
+        || ROOTS
+            .iter()
+            .any(|prefix| lowered == *prefix || lowered.starts_with(&format!("{prefix}/")))
+        || super::sensitive_command(argument)
+        || super::sensitive_command(&normalized)
+        || guard_secure_fs::sensitive_path_family(std::path::Path::new(&normalized)).is_some()
+        || !guard_secure_fs::hidden_read_parts_allowed(std::path::Path::new(&normalized))
+    {
+        return false;
+    }
+    true
+}
+
 fn lexical_read_path(value: &str) -> Option<String> {
     if value.is_empty() || value.contains(['\0', '\n', '\r', '%', '*', '?', '[', ']', '{', '}']) {
         return None;

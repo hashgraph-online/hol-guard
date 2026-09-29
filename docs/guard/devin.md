@@ -81,6 +81,17 @@ Devin's own hook contract is the outer safety net: a hook process that
 exits non-zero without using exit `2` or a `decision: "block"` payload is
 logged by Devin but does not block the action.
 
+## Which calls stay local
+
+Guard queues a Devin action in the approval center only when the native
+policy cannot prove it benign. Bounded read-only `exec` commands (for
+example `pwd`, `date`, or a single-file `cat`) and single-target
+`read`/`grep`/`glob` calls on non-sensitive workspace-relative, absolute,
+or `~/`-relative paths are allowed locally. Writes, edits, MCP calls,
+network fetches, reads of sensitive files or hidden directories
+(`.ssh`, `.aws`, `.env`, `.git`, `.hol-guard`, …), and anything the
+native evaluator cannot classify keep going to the approval center.
+
 ## Claude Code hooks overlap
 
 Devin also loads Claude Code hook files (`.claude/settings.json`,

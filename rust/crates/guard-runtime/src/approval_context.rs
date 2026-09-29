@@ -258,10 +258,13 @@ pub(super) fn derive_context_with_snapshot(
         .map_err(|_| "native_approval_result_invalid".to_owned())?;
     crate::policy_enforcement::validate_pre_tool_result_matrix(&result)
         .map_err(|_| "native_approval_action_reconstruction_failed".to_owned())?;
-    let intrinsic = guard_command::pretool::evaluate_pre_tool_envelope(
+    let intrinsic = guard_command::pretool::evaluate_pre_tool_envelope_with_source(
         &edge_result.harness,
         &edge_result.event_name,
         &envelope.raw_payload,
+        None,
+        None,
+        Some(envelope.source.home_dir.as_str()),
     );
     if result.action != intrinsic.action
         || action_rank(&intrinsic.minimum_action).is_none()
