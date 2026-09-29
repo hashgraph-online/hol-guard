@@ -131,6 +131,28 @@ def _publish(store: GuardStore, identity: UnlistedCliIdentity, *names: str) -> N
     )
 
 
+@pytest.mark.parametrize(
+    ("ttl_ms", "deadline"),
+    [(0, None), (30_000, "2026-09-27T12:00:30+00:00")],
+)
+def test_catalog_freshness_deadline_requires_a_positive_cache_window(tmp_path: Path, ttl_ms: int, deadline: str | None):
+    store, identity = _store(tmp_path)
+    catalog = replace(_catalog("read"), cache_ttl_ms=ttl_ms)
+    store.replace_local_cli_commands(
+        identity.cli_id,
+        _commands("read"),
+        mcp_catalog=catalog,
+        identity_hash=identity.identity_hash,
+        seen_at=_FIRST,
+    )
+    item = store.list_local_cli_items()[0]
+    assert item["mcp_catalog"]["complete"] is True
+    assert item["mcp_catalog"]["fresh_until"] == deadline
+    assert item["mcp_catalog"]["cache_ttl_ms"] == ttl_ms
+    assert item["mcp_catalog"]["updated_at"] == _FIRST
+    assert store.read_local_cli_revision() == 0
+
+
 def test_partial_refresh_preserves_known_tools_and_choices(tmp_path: Path) -> None:
     store, identity = _store(tmp_path)
     _publish(store, identity, "read", "delete")

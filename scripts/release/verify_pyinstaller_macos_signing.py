@@ -140,7 +140,7 @@ def _signature_info(path: Path) -> tuple[str, int]:
     for line in result.stderr.splitlines():
         if line.startswith("TeamIdentifier="):
             team_id = line.split("=", 1)[1]
-        flags_match = re.search(r"\bflags=0x([0-9a-fA-F]+)", line)
+        flags_match = re.match(r"CodeDirectory\b.*?\bflags=0x([0-9a-fA-F]+)", line)
         if flags_match is not None:
             flags = int(flags_match.group(1), 16)
     if team_id is None:

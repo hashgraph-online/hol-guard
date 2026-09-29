@@ -5,6 +5,15 @@ All notable changes to HOL Guard will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.11.1](https://github.com/hashgraph-online/hol-guard/compare/v3.11.0...v3.11.1) (2026-09-29)
+
+
+### Bug Fixes
+
+* **daemon:** re-register the runtime after store recovery and report repair reasons ([#3214](https://github.com/hashgraph-online/hol-guard/issues/3214)) ([3b5d5ff](https://github.com/hashgraph-online/hol-guard/commit/3b5d5ff1ba785d36ac762014141db726d370da95))
+* **desktop-core:** read the hardened-runtime flag from the CodeDirectory line ([#3223](https://github.com/hashgraph-online/hol-guard/issues/3223)) ([a4fb2b9](https://github.com/hashgraph-online/hol-guard/commit/a4fb2b929945b8fe3bd111a32c473b24d5f9ae46))
+* **mcp:** avoid expired status after zero-TTL discovery ([4526038](https://github.com/hashgraph-online/hol-guard/commit/45260383570af33056ba7608f382ae12297e69e9))
+
 ## [3.11.0](https://github.com/hashgraph-online/hol-guard/compare/v3.10.0...v3.11.0) (2026-09-29)
 
 
