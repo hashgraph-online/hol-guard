@@ -44,7 +44,11 @@ jobs:
                   and run.get("head_branch") == pr["head"]["ref"]
                   and bool(run.get("head_sha"))
                   and run["head_sha"] != pr["head"]["sha"]
-                  and any(item.get("number") == number for item in run.get("pull_requests", []))
+                  and (
+                      any(item.get("number") == number for item in run.get("pull_requests") or [])
+                      or (not run.get("pull_requests")
+                          and pr["head"]["repo"]["id"] != pr["base"]["repo"]["id"])
+                  )
               )
 
           def retire(repo, number, event_head, request, pause=time.sleep):

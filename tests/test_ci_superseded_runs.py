@@ -22,7 +22,11 @@ HEAD = "b" * 40
 
 
 def _pr():
-    return {"state": "open", "head": {"sha": HEAD, "ref": "feature", "repo": {"id": 123}}}
+    return {
+        "state": "open",
+        "head": {"sha": HEAD, "ref": "feature", "repo": {"id": 123}},
+        "base": {"repo": {"id": 123}},
+    }
 
 
 def _run():
@@ -87,6 +91,14 @@ def test_normal_cancellation_does_not_force_cancel_completed_run():
     api.finish_on_cancel = True
     MODULE.retire(REPO, NUMBER, HEAD, api, lambda _seconds: None)
     assert api.writes == ["actions/runs/42/cancel"]
+
+
+def test_fork_run_without_pull_requests_is_cancelled():
+    api = FakeAPI()
+    api.pr["base"]["repo"]["id"] = 456
+    api.run.pop("pull_requests")
+    MODULE.retire(REPO, NUMBER, HEAD, api, lambda _seconds: None)
+    assert api.writes == ["actions/runs/42/cancel", "actions/runs/42/force-cancel"]
 
 
 @pytest.mark.parametrize(
