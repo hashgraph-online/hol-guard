@@ -39,7 +39,6 @@ READYNESS_REASONS = frozenset(
 CONTRIBUTION_PREFIXES = (
     "contributions/extensions/",
     "contributions/mcp-servers/",
-    "contributions/command-sources/",
 )
 EXTENSION_ID_RE = re.compile(r"^(?:command|mcp)\.[a-z0-9]+(?:[.-][a-z0-9]+)*$")
 TAG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
@@ -469,26 +468,25 @@ def _resolve_identities(client: GitHubApi, github_ids: tuple[str, ...]) -> tuple
     return tuple((account_id, client.user_login(account_id)) for account_id in github_ids)
 
 
-def has_trusted_notice(comments: list[dict[str, Any]]) -> bool:
-    """Return whether the trusted GitHub Actions identity already posted this notice."""
+def has_trusted_marker(comments: list[dict[str, Any]], marker: str) -> bool:
+    """Accept markers only from the trusted GitHub Actions identity."""
     for comment in comments:
-        if MARKER not in str(comment.get("body") or ""):
+        if marker not in str(comment.get("body") or ""):
             continue
         user = comment.get("user")
         if isinstance(user, dict) and user.get("id") == TRUSTED_NOTICE_ACTOR_ID and user.get("type") == "Bot":
             return True
     return False
+
+
+def has_trusted_notice(comments: list[dict[str, Any]]) -> bool:
+    """Return whether the trusted bot already posted a claim notice."""
+    return has_trusted_marker(comments, MARKER)
 
 
 def has_trusted_guidance(comments: list[dict[str, Any]]) -> bool:
     """Ignore contributor-spoofed markers when checking guidance delivery."""
-    for comment in comments:
-        if GUIDANCE_MARKER not in str(comment.get("body") or ""):
-            continue
-        user = comment.get("user")
-        if isinstance(user, dict) and user.get("id") == TRUSTED_NOTICE_ACTOR_ID and user.get("type") == "Bot":
-            return True
-    return False
+    return has_trusted_marker(comments, GUIDANCE_MARKER)
 
 
 def build_guidance_comment(extension_ids: list[str]) -> str:
@@ -534,7 +532,15 @@ def current_unmapped_contributions(client: GitHubApi, pr_number: int, records: l
             continue
         listing_path = f"{LISTING_PREFIX}{extension_id}.json"
         tip_listing = client.file_json(listing_path, default_branch, missing_ok=True)
-        if tip_listing is None or not accepted_github_ids(tip_listing, extension_id):
+        if tip_listing is None:
+            current.append(extension_id)
+            continue
+        try:
+            mapped_ids = accepted_github_ids(tip_listing, extension_id)
+        except ClaimNoticeError:
+            print(f"PR #{pr_number}: {extension_id} has an invalid current publisher listing; skipping guidance")
+            continue
+        if not mapped_ids:
             current.append(extension_id)
     return current
 
@@ -609,9 +615,8 @@ def _plan_notice_items(
         listing_path = f"{LISTING_PREFIX}{extension_id}.json"
         current_listing = client.file_json(listing_path, merge_sha, missing_ok=True)
         if current_listing is None or not accepted_github_ids(current_listing, extension_id):
-            newly_added = (
-                extension_id in contribution_changes
-                and not client.file_exists(contribution_path(extension_id), before_sha)
+            newly_added = extension_id in contribution_changes and not client.file_exists(
+                contribution_path(extension_id), before_sha
             )
             record(extension_id, "no_mapping", missing_mapping=newly_added)
             continue
@@ -821,16 +826,18 @@ def process(
     comments = client.comments(pr_number)
     notice_exists = has_trusted_notice(comments)
     guidance_exists = has_trusted_guidance(comments)
-    if portal_readiness_url:
-        portal_status, portal_detail = portal_readiness(portal_readiness_url)
-        if portal_status != "ok":
-            # Fail closed: an unreachable or lagging portal projection must not
-            # produce an invitation that promises an immediately available claim.
-            print(f"PR #{pr_number}: portal readiness check failed ({portal_status}: {portal_detail}); skipping")
-            return 0
     records: list[ExtensionReadiness] = []
     items, _ = _plan_notice_items(client, pr_number, allow_renames=allow_renames, records=records)
     unmapped = current_unmapped_contributions(client, pr_number, records)
+    if items and portal_readiness_url:
+        portal_status, portal_detail = portal_readiness(portal_readiness_url)
+        if portal_status != "ok":
+            # An unavailable projection blocks claim invitations, not mapping guidance.
+            print(
+                f"PR #{pr_number}: portal readiness check failed "
+                f"({portal_status}: {portal_detail}); skipping claim notice"
+            )
+            items = []
     if items and not notice_exists:
         body = build_comment(items, studio_url.rstrip("/"))
         if dry_run:

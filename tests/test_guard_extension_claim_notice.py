@@ -232,6 +232,17 @@ def test_empty_accepted_set_gets_guidance_without_a_claim_link() -> None:
     assert "?claim=" not in client.posted[0][1]
 
 
+def test_invalid_current_listing_skips_guidance_without_a_claim_link() -> None:
+    client = FakeGitHub()
+    configure_unmapped_contribution(client, "command.unmapped")
+    client.file_payloads[(client.default_branch, "contributions/extension-listings/command.unmapped.json")] = {
+        "schemaVersion": "invalid"
+    }
+
+    assert MODULE.process(client, 7, MODULE.DEFAULT_STUDIO_URL) == 0
+    assert client.posted == []
+
+
 def test_listing_change_notifies_only_newly_accepted_ids() -> None:
     client = FakeGitHub()
     extension_id = "command.existing"
@@ -404,11 +415,10 @@ def test_changed_extension_ids_track_renames_and_ignore_removed_files() -> None:
                 "previous_filename": "contributions/extensions/command.old.json",
             },
             {"status": "removed", "filename": "contributions/extensions/command.gone.json"},
-            {"status": "added", "filename": "contributions/command-sources/command.source.json"},
             {"status": "modified", "filename": "README.md"},
         ]
     )
-    assert contributions == {"command.one", "command.new", "command.source"}
+    assert contributions == {"command.one", "command.new"}
     assert listings == {"mcp.two"}
     assert renamed == {"command.new", "command.old"}
 
@@ -425,7 +435,6 @@ def test_workflow_is_merge_only_and_supports_reviewed_rename_backfill() -> None:
     assert "allow_renames:" in text
     assert "dry_run:" in text
     assert "contributions/extension-listings/**" in text
-    assert "contributions/command-sources/**" in text
     assert "pull-requests: write" in text
     assert "issues: write" not in text
     assert "persist-credentials: false" in text
@@ -573,6 +582,19 @@ def test_process_never_posts_when_configured_portal_is_not_ready(monkeypatch: py
         == 0
     )
     assert client.posted == []
+
+
+def test_portal_outage_does_not_suppress_mapping_guidance(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = FakeGitHub()
+    configure_unmapped_contribution(client, "command.unmapped")
+    monkeypatch.setattr(MODULE, "portal_readiness", lambda _url: ("portal_not_ready", "projection is stale"))
+
+    assert (
+        MODULE.process(client, 7, MODULE.DEFAULT_STUDIO_URL, portal_readiness_url="https://portal.example/ready") == 0
+    )
+    assert len(client.posted) == 1
+    assert MODULE.GUIDANCE_MARKER in client.posted[0][1]
+    assert MODULE.MARKER not in client.posted[0][1]
 
 
 def test_trusted_marker_marks_readiness_already_notified() -> None:

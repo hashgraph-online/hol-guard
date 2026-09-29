@@ -6,7 +6,6 @@ on:
     paths:
       - "contributions/extensions/**"
       - "contributions/mcp-servers/**"
-      - "contributions/command-sources/**"
       - "contributions/extension-listings/**"
   workflow_dispatch:
     inputs:
