@@ -3,7 +3,7 @@
   "id": "mcp.reaper",
   "version": "1.0.0",
   "name": "ReaperMCP",
-  "description": "Reviews destructive REAPER project-editing tools: batch track deletion, track template deletion, and clearing every tempo marker. Off until you turn it on.",
+  "description": "Reviews destructive REAPER project-editing tools: batch track deletion, track template deletion, clearing every tempo marker, and multi-step undo. Off until you turn it on.",
   "trustClass": "external",
   "activation": "opt-in",
   "publisher": {
@@ -24,7 +24,7 @@
     { "name": "track_delete_batch", "state": "review" },
     { "name": "track_template_delete", "state": "review" },
     { "name": "tempo_clear_all", "state": "review" },
-    { "name": "project_undo", "state": "inherit" },
+    { "name": "project_undo", "state": "review" },
     { "name": "other", "state": "inherit" }
   ],
   "referenceUrls": [
@@ -34,6 +34,6 @@
   ],
   "saferAlternatives": [
     "Keep track_delete_batch, track_template_delete, and tempo_clear_all on Review unless this device needs unattended batch deletes.",
-    "project_undo only reverses the most recent tracked change and needs no review gate — every ReaperMCP mutation already records its own named undo step, so undoing is how a mistake gets fixed, not how one is made."
+    "project_undo accepts steps=1-100 and can undo REAPER history entries ReaperMCP did not create, so it stays on Review; single-step undo remains available after approval."
   ]
 }

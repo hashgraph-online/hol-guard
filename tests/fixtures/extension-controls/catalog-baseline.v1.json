@@ -6,7 +6,7 @@
     "canonical_diff_digest",
     "effective"
   ],
-  "catalog_digest": "5dd1a31153a60646451ce28d3e9c89262911e114e59543a5a825b957a85f295e",
+  "catalog_digest": "417712a82f1799d268ab0ae3fb2ad22a839fbf93cc9768ec4d63f472d738398d",
   "control_schema_version": "1.0.0",
   "daemon_api_schema": "guard.daemon.extension-controls.v1",
   "effective_shape": [
