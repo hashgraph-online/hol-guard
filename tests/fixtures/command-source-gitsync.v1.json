@@ -10091,34 +10091,28 @@
       {
         "extension": {
           "action_classes": [
-            "gEnclave credential mutation command",
-            "gEnclave policy modification command",
-            "gEnclave session authorization command"
+            "gitsync mirror-mutating command",
+            "gitsync webhook-rewriting command",
+            "gitsync service-install command"
           ],
           "aliases": [],
           "conflicts": [],
           "delegated_protection": null,
           "dependencies": [],
-          "description": "Reviews gEnclave (ge) security enclave operations that mutate credentials, modify access policies, or unlock persistent sessions.",
+          "description": "Reviews gitsync's live mirror sync, server-side webhook rewrites, and service install/uninstall. `check`, `status`, and plain `hooks` do not match any rule here; Guard's default floor still applies to them since gitsync is not on the built-in safe-command list and no rule in this extension matches those subcommands. Every mutating subcommand covered here always requires review, even with --help, -h or --dry-run present, because gitsync's flag parser can silently drop those flags depending on argument order and this matcher engine cannot detect when that happened.",
           "ecosystem_ids": [],
-          "executables": [
-            "ge",
-            "ge.cmd",
-            "ge.exe"
-          ],
-          "extension_id": "command.genclave",
-          "homepage": "https://gitlab.com/renich/genclave",
+          "executables": [],
+          "extension_id": "command.gitsync",
+          "homepage": "https://github.com/cristobaltormo/git-sync",
           "icon": {
-            "background": "#059669",
-            "kind": "react-icon",
-            "name": "HiMiniCommandLine"
+            "kind": "none"
           },
-          "license": "GPL-3.0-or-later",
-          "name": "gEnclave command protection",
+          "license": "Apache-2.0",
+          "name": "gitsync command protection",
           "permissions": [
             {
               "action_classes": [
-                "gEnclave credential mutation command"
+                "gitsync mirror-mutating command"
               ],
               "baseline_floor": "review",
               "configurable": true,
@@ -10126,26 +10120,27 @@
               "default_enabled": true,
               "dependencies": [],
               "deprecated": false,
-              "description": "Identifies gEnclave commands that permanently delete, generate, import, or mutate cryptographic credentials, keys, and secrets.",
-              "example_command": "ge passkey delete key-1",
+              "description": "Identifies `gitsync sync` and `gitsync run`, which force-push and prune every configured repo's branches and tags to GitHub so the two sides end up identical, and can eventually delete the GitHub mirror once a repo disappears from the source (subject to gitsync's own delete_grace and delete_limit safeguards). Both accept --help/-h, and `run` also accepts --dry-run, but gitsync's flag parser (Go's stdlib flag.FlagSet) stops at the first token that isn't a flag and never looks at anything after it - so a flag placed after a repo name, or after any other token, is silently ignored and the command still runs live. No safe variant is reliable against that, so this rule always reviews sync and run regardless of which flags are present.",
+              "example_command": "gitsync sync",
               "family": null,
               "fixed_reason": null,
               "implementation_version": "1.0.0",
               "implied_permissions": [],
               "introduced_version": "2.2.0",
-              "label": "gEnclave credential and secret mutation",
-              "permission_id": "command.genclave.permission.mutate",
+              "label": "gitsync live mirror sync",
+              "permission_id": "command.gitsync.permission.mirror-mutation",
               "replacement_permission_id": null,
               "risk_tier": "high",
               "safer_guidance": [
-                "List and inspect existing keys or credentials with read-only subcommands before mutating or deleting them.",
-                "Verify backup or recovery shares before rekeying or removing credentials."
+                "Run `gitsync run --dry-run` as the very first argument, nothing before it, and review what it reports before running it live - never rely on --dry-run appearing safe by itself.",
+                "Run `gitsync check` to confirm token scopes and account mapping before mirroring."
               ],
               "typed_capabilities": []
             },
             {
               "action_classes": [
-                "gEnclave policy modification command"
+                "gitsync webhook-rewriting command",
+                "gitsync service-install command"
               ],
               "baseline_floor": "review",
               "configurable": true,
@@ -10153,748 +10148,337 @@
               "default_enabled": true,
               "dependencies": [],
               "deprecated": false,
-              "description": "Identifies gEnclave commands that modify credential caching policies, authorization TTLs, or authentication persistence.",
-              "example_command": "ge policy set key-1 15m",
+              "description": "Identifies `gitsync hooks --force`/`-force` (rewrites existing webhooks on the git server), `gitsync hooks --remove`/`-remove` (deletes them), and `gitsync install` / `gitsync uninstall` (registers or removes the persistent background service). Go's flag parser treats a single dash the same as a double dash for a named flag, so both spellings are matched. Plain `gitsync hooks` (no flags) still mutates - it creates any missing webhooks - but never rewrites or deletes an existing one, so it is not covered here. No safe variant is offered for --help/-h on any of these: gitsync's flag parser stops at the first non-flag token and never looks at anything after it, so a flag placed after any other token is silently ignored rather than shown as help, and a declarative matcher cannot tell that case apart from one where the flag actually took effect. `uninstall` additionally never parses flags at all - it ignores every argument on both Linux and Windows and always removes the service and binary - so it was never going to have a safe variant regardless.",
+              "example_command": "gitsync hooks --remove",
               "family": null,
               "fixed_reason": null,
               "implementation_version": "1.0.0",
               "implied_permissions": [],
               "introduced_version": "2.2.0",
-              "label": "gEnclave policy modification",
-              "permission_id": "command.genclave.permission.policy",
-              "replacement_permission_id": null,
-              "risk_tier": "high",
-              "safer_guidance": [
-                "Inspect current caching and confirmation policies with ge policy show <id> before making changes.",
-                "Avoid setting infinite cache TTLs on sensitive credentials."
-              ],
-              "typed_capabilities": []
-            },
-            {
-              "action_classes": [
-                "gEnclave session authorization command"
-              ],
-              "baseline_floor": "review",
-              "configurable": true,
-              "conflicts": [],
-              "default_enabled": true,
-              "dependencies": [],
-              "deprecated": false,
-              "description": "Identifies gEnclave commands that unlock or pre-warm authentication sessions and cryptographic caches.",
-              "example_command": "ge unlock",
-              "family": null,
-              "fixed_reason": null,
-              "implementation_version": "1.0.0",
-              "implied_permissions": [],
-              "introduced_version": "2.2.0",
-              "label": "gEnclave session unlock and pre-warming",
-              "permission_id": "command.genclave.permission.session-auth",
+              "label": "gitsync webhook rewrite, removal, or service install/uninstall",
+              "permission_id": "command.gitsync.permission.operational-mutation",
               "replacement_permission_id": null,
               "risk_tier": "medium",
               "safer_guidance": [
-                "Use default ephemeral per-operation prompts instead of unlocking persistent sessions.",
-                "Lock the session immediately after batch operations with ge lock."
+                "Prefer plain `gitsync hooks`, which only creates missing webhooks and does not rewrite or delete existing ones.",
+                "Run `gitsync run --dry-run` interactively before installing it as an unattended service."
               ],
               "typed_capabilities": []
             }
           ],
           "project_markers": [],
           "publisher": {
-            "display_name": "R\u00e9nich Bon \u0106iri\u0107",
-            "id": "community.renich",
-            "url": "https://github.com/renich"
+            "display_name": "Community",
+            "id": "community.gitsync",
+            "url": null
           },
           "reference_urls": [
-            "https://gitlab.com/renich/genclave"
+            "https://github.com/cristobaltormo/git-sync#commands",
+            "https://github.com/cristobaltormo/git-sync#things-worth-knowing"
           ],
           "required": false,
           "risk_classes": [
             "destructive_shell",
-            "policy_bypass"
+            "network_egress",
+            "execution"
           ],
           "rules": [
             {
               "action_classes": [
-                "gEnclave credential mutation command"
+                "gitsync mirror-mutating command"
               ],
               "default_mode": "review",
-              "description": "Identifies gEnclave commands that permanently delete, generate, import, or mutate cryptographic credentials, keys, and secrets.",
+              "description": "Identifies `gitsync sync` and `gitsync run`, which force-push and prune every configured repo's branches and tags to GitHub so the two sides end up identical, and can eventually delete the GitHub mirror once a repo disappears from the source (subject to gitsync's own delete_grace and delete_limit safeguards). Both accept --help/-h, and `run` also accepts --dry-run, but gitsync's flag parser (Go's stdlib flag.FlagSet) stops at the first token that isn't a flag and never looks at anything after it - so a flag placed after a repo name, or after any other token, is silently ignored and the command still runs live. No safe variant is reliable against that, so this rule always reviews sync and run regardless of which flags are present.",
               "family": null,
               "matcher": {
                 "config": {},
                 "matchers": [
                   {
                     "config": {
-                      "allow_leading_options": false,
+                      "allow_leading_options": true,
                       "executables": [
-                        "ge",
-                        "ge.cmd",
-                        "ge.exe"
+                        "gitsync",
+                        "gitsync.exe"
                       ],
-                      "fail_secure_unknown_options": false,
+                      "fail_secure_unknown_options": true,
                       "forbidden_flags": [],
                       "interspersed_flags": [
-                        "--global",
-                        "--require-confirm",
-                        "--shred",
-                        "--stdin",
-                        "-v",
-                        "--version"
+                        "--help",
+                        "-h"
                       ],
                       "interspersed_options_with_values": [],
                       "inverse_flag_pairs": [],
-                      "leading_options_with_values": [],
-                      "options_with_values": [
-                        "--algorithm",
-                        "-a",
-                        "--bits",
-                        "-b",
-                        "--cache-ttl",
-                        "--comment",
-                        "-c",
-                        "--duration",
-                        "--email",
-                        "-e",
-                        "--key-type",
-                        "-t",
-                        "--name",
-                        "-n",
-                        "--pcr",
-                        "--pin",
-                        "--timeout"
+                      "leading_options_with_values": [
+                        "-c"
                       ],
-                      "paths": [
-                        [
-                          "gpg",
-                          "add"
-                        ],
-                        [
-                          "gpg",
-                          "generate"
-                        ],
-                        [
-                          "gpg",
-                          "import"
-                        ],
-                        [
-                          "gpg",
-                          "remove"
-                        ],
-                        [
-                          "passkey",
-                          "delete"
-                        ],
-                        [
-                          "rekey"
-                        ],
-                        [
-                          "secret",
-                          "delete"
-                        ],
-                        [
-                          "secret",
-                          "set"
-                        ],
-                        [
-                          "set-secret"
-                        ],
-                        [
-                          "ssh",
-                          "add"
-                        ],
-                        [
-                          "ssh",
-                          "generate"
-                        ],
-                        [
-                          "ssh",
-                          "import"
-                        ],
-                        [
-                          "ssh",
-                          "remove"
-                        ],
-                        [
-                          "webauthn",
-                          "delete"
-                        ]
-                      ],
-                      "required_flags": [],
-                      "required_flags_in_all_arguments": false,
-                      "required_option_values": []
-                    },
-                    "op": "executable-path-set.v1"
-                  }
-                ],
-                "op": "any.v1"
-              },
-              "native_capability": null,
-              "permission_id": "command.genclave.permission.mutate",
-              "risk_classes": [
-                "destructive_shell"
-              ],
-              "rule_id": "command.genclave.mutate",
-              "rule_version": "1.0.0",
-              "safe_variants": [
-                {
-                  "matcher": {
-                    "config": {},
-                    "matchers": [
-                      {
-                        "config": {
-                          "allow_leading_options": false,
-                          "executables": [
-                            "ge",
-                            "ge.cmd",
-                            "ge.exe"
-                          ],
-                          "fail_secure_unknown_options": false,
-                          "forbidden_flags": [],
-                          "interspersed_flags": [
-                            "--global",
-                            "--require-confirm",
-                            "--shred",
-                            "--stdin",
-                            "-v",
-                            "--version"
-                          ],
-                          "interspersed_options_with_values": [],
-                          "inverse_flag_pairs": [],
-                          "leading_options_with_values": [],
-                          "options_with_values": [
-                            "--algorithm",
-                            "-a",
-                            "--bits",
-                            "-b",
-                            "--cache-ttl",
-                            "--comment",
-                            "-c",
-                            "--duration",
-                            "--email",
-                            "-e",
-                            "--key-type",
-                            "-t",
-                            "--name",
-                            "-n",
-                            "--pcr",
-                            "--pin",
-                            "--timeout"
-                          ],
-                          "paths": [
-                            [
-                              "gpg",
-                              "add"
-                            ],
-                            [
-                              "gpg",
-                              "generate"
-                            ],
-                            [
-                              "gpg",
-                              "import"
-                            ],
-                            [
-                              "gpg",
-                              "remove"
-                            ],
-                            [
-                              "passkey",
-                              "delete"
-                            ],
-                            [
-                              "rekey"
-                            ],
-                            [
-                              "secret",
-                              "delete"
-                            ],
-                            [
-                              "secret",
-                              "set"
-                            ],
-                            [
-                              "set-secret"
-                            ],
-                            [
-                              "ssh",
-                              "add"
-                            ],
-                            [
-                              "ssh",
-                              "generate"
-                            ],
-                            [
-                              "ssh",
-                              "import"
-                            ],
-                            [
-                              "ssh",
-                              "remove"
-                            ],
-                            [
-                              "webauthn",
-                              "delete"
-                            ]
-                          ],
-                          "required_flags": [
-                            "--help"
-                          ],
-                          "required_flags_in_all_arguments": true,
-                          "required_option_values": []
-                        },
-                        "op": "executable-path-set.v1"
-                      }
-                    ],
-                    "op": "any.v1"
-                  },
-                  "title": "gEnclave mutation command help",
-                  "variant_id": "help"
-                },
-                {
-                  "matcher": {
-                    "config": {},
-                    "matchers": [
-                      {
-                        "config": {
-                          "allow_leading_options": false,
-                          "executables": [
-                            "ge",
-                            "ge.cmd",
-                            "ge.exe"
-                          ],
-                          "fail_secure_unknown_options": false,
-                          "forbidden_flags": [],
-                          "interspersed_flags": [
-                            "--global",
-                            "--require-confirm",
-                            "--shred",
-                            "--stdin",
-                            "-v",
-                            "--version"
-                          ],
-                          "interspersed_options_with_values": [],
-                          "inverse_flag_pairs": [],
-                          "leading_options_with_values": [],
-                          "options_with_values": [
-                            "--algorithm",
-                            "-a",
-                            "--bits",
-                            "-b",
-                            "--cache-ttl",
-                            "--comment",
-                            "-c",
-                            "--duration",
-                            "--email",
-                            "-e",
-                            "--key-type",
-                            "-t",
-                            "--name",
-                            "-n",
-                            "--pcr",
-                            "--pin",
-                            "--timeout"
-                          ],
-                          "paths": [
-                            [
-                              "gpg",
-                              "add"
-                            ],
-                            [
-                              "gpg",
-                              "generate"
-                            ],
-                            [
-                              "gpg",
-                              "import"
-                            ],
-                            [
-                              "gpg",
-                              "remove"
-                            ],
-                            [
-                              "passkey",
-                              "delete"
-                            ],
-                            [
-                              "rekey"
-                            ],
-                            [
-                              "secret",
-                              "delete"
-                            ],
-                            [
-                              "secret",
-                              "set"
-                            ],
-                            [
-                              "set-secret"
-                            ],
-                            [
-                              "ssh",
-                              "add"
-                            ],
-                            [
-                              "ssh",
-                              "generate"
-                            ],
-                            [
-                              "ssh",
-                              "import"
-                            ],
-                            [
-                              "ssh",
-                              "remove"
-                            ],
-                            [
-                              "webauthn",
-                              "delete"
-                            ]
-                          ],
-                          "required_flags": [
-                            "-h"
-                          ],
-                          "required_flags_in_all_arguments": true,
-                          "required_option_values": []
-                        },
-                        "op": "executable-path-set.v1"
-                      }
-                    ],
-                    "op": "any.v1"
-                  },
-                  "title": "gEnclave mutation command help",
-                  "variant_id": "short-help"
-                }
-              ],
-              "safer_alternatives": [
-                "List and inspect existing keys or credentials with read-only subcommands before mutating or deleting them.",
-                "Verify backup or recovery shares before rekeying or removing credentials."
-              ],
-              "severity": "high",
-              "title": "gEnclave credential and secret mutation"
-            },
-            {
-              "action_classes": [
-                "gEnclave policy modification command"
-              ],
-              "default_mode": "review",
-              "description": "Identifies gEnclave commands that modify credential caching policies, authorization TTLs, or authentication persistence.",
-              "family": null,
-              "matcher": {
-                "config": {},
-                "matchers": [
-                  {
-                    "config": {
-                      "allow_leading_options": false,
-                      "executables": [
-                        "ge",
-                        "ge.cmd",
-                        "ge.exe"
-                      ],
-                      "fail_secure_unknown_options": false,
-                      "forbidden_flags": [],
-                      "interspersed_flags": [
-                        "-v",
-                        "--version"
-                      ],
-                      "interspersed_options_with_values": [],
-                      "inverse_flag_pairs": [],
-                      "leading_options_with_values": [],
                       "options_with_values": [],
-                      "paths": [
-                        [
-                          "identity",
-                          "set-cache-ttl"
-                        ],
-                        [
-                          "policy",
-                          "set"
-                        ]
-                      ],
                       "required_flags": [],
                       "required_flags_in_all_arguments": false,
-                      "required_option_values": []
+                      "required_option_values": [],
+                      "subcommands": [
+                        "sync"
+                      ]
                     },
-                    "op": "executable-path-set.v1"
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "gitsync",
+                        "gitsync.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--help",
+                        "-h"
+                      ],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "-c"
+                      ],
+                      "options_with_values": [],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "run"
+                      ]
+                    },
+                    "op": "executable.v1"
                   }
                 ],
                 "op": "any.v1"
               },
               "native_capability": null,
-              "permission_id": "command.genclave.permission.policy",
+              "permission_id": "command.gitsync.permission.mirror-mutation",
               "risk_classes": [
-                "policy_bypass"
+                "destructive_shell",
+                "network_egress"
               ],
-              "rule_id": "command.genclave.policy",
+              "rule_id": "command.gitsync.mirror-mutation",
               "rule_version": "1.0.0",
-              "safe_variants": [
-                {
-                  "matcher": {
-                    "config": {},
-                    "matchers": [
-                      {
-                        "config": {
-                          "allow_leading_options": false,
-                          "executables": [
-                            "ge",
-                            "ge.cmd",
-                            "ge.exe"
-                          ],
-                          "fail_secure_unknown_options": false,
-                          "forbidden_flags": [],
-                          "interspersed_flags": [
-                            "-v",
-                            "--version"
-                          ],
-                          "interspersed_options_with_values": [],
-                          "inverse_flag_pairs": [],
-                          "leading_options_with_values": [],
-                          "options_with_values": [],
-                          "paths": [
-                            [
-                              "identity",
-                              "set-cache-ttl"
-                            ],
-                            [
-                              "policy",
-                              "set"
-                            ]
-                          ],
-                          "required_flags": [
-                            "--help"
-                          ],
-                          "required_flags_in_all_arguments": true,
-                          "required_option_values": []
-                        },
-                        "op": "executable-path-set.v1"
-                      }
-                    ],
-                    "op": "any.v1"
-                  },
-                  "title": "gEnclave policy command help",
-                  "variant_id": "help"
-                },
-                {
-                  "matcher": {
-                    "config": {},
-                    "matchers": [
-                      {
-                        "config": {
-                          "allow_leading_options": false,
-                          "executables": [
-                            "ge",
-                            "ge.cmd",
-                            "ge.exe"
-                          ],
-                          "fail_secure_unknown_options": false,
-                          "forbidden_flags": [],
-                          "interspersed_flags": [
-                            "-v",
-                            "--version"
-                          ],
-                          "interspersed_options_with_values": [],
-                          "inverse_flag_pairs": [],
-                          "leading_options_with_values": [],
-                          "options_with_values": [],
-                          "paths": [
-                            [
-                              "identity",
-                              "set-cache-ttl"
-                            ],
-                            [
-                              "policy",
-                              "set"
-                            ]
-                          ],
-                          "required_flags": [
-                            "-h"
-                          ],
-                          "required_flags_in_all_arguments": true,
-                          "required_option_values": []
-                        },
-                        "op": "executable-path-set.v1"
-                      }
-                    ],
-                    "op": "any.v1"
-                  },
-                  "title": "gEnclave policy command help",
-                  "variant_id": "short-help"
-                }
-              ],
+              "safe_variants": [],
               "safer_alternatives": [
-                "Inspect current caching and confirmation policies with ge policy show <id> before making changes.",
-                "Avoid setting infinite cache TTLs on sensitive credentials."
+                "Run `gitsync run --dry-run` as the very first argument, nothing before it, and review what it reports before running it live - never rely on --dry-run appearing safe by itself.",
+                "Run `gitsync check` to confirm token scopes and account mapping before mirroring."
               ],
               "severity": "high",
-              "title": "gEnclave policy modification"
+              "title": "gitsync live mirror sync"
             },
             {
               "action_classes": [
-                "gEnclave session authorization command"
+                "gitsync webhook-rewriting command",
+                "gitsync service-install command"
               ],
               "default_mode": "review",
-              "description": "Identifies gEnclave commands that unlock or pre-warm authentication sessions and cryptographic caches.",
+              "description": "Identifies `gitsync hooks --force`/`-force` (rewrites existing webhooks on the git server), `gitsync hooks --remove`/`-remove` (deletes them), and `gitsync install` / `gitsync uninstall` (registers or removes the persistent background service). Go's flag parser treats a single dash the same as a double dash for a named flag, so both spellings are matched. Plain `gitsync hooks` (no flags) still mutates - it creates any missing webhooks - but never rewrites or deletes an existing one, so it is not covered here. No safe variant is offered for --help/-h on any of these: gitsync's flag parser stops at the first non-flag token and never looks at anything after it, so a flag placed after any other token is silently ignored rather than shown as help, and a declarative matcher cannot tell that case apart from one where the flag actually took effect. `uninstall` additionally never parses flags at all - it ignores every argument on both Linux and Windows and always removes the service and binary - so it was never going to have a safe variant regardless.",
               "family": null,
               "matcher": {
                 "config": {},
                 "matchers": [
                   {
                     "config": {
-                      "allow_leading_options": false,
+                      "allow_leading_options": true,
                       "executables": [
-                        "ge",
-                        "ge.cmd",
-                        "ge.exe"
+                        "gitsync",
+                        "gitsync.exe"
                       ],
-                      "fail_secure_unknown_options": false,
+                      "fail_secure_unknown_options": true,
                       "forbidden_flags": [],
                       "interspersed_flags": [
-                        "--global",
-                        "--stdin",
-                        "-v",
-                        "--version"
+                        "--help",
+                        "-h"
                       ],
                       "interspersed_options_with_values": [],
                       "inverse_flag_pairs": [],
-                      "leading_options_with_values": [],
-                      "options_with_values": [
-                        "--duration",
-                        "--timeout"
+                      "leading_options_with_values": [
+                        "-c"
                       ],
-                      "paths": [
-                        [
-                          "prewarm"
-                        ],
-                        [
-                          "unlock"
-                        ]
+                      "options_with_values": [],
+                      "required_flags": [
+                        "--force"
                       ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "hooks"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "gitsync",
+                        "gitsync.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--help",
+                        "-h"
+                      ],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "-c"
+                      ],
+                      "options_with_values": [],
+                      "required_flags": [
+                        "-force"
+                      ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "hooks"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "gitsync",
+                        "gitsync.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--help",
+                        "-h"
+                      ],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "-c"
+                      ],
+                      "options_with_values": [],
+                      "required_flags": [
+                        "--remove"
+                      ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "hooks"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "gitsync",
+                        "gitsync.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--help",
+                        "-h"
+                      ],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "-c"
+                      ],
+                      "options_with_values": [],
+                      "required_flags": [
+                        "-remove"
+                      ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "hooks"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "gitsync",
+                        "gitsync.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--help",
+                        "-h"
+                      ],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "-c"
+                      ],
+                      "options_with_values": [],
                       "required_flags": [],
                       "required_flags_in_all_arguments": false,
-                      "required_option_values": []
+                      "required_option_values": [],
+                      "subcommands": [
+                        "install"
+                      ]
                     },
-                    "op": "executable-path-set.v1"
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "gitsync",
+                        "gitsync.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--help",
+                        "-h"
+                      ],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "-c"
+                      ],
+                      "options_with_values": [],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "uninstall"
+                      ]
+                    },
+                    "op": "executable.v1"
                   }
                 ],
                 "op": "any.v1"
               },
               "native_capability": null,
-              "permission_id": "command.genclave.permission.session-auth",
+              "permission_id": "command.gitsync.permission.operational-mutation",
               "risk_classes": [
-                "policy_bypass"
+                "network_egress",
+                "execution"
               ],
-              "rule_id": "command.genclave.session-auth",
+              "rule_id": "command.gitsync.operational-mutation",
               "rule_version": "1.0.0",
-              "safe_variants": [
-                {
-                  "matcher": {
-                    "config": {},
-                    "matchers": [
-                      {
-                        "config": {
-                          "allow_leading_options": false,
-                          "executables": [
-                            "ge",
-                            "ge.cmd",
-                            "ge.exe"
-                          ],
-                          "fail_secure_unknown_options": false,
-                          "forbidden_flags": [],
-                          "interspersed_flags": [
-                            "--global",
-                            "--stdin",
-                            "-v",
-                            "--version"
-                          ],
-                          "interspersed_options_with_values": [],
-                          "inverse_flag_pairs": [],
-                          "leading_options_with_values": [],
-                          "options_with_values": [
-                            "--duration",
-                            "--timeout"
-                          ],
-                          "paths": [
-                            [
-                              "prewarm"
-                            ],
-                            [
-                              "unlock"
-                            ]
-                          ],
-                          "required_flags": [
-                            "--help"
-                          ],
-                          "required_flags_in_all_arguments": true,
-                          "required_option_values": []
-                        },
-                        "op": "executable-path-set.v1"
-                      }
-                    ],
-                    "op": "any.v1"
-                  },
-                  "title": "gEnclave session command help",
-                  "variant_id": "help"
-                },
-                {
-                  "matcher": {
-                    "config": {},
-                    "matchers": [
-                      {
-                        "config": {
-                          "allow_leading_options": false,
-                          "executables": [
-                            "ge",
-                            "ge.cmd",
-                            "ge.exe"
-                          ],
-                          "fail_secure_unknown_options": false,
-                          "forbidden_flags": [],
-                          "interspersed_flags": [
-                            "--global",
-                            "--stdin",
-                            "-v",
-                            "--version"
-                          ],
-                          "interspersed_options_with_values": [],
-                          "inverse_flag_pairs": [],
-                          "leading_options_with_values": [],
-                          "options_with_values": [
-                            "--duration",
-                            "--timeout"
-                          ],
-                          "paths": [
-                            [
-                              "prewarm"
-                            ],
-                            [
-                              "unlock"
-                            ]
-                          ],
-                          "required_flags": [
-                            "-h"
-                          ],
-                          "required_flags_in_all_arguments": true,
-                          "required_option_values": []
-                        },
-                        "op": "executable-path-set.v1"
-                      }
-                    ],
-                    "op": "any.v1"
-                  },
-                  "title": "gEnclave session command help",
-                  "variant_id": "short-help"
-                }
-              ],
+              "safe_variants": [],
               "safer_alternatives": [
-                "Use default ephemeral per-operation prompts instead of unlocking persistent sessions.",
-                "Lock the session immediately after batch operations with ge lock."
+                "Prefer plain `gitsync hooks`, which only creates missing webhooks and does not rewrite or delete existing ones.",
+                "Run `gitsync run --dry-run` interactively before installing it as an unattended service."
               ],
               "severity": "medium",
-              "title": "gEnclave session unlock and prewarm"
+              "title": "gitsync webhook rewrite, removal, or service install/uninstall"
             }
           ],
           "safer_alternatives": [
-            "Inspect current keys, credentials, and policies with read-only subcommands before mutating them.",
-            "Use default ephemeral per-operation authentication prompts instead of persistent unlock sessions."
+            "There is no reliably safe invocation to detect here - review every sync, run, hooks --force/--remove, install and uninstall regardless of flags.",
+            "Run `gitsync check` to confirm token scopes and account mapping before mirroring.",
+            "Only set adopt_existing on a GitHub repo you are fine handing lifecycle ownership of to gitsync."
           ],
           "source": "built-in",
           "version": "1.0.0"
@@ -11003,477 +10587,411 @@
   },
   "cases": [
     {
-      "command": "ge passkey delete key-1",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.genclave"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "passkey-delete",
-      "rule_id": "command.genclave.mutate"
-    },
-    {
-      "command": "ge webauthn delete user@example.com",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.genclave"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "webauthn-delete",
-      "rule_id": "command.genclave.mutate"
-    },
-    {
-      "command": "ge secret delete api-token",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.genclave"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "secret-delete",
-      "rule_id": "command.genclave.mutate"
-    },
-    {
-      "command": "ge secret set api-token secretvalue",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.genclave"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "secret-set",
-      "rule_id": "command.genclave.mutate"
-    },
-    {
-      "command": "ge set-secret api-token secretvalue",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.genclave"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "set-secret",
-      "rule_id": "command.genclave.mutate"
-    },
-    {
-      "command": "ge ssh remove id_ed25519",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.genclave"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "ssh-remove",
-      "rule_id": "command.genclave.mutate"
-    },
-    {
-      "command": "ge ssh generate -a ed25519 -c \"work key\"",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.genclave"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "ssh-generate",
-      "rule_id": "command.genclave.mutate"
-    },
-    {
-      "command": "ge ssh import ~/.ssh/id_ed25519 --shred",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.genclave"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "ssh-import",
-      "rule_id": "command.genclave.mutate"
-    },
-    {
-      "command": "ge gpg remove 3AA5C34371567BD2",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.genclave"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "gpg-remove",
-      "rule_id": "command.genclave.mutate"
-    },
-    {
-      "command": "ge gpg generate --name \"Alice\" --email \"alice@example.com\"",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.genclave"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "gpg-generate",
-      "rule_id": "command.genclave.mutate"
-    },
-    {
-      "command": "ge gpg import private.asc",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.genclave"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "gpg-import",
-      "rule_id": "command.genclave.mutate"
-    },
-    {
-      "command": "ge rekey",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.genclave"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "rekey",
-      "rule_id": "command.genclave.mutate"
-    },
-    {
-      "command": "ge passkey delete --help",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.genclave"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [],
-      "id": "passkey-delete-help",
-      "rule_id": "command.genclave.mutate"
-    },
-    {
-      "command": "ge passkey delete -h",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.genclave"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [],
-      "id": "passkey-delete-short-help",
-      "rule_id": "command.genclave.mutate"
-    },
-    {
-      "command": "ge ssh generate --help",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.genclave"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [],
-      "id": "ssh-generate-help",
-      "rule_id": "command.genclave.mutate"
-    },
-    {
-      "command": "ge secret set --help",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.genclave"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [],
-      "id": "secret-set-help",
-      "rule_id": "command.genclave.mutate"
-    },
-    {
-      "command": "ge rekey --help",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.genclave"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [],
-      "id": "rekey-help",
-      "rule_id": "command.genclave.mutate"
-    },
-    {
-      "command": "ge passkey delete key-1",
-      "disabled_permissions": [
-        "command.genclave.permission.mutate"
-      ],
-      "enabled_extensions": [
-        "command.genclave"
-      ],
-      "expected_action": "block",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "mutate-disabled",
-      "rule_id": "command.genclave.mutate"
-    },
-    {
-      "command": "ge secret list",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.genclave"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [],
-      "id": "mutate-secret-list",
-      "rule_id": "command.genclave.mutate"
-    },
-    {
-      "command": "ge secret get api-token",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.genclave"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [],
-      "id": "mutate-secret-get",
-      "rule_id": "command.genclave.mutate"
-    },
-    {
-      "command": "ge ssh list",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.genclave"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [],
-      "id": "mutate-ssh-list",
-      "rule_id": "command.genclave.mutate"
-    },
-    {
-      "command": "ge ssh public key-1",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.genclave"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [],
-      "id": "mutate-ssh-public",
-      "rule_id": "command.genclave.mutate"
-    },
-    {
-      "command": "ge gpg list",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.genclave"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [],
-      "id": "mutate-gpg-list",
-      "rule_id": "command.genclave.mutate"
-    },
-    {
-      "command": "ge policy set key-1 15m",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.genclave"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "policy-set",
-      "rule_id": "command.genclave.policy"
-    },
-    {
-      "command": "ge identity set-cache-ttl key-1 1h",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.genclave"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "identity-set-cache-ttl",
-      "rule_id": "command.genclave.policy"
-    },
-    {
-      "command": "ge policy set --help",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.genclave"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [],
-      "id": "policy-set-help",
-      "rule_id": "command.genclave.policy"
-    },
-    {
-      "command": "ge policy set -h",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.genclave"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [],
-      "id": "policy-set-short-help",
-      "rule_id": "command.genclave.policy"
-    },
-    {
-      "command": "ge policy set key-1 15m",
-      "disabled_permissions": [
-        "command.genclave.permission.policy"
-      ],
-      "enabled_extensions": [
-        "command.genclave"
-      ],
-      "expected_action": "block",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "policy-disabled",
-      "rule_id": "command.genclave.policy"
-    },
-    {
-      "command": "ge policy show key-1",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.genclave"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [],
-      "id": "policy-show-passthrough",
-      "rule_id": "command.genclave.policy"
-    },
-    {
-      "command": "ge unlock",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.genclave"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "unlock",
-      "rule_id": "command.genclave.session-auth"
-    },
-    {
-      "command": "ge unlock --stdin",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.genclave"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "unlock-stdin",
-      "rule_id": "command.genclave.session-auth"
-    },
-    {
-      "command": "ge prewarm --duration 10m",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.genclave"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "prewarm",
-      "rule_id": "command.genclave.session-auth"
-    },
-    {
-      "command": "ge unlock --help",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.genclave"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [],
-      "id": "unlock-help",
-      "rule_id": "command.genclave.session-auth"
-    },
-    {
-      "command": "ge unlock -h",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.genclave"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [],
-      "id": "unlock-short-help",
-      "rule_id": "command.genclave.session-auth"
-    },
-    {
-      "command": "ge prewarm --help",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.genclave"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [],
-      "id": "prewarm-help",
-      "rule_id": "command.genclave.session-auth"
-    },
-    {
-      "command": "ge unlock",
-      "disabled_permissions": [
-        "command.genclave.permission.session-auth"
-      ],
-      "enabled_extensions": [
-        "command.genclave"
-      ],
-      "expected_action": "block",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "session-auth-disabled",
-      "rule_id": "command.genclave.session-auth"
-    },
-    {
-      "command": "ge status",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.genclave"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [],
-      "id": "status-passthrough",
-      "rule_id": "command.genclave.session-auth"
-    },
-    {
-      "command": "ge lock",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.genclave"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [],
-      "id": "lock-passthrough",
-      "rule_id": "command.genclave.session-auth"
-    },
-    {
-      "command": "ge passkey delete key-1",
+      "command": "gitsync sync",
       "disabled_permissions": [],
       "enabled_extensions": [],
       "expected_action": "review",
       "expected_effective_segments": [],
-      "id": "extension-inactive",
-      "rule_id": "command.genclave.mutate"
+      "id": "mirror-inactive",
+      "rule_id": "command.gitsync.mirror-mutation"
+    },
+    {
+      "command": "gitsync sync",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.gitsync"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "mirror-sync-active",
+      "rule_id": "command.gitsync.mirror-mutation"
+    },
+    {
+      "command": "gitsync sync alice/example",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.gitsync"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "mirror-sync-one-repo-active",
+      "rule_id": "command.gitsync.mirror-mutation"
+    },
+    {
+      "command": "gitsync run",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.gitsync"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "mirror-run-active",
+      "rule_id": "command.gitsync.mirror-mutation"
+    },
+    {
+      "command": "gitsync run --dry-run",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.gitsync"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "mirror-run-dry-run-still-reviewed",
+      "rule_id": "command.gitsync.mirror-mutation"
+    },
+    {
+      "command": "gitsync run --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.gitsync"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "mirror-run-help-still-reviewed",
+      "rule_id": "command.gitsync.mirror-mutation"
+    },
+    {
+      "command": "gitsync sync --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.gitsync"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "mirror-sync-help-still-reviewed",
+      "rule_id": "command.gitsync.mirror-mutation"
+    },
+    {
+      "command": "gitsync sync alice/example --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.gitsync"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "mirror-sync-help-positional-order-still-live",
+      "rule_id": "command.gitsync.mirror-mutation"
+    },
+    {
+      "command": "gitsync sync alice/example --dry-run",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.gitsync"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "mirror-sync-dry-run-positional-order-still-live",
+      "rule_id": "command.gitsync.mirror-mutation"
+    },
+    {
+      "command": "gitsync run whatever --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.gitsync"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "mirror-run-help-after-bare-token-still-live",
+      "rule_id": "command.gitsync.mirror-mutation"
+    },
+    {
+      "command": "gitsync -c /etc/gitsync/config.toml sync",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.gitsync"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "mirror-config-flag-leading",
+      "rule_id": "command.gitsync.mirror-mutation"
+    },
+    {
+      "command": "gitsync run --dry-run; gitsync sync",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.gitsync"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0,
+        1
+      ],
+      "id": "mirror-compound",
+      "rule_id": "command.gitsync.mirror-mutation"
+    },
+    {
+      "command": "gitsync sync",
+      "disabled_permissions": [
+        "command.gitsync.permission.mirror-mutation"
+      ],
+      "enabled_extensions": [
+        "command.gitsync"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "mirror-disabled-permission",
+      "rule_id": "command.gitsync.mirror-mutation"
+    },
+    {
+      "command": "gitsync status",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.gitsync"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "mirror-unrelated-safe",
+      "rule_id": "command.gitsync.mirror-mutation"
+    },
+    {
+      "command": "another-unrelated-tool sync",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.gitsync"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "mirror-unknown-cli",
+      "rule_id": "command.gitsync.mirror-mutation"
+    },
+    {
+      "command": "gitsync hooks --force",
+      "disabled_permissions": [],
+      "enabled_extensions": [],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "ops-inactive",
+      "rule_id": "command.gitsync.operational-mutation"
+    },
+    {
+      "command": "gitsync hooks --force",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.gitsync"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "ops-hooks-force-active",
+      "rule_id": "command.gitsync.operational-mutation"
+    },
+    {
+      "command": "gitsync hooks --remove",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.gitsync"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "ops-hooks-remove-active",
+      "rule_id": "command.gitsync.operational-mutation"
+    },
+    {
+      "command": "gitsync hooks -force",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.gitsync"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "ops-hooks-force-single-dash-active",
+      "rule_id": "command.gitsync.operational-mutation"
+    },
+    {
+      "command": "gitsync hooks -force=true",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.gitsync"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "ops-hooks-force-single-dash-equals-active",
+      "rule_id": "command.gitsync.operational-mutation"
+    },
+    {
+      "command": "gitsync hooks -remove",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.gitsync"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "ops-hooks-remove-single-dash-active",
+      "rule_id": "command.gitsync.operational-mutation"
+    },
+    {
+      "command": "gitsync hooks -remove=true",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.gitsync"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "ops-hooks-remove-single-dash-equals-active",
+      "rule_id": "command.gitsync.operational-mutation"
+    },
+    {
+      "command": "gitsync hooks -force",
+      "disabled_permissions": [
+        "command.gitsync.permission.operational-mutation"
+      ],
+      "enabled_extensions": [
+        "command.gitsync"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "ops-hooks-force-single-dash-disabled-permission",
+      "rule_id": "command.gitsync.operational-mutation"
+    },
+    {
+      "command": "gitsync hooks",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.gitsync"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "ops-hooks-bare-not-covered",
+      "rule_id": "command.gitsync.operational-mutation"
+    },
+    {
+      "command": "gitsync hooks --force --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.gitsync"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "ops-hooks-force-help-still-reviewed",
+      "rule_id": "command.gitsync.operational-mutation"
+    },
+    {
+      "command": "gitsync hooks --force whatever --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.gitsync"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "ops-hooks-force-help-after-bare-token-still-live",
+      "rule_id": "command.gitsync.operational-mutation"
+    },
+    {
+      "command": "gitsync install",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.gitsync"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "ops-install-active",
+      "rule_id": "command.gitsync.operational-mutation"
+    },
+    {
+      "command": "gitsync install --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.gitsync"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "ops-install-help-still-reviewed",
+      "rule_id": "command.gitsync.operational-mutation"
+    },
+    {
+      "command": "gitsync uninstall",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.gitsync"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "ops-uninstall-active",
+      "rule_id": "command.gitsync.operational-mutation"
+    },
+    {
+      "command": "gitsync uninstall --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.gitsync"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "ops-uninstall-help-still-destructive",
+      "rule_id": "command.gitsync.operational-mutation"
+    },
+    {
+      "command": "gitsync uninstall",
+      "disabled_permissions": [
+        "command.gitsync.permission.operational-mutation"
+      ],
+      "enabled_extensions": [
+        "command.gitsync"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "ops-disabled-permission",
+      "rule_id": "command.gitsync.operational-mutation"
+    },
+    {
+      "command": "gitsync check",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.gitsync"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "ops-unrelated-safe",
+      "rule_id": "command.gitsync.operational-mutation"
     }
   ],
   "schema": "guard.command-extension-fixtures.v1"

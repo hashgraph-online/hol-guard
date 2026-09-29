@@ -6,7 +6,7 @@
     "canonical_diff_digest",
     "effective"
   ],
-  "catalog_digest": "19131ed462237ad9d55b2340d633d6ea47403ecdf82a2fe07de6316678f64f21",
+  "catalog_digest": "27e4f17831c60931e27e835ae8d6343b1516110440bfe2311393f2f951ea8261",
   "control_schema_version": "1.0.0",
   "daemon_api_schema": "guard.daemon.extension-controls.v1",
   "effective_shape": [
@@ -20,7 +20,7 @@
     "failures",
     "projection"
   ],
-  "extension_count": 76,
+  "extension_count": 77,
   "extension_ids": [
     "command.api-gateway",
     "command.backup.borg",
@@ -56,6 +56,7 @@
     "command.genclave",
     "command.git",
     "command.github",
+    "command.gitsync",
     "command.guard-self-protection",
     "command.infrastructure-as-code",
     "command.kubernetes-operations",
@@ -102,7 +103,7 @@
   "extension_schema_version": 2,
   "installed_browser_config": "dashboard/playwright.installed.config.ts",
   "overview_route": "/extensions",
-  "permission_count": 263,
+  "permission_count": 265,
   "permission_examples": {
     "command.api-gateway.permission.delete": "aws apigateway delete-rest-api",
     "command.backup.borg.permission.mutation": "borg delete",
@@ -245,6 +246,8 @@
     "command.github.permission.unknown": "gh extension run custom-tool",
     "command.github.permission.workflow-remote": "gh workflow run deploy.yml",
     "command.github.permission.write-local": "gh repo set-default owner/repo",
+    "command.gitsync.permission.mirror-mutation": "gitsync sync",
+    "command.gitsync.permission.operational-mutation": "gitsync hooks --remove",
     "command.guard-self-protection.permission.self-authorization": "hol-guard approvals approve",
     "command.infrastructure-as-code.permission.destroy": "terraform destroy",
     "command.kubernetes-operations.permission.annotate-resources": "kubectl annotate deployment api owner=platform --overwrite",
@@ -606,6 +609,8 @@
     "command.github.permission.unknown",
     "command.github.permission.workflow-remote",
     "command.github.permission.write-local",
+    "command.gitsync.permission.mirror-mutation",
+    "command.gitsync.permission.operational-mutation",
     "command.guard-self-protection.permission.self-authorization",
     "command.infrastructure-as-code.permission.destroy",
     "command.kubernetes-operations.permission.annotate-resources",
@@ -739,7 +744,7 @@
     "controls",
     "semantic_preview"
   ],
-  "rule_count": 248,
+  "rule_count": 250,
   "rule_ids": [
     "command.api-gateway.delete",
     "command.backup.borg.mutation",
@@ -878,6 +883,8 @@
     "command.github.access",
     "command.github.mutation",
     "command.github.unknown",
+    "command.gitsync.mirror-mutation",
+    "command.gitsync.operational-mutation",
     "command.guard-self-protection.self-authorization",
     "command.infrastructure-as-code.destroy",
     "command.kubernetes-operations.delete-resources",
