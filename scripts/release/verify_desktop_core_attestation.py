@@ -7,10 +7,14 @@ import argparse
 import hashlib
 import importlib.util
 import json
+import os
+import posixpath
 import re
 import stat
+import subprocess
 import sys
 import tempfile
+import unicodedata
 import zipfile
 from collections.abc import Mapping, Sequence
 from pathlib import Path, PurePosixPath
@@ -204,24 +208,42 @@ def _evidence(
     }
 
 
-def _extract_onedir_zip(archive: Path, destination: Path) -> Path:
-    """Extract the onedir zip and return the launcher path (<dest>/hol-guard/hol-guard)."""
+_ONEDIR_SYMLINK_TARGET_MAX = 1024
+_ONEDIR_REQUIRED_MEMBERS = (
+    _ONEDIR_LAUNCHER,
+    f"{_ONEDIR_ROOT}/Info.plist",
+    f"{_ONEDIR_ROOT}/_CodeSignature/CodeResources",
+)
+
+
+def _fold(name: str) -> list[str]:
+    return unicodedata.normalize("NFC", name.rstrip("/")).casefold().split("/")
+
+
+def _check_onedir_zip_symlink(zipped: zipfile.ZipFile, info: zipfile.ZipInfo) -> None:
+    """R2: a symlink member's target must be a short relative path that stays in-tree."""
+    name = info.filename
+    try:
+        raw = zipped.read(info)
+    except (OSError, RuntimeError, zipfile.BadZipFile) as error:
+        raise DesktopAttestationError("Desktop Core onedir archive is not a readable zip") from error
+    if not raw or len(raw) > _ONEDIR_SYMLINK_TARGET_MAX or b"\x00" in raw:
+        raise DesktopAttestationError(f"Onedir zip member has an invalid symlink target: {name!r}")
+    try:
+        target = raw.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise DesktopAttestationError(f"Onedir zip member has an invalid symlink target: {name!r}") from error
+    resolved = posixpath.normpath(posixpath.join(posixpath.dirname(name), target))
+    if PurePosixPath(target).is_absolute() or not resolved.startswith(f"{_ONEDIR_ROOT}/"):
+        raise DesktopAttestationError(f"Onedir zip member symlink escapes the tree: {name!r}")
+
+
+def _extract_onedir_zip_portable(archive: Path, destination: Path) -> None:
+    """Non-Darwin unit-test path: `zipfile` writes links as plain files, which
+    is fine for fixtures that never run the launcher."""
     try:
         with zipfile.ZipFile(archive) as zipped:
-            infos = zipped.infolist()
-            for info in infos:
-                name = info.filename
-                member = PurePosixPath(name)
-                if (
-                    member.is_absolute()
-                    or ".." in member.parts
-                    or member.parts[:1] != (_ONEDIR_ROOT,)
-                    or (info.external_attr >> 16) & _ZIP_MODE_MASK == _ZIP_SYMLINK_MODE
-                    or member.name.startswith("._")
-                    or "__MACOSX" in member.parts
-                ):
-                    raise DesktopAttestationError(f"Onedir zip member is not allowed: {name!r}")
-            for info in infos:
+            for info in zipped.infolist():
                 zipped.extract(info, destination)
                 name = info.filename
                 extracted = destination / name
@@ -229,6 +251,91 @@ def _extract_onedir_zip(archive: Path, destination: Path) -> Path:
                     extracted.chmod(extracted.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
     except zipfile.BadZipFile as error:
         raise DesktopAttestationError("Desktop Core onedir archive is not a readable zip") from error
+
+
+def _check_onedir_tree_links(destination: Path) -> None:
+    """R6: every extracted link must be a relative readlink that stays inside
+    the tree — lexically and after realpath — and must not be broken."""
+    tree_real = os.path.realpath(destination / _ONEDIR_ROOT)
+    for entry in destination.rglob("*"):
+        if not entry.is_symlink():
+            continue
+        try:
+            target = os.readlink(entry)
+            encoded = os.fsencode(target)
+            relative = entry.relative_to(destination).as_posix()
+        except (OSError, UnicodeEncodeError, ValueError) as error:
+            raise DesktopAttestationError("Desktop Core onedir tree contains an unreadable symlink") from error
+        if (
+            not encoded
+            or len(encoded) > _ONEDIR_SYMLINK_TARGET_MAX
+            or b"\x00" in encoded
+            or PurePosixPath(target).is_absolute()
+        ):
+            raise DesktopAttestationError("Desktop Core onedir tree contains an unsafe symlink")
+        resolved = posixpath.normpath(posixpath.join(posixpath.dirname(relative), target))
+        if not resolved.startswith(f"{_ONEDIR_ROOT}/"):
+            raise DesktopAttestationError("Desktop Core onedir tree contains an unsafe symlink")
+        if not entry.exists() or not os.path.realpath(entry).startswith(tree_real + os.sep):
+            raise DesktopAttestationError("Desktop Core onedir tree contains an unsafe symlink")
+
+
+def _extract_onedir_zip(archive: Path, destination: Path) -> Path:
+    """Extract the onedir zip and return the launcher path (<dest>/hol-guard/hol-guard)."""
+    try:
+        with zipfile.ZipFile(archive) as zipped:
+            names: set[str] = set()
+            link_names: list[str] = []
+            for info in zipped.infolist():
+                name = info.filename
+                member = PurePosixPath(name)
+                # PurePosixPath folds "." and empty components away; check the raw
+                # split so a "./" detour cannot dodge the nested-under-link rule.
+                raw_parts = name.split("/")
+                if (
+                    member.is_absolute()
+                    or ".." in member.parts
+                    or "." in raw_parts
+                    or "" in raw_parts[:-1]
+                    or member.parts[:1] != (_ONEDIR_ROOT,)
+                    or member.name.startswith("._")
+                    or "__MACOSX" in member.parts
+                ):
+                    raise DesktopAttestationError(f"Onedir zip member is not allowed: {name!r}")
+                if (info.external_attr >> 16) & _ZIP_MODE_MASK == _ZIP_SYMLINK_MODE:
+                    _check_onedir_zip_symlink(zipped, info)
+                    link_names.append(name)
+                names.add(name)
+    except zipfile.BadZipFile as error:
+        raise DesktopAttestationError("Desktop Core onedir archive is not a readable zip") from error
+    folded = [tuple(_fold(name)) for name in names]
+    if len(set(folded)) != len(folded):
+        raise DesktopAttestationError("Onedir zip archive contains colliding members")
+    # R3: nothing may sit beneath a symlink member, so extraction can never
+    # write through a link.
+    link_parts = [_fold(name) for name in link_names]
+    for name in names:
+        parts = _fold(name)
+        if any(len(link) < len(parts) and parts[: len(link)] == link for link in link_parts):
+            raise DesktopAttestationError(f"Onedir zip member is nested under a symlink: {name!r}")
+    # R4: the launcher and sealed-bundle anchors must be regular files, never links.
+    if any(name not in names or name in link_names for name in _ONEDIR_REQUIRED_MEMBERS):
+        raise DesktopAttestationError("Desktop Core onedir archive is missing a required regular member")
+    if not any(name.startswith(f"{_ONEDIR_ROOT}/_internal/") for name in names):
+        raise DesktopAttestationError("Desktop Core onedir archive is missing a required regular member")
+    if sys.platform == "darwin":
+        # zipfile.extract materializes link members as regular files, which
+        # breaks the sealed tree; ditto preserves the real links.
+        result = subprocess.run(
+            ["/usr/bin/ditto", "-x", "-k", str(archive), str(destination)],
+            check=False,
+            capture_output=True,
+        )
+        if result.returncode != 0:
+            raise DesktopAttestationError("Desktop Core onedir archive extraction failed")
+    else:
+        _extract_onedir_zip_portable(archive, destination)
+    _check_onedir_tree_links(destination)
     launcher = destination / _ONEDIR_LAUNCHER
     if not launcher.is_file():
         raise DesktopAttestationError("Desktop Core onedir archive is missing its launcher")

@@ -302,6 +302,7 @@ jobs:
           runtime=$(.venv/bin/python -c 'from codex_plugin_scanner.guard.native_runtime import native_runtime_status; status = native_runtime_status(); assert status.identity is not None; print(status.identity.path)')
           run_installed_slo() {
             local output_path="$1"
+            local status=0
             .venv/bin/python scripts/bench_guard_native_installed_slo.py \
               --runtime "$runtime" \
               --warm-iterations 2 \
@@ -309,7 +310,9 @@ jobs:
               --recovery-iterations 2 \
               --readiness-samples 2 \
               --json "$output_path" \
-              --enforce
+              --enforce 2>"${output_path}.stderr" || status=$?
+            cat "${output_path}.stderr" >&2
+            return "$status"
           }
           retryable_intel_latency_miss() {
             .venv/bin/python - "$1" <<'PY_CHECK'
@@ -355,10 +358,20 @@ jobs:
               run_installed_slo "$output_path"
               slo_status=$?
               set -e
-              cp "$output_path" native-installed-slo.json
               if [[ "$slo_status" -eq 0 ]]; then
+                cp "$output_path" native-installed-slo.json
                 break
               fi
+              if [[ ! -f "$output_path" ]]; then
+                if grep -Eq 'native_installed_slo_failed: .*recovery sample' "${output_path}.stderr"; then
+                  echo "::warning::Intel macOS SLO attempt ${attempt}/3 hit transient recovery routing crash; retrying."
+                  tail -5 "${output_path}.stderr"
+                  continue
+                fi
+                echo "Intel macOS SLO crashed without a report for a non-retryable reason." >&2
+                exit "$slo_status"
+              fi
+              cp "$output_path" native-installed-slo.json
               if ! retryable_intel_latency_miss "$output_path"; then
                 echo "Intel macOS SLO failed for a non-retryable reason." >&2
                 exit "$slo_status"
@@ -402,6 +415,8 @@ jobs:
             installed-native-extensions.json
             native-installed-slo.json
             native-installed-slo-attempt-*.json
+            native-installed-slo-attempt-*.json.stderr
+            native-installed-slo.json.stderr
             native-artifact-evidence.json
             native-stop-diagnostic.json
           if-no-files-found: error

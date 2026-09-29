@@ -241,7 +241,7 @@ def await_persisted_native_receipt(
         (writer, receipt_processed_before) if writer is not None and receipt_processed_before is not None else None
     )
     # Writer progress avoids early SQLite churn on Windows. If its counter
-    # stalls after a durable receipt lands, make one bounded fallback read.
+    # stalls, periodically make bounded fallback reads.
     next_reader_poll: float | None = time.monotonic() + 0.5
     while time.monotonic() < deadline:
         should_read = writer_progress is None
@@ -253,8 +253,10 @@ def await_persisted_native_receipt(
                 should_read = True
             elif processed > processed_mark:
                 writer_progress = (progress_writer, processed)
+                next_reader_poll = time.monotonic() + 0.25
                 should_read = True
             elif next_reader_poll is not None and time.monotonic() >= next_reader_poll:
+                next_reader_poll = time.monotonic() + 0.5
                 should_read = True
         if should_read:
             new_ids = persisted_native_receipt_ids(store) - known_ids
@@ -264,8 +266,6 @@ def await_persisted_native_receipt(
                 receipt = store.get_native_decision_receipt(next(iter(new_ids)))
                 if receipt is not None:
                     return receipt
-            if writer_progress is not None:
-                next_reader_poll = time.monotonic() + 0.25
         time.sleep(0.02)
     raise RuntimeError("installed_native_extensions_failed:receipt_persistence_missing")
 

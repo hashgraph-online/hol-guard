@@ -41,6 +41,10 @@ assert(
   "Supply-chain subroutes keep their parent destination active",
 );
 assert(
+  canonicalNavigationView("protection-repair") === "extensions",
+  "Repair protection stays inside Extensions without a new navigation item",
+);
+assert(
   navigationItemForView("settings").label === "Settings",
   "The current section can be described without a select input",
 );

@@ -22,6 +22,7 @@ from .hook_availability_policy import (
 )
 from .hook_native_review_approval import pause_native_pre_tool_for_approval
 from .hook_native_review_fence import native_review_fence
+from .hook_policy_repair import apply_command_policy_repair
 from .hook_request_parsing import pre_tool_command
 from .hook_worker_responses import (
     harness_json_from_native_post_tool,
@@ -481,6 +482,11 @@ class HookWorkerNativeMixin:
                     guard_home=guard_home,
                 )
                 return (_record_native_pre_activity(self, native_harness, payload, response, accepted_receipt), True)
+            native_result = apply_command_policy_repair(
+                self.store,
+                native_result,
+                guard_home=guard_home,
+            )
             return (
                 _record_native_pre_activity(
                     self,

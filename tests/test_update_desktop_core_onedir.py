@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import zipfile
 from pathlib import Path
 
@@ -476,14 +477,80 @@ class TestValidateOnedirZipMembers:
             update_desktop_core._validate_onedir_zip_members(archive)
         assert error.value.reason_code == "desktop_core_install_failed"
 
-    def test_rejects_symlink_member(self, tmp_path: Path) -> None:
-        archive = tmp_path / "bad.zip"
-        good = self._good(tmp_path)
-        archive.write_bytes(good.read_bytes())
+    def _write_link(self, archive: Path, name: str, target: bytes) -> None:
         with zipfile.ZipFile(archive, "a") as zipped:
-            info = zipfile.ZipInfo("hol-guard/_internal/link")
+            info = zipfile.ZipInfo(name)
             info.external_attr = 0o120777 << 16
-            zipped.writestr(info, b"target")
+            zipped.writestr(info, target)
+
+    def test_accepts_framework_symlinks(self, tmp_path: Path) -> None:
+        archive = tmp_path / "links.zip"
+        archive.write_bytes(self._good(tmp_path).read_bytes())
+        self._write_link(archive, "hol-guard/_internal/Python", b"Python.framework/Versions/3.12/Python")
+        self._write_link(archive, "hol-guard/_internal/Python.framework/Versions/Current", b"3.12")
+        update_desktop_core._validate_onedir_zip_members(archive)
+
+    @pytest.mark.parametrize(
+        "target",
+        [
+            b"/abs/path",
+            b"../../x",
+            b"..",
+            b"../../../etc/passwd",
+            b"",
+            b"x" * 1025,
+            b"a\x00b",
+            b"\xff\xfe",
+        ],
+    )
+    def test_rejects_unsafe_symlink_target(self, tmp_path: Path, target: bytes) -> None:
+        archive = tmp_path / "bad.zip"
+        archive.write_bytes(self._good(tmp_path).read_bytes())
+        self._write_link(archive, "hol-guard/_internal/link", target)
+        with pytest.raises(DesktopCoreUpdateError) as error:
+            update_desktop_core._validate_onedir_zip_members(archive)
+        assert error.value.reason_code == "desktop_core_install_failed"
+
+    def test_rejects_member_nested_under_symlink(self, tmp_path: Path) -> None:
+        archive = tmp_path / "bad.zip"
+        archive.write_bytes(self._good(tmp_path).read_bytes())
+        self._write_link(archive, "hol-guard/_internal/link", b"target-file")
+        with zipfile.ZipFile(archive, "a") as zipped:
+            zipped.writestr("hol-guard/_internal/link/x", b"x")
+        with pytest.raises(DesktopCoreUpdateError) as error:
+            update_desktop_core._validate_onedir_zip_members(archive)
+        assert error.value.reason_code == "desktop_core_install_failed"
+
+    @pytest.mark.parametrize(
+        "member",
+        [
+            "hol-guard/_internal/./link/x",
+            "hol-guard/./x",
+            "hol-guard//x",
+        ],
+    )
+    def test_rejects_dot_and_empty_components(self, tmp_path: Path, member: str) -> None:
+        archive = tmp_path / "bad.zip"
+        archive.write_bytes(self._good(tmp_path).read_bytes())
+        self._write_link(archive, "hol-guard/_internal/link", b"target-file")
+        with zipfile.ZipFile(archive, "a") as zipped:
+            zipped.writestr(member, b"x")
+        with pytest.raises(DesktopCoreUpdateError) as error:
+            update_desktop_core._validate_onedir_zip_members(archive)
+        assert error.value.reason_code == "desktop_core_install_failed"
+
+    @pytest.mark.parametrize(
+        "member",
+        [
+            "hol-guard/hol-guard",
+            "hol-guard/Info.plist",
+            "hol-guard/_CodeSignature/CodeResources",
+        ],
+    )
+    def test_rejects_required_member_as_symlink(self, tmp_path: Path, member: str) -> None:
+        archive = tmp_path / "bad.zip"
+        archive.write_bytes(self._good(tmp_path).read_bytes())
+        self._write_link(archive, member, b"elsewhere")
         with pytest.raises(DesktopCoreUpdateError) as error:
             update_desktop_core._validate_onedir_zip_members(archive)
         assert error.value.reason_code == "desktop_core_install_failed"
@@ -558,6 +625,174 @@ class TestValidateOnedirZipMembers:
             )
         assert error.value.reason_code == "desktop_core_install_failed"
         assert calls == []
+
+
+@pytest.mark.skipif(os.name != "posix", reason="needs POSIX symlink creation")
+class TestOnedirFileCount:
+    """R5/R6 checks on the extracted tree: links count once and must be safe."""
+
+    def _tree(self, tmp_path: Path) -> Path:
+        extracted = tmp_path / "extracted"
+        tree = extracted / "hol-guard"
+        (tree / "_internal").mkdir(parents=True)
+        (tree / "hol-guard").write_bytes(b"launcher")
+        (tree / "_internal" / "a.txt").write_bytes(b"data")
+        return extracted
+
+    def test_counts_files_and_links_once(self, tmp_path: Path) -> None:
+        extracted = self._tree(tmp_path)
+        tree = extracted / "hol-guard"
+        os.symlink("a.txt", tree / "_internal" / "file-link")
+        os.symlink("_internal", tree / "dir-link")
+        # launcher + a.txt + file-link + dir-link; the dir link is not descended.
+        assert update_desktop_core._onedir_file_count(extracted) == 4
+
+    def test_rejects_broken_link(self, tmp_path: Path) -> None:
+        extracted = self._tree(tmp_path)
+        os.symlink("missing-target", extracted / "hol-guard" / "_internal" / "broken")
+        with pytest.raises(DesktopCoreUpdateError) as error:
+            update_desktop_core._onedir_file_count(extracted)
+        assert error.value.reason_code == "desktop_core_install_failed"
+
+    def test_rejects_absolute_link(self, tmp_path: Path) -> None:
+        extracted = self._tree(tmp_path)
+        os.symlink("/etc/hosts", extracted / "hol-guard" / "_internal" / "abs")
+        with pytest.raises(DesktopCoreUpdateError) as error:
+            update_desktop_core._onedir_file_count(extracted)
+        assert error.value.reason_code == "desktop_core_install_failed"
+
+    def test_rejects_escaping_link(self, tmp_path: Path) -> None:
+        outside = tmp_path / "outside.txt"
+        outside.write_bytes(b"x")
+        extracted = self._tree(tmp_path)
+        os.symlink("../../outside.txt", extracted / "hol-guard" / "_internal" / "esc")
+        with pytest.raises(DesktopCoreUpdateError) as error:
+            update_desktop_core._onedir_file_count(extracted)
+        assert error.value.reason_code == "desktop_core_install_failed"
+
+    def test_rejects_entries_outside_the_tree_root(self, tmp_path: Path) -> None:
+        extracted = self._tree(tmp_path)
+        (extracted / "stray.txt").write_bytes(b"x")
+        with pytest.raises(DesktopCoreUpdateError) as error:
+            update_desktop_core._onedir_file_count(extracted)
+        assert error.value.reason_code == "desktop_core_install_failed"
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="real link extraction needs ditto")
+class TestInstallFrameworkLinks:
+    """End-to-end install of a framework-style tree through real ditto extraction."""
+
+    def _archive(self, tmp_path: Path) -> bytes:
+        archive = tmp_path / "links.zip"
+        with zipfile.ZipFile(archive, "w") as zipped:
+            for name, data, mode in [
+                ("hol-guard/hol-guard", b"launcher-bytes", 0o755),
+                ("hol-guard/Info.plist", b"<plist/>", 0o644),
+                ("hol-guard/_CodeSignature/CodeResources", b"<resources/>", 0o644),
+                ("hol-guard/_internal/a.txt", b"data", 0o644),
+                ("hol-guard/_internal/Python.framework/Versions/3.12/Python", b"py", 0o755),
+            ]:
+                info = zipfile.ZipInfo(name)
+                info.external_attr = mode << 16
+                zipped.writestr(info, data)
+            for name, target in [
+                ("hol-guard/_internal/Python", b"Python.framework/Versions/3.12/Python"),
+                ("hol-guard/_internal/Python.framework/Versions/Current", b"3.12"),
+            ]:
+                info = zipfile.ZipInfo(name)
+                info.external_attr = 0o120777 << 16
+                zipped.writestr(info, target)
+        return archive.read_bytes()
+
+    def test_installs_tree_with_links_preserved(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        import subprocess
+
+        _apply_mocks(tmp_path, monkeypatch)
+
+        def ditto_extract(archive: Path, destination: Path) -> None:
+            subprocess.run(
+                ["/usr/bin/ditto", "-x", "-k", str(archive), str(destination)],
+                check=True,
+            )
+
+        monkeypatch.setattr(update_desktop_core, "_extract_onedir_zip", ditto_extract)
+        archive_bytes = self._archive(tmp_path)
+        v2 = _v2_manifest(
+            archive=archive_bytes,
+            launcher_sha256=update_desktop_core._sha256_hex(b"launcher-bytes"),
+            file_count=7,
+        )
+        urls = {
+            update_desktop_core._release_url(TAG, f"{ARTIFACT}.json"): json.dumps(
+                _v1_manifest(sha256="0" * 64, size=1)
+            ).encode("utf-8"),
+            update_desktop_core._release_url(TAG, f"{ARTIFACT}.onedir.json"): json.dumps(v2).encode("utf-8"),
+            update_desktop_core._release_url(TAG, f"{ARTIFACT}.onedir.zip"): archive_bytes,
+        }
+
+        def fetch(url: str, limit: int) -> bytes:
+            _ = limit
+            if url in urls:
+                return urls[url]
+            raise DesktopCoreUpdateError("desktop_core_asset_missing")
+
+        result = update_desktop_core._try_apply_onedir(
+            fetch,
+            tag=TAG,
+            artifact=ARTIFACT,
+            channel="alpha",
+            expected_version=VERSION,
+            expected_target=TARGET,
+        )
+
+        installed = tmp_path / "core" / "versions" / VERSION
+        assert result == installed / "hol-guard"
+        python_link = installed / "_internal" / "Python"
+        assert python_link.is_symlink()
+        assert os.readlink(python_link) == "Python.framework/Versions/3.12/Python"
+        current_link = installed / "_internal" / "Python.framework" / "Versions" / "Current"
+        assert current_link.is_symlink()
+        assert os.readlink(current_link) == "3.12"
+
+
+class TestVerifyOnedirTreeSignatures:
+    """Every Mach-O anywhere in the tree must carry the expected team."""
+
+    def _tree(self, tmp_path: Path) -> Path:
+        tree = tmp_path / "hol-guard"
+        (tree / "_internal").mkdir(parents=True)
+        (tree / "hol-guard").write_bytes(b"\xcf\xfa\xed\xfe" + b"launcher")
+        (tree / "_internal" / "libx.dylib").write_bytes(b"\xcf\xfa\xed\xfe" + b"lib")
+        return tree
+
+    def test_whole_tree_matching_teams_pass(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(update_desktop_core, "_macos_signing_team", lambda _p: "TEAMID")
+        tree = self._tree(tmp_path)
+        (tree / "tool").write_bytes(b"\xcf\xfa\xed\xfe" + b"tool")
+        update_desktop_core._verify_onedir_tree_signatures(tree, expected_team="TEAMID")
+
+    def test_macho_outside_internal_with_wrong_team_fails(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        tree = self._tree(tmp_path)
+        (tree / "tool").write_bytes(b"\xcf\xfa\xed\xfe" + b"tool")
+        monkeypatch.setattr(
+            update_desktop_core,
+            "_macos_signing_team",
+            lambda path: "OTHERTEAM" if path.name == "tool" else "TEAMID",
+        )
+        with pytest.raises(DesktopCoreUpdateError) as error:
+            update_desktop_core._verify_onedir_tree_signatures(tree, expected_team="TEAMID")
+        assert error.value.reason_code == "desktop_core_signature_mismatch"
+
+    def test_missing_internal_fails(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        tree = tmp_path / "hol-guard"
+        tree.mkdir(parents=True)
+        (tree / "hol-guard").write_bytes(b"\xcf\xfa\xed\xfe" + b"launcher")
+        monkeypatch.setattr(update_desktop_core, "_macos_signing_team", lambda _p: "TEAMID")
+        with pytest.raises(DesktopCoreUpdateError) as error:
+            update_desktop_core._verify_onedir_tree_signatures(tree, expected_team="TEAMID")
+        assert error.value.reason_code == "desktop_core_install_failed"
 
 
 class TestRequireSealedOnedir:

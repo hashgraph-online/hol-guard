@@ -148,7 +148,12 @@ def build_approval_request_url(approval_center_url: str, request_id: str) -> str
     return f"{approval_center_url.rstrip('/')}/requests/{request_id.strip()}"
 
 
-def build_approval_browser_url(approval_url: str | None, *, auth_token: str | None) -> str | None:
+def build_approval_browser_url(
+    approval_url: str | None,
+    *,
+    auth_token: str | None,
+    surface: str = "approval-center",
+) -> str | None:
     """Build a browser-openable approval URL with a scoped Guard session token."""
 
     if not approval_url or auth_token is None:
@@ -162,7 +167,7 @@ def build_approval_browser_url(approval_url: str | None, *, auth_token: str | No
             "guard-token",
             build_local_dashboard_session_token(
                 auth_token=auth_token,
-                surface="approval-center",
+                surface=surface,
             ),
         )
     )

@@ -5,7 +5,9 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import posixpath
 import re
+import unicodedata
 import zipfile
 from collections.abc import Mapping
 from datetime import datetime, timezone
@@ -142,43 +144,86 @@ def _onedir_launcher_path(tree: Path) -> Path:
     return launcher
 
 
+_ONEDIR_SYMLINK_TARGET_MAX = 1024
+
+
+def _fold(name: str) -> list[str]:
+    return unicodedata.normalize("NFC", name.rstrip("/")).casefold().split("/")
+
+
+def _check_onedir_zip_symlink(zipped: zipfile.ZipFile, info: zipfile.ZipInfo) -> None:
+    """R2: a symlink member's target must be a short relative path that stays in-tree."""
+    name = info.filename
+    try:
+        raw = zipped.read(info)
+    except (OSError, RuntimeError, zipfile.BadZipFile) as error:
+        raise SystemExit(f"Onedir archive symlink target is unreadable: {name!r}") from error
+    if not raw or len(raw) > _ONEDIR_SYMLINK_TARGET_MAX or b"\x00" in raw:
+        raise SystemExit(f"Onedir archive symlink target is invalid: {name!r}")
+    try:
+        target = raw.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise SystemExit(f"Onedir archive symlink target is not UTF-8: {name!r}") from error
+    resolved = posixpath.normpath(posixpath.join(posixpath.dirname(name), target))
+    if PurePosixPath(target).is_absolute() or not resolved.startswith(f"{ONEDIR_TREE_ROOT}/"):
+        raise SystemExit(f"Onedir archive symlink escapes the tree: {name!r}")
+
+
 def validate_onedir_zip_members(archive: Path) -> None:
     """Require a sealed, self-contained onedir zip before a manifest may bind it."""
     try:
         with zipfile.ZipFile(archive) as zipped:
-            infos = zipped.infolist()
+            names: set[str] = set()
+            link_names: list[str] = []
+            for info in zipped.infolist():
+                name = info.filename
+                member = PurePosixPath(name)
+                if member.is_absolute() or ".." in member.parts:
+                    raise SystemExit(f"Onedir archive member escapes the tree: {name!r}")
+                # PurePosixPath folds "." and empty components away; check the raw
+                # split so a "./" detour cannot dodge the nested-under-link rule.
+                raw_parts = name.split("/")
+                if "." in raw_parts or "" in raw_parts[:-1]:
+                    raise SystemExit(f"Onedir archive member has a malformed path: {name!r}")
+                if name != ONEDIR_TREE_ROOT and not name.startswith(f"{ONEDIR_TREE_ROOT}/"):
+                    raise SystemExit(f"Onedir archive member is outside {ONEDIR_TREE_ROOT}/: {name!r}")
+                if member.name.startswith("._") or "__MACOSX" in member.parts:
+                    raise SystemExit(f"Onedir archive member is AppleDouble metadata: {name!r}")
+                if (info.external_attr >> 16) & 0o170000 == 0o120000:
+                    _check_onedir_zip_symlink(zipped, info)
+                    link_names.append(name)
+                names.add(name)
     except (OSError, zipfile.BadZipFile) as error:
         raise SystemExit(f"Onedir archive is not a readable zip: {archive}") from error
-    names: set[str] = set()
-    for info in infos:
-        name = info.filename
-        member = PurePosixPath(name)
-        if member.is_absolute() or ".." in member.parts:
-            raise SystemExit(f"Onedir archive member escapes the tree: {name!r}")
-        if name != ONEDIR_TREE_ROOT and not name.startswith(f"{ONEDIR_TREE_ROOT}/"):
-            raise SystemExit(f"Onedir archive member is outside {ONEDIR_TREE_ROOT}/: {name!r}")
-        if (info.external_attr >> 16) & 0o170000 == 0o120000:
-            raise SystemExit(f"Onedir archive member is a symlink: {name!r}")
-        if member.name.startswith("._") or "__MACOSX" in member.parts:
-            raise SystemExit(f"Onedir archive member is AppleDouble metadata: {name!r}")
-        names.add(name)
+    folded = [tuple(_fold(name)) for name in names]
+    if len(set(folded)) != len(folded):
+        raise SystemExit("Onedir archive contains colliding members")
+    # R3: nothing may sit beneath a symlink member, so extraction can never
+    # write through a link.
+    link_parts = [_fold(name) for name in link_names]
+    for name in names:
+        parts = _fold(name)
+        if any(len(link) < len(parts) and parts[: len(link)] == link for link in link_parts):
+            raise SystemExit(f"Onedir archive member is nested under a symlink: {name!r}")
     required = (
         ONEDIR_LAUNCHER,
         f"{ONEDIR_TREE_ROOT}/Info.plist",
         f"{ONEDIR_TREE_ROOT}/_CodeSignature/CodeResources",
     )
+    # R4: the sealed-bundle anchors must be regular files, never links.
     for entry in required:
-        if entry not in names:
+        if entry not in names or entry in link_names:
             raise SystemExit(f"Onedir archive is missing required member: {entry}")
     if not any(name.startswith(f"{ONEDIR_TREE_ROOT}/_internal/") for name in names):
         raise SystemExit(f"Onedir archive is missing required member: {ONEDIR_TREE_ROOT}/_internal/")
 
 
 def _onedir_file_count(tree: Path) -> int:
+    """R5: non-directory entries under hol-guard/, counting a link once whatever its target."""
     root = tree / "hol-guard"
     if not root.is_dir():
         raise SystemExit(f"Onedir tree root is missing: {root}")
-    return sum(1 for entry in root.rglob("*") if entry.is_file())
+    return sum(1 for entry in root.rglob("*") if entry.is_symlink() or entry.is_file())
 
 
 def _onedir_manifest_expected(
