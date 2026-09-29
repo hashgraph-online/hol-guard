@@ -190,7 +190,7 @@ fn policy_override_reason(action: &str) -> (&'static str, &'static str) {
 pub(crate) fn apply_pre_tool_policy(
     snapshot: &AdmittedPolicySnapshot,
     payload: &Value,
-    result: PreToolResultV1,
+    mut result: PreToolResultV1,
 ) -> Result<PreToolResultV1, String> {
     if !matches!(snapshot.mode.as_str(), "enforce" | "observe") {
         return Err("native_policy_mode_invalid".to_owned());

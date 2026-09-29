@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import logging
 import re
 import shlex
 import sqlite3
@@ -31,6 +32,8 @@ from .hook_worker_responses import (
 
 if TYPE_CHECKING:
     from ..store import GuardStore
+
+_LOGGER = logging.getLogger(__name__)
 
 _DEFAULT_APPROVAL_CENTER_PORT = 4781
 _MUTABLE_CODE_LAUNCHERS = {
@@ -213,6 +216,21 @@ def queue_native_pre_tool_review(
     approval_url = f"{approval_center_url}/requests/{request_id}"
     reason = str(native_result.get("reason") or "HOL Guard requires review before this action can execute.")
     binding = _native_review_binding(harness, payload, native_result, native_receipt, workspace)
+    try:
+        action_envelope = _native_review_action_envelope(
+            harness=harness,
+            payload=payload,
+            workspace=workspace,
+            home_dir=home_dir,
+        )
+    except (OSError, RuntimeError, TypeError, ValueError, KeyError) as error:
+        # Never make an action approvable when its details could not be safely presented.
+        # Exception messages can contain private tool input; log only the error class.
+        _LOGGER.warning("Native review presentation failed for %s (%s)", request_id, type(error).__name__)
+        return None
+    if action_envelope is None:
+        _LOGGER.warning("Native review presentation failed for %s (ValueError)", request_id)
+        return None
     request = GuardApprovalRequest(
         request_id=request_id,
         harness=harness,
@@ -230,12 +248,7 @@ def queue_native_pre_tool_review(
         artifact_type="tool_call",
         launch_target=launch_target,
         risk_summary=reason,
-        action_envelope_json=_native_review_action_envelope(
-            harness=harness,
-            payload=payload,
-            workspace=workspace,
-            home_dir=home_dir,
-        ),
+        action_envelope_json=action_envelope,
     )
     try:
         persisted_id = persist(request, datetime.now(tz=timezone.utc).isoformat())

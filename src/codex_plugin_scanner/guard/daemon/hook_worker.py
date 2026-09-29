@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Mapping
+from contextlib import suppress
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol, final
 
