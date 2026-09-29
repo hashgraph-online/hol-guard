@@ -45,8 +45,10 @@ not copy their registration pattern to add an extension.
    which enables automatic repair for mechanical schema, binding, and generated-projection issues.
 
 The canonical source, portable fixture, and external trust entry are the contributor-owned inputs.
-Generated projections are mechanical closure work: Gitar or maintainers may regenerate them after
-the capability boundary is accepted, so projection drift alone should not bounce a contributor.
+Generated projections (command catalog, native program, baselines, digest vectors, directory
+render) are maintainer-owned: keep them out of the contribution diff. CI validates sources
+additively while they are pending, and `extension-artifact-regen` regenerates the projections
+on `main` after merge, so projection drift alone never bounces a contribution.
 
 Gitar does not choose command semantics, trust, claim authority, or safe variants. Contributors
 can request analysis without changes at any time with `gitar auto-apply:off`.
@@ -57,6 +59,13 @@ if you want Gitar to commit a mechanical repair. GitHub requires the fork owner 
 permission; this repository cannot enable it for the contributor. If GitHub instead offers
 **Allow edits and access to secrets by maintainers**, leave it disabled and apply Gitar's
 suggestion yourself.
+
+PRs from organization-owned forks — or with maintainer edits disabled — cannot
+receive maintainer pushes at all. Maintainers land those through an upstream
+`intake/pr-NNNN` branch prepared by `scripts/intake_contribution_pr.py`, which
+keeps the contributor commits as ancestors so attribution and the original PR
+stay intact. Several contributions can also be batched onto one
+`intake/batch-...` branch so artifact regeneration runs once.
 
 ## Development setup
 

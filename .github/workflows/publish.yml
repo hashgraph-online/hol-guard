@@ -545,7 +545,12 @@ jobs:
         shell: bash
         env:
           SOURCE_COMPILER: ${{ matrix.source_compiler }}
-        run: python scripts/build_native_command_program.py --check --compiler "$SOURCE_COMPILER"
+        run: |
+          arguments=(--compiler "$SOURCE_COMPILER")
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            arguments+=(--changed-from "${{ github.event.pull_request.base.sha }}")
+          fi
+          python scripts/ci/verify_native_command_program.py "${arguments[@]}"
       - name: Verify native source compiler output
         shell: bash
         env:

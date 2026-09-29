@@ -75,7 +75,12 @@ jobs:
           jq --slurpfile build source-build.json '. + {build:$build[0]}' rust/crates/guard-command/tests/fixtures/command-source-behavior.v1.json > source-fixtures.json
           docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges -i guard-source-compiler:ci test < source-fixtures.json > source-fixture-results.json
       - name: Verify native command program is current
-        run: uv run --no-sync python scripts/build_native_command_program.py --check --compiler rust/target/x86_64-unknown-linux-musl/release/guard-command-source
+        run: |
+          arguments=(--compiler rust/target/x86_64-unknown-linux-musl/release/guard-command-source)
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            arguments+=(--changed-from "${{ github.event.pull_request.base.sha }}")
+          fi
+          uv run --no-sync python scripts/ci/verify_native_command_program.py "${arguments[@]}"
       - name: Assemble and install native wheel
         env:
           SOURCE_SHA: ${{ github.sha }}
@@ -436,7 +441,11 @@ jobs:
       - name: Prove native source compiler output
         shell: pwsh
         run: |
-          uv run --no-sync python scripts/build_native_command_program.py --check --compiler rust/target/release/guard-command-source.exe
+          $arguments = @("--compiler", "rust/target/release/guard-command-source.exe")
+          if ("${{ github.event_name }}" -eq "pull_request") {
+            $arguments += @("--changed-from", "${{ github.event.pull_request.base.sha }}")
+          }
+          uv run --no-sync python scripts/ci/verify_native_command_program.py @arguments
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $source = Get-Content rust/crates/guard-command/tests/fixtures/command-source-example.v1.json -Raw | ConvertFrom-Json
           $trust = Get-Content contracts/extensions/trust-class-map.v1.json -Raw | ConvertFrom-Json

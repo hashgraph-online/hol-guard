@@ -124,6 +124,14 @@ def configure_new_contribution(
     )
 
 
+def configure_unmapped_contribution(client: FakeGitHub, extension_id: str) -> str:
+    contribution_path = f"contributions/extensions/{extension_id}.json"
+    client.files = [{"status": "added", "filename": contribution_path}]
+    client.file_payloads[(MERGE_SHA, contribution_path)] = {"schemaVersion": "v1"}
+    client.file_payloads[(client.default_branch, contribution_path)] = {"schemaVersion": "v1"}
+    return contribution_path
+
+
 def test_new_contribution_notifies_only_reviewed_numeric_ids() -> None:
     client = FakeGitHub()
     configure_new_contribution(client, "command.example", ["200", "100"])
@@ -148,6 +156,88 @@ def test_pr_authorship_never_creates_claim_authority() -> None:
     extension_id = "command.no-authority"
     client.files = [{"status": "added", "filename": f"contributions/extensions/{extension_id}.json"}]
     client.file_payloads[(MERGE_SHA, f"contributions/extensions/{extension_id}.json")] = {"schemaVersion": "v1"}
+
+    assert MODULE.process(client, 7, MODULE.DEFAULT_STUDIO_URL) == 0
+    assert client.posted == []
+
+
+def test_current_unmapped_contribution_gets_reviewed_mapping_instructions() -> None:
+    client = FakeGitHub()
+    configure_unmapped_contribution(client, "command.unmapped")
+
+    assert MODULE.process(client, 7, MODULE.DEFAULT_STUDIO_URL) == 0
+    assert len(client.posted) == 1
+    body = client.posted[0][1]
+    assert MODULE.GUIDANCE_MARKER in body
+    assert "contributions/extension-listings/command.unmapped.json" in body
+    assert "publisher-metadata.md" in body
+    assert "?claim=" not in body
+    assert MODULE.MARKER not in body
+
+
+def test_updated_existing_unmapped_contribution_does_not_repeat_claim_guidance() -> None:
+    client = FakeGitHub()
+    contribution_path = configure_unmapped_contribution(client, "command.unmapped")
+    client.file_payloads[(BEFORE_SHA, contribution_path)] = {"schemaVersion": "v1"}
+
+    assert MODULE.process(client, 7, MODULE.DEFAULT_STUDIO_URL) == 0
+    assert client.posted == []
+
+
+def test_guidance_is_idempotent_only_for_the_trusted_bot() -> None:
+    client = FakeGitHub()
+    configure_unmapped_contribution(client, "command.unmapped")
+    client.comment_rows = [{"body": MODULE.GUIDANCE_MARKER, "user": {"id": 1234, "type": "User"}}]
+
+    assert MODULE.process(client, 7, MODULE.DEFAULT_STUDIO_URL) == 0
+    assert len(client.posted) == 1
+
+    client.comment_rows.append(
+        {
+            "body": client.posted[0][1],
+            "user": {"id": MODULE.TRUSTED_NOTICE_ACTOR_ID, "type": "Bot"},
+        }
+    )
+    assert MODULE.process(client, 7, MODULE.DEFAULT_STUDIO_URL) == 0
+    assert len(client.posted) == 1
+
+
+def test_removed_or_later_claimable_source_gets_no_stale_guidance() -> None:
+    client = FakeGitHub()
+    contribution_path = configure_unmapped_contribution(client, "command.unmapped")
+    del client.file_payloads[(client.default_branch, contribution_path)]
+
+    assert MODULE.process(client, 7, MODULE.DEFAULT_STUDIO_URL) == 0
+    assert client.posted == []
+
+    client.file_payloads[(client.default_branch, contribution_path)] = {"schemaVersion": "v1"}
+    client.file_payloads[(client.default_branch, "contributions/extension-listings/command.unmapped.json")] = listing(
+        "command.unmapped", ["100"]
+    )
+    assert MODULE.process(client, 7, MODULE.DEFAULT_STUDIO_URL) == 0
+    assert client.posted == []
+
+
+def test_empty_accepted_set_gets_guidance_without_a_claim_link() -> None:
+    client = FakeGitHub()
+    contribution_path = configure_unmapped_contribution(client, "command.unmapped")
+    listing_path = "contributions/extension-listings/command.unmapped.json"
+    client.file_payloads[(MERGE_SHA, listing_path)] = listing("command.unmapped", [])
+    client.file_payloads[(client.default_branch, listing_path)] = listing("command.unmapped", [])
+    assert client.file_payloads[(client.default_branch, contribution_path)] is not None
+
+    assert MODULE.process(client, 7, MODULE.DEFAULT_STUDIO_URL) == 0
+    assert len(client.posted) == 1
+    assert MODULE.GUIDANCE_MARKER in client.posted[0][1]
+    assert "?claim=" not in client.posted[0][1]
+
+
+def test_invalid_current_listing_skips_guidance_without_a_claim_link() -> None:
+    client = FakeGitHub()
+    configure_unmapped_contribution(client, "command.unmapped")
+    client.file_payloads[(client.default_branch, "contributions/extension-listings/command.unmapped.json")] = {
+        "schemaVersion": "invalid"
+    }
 
     assert MODULE.process(client, 7, MODULE.DEFAULT_STUDIO_URL) == 0
     assert client.posted == []
@@ -430,6 +520,59 @@ def test_readiness_report_types_empty_mapping_as_no_mapping() -> None:
     assert report["entries"] == [{"extensionId": "command.empty-authority", "status": "no_mapping", "notifiedIds": []}]
 
 
+def test_readiness_report_maps_github_api_errors_to_provider_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = FakeGitHub()
+
+    def api_failure(number: int) -> list[dict[str, Any]]:
+        raise MODULE.ClaimNoticeError("GitHub API request failed")
+
+    monkeypatch.setattr(client, "comments", api_failure)
+    report = MODULE.readiness_report(client, 38)
+
+    assert report["prStatus"] == "provider_unavailable"
+    assert report["detail"] == "GitHub API request failed"
+    assert report["entries"] == []
+
+
+def test_readiness_report_reraises_non_api_claim_notice_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = FakeGitHub()
+
+    def invalid_provenance(number: int) -> list[dict[str, Any]]:
+        raise MODULE.ClaimNoticeError("invalid comment provenance")
+
+    monkeypatch.setattr(client, "comments", invalid_provenance)
+    with pytest.raises(MODULE.ClaimNoticeError, match="invalid comment provenance"):
+        MODULE.readiness_report(client, 39)
+
+
+def test_readiness_report_uses_first_entry_for_mixed_noneligible_statuses(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = FakeGitHub()
+
+    def mixed_statuses(
+        _client: Any,
+        _pr_number: int,
+        *,
+        allow_renames: bool = False,
+        records: list[Any] | None = None,
+    ) -> tuple[list[Any], str]:
+        assert records is not None
+        records.extend(
+            [
+                MODULE.ExtensionReadiness("command.source-not-current", "source_not_current"),
+                MODULE.ExtensionReadiness("command.no-mapping", "no_mapping"),
+            ]
+        )
+        return [], "source_not_current"
+
+    monkeypatch.setattr(MODULE, "_plan_notice_items", mixed_statuses)
+    report = MODULE.readiness_report(client, 40)
+
+    assert [entry["status"] for entry in report["entries"]] == ["source_not_current", "no_mapping"]
+    assert report["prStatus"] == "source_not_current"
+
+
 def test_readiness_report_reports_eligible_entry_and_portal_gate(monkeypatch: pytest.MonkeyPatch) -> None:
     client = FakeGitHub()
     configure_new_contribution(client, "command.ready", ["600"])
@@ -492,6 +635,38 @@ def test_process_never_posts_when_configured_portal_is_not_ready(monkeypatch: py
         == 0
     )
     assert client.posted == []
+
+
+def test_portal_outage_does_not_suppress_mapping_guidance(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = FakeGitHub()
+    configure_unmapped_contribution(client, "command.unmapped")
+    monkeypatch.setattr(MODULE, "portal_readiness", lambda _url: ("portal_not_ready", "projection is stale"))
+
+    assert (
+        MODULE.process(client, 7, MODULE.DEFAULT_STUDIO_URL, portal_readiness_url="https://portal.example/ready") == 0
+    )
+    assert len(client.posted) == 1
+    assert MODULE.GUIDANCE_MARKER in client.posted[0][1]
+    assert MODULE.MARKER not in client.posted[0][1]
+
+
+def test_account_lookup_failure_does_not_suppress_mapping_guidance(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = FakeGitHub()
+    configure_new_contribution(client, "command.mapped", ["800"])
+    unmapped_path = "contributions/extensions/command.unmapped.json"
+    client.files.append({"status": "added", "filename": unmapped_path})
+    client.file_payloads[(MERGE_SHA, unmapped_path)] = {"schemaVersion": "v1"}
+    client.file_payloads[(client.default_branch, unmapped_path)] = {"schemaVersion": "v1"}
+
+    def lookup_failure(_account_id: str) -> str | None:
+        raise MODULE.ClaimNoticeError("GitHub API request failed")
+
+    monkeypatch.setattr(client, "user_login", lookup_failure)
+    with pytest.raises(MODULE.ClaimNoticeError, match="GitHub API request failed"):
+        MODULE.process(client, 7, MODULE.DEFAULT_STUDIO_URL)
+    assert len(client.posted) == 1
+    assert MODULE.GUIDANCE_MARKER in client.posted[0][1]
+    assert MODULE.MARKER not in client.posted[0][1]
 
 
 def test_trusted_marker_marks_readiness_already_notified() -> None:
@@ -575,11 +750,29 @@ def test_portal_readiness_maps_transport_failures_without_claiming_ready(monkeyp
     monkeypatch.setattr(MODULE.urllib.request, "urlopen", not_affirming)
     assert MODULE.portal_readiness("https://portal.example/ready")[0] == "portal_not_ready"
 
+    def non_200(req: object, timeout: float) -> Response:
+        return Response(b'{"ok": true}', status=202)
+
+    monkeypatch.setattr(MODULE.urllib.request, "urlopen", non_200)
+    assert MODULE.portal_readiness("https://portal.example/ready") == (
+        "portal_not_ready",
+        "portal returned HTTP 202",
+    )
+
     def http_error(req: object, timeout: float) -> Response:
         raise urllib.error.HTTPError(req.url if hasattr(req, "url") else "x", 503, "unavailable", None, None)  # type: ignore[arg-type]
 
     monkeypatch.setattr(MODULE.urllib.request, "urlopen", http_error)
     assert MODULE.portal_readiness("https://portal.example/ready")[0] == "provider_unavailable"
+
+    def http_not_found(req: object, timeout: float) -> Response:
+        raise urllib.error.HTTPError(req.url if hasattr(req, "url") else "x", 404, "not found", None, None)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(MODULE.urllib.request, "urlopen", http_not_found)
+    assert MODULE.portal_readiness("https://portal.example/ready") == (
+        "portal_not_ready",
+        "portal returned HTTP 404",
+    )
 
     def os_error(req: object, timeout: float) -> Response:
         raise OSError("connection refused")
