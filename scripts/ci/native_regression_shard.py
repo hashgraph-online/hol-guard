@@ -6,23 +6,24 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import sys
 from pathlib import Path
 from typing import cast
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
+if not __package__:
+    sys.path.insert(0, str(ROOT))
+
+from scripts.ci.pytest_shard import build_node_shards  # noqa: E402
 
 
 def select_nodes(node_ids: list[str], index: int, count: int) -> list[str]:
     """Partition the collected platform inventory, rejecting empty or ambiguous shards."""
-    if count < 1 or not 0 <= index < count:
+    if not 0 <= index < count:
         raise ValueError("shard index must be in [0, shard count)")
-    if len(set(node_ids)) != len(node_ids):
-        raise ValueError("duplicate native regression node IDs")
-    if len(node_ids) < count:
-        raise ValueError("shard count exceeds collected native regression tests")
-    return sorted(node_ids)[index::count]
+    return build_node_shards(node_ids, count)[index]
 
 
 class _AssertInstalled:
