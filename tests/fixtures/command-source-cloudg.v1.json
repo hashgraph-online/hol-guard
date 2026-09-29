@@ -10902,6 +10902,39 @@
       ],
       "id": "scan-images",
       "rule_id": "command.cloudg.scan"
+    },
+    {
+      "command": "cloudg collect --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cloudg"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "collect-help",
+      "rule_id": "command.cloudg.collect"
+    },
+    {
+      "command": "cloudg run --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cloudg"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "run-help",
+      "rule_id": "command.cloudg.run"
+    },
+    {
+      "command": "cloudg scan --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.cloudg"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "scan-help",
+      "rule_id": "command.cloudg.scan"
     }
   ],
   "schema": "guard.command-extension-fixtures.v1"
