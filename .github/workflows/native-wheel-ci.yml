@@ -309,7 +309,10 @@ jobs:
               --recovery-iterations 2 \
               --readiness-samples 2 \
               --json "$output_path" \
-              --enforce 2> >(tee "${output_path}.stderr" >&2)
+              --enforce 2>"${output_path}.stderr"
+            local status=$?
+            cat "${output_path}.stderr" >&2
+            return "$status"
           }
           retryable_intel_latency_miss() {
             .venv/bin/python - "$1" <<'PY_CHECK'
