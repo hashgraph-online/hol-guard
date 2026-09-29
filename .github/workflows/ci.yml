@@ -178,7 +178,7 @@ jobs:
       - name: Run coverage shard ${{ matrix.shard-index }}
         shell: bash
         run: |
-          shard_file=$(printf 'pytest-shards/shard-%03d.txt' "${{ matrix.shard-index }}")
+          shard_file=$(printf 'pytest-shards/shard-%02d.txt' "${{ matrix.shard-index }}")
           test -s "$shard_file"
           # Timing contracts run untraced in scheduling-sensitive with their original deadlines.
           PYTHONPATH=scripts/ci GUARD_PYTEST_DURATION_OUTPUT=pytest-durations.json GUARD_PYTEST_UNDER_COVERAGE=1 \
