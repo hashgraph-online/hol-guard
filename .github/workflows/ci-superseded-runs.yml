@@ -1,0 +1,122 @@
+name: Retire superseded PR checks
+
+on:
+  pull_request_target:
+    branches: [main, release/3.2]
+    types: [opened, reopened, synchronize]
+
+# Metadata only: do not check out a PR, download its artifacts, or execute its code.
+permissions:
+  actions: write
+  pull-requests: read
+
+concurrency:
+  group: ci-superseded-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  retire:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Release slots held by older commits of this PR
+        shell: python
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          import json
+          import os
+          import time
+          from urllib.error import HTTPError
+          from urllib.parse import urlencode
+          from urllib.request import Request, urlopen
+
+          WORKFLOWS = ("ci.yml", "native-wheel-ci.yml")
+          ACTIVE = {"queued", "in_progress"}
+
+          def eligible(run, pr, repo, number):
+              return (
+                  run.get("status") in ACTIVE
+                  and run.get("event") == "pull_request"
+                  and run.get("path") in {f".github/workflows/{name}" for name in WORKFLOWS}
+                  and (run.get("repository") or {}).get("full_name") == repo
+                  and (run.get("head_repository") or {}).get("id") == pr["head"]["repo"]["id"]
+                  and run.get("head_branch") == pr["head"]["ref"]
+                  and bool(run.get("head_sha"))
+                  and run["head_sha"] != pr["head"]["sha"]
+                  and any(item.get("number") == number for item in run.get("pull_requests", []))
+              )
+
+          def retire(repo, number, event_head, request, pause=time.sleep):
+              def current():
+                  pr = request("GET", f"pulls/{number}")
+                  if (pr.get("state") != "open" or pr["head"]["sha"] != event_head
+                          or pr["head"].get("repo") is None):
+                      return None
+                  return pr
+
+              pr = current()
+              if pr is None:
+                  return
+              candidates = {}
+              for workflow in WORKFLOWS:
+                  for status in sorted(ACTIVE):
+                      page = 1
+                      while True:
+                          query = urlencode({"event": "pull_request", "branch": pr["head"]["ref"],
+                                             "status": status, "per_page": 100, "page": page})
+                          rows = request("GET", f"actions/workflows/{workflow}/runs?{query}")["workflow_runs"]
+                          for run in rows:
+                              if eligible(run, pr, repo, number):
+                                  candidates[run["id"]] = run
+                          if len(rows) < 100:
+                              break
+                          page += 1
+              for run_id in sorted(candidates):
+                  path = f"actions/runs/{run_id}"
+                  pr = current()
+                  run = request("GET", path)
+                  if pr is None:
+                      return
+                  if not eligible(run, pr, repo, number):
+                      continue
+                  try:
+                      request("POST", path + "/cancel")
+                  except HTTPError as error:
+                      if error.code != 409:
+                          raise
+                  # Give normal cancellation a chance before bypassing always().
+                  pause(15)
+                  pr = current()
+                  run = request("GET", path)
+                  if pr is None:
+                      return
+                  if eligible(run, pr, repo, number):
+                      try:
+                          request("POST", path + "/force-cancel")
+                      except HTTPError as error:
+                          if error.code != 409:
+                              raise
+                  print(f"Requested cancellation of superseded workflow run {run_id}")
+
+          def main():
+              repo = os.environ["GITHUB_REPOSITORY"]
+              with open(os.environ["GITHUB_EVENT_PATH"], encoding="utf-8") as stream:
+                  event = json.load(stream)
+              def request(method, path):
+                  req = Request(
+                      f"https://api.github.com/repos/{repo}/{path}",
+                      data=b"" if method == "POST" else None,
+                      method=method,
+                      headers={"Authorization": "Bearer " + os.environ["GH_TOKEN"],
+                               "Accept": "application/vnd.github+json",
+                               "X-GitHub-Api-Version": "2026-03-10",
+                               "User-Agent": "hol-guard-superseded-ci"},
+                  )
+                  with urlopen(req, timeout=20) as response:
+                      body = response.read()
+                  return json.loads(body) if body else None
+              retire(repo, event["number"], event["pull_request"]["head"]["sha"], request)
+
+          if __name__ == "__main__":
+              main()
