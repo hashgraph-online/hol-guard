@@ -1,4 +1,5 @@
-import { aT as fetchLocalCliApi, r as reactExports, aU as fetchExtensionControlApi, j as jsxRuntimeExports, B as HiMiniSparkles, s as HiMiniCheckCircle, aV as HiMiniNoSymbol, al as HiMiniLockClosed, P as HiMiniExclamationTriangle, aW as useResolvedApprovalGate, ar as HiMiniArrowPath, w as HiMiniShieldCheck, aX as HiMiniInformationCircle, at as isApprovalProofSubmitDisabled, C as HiMiniXMark, as as ApprovalProofFieldInputs, au as buildApprovalProofCredentials, aY as GenIcon, Q as HiMiniBolt, aZ as HiMiniGlobeAlt, a_ as HiMiniCube, K as HiMiniCloud, a$ as HiMiniServerStack, b as HiMiniCommandLine, b0 as HiMiniFolder, b1 as FaWindows, b2 as FaAws, c as HiMiniChevronRight, I as HiMiniChevronDown, b3 as approvalProofRecentlySatisfied, b4 as isBulkApproveGateReady, b5 as HiMiniArrowLeft, b6 as HiMiniPlus, ae as HiMiniClipboardDocumentCheck, af as HiMiniClipboard, b7 as guardAwareHref, an as HiMiniAdjustmentsHorizontal, b8 as HiMiniCheck, aN as HiMiniMagnifyingGlass, b9 as startGuardCloudConnect, ba as HiMiniArrowTopRightOnSquare, aM as WorkspacePageHeader } from "../guard-dashboard.js";
+import { aT as fetchLocalCliApi, r as reactExports, j as jsxRuntimeExports, B as HiMiniSparkles, s as HiMiniCheckCircle, aU as HiMiniNoSymbol, al as HiMiniLockClosed, P as HiMiniExclamationTriangle, aV as useResolvedApprovalGate, ar as HiMiniArrowPath, w as HiMiniShieldCheck, aW as HiMiniInformationCircle, at as isApprovalProofSubmitDisabled, C as HiMiniXMark, as as ApprovalProofFieldInputs, au as buildApprovalProofCredentials, aX as GenIcon, Q as HiMiniBolt, aY as HiMiniGlobeAlt, aZ as HiMiniCube, K as HiMiniCloud, a_ as HiMiniServerStack, b as HiMiniCommandLine, a$ as HiMiniFolder, b0 as FaWindows, b1 as FaAws, c as HiMiniChevronRight, I as HiMiniChevronDown, b2 as approvalProofRecentlySatisfied, b3 as isBulkApproveGateReady, b4 as HiMiniArrowLeft, b5 as HiMiniPlus, ae as HiMiniClipboardDocumentCheck, af as HiMiniClipboard, b6 as guardAwareHref, an as HiMiniAdjustmentsHorizontal, b7 as HiMiniCheck, aN as HiMiniMagnifyingGlass, b8 as startGuardCloudConnect, b9 as HiMiniArrowTopRightOnSquare, aM as WorkspacePageHeader, ba as fetchExtensionControlApi } from "../guard-dashboard.js";
+import { E as ExtensionControlApiError, p as previewExtensionMutation, a as applyExtensionMutation, f as fetchExtensionCatalog, b as fetchEffectiveExtensionControls, c as fetchExtensionControlHistory, d as acknowledgeDegradedExtensionControlAuthority, r as recoverExtensionControlAuthority } from "./extension-controls-api.js";
 import { A as ApprovalProofModal } from "./approval-proof-modal.js";
 import { u as useConfirmDialog } from "./confirm-dialog.js";
 const EXTENSION_ID_PATTERN = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
@@ -74,23 +75,23 @@ function extensionDetailHref(extensionId, state = DEFAULT_EXTENSION_DETAIL_URL_S
 function canonicalExtensionId(catalog, candidate) {
   if (!candidate) return null;
   const normalized = candidate.trim().toLowerCase();
-  const direct = catalog.find((extension2) => extension2.extension_id === normalized);
+  const direct = catalog.find((extension) => extension.extension_id === normalized);
   if (direct) return direct.extension_id;
-  return catalog.find((extension2) => extension2.aliases.includes(normalized))?.extension_id ?? null;
+  return catalog.find((extension) => extension.aliases.includes(normalized))?.extension_id ?? null;
 }
-function explicitControlState(effective, kind, targetId2) {
-  const projected = kind === "extension" ? effective.projection?.extensions.find((item) => item.extension_id === targetId2)?.local_state : effective.projection?.permissions.find((item) => item.permission_id === targetId2)?.local_state;
+function explicitControlState(effective, kind, targetId) {
+  const projected = kind === "extension" ? effective.projection?.extensions.find((item) => item.extension_id === targetId)?.local_state : effective.projection?.permissions.find((item) => item.permission_id === targetId)?.local_state;
   if (projected) return projected === "inherited" ? null : projected;
   return effective.controls.find(
-    (control) => control.target.kind === kind && control.target.target_id === targetId2
+    (control) => control.target.kind === kind && control.target.target_id === targetId
   )?.state ?? null;
 }
-function managedExplicitControlState(effective, kind, targetId2) {
-  const projected = kind === "extension" ? effective.projection?.extensions.find((item) => item.extension_id === targetId2)?.managed_state : effective.projection?.permissions.find((item) => item.permission_id === targetId2)?.managed_state;
+function managedExplicitControlState(effective, kind, targetId) {
+  const projected = kind === "extension" ? effective.projection?.extensions.find((item) => item.extension_id === targetId)?.managed_state : effective.projection?.permissions.find((item) => item.permission_id === targetId)?.managed_state;
   if (projected) return projected === "inherited" ? null : projected;
   for (const layer of effective.layers) {
     if (layer.kind !== "signed-cloud") continue;
-    const control = layer.controls.find((item) => item.target_kind === kind && item.target_id === targetId2);
+    const control = layer.controls.find((item) => item.target_kind === kind && item.target_id === targetId);
     if (control) return control.state;
   }
   return null;
@@ -98,24 +99,24 @@ function managedExplicitControlState(effective, kind, targetId2) {
 function managedPermissionState(effective, permissionId) {
   return managedExplicitControlState(effective, "permission", permissionId);
 }
-function extensionEffectiveState(effective, extension2) {
-  const projected = effective.projection?.extensions.find((item) => item.extension_id === extension2.extension_id);
+function extensionEffectiveState(effective, extension) {
+  const projected = effective.projection?.extensions.find((item) => item.extension_id === extension.extension_id);
   if (projected) return projected.effective_state === "allowed" ? "enabled" : "disabled";
   if (effective.health !== "protected") return "disabled";
   if (effective.global_lockdown) return "disabled";
-  if (extension2.required) return "enabled";
-  const explicit = explicitControlState(effective, "extension", extension2.extension_id);
-  if (extension2.trust_class === "external" || extension2.activation === "opt-in") {
+  if (extension.required) return "enabled";
+  const explicit = explicitControlState(effective, "extension", extension.extension_id);
+  if (extension.trust_class === "external" || extension.activation === "opt-in") {
     return explicit === "enabled" ? "enabled" : "disabled";
   }
   return explicit ?? "enabled";
 }
-function permissionEffectiveState(effective, extension2, permission2) {
-  const projected = effective.projection?.permissions.find((item) => item.permission_id === permission2.permission_id);
+function permissionEffectiveState(effective, extension, permission) {
+  const projected = effective.projection?.permissions.find((item) => item.permission_id === permission.permission_id);
   if (projected) return projected.effective_state === "allowed" ? "enabled" : "disabled";
-  if (extensionEffectiveState(effective, extension2) === "disabled") return "disabled";
-  if (!permission2.configurable) return permission2.default_enabled ? "enabled" : "disabled";
-  return explicitControlState(effective, "permission", permission2.permission_id) ?? (permission2.default_enabled ? "enabled" : "disabled");
+  if (extensionEffectiveState(effective, extension) === "disabled") return "disabled";
+  if (!permission.configurable) return permission.default_enabled ? "enabled" : "disabled";
+  return explicitControlState(effective, "permission", permission.permission_id) ?? (permission.default_enabled ? "enabled" : "disabled");
 }
 function extensionDisplayName(name) {
   for (const suffix of [" command protection", " protection"]) {
@@ -126,25 +127,25 @@ function extensionDisplayName(name) {
   }
   return name;
 }
-function extensionStateLabel(effective, extension2) {
+function extensionStateLabel(effective, extension) {
   if (effective.health !== "protected") return "Unavailable";
   if (effective.global_lockdown) return "Lockdown";
-  if (managedExplicitControlState(effective, "extension", extension2.extension_id) !== null) return "Managed";
-  if (extension2.required) return "Required";
-  return extensionEffectiveState(effective, extension2) === "enabled" ? "Allowed" : "Blocked";
+  if (managedExplicitControlState(effective, "extension", extension.extension_id) !== null) return "Managed";
+  if (extension.required) return "Required";
+  return extensionEffectiveState(effective, extension) === "enabled" ? "Allowed" : "Blocked";
 }
-function catalogRowSecondLine(extension2, state) {
+function catalogRowSecondLine(extension, state) {
   if (state === "Managed" || state === "Lockdown" || state === "Unavailable") return state;
-  if (extension2.trust_class === "external" && state !== "Allowed" && state !== "Required") {
+  if (extension.trust_class === "external" && state !== "Allowed" && state !== "Required") {
     return "Off until you turn it on";
   }
   if (state === "Blocked") return state;
-  const executables = extension2.executables.join(" · ").trim();
-  return executables || extension2.description;
+  const executables = extension.executables.join(" · ").trim();
+  return executables || extension.description;
 }
-function controlProvenance(effective, kind, targetId2) {
+function controlProvenance(effective, kind, targetId) {
   const managedSource2 = effective.managed_controls?.authority_mode === "managed-restrictive" ? `Managed by ${effective.managed_controls.workspace_id}` : "Synced from Guard Cloud";
-  const projected = kind === "extension" ? effective.projection?.extensions.find((item) => item.extension_id === targetId2) : effective.projection?.permissions.find((item) => item.permission_id === targetId2);
+  const projected = kind === "extension" ? effective.projection?.extensions.find((item) => item.extension_id === targetId) : effective.projection?.permissions.find((item) => item.permission_id === targetId);
   if (projected) {
     const sources2 = [];
     if (effective.global_lockdown) sources2.push("Emergency Lockdown");
@@ -156,15 +157,15 @@ function controlProvenance(effective, kind, targetId2) {
   const sources = [];
   if (effective.global_lockdown) sources.push("Emergency Lockdown");
   for (const layer of effective.layers) {
-    if (layer.controls.some((control) => control.target_kind === kind && control.target_id === targetId2)) {
+    if (layer.controls.some((control) => control.target_kind === kind && control.target_id === targetId)) {
       sources.push(layer.kind === "signed-cloud" ? managedSource2 : "Set on this device");
     }
   }
   if (sources.length === 0) sources.push("Recommended by Guard");
   return sources;
 }
-function permissionForRule(extension2, rule2) {
-  return extension2.permissions.find((permission2) => permission2.rule_ids.includes(rule2.rule_id)) ?? null;
+function permissionForRule(extension, rule) {
+  return extension.permissions.find((permission) => permission.rule_ids.includes(rule.rule_id)) ?? null;
 }
 function treatmentLabel(value) {
   const labels = {
@@ -182,7 +183,7 @@ function treatmentLabel(value) {
   return labels[value] ?? value.replaceAll("-", " ");
 }
 function familyHeading(permissions) {
-  const examples = permissions.map((permission2) => permission2.example_command).filter((example) => Boolean(example)).map((example) => example.split(/\s+/));
+  const examples = permissions.map((permission) => permission.example_command).filter((example) => Boolean(example)).map((example) => example.split(/\s+/));
   if (!examples.length) return permissions[0]?.label ?? "";
   const first = examples[0];
   const shared = [];
@@ -196,12 +197,12 @@ function familyHeading(permissions) {
 function groupPermissionsByFamily(permissions) {
   const byFamily = /* @__PURE__ */ new Map();
   const ungrouped = [];
-  for (const permission2 of permissions) {
-    if (!permission2.family) ungrouped.push(permission2);
+  for (const permission of permissions) {
+    if (!permission.family) ungrouped.push(permission);
     else {
-      const members = byFamily.get(permission2.family) ?? [];
-      members.push(permission2);
-      byFamily.set(permission2.family, members);
+      const members = byFamily.get(permission.family) ?? [];
+      members.push(permission);
+      byFamily.set(permission.family, members);
     }
   }
   const families = [...byFamily.entries()].map(([family, members]) => ({ family, heading: familyHeading(members), permissions: members })).sort((left, right) => left.family.localeCompare(right.family));
@@ -244,7 +245,7 @@ function requiredInt(value, field) {
   if (typeof value !== "number" || !Number.isInteger(value)) throw new Error(`Invalid local CLI ${field}`);
   return value;
 }
-function optionalString$1(value) {
+function optionalString(value) {
   if (value === null || value === void 0) return null;
   if (typeof value !== "string") throw new Error("Invalid local CLI string");
   return value;
@@ -286,10 +287,10 @@ function normalizeLocalCliItem(value) {
     kind,
     identity_hash: identityHash,
     example_label: requiredString(value.example_label, "example").slice(0, 160),
-    interpreter_name: optionalString$1(value.interpreter_name),
+    interpreter_name: optionalString(value.interpreter_name),
     observed_count: requiredInt(value.observed_count, "count"),
-    last_seen_at: optionalString$1(value.last_seen_at),
-    source_path: optionalString$1(value.source_path),
+    last_seen_at: optionalString(value.last_seen_at),
+    source_path: optionalString(value.source_path),
     help_status: normalizeHelpStatus(value.help_status),
     surface: normalizeSurface(value.surface),
     server_identity_hash: normalizeIdentityHash(value.server_identity_hash),
@@ -946,749 +947,18 @@ function newExtensionPolicyDraftIdentity() {
 function isCurrentExtensionPolicyDraft(generation, current) {
   return generation === current;
 }
-const DIGEST$2 = /^[a-f0-9]{64}$/;
-const EXTENSION_ID$1 = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
-const PERMISSION_ID$1 = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*\.permission\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
-const MAX_EXTENSIONS = 512;
-const MAX_PERMISSIONS = 4096;
-const MAX_REASONS = 64;
-function record$4(value, label) {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error(`Invalid ${label}`);
-  return value;
-}
-function text(value, label, max = 256) {
-  if (typeof value !== "string" || value.length === 0 || value.length > max) throw new Error(`Invalid ${label}`);
-  return value;
-}
-function integer$4(value, label) {
-  if (!Number.isSafeInteger(value) || value < 0) throw new Error(`Invalid ${label}`);
-  return value;
-}
-function boolean(value, label) {
-  if (typeof value !== "boolean") throw new Error(`Invalid ${label}`);
-  return value;
-}
-function enumValue$1(value, label, values) {
-  const candidate = text(value, label, 64);
-  if (!values.includes(candidate)) throw new Error(`Invalid ${label}`);
-  return candidate;
-}
-function id$1(value, label, pattern) {
-  const candidate = text(value, label).toLowerCase();
-  if (!pattern.test(candidate)) throw new Error(`Invalid ${label}`);
-  return candidate;
-}
-function reasons(value, label) {
-  if (!Array.isArray(value) || value.length > MAX_REASONS) throw new Error(`Invalid ${label}`);
-  return value.map((item, index) => text(item, `${label}[${index}]`, 128));
-}
-function extensionItem(value, label) {
-  const item = record$4(value, label);
-  return {
-    extension_id: id$1(item.extension_id, `${label}.extension_id`, EXTENSION_ID$1),
-    effective_state: enumValue$1(item.effective_state, `${label}.effective_state`, ["allowed", "blocked"]),
-    local_state: enumValue$1(item.local_state, `${label}.local_state`, ["inherited", "enabled", "disabled"]),
-    managed_state: enumValue$1(item.managed_state, `${label}.managed_state`, ["inherited", "enabled", "disabled"]),
-    required: boolean(item.required, `${label}.required`),
-    reason_codes: reasons(item.reason_codes, `${label}.reason_codes`)
-  };
-}
-function permissionItem(value, label) {
-  const item = record$4(value, label);
-  return {
-    permission_id: id$1(item.permission_id, `${label}.permission_id`, PERMISSION_ID$1),
-    extension_id: id$1(item.extension_id, `${label}.extension_id`, EXTENSION_ID$1),
-    effective_state: enumValue$1(item.effective_state, `${label}.effective_state`, ["allowed", "blocked"]),
-    local_state: enumValue$1(item.local_state, `${label}.local_state`, ["inherited", "enabled", "disabled"]),
-    managed_state: enumValue$1(item.managed_state, `${label}.managed_state`, ["inherited", "enabled", "disabled"]),
-    configurable: boolean(item.configurable, `${label}.configurable`),
-    fixed_reason: item.fixed_reason === null ? null : text(item.fixed_reason, `${label}.fixed_reason`, 2048),
-    reason_codes: reasons(item.reason_codes, `${label}.reason_codes`)
-  };
-}
-function normalizeEffectiveExtensionControlProjection(value) {
-  const root = record$4(value, "extension projection");
-  const schemaVersion = text(root.schema_version, "projection.schema_version", 128);
-  if (schemaVersion !== "guard.daemon.extension-control-projection.v1") throw new Error("Invalid extension projection schema");
-  const digest2 = text(root.catalog_digest, "projection.catalog_digest", 64);
-  if (!DIGEST$2.test(digest2)) throw new Error("Invalid projection.catalog_digest");
-  if (!Array.isArray(root.extensions) || root.extensions.length > MAX_EXTENSIONS) throw new Error("Invalid projection.extensions");
-  if (!Array.isArray(root.permissions) || root.permissions.length > MAX_PERMISSIONS) throw new Error("Invalid projection.permissions");
-  const extensions = root.extensions.map((item, index) => extensionItem(item, `projection.extensions[${index}]`));
-  const permissions = root.permissions.map((item, index) => permissionItem(item, `projection.permissions[${index}]`));
-  if (new Set(extensions.map((item) => item.extension_id)).size !== extensions.length) throw new Error("Duplicate projection extension ID");
-  if (new Set(permissions.map((item) => item.permission_id)).size !== permissions.length) throw new Error("Duplicate projection permission ID");
-  return {
-    schema_version: "guard.daemon.extension-control-projection.v1",
-    revision: integer$4(root.revision, "projection.revision"),
-    catalog_digest: digest2,
-    health: enumValue$1(root.health, "projection.health", ["unenrolled", "protected", "tampered", "degraded-unacknowledged", "degraded-acknowledged", "recovery-required"]),
-    extensions,
-    permissions
-  };
-}
-const EXTENSION_ID = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
-const PERMISSION_ID = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*\.permission\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
-const RULE_ID = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
-const DIGEST$1 = /^[a-f0-9]{64}$/;
-const VERSION = /^[1-9][0-9]*\.[0-9]+\.[0-9]+$/;
-const EXTENSION_CLIENT_LIMITS = Object.freeze({
-  extensions: 512,
-  rulesPerExtension: 1024,
-  permissionsPerExtension: 512,
-  relationshipIds: 1024,
-  controls: 1024,
-  layers: 2,
-  failures: 256,
-  stringLength: 8192
-});
-class ExtensionControlProtocolError extends Error {
-  constructor(message) {
-    super(`Invalid extension-control response: ${message}`);
-  }
-}
-function record$3(value, label) {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new ExtensionControlProtocolError(`${label} must be an object`);
-  }
-  return value;
-}
-function array(value, label, max) {
-  if (!Array.isArray(value)) throw new ExtensionControlProtocolError(`${label} must be an array`);
-  if (value.length > max) throw new ExtensionControlProtocolError(`${label} exceeds ${max} items`);
-  return value;
-}
-function string$1(value, label, allowEmpty = false) {
-  if (typeof value !== "string") throw new ExtensionControlProtocolError(`${label} must be a string`);
-  if (value.length > EXTENSION_CLIENT_LIMITS.stringLength) throw new ExtensionControlProtocolError(`${label} is too long`);
-  if (!allowEmpty && value.trim().length === 0) throw new ExtensionControlProtocolError(`${label} is required`);
-  return value;
-}
-function optionalString(value, label) {
-  if (value === null) return null;
-  return string$1(value, label);
-}
-function catalogText(value) {
-  return typeof value === "string" && value.trim() ? value : null;
-}
-function publisher(value, label) {
-  const item = record$3(value, label);
-  const url = item.url;
-  return {
-    id: string$1(item.id, `${label}.id`),
-    displayName: string$1(item.displayName, `${label}.displayName`),
-    ...url === void 0 ? {} : { url: string$1(url, `${label}.url`) }
-  };
-}
-function icon(value, label) {
-  if (value === void 0 || value === null) return { kind: "none" };
-  const item = record$3(value, label);
-  const kind = enumValue(item.kind, `${label}.kind`, ["react-icon", "svg-ref", "none"]);
-  const name = item.name === void 0 ? void 0 : string$1(item.name, `${label}.name`);
-  const background = item.background === void 0 ? void 0 : string$1(item.background, `${label}.background`);
-  return { kind, ...name ? { name } : {}, ...background ? { background } : {} };
-}
-function bool$1(value, label) {
-  if (typeof value !== "boolean") throw new ExtensionControlProtocolError(`${label} must be boolean`);
-  return value;
-}
-function integer$3(value, label, min = 0) {
-  if (!Number.isSafeInteger(value) || value < min) {
-    throw new ExtensionControlProtocolError(`${label} must be an integer >= ${min}`);
-  }
-  return value;
-}
-function enumValue(value, label, values) {
-  const candidate = string$1(value, label);
-  if (!values.includes(candidate)) throw new ExtensionControlProtocolError(`${label} has unsupported value`);
-  return candidate;
-}
-function id(value, label, pattern) {
-  const candidate = string$1(value, label).trim().toLowerCase();
-  if (!pattern.test(candidate)) throw new ExtensionControlProtocolError(`${label} is not canonical`);
-  return candidate;
-}
-function digest$2(value, label) {
-  const candidate = string$1(value, label).trim().toLowerCase();
-  if (!DIGEST$1.test(candidate)) throw new ExtensionControlProtocolError(`${label} must be a SHA-256 digest`);
-  return candidate;
-}
-function version(value, label) {
-  const candidate = string$1(value, label);
-  if (!VERSION.test(candidate)) throw new ExtensionControlProtocolError(`${label} is not a semantic implementation version`);
-  return candidate;
-}
-function terminalCommands(value) {
-  if (value === void 0) return void 0;
-  const item = record$3(value, "effective.terminal_commands");
-  return {
-    ...item.shell === void 0 ? {} : { shell: enumValue(item.shell, "effective.terminal_commands.shell", ["powershell"]) },
-    enroll: string$1(item.enroll, "effective.terminal_commands.enroll"),
-    recover_authority: string$1(item.recover_authority, "effective.terminal_commands.recover_authority")
-  };
-}
-function stringList$1(value, label, max = EXTENSION_CLIENT_LIMITS.relationshipIds) {
-  return array(value, label, max).map((item, index) => string$1(item, `${label}[${index}]`));
-}
-function idList$1(value, label, pattern, max = EXTENSION_CLIENT_LIMITS.relationshipIds) {
-  const items = array(value, label, max).map((item, index) => id(item, `${label}[${index}]`, pattern));
-  if (new Set(items).size !== items.length) throw new ExtensionControlProtocolError(`${label} contains duplicates`);
-  return items;
-}
-function safeVariant(value, label) {
-  const item = record$3(value, label);
-  return {
-    variant_id: string$1(item.variant_id, `${label}.variant_id`),
-    title: string$1(item.title, `${label}.title`),
-    matcher_kind: string$1(item.matcher_kind, `${label}.matcher_kind`)
-  };
-}
-function rule(value, extensionId, label) {
-  const item = record$3(value, label);
-  const ruleId = id(item.rule_id, `${label}.rule_id`, RULE_ID);
-  if (!ruleId.startsWith(`${extensionId}.`)) throw new ExtensionControlProtocolError(`${label}.rule_id belongs to another extension`);
-  const rawVersion = item.rule_version;
-  if (!(typeof rawVersion === "string" || Number.isSafeInteger(rawVersion))) {
-    throw new ExtensionControlProtocolError(`${label}.rule_version must be string or integer`);
-  }
-  return {
-    rule_id: ruleId,
-    rule_version: rawVersion,
-    title: string$1(item.title, `${label}.title`),
-    description: string$1(item.description, `${label}.description`),
-    severity: enumValue(item.severity, `${label}.severity`, ["low", "medium", "high", "critical"]),
-    risk_classes: stringList$1(item.risk_classes, `${label}.risk_classes`),
-    action_classes: stringList$1(item.action_classes, `${label}.action_classes`),
-    safer_alternatives: stringList$1(item.safer_alternatives, `${label}.safer_alternatives`),
-    default_mode: enumValue(item.default_mode, `${label}.default_mode`, ["required", "enforce", "review", "monitor", "disabled"]),
-    matcher_kind: string$1(item.matcher_kind, `${label}.matcher_kind`),
-    safe_variants: array(item.safe_variants, `${label}.safe_variants`, EXTENSION_CLIENT_LIMITS.relationshipIds).map((entry, index) => safeVariant(entry, `${label}.safe_variants[${index}]`)),
-    compatibility_fallback: bool$1(item.compatibility_fallback, `${label}.compatibility_fallback`)
-  };
-}
-function permission(value, extensionId, label) {
-  const item = record$3(value, label);
-  const permissionId = id(item.permission_id, `${label}.permission_id`, PERMISSION_ID);
-  const owner = id(item.extension_id, `${label}.extension_id`, EXTENSION_ID);
-  if (owner !== extensionId || !permissionId.startsWith(`${extensionId}.permission.`)) {
-    throw new ExtensionControlProtocolError(`${label} belongs to another extension`);
-  }
-  const replacement = item.replacement_permission_id === null ? null : id(item.replacement_permission_id, `${label}.replacement_permission_id`, PERMISSION_ID);
-  return {
-    permission_id: permissionId,
-    schema_version: integer$3(item.schema_version, `${label}.schema_version`, 1),
-    extension_id: owner,
-    implementation_version: version(item.implementation_version, `${label}.implementation_version`),
-    label: string$1(item.label, `${label}.label`),
-    description: string$1(item.description, `${label}.description`),
-    risk_tier: enumValue(item.risk_tier, `${label}.risk_tier`, ["low", "medium", "high", "critical"]),
-    baseline_floor: enumValue(item.baseline_floor, `${label}.baseline_floor`, ["allow", "warn", "review", "require-reapproval", "sandbox-required", "block"]),
-    default_enabled: bool$1(item.default_enabled, `${label}.default_enabled`),
-    configurable: bool$1(item.configurable, `${label}.configurable`),
-    fixed_reason: optionalString(item.fixed_reason, `${label}.fixed_reason`),
-    typed_capabilities: stringList$1(item.typed_capabilities, `${label}.typed_capabilities`),
-    action_classes: stringList$1(item.action_classes, `${label}.action_classes`),
-    rule_ids: idList$1(item.rule_ids, `${label}.rule_ids`, RULE_ID),
-    dependencies: idList$1(item.dependencies, `${label}.dependencies`, PERMISSION_ID),
-    conflicts: idList$1(item.conflicts, `${label}.conflicts`, PERMISSION_ID),
-    implied_permissions: idList$1(item.implied_permissions, `${label}.implied_permissions`, PERMISSION_ID),
-    introduced_version: version(item.introduced_version, `${label}.introduced_version`),
-    deprecated: bool$1(item.deprecated, `${label}.deprecated`),
-    replacement_permission_id: replacement,
-    safer_guidance: stringList$1(item.safer_guidance, `${label}.safer_guidance`),
-    example_command: catalogText(item.example_command),
-    family: catalogText(item.family)
-  };
-}
-function mcpLaunch(value, label) {
-  const item = record$3(value, label);
-  const kind = enumValue(item.kind, `${label}.kind`, ["package-launcher", "remote-http"]);
-  if (kind === "package-launcher") {
-    return {
-      kind,
-      command: string$1(item.command, `${label}.command`),
-      package: string$1(item.package, `${label}.package`)
-    };
-  }
-  return {
-    kind,
-    url: string$1(item.url, `${label}.url`),
-    serverNames: stringList$1(item.serverNames, `${label}.serverNames`, 8)
-  };
-}
-function mcpTool(value, label) {
-  const item = record$3(value, label);
-  return {
-    name: string$1(item.name, `${label}.name`),
-    state: enumValue(item.state, `${label}.state`, ["inherit", "allow", "review", "block"])
-  };
-}
-function mcpCatalogFields(item, label) {
-  if (item.surface === void 0) return {};
-  const surface = enumValue(item.surface, `${label}.surface`, ["mcp"]);
-  const launch = item.mcp_launch === void 0 ? void 0 : mcpLaunch(item.mcp_launch, `${label}.mcp_launch`);
-  const tools = item.mcp_tools === void 0 ? void 0 : array(item.mcp_tools, `${label}.mcp_tools`, 80).map((entry, index) => mcpTool(entry, `${label}.mcp_tools[${index}]`));
-  return {
-    surface,
-    ...launch ? { mcp_launch: launch } : {},
-    ...tools ? { mcp_tools: tools } : {}
-  };
-}
-function extension(value, label) {
-  const item = record$3(value, label);
-  const extensionId = id(item.extension_id, `${label}.extension_id`, EXTENSION_ID);
-  const rules = array(item.rules, `${label}.rules`, EXTENSION_CLIENT_LIMITS.rulesPerExtension).map((entry, index) => rule(entry, extensionId, `${label}.rules[${index}]`));
-  const permissions = array(item.permissions, `${label}.permissions`, EXTENSION_CLIENT_LIMITS.permissionsPerExtension).map((entry, index) => permission(entry, extensionId, `${label}.permissions[${index}]`));
-  const ruleIds = rules.map((entry) => entry.rule_id);
-  const permissionIds = permissions.map((entry) => entry.permission_id);
-  if (new Set(ruleIds).size !== ruleIds.length) throw new ExtensionControlProtocolError(`${label}.rules contains duplicate rule IDs`);
-  if (new Set(permissionIds).size !== permissionIds.length) throw new ExtensionControlProtocolError(`${label}.permissions contains duplicate permission IDs`);
-  const knownRules = new Set(ruleIds);
-  for (const spec of permissions) {
-    for (const ruleId of spec.rule_ids) {
-      if (!knownRules.has(ruleId)) throw new ExtensionControlProtocolError(`${label} permission references unknown rule ${ruleId}`);
-    }
-  }
-  const ruleCount = integer$3(item.rule_count, `${label}.rule_count`);
-  const permissionCount = integer$3(item.permission_count, `${label}.permission_count`);
-  if (ruleCount !== rules.length || permissionCount !== permissions.length) {
-    throw new ExtensionControlProtocolError(`${label} count metadata does not match payload`);
-  }
-  return {
-    schema_version: integer$3(item.schema_version, `${label}.schema_version`, 1),
-    extension_id: extensionId,
-    name: string$1(item.name, `${label}.name`),
-    description: string$1(item.description, `${label}.description`),
-    enabled: bool$1(item.enabled, `${label}.enabled`),
-    required: bool$1(item.required, `${label}.required`),
-    trust_class: item.trust_class === void 0 ? "first-party" : enumValue(item.trust_class, `${label}.trust_class`, ["first-party", "trusted-library", "external"]),
-    activation: item.activation === void 0 ? "default-on" : enumValue(item.activation, `${label}.activation`, ["default-on", "opt-in"]),
-    publisher: item.publisher === void 0 ? { id: "hol", displayName: "Hashgraph Online" } : publisher(item.publisher, `${label}.publisher`),
-    icon: icon(item.icon, `${label}.icon`),
-    source: enumValue(item.source, `${label}.source`, ["built-in", "local-admin", "signed-cloud"]),
-    version: version(item.version, `${label}.version`),
-    aliases: idList$1(item.aliases, `${label}.aliases`, EXTENSION_ID),
-    dependencies: idList$1(item.dependencies, `${label}.dependencies`, EXTENSION_ID),
-    conflicts: idList$1(item.conflicts, `${label}.conflicts`, EXTENSION_ID),
-    delegated_protection: optionalString(item.delegated_protection, `${label}.delegated_protection`),
-    ecosystem_ids: stringList$1(item.ecosystem_ids, `${label}.ecosystem_ids`),
-    executables: stringList$1(item.executables, `${label}.executables`),
-    project_markers: stringList$1(item.project_markers, `${label}.project_markers`),
-    reference_urls: stringList$1(item.reference_urls, `${label}.reference_urls`),
-    action_classes: stringList$1(item.action_classes, `${label}.action_classes`),
-    risk_classes: stringList$1(item.risk_classes, `${label}.risk_classes`),
-    safer_alternatives: stringList$1(item.safer_alternatives, `${label}.safer_alternatives`),
-    rule_count: ruleCount,
-    rules,
-    permission_count: permissionCount,
-    permissions,
-    ...mcpCatalogFields(item, label)
-  };
-}
-function normalizeExtensionControlLayer(value, label = "layer") {
-  const item = record$3(value, label);
-  const controls = array(item.controls, `${label}.controls`, EXTENSION_CLIENT_LIMITS.controls).map((entry, index) => {
-    const raw = record$3(entry, `${label}.controls[${index}]`);
-    const kind = enumValue(raw.target_kind, `${label}.controls[${index}].target_kind`, ["extension", "permission"]);
-    return {
-      target_kind: kind,
-      target_id: id(raw.target_id, `${label}.controls[${index}].target_id`, kind === "extension" ? EXTENSION_ID : PERMISSION_ID),
-      state: enumValue(raw.state, `${label}.controls[${index}].state`, ["enabled", "disabled"])
-    };
-  });
-  const keys = controls.map((control) => `${control.target_kind}:${control.target_id}`);
-  if (new Set(keys).size !== keys.length) throw new ExtensionControlProtocolError(`${label}.controls contains duplicate targets`);
-  return {
-    schema_version: string$1(item.schema_version, `${label}.schema_version`),
-    kind: enumValue(item.kind, `${label}.kind`, ["local-admin", "signed-cloud"]),
-    catalog_digest: digest$2(item.catalog_digest, `${label}.catalog_digest`),
-    global_lockdown: bool$1(item.global_lockdown, `${label}.global_lockdown`),
-    controls
-  };
-}
-function normalizeExtensionCatalog(value) {
-  const root = record$3(value, "catalog");
-  const extensions = array(root.extensions, "catalog.extensions", EXTENSION_CLIENT_LIMITS.extensions).map((entry, index) => extension(entry, `catalog.extensions[${index}]`));
-  const ids = extensions.map((entry) => entry.extension_id);
-  if (new Set(ids).size !== ids.length) throw new ExtensionControlProtocolError("catalog.extensions contains duplicate extension IDs");
-  const limits = root.limits === void 0 ? void 0 : record$3(root.limits, "catalog.limits");
-  return {
-    schema_version: string$1(root.schema_version, "catalog.schema_version"),
-    control_schema_version: root.control_schema_version === void 0 ? void 0 : string$1(root.control_schema_version, "catalog.control_schema_version"),
-    catalog_digest: digest$2(root.catalog_digest, "catalog.catalog_digest"),
-    extensions,
-    limits: limits === void 0 ? void 0 : {
-      max_body_bytes: limits.max_body_bytes === void 0 ? void 0 : integer$3(limits.max_body_bytes, "catalog.limits.max_body_bytes", 1),
-      max_controls: limits.max_controls === void 0 ? void 0 : integer$3(limits.max_controls, "catalog.limits.max_controls", 1),
-      max_observations: limits.max_observations === void 0 ? void 0 : integer$3(limits.max_observations, "catalog.limits.max_observations", 1)
-    }
-  };
-}
-function normalizeEffectiveExtensionControls(value) {
-  const root = record$3(value, "effective");
-  const controls = array(root.controls, "effective.controls", EXTENSION_CLIENT_LIMITS.controls).map((entry, index) => {
-    const raw = record$3(entry, `effective.controls[${index}]`);
-    const target2 = record$3(raw.target, `effective.controls[${index}].target`);
-    const kind = enumValue(target2.kind, `effective.controls[${index}].target.kind`, ["extension", "permission"]);
-    return {
-      target: {
-        kind,
-        target_id: id(target2.target_id, `effective.controls[${index}].target.target_id`, kind === "extension" ? EXTENSION_ID : PERMISSION_ID)
-      },
-      state: enumValue(raw.state, `effective.controls[${index}].state`, ["enabled", "disabled"])
-    };
-  });
-  const keys = controls.map((control) => `${control.target.kind}:${control.target.target_id}`);
-  if (new Set(keys).size !== keys.length) throw new ExtensionControlProtocolError("effective.controls contains duplicate targets");
-  const layers = array(root.layers, "effective.layers", EXTENSION_CLIENT_LIMITS.layers).map((entry, index) => normalizeExtensionControlLayer(entry, `effective.layers[${index}]`));
-  const failures = array(root.failures, "effective.failures", EXTENSION_CLIENT_LIMITS.failures).map((entry, index) => {
-    const raw = record$3(entry, `effective.failures[${index}]`);
-    return {
-      code: string$1(raw.code, `effective.failures[${index}].code`),
-      detail: raw.detail === void 0 ? void 0 : string$1(raw.detail, `effective.failures[${index}].detail`, true),
-      layer_kind: raw.layer_kind === void 0 ? void 0 : string$1(raw.layer_kind, `effective.failures[${index}].layer_kind`)
-    };
-  });
-  const managedControls = root.managed_controls === void 0 ? void 0 : (() => {
-    const managed = record$3(root.managed_controls, "effective.managed_controls");
-    const acknowledgement = record$3(
-      managed.acknowledgement,
-      "effective.managed_controls.acknowledgement"
-    );
-    const bundleVersion = managed.bundle_version;
-    if (!(typeof bundleVersion === "string" && bundleVersion.length > 0 && bundleVersion.length <= 160) && !(typeof bundleVersion === "number" && Number.isSafeInteger(bundleVersion) && bundleVersion >= 0)) {
-      throw new ExtensionControlProtocolError("effective.managed_controls.bundle_version is invalid");
-    }
-    const policyRevision = acknowledgement.policy_revision;
-    if (policyRevision !== void 0 && !(typeof policyRevision === "string" && policyRevision.length > 0 && policyRevision.length <= 160) && !(typeof policyRevision === "number" && Number.isSafeInteger(policyRevision) && policyRevision >= 0)) {
-      throw new ExtensionControlProtocolError("effective.managed_controls.acknowledgement.policy_revision is invalid");
-    }
-    return {
-      control_set_id: managed.control_set_id === void 0 ? void 0 : string$1(managed.control_set_id, "effective.managed_controls.control_set_id"),
-      control_set_name: managed.control_set_name === void 0 ? void 0 : string$1(managed.control_set_name, "effective.managed_controls.control_set_name"),
-      bundle_version: bundleVersion,
-      workspace_id: string$1(managed.workspace_id, "effective.managed_controls.workspace_id"),
-      authority_mode: managed.authority_mode === void 0 ? void 0 : enumValue(
-        managed.authority_mode,
-        "effective.managed_controls.authority_mode",
-        ["personal-shared", "workspace-shared", "managed-restrictive"]
-      ),
-      catalog_digest: digest$2(managed.catalog_digest, "effective.managed_controls.catalog_digest"),
-      issued_at: managed.issued_at === void 0 ? void 0 : string$1(managed.issued_at, "effective.managed_controls.issued_at"),
-      expires_at: managed.expires_at === void 0 ? void 0 : string$1(managed.expires_at, "effective.managed_controls.expires_at"),
-      acknowledgement: {
-        extension_authority_revision: integer$3(
-          acknowledgement.extension_authority_revision,
-          "effective.managed_controls.acknowledgement.extension_authority_revision"
-        ),
-        policy_revision: policyRevision,
-        effective_projection_digest: acknowledgement.effective_projection_digest === void 0 ? void 0 : digest$2(
-          acknowledgement.effective_projection_digest,
-          "effective.managed_controls.acknowledgement.effective_projection_digest"
-        ),
-        status: string$1(acknowledgement.status, "effective.managed_controls.acknowledgement.status")
-      }
-    };
-  })();
-  return {
-    schema_version: string$1(root.schema_version, "effective.schema_version"),
-    health: enumValue(root.health, "effective.health", ["unenrolled", "protected", "tampered", "degraded-unacknowledged", "degraded-acknowledged", "recovery-required"]),
-    revision: integer$3(root.revision, "effective.revision"),
-    catalog_digest: digest$2(root.catalog_digest, "effective.catalog_digest"),
-    global_lockdown: bool$1(root.global_lockdown, "effective.global_lockdown"),
-    controls,
-    layers,
-    failures,
-    terminal_commands: terminalCommands(root.terminal_commands),
-    projection: root.projection === void 0 ? void 0 : normalizeEffectiveExtensionControlProjection(root.projection),
-    managed_controls: managedControls
-  };
-}
-const DIGEST = /^[a-f0-9]{64}$/;
-const TARGET_ID = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
-const MAX_CHANGED_TARGETS = 4096;
-const MAX_AFFECTED_IDS = 4096;
-const MAX_WARNINGS = 64;
-const MAX_TEXT = 8192;
-function record$2(value, label) {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error(`Invalid extension-control ${label}: expected object`);
-  return value;
-}
-function string(value, label, max = MAX_TEXT) {
-  if (typeof value !== "string" || value.length === 0 || value.length > max) throw new Error(`Invalid extension-control ${label}`);
-  return value;
-}
-function integer$2(value, label) {
-  if (!Number.isSafeInteger(value) || value < 0) throw new Error(`Invalid extension-control ${label}`);
-  return value;
-}
-function bool(value, label) {
-  if (typeof value !== "boolean") throw new Error(`Invalid extension-control ${label}`);
-  return value;
-}
-function digest$1(value, label) {
-  const candidate = string(value, label, 64);
-  if (!DIGEST.test(candidate)) throw new Error(`Invalid extension-control ${label}`);
-  return candidate;
-}
-function targetId(value, label) {
-  const candidate = string(value, label, 256);
-  if (!TARGET_ID.test(candidate)) throw new Error(`Invalid extension-control ${label}`);
-  return candidate;
-}
-function boundedArray(value, label, max) {
-  if (!Array.isArray(value) || value.length > max) throw new Error(`Invalid extension-control ${label}`);
-  return value;
-}
-function idList(value, label) {
-  const items = boundedArray(value, label, MAX_AFFECTED_IDS).map((item, index) => targetId(item, `${label}[${index}]`));
-  if (new Set(items).size !== items.length) throw new Error(`Invalid extension-control ${label}: duplicate IDs`);
-  return items;
-}
-function optionalIdList(value, label) {
-  return value === void 0 ? void 0 : idList(value, label);
-}
-function optionalStringList(value, label) {
-  if (value === void 0) return void 0;
-  const items = boundedArray(value, label, MAX_AFFECTED_IDS).map((item, index) => string(item, `${label}[${index}]`, 128));
-  if (new Set(items).size !== items.length) throw new Error(`Invalid extension-control ${label}: duplicate values`);
-  return items;
-}
-function warning(value, label) {
-  const item = record$2(value, label);
-  return {
-    code: string(item.code, `${label}.code`, 128),
-    message: string(item.message, `${label}.message`, 1024),
-    ...item.target_id === void 0 ? {} : { target_id: targetId(item.target_id, `${label}.target_id`) },
-    ...item.count === void 0 ? {} : { count: integer$2(item.count, `${label}.count`) }
-  };
-}
-function target(value, label) {
-  const item = record$2(value, label);
-  const rawTarget = record$2(item.target, `${label}.target`);
-  const kind = string(rawTarget.kind, `${label}.target.kind`, 32);
-  if (kind !== "extension" && kind !== "permission") throw new Error(`Invalid extension-control ${label}.target.kind`);
-  const beforeExplicit = string(item.before_explicit, `${label}.before_explicit`, 32);
-  const afterExplicit = string(item.after_explicit, `${label}.after_explicit`, 32);
-  if (!["inherited", "enabled", "disabled"].includes(beforeExplicit) || !["inherited", "enabled", "disabled"].includes(afterExplicit)) throw new Error(`Invalid extension-control ${label} explicit state`);
-  const beforeEffective = string(item.before_effective, `${label}.before_effective`, 32);
-  const afterEffective = string(item.after_effective, `${label}.after_effective`, 32);
-  if (!["allowed", "blocked"].includes(beforeEffective) || !["allowed", "blocked"].includes(afterEffective)) throw new Error(`Invalid extension-control ${label} effective state`);
-  const affectedExtensionIds = optionalIdList(item.affected_extension_ids, `${label}.affected_extension_ids`);
-  const dependencyPermissionIds = optionalIdList(item.dependency_permission_ids, `${label}.dependency_permission_ids`);
-  const impliedPermissionIds = optionalIdList(item.implied_permission_ids, `${label}.implied_permission_ids`);
-  const conflictPermissionIds = optionalIdList(item.conflict_permission_ids, `${label}.conflict_permission_ids`);
-  const provenance = optionalStringList(item.provenance, `${label}.provenance`);
-  return {
-    target: { kind, target_id: targetId(rawTarget.target_id, `${label}.target.target_id`) },
-    extension_id: targetId(item.extension_id, `${label}.extension_id`),
-    label: string(item.label, `${label}.label`, 512),
-    before_explicit: beforeExplicit,
-    after_explicit: afterExplicit,
-    before_effective: beforeEffective,
-    after_effective: afterEffective,
-    affected_permission_ids: idList(item.affected_permission_ids, `${label}.affected_permission_ids`),
-    affected_rule_ids: idList(item.affected_rule_ids, `${label}.affected_rule_ids`),
-    ...affectedExtensionIds === void 0 ? {} : { affected_extension_ids: affectedExtensionIds },
-    ...dependencyPermissionIds === void 0 ? {} : { dependency_permission_ids: dependencyPermissionIds },
-    ...impliedPermissionIds === void 0 ? {} : { implied_permission_ids: impliedPermissionIds },
-    ...conflictPermissionIds === void 0 ? {} : { conflict_permission_ids: conflictPermissionIds },
-    ...provenance === void 0 ? {} : { provenance },
-    warnings: boundedArray(item.warnings, `${label}.warnings`, MAX_WARNINGS).map((entry, index) => warning(entry, `${label}.warnings[${index}]`)),
-    ...item.extension_name === void 0 ? {} : { extension_name: string(item.extension_name, `${label}.extension_name`, 512) },
-    ...item.baseline_risk === void 0 ? {} : { baseline_risk: string(item.baseline_risk, `${label}.baseline_risk`, 32) },
-    ...item.baseline_floor === void 0 ? {} : { baseline_floor: string(item.baseline_floor, `${label}.baseline_floor`, 32) }
-  };
-}
-function normalizeExtensionSemanticPreview(value) {
-  const root = record$2(value, "semantic preview");
-  if (string(root.schema_version, "semantic_preview.schema_version", 128) !== "guard.daemon.extension-control-semantic-preview.v1") throw new Error("Invalid extension-control semantic preview schema");
-  const lockdown = record$2(root.global_lockdown, "semantic_preview.global_lockdown");
-  const summary = record$2(root.summary, "semantic_preview.summary");
-  const changedTargets = boundedArray(root.changed_targets, "semantic_preview.changed_targets", MAX_CHANGED_TARGETS).map((entry, index) => target(entry, `semantic_preview.changed_targets[${index}]`));
-  const changedTargetCount = integer$2(root.changed_target_count, "semantic_preview.changed_target_count");
-  if (changedTargetCount !== changedTargets.length) throw new Error("Invalid extension-control semantic preview target count");
-  return {
-    schema_version: "guard.daemon.extension-control-semantic-preview.v1",
-    global_lockdown: {
-      before: bool(lockdown.before, "semantic_preview.global_lockdown.before"),
-      after: bool(lockdown.after, "semantic_preview.global_lockdown.after"),
-      changed: bool(lockdown.changed, "semantic_preview.global_lockdown.changed")
-    },
-    changed_target_count: changedTargetCount,
-    affected_permission_count: integer$2(root.affected_permission_count, "semantic_preview.affected_permission_count"),
-    affected_rule_count: integer$2(root.affected_rule_count, "semantic_preview.affected_rule_count"),
-    changed_targets: changedTargets,
-    ...root.approval_required === void 0 ? {} : { approval_required: bool(root.approval_required, "semantic_preview.approval_required") },
-    summary: {
-      newly_blocked_permissions: integer$2(summary.newly_blocked_permissions, "semantic_preview.summary.newly_blocked_permissions"),
-      newly_allowed_permissions: integer$2(summary.newly_allowed_permissions, "semantic_preview.summary.newly_allowed_permissions"),
-      effective_change_count: integer$2(summary.effective_change_count, "semantic_preview.summary.effective_change_count")
-    }
-  };
-}
-function normalizeExtensionMutationPreview(value) {
-  const root = record$2(value, "mutation preview");
-  return {
-    schema_version: string(root.schema_version, "preview.schema_version", 128),
-    previous_revision: integer$2(root.previous_revision, "preview.previous_revision"),
-    next_revision: integer$2(root.next_revision, "preview.next_revision"),
-    catalog_digest: digest$1(root.catalog_digest, "preview.catalog_digest"),
-    canonical_diff_digest: digest$1(root.canonical_diff_digest, "preview.canonical_diff_digest"),
-    global_lockdown: bool(root.global_lockdown, "preview.global_lockdown"),
-    controls: integer$2(root.controls, "preview.controls"),
-    semantic_preview: normalizeExtensionSemanticPreview(root.semantic_preview),
-    ...root.proof_id === void 0 ? {} : { proof_id: string(root.proof_id, "preview.proof_id", 256) }
-  };
-}
-function normalizeExtensionMutationApply(value) {
-  const root = record$2(value, "mutation apply");
-  if (string(root.status, "apply.status", 32) !== "applied") throw new Error("Invalid extension-control apply status");
-  return {
-    schema_version: string(root.schema_version, "apply.schema_version", 128),
-    status: "applied",
-    revision: integer$2(root.revision, "apply.revision"),
-    catalog_digest: digest$1(root.catalog_digest, "apply.catalog_digest")
-  };
-}
-class ExtensionControlApiError extends Error {
-  constructor(message, status, code, recoveryAction) {
-    super(message);
-    this.status = status;
-    this.code = code;
-    this.recoveryAction = recoveryAction;
-  }
-  status;
-  code;
-  recoveryAction;
-}
-async function request$1(path, init) {
-  const response = await fetchExtensionControlApi(path, init);
-  let payload;
-  try {
-    payload = await response.json();
-  } catch {
-    throw new ExtensionControlApiError(`Guard returned invalid JSON (${response.status})`, response.status);
-  }
-  if (!response.ok) {
-    const error = typeof payload === "object" && payload !== null ? payload : {};
-    throw new ExtensionControlApiError(
-      typeof error.error === "string" ? error.error : `Request failed (${response.status})`,
-      response.status,
-      typeof error.error === "string" ? error.error : void 0,
-      typeof error.recovery === "object" && error.recovery !== null && typeof error.recovery.action === "string" ? error.recovery.action : void 0
-    );
-  }
-  return payload;
-}
-async function fetchExtensionCatalog() {
-  return normalizeExtensionCatalog(await request$1("/v1/extension-controls/catalog"));
-}
-async function fetchEffectiveExtensionControls() {
-  const raw = await request$1("/v1/extension-controls/effective");
-  const normalized = normalizeEffectiveExtensionControls(raw);
-  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return normalized;
-  const projectionValue = raw.projection;
-  if (projectionValue === void 0) return normalized;
-  const projection = normalizeEffectiveExtensionControlProjection(projectionValue);
-  if (projection.revision !== normalized.revision || projection.catalog_digest !== normalized.catalog_digest || projection.health !== normalized.health) {
-    throw new ExtensionControlApiError("Guard returned an inconsistent extension-control projection", 502);
-  }
-  return { ...normalized, projection };
-}
-async function fetchExtensionControlHistory() {
-  const raw = await request$1("/v1/extension-controls/history");
-  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) throw new ExtensionControlApiError("Guard returned invalid settings history", 502);
-  const root = raw;
-  if (root.schema_version !== "guard.daemon.extension-control-history.v1") throw new ExtensionControlApiError("Guard returned unsupported settings history", 502);
-  if (!Number.isSafeInteger(root.revision) || root.revision < 0 || typeof root.catalog_digest !== "string") throw new ExtensionControlApiError("Guard returned invalid settings history metadata", 502);
-  if (!Array.isArray(root.items) || root.items.length > 50) throw new ExtensionControlApiError("Guard returned too much settings history", 502);
-  const items = root.items.map((value, index) => {
-    if (typeof value !== "object" || value === null || Array.isArray(value)) throw new ExtensionControlApiError("Guard returned invalid settings history item", 502);
-    const item = value;
-    if (!Number.isSafeInteger(item.revision) || !Number.isSafeInteger(item.previous_revision) || typeof item.occurred_at !== "string" || typeof item.catalog_digest !== "string" || !Array.isArray(item.layers)) throw new ExtensionControlApiError("Guard returned invalid settings history item", 502);
-    const layers = item.layers.map((layer, layerIndex) => normalizeExtensionControlLayer(layer, `history.items[${index}].layers[${layerIndex}]`));
-    return {
-      revision: item.revision,
-      previous_revision: item.previous_revision,
-      occurred_at: item.occurred_at,
-      catalog_digest: item.catalog_digest,
-      layers
-    };
-  });
-  return {
-    schema_version: "guard.daemon.extension-control-history.v1",
-    revision: root.revision,
-    catalog_digest: root.catalog_digest,
-    items
-  };
-}
-async function recoverExtensionControlAuthority(credentials) {
-  const raw = await request$1("/v1/extension-controls/recover-authority", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      session_nonce: crypto.randomUUID().replaceAll("-", ""),
-      ...credentials
-    })
-  });
-  const normalized = normalizeEffectiveExtensionControls(raw);
-  if (typeof raw === "object" && raw !== null && !Array.isArray(raw) && raw.projection !== void 0) {
-    return { ...normalized, projection: normalizeEffectiveExtensionControlProjection(raw.projection) };
-  }
-  return normalized;
-}
-async function acknowledgeDegradedExtensionControlAuthority(credentials) {
-  const raw = await request$1("/v1/extension-controls/acknowledge-degraded", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      session_nonce: crypto.randomUUID().replaceAll("-", ""),
-      ...credentials
-    })
-  });
-  const normalized = normalizeEffectiveExtensionControls(raw);
-  if (typeof raw === "object" && raw !== null && !Array.isArray(raw) && raw.projection !== void 0) {
-    return { ...normalized, projection: normalizeEffectiveExtensionControlProjection(raw.projection) };
-  }
-  return normalized;
-}
-async function previewExtensionMutation(payload) {
-  try {
-    return normalizeExtensionMutationPreview(await request$1("/v1/extension-controls/preview", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    }));
-  } catch (error) {
-    if (error instanceof ExtensionControlApiError) throw error;
-    throw new ExtensionControlApiError(error instanceof Error ? error.message : "Guard returned an invalid preview response", 502);
-  }
-}
-async function applyExtensionMutation(payload) {
-  try {
-    return normalizeExtensionMutationApply(await request$1("/v1/extension-controls/apply", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    }));
-  } catch (error) {
-    if (error instanceof ExtensionControlApiError) throw error;
-    throw new ExtensionControlApiError(error instanceof Error ? error.message : "Guard returned an invalid apply response", 502);
-  }
-}
 function permissionSuffix(permissionId) {
   const marker = ".permission.";
   const index = permissionId.indexOf(marker);
   return index < 0 ? null : permissionId.slice(index + marker.length);
 }
 function latestPermissionId(original, oldExtension, latestExtension) {
-  if (latestExtension.permissions.some((permission2) => permission2.permission_id === original)) return original;
+  if (latestExtension.permissions.some((permission) => permission.permission_id === original)) return original;
   if (latestExtension.extension_id !== oldExtension.extension_id && latestExtension.aliases.includes(oldExtension.extension_id)) {
     const suffix = permissionSuffix(original);
     if (!suffix) return null;
     const candidate = `${latestExtension.extension_id}.permission.${suffix}`;
-    if (latestExtension.permissions.some((permission2) => permission2.permission_id === candidate)) return candidate;
+    if (latestExtension.permissions.some((permission) => permission.permission_id === candidate)) return candidate;
   }
   return null;
 }
@@ -1696,14 +966,14 @@ function rebaseExtensionPolicyDraft(oldEffective, latestEffective, oldExtension,
   let rebased = latestEffective.layers.map((layer) => ({ ...layer, controls: layer.controls.map((control) => ({ ...control })) }));
   const conflicts = [];
   const remapped = {};
-  for (const permission2 of oldExtension.permissions) {
-    const baseState = localPermissionDraftState(oldEffective.layers, permission2.permission_id);
-    const requestedState = localPermissionDraftState(draftLayers, permission2.permission_id);
+  for (const permission of oldExtension.permissions) {
+    const baseState = localPermissionDraftState(oldEffective.layers, permission.permission_id);
+    const requestedState = localPermissionDraftState(draftLayers, permission.permission_id);
     if (baseState === requestedState) continue;
-    const mapped = latestPermissionId(permission2.permission_id, oldExtension, latestExtension);
+    const mapped = latestPermissionId(permission.permission_id, oldExtension, latestExtension);
     if (!mapped) {
       conflicts.push({
-        original_permission_id: permission2.permission_id,
+        original_permission_id: permission.permission_id,
         latest_permission_id: null,
         kind: "removed",
         base_state: baseState,
@@ -1712,11 +982,11 @@ function rebaseExtensionPolicyDraft(oldEffective, latestEffective, oldExtension,
       });
       continue;
     }
-    remapped[permission2.permission_id] = mapped;
+    remapped[permission.permission_id] = mapped;
     const latestState = localPermissionDraftState(latestEffective.layers, mapped);
     if (latestState !== baseState && latestState !== requestedState) {
       conflicts.push({
-        original_permission_id: permission2.permission_id,
+        original_permission_id: permission.permission_id,
         latest_permission_id: mapped,
         kind: "overlap",
         base_state: baseState,
@@ -1781,7 +1051,7 @@ function useExtensionPolicyDraft(props) {
   }, [baseEffective, draftLayers]);
   const changedPermissionCount = reactExports.useMemo(
     () => changeCountFor([...new Set(
-      baseEffective.layers.concat(draftLayers).flatMap((layer) => layer.controls).map((control) => control.target_kind === "permission" ? control.target_id : null).filter((id2) => Boolean(id2))
+      baseEffective.layers.concat(draftLayers).flatMap((layer) => layer.controls).map((control) => control.target_kind === "permission" ? control.target_id : null).filter((id) => Boolean(id))
     )]),
     [baseEffective.layers, changeCountFor, draftLayers]
   );
@@ -1868,14 +1138,14 @@ function useExtensionPolicyDraft(props) {
       setError(null);
       setStale(false);
       if (applied.revision <= baseEffective.revision) throw new Error("Guard did not advance the committed extension-control revision.");
-      const changedPermissionIds = baseEffective.layers.flatMap((layer) => layer.controls).concat(draftLayers.flatMap((layer) => layer.controls)).map((control) => control.target_kind === "permission" ? control.target_id : null).filter((id2) => Boolean(id2));
+      const changedPermissionIds = baseEffective.layers.flatMap((layer) => layer.controls).concat(draftLayers.flatMap((layer) => layer.controls)).map((control) => control.target_kind === "permission" ? control.target_id : null).filter((id) => Boolean(id));
       const previouslyRequested = new Set(
-        draftLayers.flatMap((layer) => layer.controls).map((control) => control.target_kind === "permission" ? control.target_id : null).filter((id2) => Boolean(id2))
+        draftLayers.flatMap((layer) => layer.controls).map((control) => control.target_kind === "permission" ? control.target_id : null).filter((id) => Boolean(id))
       );
       setLastApplied({
         revision: applied.revision,
         previousLayers: appliedLayersBefore,
-        changedPermissionIds: [...new Set(changedPermissionIds)].filter((id2) => previouslyRequested.has(id2) || localPermissionDraftState(baseEffective.layers, id2) !== localPermissionDraftState(draftLayers, id2))
+        changedPermissionIds: [...new Set(changedPermissionIds)].filter((id) => previouslyRequested.has(id) || localPermissionDraftState(baseEffective.layers, id) !== localPermissionDraftState(draftLayers, id))
       });
       draftGeneration.current += 1;
       setDraftLayers(cloneLayers(baseEffective));
@@ -1973,10 +1243,10 @@ function useExtensionPolicyDraft(props) {
     if (profile === "custom") return;
     draftGeneration.current += 1;
     let next = cloneLayers(baseEffective);
-    for (const permission2 of permissions) {
-      if (!permission2.configurable) continue;
+    for (const permission of permissions) {
+      if (!permission.configurable) continue;
       const state = profile === "recommended" ? "inherit" : "block";
-      next = setLocalPermissionDraftState(next, baseEffective.catalog_digest, permission2.permission_id, state);
+      next = setLocalPermissionDraftState(next, baseEffective.catalog_digest, permission.permission_id, state);
     }
     setDraftLayers(next);
     setIdentity(newExtensionPolicyDraftIdentity());
@@ -2105,13 +1375,13 @@ const DEFAULT_QUICK_APPLY_SUBJECT = {
   other: "matching capabilities"
 };
 function quickApplyPermissionIds(permissions, effective, state) {
-  return permissions.filter((permission2) => permission2.configurable).filter((permission2) => state !== "allow" || managedPermissionState(effective, permission2.permission_id) !== "disabled").map((permission2) => permission2.permission_id);
+  return permissions.filter((permission) => permission.configurable).filter((permission) => state !== "allow" || managedPermissionState(effective, permission.permission_id) !== "disabled").map((permission) => permission.permission_id);
 }
 function QuickApplyToolbar(props) {
   const subject = props.subject ?? DEFAULT_QUICK_APPLY_SUBJECT;
-  const configurableCount = props.permissions.filter((permission2) => permission2.configurable).length;
+  const configurableCount = props.permissions.filter((permission) => permission.configurable).length;
   const managedBlockCount = props.permissions.filter(
-    (permission2) => permission2.configurable && managedPermissionState(props.effective, permission2.permission_id) === "disabled"
+    (permission) => permission.configurable && managedPermissionState(props.effective, permission.permission_id) === "disabled"
   ).length;
   let managedBlockCopy = "";
   if (managedBlockCount) {
@@ -2180,19 +1450,19 @@ function managedControlsHref(input) {
   if (!input.cloudControlsUrl) {
     return null;
   }
-  let target2;
+  let target;
   try {
-    target2 = new URL("/guard/controls", input.cloudControlsUrl);
+    target = new URL("/guard/controls", input.cloudControlsUrl);
   } catch {
     return null;
   }
   if (input.extensionId) {
-    target2.searchParams.set("extensionId", input.extensionId);
+    target.searchParams.set("extensionId", input.extensionId);
   }
   if (input.permissionId) {
-    target2.searchParams.set("permissionId", input.permissionId);
+    target.searchParams.set("permissionId", input.permissionId);
   }
-  return target2.toString();
+  return target.toString();
 }
 function buildLocalProtectionView(input) {
   const sources = input.sources?.length ? input.sources : [input.source];
@@ -2437,51 +1707,51 @@ function PreviewPanel(props) {
         /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 text-2xl font-semibold text-brand-dark", children: semantic.summary.effective_change_count })
       ] })
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 space-y-3", children: semantic.changed_targets.map((target2) => /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "border-b border-[rgba(63,65,116,0.12)] py-3", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 space-y-3", children: semantic.changed_targets.map((target) => /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "border-b border-[rgba(63,65,116,0.12)] py-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { className: "text-sm text-brand-dark", children: target2.label }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { className: "text-sm text-brand-dark", children: target.label }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs(Pill, { children: [
-          target2.before_explicit,
+          target.before_explicit,
           " → ",
-          target2.after_explicit
+          target.after_explicit
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs(Pill, { children: [
-          target2.before_effective,
+          target.before_effective,
           " → ",
-          target2.after_effective
+          target.after_effective
         ] }),
-        target2.baseline_risk ? /* @__PURE__ */ jsxRuntimeExports.jsxs(Pill, { tone: RISK_TONE[target2.baseline_risk], children: [
-          target2.baseline_risk,
+        target.baseline_risk ? /* @__PURE__ */ jsxRuntimeExports.jsxs(Pill, { tone: RISK_TONE[target.baseline_risk], children: [
+          target.baseline_risk,
           " baseline"
         ] }) : null
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2 text-xs text-brand-dark/80", children: [
         "Affects ",
-        target2.affected_permission_ids.length,
+        target.affected_permission_ids.length,
         " permission",
-        target2.affected_permission_ids.length === 1 ? "" : "s",
+        target.affected_permission_ids.length === 1 ? "" : "s",
         " and ",
-        target2.affected_rule_ids.length,
+        target.affected_rule_ids.length,
         " rule",
-        target2.affected_rule_ids.length === 1 ? "" : "s",
+        target.affected_rule_ids.length === 1 ? "" : "s",
         "."
       ] }),
-      target2.affected_rule_ids.length ? /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "mt-3", children: [
+      target.affected_rule_ids.length ? /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "mt-3", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer text-xs font-semibold text-brand-blue", children: "Developer details" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2 max-h-40 overflow-auto", children: target2.affected_rule_ids.map((id2) => /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "block break-all text-[11px] text-brand-dark/80", children: id2 }, id2)) })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2 max-h-40 overflow-auto", children: target.affected_rule_ids.map((id) => /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "block break-all text-[11px] text-brand-dark/80", children: id }, id)) })
       ] }) : null,
-      target2.warnings.map((warning2, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-3 flex items-start gap-2 text-xs leading-5 text-amber-950", children: [
+      target.warnings.map((warning, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-3 flex items-start gap-2 text-xs leading-5 text-amber-950", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 size-4 shrink-0" }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("strong", { children: [
-            warning2.code,
+            warning.code,
             ":"
           ] }),
           " ",
-          warning2.message
+          warning.message
         ] })
-      ] }, `${warning2.code}-${index}`))
-    ] }, `${target2.target.kind}:${target2.target.target_id}`)) }),
+      ] }, `${warning.code}-${index}`))
+    ] }, `${target.target.kind}:${target.target.target_id}`)) }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "mt-4", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer text-xs font-semibold text-brand-dark/80", children: "Developer change identity" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "mt-2 block break-all text-[11px] text-brand-dark/80", children: props.preview.canonical_diff_digest })
@@ -2597,8 +1867,8 @@ function ExtensionPolicyPanel(props) {
     void resolveApprovalGate({ failClosed: true }).catch(() => {
     });
   }, [reviewOpen, resolveApprovalGate]);
-  const managedCount = policyExtension.permissions.filter((permission2) => managedPermissionState(baseEffective, permission2.permission_id) !== null).length;
-  const changeCount = draft.changeCountFor(policyExtension.permissions.map((permission2) => permission2.permission_id));
+  const managedCount = policyExtension.permissions.filter((permission) => managedPermissionState(baseEffective, permission.permission_id) !== null).length;
+  const changeCount = draft.changeCountFor(policyExtension.permissions.map((permission) => permission.permission_id));
   const applyAcrossHref = appliedPolicyCloudHref({
     extensionName: policyExtension.name,
     extensionId: policyExtension.extension_id,
@@ -2648,17 +1918,17 @@ function ExtensionPolicyPanel(props) {
     ) : refreshRequired ? /* @__PURE__ */ jsxRuntimeExports.jsx(PolicyEditingLocks, { refreshRequired: true }) : null,
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: (() => {
       const { ungrouped, families } = groupPermissionsByFamily(policyExtension.permissions);
-      const renderRow = (permission2) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+      const renderRow = (permission) => /* @__PURE__ */ jsxRuntimeExports.jsx(
         PermissionPolicyRow,
         {
-          permission: permission2,
+          permission,
           extension: policyExtension,
           effective: baseEffective,
-          draftState: permissionState(permission2.permission_id),
+          draftState: permissionState(permission.permission_id),
           disabled: refreshRequired,
-          onChange: (state) => setPermissionState(permission2.permission_id, state)
+          onChange: (state) => setPermissionState(permission.permission_id, state)
         },
-        permission2.permission_id
+        permission.permission_id
       );
       return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
         ungrouped.map(renderRow),
@@ -3746,10 +3016,10 @@ function uniqueSlugs(slugs) {
   return ordered.slice(0, 3);
 }
 function inferSlugs(input) {
-  const text2 = searchableText(input);
+  const text = searchableText(input);
   const found = [];
   for (const entry of INFERENCE) {
-    if (entry.pattern.test(text2)) found.push(entry.slug);
+    if (entry.pattern.test(text)) found.push(entry.slug);
   }
   return uniqueSlugs(found);
 }
@@ -4671,7 +3941,7 @@ function McpRegistrySearch({ items, approvalGate, onOpenChange, onConfigured }) 
       if (!next.signal.aborted) setBusy(false);
     }
   }
-  async function preview(entry, target2) {
+  async function preview(entry, target) {
     if (operation.current) return;
     interactionGeneration.current += 1;
     operation.current = "preview";
@@ -4689,19 +3959,19 @@ function McpRegistrySearch({ items, approvalGate, onOpenChange, onConfigured }) 
           registry_name: entry.name,
           version: entry.version,
           setup_name: setupName,
-          ..."endpoint" in target2 ? { kind: "remote", endpoint: target2.endpoint } : {
+          ..."endpoint" in target ? { kind: "remote", endpoint: target.endpoint } : {
             kind: "package",
-            package_identifier: target2.packageOption.identifier,
-            package_version: target2.packageOption.version
+            package_identifier: target.packageOption.identifier,
+            package_version: target.packageOption.version
           }
         })
       });
       const body = await response.json();
       if (!response.ok) throw new Error(object(body) && typeof body.message === "string" ? body.message : "Could not review setup.");
       if (!object(body) || body.host !== "codex" || body.registry_name !== entry.name || body.version !== entry.version || body.setup_name !== setupName || body.permissions_granted !== false || body.host_change_applied !== false || typeof body.selection_digest !== "string" || !/^[a-f0-9]{64}$/.test(body.selection_digest)) throw new Error("Invalid Codex setup preview");
-      if ("endpoint" in target2) {
-        if (body.endpoint !== target2.endpoint || body.kind !== "remote") throw new Error("Invalid Codex endpoint preview");
-      } else if (body.kind !== "package" || body.package_identifier !== target2.packageOption.identifier || body.package_version !== target2.packageOption.version || typeof body.command !== "string" || !Array.isArray(body.arguments) || !body.arguments.every((argument) => typeof argument === "string") || body.verified_package !== false) throw new Error("Invalid Codex package preview");
+      if ("endpoint" in target) {
+        if (body.endpoint !== target.endpoint || body.kind !== "remote") throw new Error("Invalid Codex endpoint preview");
+      } else if (body.kind !== "package" || body.package_identifier !== target.packageOption.identifier || body.package_version !== target.packageOption.version || typeof body.command !== "string" || !Array.isArray(body.arguments) || !body.arguments.every((argument) => typeof argument === "string") || body.verified_package !== false) throw new Error("Invalid Codex package preview");
       setCandidate(body);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not review setup.");
@@ -5941,9 +5211,9 @@ const DEFAULT_TERMINAL_COMMANDS = {
   recover_authority: "hol-guard command controls recover-authority"
 };
 const GATE_SETUP_SUFFIX = " Enable Ask for proof and set an Approval password in Settings > Approval gate, then return here.";
-function authorityNoticeView(health, approvalGateReady, terminalCommands2) {
-  const commands = terminalCommands2 ?? DEFAULT_TERMINAL_COMMANDS;
-  const terminalName = terminalCommands2?.shell === "powershell" ? "PowerShell" : "your terminal";
+function authorityNoticeView(health, approvalGateReady, terminalCommands) {
+  const commands = terminalCommands ?? DEFAULT_TERMINAL_COMMANDS;
+  const terminalName = terminalCommands?.shell === "powershell" ? "PowerShell" : "your terminal";
   switch (health) {
     case "tampered":
     case "recovery-required": {
@@ -6073,14 +5343,14 @@ function ProtectionAuthorityNotice(props) {
       setCheckPending(false);
     }
   };
-  const warning2 = view.tone === "warning";
-  const panelClass = warning2 ? "border border-amber-200 bg-amber-50" : "border border-brand-blue/25 bg-[rgba(85,153,254,0.06)]";
+  const warning = view.tone === "warning";
+  const panelClass = warning ? "border border-amber-200 bg-amber-50" : "border border-brand-blue/25 bg-[rgba(85,153,254,0.06)]";
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-labelledby": "protection-authority-notice-heading", className: `mt-4 rounded-2xl p-5 sm:p-6 ${panelClass}`, children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
-      warning2 ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 size-5 shrink-0 text-amber-600", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniInformationCircle, { className: "mt-0.5 size-5 shrink-0 text-brand-blue", "aria-hidden": "true" }),
+      warning ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 size-5 shrink-0 text-amber-600", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniInformationCircle, { className: "mt-0.5 size-5 shrink-0 text-brand-blue", "aria-hidden": "true" }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "protection-authority-notice-heading", className: `text-base font-semibold ${warning2 ? "text-amber-950" : "text-brand-dark"}`, children: view.title }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `mt-1 max-w-3xl text-sm leading-6 ${warning2 ? "text-amber-950/90" : "text-brand-dark/80"}`, children: view.body }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "protection-authority-notice-heading", className: `text-base font-semibold ${warning ? "text-amber-950" : "text-brand-dark"}`, children: view.title }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `mt-1 max-w-3xl text-sm leading-6 ${warning ? "text-amber-950/90" : "text-brand-dark/80"}`, children: view.body }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex flex-wrap items-center gap-2", children: [
           view.actionLabel && view.action.kind !== "none" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
             "button",
@@ -6128,15 +5398,15 @@ function ProtectionAuthorityNotice(props) {
             }
           )
         ] }),
-        props.busy ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: `mt-3 text-sm font-medium ${warning2 ? "text-amber-950" : "text-brand-dark"}`, children: pendingAction === "acknowledge" ? "Confirming the limited state…" : "Repairing local protection…" }) : null,
-        checkPending ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", "aria-live": "polite", className: `mt-3 text-sm font-medium ${warning2 ? "text-amber-950" : "text-brand-dark"}`, children: "Checking current protection status…" }) : null,
-        checkComplete ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", "aria-live": "polite", className: `mt-3 text-sm font-medium ${warning2 ? "text-amber-950" : "text-brand-dark"}`, children: effectiveStatusKey(props.effective, { approvalGate: props.approvalGate }) === checkBaselineRef.current ? "Check complete. No change detected; local protection remains in its current fail-safe state." : "Check complete. Protection status updated." }) : null,
+        props.busy ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: `mt-3 text-sm font-medium ${warning ? "text-amber-950" : "text-brand-dark"}`, children: pendingAction === "acknowledge" ? "Confirming the limited state…" : "Repairing local protection…" }) : null,
+        checkPending ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", "aria-live": "polite", className: `mt-3 text-sm font-medium ${warning ? "text-amber-950" : "text-brand-dark"}`, children: "Checking current protection status…" }) : null,
+        checkComplete ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", "aria-live": "polite", className: `mt-3 text-sm font-medium ${warning ? "text-amber-950" : "text-brand-dark"}`, children: effectiveStatusKey(props.effective, { approvalGate: props.approvalGate }) === checkBaselineRef.current ? "Check complete. No change detected; local protection remains in its current fail-safe state." : "Check complete. Protection status updated." }) : null,
         checkError ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800", children: checkError }) : null,
         props.error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800", children: props.error }) : null,
         props.status ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mt-3 text-sm font-medium text-brand-dark", children: props.status }) : null,
         view.command ? /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "mt-4", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: `cursor-pointer text-sm font-semibold ${warning2 ? "text-amber-950" : "text-brand-dark"}`, children: view.commandLabel }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `mt-2 text-sm leading-6 ${warning2 ? "text-amber-950/80" : "text-brand-dark/70"}`, children: view.terminalSummary }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: `cursor-pointer text-sm font-semibold ${warning ? "text-amber-950" : "text-brand-dark"}`, children: view.commandLabel }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `mt-2 text-sm leading-6 ${warning ? "text-amber-950/80" : "text-brand-dark/70"}`, children: view.terminalSummary }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2 flex flex-col gap-2 sm:flex-row sm:items-center", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "min-w-0 flex-1 overflow-x-auto rounded-lg border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-brand-dark", children: view.command }),
             /* @__PURE__ */ jsxRuntimeExports.jsxs(
@@ -6374,7 +5644,7 @@ function LocalSkillsWorkspace() {
               type: "checkbox",
               checked: selected.includes(root.root_id),
               disabled: !root.available,
-              onChange: (event) => setSelected((current) => event.target.checked ? [...current, root.root_id] : current.filter((id2) => id2 !== root.root_id))
+              onChange: (event) => setSelected((current) => event.target.checked ? [...current, root.root_id] : current.filter((id) => id !== root.root_id))
             }
           ),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "break-all", children: [
@@ -6550,28 +5820,28 @@ const PROTECTION_CATEGORIES = [
   { id: "ai-workflows", label: "AI tools and agent workflows", description: "Protect AI-agent, tool, and automated workflow actions.", searchAliases: ["ai", "agent", "mcp", "tool", "workflow"] }
 ];
 new Map(PROTECTION_CATEGORIES.map((category) => [category.id, category]));
-function searchableExtensionText(extension2) {
+function searchableExtensionText(extension) {
   return [
-    extension2.extension_id,
-    extension2.name,
-    extension2.description,
-    ...extension2.ecosystem_ids,
-    ...extension2.executables,
-    ...extension2.action_classes,
-    ...extension2.risk_classes
+    extension.extension_id,
+    extension.name,
+    extension.description,
+    ...extension.ecosystem_ids,
+    ...extension.executables,
+    ...extension.action_classes,
+    ...extension.risk_classes
   ].join(" ").toLowerCase();
 }
-function protectionCategoryIdForExtension(extension2) {
-  const text2 = searchableExtensionText(extension2);
-  if (/\bgit\b|github|source.?control|repository|branch|commit/.test(text2)) return "source-control";
-  if (/package|dependency|npm|pnpm|yarn|pip|poetry|cargo|composer|gem|supply.?chain/.test(text2)) return "packages";
-  if (/secret|credential|\.env|filesystem|sensitive.?file|keychain/.test(text2)) return "files-secrets";
-  if (/aws|azure|gcp|cloud|terraform|kubectl|kubernetes|infrastructure|platform/.test(text2)) return "cloud-infrastructure";
-  if (/network|egress|download|curl|wget|ssh|remote|http|ftp/.test(text2)) return "network-downloads";
-  if (/database|sql|postgres|mysql|sqlite|redis|mongo|storage|backup|data/.test(text2)) return "data-databases";
-  if (/deploy|release|ci.?cd|pipeline|workflow|build|artifact/.test(text2)) return "deployments-ci";
-  if (/slack|discord|message|collaboration|search|email/.test(text2)) return "messaging-collaboration";
-  if (/agent|\bmcp\b|assistant|model|prompt|ai.?tool/.test(text2)) return "ai-workflows";
+function protectionCategoryIdForExtension(extension) {
+  const text = searchableExtensionText(extension);
+  if (/\bgit\b|github|source.?control|repository|branch|commit/.test(text)) return "source-control";
+  if (/package|dependency|npm|pnpm|yarn|pip|poetry|cargo|composer|gem|supply.?chain/.test(text)) return "packages";
+  if (/secret|credential|\.env|filesystem|sensitive.?file|keychain/.test(text)) return "files-secrets";
+  if (/aws|azure|gcp|cloud|terraform|kubectl|kubernetes|infrastructure|platform/.test(text)) return "cloud-infrastructure";
+  if (/network|egress|download|curl|wget|ssh|remote|http|ftp/.test(text)) return "network-downloads";
+  if (/database|sql|postgres|mysql|sqlite|redis|mongo|storage|backup|data/.test(text)) return "data-databases";
+  if (/deploy|release|ci.?cd|pipeline|workflow|build|artifact/.test(text)) return "deployments-ci";
+  if (/slack|discord|message|collaboration|search|email/.test(text)) return "messaging-collaboration";
+  if (/agent|\bmcp\b|assistant|model|prompt|ai.?tool/.test(text)) return "ai-workflows";
   return "system-shell";
 }
 const EMPTY_CATALOG_FILTERS = {
@@ -6597,26 +5867,26 @@ function catalogKindLabel(kind) {
   if (kind === "mcp") return "MCP";
   return "Commands";
 }
-function catalogItemKind(extension2) {
-  if (extension2.surface === "mcp") return "mcp";
+function catalogItemKind(extension) {
+  if (extension.surface === "mcp") return "mcp";
   return "commands";
 }
 function toggleCatalogFilterValue(selected, value) {
   if (selected.includes(value)) return selected.filter((item) => item !== value);
   return [...selected, value];
 }
-function catalogItemMatchesFilters(extension2, filters) {
-  if (filters.trusts.length > 0 && !filters.trusts.includes(extension2.trust_class)) return false;
-  if (filters.kinds.length > 0 && !filters.kinds.includes(catalogItemKind(extension2))) return false;
+function catalogItemMatchesFilters(extension, filters) {
+  if (filters.trusts.length > 0 && !filters.trusts.includes(extension.trust_class)) return false;
+  if (filters.kinds.length > 0 && !filters.kinds.includes(catalogItemKind(extension))) return false;
   if (filters.areas.length > 0) {
-    const area = protectionCategoryIdForExtension(extension2);
+    const area = protectionCategoryIdForExtension(extension);
     if (!filters.areas.includes(area)) return false;
   }
   return true;
 }
 function filterCatalogExtensions(extensions, filters) {
   if (!catalogFiltersActive(filters)) return [...extensions];
-  return extensions.filter((extension2) => catalogItemMatchesFilters(extension2, filters));
+  return extensions.filter((extension) => catalogItemMatchesFilters(extension, filters));
 }
 function customItemMatchesKind(item, kinds) {
   if (kinds.length === 0) return true;
@@ -6657,10 +5927,10 @@ function catalogFilterChipAriaLabel(label, count) {
 }
 function populatedCatalogAreas(extensions) {
   const present = /* @__PURE__ */ new Set();
-  for (const extension2 of extensions) {
-    present.add(protectionCategoryIdForExtension(extension2));
+  for (const extension of extensions) {
+    present.add(protectionCategoryIdForExtension(extension));
   }
-  return PROTECTION_CATEGORIES.map((category) => category.id).filter((id2) => present.has(id2));
+  return PROTECTION_CATEGORIES.map((category) => category.id).filter((id) => present.has(id));
 }
 function populatedCatalogAreaOptions(extensions) {
   const present = new Set(populatedCatalogAreas(extensions));
@@ -6904,16 +6174,16 @@ const PROTECTION_CENTER_PERFORMANCE_BUDGETS = Object.freeze({
   developerRelationshipCap: 1024
 });
 const COMMAND_PATTERN_DISPLAY_LIMIT = 24;
-function patternSearchText(extension2, permission2) {
+function patternSearchText(extension, permission) {
   return [
-    permission2.label,
-    permission2.description,
-    permission2.example_command ?? "",
-    permission2.family ?? "",
-    permission2.permission_id,
-    extension2.name,
-    extension2.extension_id,
-    ...extension2.executables
+    permission.label,
+    permission.description,
+    permission.example_command ?? "",
+    permission.family ?? "",
+    permission.permission_id,
+    extension.name,
+    extension.extension_id,
+    ...extension.executables
   ].join(" ").toLowerCase();
 }
 function searchCommandPatterns(extensions, rawQuery, limit = COMMAND_PATTERN_DISPLAY_LIMIT) {
@@ -6921,11 +6191,11 @@ function searchCommandPatterns(extensions, rawQuery, limit = COMMAND_PATTERN_DIS
   if (!normalized) return [];
   const terms = normalized.split(/\s+/).filter(Boolean).slice(0, PROTECTION_CENTER_PERFORMANCE_BUDGETS.humanSearchTermCap);
   const matches = [];
-  for (const extension2 of extensions) {
-    for (const permission2 of extension2.permissions) {
-      const text2 = patternSearchText(extension2, permission2);
-      if (terms.every((term) => text2.includes(term))) {
-        matches.push({ extension: extension2, permission: permission2, score: terms.length });
+  for (const extension of extensions) {
+    for (const permission of extension.permissions) {
+      const text = patternSearchText(extension, permission);
+      if (terms.every((term) => text.includes(term))) {
+        matches.push({ extension, permission, score: terms.length });
       }
     }
   }
@@ -6987,8 +6257,8 @@ function PatternSearchConsole(props) {
     if (!searchActive) return;
     const onKeyDown = (event) => {
       if (event.key !== "/" || event.defaultPrevented) return;
-      const target2 = event.target;
-      if (target2 && (target2.tagName === "INPUT" || target2.tagName === "TEXTAREA" || target2.isContentEditable)) return;
+      const target = event.target;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
       event.preventDefault();
       inputRef.current?.focus();
     };
@@ -6996,7 +6266,7 @@ function PatternSearchConsole(props) {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [searchActive]);
   const totalPermissionCount = reactExports.useMemo(
-    () => props.catalog.reduce((total, extension2) => total + extension2.permissions.length, 0),
+    () => props.catalog.reduce((total, extension) => total + extension.permissions.length, 0),
     [props.catalog]
   );
   const allMatches = reactExports.useMemo(
@@ -7007,9 +6277,9 @@ function PatternSearchConsole(props) {
   const toolMatches = reactExports.useMemo(() => {
     const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
     if (!terms.length) return [];
-    return props.catalog.filter((extension2) => {
-      const text2 = [extension2.name, extension2.extension_id, ...extension2.executables, ...extension2.aliases].join(" ").toLowerCase();
-      return terms.every((term) => text2.includes(term));
+    return props.catalog.filter((extension) => {
+      const text = [extension.name, extension.extension_id, ...extension.executables, ...extension.aliases].join(" ").toLowerCase();
+      return terms.every((term) => text.includes(term));
     });
   }, [props.catalog, query]);
   const grouped = reactExports.useMemo(() => {
@@ -7030,7 +6300,7 @@ function PatternSearchConsole(props) {
     });
   }, [reviewOpen, resolveApprovalGate]);
   const managedCount = involvedPermissions.filter(
-    (permission2) => managedPermissionState(baseEffective, permission2.permission_id) !== null
+    (permission) => managedPermissionState(baseEffective, permission.permission_id) !== null
   ).length;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-labelledby": "pattern-search-heading", className: "mt-6", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "pattern-search-heading", className: "sr-only", children: "Search command patterns" }),
@@ -7114,32 +6384,32 @@ function PatternSearchConsole(props) {
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: extensionDisplayName(group.extension.name) })
         ] }),
         group.permissionIds.map((permissionId) => {
-          const permission2 = group.extension.permissions.find((item) => item.permission_id === permissionId);
-          if (!permission2) return null;
+          const permission = group.extension.permissions.find((item) => item.permission_id === permissionId);
+          if (!permission) return null;
           return /* @__PURE__ */ jsxRuntimeExports.jsx(
             PermissionPolicyRow,
             {
-              permission: permission2,
+              permission,
               extension: group.extension,
               effective: baseEffective,
-              draftState: permissionState(permission2.permission_id),
+              draftState: permissionState(permission.permission_id),
               disabled: refreshRequired,
-              onChange: (state) => setPermissionState(permission2.permission_id, state)
+              onChange: (state) => setPermissionState(permission.permission_id, state)
             },
-            permission2.permission_id
+            permission.permission_id
           );
         })
       ] }, group.extension.extension_id)),
       toolMatches.length ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": "Matching tools", className: "guard-pattern-family", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "guard-pattern-family-heading", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Tools" }) }),
-        toolMatches.map((extension2) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+        toolMatches.map((extension) => /* @__PURE__ */ jsxRuntimeExports.jsx(
           CatalogSearchRow,
           {
-            extension: extension2,
+            extension,
             effective: props.effective,
             onOpen: props.onOpenExtension
           },
-          extension2.extension_id
+          extension.extension_id
         ))
       ] }) : null,
       managedCount ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-3 text-xs text-indigo-950", children: [
@@ -7249,11 +6519,11 @@ function ManagedControlsPrimaryAction(props) {
   }
   return null;
 }
-function layerTargetsExtension(effective, extension2, kind) {
-  const permissionIds = new Set(extension2.permissions.map((permission2) => permission2.permission_id));
+function layerTargetsExtension(effective, extension, kind) {
+  const permissionIds = new Set(extension.permissions.map((permission) => permission.permission_id));
   return effective.layers.some(
     (layer) => layer.kind === kind && layer.controls.some(
-      (control) => control.target_kind === "extension" && control.target_id === extension2.extension_id || control.target_kind === "permission" && permissionIds.has(control.target_id)
+      (control) => control.target_kind === "extension" && control.target_id === extension.extension_id || control.target_kind === "permission" && permissionIds.has(control.target_id)
     )
   );
 }
@@ -7261,53 +6531,53 @@ function managedSource(effective) {
   const managed = effective.managed_controls;
   return managed?.authority_mode === "managed-restrictive" ? `Managed by ${managed.workspace_id}` : "Synced from Guard Cloud";
 }
-function extensionProtectionAuthority(effective, extension2) {
+function extensionProtectionAuthority(effective, extension) {
   if (effective.global_lockdown) {
     return { effectiveState: "lockdown", source: "Emergency Lockdown", sources: ["Emergency Lockdown"] };
   }
-  const permissionIds = new Set(extension2.permissions.map((permission2) => permission2.permission_id));
+  const permissionIds = new Set(extension.permissions.map((permission) => permission.permission_id));
   const extensionProjection = effective.projection?.extensions.find(
-    (item) => item.extension_id === extension2.extension_id
+    (item) => item.extension_id === extension.extension_id
   );
   const permissionProjections = effective.projection?.permissions.filter(
-    (item) => item.extension_id === extension2.extension_id || permissionIds.has(item.permission_id)
+    (item) => item.extension_id === extension.extension_id || permissionIds.has(item.permission_id)
   ) ?? [];
   const projections = extensionProjection ? [extensionProjection, ...permissionProjections] : permissionProjections;
   const managed = managedSource(effective);
-  const hasManaged = projections.some((item) => item.managed_state !== "inherited") || layerTargetsExtension(effective, extension2, "signed-cloud");
-  const hasLocal = projections.some((item) => item.local_state !== "inherited") || layerTargetsExtension(effective, extension2, "local-admin");
+  const hasManaged = projections.some((item) => item.managed_state !== "inherited") || layerTargetsExtension(effective, extension, "signed-cloud");
+  const hasLocal = projections.some((item) => item.local_state !== "inherited") || layerTargetsExtension(effective, extension, "local-admin");
   const sources = [];
   if (hasManaged) sources.push(managed);
   if (hasLocal) sources.push("Set on this device");
-  if (sources.length === 0) sources.push(extension2.required ? "Required by Guard" : "Recommended by Guard");
+  if (sources.length === 0) sources.push(extension.required ? "Required by Guard" : "Recommended by Guard");
   const managedBlocks = projections.some(
     (item) => item.effective_state === "blocked" && item.managed_state === "disabled"
   ) || effective.layers.some((layer) => layer.kind === "signed-cloud" && layer.controls.some(
-    (control) => control.state === "disabled" && (control.target_kind === "extension" && control.target_id === extension2.extension_id || control.target_kind === "permission" && permissionIds.has(control.target_id))
+    (control) => control.state === "disabled" && (control.target_kind === "extension" && control.target_id === extension.extension_id || control.target_kind === "permission" && permissionIds.has(control.target_id))
   ));
   const localBlocks = projections.some(
     (item) => item.effective_state === "blocked" && item.local_state === "disabled"
   ) || effective.layers.some((layer) => layer.kind === "local-admin" && layer.controls.some(
-    (control) => control.state === "disabled" && (control.target_kind === "extension" && control.target_id === extension2.extension_id || control.target_kind === "permission" && permissionIds.has(control.target_id))
+    (control) => control.state === "disabled" && (control.target_kind === "extension" && control.target_id === extension.extension_id || control.target_kind === "permission" && permissionIds.has(control.target_id))
   ));
-  const extensionBlocked = extensionProjection?.effective_state === "blocked" || extensionEffectiveState(effective, extension2) === "disabled";
-  const permissionStates = extension2.permissions.map(
-    (permission2) => permissionEffectiveState(effective, extension2, permission2)
+  const extensionBlocked = extensionProjection?.effective_state === "blocked" || extensionEffectiveState(effective, extension) === "disabled";
+  const permissionStates = extension.permissions.map(
+    (permission) => permissionEffectiveState(effective, extension, permission)
   );
   const blockedPermissionCount = permissionStates.filter((state) => state === "disabled").length;
   let effectiveState;
   if (extensionBlocked) effectiveState = "blocked";
   else if (blockedPermissionCount > 0 && blockedPermissionCount < permissionStates.length) effectiveState = "partial";
   else if (blockedPermissionCount > 0 || localBlocks || managedBlocks) effectiveState = "blocked";
-  else if (extension2.required) effectiveState = "required";
-  else effectiveState = extensionEffectiveState(effective, extension2) === "enabled" ? "allowed" : "blocked";
+  else if (extension.required) effectiveState = "required";
+  else effectiveState = extensionEffectiveState(effective, extension) === "enabled" ? "allowed" : "blocked";
   let source = sources.at(-1) ?? "Recommended by Guard";
   if (localBlocks) source = "Set on this device";
   if (managedBlocks) source = managed;
   return { effectiveState, source, sources };
 }
-function extensionProtectionSource(effective, extension2) {
-  return extensionProtectionAuthority(effective, extension2).source;
+function extensionProtectionSource(effective, extension) {
+  return extensionProtectionAuthority(effective, extension).source;
 }
 function cloudBase(runtime) {
   const candidate = runtime?.dashboard_url?.trim() || runtime?.connect_url?.trim();
@@ -7325,9 +6595,9 @@ function recoveryNotice(recovery) {
   }
   return "Guard Cloud data is stale. Local protection continues with the last verified authority; check again to see whether a newer Control Set is available.";
 }
-function extensionLocalProtectionInput(extension2, effective, runtime) {
+function extensionLocalProtectionInput(extension, effective, runtime) {
   const managed = effective.managed_controls;
-  const authority = extensionProtectionAuthority(effective, extension2);
+  const authority = extensionProtectionAuthority(effective, extension);
   const failureCodes = new Set(effective.failures.map((failure) => failure.code.toLowerCase()));
   let recovery;
   if (failureCodes.has("unsupported-control-schema")) recovery = "unsupported-version";
@@ -7335,8 +6605,8 @@ function extensionLocalProtectionInput(extension2, effective, runtime) {
   else if (runtime?.cloud_policy_sync_error || [...failureCodes].some((code) => code.includes("stale"))) recovery = "stale";
   else if (effective.health !== "protected") recovery = "degraded";
   return {
-    extensionName: extension2.name,
-    extensionId: extension2.extension_id,
+    extensionName: extension.name,
+    extensionId: extension.extension_id,
     effectiveState: authority.effectiveState,
     source: authority.source,
     sources: authority.sources,
@@ -7590,14 +6860,14 @@ function ExtensionsOverview(props) {
             /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm text-brand-dark/70", "data-testid": "catalog-tool-count", "aria-live": "polite", children: catalogFilterCountCopy(visibleCatalog.length, props.catalogExtensions.length, filtering) })
           ] })
         ] }),
-        visibleCatalog.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: visibleCatalog.map((extension2) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+        visibleCatalog.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: visibleCatalog.map((extension) => /* @__PURE__ */ jsxRuntimeExports.jsx(
           CatalogExtensionRow,
           {
-            extension: extension2,
+            extension,
             effective: props.effective,
             onOpen: props.onOpenExtension
           },
-          extension2.extension_id
+          extension.extension_id
         )) }) : /* @__PURE__ */ jsxRuntimeExports.jsx(CatalogFilterEmpty, { onClear: handleClearFilters })
       ] })
     ] })
@@ -7609,22 +6879,22 @@ function pushExtensionHistory(href) {
 function replaceExtensionHistory(href) {
   window.history.replaceState({}, "", guardAwareHref(href));
 }
-function receiptMatchesExtension(receipt, extension2) {
+function receiptMatchesExtension(receipt, extension) {
   const identities = /* @__PURE__ */ new Set([
-    extension2.extension_id,
-    ...extension2.permissions.map((permission2) => permission2.permission_id),
-    ...extension2.rules.map((rule2) => rule2.rule_id)
+    extension.extension_id,
+    ...extension.permissions.map((permission) => permission.permission_id),
+    ...extension.rules.map((rule) => rule.rule_id)
   ]);
   if (identities.has(receipt.artifact_id)) return true;
   if (receipt.changed_capabilities.some((capability) => identities.has(capability))) return true;
   const envelope = receipt.action_envelope_json;
   if (!envelope) return false;
-  if (envelope.command_category === extension2.extension_id) return true;
+  if (envelope.command_category === extension.extension_id) return true;
   const toolName = envelope.tool_name?.trim().toLowerCase();
-  return Boolean(toolName && extension2.executables.some((executable) => executable.toLowerCase() === toolName));
+  return Boolean(toolName && extension.executables.some((executable) => executable.toLowerCase() === toolName));
 }
-function recentExtensionReceipts(receipts, extension2, limit = 8) {
-  return receipts.filter((receipt) => receiptMatchesExtension(receipt, extension2)).sort((left, right) => Date.parse(right.timestamp) - Date.parse(left.timestamp)).slice(0, limit);
+function recentExtensionReceipts(receipts, extension, limit = 8) {
+  return receipts.filter((receipt) => receiptMatchesExtension(receipt, extension)).sort((left, right) => Date.parse(right.timestamp) - Date.parse(left.timestamp)).slice(0, limit);
 }
 function receiptDecisionLabel(receipt) {
   if (receipt.policy_decision === "allow") return "Allowed";
@@ -7666,10 +6936,10 @@ function toolStateLabel(state) {
   if (state === "block") return "Block";
   return "Recommended";
 }
-function McpServerDefaults({ extension: extension2 }) {
-  if (extension2.surface !== "mcp") return null;
-  const launch = extension2.mcp_launch;
-  const tools = extension2.mcp_tools ?? [];
+function McpServerDefaults({ extension }) {
+  if (extension.surface !== "mcp") return null;
+  const launch = extension.mcp_launch;
+  const tools = extension.mcp_tools ?? [];
   const remoteLaunch = launch?.kind === "remote-http" ? launch : null;
   const packageLaunch = launch?.kind === "package-launcher" ? launch : null;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "rounded-3xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2", "data-testid": "mcp-server-defaults", children: [
@@ -7780,9 +7050,9 @@ async function testProtectionCommand(extensionId, command) {
   }
   return normalizeProtectionTestResult(payload);
 }
-function safeExamples(extension2) {
-  const executable = extension2.executables[0];
-  const examples = extension2.extension_id === "command.git" ? ["git status", "git reset --hard HEAD~1", "git push --force-with-lease"] : executable ? [`${executable} --help`] : [];
+function safeExamples(extension) {
+  const executable = extension.executables[0];
+  const examples = extension.extension_id === "command.git" ? ["git status", "git reset --hard HEAD~1", "git push --force-with-lease"] : executable ? [`${executable} --help`] : [];
   return examples.slice(0, 3);
 }
 function resultTitle(result) {
@@ -7790,12 +7060,12 @@ function resultTitle(result) {
   if (result.decision === "ask-first") return "Guard would ask first";
   return "Guard would allow this";
 }
-function ProtectionTestLab({ extension: extension2 }) {
+function ProtectionTestLab({ extension }) {
   const [command, setCommand] = reactExports.useState("");
   const [result, setResult] = reactExports.useState(null);
   const [busy, setBusy] = reactExports.useState(false);
   const [error, setError] = reactExports.useState(null);
-  const examples = reactExports.useMemo(() => safeExamples(extension2), [extension2]);
+  const examples = reactExports.useMemo(() => safeExamples(extension), [extension]);
   const run = async () => {
     const candidate = command.trim();
     if (!candidate || busy) return;
@@ -7803,7 +7073,7 @@ function ProtectionTestLab({ extension: extension2 }) {
     setError(null);
     setResult(null);
     try {
-      setResult(await testProtectionCommand(extension2.extension_id, candidate));
+      setResult(await testProtectionCommand(extension.extension_id, candidate));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Test Lab could not evaluate this command.");
     } finally {
@@ -7817,7 +7087,7 @@ function ProtectionTestLab({ extension: extension2 }) {
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-sm text-slate-500", children: [
       "See how Guard would handle a ",
-      extension2.name,
+      extension.name,
       " command without running it."
     ] }),
     examples.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 flex flex-wrap gap-2", children: examples.map((example) => /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: busy, onClick: () => {
@@ -7897,18 +7167,18 @@ function canonicalProtectionDetailTab(tab) {
   if (tab === "managed-controls" || tab === "permissions" || tab === "technical") return tab;
   return tab === "activity" ? "activity" : "overview";
 }
-function requiredLine(extension2) {
-  if (!extension2.required) return null;
+function requiredLine(extension) {
+  if (!extension.required) return null;
   return "Required by Guard — this protection stays on. The command patterns below can still follow recommended settings or be blocked on this device.";
 }
-function availabilityCopy(extension2, enabled) {
-  if (extension2.surface === "mcp" && extension2.trust_class === "external") {
+function availabilityCopy(extension, enabled) {
+  if (extension.surface === "mcp" && extension.trust_class === "external") {
     if (enabled) {
       return "Matching MCP tools follow the protection settings below. Turn off to leave this community server inactive.";
     }
     return "This community MCP server stays off until you turn it on.";
   }
-  if (extension2.trust_class === "external") {
+  if (extension.trust_class === "external") {
     if (enabled) {
       return "Matching commands follow the protection settings below. Turn off to leave this community tool inactive.";
     }
@@ -7954,24 +7224,24 @@ function DeveloperModuleDetails(props) {
           /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-3 py-2", children: "Matcher" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-3 py-2", children: "Default" })
         ] }) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("tbody", { children: props.extension.rules.map((rule2) => /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { className: "border-t border-[rgba(63,65,116,0.08)]", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("tbody", { children: props.extension.rules.map((rule) => /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { className: "border-t border-[rgba(63,65,116,0.08)]", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("td", { className: "px-3 py-2", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "font-medium text-brand-dark/80", children: rule2.title }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "break-all text-[10px] text-brand-dark/80", children: rule2.rule_id })
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "font-medium text-brand-dark/80", children: rule.title }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "break-all text-[10px] text-brand-dark/80", children: rule.rule_id })
           ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2", children: rule2.severity }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2", children: rule2.matcher_kind }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2", children: treatmentLabel(rule2.default_mode) })
-        ] }, rule2.rule_id)) })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2", children: rule.severity }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2", children: rule.matcher_kind }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2", children: treatmentLabel(rule.default_mode) })
+        ] }, rule.rule_id)) })
       ] }) })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "font-semibold text-brand-dark", children: "Protection setting identifiers" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2 space-y-2", children: props.extension.permissions.map((permission2) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "py-2", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-sm font-medium text-brand-dark/80", children: permission2.label }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "mt-1 block break-all text-[11px] text-brand-dark/80", children: permission2.permission_id }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-1 text-xs text-brand-dark/80", children: permission2.action_classes.join(", ") || "No action classes" })
-      ] }, permission2.permission_id)) })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2 space-y-2", children: props.extension.permissions.map((permission) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "py-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-sm font-medium text-brand-dark/80", children: permission.label }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "mt-1 block break-all text-[11px] text-brand-dark/80", children: permission.permission_id }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-1 text-xs text-brand-dark/80", children: permission.action_classes.join(", ") || "No action classes" })
+      ] }, permission.permission_id)) })
     ] })
   ] }) });
 }
@@ -8005,9 +7275,9 @@ function ProtectionModuleDetail(props) {
         if (requested) ruleId = requested;
       }
       if (ruleId) {
-        const rule2 = props.extension.rules.find((item) => item.rule_id === ruleId);
-        const permission2 = rule2 ? permissionForRule(props.extension, rule2) : null;
-        rowId = permission2 ? `pattern-${permission2.permission_id}` : null;
+        const rule = props.extension.rules.find((item) => item.rule_id === ruleId);
+        const permission = rule ? permissionForRule(props.extension, rule) : null;
+        rowId = permission ? `pattern-${permission.permission_id}` : null;
       }
       clearHighlight();
       if (!rowId) return;
@@ -8208,12 +7478,12 @@ function ProtectionModuleDetail(props) {
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Baseline floors" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 text-sm text-brand-dark", children: [...new Set(props.extension.permissions.map((permission2) => treatmentLabel(permission2.baseline_floor)))].join(", ") || "Built-in" })
+            /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 text-sm text-brand-dark", children: [...new Set(props.extension.permissions.map((permission) => treatmentLabel(permission.baseline_floor)))].join(", ") || "Built-in" })
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Configurable" }),
             /* @__PURE__ */ jsxRuntimeExports.jsxs("dd", { className: "mt-1 text-sm text-brand-dark", children: [
-              props.extension.permissions.filter((permission2) => permission2.configurable).length,
+              props.extension.permissions.filter((permission) => permission.configurable).length,
               " of ",
               props.extension.permission_count
             ] })
@@ -8565,9 +7835,9 @@ function ProtectionCenterWorkspace(props) {
     replaceExtensionHistory(extensionDetailHref(canonicalSelected, routeState.detail));
     setRouteState({ route: { kind: "detail", extensionId: canonicalSelected }, detail: routeState.detail });
   }, [canonicalSelected, routeState, state]);
-  const openExtension = reactExports.useCallback((extension2) => {
-    pushExtensionHistory(extensionDetailHref(extension2.extension_id, DEFAULT_EXTENSION_DETAIL_URL_STATE));
-    setRouteState({ route: { kind: "detail", extensionId: extension2.extension_id }, detail: DEFAULT_EXTENSION_DETAIL_URL_STATE });
+  const openExtension = reactExports.useCallback((extension) => {
+    pushExtensionHistory(extensionDetailHref(extension.extension_id, DEFAULT_EXTENSION_DETAIL_URL_STATE));
+    setRouteState({ route: { kind: "detail", extensionId: extension.extension_id }, detail: DEFAULT_EXTENSION_DETAIL_URL_STATE });
     window.scrollTo({ top: 0, behavior: "auto" });
   }, []);
   const closeExtension = reactExports.useCallback(() => {
@@ -8627,8 +7897,8 @@ function ProtectionCenterWorkspace(props) {
     setMutationError(null);
     void resolveApprovalGate({ failClosed: true }).then(() => setPending(change)).catch(() => setMutationError("Guard could not load local approval settings. Check the local connection and try again."));
   }, [resolveApprovalGate]);
-  const handleRequestExtensionChange = reactExports.useCallback((extension2, enabled) => {
-    requestChange({ extension: { extension_id: extension2.extension_id, name: extension2.name }, enabled });
+  const handleRequestExtensionChange = reactExports.useCallback((extension, enabled) => {
+    requestChange({ extension: { extension_id: extension.extension_id, name: extension.name }, enabled });
   }, [requestChange]);
   const confirm = reactExports.useCallback(async (credentials) => {
     if (state.kind !== "ready" || !pending) return;

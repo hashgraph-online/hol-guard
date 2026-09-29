@@ -120,9 +120,12 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    fault_injection_enabled = os.environ.get("GUARD_FAULT_INJECTION") == "1"
     for item in items:
         for marker in invariant_markers_for_nodeid(item.nodeid):
             item.add_marker(marker)
+        if not fault_injection_enabled and item.get_closest_marker("fault_injection") is not None:
+            item.add_marker(pytest.mark.skip(reason="requires GUARD_FAULT_INJECTION=1"))
 
     if not config.getoption("--validate-test-invariants"):
         return
