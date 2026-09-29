@@ -44,7 +44,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def _run(command: list[str], *, capture: bool = True) -> str:
     completed = subprocess.run(command, cwd=ROOT, capture_output=capture, text=True, check=False)
     if completed.returncode:
-        detail = (completed.stderr or completed.stdout).strip()
+        detail = (completed.stderr or completed.stdout or "").strip()
         raise SystemExit(f"intake failed: {' '.join(command)}\n{detail[:2048]}")
     return (completed.stdout or "").strip()
 
