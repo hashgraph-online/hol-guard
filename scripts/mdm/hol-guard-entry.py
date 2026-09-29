@@ -9,6 +9,7 @@ import http.client
 import io
 import json
 import os
+import re
 import secrets
 import stat
 import subprocess
@@ -283,6 +284,13 @@ _CODEX_WAIT_PROCESS_KEY = "guard_codex_browser_wait_process"
 _CODEX_WAIT_TIMEOUT_KEY = "guard_codex_browser_wait_timeout_seconds"
 _CODEX_TRUSTED_PS_PATHS = ("/bin/ps", "/usr/bin/ps")
 _CODEX_DISCOVERY_PROTOCOL_VERSION = 1
+_CODEX_DAEMON_RPC_TIMEOUT_SECONDS = 4.0
+_CODEX_FAIL_CLOSED_REASON = (
+    "HOL Guard could not authenticate the local daemon. Run `hol-guard daemon repair`, then retry."
+)
+_CODEX_APPROVAL_REQUEST_ID_KEY = "guardApprovalRequestId"
+_CODEX_APPROVAL_URL_KEY = "guardApprovalUrl"
+_CODEX_REQUEST_URL_RE = re.compile(r"(https?://[^\s]+/requests/([A-Za-z0-9_-]{8,128}))", re.IGNORECASE)
 
 
 def _codex_bridge_request_config() -> dict[str, object] | None:
@@ -364,7 +372,7 @@ def _codex_process_start_token(pid: int) -> str | None:
     return None
 
 
-def _codex_hint_hook_data(data: str, *, event_name: str, deadline: float) -> str:
+def _codex_hint_hook_data(data: str, *, event_name: str, deadline: float, rpc_deadline: float) -> str:
     """Attach the wait-process identity and remaining budget the daemon expects."""
 
     try:
@@ -373,7 +381,7 @@ def _codex_hint_hook_data(data: str, *, event_name: str, deadline: float) -> str
         return data
     if not isinstance(payload, dict):
         return data
-    payload["guard_remaining_ms"] = min(60_000, max(1, int((deadline - time.monotonic()) * 1000)))
+    payload["guard_remaining_ms"] = min(60_000, max(1, int((rpc_deadline - time.monotonic()) * 1000)))
     if event_name == "PreToolUse":
         start_token = _codex_process_start_token(os.getpid())
         if start_token is None:
@@ -492,6 +500,34 @@ def _codex_daemon_challenge_proof(
     return proof if isinstance(proof, str) and secrets.compare_digest(proof, expected_proof) else None
 
 
+def _codex_daemon_json_body(
+    response: http.client.HTTPResponse,
+    *,
+    connection: http.client.HTTPConnection,
+    deadline: float,
+) -> dict[str, object] | None:
+    """Read a bounded daemon JSON body while re-checking the deadline per chunk."""
+
+    body = bytearray()
+    while len(body) <= _CODEX_MAX_DAEMON_RESPONSE_BYTES:
+        remaining = max(0.0, deadline - time.monotonic())
+        if remaining < 0.01:
+            return None
+        if connection.sock is not None:
+            connection.sock.settimeout(remaining)
+        chunk = response.read1(min(64 * 1024, _CODEX_MAX_DAEMON_RESPONSE_BYTES + 1 - len(body)))
+        if not chunk:
+            break
+        body.extend(chunk)
+    if len(body) > _CODEX_MAX_DAEMON_RESPONSE_BYTES or response.status != 200:
+        return None
+    try:
+        payload = json.loads(bytes(body).decode("utf-8", errors="replace").strip())
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
 def _codex_daemon_hook_request(
     *,
     state_path: str,
@@ -500,6 +536,7 @@ def _codex_daemon_hook_request(
     data: str,
     event_name: str,
     deadline: float,
+    rpc_deadline: float,
 ) -> dict[str, object] | None:
     """Run one authenticated hook round-trip against the resident daemon."""
 
@@ -509,7 +546,7 @@ def _codex_daemon_hook_request(
     if not isinstance(port, int) or isinstance(port, bool):
         return None
     nonce = secrets.token_hex(32)
-    connection = http.client.HTTPConnection(host, port, timeout=max(0.5, deadline - time.monotonic()))
+    connection = http.client.HTTPConnection(host, port, timeout=max(0.5, rpc_deadline - time.monotonic()))
     try:
         connection.request(
             "POST",
@@ -525,17 +562,12 @@ def _codex_daemon_hook_request(
             ).encode("utf-8"),
             headers={"Content-Type": "application/json", "Connection": "keep-alive"},
         )
-        challenge_response = connection.getresponse()
-        if challenge_response.status != 200:
-            return None
-        challenge_body = challenge_response.read(_CODEX_MAX_DAEMON_RESPONSE_BYTES + 1)
-        if len(challenge_body) > _CODEX_MAX_DAEMON_RESPONSE_BYTES:
-            return None
-        try:
-            challenge = json.loads(challenge_body.decode("utf-8", errors="replace").strip())
-        except (UnicodeDecodeError, json.JSONDecodeError):
-            return None
-        if not isinstance(challenge, dict):
+        challenge = _codex_daemon_json_body(
+            connection.getresponse(),
+            connection=connection,
+            deadline=rpc_deadline,
+        )
+        if challenge is None:
             return None
         proof = _codex_daemon_challenge_proof(
             challenge,
@@ -553,13 +585,18 @@ def _codex_daemon_hook_request(
             or not secrets.compare_digest(refreshed[1], discovery_key)
         ):
             return None
-        remaining = deadline - time.monotonic()
+        remaining = rpc_deadline - time.monotonic()
         if remaining < 0.01:
             return None
         connection.timeout = remaining
         if connection.sock is not None:
             connection.sock.settimeout(remaining)
-        hinted_data = _codex_hint_hook_data(data, event_name=event_name, deadline=deadline)
+        hinted_data = _codex_hint_hook_data(
+            data,
+            event_name=event_name,
+            deadline=deadline,
+            rpc_deadline=rpc_deadline,
+        )
         connection.request(
             "POST",
             f"/v1/hooks/codex?{query}",
@@ -572,15 +609,11 @@ def _codex_daemon_hook_request(
                 "X-Guard-Daemon-Proof": proof,
             },
         )
-        hook_response = connection.getresponse()
-        body = hook_response.read(_CODEX_MAX_DAEMON_RESPONSE_BYTES + 1)
-        if len(body) > _CODEX_MAX_DAEMON_RESPONSE_BYTES or hook_response.status != 200:
-            return None
-        try:
-            payload = json.loads(body.decode("utf-8", errors="replace").strip())
-        except (UnicodeDecodeError, json.JSONDecodeError):
-            return None
-        return payload if isinstance(payload, dict) else None
+        return _codex_daemon_json_body(
+            connection.getresponse(),
+            connection=connection,
+            deadline=rpc_deadline,
+        )
     finally:
         connection.close()
 
@@ -629,6 +662,59 @@ def _codex_daemon_worker_failed(response: dict[str, object]) -> bool:
     return isinstance(reason_code, str) and reason_code.startswith("daemon_hook_process_")
 
 
+def _codex_safe_request_id(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    request_id = value.strip()
+    if not 8 <= len(request_id) <= 128:
+        return None
+    if any(not (char.isalnum() or char in "-_") for char in request_id):
+        return None
+    return request_id
+
+
+def _codex_pending_pretool_approval(response: dict[str, object], *, event_name: str) -> bool:
+    """Detect the pending-approval shape the managed bridge resumes locally.
+
+    A pending ``PreToolUse`` denial carries an approval request identity that
+    the full bridge turns into a browser wait and live-decision finalize. The
+    early path cannot reproduce that flow, so it must fall through instead of
+    returning the pending denial to Codex.
+    """
+
+    if event_name != "PreToolUse":
+        return False
+    hook_output = response.get("hookSpecificOutput")
+    if not isinstance(hook_output, dict):
+        return False
+    if hook_output.get("permissionDecision") != "deny":
+        return False
+    if _codex_safe_request_id(response.get(_CODEX_APPROVAL_REQUEST_ID_KEY)) is not None:
+        return True
+    if isinstance(response.get(_CODEX_APPROVAL_URL_KEY), str):
+        return True
+    reason = hook_output.get("permissionDecisionReason")
+    match = _CODEX_REQUEST_URL_RE.search(reason) if isinstance(reason, str) else None
+    return match is not None and _codex_safe_request_id(match.group(2)) is not None
+
+
+def _codex_write_fail_closed() -> None:
+    """Mirror the managed bridge's bounded-input fail-closed output."""
+
+    sys.stdout.write(
+        json.dumps(
+            {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": _CODEX_FAIL_CLOSED_REASON,
+                }
+            },
+            separators=(",", ":"),
+        )
+    )
+
+
 def _try_codex_daemon_bridge() -> bool:
     """Answer a managed Codex hook from the running daemon before frozen imports.
 
@@ -646,16 +732,21 @@ def _try_codex_daemon_bridge() -> bool:
     config = _codex_bridge_request_config()
     if config is None:
         return False
+    # Match the managed bridge's bounded stdin read: oversized or undecodable
+    # input fails closed there too, so emit that response rather than replay a
+    # truncated payload into the fallback path.
     try:
-        raw_stdin = sys.stdin.buffer.read(_CODEX_HOOK_MAX_INPUT_BYTES + 1)
-    except (AttributeError, OSError, ValueError):
-        return False
+        data = sys.stdin.read(_CODEX_HOOK_MAX_INPUT_BYTES + 1)
+    except (AttributeError, OSError, ValueError, UnicodeError):
+        _codex_write_fail_closed()
+        return True
     try:
-        data = raw_stdin.decode("utf-8")
-    except UnicodeDecodeError:
-        return False
-    if len(data.encode("utf-8")) > _CODEX_HOOK_MAX_INPUT_BYTES:
-        return False
+        if len(data.encode("utf-8")) > _CODEX_HOOK_MAX_INPUT_BYTES:
+            _codex_write_fail_closed()
+            return True
+    except UnicodeError:
+        _codex_write_fail_closed()
+        return True
     # Replay stdin so a fall-through keeps the managed bridge's input intact.
     sys.stdin = io.StringIO(data)
     try:
@@ -666,7 +757,10 @@ def _try_codex_daemon_bridge() -> bool:
     hook_timeouts = config["hook_timeouts"]
     assert isinstance(hook_timeouts, dict)
     timeout = hook_timeouts.get(event_name, min(hook_timeouts.values()))
+    # Reserve the hook grace period and cap the daemon round-trip at the same
+    # budget the managed bridge allows before it falls back.
     deadline = time.monotonic() + max(1.0, float(timeout) - _CODEX_HOOK_TIMEOUT_GRACE_SECONDS)
+    rpc_deadline = time.monotonic() + min(max(0.0, deadline - time.monotonic()), _CODEX_DAEMON_RPC_TIMEOUT_SECONDS)
     identity = _codex_daemon_identity(str(config["state_path"]))
     if identity is None:
         return False
@@ -678,10 +772,15 @@ def _try_codex_daemon_bridge() -> bool:
             data=data,
             event_name=event_name,
             deadline=deadline,
+            rpc_deadline=rpc_deadline,
         )
     except (OSError, ValueError, http.client.HTTPException, TimeoutError):
         return False
-    if response is None or _codex_daemon_worker_failed(response):
+    if (
+        response is None
+        or _codex_daemon_worker_failed(response)
+        or _codex_pending_pretool_approval(response, event_name=event_name)
+    ):
         return False
     sys.stdout.write(
         json.dumps(

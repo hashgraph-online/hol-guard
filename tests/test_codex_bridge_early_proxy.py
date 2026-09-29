@@ -309,6 +309,107 @@ def test_codex_bridge_proxy_ignores_unauthenticated_state(tmp_path: Path) -> Non
     assert fake.challenges == []
 
 
+def test_codex_bridge_proxy_falls_through_on_pending_approval(tmp_path: Path) -> None:
+    fake = _FakeDaemon(
+        {
+            "continue": True,
+            "guardApprovalRequestId": "req_abc12345",
+            "guardApprovalUrl": "http://127.0.0.1:5474/requests/req_abc12345",
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "deny",
+                "permissionDecisionReason": "approval required",
+            },
+        }
+    )
+    fake.start()
+    try:
+        _write_daemon_identity(tmp_path, host="127.0.0.1", port=fake.port)
+        guard_home = tmp_path / ".hol-guard"
+        fake.state = json.loads((guard_home / "daemon-state.json").read_text(encoding="utf-8"))
+        marker, environment = _poison_guard_import(tmp_path)
+        result = _run_bridge(
+            tmp_path,
+            {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {}, "session_id": "s"},
+            environment,
+        )
+    finally:
+        fake.server.shutdown()  # type: ignore[union-attr]
+    # Pending approvals need the full bridge's browser wait and finalize flow.
+    assert result.returncode != 0
+    assert marker.is_file()
+
+
+def test_codex_bridge_proxy_fails_closed_on_oversized_input(tmp_path: Path) -> None:
+    fake = _FakeDaemon({"continue": True})
+    fake.start()
+    try:
+        _write_daemon_identity(tmp_path, host="127.0.0.1", port=fake.port)
+        guard_home = tmp_path / ".hol-guard"
+        fake.state = json.loads((guard_home / "daemon-state.json").read_text(encoding="utf-8"))
+        marker, environment = _poison_guard_import(tmp_path)
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(FROZEN_ENTRYPOINT),
+                "--_hol-guard-codex-bridge",
+                _bridge_config(tmp_path),
+            ],
+            input=" " * 1_000_002,
+            capture_output=True,
+            env=environment,
+            check=False,
+            text=True,
+        )
+    finally:
+        fake.server.shutdown()  # type: ignore[union-attr]
+    assert result.returncode == 0
+    response = json.loads(result.stdout)
+    assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert not marker.exists()
+    assert fake.hook_requests == []
+
+
+def test_codex_bridge_proxy_normalizes_post_tool_use(tmp_path: Path) -> None:
+    fake = _FakeDaemon(
+        {
+            "continue": True,
+            "decision": "block",
+            "reason": "post-tool policy",
+            "policy_action": "warn",
+            "hookSpecificOutput": {
+                "hookEventName": "PostToolUse",
+                "additionalContext": "guard context",
+                "unexpectedField": "dropped",
+            },
+        }
+    )
+    fake.start()
+    try:
+        _write_daemon_identity(tmp_path, host="127.0.0.1", port=fake.port)
+        guard_home = tmp_path / ".hol-guard"
+        fake.state = json.loads((guard_home / "daemon-state.json").read_text(encoding="utf-8"))
+        marker, environment = _poison_guard_import(tmp_path)
+        result = _run_bridge(
+            tmp_path,
+            {"hook_event_name": "PostToolUse", "tool_name": "Bash", "session_id": "s"},
+            environment,
+        )
+    finally:
+        fake.server.shutdown()  # type: ignore[union-attr]
+    assert result.returncode == 0
+    response = json.loads(result.stdout)
+    assert response["decision"] == "block"
+    assert response["reason"] == "post-tool policy"
+    assert "policy_action" not in response
+    assert response["hookSpecificOutput"] == {
+        "hookEventName": "PostToolUse",
+        "additionalContext": "guard context",
+    }
+    assert not marker.exists()
+    assert fake.challenges[0]["hook_event"] == "PostToolUse"
+
+
 def test_codex_bridge_proxy_falls_through_on_worker_failure(tmp_path: Path) -> None:
     fake = _FakeDaemon({"reason_code": "daemon_hook_process_failed", "detail": "worker crashed"})
     fake.start()
