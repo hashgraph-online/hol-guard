@@ -355,10 +355,15 @@ jobs:
               run_installed_slo "$output_path"
               slo_status=$?
               set -e
-              cp "$output_path" native-installed-slo.json
               if [[ "$slo_status" -eq 0 ]]; then
+                cp "$output_path" native-installed-slo.json
                 break
               fi
+              if [[ ! -f "$output_path" ]]; then
+                echo "::warning::Intel macOS SLO attempt ${attempt}/3 crashed without a report (transient hard failure); retrying the same installed wheel."
+                continue
+              fi
+              cp "$output_path" native-installed-slo.json
               if ! retryable_intel_latency_miss "$output_path"; then
                 echo "Intel macOS SLO failed for a non-retryable reason." >&2
                 exit "$slo_status"
