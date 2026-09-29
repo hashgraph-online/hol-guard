@@ -10615,6 +10615,7 @@
           "command.blitcp",
           "command.cloudg",
           "command.cogext",
+          "command.digline",
           "command.genclave",
           "command.gitsync",
           "command.mcp-filesystem",
