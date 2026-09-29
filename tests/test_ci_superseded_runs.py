@@ -38,7 +38,7 @@ def _run():
         "status": "in_progress",
         "event": "pull_request",
         "path": ".github/workflows/ci.yml",
-        "repository": {"full_name": REPO},
+        "repository": {"id": 123, "full_name": REPO},
         "head_repository": {"id": 123},
         "head_branch": "feature",
         "head_sha": "a" * 40,
@@ -59,8 +59,12 @@ class FakeAPI:
         self.full_pages = False
         self.missing_replacement = False
         self.on_old_read = None
+        self.associations = {}
+        self.association_reads = []
+        self.requests = []
 
     def __call__(self, method, path):
+        self.requests.append((method, path))
         if method == "POST":
             self.writes.append(path)
             if self.error:
@@ -78,6 +82,10 @@ class FakeAPI:
             if self.on_old_read:
                 self.on_old_read()
             return copy.deepcopy(self.run)
+        if path.startswith("commits/"):
+            self.association_reads.append(path)
+            assert path.endswith("/pulls?per_page=2")
+            return copy.deepcopy(self.associations.get(path.split("/")[1], []))
         assert path.startswith("actions/workflows/17/runs?")
         query = parse_qs(urlsplit(path).query)
         assert query["event"] == ["pull_request"]
@@ -267,7 +275,9 @@ def test_entrypoint_does_not_guess_an_ambiguous_pr(monkeypatch, tmp_path, associ
 
 def test_privileged_workflow_only_executes_trusted_inline_code():
     workflow = yaml.load((ROOT / ".github/workflows/ci-superseded-runs.yml").read_text(), Loader=yaml.BaseLoader)
-    assert workflow["on"] == {"workflow_run": {"workflows": ["CI", "Native wheel CI"], "types": ["requested", "in_progress"]}}
+    assert workflow["on"] == {
+        "workflow_run": {"workflows": ["CI", "Native wheel CI"], "types": ["requested", "in_progress"]}
+    }
     assert workflow["permissions"] == {}
     assert workflow["concurrency"]["cancel-in-progress"] == "false"
     assert "workflow_run.id" in workflow["concurrency"]["group"]
@@ -281,3 +291,150 @@ def test_privileged_workflow_only_executes_trusted_inline_code():
     assert "${{" not in SCRIPT
     assert "checkout" not in SCRIPT and "subprocess" not in SCRIPT
     assert "artifacts" not in SCRIPT and '"DELETE"' not in SCRIPT
+
+
+def _missing_links_api():
+    api = FakeAPI()
+    api.run["pull_requests"] = []
+    api.replacement["pull_requests"] = []
+    link = {**_pr(), "number": NUMBER}
+    api.associations = {api.run["head_sha"]: [link], HEAD: [link]}
+    return api
+
+
+def test_same_repository_missing_links_use_exact_commit_associations():
+    api = _missing_links_api()
+    _retire(api)
+    assert api.writes == ["actions/runs/42/cancel", "actions/runs/42/force-cancel"]
+    assert set(api.association_reads) == {
+        f"commits/{HEAD}/pulls?per_page=2",
+        f"commits/{api.run['head_sha']}/pulls?per_page=2",
+    }
+    for index, (method, _path) in enumerate(api.requests):
+        if method == "POST":
+            assert api.requests[index - 1] == ("GET", f"pulls/{NUMBER}")
+
+
+def test_missing_fork_associations_never_use_commit_lookup():
+    api = _missing_links_api()
+    api.pr["base"]["repo"]["id"] = 456
+    api.run["repository"]["id"] = 456
+    api.replacement["repository"]["id"] = 456
+    _retire(api)
+    assert api.association_reads == []
+    assert api.writes == []
+
+
+@pytest.mark.parametrize("links", [[], [{"number": NUMBER}, {"number": 999}], None, {}, [None]])
+def test_missing_or_ambiguous_commit_associations_fail_closed(links):
+    api = _missing_links_api()
+    api.associations[HEAD] = links
+    _retire(api)
+    assert api.writes == []
+
+
+@pytest.mark.parametrize(
+    "change", ["closed", "other-base", "other-head", "other-branch", "bool-number", "negative-number"]
+)
+def test_commit_association_must_match_open_repository_and_branch(change):
+    api = _missing_links_api()
+    link = api.associations[HEAD][0]
+    if change == "closed":
+        link["state"] = "closed"
+    elif change == "other-base":
+        link["base"]["repo"]["id"] = 456
+    elif change == "other-head":
+        link["head"]["repo"]["id"] = 456
+    elif change == "other-branch":
+        link["head"]["ref"] = "other"
+    elif change == "bool-number":
+        link["number"] = True
+    else:
+        link["number"] = -1
+    _retire(api)
+    assert api.writes == []
+
+
+@pytest.mark.parametrize("sha", ["", "main", "../pulls/3216", "g" * 40, None])
+def test_commit_lookup_requires_an_exact_hexadecimal_sha(sha):
+    api = _missing_links_api()
+    api.replacement["head_sha"] = sha
+    _retire(api)
+    assert api.association_reads == []
+    assert api.writes == []
+
+
+def test_explicit_unrelated_association_cannot_be_overridden_by_fallback():
+    api = _missing_links_api()
+    api.run["pull_requests"] = [{"number": 999}]
+    _retire(api)
+    assert api.writes == []
+    assert all(api.run["head_sha"] not in path for path in api.association_reads)
+
+
+def test_commit_association_lookup_budget_is_shared_and_fail_closed():
+    api = _missing_links_api()
+    budget = [1]
+    MODULE.retire(REPO, NUMBER, REPLACEMENT_ID, api, lambda _seconds: None, budget)
+    assert budget == [0]
+    assert len(api.association_reads) == 1
+    assert api.writes == []
+
+
+def test_ambiguous_association_during_grace_prevents_force_cancel():
+    api = _missing_links_api()
+
+    def change(_seconds):
+        api.associations[api.run["head_sha"]].append({"number": 999})
+
+    _retire(api, change)
+    assert api.writes == ["actions/runs/42/cancel"]
+
+
+@pytest.mark.parametrize("code", [401, 403, 500])
+def test_commit_association_api_error_cannot_authorize_cancellation(code):
+    api = _missing_links_api()
+
+    def request(method, path):
+        if path.startswith("commits/"):
+            raise HTTPError(path, code, "association unavailable", {}, None)
+        return api(method, path)
+
+    with pytest.raises(HTTPError):
+        MODULE.retire(REPO, NUMBER, REPLACEMENT_ID, request, lambda _seconds: None)
+    assert api.writes == []
+
+
+def test_entrypoint_resolves_missing_same_repository_association(monkeypatch, tmp_path):
+    import io
+
+    api = _missing_links_api()
+    event = tmp_path / "event.json"
+    event.write_text(json.dumps({"workflow_run": api.replacement}))
+    monkeypatch.setenv("GITHUB_REPOSITORY", REPO)
+    monkeypatch.setenv("GITHUB_EVENT_PATH", str(event))
+    monkeypatch.setenv("GH_TOKEN", "isolated-test-token")
+    calls = []
+
+    def open_request(request, *, timeout):
+        assert timeout == 10
+        assert request.full_url == f"https://api.github.com/repos/{REPO}/commits/{HEAD}/pulls?per_page=2"
+        assert request.get_method() == "GET"
+        return io.BytesIO(json.dumps(api.associations[HEAD]).encode())
+
+    monkeypatch.setattr(MODULE, "urlopen", open_request)
+    monkeypatch.setattr(MODULE, "retire", lambda *args, **kwargs: calls.append((args, kwargs)))
+    MODULE.main()
+    assert len(calls) == 1
+    args, kwargs = calls[0]
+    assert args[:3] == (REPO, NUMBER, REPLACEMENT_ID)
+    assert kwargs["association_budget"] == [MODULE.MAX_ASSOCIATION_LOOKUPS - 1]
+
+
+@pytest.mark.parametrize("target", ["run", "replacement"])
+def test_multiple_explicit_associations_remain_ambiguous(target):
+    api = FakeAPI()
+    getattr(api, target)["pull_requests"] = [{"number": NUMBER}, {"number": 999}]
+    _retire(api)
+    assert api.writes == []
+    assert api.association_reads == []
