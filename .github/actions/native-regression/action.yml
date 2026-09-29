@@ -39,6 +39,7 @@ runs:
       shell: bash
       env:
         HOL_GUARD_NATIVE_REGRESSION: "1"
+        HOL_GUARD_TEST_USE_INSTALLED: "1"
         NATIVE_SHARD_INDEX: ${{ inputs.shard-index }}
         NATIVE_SHARD_COUNT: ${{ inputs.shard-count }}
         NATIVE_PLATFORM: ${{ inputs.platform }}

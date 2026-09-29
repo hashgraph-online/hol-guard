@@ -25,6 +25,18 @@ def select_nodes(node_ids: list[str], index: int, count: int) -> list[str]:
     return sorted(node_ids)[index::count]
 
 
+class _AssertInstalled:
+    @pytest.hookimpl(trylast=True)
+    def pytest_collection_finish(self, session: pytest.Session) -> None:
+        import sysconfig
+
+        import codex_plugin_scanner
+
+        site = Path(sysconfig.get_paths()["purelib"]).resolve()
+        if site not in Path(codex_plugin_scanner.__file__).resolve().parents:
+            raise pytest.UsageError("native regression must import the installed wheel")
+
+
 class NativeShard:
     def __init__(self, index: int, count: int) -> None:
         self.index = index
@@ -67,7 +79,9 @@ def main() -> int:
     shard = NativeShard(cast(int, args.shard_index), cast(int, args.shard_count))
     report = cast(Path, args.report)
     # Retain the exact manifest, pytest configuration, assertions and exit status.
-    exit_code = int(pytest.main(["@" + str(ROOT / "ci/native_runtime/regression-tests.txt")], plugins=[shard]))
+    exit_code = int(
+        pytest.main(["@" + str(ROOT / "ci/native_runtime/regression-tests.txt")], plugins=[shard, _AssertInstalled()])
+    )
     report.parent.mkdir(parents=True, exist_ok=True)
     report.write_text(
         json.dumps({**shard.report(exit_code), "platform": args.platform}, sort_keys=True) + "\n", encoding="utf-8"
