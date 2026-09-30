@@ -6,11 +6,17 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
-from codex_plugin_scanner.guard.runtime.command_inspection import inspect_command
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
-    extract_sensitive_tool_action_request,
     is_explicitly_benign_tool_action_request,
 )
+from tests.git_execution_test_support import assert_host_git_proof_result
+from tests.native_command_test_support import (
+    build_tool_action_request_artifact_native_test as build_tool_action_request_artifact,
+)
+from tests.native_command_test_support import (
+    extract_sensitive_tool_action_request_native_test as extract_sensitive_tool_action_request,
+)
+from tests.native_command_test_support import inspect_command_native_test as inspect_command
 
 _INDEX_SCAN = """git diff --cached --check; echo "CHECK_EXIT=$?"
 
@@ -66,34 +72,54 @@ def _is_benign(command: str, *, home: Path, repository: Path) -> bool:
 
 
 @pytest.mark.parametrize(
-    "command",
+    ("command", "native_supported"),
     (
-        "git diff --cached --check",
-        "git diff --staged --check",
-        'git diff --cached --check; echo "CHECK_EXIT=$?"',
-        "git diff --cached -- . ':!pnpm-lock.yaml' ':!package-lock.json'",
-        "git diff --cached -- . ':!pnpm-lock.yaml' ':!package-lock.json' | rg -n unique-token-alpha",
-        "if git diff --cached --check; then echo FAIL; else echo PASS; fi",
+        ("git diff --cached --check", True),
+        ("git diff --staged --check", True),
+        ('git diff --cached --check; echo "CHECK_EXIT=$?"', True),
+        ("git diff --cached -- . ':!pnpm-lock.yaml' ':!package-lock.json'", True),
+        ("git diff --cached -- . ':!pnpm-lock.yaml' ':!package-lock.json' | rg -n unique-token-alpha", True),
+        ("if git diff --cached --check; then echo FAIL; else echo PASS; fi", False),
         (
             "if git diff --cached -- . ':!pnpm-lock.yaml' ':!package-lock.json' "
-            "| rg -n unique-token-alpha; then echo FAIL; else echo PASS; fi"
+            "| rg -n unique-token-alpha; then echo FAIL; else echo PASS; fi",
+            False,
         ),
-        _INDEX_SCAN,
+        (_INDEX_SCAN, False),
     ),
 )
-def test_repo_bound_cached_diff_variants_are_benign(tmp_path: Path, command: str) -> None:
+def test_cached_diff_keeps_separate_host_and_native_repository_proof(
+    tmp_path: Path, command: str, native_supported: bool
+) -> None:
     home, repository = _repository(tmp_path)
 
-    assert _is_benign(command, home=home, repository=repository)
-    assert (
-        extract_sensitive_tool_action_request(
-            "Bash",
-            {"command": command},
-            cwd=repository,
-            home_dir=home,
-        )
-        is None
+    host_proof = _is_benign(command, home=home, repository=repository)
+    assert_host_git_proof_result(host_proof, cwd=repository)
+    # On supported hosts the recognizer can inspect this repository, but native
+    # pre-tool requests intentionally omit cwd/home and Git configuration.
+    # Its missing repository proof must not be replaced by this Python result.
+    request = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": command},
+        cwd=repository,
+        home_dir=home,
     )
+    assert request is not None
+    if native_supported or not host_proof:
+        # Without an executable proof, host discovery keeps its Git diagnostic
+        # even when the native parser rejects the surrounding conditional.
+        assert request.action_class == "git index inspection"
+    else:
+        # The bounded host recognizer cannot discharge an unsupported native
+        # if/then grammar; the complete command keeps the native hard block.
+        assert request.action_class == "unmodeled shell command"
+        assert request.guard_default_action == "block"
+        assert request.reason_code == "native-command-classification-block"
+    if not native_supported:
+        artifact = build_tool_action_request_artifact(
+            "codex", request, config_path="config.toml", source_scope="project"
+        )
+        assert artifact.metadata["command_action_floor"] == "block"
 
 
 def test_unverified_cached_diff_is_owned_by_git_extension(tmp_path: Path) -> None:
@@ -111,13 +137,13 @@ def test_unverified_cached_diff_is_owned_by_git_extension(tmp_path: Path) -> Non
     assert any(permission.permission_id == "command.git.permission.index-inspection" for permission in git.permissions)
 
 
-def test_execution_config_cached_diff_stays_unowned(tmp_path: Path) -> None:
+def test_execution_config_cached_diff_keeps_native_uncertainty(tmp_path: Path) -> None:
     payload = inspect_command("git -c diff.external=payload diff --cached", cwd=tmp_path, home_dir=tmp_path)
 
-    assert payload["status"] == "no_match"
-    assert payload["classification"]["action_class"] is None
-    assert payload["controlling_rule_id"] is None
-    assert payload["extensions"] == []
+    assert payload["status"] == "review"
+    assert payload["minimum_action"] == "block"
+    assert payload["classification"]["explicitly_benign"] is False
+    assert payload["controlling_rule_id"] == "command.git.index-inspection"
 
 
 def test_echo_redirection_is_not_benign(tmp_path: Path) -> None:
@@ -135,21 +161,26 @@ def test_echo_redirection_is_not_benign(tmp_path: Path) -> None:
     assert request.action_class == "git index inspection"
 
 
-def test_attached_config_override_stays_unowned(tmp_path: Path) -> None:
+def test_attached_config_override_keeps_native_uncertainty(tmp_path: Path) -> None:
     payload = inspect_command("git -cdiff.external=payload diff --cached", cwd=tmp_path, home_dir=tmp_path)
 
-    assert payload["status"] == "no_match"
-    assert payload["classification"]["action_class"] is None
-    assert payload["extensions"] == []
+    assert payload["status"] == "review"
+    assert payload["minimum_action"] == "block"
+    assert payload["classification"]["explicitly_benign"] is False
+    assert payload["controlling_rule_id"] == "command.git.index-inspection"
 
 
-def test_verified_cached_check_stays_unmatched_in_inspection(tmp_path: Path) -> None:
+def test_native_cached_check_requires_repository_evidence(tmp_path: Path) -> None:
     home, repository = _repository(tmp_path)
     payload = inspect_command("git diff --cached --check", cwd=repository, home_dir=home)
 
-    assert payload["classification"]["explicitly_benign"] is True
-    assert payload["status"] == "no_match"
-    assert payload["extensions"] == []
+    assert_host_git_proof_result(
+        _is_benign("git diff --cached --check", home=home, repository=repository), cwd=repository
+    )
+    assert payload["classification"]["explicitly_benign"] is False
+    assert payload["status"] == "review"
+    assert payload["minimum_action"] == "block"
+    assert payload["controlling_rule_id"] == "command.git.index-inspection"
 
 
 @pytest.mark.parametrize(
@@ -185,17 +216,13 @@ def test_pathspec_index_flag_names_are_not_owned(tmp_path: Path, command: str) -
     home, repository = _repository(tmp_path)
     payload = inspect_command(command, cwd=repository, home_dir=home)
 
-    assert payload["status"] == "no_match"
-    assert payload["classification"]["action_class"] is None
-    assert (
-        extract_sensitive_tool_action_request(
-            "Bash",
-            {"command": command},
-            cwd=repository,
-            home_dir=home,
-        )
-        is None
-    )
+    # The terminator makes these paths, not index flags. The native generic
+    # diff owner still requires proof that Git helpers cannot execute.
+    assert payload["status"] == "review"
+    assert payload["minimum_action"] == "review"
+    assert payload["classification"]["action_class"] == "git read command"
+    assert payload["controlling_rule_id"] == "command.git.diff"
+    assert all(rule["rule_id"] != "command.git.index-inspection" for rule in payload["rules"])
 
 
 def test_ripgrep_config_path_is_owned(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -190,6 +190,7 @@ def test_hook_artifact_metadata_persists_only_sanitized_record(tmp_path: Path, m
     state = prepare_github_workflow_hook_state(
         artifact,
         workspace=tmp_path,
+        guard_home=tmp_path / "guard",
         config=GuardConfig(guard_home=tmp_path / "guard", workspace=tmp_path),
         store=GuardStore(tmp_path / "guard", prime_policy_integrity=False),
         approval_request_id=None,

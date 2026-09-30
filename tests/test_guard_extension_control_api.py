@@ -116,6 +116,58 @@ def test_catalog_and_effective_responses_are_bounded_public_dtos(tmp_path: Path)
     }
 
 
+def test_inspect_command_uses_existing_guard_home_and_runtime_snapshot(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    service = _service(store)
+    snapshot = service._runtime.current()
+    inspected = {"status": "native_unavailable", "command": "git status"}
+    inspector = Mock(return_value=inspected)
+    monkeypatch.setattr(extension_control_api_module.command_inspection, "inspect_command", inspector)
+
+    result = service.inspect_command(
+        {
+            "command": "  git status  ",
+            "cwd": str(tmp_path),
+            "home_dir": str(tmp_path),
+        }
+    )
+
+    assert result is inspected
+    inspector.assert_called_once_with(
+        "git status",
+        cwd=tmp_path,
+        home_dir=tmp_path,
+        guard_home=store.guard_home,
+        extension_control_snapshot=snapshot,
+    )
+
+
+@pytest.mark.parametrize(
+    ("payload", "code"),
+    [
+        ({"command": "", "cwd": "/tmp", "home_dir": "/tmp"}, "invalid_inspection_command"),
+        ({"command": "x" * 4097, "cwd": "/tmp", "home_dir": "/tmp"}, "invalid_inspection_command"),
+        ({"command": "echo ok", "cwd": "relative", "home_dir": "/tmp"}, "invalid_cwd"),
+        ({"command": "echo ok", "cwd": "/tmp", "home_dir": "relative"}, "invalid_home_dir"),
+    ],
+)
+def test_inspect_command_rejects_unbounded_or_non_absolute_input(
+    tmp_path: Path,
+    payload: dict[str, object],
+    code: str,
+) -> None:
+    service = _service(GuardStore(tmp_path / "guard-home"))
+
+    with pytest.raises(ExtensionControlApiError) as error:
+        service.inspect_command(payload)
+
+    assert error.value.status == 400
+    assert error.value.code == code
+
+
 def test_effective_response_projects_frozen_windows_terminal_commands(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

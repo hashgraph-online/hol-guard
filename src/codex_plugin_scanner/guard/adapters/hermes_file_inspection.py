@@ -129,7 +129,14 @@ def inspect_hermes_text_file(
     changed = False
     try:
         opened = os.fstat(descriptor)
-        if not stat.S_ISREG(opened.st_mode) or _stat_key(opened) != _stat_key(before):
+        # Windows path and CRT descriptor stats expose different identity
+        # fields. The native handle denies write/delete sharing, so compare
+        # path stats while that lock is held and descriptor stats across reads.
+        try:
+            opened_path = os.lstat(logical_path) if os.name == "nt" else opened
+        except OSError:
+            return _file_failure("file_changed_during_read", size_bytes=before.st_size)
+        if not stat.S_ISREG(opened.st_mode) or _stat_key(opened_path) != _stat_key(before):
             changed = True
         while not changed:
             try:

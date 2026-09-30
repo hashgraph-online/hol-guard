@@ -314,6 +314,17 @@ def resolve_call(
 
     if "." not in name and name in _local_binding_names(record):
         return None
+    if "." not in name:
+        # A directly nested function shadows module/imported helpers in Python's lexical scope.
+        nested = [
+            candidate
+            for candidate in records.get((record.path, name), [])
+            if candidate.qualname == f"{record.qualname}.{name}"
+        ]
+        if len(nested) == 1:
+            return nested[0]
+        if len(nested) > 1:
+            raise RuntimeError(f"ambiguous nested helper call {name!r} from {record.path}:{record.qualname}")
     imported_path = imported_symbol_path(root, record, name)
     if "." in name:
         if imported_path is None:

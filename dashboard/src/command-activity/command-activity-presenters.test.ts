@@ -89,8 +89,8 @@ const analytics: CommandActivityAnalytics = {
 };
 
 assert(commandDecisionLabel(item.policy_action) === "Allowed", "decision copy is independent");
-assert(commandExecutionLabel(item.execution_status) === "Allowed; execution not confirmed", "unconfirmed copy is exact");
-assert(commandProofLabel(item.proof_level) === "Pre-execution check only", "proof copy is exact");
+assert(commandExecutionLabel(item.execution_status) === "Result not recorded", "unconfirmed copy distinguishes missing result from the allow decision");
+assert(commandProofLabel(item.proof_level) === "Before-command check recorded", "proof copy describes what Guard observed");
 assert(commandInteractionLabel(item) === "No review prompt recorded", "prompt copy stays factual");
 assert(commandInvocationLabel(item.invocation_preview) === "git fetch origin main", "recorded commands stay visible");
 assert(commandInvocationLabel(null) === "Command not recorded", "missing commands stay explicit");
@@ -113,7 +113,7 @@ assert(
 );
 assert(
   commandExecutionEvidenceCopy("codex", false).includes("Codex") &&
-    commandExecutionEvidenceCopy("codex", false).includes("remain unconfirmed"),
+    commandExecutionEvidenceCopy("codex", false).includes("cannot confirm what happened afterward"),
   "per-app proof disclosure names the harness and retains uncertainty",
 );
 assert(homeCommandActivityModel({ ...analytics, commands_checked: 0 }) === null, "home card stays absent without activity");

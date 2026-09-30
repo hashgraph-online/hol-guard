@@ -312,7 +312,7 @@ class StoreReviewEventOutboxMixin:
                 set binding_status = 'quarantined', quarantine_reason = ?, last_error = ?
                 where stream_sequence = ? and oauth_source = ? and oauth_subject_hash = ?
                   and workspace_id = ? and machine_id = ? and machine_installation_id = ?
-                  and binding_status = 'ready'
+                  and binding_status = 'ready' and acknowledged_at is null
                 """,
                 (reason[:128], error[:512], int(sequence), self._guard_source, *binding),
             )
@@ -358,9 +358,18 @@ class StoreReviewEventOutboxMixin:
               and machine_id = ? and machine_installation_id = ?
             """
             parameters.extend(binding)
+        # Terminal continuation quarantine preserves evidence, not a broken
+        # OAuth identity. Only identity-specific reasons require identity repair.
         diagnostics_query = """
             select
               sum(case when binding_status = 'quarantined' then 1 else 0 end) as quarantined_depth,
+              sum(case when binding_status = 'quarantined'
+                and quarantine_reason in ('identity_incomplete', 'identity_changed_requires_confirmation')
+                then 1 else 0 end) as identity_quarantined_depth,
+              sum(case when binding_status = 'quarantined'
+                and quarantine_reason in ('identity_incomplete', 'identity_changed_requires_confirmation')
+                and oauth_source is not null and workspace_id is not null
+                then 1 else 0 end) as identity_mismatch_depth,
               sum(case when binding_status = 'quarantined'
                 and (oauth_source is null or workspace_id is null) then 1 else 0 end)
                 as unbound_depth,
@@ -375,6 +384,15 @@ class StoreReviewEventOutboxMixin:
                     and (oauth_source = ? or (oauth_source is null and (workspace_id is null or workspace_id = ?)))
                     then 1 else 0 end) as quarantined_depth,
                   sum(case when binding_status = 'quarantined'
+                    and quarantine_reason in ('identity_incomplete', 'identity_changed_requires_confirmation')
+                    and (oauth_source = ? or (oauth_source is null and (workspace_id is null or workspace_id = ?)))
+                    then 1 else 0 end) as identity_quarantined_depth,
+                  sum(case when binding_status = 'quarantined'
+                    and quarantine_reason in ('identity_incomplete', 'identity_changed_requires_confirmation')
+                    and oauth_source is not null and workspace_id is not null
+                    and oauth_source = ? and workspace_id = ?
+                    then 1 else 0 end) as identity_mismatch_depth,
+                  sum(case when binding_status = 'quarantined'
                     and (oauth_source is null or workspace_id is null)
                     and (workspace_id is null or workspace_id = ?) then 1 else 0 end) as unbound_depth,
                   sum(case when binding_status = 'quarantined' and workspace_id is not null
@@ -385,6 +403,10 @@ class StoreReviewEventOutboxMixin:
             diagnostics_parameters = [
                 self._guard_source,
                 workspace_id,
+                self._guard_source,
+                workspace_id,
+                self._guard_source,
+                workspace_id,
                 workspace_id,
                 workspace_id,
                 self._guard_source,
@@ -393,13 +415,15 @@ class StoreReviewEventOutboxMixin:
             row = connection.execute(query, parameters).fetchone()
             diagnostics = connection.execute(diagnostics_query, diagnostics_parameters).fetchone()
         quarantined = int(diagnostics["quarantined_depth"] or 0) if diagnostics is not None else 0
+        identity_quarantined = int(diagnostics["identity_quarantined_depth"] or 0) if diagnostics is not None else 0
+        identity_mismatch = int(diagnostics["identity_mismatch_depth"] or 0) if diagnostics is not None else 0
         unbound = int(diagnostics["unbound_depth"] or 0) if diagnostics is not None else 0
         other_workspace = int(diagnostics["other_workspace_depth"] or 0) if diagnostics is not None else 0
         return {
             "oauth_source": self._guard_source,
             "oauth_subject_hash": oauth_subject_hash,
-            "binding_state": "quarantined" if quarantined else "healthy",
-            "binding_hint": "Review events require explicit identity repair." if quarantined else None,
+            "binding_state": "quarantined" if identity_quarantined else "healthy",
+            "binding_hint": "Review events require explicit identity repair." if identity_quarantined else None,
             "depth": int(row["depth"] if row is not None else 0),
             "ready_depth": int(row["ready_depth"] or 0) if row is not None else 0,
             "oldest_changed_at": row["oldest_changed_at"] if row is not None else None,
@@ -408,7 +432,7 @@ class StoreReviewEventOutboxMixin:
             "next_attempt_at": row["next_attempt_at"] if row is not None else None,
             "unbound_depth": unbound,
             "other_workspace_depth": other_workspace,
-            "identity_mismatch_depth": max(0, quarantined - unbound),
+            "identity_mismatch_depth": identity_mismatch,
             "quarantined_depth": quarantined,
             "checked_at": now,
         }

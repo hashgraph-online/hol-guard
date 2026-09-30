@@ -10,7 +10,8 @@ from typing import cast
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
+from codex_plugin_scanner.guard.native_command_model import _canonical_command_from_native
+from codex_plugin_scanner.guard.runtime.command_evaluation import CompositeCommandEvaluation, evaluate_command
 from codex_plugin_scanner.guard.runtime.command_model import parse_shell_command
 from codex_plugin_scanner.guard.runtime.effect_decision import FinalDisposition, PositiveProof
 from codex_plugin_scanner.guard.runtime.github_capability_interaction import GITHUB_MAINTENANCE_ACTION_CLASS
@@ -32,6 +33,7 @@ from codex_plugin_scanner.guard.workflow_capabilities import (
     WorkflowCapabilityRuleBinding,
     format_utc_timestamp,
 )
+from tests.native_command_test_support import real_native_review_fixture
 
 _KEY = b"w" * 32
 _KEY_ID = "guard-policy-integrity-key:github-workflow-test"
@@ -41,6 +43,29 @@ _COMMAND = (
     "query='mutation($threadId:ID!){resolveReviewThread(input:{threadId:$threadId}){thread{id}}}' "
     "-f threadId=THREAD_1"
 )
+
+
+def _evaluate_native(
+    command: str,
+    *,
+    compatibility_action_class: str,
+    workflow_authorization: GitHubWorkflowAuthorization,
+    compatibility_reason: str | None = None,
+    controls: tuple[tuple[str, str, str], ...] = (),
+    managed_controls: tuple[tuple[str, str, str], ...] = (),
+) -> CompositeCommandEvaluation:
+    fixture = real_native_review_fixture(command, controls=controls, managed_controls=managed_controls)
+    canonical = _canonical_command_from_native(command, fixture.payload["command_model"])
+    assert canonical is not None
+    return evaluate_command(
+        command,
+        canonical_command=canonical,
+        native_extension_evidence=fixture.payload,
+        extension_control_snapshot=fixture.snapshot,
+        compatibility_action_class=compatibility_action_class,
+        compatibility_reason=compatibility_reason,
+        workflow_authorization=workflow_authorization,
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -197,21 +222,24 @@ def test_dynamic_mixed_and_high_impact_operations_are_ineligible(command: str) -
     assert parse_github_workflow_operation(parse_shell_command(command), repository="example/repo") is None
 
 
-def test_atomic_claim_produces_workflow_authorized_decision(tmp_path: Path) -> None:
+def test_atomic_claim_proof_cannot_relax_native_unknown_graphql_uncertainty(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
     context = _context()
     _issue(store, context)
     authorization = _claim(store, context)
+    command = parse_shell_command(_COMMAND)
+    assert authorization.evidence(command_identity=command.security_identity) is not None
 
-    evaluation = evaluate_command(
+    evaluation = _evaluate_native(
         _COMMAND,
         compatibility_action_class=GITHUB_MAINTENANCE_ACTION_CLASS,
         compatibility_reason="Exact GitHub maintenance requires review without task proof.",
         workflow_authorization=authorization,
     )
 
-    assert evaluation.decision_plane.action == "allow"
-    assert evaluation.decision_plane.disposition is FinalDisposition.WORKFLOW_AUTHORIZED
+    assert evaluation.decision_plane.action == "block"
+    assert evaluation.decision_plane.disposition is FinalDisposition.BLOCK
+    assert evaluation.extension_observations[0].uncertainty_reasons
 
 
 def test_bounded_pr_metadata_claim_produces_workflow_authorized_decision(tmp_path: Path) -> None:
@@ -221,7 +249,7 @@ def test_bounded_pr_metadata_claim_produces_workflow_authorized_decision(tmp_pat
     _issue(store, context, command=command)
     authorization = _claim(store, context, command=command)
 
-    evaluation = evaluate_command(
+    evaluation = _evaluate_native(
         command,
         compatibility_action_class=GITHUB_MAINTENANCE_ACTION_CLASS,
         workflow_authorization=authorization,
@@ -229,6 +257,26 @@ def test_bounded_pr_metadata_claim_produces_workflow_authorized_decision(tmp_pat
 
     assert evaluation.decision_plane.action == "allow"
     assert evaluation.decision_plane.disposition is FinalDisposition.WORKFLOW_AUTHORIZED
+    assert evaluation.minimum_action == "allow"
+
+
+def test_workflow_proof_cannot_discharge_managed_extension_disable(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
+    command = "gh pr ready 17 --undo --repo example/repo"
+    context = _context()
+    _issue(store, context, command=command)
+    authorization = _claim(store, context, command=command)
+
+    evaluation = _evaluate_native(
+        command,
+        compatibility_action_class=GITHUB_MAINTENANCE_ACTION_CLASS,
+        workflow_authorization=authorization,
+        managed_controls=(("extension", "command.github", "disabled"),),
+    )
+
+    assert evaluation.control_resolution.blocked
+    assert evaluation.decision_plane.action == "block"
+    assert evaluation.minimum_action == "block"
 
 
 def test_graphql_operation_requires_guard_derived_repository() -> None:
@@ -328,7 +376,7 @@ def test_invocation_replay_and_operation_drift_fail_closed(tmp_path: Path) -> No
     with pytest.raises(WorkflowCapabilityError, match="capability_invocation_replayed"):
         _ = _claim(store, context)
 
-    drifted = evaluate_command(
+    drifted = _evaluate_native(
         "gh issue lock 17 --repo example/repo",
         compatibility_action_class=GITHUB_MAINTENANCE_ACTION_CLASS,
         workflow_authorization=authorization,
@@ -425,7 +473,7 @@ def test_only_one_concurrent_claim_can_consume_last_use(tmp_path: Path) -> None:
     assert len([result for result in results if result != "authorized"]) == 1
 
 
-def test_public_constructor_and_uninitialized_object_cannot_invent_proof() -> None:
+def test_public_constructor_and_uninitialized_object_cannot_invent_proof_or_relax_native_uncertainty() -> None:
     with pytest.raises(TypeError, match="atomic Guard claim"):
         _ = GitHubWorkflowAuthorization(
             authority_token=object(),
@@ -435,14 +483,14 @@ def test_public_constructor_and_uninitialized_object_cannot_invent_proof() -> No
         )
     forged = object.__new__(GitHubWorkflowAuthorization)
 
-    evaluation = evaluate_command(
+    evaluation = _evaluate_native(
         _COMMAND,
         compatibility_action_class=GITHUB_MAINTENANCE_ACTION_CLASS,
         workflow_authorization=forged,
     )
 
-    assert evaluation.decision_plane.action == "review"
-    assert evaluation.decision_plane.disposition is FinalDisposition.REVIEW
+    assert evaluation.decision_plane.action == "block"
+    assert evaluation.decision_plane.disposition is FinalDisposition.BLOCK
 
 
 def test_binding_and_receipt_do_not_expose_raw_remote_identity(tmp_path: Path) -> None:
