@@ -16000,6 +16000,7 @@
       "classes": {
         "external": [
           "command.blitcp",
+          "command.blkcp",
           "command.cloudg",
           "command.cogext",
           "command.ctty",

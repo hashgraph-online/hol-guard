@@ -10874,19 +10874,24 @@
     "trust": {
       "classes": {
         "external": [
-          "command.blkcp",
           "command.blitcp",
+          "command.blkcp",
           "command.cloudg",
           "command.cogext",
+          "command.ctty",
+          "command.digline",
           "command.genclave",
+          "command.gitsync",
           "command.mcp-filesystem",
           "command.mcp-instapods",
           "command.mcp-pr-ui-compare",
+          "command.mcp-reaper",
           "command.noodle",
           "command.ollama",
           "command.probe",
           "command.remote.essh",
           "command.repo2nb",
+          "command.skill-base",
           "command.skill-sunset",
           "command.uivoid"
         ],
@@ -10972,108 +10977,108 @@
   },
   "cases": [
     {
-      "id": "write-device-positional",
       "command": "blkcp image.raw /dev/sda",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.blkcp"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.blkcp.device-write",
       "expected_effective_segments": [
         0
-      ]
+      ],
+      "id": "write-device-positional",
+      "rule_id": "command.blkcp.device-write"
     },
     {
-      "id": "write-device-flag-short",
       "command": "blkcp -b 1M image.raw /dev/sda",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.blkcp"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.blkcp.device-write",
       "expected_effective_segments": [
         0
-      ]
+      ],
+      "id": "write-device-flag-short",
+      "rule_id": "command.blkcp.device-write"
     },
     {
-      "id": "write-device-flag-long",
       "command": "blkcp -p image.raw /dev/sdb",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.blkcp"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.blkcp.device-write",
       "expected_effective_segments": [
         0
-      ]
+      ],
+      "id": "write-device-flag-long",
+      "rule_id": "command.blkcp.device-write"
     },
     {
-      "id": "write-device-flag-glued",
       "command": "blkcp -q image.raw /dev/nvme0n1",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.blkcp"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.blkcp.device-write",
       "expected_effective_segments": [
         0
-      ]
+      ],
+      "id": "write-device-flag-glued",
+      "rule_id": "command.blkcp.device-write"
     },
     {
-      "id": "force-flag-long",
       "command": "blkcp --force -i file1.bin -o file2.bin",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.blkcp"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.blkcp.force",
       "expected_effective_segments": [
         0
-      ]
+      ],
+      "id": "force-flag-long",
+      "rule_id": "command.blkcp.force"
     },
     {
-      "id": "force-flag-short",
       "command": "blkcp -f -i file1.bin -o file2.bin",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.blkcp"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.blkcp.force",
       "expected_effective_segments": [
         0
-      ]
+      ],
+      "id": "force-flag-short",
+      "rule_id": "command.blkcp.force"
     },
     {
-      "id": "force-positional-long",
       "command": "blkcp --force file1.bin file2.bin",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.blkcp"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.blkcp.force",
       "expected_effective_segments": [
         0
-      ]
+      ],
+      "id": "force-positional-long",
+      "rule_id": "command.blkcp.force"
     },
     {
-      "id": "force-positional-short",
       "command": "blkcp -f file1.bin file2.bin",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.blkcp"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.blkcp.force",
       "expected_effective_segments": [
         0
-      ]
+      ],
+      "id": "force-positional-short",
+      "rule_id": "command.blkcp.force"
     }
   ],
   "schema": "guard.command-extension-fixtures.v1"

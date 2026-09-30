@@ -6,7 +6,7 @@
     "canonical_diff_digest",
     "effective"
   ],
-  "catalog_digest": "417712a82f1799d268ab0ae3fb2ad22a839fbf93cc9768ec4d63f472d738398d",
+  "catalog_digest": "f59360ba38ab4e8f75b87f59d7ce2dbfabe1e0b230dfaaebcb9b57e81d220995",
   "control_schema_version": "1.0.0",
   "daemon_api_schema": "guard.daemon.extension-controls.v1",
   "effective_shape": [
@@ -20,7 +20,7 @@
     "failures",
     "projection"
   ],
-  "extension_count": 81,
+  "extension_count": 82,
   "extension_ids": [
     "command.api-gateway",
     "command.backup.borg",
@@ -28,6 +28,7 @@
     "command.backup.restic",
     "command.backup.velero",
     "command.blitcp",
+    "command.blkcp",
     "command.cdn",
     "command.cicd.circleci",
     "command.cicd.github",
@@ -107,7 +108,7 @@
   "extension_schema_version": 2,
   "installed_browser_config": "dashboard/playwright.installed.config.ts",
   "overview_route": "/extensions",
-  "permission_count": 280,
+  "permission_count": 282,
   "permission_examples": {
     "command.api-gateway.permission.delete": "aws apigateway delete-rest-api",
     "command.backup.borg.permission.mutation": "borg delete",
@@ -118,6 +119,8 @@
     "command.blitcp.permission.remote-destination": "blitcp /data s3://backups/nightly",
     "command.blitcp.permission.self-update": "blitcp --update",
     "command.blitcp.permission.unverified-copy": "blitcp --no-verify /data /mnt/backup",
+    "command.blkcp.permission.device-write": "blkcp image.raw /dev/sdb",
+    "command.blkcp.permission.force": "blkcp image.raw /dev/sda --force",
     "command.cdn.permission.delete": "aws cloudfront delete-distribution",
     "command.cicd.circleci.permission.pipeline-run": "circleci pipeline run",
     "command.cicd.github.permission.run-administration": "gh run cancel",
@@ -496,6 +499,8 @@
     "command.blitcp.permission.remote-destination",
     "command.blitcp.permission.self-update",
     "command.blitcp.permission.unverified-copy",
+    "command.blkcp.permission.device-write",
+    "command.blkcp.permission.force",
     "command.cdn.permission.delete",
     "command.cicd.circleci.permission.pipeline-run",
     "command.cicd.github.permission.run-administration",
@@ -778,7 +783,7 @@
     "controls",
     "semantic_preview"
   ],
-  "rule_count": 264,
+  "rule_count": 266,
   "rule_ids": [
     "command.api-gateway.delete",
     "command.backup.borg.mutation",
@@ -789,6 +794,8 @@
     "command.blitcp.privilege-escalation",
     "command.blitcp.self-update",
     "command.blitcp.unverified-copy",
+    "command.blkcp.force",
+    "command.blkcp.device-write",
     "command.cdn.delete",
     "command.cicd.circleci.pipeline-run",
     "command.cicd.github.run-administration",
