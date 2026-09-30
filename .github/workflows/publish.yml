@@ -800,7 +800,7 @@ jobs:
         shell: bash
         run: |
           WHEEL_REQUIREMENT=$(python -c 'import json; print(json.load(open("verified-download.json", encoding="utf-8"))["requirement"])')
-          python -m venv "$RUNNER_TEMP/hol-guard-canary-venv"
+          python -m venv --copies "$RUNNER_TEMP/hol-guard-canary-venv"
           if [[ "$RUNNER_OS" == "Windows" ]]; then
             CANARY_PYTHON="$RUNNER_TEMP/hol-guard-canary-venv/Scripts/python.exe"
           else
@@ -826,6 +826,19 @@ jobs:
             exit 1
           fi
           test ! -e installed-canary/missing-proof-must-not-exist.json
+      - name: Run installed Codex outage regressions
+        shell: bash
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+          SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
+        run: |
+          PYTHONPATH= "$CANARY_PYTHON" -X "pycache_prefix=$RUNNER_TEMP/hol-guard-outage-cache" \
+            -m scripts.run_installed_codex_outage \
+            --subject installed-canary/installed-canary-subject.json \
+            --version "$VERSION" \
+            --source-sha "$SOURCE_SHA" \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --output installed-canary/codex-outage-evidence.json
       - name: Run installed 51k corpus and dashboard smoke
         shell: bash
         env:
@@ -886,6 +899,7 @@ jobs:
           name: installed-canary-evidence-${{ runner.os }}
           path: |
             installed-canary/evidence.json
+            installed-canary/codex-outage-evidence.json
             installed-canary/command-extension-analytics.json
             .artifacts/command-extension-analytics/playwright-output/**/*.png
           if-no-files-found: error

@@ -3725,7 +3725,7 @@ function customExtensionUnits(surface) {
   if (surface === "package-scripts") return { unit: "script", units: "scripts", source: "this project" };
   return { unit: "command", units: "commands", source: "this file" };
 }
-function customExtensionStateLabel$1(item) {
+function customExtensionStateLabel(item) {
   const { unit, units, source } = customExtensionUnits(item.surface);
   if (item.stale) {
     if (item.surface === "mcp") return "This connection changed. Review its permissions again.";
@@ -3750,7 +3750,7 @@ function customExtensionStateLabel$1(item) {
   }
   return item.surface === "mcp" ? "Detected · Permissions not configured. Inspect this connection." : item.example_label;
 }
-function continuityCopy$1(item) {
+function continuityCopy(item) {
   const status = item.continuity?.status;
   if (status === "applied") {
     const view = customExtensionContinuityView("identity-matched");
@@ -5732,7 +5732,7 @@ function CustomExtensionRow(props) {
   const handleOpen = reactExports.useCallback(() => {
     onOpen(cliId);
   }, [cliId, onOpen]);
-  const continuity = continuityCopy$1(props.item);
+  const continuity = continuityCopy(props.item);
   const catalog = mcpCatalogCopy(props.item);
   return /* @__PURE__ */ jsxRuntimeExports.jsx(
     ProtectionModuleRow,
@@ -5740,7 +5740,7 @@ function CustomExtensionRow(props) {
       extensionId: props.item.cli_id,
       name: props.item.name,
       description: customExtensionRowDescription(props.item, catalog?.title ?? null),
-      behavior: continuity ? `${continuity.title}. ${continuity.description}` : customExtensionStateLabel$1(props.item),
+      behavior: continuity ? `${continuity.title}. ${continuity.description}` : customExtensionStateLabel(props.item),
       custom: true,
       executables: [props.item.name],
       onOpen: handleOpen

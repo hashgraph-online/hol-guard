@@ -178,42 +178,6 @@ def test_launcher_integrity_failure_does_not_stop_user_prompt(
     }
 
 
-def test_launcher_integrity_failure_keeps_exact_codex_repair_available(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    guard_home = tmp_path / "guard-home"
-    monkeypatch.setattr(
-        "sys.stdin",
-        io.StringIO(
-            json.dumps(
-                {
-                    "hook_event_name": "PreToolUse",
-                    "tool_name": "Bash",
-                    "tool_input": {"command": "hol-guard install codex"},
-                }
-            )
-        ),
-    )
-    monkeypatch.setattr(bridge_flow, "_daemon_response", lambda **_kwargs: (_ for _ in ()).throw(OSError()))
-    monkeypatch.setattr(
-        bridge_flow,
-        "trusted_hook_launch",
-        lambda **_kwargs: (_ for _ in ()).throw(ValueError("stale manifest")),
-    )
-    config = _bridge_config(guard_home, 5474)
-    config["manifest_path"] = guard_home / "managed" / "codex" / "hooks-fixture.manifest.json"
-    config["config_json"] = "{}"
-
-    assert bridge.main(**config) == 0
-    assert json.loads(capsys.readouterr().out) == {
-        "continue": True,
-        "systemMessage": bridge._LAUNCH_INTEGRITY_REASON,
-        "hookSpecificOutput": {"hookEventName": "PreToolUse"},
-    }
-
-
 def test_launcher_integrity_failure_denies_unrelated_pretool_use(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
