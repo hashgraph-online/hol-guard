@@ -60,13 +60,30 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
     assert "test-plan" not in jobs
     assert "tests" not in jobs
     assert "needs" not in jobs["coverage-plan"]
+    native_steps = jobs["native-command-evaluators"]["steps"]
+    verify_index = next(
+        index for index, step in enumerate(native_steps) if "verify_native_command_program.py" in step.get("run", "")
+    )
+    verify_step = native_steps[verify_index]
+    assert "--compiler rust/target/release/guard-command-source" in verify_step["run"]
+    assert "--changed-from" in verify_step["run"]
+    assert "if" not in verify_step
+    assert verify_step.get("continue-on-error", False) is False
+    upload_index = next(
+        index
+        for index, step in enumerate(native_steps)
+        if step.get("uses", "").startswith("actions/upload-artifact@")
+        and step["with"]["name"] == "pytest-native-command-evaluators"
+    )
+    assert verify_index < upload_index
+    assert "if" not in native_steps[upload_index]
 
     for planner, executor, version, env_name, count, width in (
-        ("coverage-plan", "coverage", "3.12", "CI_PYTHON_VERSION", 192, 3),
+        ("coverage-plan", "coverage", "3.12", "CI_PYTHON_VERSION", 128, 3),
     ):
         plan_job = jobs[planner]
         execution_job = jobs[executor]
-        assert execution_job["needs"] == planner
+        assert set(execution_job["needs"]) == {planner, "native-command-evaluators"}
         assert execution_job["strategy"]["matrix"]["shard-index"] == list(range(count))
         for job in (plan_job, execution_job):
             setup = next(step for step in job["steps"] if step.get("uses") == "./.github/actions/setup-ci-python")
@@ -78,7 +95,17 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
             step for step in execution_job["steps"] if step.get("uses", "").startswith("actions/download-artifact@")
         )
         assert download["with"]["name"] == f"pytest-shard-plan-{version}"
+        native_download = next(
+            step
+            for step in execution_job["steps"]
+            if step.get("uses", "").startswith("actions/download-artifact@")
+            and step["with"]["name"] == "pytest-native-command-evaluators"
+        )
+        assert native_download["with"]["path"] == "rust/target/release"
         commands = "\n".join(step.get("run", "") for step in execution_job["steps"])
+        assert "HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER=$GITHUB_WORKSPACE/" in commands
+        assert "HOL_GUARD_NATIVE_BINARY=$GITHUB_WORKSPACE/" in commands
+        assert "HOL_GUARD_NATIVE_REGRESSION=1" in commands
         assert f"shard-%0{width}d.txt" in commands
         assert "python scripts/ci/pytest_shard.py" not in commands
         assert "--ignore" not in commands
@@ -108,11 +135,11 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
     candidate = jobs["duration-manifest-candidate"]
     assert candidate["needs"] == "coverage"
     assert candidate["if"] == "needs.coverage.result == 'success'"
-    assert 'test "${#reports[@]}" -eq 192' in "\n".join(step.get("run", "") for step in candidate["steps"])
+    assert 'test "${#reports[@]}" -eq 128' in "\n".join(step.get("run", "") for step in candidate["steps"])
     sonar_job = _workflow_job(workflow, "sonar", "scheduling-sensitive")
     assert "bash scripts/ci/prepare_sonar_analysis.sh" in sonar_job
     sonar_setup = (ROOT / "scripts/ci/prepare_sonar_analysis.sh").read_text(encoding="utf-8")
-    assert 'test "${#reports[@]}" -eq 192' in sonar_setup
+    assert 'test "${#reports[@]}" -eq 128' in sonar_setup
     assert "vars.SONAR_CI_ENABLED == 'true'" in sonar_job
     gate = jobs["ci-python-312"]
     assert gate["name"] == "ci (3.12)"

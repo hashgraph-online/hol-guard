@@ -19,7 +19,6 @@ from codex_plugin_scanner.guard.runtime import local_package_script_evidence as 
 from codex_plugin_scanner.guard.runtime.command_contained_routine_candidates import (
     contained_routine_candidate_operation,
 )
-from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
 from codex_plugin_scanner.guard.runtime.containment_contract import (
     ContainmentAttestation,
     ContainmentBackend,
@@ -41,6 +40,7 @@ from codex_plugin_scanner.guard.runtime.local_package_script_evidence import (
 from codex_plugin_scanner.guard.runtime.workspace_snapshot_inputs import complete_workspace_snapshot
 from tests.guard_command_corpus import iter_adversarial_corpus, iter_benign_corpus
 from tests.guard_command_corpus_oracle import iter_adversarial_oracle, iter_benign_oracle
+from tests.native_command_test_support import iter_native_command_evaluations
 
 _INTEGRITY = "sha512-" + base64.b64encode(bytes(64)).decode("ascii")
 _OPERATIONS = {
@@ -153,15 +153,21 @@ def _result(request: ContainmentRequest, exit_code: int = 0) -> ContainmentExecu
 
 @pytest.mark.parametrize("partition", range(_CORPUS_PARTITIONS))
 def test_every_cdx_061_corpus_case_requires_owned_containment_proof(partition: int) -> None:
-    # Keep all 51,000 cases while allowing CI to distribute this formerly
-    # five-minute pytest node across its duration-balanced shard plan.
-    for case, oracle in zip(
-        iter_benign_corpus(shard_index=partition, shard_count=_CORPUS_PARTITIONS),
-        iter_benign_oracle(shard_index=partition, shard_count=_CORPUS_PARTITIONS),
-        strict=True,
-    ):
+    # Keep every case and oracle assertion, but amortize native process startup
+    # through the existing bounded evaluator rather than spawning per command.
+    benign = list(
+        zip(
+            iter_benign_corpus(shard_index=partition, shard_count=_CORPUS_PARTITIONS),
+            iter_benign_oracle(shard_index=partition, shard_count=_CORPUS_PARTITIONS),
+            strict=True,
+        )
+    )
+    evaluations = iter_native_command_evaluations(
+        (case.command for case, _oracle in benign), cwd=Path("workspace"), home_dir=Path("home")
+    )
+    for (case, oracle), reviewed in zip(benign, evaluations, strict=True):
         assert case.case_id == oracle.case_id
-        evaluation = evaluate_command(case.command, cwd=Path("workspace"), home_dir=Path("home"))
+        evaluation = reviewed.evaluation
         operation = contained_routine_candidate_operation(evaluation.command)
         if oracle.owner != "CDX-061":
             assert operation is None
@@ -173,25 +179,36 @@ def test_every_cdx_061_corpus_case_requires_owned_containment_proof(partition: i
         assert any(
             reason.reason_code == "contained-routine-proof-required" for reason in evaluation.decision_plane.reasons
         )
-    for case, oracle in zip(
-        iter_adversarial_corpus(shard_index=partition, shard_count=_CORPUS_PARTITIONS),
-        iter_adversarial_oracle(shard_index=partition, shard_count=_CORPUS_PARTITIONS),
-        strict=True,
-    ):
+    adversarial = list(
+        zip(
+            iter_adversarial_corpus(shard_index=partition, shard_count=_CORPUS_PARTITIONS),
+            iter_adversarial_oracle(shard_index=partition, shard_count=_CORPUS_PARTITIONS),
+            strict=True,
+        )
+    )
+    evaluations = iter_native_command_evaluations(
+        (case.command for case, _oracle in adversarial), cwd=Path("workspace"), home_dir=Path("home")
+    )
+    for (case, oracle), reviewed in zip(adversarial, evaluations, strict=True):
         assert case.case_id == oracle.case_id
         assert oracle.owner != "CDX-061"
-        evaluation = evaluate_command(case.command, cwd=Path("workspace"), home_dir=Path("home"))
-        assert contained_routine_candidate_operation(evaluation.command) is None
+        assert contained_routine_candidate_operation(reviewed.evaluation.command) is None
 
 
 def test_cdx_061_corpus_owned_count_and_operations_remain_complete() -> None:
+    owned = [
+        (case, oracle)
+        for case, oracle in zip(iter_benign_corpus(), iter_benign_oracle(), strict=True)
+        if oracle.owner == "CDX-061"
+    ]
+    evaluations = iter_native_command_evaluations(
+        (case.command for case, _oracle in owned), cwd=Path("workspace"), home_dir=Path("home")
+    )
     operations: set[str] = set()
     count = 0
-    for case, oracle in zip(iter_benign_corpus(), iter_benign_oracle(), strict=True):
-        if oracle.owner != "CDX-061":
-            continue
-        evaluation = evaluate_command(case.command, cwd=Path("workspace"), home_dir=Path("home"))
-        operation = contained_routine_candidate_operation(evaluation.command)
+    for (case, oracle), reviewed in zip(owned, evaluations, strict=True):
+        assert case.case_id == oracle.case_id
+        operation = contained_routine_candidate_operation(reviewed.evaluation.command)
         count += 1
         assert operation is not None
         operations.add(operation)

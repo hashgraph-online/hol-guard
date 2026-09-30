@@ -38,6 +38,7 @@ from .runtime.approval_reuse import (
     evaluate_approval_reuse,
 )
 from .runtime.browser_mcp_intent import browser_intent_display_target, normalize_browser_mcp_intent
+from .runtime.composio_contract import composio_requires_action_review
 from .runtime.mcp_protection import (
     McpServerIdentity,
     build_mcp_tool_identity,
@@ -48,7 +49,7 @@ from .runtime.mcp_skill_firewall import enrich_artifact_with_mcp_skill_firewall,
 from .store import GuardStore, browser_mcp_exact_match_context
 from .temporary_mcp_approvals import runtime_grant_selectors
 
-_MCP_TOOL_CALL_EVALUATOR_POLICY_VERSION = "mcp-tool-call-evaluation-v3"  # bump with risk/action semantics
+_MCP_TOOL_CALL_EVALUATOR_POLICY_VERSION = "mcp-tool-call-evaluation-v4"  # bump with risk/action semantics
 
 _NON_EXECUTED_TOOL_CALL_TAXONOMY: Mapping[GuardAction, tuple[str, str]] = {
     "review": ("runtime_tool_call_review_required", "runtime tool call awaiting review"),
@@ -246,8 +247,14 @@ def build_tool_call_artifact(
     server_identity: McpServerIdentity | None = None,
     tool_schema: object | None = None,
     tool_description: str | None = None,
+    tool_definition: Mapping[str, object] | None = None,
+    provider_catalog_hash: str | None = None,
 ) -> GuardArtifact:
     metadata: dict[str, object] = {"server_name": server_name}
+    if provider_catalog_hash is not None:
+        if not re.fullmatch(r"[0-9a-f]{64}", provider_catalog_hash):
+            raise ValueError("invalid provider catalog authority hash")
+        metadata["mcp_provider_catalog_hash"] = provider_catalog_hash
     if server_id is not None:
         metadata["server_id"] = server_id
     if server_fingerprint is not None:
@@ -269,6 +276,12 @@ def build_tool_call_artifact(
     metadata["mcp_tool_identity"] = mcp_tool_identity_metadata(tool_identity)
     if tool_schema is not None:
         metadata["tool_schema"] = tool_schema
+    if tool_definition is not None:
+        from .store_mcp_catalog import tool_definition_authority_hash
+
+        metadata["mcp_tool_authority_hash"] = (
+            tool_definition_authority_hash(dict(tool_definition)) if tool_definition.get("name") == tool_name else None
+        )
     if isinstance(tool_description, str) and tool_description.strip():
         metadata["tool_description"] = tool_description.strip()
     return enrich_artifact_with_mcp_skill_firewall(
@@ -334,6 +347,12 @@ def build_tool_call_hash(
         "tool_identity": artifact.metadata.get("mcp_tool_identity"),
         "arguments": content_arguments,
     }
+    authority_hash = artifact.metadata.get("mcp_tool_authority_hash")
+    if authority_hash is not None:
+        legacy_material["tool_authority_hash"] = authority_hash
+    provider_hash = artifact.metadata.get("mcp_provider_catalog_hash")
+    if provider_hash is not None:
+        legacy_material["provider_catalog_hash"] = provider_hash
     # Keep the legacy digest for callers that genuinely have no workspace,
     # while binding every workspace-aware runtime call to its effective cwd.
     # Artifact-scope policy rows intentionally discard their workspace column,
@@ -379,6 +398,8 @@ def build_tool_call_hash(
             "tool_catalog_fingerprint": tool_catalog_fingerprint,
             "tool_identity": artifact.metadata.get("mcp_tool_identity"),
             "transport": artifact.transport,
+            **({"tool_authority_hash": authority_hash} if authority_hash is not None else {}),
+            **({"provider_catalog_hash": provider_hash} if provider_hash is not None else {}),
         },
         policy=_tool_call_policy_context(config, artifact),
         sandbox={"analysis": config.sandbox_analysis},
@@ -460,6 +481,17 @@ def evaluate_tool_call(
         arguments=arguments,
         current=current,
     )
+    if (
+        composio_requires_action_review(artifact.command or "")
+        and current.action != "block"
+        and store.read_mcp_provider_authority_hash() != artifact.metadata.get("mcp_provider_catalog_hash")
+    ):
+        return replace(
+            current,
+            action=most_restrictive_guard_action(current.action, "require-reapproval"),
+            source="composio-schema-reapproval",
+            summary="The app action inventory changed. Rebuild this call and review it again.",
+        )
     runtime_exact_match_context = _browser_runtime_exact_match_context(artifact, arguments)
     policy_lookup = store.resolve_policy_decision_lookup_with_memory_pattern(
         artifact.harness,
@@ -512,6 +544,17 @@ def evaluate_tool_call(
             )
         )
 
+    if (
+        validation_reason is None
+        and saved_decision is not None
+        and saved_action == "allow"
+        and composio_requires_action_review(artifact.command or "")
+        and store.approval_reuse_claim_disposition(saved_decision) != "consumed"
+    ):
+        # No supported account resolver exists for this profile. A retained
+        # wrapper approval could silently follow a changed default account.
+        # Fresh single-use review remains available; durable reuse does not.
+        validation_reason = "approval_reuse_provider_account_unverified"
     reuse = evaluate_approval_reuse(
         current.action,
         saved_action,
@@ -562,6 +605,30 @@ def _apply_temporary_mcp_grant(
     current: ToolCallDecision,
 ) -> ToolCallDecision:
     original_action = current.action
+    from .runtime.mcp_provider_permissions import composio_provider_action_floor
+
+    provider_floor = (
+        composio_provider_action_floor(
+            store.read_mcp_provider_choices(),
+            harness=artifact.harness,
+            tool_name=artifact.command or "",
+            arguments=arguments,
+        )
+        if composio_requires_action_review(artifact.command or "")
+        else None
+    )
+    if provider_floor is not None and provider_floor.action == "block":
+        return replace(
+            current,
+            action="block",
+            source="composio-action-deny",
+            summary="A denied app action blocks this execution. No batch member may run.",
+        )
+    # A decisive extension choice fixes the action. Temporary grants only add
+    # Allow, so probing them cannot change that choice.
+    granted = apply_local_mcp_extension_decision(store, artifact, original_action)
+    if granted is not None and (granted[0] in {"block", "review"} or current.action != "allow"):
+        return replace(current, action=granted[0], source=granted[1], summary=granted[2])
     if original_action == "review":
         selectors = runtime_grant_selectors(
             normalize_browser_mcp_intent(artifact, arguments),
@@ -584,9 +651,13 @@ def _apply_temporary_mcp_grant(
                     summary="A time-bounded approval covers this routine MCP capability.",
                 )
                 break
-    granted = apply_local_mcp_extension_decision(store, artifact, original_action)
-    if granted is not None and (granted[0] in {"block", "review"} or current.action != "allow"):
-        return replace(current, action=granted[0], source=granted[1], summary=granted[2])
+    if composio_requires_action_review(artifact.command or ""):
+        return replace(
+            current,
+            action=most_restrictive_guard_action(current.action, "review"),
+            source="composio-action-review",
+            summary="Review the underlying actions and account. A wrapper grant does not authorize execution.",
+        )
     return current
 
 
@@ -1429,6 +1500,8 @@ def allow_tool_call(
     emit_runtime_evidence: bool = True,
 ) -> GuardReceipt:
     if remember:
+        if composio_requires_action_review(artifact.command or ""):
+            raise ValueError("verified_account_required_for_remembered_provider_action")
         store.upsert_policy(
             PolicyDecision(
                 harness=artifact.harness,

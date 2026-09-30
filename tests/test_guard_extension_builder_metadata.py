@@ -18,7 +18,8 @@ def test_generated_metadata_does_not_imply_review_or_activation(
 ) -> None:
     kit = make_kit(tmp_path, kind, reviewed=reviewed)
     files = dict(kit.files)
-    contribution_name = next(name for name in files if name.startswith("artifacts/contributions/"))
+    family = "extensions" if kind == "cli" else "mcp-servers"
+    contribution_name = next(name for name in files if name.startswith(f"artifacts/contributions/{family}/"))
     contribution = json.loads(files[contribution_name])
     assert contribution["description"] == "Conservative operation knowledge compiled from a contributor inventory."
     assert contribution["trustClass"] == "external"

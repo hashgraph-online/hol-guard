@@ -6,7 +6,6 @@ import importlib.util
 from pathlib import Path
 from types import ModuleType
 
-import yaml
 
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 
@@ -42,8 +41,9 @@ def test_readme_and_contribution_guide_expose_complete_entry_path() -> None:
     readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
     contributing = (REPO_ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
     guide = (REPO_ROOT / "docs" / "guard" / "extensions" / "contributing.md").read_text(encoding="utf-8")
-    proposal = (REPO_ROOT / ".github" / "ISSUE_TEMPLATE" / "command-extension-proposal.yml").read_text(encoding="utf-8")
-    proposal_data = yaml.safe_load(proposal)
+    pr_template = (REPO_ROOT / ".github" / "PULL_REQUEST_TEMPLATE" / "command-extension.md").read_text(
+        encoding="utf-8"
+    )
 
     assert "docs/guard/extensions/README.md" in readme
     assert "docs/guard/extensions/contributing.md" in readme
@@ -52,27 +52,13 @@ def test_readme_and_contribution_guide_expose_complete_entry_path() -> None:
         "destructive examples reach both side-effect-free inspection and runtime review",
         "safe previews",
         "privacy",
-        "Extension proposal",
+        "draft pull request",
     ):
         assert requirement.lower() in guide.lower()
-    for field in (
-        "extension_identity",
-        "destructive_examples",
-        "safe_counterparts",
-        "authority_model",
-        "privacy_performance",
+    for requirement in (
+        "Upstream source and version",
+        "Capability boundary",
+        "safe/read-only counterparts",
+        "Allow edits from maintainers",
     ):
-        assert f"id: {field}" in proposal
-    proposal_fields = {item["id"]: item for item in proposal_data["body"] if isinstance(item, dict) and "id" in item}
-    for field in (
-        "extension_identity",
-        "capability_boundary",
-        "command_surface",
-        "destructive_examples",
-        "safe_counterparts",
-        "edge_cases",
-        "authority_model",
-        "privacy_performance",
-        "references",
-    ):
-        assert proposal_fields[field]["validations"]["required"] is True
+        assert requirement.lower() in pr_template.lower()

@@ -90,6 +90,8 @@ def _rule_pack_signal(trust_status: Mapping[str, object]) -> ProtectionSignal:
 def _daemon_signal(runtime_state: Mapping[str, object] | None, *, now: datetime) -> ProtectionSignal:
     if runtime_state is None:
         return _signal(ProtectionCheckStatus.FAIL, "daemon_runtime_unavailable")
+    if runtime_state.get("registration_status") == "missing":
+        return _signal(ProtectionCheckStatus.UNKNOWN, "daemon_registration_missing")
     heartbeat_value = runtime_state.get("last_heartbeat_at")
     if not isinstance(heartbeat_value, str):
         return _signal(ProtectionCheckStatus.UNKNOWN, "daemon_heartbeat_unavailable")

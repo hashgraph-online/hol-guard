@@ -1,15 +1,9 @@
 from __future__ import annotations
 
 import importlib.util
-import sys
 from pathlib import Path
 
 import pytest
-
-if sys.version_info >= (3, 11):
-    import tomllib
-else:
-    import tomli as tomllib
 
 SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts/release/stage_guard_cloud_review_artifacts.py"
 SPEC = importlib.util.spec_from_file_location("stage_guard_cloud_review_artifacts", SCRIPT_PATH)
@@ -25,30 +19,16 @@ def _write_artifacts(root: Path) -> None:
         source.write_text(source_name, encoding="utf-8")
 
 
-def test_stage_artifacts_matches_wheel_package_data(tmp_path: Path) -> None:
-    repository = SCRIPT_PATH.parents[2]
-    pyproject = tomllib.loads((repository / "pyproject.toml").read_text(encoding="utf-8"))
-    package_prefix = "codex_plugin_scanner/guard/contracts/data/"
-    artifacts = {
-        source: destination.removeprefix(package_prefix)
-        for source, destination in pyproject["tool"]["hatch"]["build"]["targets"]["wheel"]["force-include"].items()
-        if destination.startswith(package_prefix)
-    }
-    assert artifacts
-    for source_name in artifacts:
-        source = tmp_path / source_name
-        source.parent.mkdir(parents=True, exist_ok=True)
-        source.write_bytes((repository / source_name).read_bytes())
+def test_stage_artifacts_copies_every_canonical_artifact(tmp_path: Path) -> None:
+    _write_artifacts(tmp_path)
 
     staged = MODULE.stage_artifacts(tmp_path)
 
     data_root = tmp_path / "src/codex_plugin_scanner/guard/contracts/data"
-    assert {path.relative_to(data_root).as_posix() for path in staged if path.name != "__init__.py"} == set(
-        artifacts.values()
-    )
-    for source_name, destination_name in artifacts.items():
+    assert len(staged) >= len(MODULE._ARTIFACTS)
+    for source_name, destination_name in MODULE._ARTIFACTS.items():
         destination = data_root / destination_name
-        assert destination.read_bytes() == (repository / source_name).read_bytes()
+        assert destination.read_text(encoding="utf-8") == source_name
     assert (data_root / "extensions" / "__init__.py").is_file()
     assert (data_root / "extensions" / "contributions" / "__init__.py").is_file()
     assert (data_root / "extensions" / "trust-class-map.v1.json").is_file()

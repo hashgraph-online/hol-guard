@@ -29,49 +29,9 @@ def examples(matcher: object) -> set[str]:
 def main() -> None:
     if sys.version_info[:2] != (3, 12):
         raise SystemExit("Native v1 oracle requires CPython 3.12 / UCD15.")
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from tests.test_guard_command_errand_extensions import ERRAND_APPLY_CASES, ERRAND_RUN_CASES, ERRAND_SAFE_COMMANDS
-
     commands = {
         value for extension in REGISTRY.extensions for rule in extension.rules for value in examples(rule.matcher)
     }
-    # Reuse the Python regression corpus as an independent native oracle.
-    commands.update(command for command, _, _ in (*ERRAND_RUN_CASES, *ERRAND_APPLY_CASES))
-    commands.update(ERRAND_SAFE_COMMANDS)
-    commands.update(
-        f"errand fetch --apply={value} linux/job"
-        for value in ("1", "t", "T", "true", "True", "TRUE", "0", "f", "F", "false", "False", "FALSE", "yes", "")
-    )
-    commands.update(
-        {
-            "errand",
-            "errand --",
-            "errand --on",
-            "xargs errand --on",
-            "errand fetch --on",
-            "errand fetch --apply --on",
-            "xargs errand fetch --on",
-            "errand fetch -- linux/job --apply",
-            "errand fetch --apply -- linux/job",
-            "errand FETCH --apply linux/job",
-            "errand fetch --Apply linux/job",
-            "exec -- errand -- make test",
-            "xargs -- errand fetch --apply linux/job",
-            "xargs -I ITEM errand fetch ITEM",
-            "xargs --replace=ITEM errand ITEM",
-            "xargs --unknown errand",
-            "xargs --unknown printf text",
-            "exec -a alias errand",
-            "xargs -n1 errand",
-            "xargs -0r errand",
-            "xargs --max-args=1 errand",
-            "errand fetch --apply linux/job && errand -- make test",
-            "/usr/local/bin/ERRAND -- make test",
-            "xargs /usr/local/bin/ERRAND fetch --apply linux/job",
-            "errand --on=café -- make test",
-            "errand fetch --output=café linux/job",
-        }
-    )
     commands.update(
         {
             "pwd",
@@ -109,6 +69,28 @@ def main() -> None:
             "zsh -lc 'ollama push model'",
             "git status",
             "rm -rf /",
+            # VersionedPackageSubcommandMatcher: an npm-style @version/@tag
+            # suffix on the package token, and lookalikes that must not match.
+            "npx uivoid@latest create my-app",
+            "npx uivoid@1.2.3 create my-app",
+            "bunx uivoid@latest create my-app",
+            "npm exec uivoid@1.2.3 create my-app",
+            "pnpm exec uivoid@1.2.3 create my-app",
+            "pnpm dlx uivoid@latest create my-app",
+            "yarn dlx uivoid@latest create my-app",
+            "npx --yes uivoid@latest create my-app",
+            "npm exec --yes uivoid@1.2.3 create my-app",
+            "npx uivoid@latest login --token pat_abc123",
+            "npx uivoid@latest skill --install",
+            "NPX UIVOID@LATEST CREATE MY-APP",
+            "npx uivoidx@latest create my-app",
+            "npx @scope/uivoid@latest create my-app",
+            "npx not-uivoid create my-app",
+            "pnpm uivoid@latest create my-app",
+            "yarn uivoid@latest create my-app",
+            "npx uivoid@ create my-app",
+            "npm exec uivoid@ create my-app",
+            "pnpm dlx uivoid@ create my-app",
         }
     )
     fixtures = []

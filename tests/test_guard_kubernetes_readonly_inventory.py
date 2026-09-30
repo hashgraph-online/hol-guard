@@ -9,6 +9,7 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     extract_sensitive_tool_action_request,
     is_explicitly_benign_tool_action_request,
 )
+from tests.native_command_test_support import extract_sensitive_tool_action_request_native_test
 
 
 def test_basic_pod_name_inventory_is_explicitly_benign(tmp_path: Path) -> None:
@@ -83,4 +84,4 @@ def test_sensitive_or_effectful_variants_are_not_benign(command: str) -> None:
     ),
 )
 def test_risky_variants_keep_sensitive_runtime_classification(command: str) -> None:
-    assert extract_sensitive_tool_action_request("bash", {"command": command}) is not None
+    assert extract_sensitive_tool_action_request_native_test("bash", {"command": command}) is not None

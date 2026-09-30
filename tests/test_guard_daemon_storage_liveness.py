@@ -32,6 +32,7 @@ from codex_plugin_scanner.guard.daemon.server import (
 )
 from codex_plugin_scanner.guard.sqlite_tuning import sqlite_connect_timeout_override, sqlite_connect_timeout_seconds
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.native_command_activity_test_support import use_real_native_activity_reviews
 
 
 def _is_string_object_dict(value: object) -> TypeGuard[dict[str, object]]:
@@ -61,7 +62,7 @@ def test_critical_daemon_liveness_does_not_wait_for_locked_storage(
     store = GuardStore(tmp_path / "guard-home")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
-    blocker = sqlite3.connect(store.path, timeout=0.1, isolation_level=None)
+    blocker = sqlite3.connect(store.path, timeout=2.0, isolation_level=None)
 
     try:
         initial_runtime = store.get_runtime_state()
@@ -192,6 +193,7 @@ def test_runtime_heartbeat_writer_coalesces_pending_updates() -> None:
             session_id: str,
             last_heartbeat_at: str,
             timeout_seconds: float,
+            registration: object = None,
         ) -> bool:
             assert session_id == "session"
             assert timeout_seconds == 0.01
@@ -276,6 +278,7 @@ def test_store_promotes_rollback_journal_before_bounded_hook_writes(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    use_real_native_activity_reviews(monkeypatch)
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir()
     database_path = guard_home / "guard.db"

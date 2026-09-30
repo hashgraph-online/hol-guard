@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 from ...path_support import resolves_within_root
 from ..models import GuardArtifact, HarnessDetection
 from .contracts import HarnessCoverageSummary, HarnessSetupContract, HarnessSetupStep, setup_contract_for
+from .diagnostic_probes import skipped_command_probe
 
 if TYPE_CHECKING:
     from ..inventory_contract import GuardAgentInventorySnapshot
@@ -71,6 +72,9 @@ def _run_command_probe(
     cwd: Path | None = None,
     env: Mapping[str, str] | None = None,
 ) -> dict[str, object]:
+    skipped = skipped_command_probe(command)
+    if skipped is not None:
+        return skipped
     try:
         result = subprocess.run(
             command,

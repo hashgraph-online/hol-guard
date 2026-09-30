@@ -24,6 +24,40 @@ def test_complete_inline_recording_only_output_gets_matching_proof() -> None:
     assert harness_json_from_native_post_tool("pi", result)["reviewed_output_sha256"] == sha256_text(content)
 
 
+def test_cline_native_projection_preserves_reviewed_output_binding() -> None:
+    digest = sha256_text("complete tool output")
+    response = {
+        "decision": "allow",
+        "model_output_action": "allow_original",
+        "reviewed_output_sha256": digest,
+        "policy_action": "allow",
+        "reason": "SECRET_REASON",
+        "unreviewed_metadata": "SECRET_METADATA",
+    }
+
+    assert harness_json_from_native_post_tool("cline", response) == {
+        "decision": "allow",
+        "model_output_action": "allow_original",
+        "reviewed_output_sha256": digest,
+        "policy_action": "allow",
+    }
+
+
+def test_cline_native_projection_preserves_exact_reviewed_excerpt() -> None:
+    response = {
+        "decision": "allow",
+        "model_output_action": "replace_with_reviewed_excerpt",
+        "reviewed_excerpt": "SAFE_EXCERPT",
+        "reason_code": "output_too_large",
+    }
+
+    assert harness_json_from_native_post_tool("cline", response) == {
+        "decision": "allow",
+        "model_output_action": "replace_with_reviewed_excerpt",
+        "reviewed_excerpt": "SAFE_EXCERPT",
+    }
+
+
 def test_source_ref_proof_is_copied_without_hashing_an_excerpt() -> None:
     digest = "a" * 64
     payload = {

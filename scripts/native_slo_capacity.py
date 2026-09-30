@@ -15,6 +15,7 @@ from scripts.native_slo_baseline import steady_state_rss_baseline as _steady_sta
 from scripts.native_slo_session import AdapterSession
 
 _MAX_CONCURRENCY = 64
+_STEADY_STATE_CONCURRENCY = 16
 _LOAD_EXECUTOR_PREWARM_TIMEOUT_SECONDS = 10.0
 # AdapterSession transport I/O is individually bounded at five seconds. Every
 # worker is prestarted before a measured wave, and this one-second envelope lets
@@ -118,15 +119,19 @@ def _prewarm_ready_hook_workers(
     executor: ThreadPoolExecutor,
 ) -> tuple[list[Observation], int]:
     observations, errors = _run_concurrent(session, routes, concurrency, executor)
+    _require_ready_hook_workers(session, concurrency)
+    return observations, errors
+
+
+def _require_ready_hook_workers(session: AdapterSession, ready_workers: int) -> None:
     stats = session.daemon._server.hook_process_runner.stats()
     _require(
-        stats["target"] == concurrency
-        and stats["workers"] == concurrency
-        and stats["ready"] == concurrency
+        stats["target"] == ready_workers
+        and stats["workers"] == ready_workers
+        and stats["ready"] == ready_workers
         and stats["busy"] == 0,
         "hook worker capacity was not steady after prewarm",
     )
-    return observations, errors
 
 
 def _classify_native_overloads(
@@ -263,10 +268,10 @@ def _measure_c16(
 ) -> tuple[list[Observation], int]:
     if not include_capacity:
         return [], 0
-    executor = ThreadPoolExecutor(max_workers=16)
+    executor = ThreadPoolExecutor(max_workers=_STEADY_STATE_CONCURRENCY)
     try:
-        _prime_load_executor(executor, 16)
-        observations, errors = _measure_classified_wave(session, routes, 16, executor)
+        _prime_load_executor(executor, _STEADY_STATE_CONCURRENCY)
+        observations, errors = _measure_classified_wave(session, routes, _STEADY_STATE_CONCURRENCY, executor)
     except BaseException:
         executor.shutdown(wait=False, cancel_futures=True)
         raise
@@ -280,15 +285,39 @@ def _prewarm_capacity_workers(
     routes: tuple[tuple[str, str], ...],
     ready_workers: int,
 ) -> None:
-    """Initialize every ready worker's resident transport before capacity timing."""
+    """Initialize the measured native client concurrency before capacity timing."""
 
-    executor = ThreadPoolExecutor(max_workers=ready_workers)
+    # Native requests use their own lazy stream pool in the daemon, rather than
+    # the isolated Python hook workers. Warm the measured native concurrency;
+    # the Python worker target can remain two even when sixteen clients run.
+    executor = ThreadPoolExecutor(max_workers=_STEADY_STATE_CONCURRENCY)
     try:
-        _prime_load_executor(executor, ready_workers)
-        observations, errors = _prewarm_ready_hook_workers(session, routes, ready_workers, executor)
+        _prime_load_executor(executor, _STEADY_STATE_CONCURRENCY)
+        observations, errors = _run_concurrent(session, routes, _STEADY_STATE_CONCURRENCY, executor)
         _require(
-            errors == 0 and len(observations) == ready_workers,
-            "hook worker capacity prewarm did not complete every request",
+            errors == 0 and len(observations) == _STEADY_STATE_CONCURRENCY,
+            "native client capacity prewarm did not complete every request",
+        )
+        _require(
+            all(item.allowed and item.route == "native_resident" and not item.overloaded for item in observations),
+            "native client capacity prewarm did not complete native review",
+        )
+        _require_ready_hook_workers(session, ready_workers)
+        print(
+            json.dumps(
+                {
+                    "schema": "hol-guard.native-capacity-prewarm.v1",
+                    "concurrency": _STEADY_STATE_CONCURRENCY,
+                    "python_worker_target": ready_workers,
+                    "responses": len(observations),
+                    "errors": errors,
+                    "native_resident_responses": sum(item.route == "native_resident" for item in observations),
+                    "max_latency_ms": round(max(item.latency_ms for item in observations), 3),
+                },
+                sort_keys=True,
+            ),
+            file=sys.stderr,
+            flush=True,
         )
     except BaseException:
         executor.shutdown(wait=False, cancel_futures=True)
@@ -335,8 +364,8 @@ def measure_capacity(
 ) -> CapacityMeasurements:
     ready_workers = _stabilize_ready_hook_workers(session)
     if include_capacity:
-        # Serialized warmup has not exercised every ready worker's transport,
-        # so initialize the full pool before measuring steady-state capacity.
+        # Serialized warmup has not exercised the concurrent native transports,
+        # so initialize them before measuring steady-state capacity.
         # Cold and recovery latency remain separate measurements; the 16-client sample still precedes
         # the larger 64-client overload wave.
         _prewarm_capacity_workers(session, routes, ready_workers)

@@ -187,9 +187,10 @@ def availability_harness_response(
 ) -> dict[str, object]:
     """Render a schema-valid harness result when native review is unavailable."""
 
+    from .hook_launcher_recovery import hook_action_is_launcher_recovery_safe
     from .hook_worker_responses import observe_lifecycle_fail_safe_response
 
-    del payload, workspace, home_dir, guard_home, recording_only
+    del guard_home, recording_only
     canonical_lifecycle = _LIFECYCLE_CANONICAL_BY_COMPACT.get(_compact_hook_event_name(event_name))
     if canonical_lifecycle is not None:
         return observe_lifecycle_fail_safe_response(
@@ -211,6 +212,12 @@ def availability_harness_response(
     if pre_tool_event and reason_code.strip() in _INTEGRITY_FAIL_CLOSED_REASON_CODES:
         from .hook_worker_responses import integrity_fail_closed_pre_tool_response
 
+        if hook_action_is_launcher_recovery_safe(payload, workspace=workspace, home_dir=home_dir):
+            return recording_only_pre_tool_response(
+                harness,
+                reason_code=reason_code,
+                reason=reason,
+            )
         return integrity_fail_closed_pre_tool_response(
             harness,
             reason=reason,
