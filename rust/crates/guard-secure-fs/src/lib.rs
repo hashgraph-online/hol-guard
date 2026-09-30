@@ -15,7 +15,10 @@ mod secure_open;
 mod source_path;
 
 use secure_open::{secure_open, SecureOpenError};
-pub use source_path::{classify_source_path, sensitive_path_family, source_like};
+pub use source_path::{
+    classify_source_path, credential_named_path, credential_path_markers, is_source_code_extension,
+    sensitive_path_family, source_like,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FileIdentity {
