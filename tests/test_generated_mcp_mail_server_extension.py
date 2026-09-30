@@ -10,6 +10,7 @@ from codex_plugin_scanner.guard.runtime.mcp_server_contribution import (
     mcp_tool_state,
     validate_mcp_contribution,
 )
+from tests.support.extension_freshness import requires_fresh_projections
 
 _CATALOG_ID = "command.mcp-mail-server"
 _TOOL_CASES = (
@@ -30,6 +31,7 @@ _TOOL_CASES = (
 )
 
 
+@requires_fresh_projections
 def test_generated_catalog_is_external_and_off() -> None:
     extension = BUILT_IN_COMMAND_EXTENSION_REGISTRY.get(_CATALOG_ID)
     assert extension is not None

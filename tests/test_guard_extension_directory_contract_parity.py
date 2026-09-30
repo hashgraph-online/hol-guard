@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import importlib.util
 import json
-import shutil
 from pathlib import Path
 from typing import Literal
 
@@ -22,6 +21,7 @@ from codex_plugin_scanner.guard.extension_builder.listing import (
 )
 from codex_plugin_scanner.guard.runtime.mcp_server_contribution import catalog_id_for_mcp_id
 from tests.extension_builder_support import REPOSITORY, metadata
+from tests.support.extension_directory import copy_projected_contribution_sources
 
 
 def directory_schema() -> dict[str, object]:
@@ -107,8 +107,7 @@ def test_exporter_never_infers_claim_authority_when_ids_are_omitted(tmp_path: Pa
     assert specification and specification.loader
     exporter = importlib.util.module_from_spec(specification)
     specification.loader.exec_module(exporter)
-    for directory in ("extensions", "mcp-servers"):
-        shutil.copytree(REPOSITORY / "contributions" / directory, tmp_path / "contributions" / directory)
+    copy_projected_contribution_sources(REPOSITORY, tmp_path)
     listings = tmp_path / "contributions/extension-listings"
     listings.mkdir()
     path = listings / "command.blitcp.json"

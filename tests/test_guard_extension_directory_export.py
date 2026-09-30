@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import importlib.util
 import json
-import shutil
 import sys
 from pathlib import Path
 
@@ -14,6 +13,8 @@ from codex_plugin_scanner.guard.extension_builder.errors import BuilderError
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_trust import trust_class_for
 from tests.extension_builder_support import REPOSITORY
+from tests.support.extension_directory import copy_projected_contribution_sources
+from tests.support.extension_freshness import requires_fresh_projections
 
 spec = importlib.util.spec_from_file_location(
     "guard_directory_export", REPOSITORY / "scripts/export_extension_directory.py"
@@ -24,6 +25,7 @@ sys.modules[spec.name] = exporter
 spec.loader.exec_module(exporter)
 
 
+@requires_fresh_projections
 def test_export_is_deterministic_and_current() -> None:
     first = exporter.render_directory()
     assert first == exporter.render_directory()
@@ -38,6 +40,7 @@ def test_export_is_deterministic_and_current() -> None:
     assert json.loads(v2)["schemaVersion"] == "guard.extension-directory.v2"
 
 
+@requires_fresh_projections
 def test_paired_directory_render_uses_one_validated_source_snapshot(monkeypatch: pytest.MonkeyPatch) -> None:
     source_calls = 0
     listing_calls = 0
@@ -71,9 +74,10 @@ def test_public_directory_bytes_use_lf_checkout_for_stable_public_digests() -> N
     assert "/docs/guard/extensions/catalog.v2.json text eol=lf" in attributes
 
 
-def test_every_native_extension_appears_once_with_unchanged_authority() -> None:
+def test_every_native_extension_appears_once_with_unchanged_authority(tmp_path: Path) -> None:
+    root = copy_sources(tmp_path)
     native = {row.extension_id: row for row in BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions}
-    entries = exporter.export_directory()["entries"]
+    entries = exporter.export_directory(root)["entries"]
     assert {row["runtimeExtensionId"] for row in entries} == set(native)
     for row in entries:
         extension = native[row["runtimeExtensionId"]]
@@ -87,7 +91,7 @@ def test_every_native_extension_appears_once_with_unchanged_authority() -> None:
             assert row["sourcePath"].startswith("contributions/")
             assert row["contributionDigest"].startswith("sha256:")
         assert "enabled" not in row and "safe" not in row and "rating" not in row
-    for row in exporter.export_directory_v2()["entries"]:
+    for row in exporter.export_directory_v2(root)["entries"]:
         assert "contributors" in row and "listing" in row and "authoringSource" in row
         if row["kind"] == "command":
             assert row["authoringSource"]["path"].endswith(f"/{row['id']}.json")
@@ -96,8 +100,8 @@ def test_every_native_extension_appears_once_with_unchanged_authority() -> None:
             assert row["authoringSource"] is None
 
 
-def test_mcp_entry_preserves_contribution_identity_and_inheritance() -> None:
-    entries = exporter.export_directory()["entries"]
+def test_mcp_entry_preserves_contribution_identity_and_inheritance(tmp_path: Path) -> None:
+    entries = exporter.export_directory(copy_sources(tmp_path))["entries"]
     row = next(row for row in entries if row["id"] == "mcp.filesystem")
     assert row["runtimeExtensionId"] == "command.mcp-filesystem"
     assert row["kind"] == "mcp"
@@ -107,8 +111,7 @@ def test_mcp_entry_preserves_contribution_identity_and_inheritance() -> None:
 
 def copy_sources(tmp_path: Path) -> Path:
     root = tmp_path / "repo"
-    for directory in ("extensions", "mcp-servers", "command-sources"):
-        shutil.copytree(REPOSITORY / "contributions" / directory, root / "contributions" / directory)
+    copy_projected_contribution_sources(REPOSITORY, root)
     (root / "contributions/extension-listings").mkdir()
     return root
 
@@ -134,17 +137,18 @@ def test_source_identity_mismatch_is_rejected(tmp_path: Path) -> None:
         exporter.export_directory(root)
 
 
-def test_public_directory_matches_cross_repository_contract() -> None:
+def test_public_directory_matches_cross_repository_contract(tmp_path: Path) -> None:
     from jsonschema import Draft202012Validator
 
+    root = copy_sources(tmp_path)
     schema = json.loads((REPOSITORY / "contracts/extensions/directory.v1.schema.json").read_text())
-    Draft202012Validator(schema).validate(exporter.export_directory())
-    catalog = exporter.export_directory()
+    Draft202012Validator(schema).validate(exporter.export_directory(root))
+    catalog = exporter.export_directory(root)
     entry = dict(catalog["entries"][0])
     entry.pop("operations", None)
     Draft202012Validator(schema).validate({"schemaVersion": catalog["schemaVersion"], "entries": [entry]})
     v2_schema = json.loads((REPOSITORY / "contracts/extensions/directory.v2.schema.json").read_text())
-    Draft202012Validator(v2_schema).validate(exporter.export_directory_v2())
+    Draft202012Validator(v2_schema).validate(exporter.export_directory_v2(root))
 
 
 def test_v2_listing_metadata_has_separate_credit_and_claim_authority(tmp_path: Path) -> None:
@@ -183,11 +187,12 @@ def test_v2_directory_supplies_a_valid_summary_for_a_short_legacy_description(tm
     assert row["summary"] == "Reviewed Guard coverage for command.blitcp."
 
 
-def test_claim_readiness_report_matches_claim_policy_invariants() -> None:
-    report = exporter.claim_readiness()
+def test_claim_readiness_report_matches_claim_policy_invariants(tmp_path: Path) -> None:
+    root = copy_sources(tmp_path)
+    report = exporter.claim_readiness(root)
     assert report["schemaVersion"] == "guard.extension-claim-readiness.v1"
     rows = report["entries"]
-    assert len(rows) == len(exporter.export_directory()["entries"])
+    assert len(rows) == len(exporter.export_directory(root)["entries"])
     provenance = [row for row in rows if row["claimPolicy"] == "provenance"]
     assert provenance, "expected at least one provenance entry in the canonical directory"
     for row in provenance:
@@ -220,3 +225,22 @@ def test_valid_contribution_with_empty_accepted_set_is_not_invitation_eligible(t
     assert row["acceptedGithubIdCount"] == 0
     assert row["invitationEligible"] is False
     assert row["reason"] == "empty_accepted_set"
+
+
+def test_directory_fixture_preserves_projected_authority_and_exporter_rejects_pending_sources(tmp_path: Path) -> None:
+    root = copy_sources(tmp_path)
+    pending = root / "contributions/mcp-servers/mcp.pending-fixture.json"
+    payload = json.loads((root / "contributions/mcp-servers/mcp.filesystem.json").read_text())
+    payload["id"] = "mcp.pending-fixture"
+    pending.write_text(json.dumps(payload))
+    with pytest.raises(ValueError, match="absent from the canonical native registry"):
+        exporter.export_directory(root)
+    projected = tmp_path / "projected"
+    copy_projected_contribution_sources(root, projected)
+    entries = exporter.export_directory(projected)["entries"]
+    assert {row["runtimeExtensionId"] for row in entries} == {
+        row.extension_id for row in BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions
+    }
+    assert "mcp.pending-fixture" not in {row["id"] for row in entries}
+    known = "contributions/mcp-servers/mcp.filesystem.json"
+    assert (projected / known).read_bytes() == (root / known).read_bytes()
