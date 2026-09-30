@@ -112,12 +112,20 @@ def build_mcp_tool_identity(
     )
 
 
+def _non_secret_mcp_server_command(command: str) -> str:
+    """Return a serialization-safe MCP command without URL credentials."""
+
+    if "://" not in command:
+        return command
+    return _sanitize_package_url(command)
+
+
 def mcp_server_identity_metadata(identity: McpServerIdentity) -> dict[str, object]:
     """Serialize an MCP server identity into non-secret Guard metadata."""
 
     return {
         "config_path": identity.config_path,
-        "command": identity.command,
+        "command": _non_secret_mcp_server_command(identity.command),
         "args_hash": identity.args_hash,
         "package_name": identity.package_name,
         "package_version": identity.package_version,

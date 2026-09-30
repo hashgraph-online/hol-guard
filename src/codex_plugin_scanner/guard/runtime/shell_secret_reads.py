@@ -17,6 +17,12 @@ from ._shell_execution_context_support import (
     SHELL_CWD_UNRESOLVED_PARENT_SHELL,
     SHELL_CWD_WORKSPACE_ESCAPE,
 )
+from ._shell_secret_read_flow import (
+    _failed_cd_short_circuit_state,
+    _flow_operator_before,
+    _parse_execution_segment,
+    _segment_may_touch_local_data,
+)
 from ._shell_secret_read_support import (
     _MAX_DEPTH,
     _MAX_INLINE_SCRIPT_BYTES,
@@ -26,18 +32,14 @@ from ._shell_secret_read_support import (
     _command_may_need_read_assessment,
     _cwd_shadowed_executable,
     _direct_secret_read_paths_from_tokens,
-    _failed_cd_short_circuit_state,
-    _flow_operator_before,
     _interpreter_inline_launch,
     _interpreter_stdin_launch,
     _known_python_module_launch,
     _literal_read_paths,
     _local_executable_operand,
-    _parse_execution_segment,
     _python_executable,
     _python_module_launch,
     _script_operand,
-    _segment_may_touch_local_data,
     _sensitive_path,
     _shell_command_string,
     _unresolved_local_script_launch,
@@ -106,7 +108,7 @@ def assess_shell_reads(
         # its conditional successor conservatively without inventing a cwd
         # failure for the delay itself.
         delay = re.match(r"^\s*sleep\s+([1-9]\d{0,3})\s*&&\s*", text)
-        if delay is not None and int(delay.group(1)) <= 3600:
+        if delay is not None and int(delay.group(1)) <= 3600 and not _cwd_shadowed_executable("sleep", cwd=current_cwd):
             text = text[delay.end() :]
         context = model_shell_execution_context(
             text,

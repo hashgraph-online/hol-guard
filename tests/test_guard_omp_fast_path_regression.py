@@ -69,7 +69,8 @@ def test_omp_post_tool_read_burst_uses_resident_scanner(
     finally:
         daemon.stop()
 
-    assert all(result.get("decision") == "allow" for result in results)
-    assert all(result.get("reason_code") == "output_scan_allow" for result in results)
+    verdicts = [(result.get("decision"), result.get("reason_code")) for result in results]
+    assert all(result.get("decision") == "allow" for result in results), verdicts
+    assert all(result.get("reason_code") == "output_scan_allow" for result in results), verdicts
     assert worker_stats["timeouts"] == 0
     assert worker_stats["restarts"] == 0

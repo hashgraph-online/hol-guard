@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import shutil
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -16,8 +17,10 @@ from codex_plugin_scanner.guard.mcp_tool_calls import (
 )
 from codex_plugin_scanner.guard.runtime.local_cli_commands import LocalCliCommand
 from codex_plugin_scanner.guard.runtime.local_mcp_probe import McpProbeResult
+from codex_plugin_scanner.guard.runtime.local_mcp_stdio import McpCatalogResult
 from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
 from codex_plugin_scanner.guard.store import GuardStore
+from codex_plugin_scanner.guard.store_mcp_catalog import tool_definition_authority_hash
 
 
 def _clean_npx() -> str | None:
@@ -126,6 +129,174 @@ def test_allowed_tool_overrides_review(tmp_path: Path) -> None:
     assert decision.source == "local-mcp-extension"
 
 
+def test_explicit_empty_public_hash_cannot_use_private_catalog_authority(tmp_path: Path) -> None:
+    identity = _identity()
+    store = GuardStore(tmp_path / "guard-home")
+    _enroll(store, identity, states={"read_file": "allow"})
+    definition = {"name": "read_file", "inputSchema": {"type": "object"}}
+    store.replace_local_cli_commands(
+        f"local-cli.mcp-{identity.identity_hash[:8]}",
+        (LocalCliCommand("read_file", "read_file", "read_file", "Read a file"),),
+        mcp_catalog=McpCatalogResult(tools=(definition,), complete=True),
+        identity_hash=identity.identity_hash,
+        seen_at=utc_now(),
+    )
+    store.upsert_local_cli_command_states(f"local-cli.mcp-{identity.identity_hash[:8]}", {"read_file": "allow"})
+    artifact = _artifact(identity, "read_file")
+    private_hash = tool_definition_authority_hash(definition)
+    private_artifact = replace(artifact, runtime_private_metadata={"mcp_tool_authority_hash": private_hash})
+    assert matching_local_mcp_grant(store=store, artifact=private_artifact, current_action="allow") == "allowed"
+
+    empty_public_artifact = replace(private_artifact, metadata={**artifact.metadata, "mcp_tool_authority_hash": ""})
+    assert matching_local_mcp_grant(store=store, artifact=empty_public_artifact, current_action="allow") == "review"
+
+
+def test_mcp_grant_reads_one_snapshot_during_permission_change(tmp_path: Path, monkeypatch) -> None:
+    import sqlite3
+
+    from codex_plugin_scanner.guard import store_local_mcp
+
+    identity = _identity()
+    store = GuardStore(tmp_path / "guard-home")
+    _enroll(store, identity, states={"read_file": "allow"})
+    cli_id = f"local-cli.mcp-{identity.identity_hash[:8]}"
+    with sqlite3.connect(store.path) as connection:
+        connection.execute("pragma journal_mode=WAL")
+    original = store_local_mcp._read_command_catalog
+    changed = False
+
+    def read_commands_then_change_permissions(connection, selected_cli_id):
+        nonlocal changed
+        result = original(connection, selected_cli_id)
+        if not changed:
+            changed = True
+            store.upsert_local_cli_command_states(cli_id, {"read_file": "block"})
+        return result
+
+    monkeypatch.setattr(store_local_mcp, "_read_command_catalog", read_commands_then_change_permissions)
+    before = store.read_local_mcp_grant(identity.identity_hash)
+    after = store.read_local_mcp_grant(identity.identity_hash)
+    assert before is not None and after is not None
+    assert before["command_states"]["read_file"] == "allow"
+    assert after["command_states"]["read_file"] == "block"
+
+
+def test_mcp_targeted_grant_reads_only_called_tool_and_other(tmp_path: Path) -> None:
+    identity = _identity()
+    store = GuardStore(tmp_path / "guard-home")
+    _enroll(store, identity, states={"read_file": "allow", "write_file": "block", "other": "block"})
+
+    grant = store.read_local_mcp_grant(identity.identity_hash, tool_name="read_file")
+    assert grant is not None
+    assert {command.command_id for command in grant["commands"]} == {"read_file", "other"}
+    assert grant["command_states"] == {"read_file": "allow", "other": "block"}
+    assert (
+        matching_local_mcp_grant(store=store, artifact=_artifact(identity, "read_file"), current_action="review")
+        == "allowed"
+    )
+    assert (
+        matching_local_mcp_grant(store=store, artifact=_artifact(identity, "new_file"), current_action="allow")
+        == "blocked"
+    )
+    empty_name_grant = store.read_local_mcp_grant(identity.identity_hash, tool_name="")
+    assert empty_name_grant is not None
+    assert {command.command_id for command in empty_name_grant["commands"]} == {"other"}
+    assert empty_name_grant["command_states"] == {"other": "block"}
+
+
+def test_configured_connection_does_not_inherit_another_connections_denial(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity
+
+    store = GuardStore(tmp_path / "guard-home")
+    server_hash = "c" * 64
+    other = UnlistedCliIdentity("local-cli.mcp-other", "other", "executable", server_hash, "other")
+    store.record_local_cli_observation(
+        other,
+        seen_at=utc_now(),
+        surface="mcp",
+        server_identity_hash=server_hash,
+        server_command="npx",
+        server_args_hash="d" * 64,
+    )
+    store.upsert_local_cli_grant(
+        identity=other,
+        state="blocked",
+        expected_revision=store.read_local_cli_revision(),
+        updated_at=utc_now(),
+    )
+    configured = UnlistedCliIdentity("local-cli.mcp-configured", "configured", "executable", "a" * 64, "configured")
+    store.record_local_cli_observation(
+        configured,
+        seen_at=utc_now(),
+        surface="mcp",
+        server_identity_hash=server_hash,
+        server_command="npx",
+        server_args_hash="d" * 64,
+    )
+
+    assert store.read_local_mcp_grant(server_hash, connection_identity_hash="b" * 64) is None
+
+
+def test_empty_command_filter_never_loads_every_permission(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.store_local_cli import _read_command_catalog, _read_command_states
+
+    identity = _identity()
+    store = GuardStore(tmp_path / "guard-home")
+    _enroll(store, identity, states={"read_file": "allow", "other": "block"})
+    with store._connect() as connection:
+        cli_id = f"local-cli.mcp-{identity.identity_hash[:8]}"
+        assert _read_command_catalog(connection, cli_id, ()) == []
+        assert _read_command_states(connection, cli_id, ()) == {}
+        assert len(_read_command_catalog(connection, cli_id)) == 3
+
+
+def test_mcp_targeted_grant_keeps_observed_hashed_tool_choice(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity
+    from codex_plugin_scanner.guard.runtime.observed_mcp_tools import observed_mcp_tool
+
+    tool = observed_mcp_tool("codex", "mcp__codex_apps__composio__COMPOSIO_SEARCH_TOOLS")
+    assert tool is not None
+    store = GuardStore(tmp_path / "guard-home")
+    identity = UnlistedCliIdentity(
+        cli_id=tool.identity.cli_id, name=tool.identity.name, kind=tool.identity.kind,
+        identity_hash=tool.identity.identity_hash, example_label=tool.identity.example_label,
+    )
+    store.record_local_cli_observation(
+        identity, seen_at=utc_now(), surface="mcp",
+        server_identity_hash=tool.server_identity.identity_hash,
+        server_command=tool.server_identity.command, server_args_hash=tool.server_identity.args_hash,
+    )
+    store.replace_local_cli_commands(
+        identity.cli_id,
+        (LocalCliCommand(tool.command_id, tool.name, tool.qualified_name, "Observed tool"),),
+    )
+    store.upsert_local_cli_grant(
+        identity=identity, state="allowed", expected_revision=0, updated_at=utc_now(),
+        command_states={tool.command_id: "block"},
+    )
+    grant = store.read_local_mcp_grant(tool.server_identity.identity_hash, tool_name=tool.qualified_name)
+    assert grant is not None
+    assert {command.command_id for command in grant["commands"]} == {tool.command_id}
+    assert grant["command_states"] == {tool.command_id: "block"}
+    artifact = _artifact(tool.server_identity, tool.qualified_name)
+    assert matching_local_mcp_grant(store=store, artifact=artifact, current_action="allow") == "blocked"
+
+
+def test_retired_deny_still_blocks_an_empty_inventory(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.runtime.local_mcp_stdio import McpCatalogResult
+
+    identity = _identity()
+    store = GuardStore(tmp_path / "guard-home")
+    _enroll(store, identity, states={"read_file": "block"})
+    store.replace_local_cli_commands(
+        f"local-cli.mcp-{identity.identity_hash[:8]}", (),
+        mcp_catalog=McpCatalogResult(tools=(), complete=True),
+        identity_hash=identity.identity_hash, seen_at=utc_now(),
+    )
+    artifact = _artifact(identity, "read_file")
+    assert matching_local_mcp_grant(store=store, artifact=artifact, current_action="allow") == "blocked"
+
+
 def test_recommended_tool_stays_on_review(tmp_path: Path) -> None:
     identity = _identity()
     store = GuardStore(tmp_path / "guard-home")
@@ -142,6 +313,23 @@ def test_recommended_tool_stays_on_review(tmp_path: Path) -> None:
     )
     assert decision.action == "review"
     assert decision.source != "local-mcp-extension"
+
+
+def test_explicit_ask_reviews_benign_tool(tmp_path: Path) -> None:
+    identity = _identity()
+    store = GuardStore(tmp_path / "guard-home")
+    _enroll(store, identity, states={"read_file": "review"})
+    artifact = _artifact(identity, "read_file")
+    arguments = {"path": "notes.txt"}
+    assert matching_local_mcp_grant(store=store, artifact=artifact, current_action="allow") == "review"
+    decision = evaluate_tool_call(
+        store=store, config=_config(tmp_path), artifact=artifact,
+        artifact_hash=build_tool_call_hash(artifact, arguments, workspace=tmp_path, config=_config(tmp_path)),
+        arguments=arguments, claim_saved_approval=False,
+    )
+    assert decision.action == "review"
+    assert decision.source == "local-mcp-extension"
+    assert store.read_local_cli_command_states(f"local-cli.mcp-{identity.identity_hash[:8]}")["read_file"] == "review"
 
 
 def test_blocked_tool_overrides_review(tmp_path: Path) -> None:
@@ -189,7 +377,53 @@ def test_allow_does_not_override_block(tmp_path: Path) -> None:
     assert matching_local_mcp_grant(store=store, artifact=artifact, current_action="block") is None
 
 
-def test_env_drift_still_matches_command_and_args(tmp_path: Path) -> None:
+@pytest.mark.parametrize("empty_catalog", [False, True])
+def test_unlisted_tools_do_not_inherit_allow(tmp_path: Path, empty_catalog: bool) -> None:
+    identity = _identity()
+    store = GuardStore(tmp_path / "guard-home")
+    _enroll(store, identity, states={"read_file": "allow", "other": "allow"})
+    if empty_catalog:
+        store.replace_local_cli_commands(f"local-cli.mcp-{identity.identity_hash[:8]}", ())
+    artifact = _artifact(identity, "new_delete_tool")
+    assert matching_local_mcp_grant(store=store, artifact=artifact, current_action="review") == "review"
+    artifact = _artifact(identity, "new_read_tool")
+    decision = evaluate_tool_call(
+        store=store, config=_config(tmp_path), artifact=artifact,
+        artifact_hash=build_tool_call_hash(artifact, {}, workspace=tmp_path, config=_config(tmp_path)),
+        arguments={}, claim_saved_approval=False,
+    )
+    assert decision.action == "review"
+
+
+def test_unlisted_tools_keep_explicit_deny(tmp_path: Path) -> None:
+    identity = _identity()
+    store = GuardStore(tmp_path / "guard-home")
+    _enroll(store, identity, states={"read_file": "allow", "other": "block"})
+    artifact = _artifact(identity, "new_delete_tool")
+    assert matching_local_mcp_grant(store=store, artifact=artifact, current_action="review") == "blocked"
+
+
+@pytest.mark.parametrize("choice", ["allow", "block"])
+def test_composio_wrapper_choice_cannot_grant_inner_actions(tmp_path: Path, choice: str) -> None:
+    identity = _identity()
+    store = GuardStore(tmp_path / "guard-home")
+    tool = "composio_multi_execute_tool"
+    _enroll(store, identity, states={tool: choice}, commands=(
+        LocalCliCommand(tool, tool, tool, "Execute a batch"),
+    ))
+    artifact = _artifact(identity, tool)
+    expected = "blocked" if choice == "block" else None
+    assert matching_local_mcp_grant(store=store, artifact=artifact, current_action="review") == expected
+    arguments = {"tools": [{"tool_slug": "SLACK_SEND_MESSAGE", "arguments": {"channel": "test"}}]}
+    decision = evaluate_tool_call(
+        store=store, config=_config(tmp_path), artifact=artifact,
+        artifact_hash=build_tool_call_hash(artifact, arguments, workspace=tmp_path, config=_config(tmp_path)),
+        arguments=arguments, claim_saved_approval=False,
+    )
+    assert decision.action == ("block" if choice == "block" else "review")
+
+
+def test_env_drift_cannot_inherit_same_launch_grant(tmp_path: Path) -> None:
     identity = _identity()
     store = GuardStore(tmp_path / "guard-home")
     _enroll(store, identity, states={"read_file": "allow"})
@@ -203,7 +437,7 @@ def test_env_drift_still_matches_command_and_args(tmp_path: Path) -> None:
     )
     assert runtime.identity_hash != identity.identity_hash
     artifact = _artifact(runtime, "read_file")
-    assert matching_local_mcp_grant(store=store, artifact=artifact, current_action="review") == "allowed"
+    assert matching_local_mcp_grant(store=store, artifact=artifact, current_action="review") is None
 
 
 def test_npx_absolute_path_still_matches_command_and_args(tmp_path: Path) -> None:

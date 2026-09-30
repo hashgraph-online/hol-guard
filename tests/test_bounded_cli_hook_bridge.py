@@ -78,7 +78,7 @@ def test_timeout_allows_emergency_safe_read(
     assert hook_output["permissionDecision"] == "allow"
 
 
-@pytest.mark.parametrize("harness", ["kimi", "zcode"])
+@pytest.mark.parametrize("harness", ["kimi", "zcode", "devin"])
 def test_claude_shaped_timeout_continues_when_review_cannot_finish(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

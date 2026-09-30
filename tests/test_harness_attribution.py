@@ -51,6 +51,7 @@ def test_resolve_environment_harness_matches_each_runtime_family() -> None:
     assert resolve_environment_harness({"GROK_HOME": "/tmp/grok-home"}) is None
     assert resolve_environment_harness({"OPENCODE_CONFIG_CONTENT": "{}"}) == "opencode"
     assert resolve_environment_harness({"OPENCODE_CONFIG": "/tmp/opencode.json"}) is None
+    assert resolve_environment_harness({"DEVIN_PROJECT_DIR": "/workspace/project"}) == "devin"
     assert resolve_environment_harness({"HOL_GUARD_ORIGIN_HARNESS": "grok"}) == "grok"
     assert resolve_environment_harness({"HOL_GUARD_ORIGIN_HARNESS": "guard-cli"}) is None
     assert origin_harness_env("grok") == {"HOL_GUARD_ORIGIN_HARNESS": "grok"}

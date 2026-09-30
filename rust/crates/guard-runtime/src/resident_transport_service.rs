@@ -66,7 +66,7 @@ pub(crate) fn serve(socket_path: &str) -> Result<(), String> {
         .map_err(|_| "native_socket_nonblocking_failed".to_owned())?;
 
     let token = Arc::new(read_resident_auth_token()?);
-    let sender = start_resident_workers(token, None);
+    let admission = start_resident_workers(token, None);
     let parent_alive = resident_parent_liveness()?;
     let mut consecutive_accept_failures = 0;
     while parent_alive.load(Ordering::Acquire) {
@@ -76,7 +76,7 @@ pub(crate) fn serve(socket_path: &str) -> Result<(), String> {
                 if stream.set_nonblocking(false).is_err() {
                     continue;
                 }
-                admit_connection(&sender, Box::new(stream))?;
+                admit_connection(&admission, Box::new(stream))?;
             }
             Err(error)
                 if crate::hardening::classify_io_error(&error)
@@ -116,13 +116,13 @@ pub(crate) fn serve_loopback(address: &str) -> Result<(), String> {
     }
 
     let token = Arc::new(read_resident_auth_token()?);
-    let sender = start_resident_workers(token, None);
+    let admission = start_resident_workers(token, None);
     let mut consecutive_accept_failures = 0;
     loop {
         match listener.accept() {
             Ok((stream, _address)) => {
                 consecutive_accept_failures = 0;
-                admit_connection(&sender, Box::new(stream))?;
+                admit_connection(&admission, Box::new(stream))?;
             }
             Err(error)
                 if crate::hardening::classify_io_error(&error)

@@ -17,16 +17,24 @@ pytest_plugins = ["tests.bundle_first_cloud"]
 SRC_PATH = Path(__file__).resolve().parents[1] / "src"
 SUPPORT_PATH = Path(__file__).resolve().parent / "support"
 
-if str(SRC_PATH) not in sys.path:
+use_installed_package = os.environ.get("HOL_GUARD_TEST_USE_INSTALLED") == "1"
+if not use_installed_package and str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
 if str(SUPPORT_PATH) not in sys.path:
     sys.path.insert(0, str(SUPPORT_PATH))
 
 existing_pythonpath = os.environ.get("PYTHONPATH", "")
 pythonpath_entries = [entry for entry in existing_pythonpath.split(os.pathsep) if entry]
-pythonpath_prefix = [str(path) for path in (SUPPORT_PATH, SRC_PATH) if str(path) not in pythonpath_entries]
+source_paths = (SUPPORT_PATH,) if use_installed_package else (SUPPORT_PATH, SRC_PATH)
+pythonpath_prefix = [str(path) for path in source_paths if str(path) not in pythonpath_entries]
 if pythonpath_prefix:
     os.environ["PYTHONPATH"] = os.pathsep.join([*pythonpath_prefix, *pythonpath_entries])
+
+# Unit tests must never open real browser tabs. The flag is assigned at import
+# time so it is also inherited by helpers spawned from session-scoped fixtures,
+# and so an inherited value cannot silently re-enable launches.
+os.environ["HOL_GUARD_TEST_DISABLE_BROWSER_OPEN"] = "1"
+os.environ.pop("HOL_GUARD_TEST_ALLOW_BROWSER_OPEN", None)
 
 
 @pytest.fixture(autouse=True)
@@ -86,6 +94,22 @@ def _explicit_python_differential_oracle(monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.setattr(commands_hook_source_ref, "_test_source_ref_oracle", source_ref_oracle)
 
 
+@pytest.fixture
+def native_command_artifact_reviews(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Supply actual native command evidence to legacy hook orchestration tests."""
+    from codex_plugin_scanner.guard.cli import commands_support_runtime_artifacts
+    from tests.native_command_test_support import real_native_command_evaluation
+
+    def review(command: str, *, guard_home: Path, cwd: Path | None = None, home_dir: Path | None = None):
+        del guard_home
+        try:
+            return real_native_command_evaluation(command, cwd=cwd, home_dir=home_dir)
+        except Exception as exc:
+            pytest.fail(f"Native command artifact fixture failed: {type(exc).__name__}: {exc}")
+
+    monkeypatch.setattr(commands_support_runtime_artifacts, "review_command_native", review)
+
+
 def pytest_addoption(parser: pytest.Parser) -> None:
     parser.addoption(
         "--validate-test-invariants",
@@ -96,9 +120,12 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    fault_injection_enabled = os.environ.get("GUARD_FAULT_INJECTION") == "1"
     for item in items:
         for marker in invariant_markers_for_nodeid(item.nodeid):
             item.add_marker(marker)
+        if not fault_injection_enabled and item.get_closest_marker("fault_injection") is not None:
+            item.add_marker(pytest.mark.skip(reason="requires GUARD_FAULT_INJECTION=1"))
 
     if not config.getoption("--validate-test-invariants"):
         return
