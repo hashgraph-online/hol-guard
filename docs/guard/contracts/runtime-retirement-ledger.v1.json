@@ -1,0 +1,165 @@
+{
+  "schema": "hol-guard.runtime-retirement-ledger.v1",
+  "baseline_sha": "b22841ac004b9d8a6deccdeee1a1be3600fddfb9",
+  "scope": "RMN-009 resident retirement only; remaining PRD phases are not marked complete",
+  "retired_source_paths": [
+    "src/codex_plugin_scanner/guard/native_runtime_resident.py",
+    "src/codex_plugin_scanner/guard/native_runtime_resident_transport.py"
+  ],
+  "retired_tests": [
+    {
+      "old_node": "ci/native_runtime/test_guard_native_runtime_resident.py::test_resident_runtime_reuses_one_contained_service",
+      "replacement_nodes": [
+        "ci/native_runtime/test_native_managed_resident.py::test_production_client_reuses_authenticated_native_generation"
+      ],
+      "status": "native_behavior_ported_requires_ci"
+    },
+    {
+      "old_node": "ci/native_runtime/test_guard_native_runtime_resident.py::test_start_lock_wait_stays_inside_request_deadline",
+      "replacement_nodes": [
+        "rust/crates/guard-runtime/src/managed_resident_tests.rs::client_deadline_is_bounded",
+        "ci/native_runtime/test_native_hook_client_timeout.py::test_native_hook_client_start_timeout_contains_new_managed_processes"
+      ],
+      "status": "native_behavior_ported_requires_ci"
+    },
+    {
+      "old_node": "ci/native_runtime/test_guard_native_runtime_resident.py::test_startup_timeout_signals_new_resident_for_containment",
+      "replacement_nodes": [
+        "ci/native_runtime/test_native_hook_client_timeout.py::test_native_hook_client_start_timeout_contains_new_managed_processes"
+      ],
+      "status": "native_behavior_ported_requires_ci"
+    },
+    {
+      "old_node": "ci/native_runtime/test_guard_native_runtime_resident.py::test_ensure_started_replaces_supervisor_after_external_stop",
+      "replacement_nodes": [
+        "ci/native_runtime/test_native_hook_client.py::test_native_hook_client_recovers_after_exact_managed_process_exit",
+        "ci/native_runtime/test_native_hook_client.py::test_native_hook_client_recovers_after_supervisor_exit"
+      ],
+      "status": "native_behavior_ported_requires_ci"
+    },
+    {
+      "old_node": "ci/native_runtime/test_guard_native_runtime_resident.py::test_close_retains_tracking_until_resident_thread_stops",
+      "replacement_nodes": [
+        "ci/native_runtime/test_native_hook_client.py::test_native_hook_client_stop_reaps_managed_processes",
+        "tests/test_native_resident_client_cleanup.py::test_close_native_residents_stops_tracked_production_pool"
+      ],
+      "status": "native_behavior_ported_requires_ci"
+    },
+    {
+      "old_node": "ci/native_runtime/test_guard_native_runtime_resident.py::test_request_shares_one_deadline_across_probe_start_and_retry",
+      "replacement_nodes": [
+        "rust/crates/guard-runtime/src/managed_resident_tests.rs::client_deadline_is_bounded",
+        "ci/native_runtime/test_native_hook_client_timeout.py::test_native_hook_client_start_timeout_contains_new_managed_processes"
+      ],
+      "status": "native_behavior_ported_requires_ci"
+    },
+    {
+      "old_node": "ci/native_runtime/test_guard_native_runtime_resident.py::test_resident_runtime_falls_back_for_overlong_socket_path",
+      "replacement_nodes": [
+        "ci/native_runtime/test_native_managed_resident.py::test_native_endpoint_supports_long_guard_home_paths"
+      ],
+      "status": "native_behavior_ported_requires_ci"
+    },
+    {
+      "old_node": "ci/native_runtime/test_guard_native_runtime_resident_cross_process.py::test_independent_supervisors_do_not_replace_one_live_resident",
+      "replacement_nodes": [
+        "ci/native_runtime/test_native_managed_resident_cross_process.py::test_independent_production_clients_share_one_native_generation"
+      ],
+      "status": "native_behavior_ported_requires_ci"
+    },
+    {
+      "old_node": "ci/native_runtime/test_guard_native_runtime_resident_cross_process.py::test_spawned_supervisors_share_one_resident_owner",
+      "replacement_nodes": [
+        "ci/native_runtime/test_native_managed_resident_cross_process.py::test_independent_production_clients_share_one_native_generation"
+      ],
+      "status": "native_behavior_ported_requires_ci"
+    },
+    {
+      "old_node": "ci/native_runtime/test_guard_native_runtime_resident_cross_process.py::test_resident_close_preserves_replacement_socket",
+      "replacement_nodes": [
+        "rust/crates/guard-runtime/src/resident_endpoint.rs::dropping_owned_endpoint_preserves_replacement_socket"
+      ],
+      "status": "native_behavior_ported_requires_ci"
+    },
+    {
+      "old_node": "ci/native_runtime/test_guard_native_runtime_windows_resident.py::test_invalid_loopback_server_proof_receives_no_authenticated_payload",
+      "replacement_nodes": [
+        "rust/crates/guard-runtime/src/resident_client_tests.rs::rejected_server_proof_never_receives_client_proof_or_request_payload"
+      ],
+      "status": "native_behavior_ported_requires_ci"
+    },
+    {
+      "old_node": "ci/native_runtime/test_guard_native_runtime_windows_resident.py::test_loopback_proof_is_role_bound_and_matches_known_vector",
+      "replacement_nodes": [
+        "rust/crates/guard-runtime/src/resident_client_tests.rs::resident_proofs_are_role_bound_and_match_fixed_hmac_vectors"
+      ],
+      "status": "native_behavior_ported_requires_ci"
+    },
+    {
+      "old_node": "ci/native_runtime/test_guard_native_runtime_windows_resident.py::test_windows_service_rotates_auth_secret_and_stays_closed",
+      "replacement_nodes": [
+        "ci/native_runtime/test_native_managed_resident.py::test_new_native_generation_rotates_its_authentication_secret",
+        "ci/native_runtime/test_native_managed_resident.py::test_production_explicit_shutdown_retires_native_generation"
+      ],
+      "status": "native_behavior_ported_requires_ci"
+    },
+    {
+      "old_node": "ci/native_runtime/test_guard_native_runtime_windows_resident.py::test_windows_native_runtime_reuses_authenticated_resident_service",
+      "replacement_nodes": [
+        "ci/native_runtime/test_native_managed_resident.py::test_production_client_reuses_authenticated_native_generation"
+      ],
+      "status": "native_behavior_ported_requires_ci"
+    },
+    {
+      "old_node": "tests/test_native_runtime_admission.py::test_native_resident_path_restarts_after_transient_transport_loss",
+      "replacement_nodes": [
+        "ci/native_runtime/test_native_hook_client.py::test_native_hook_client_recovers_after_exact_managed_process_exit"
+      ],
+      "status": "native_behavior_ported_requires_ci"
+    },
+    {
+      "old_node": "tests/test_native_runtime_admission.py::test_native_resident_path_does_not_retry_refused_start",
+      "replacement_nodes": [
+        "rust/crates/guard-runtime/src/resident_client_tests.rs::truncated_server_proof_is_never_retryable",
+        "ci/native_runtime/test_native_hook_client.py::test_native_hook_client_rejects_self_authenticated_forged_state"
+      ],
+      "status": "native_behavior_ported_requires_ci"
+    }
+  ],
+  "preserved_tests": [
+    {
+      "old_node": "ci/native_runtime/test_guard_native_runtime_resident.py::test_hook_worker_auto_is_native_first",
+      "new_node": "ci/native_runtime/test_native_hook_worker_modes.py::test_hook_worker_auto_is_native_first",
+      "reason": "Unrelated hook-worker behavior preserved unchanged until its own semantic cutover."
+    },
+    {
+      "old_node": "ci/native_runtime/test_guard_native_runtime_resident.py::test_hook_worker_auto_fails_closed_when_native_unavailable",
+      "new_node": "ci/native_runtime/test_native_hook_worker_modes.py::test_hook_worker_auto_fails_closed_when_native_unavailable",
+      "reason": "Unrelated hook-worker behavior preserved unchanged until its own semantic cutover."
+    },
+    {
+      "old_node": "ci/native_runtime/test_guard_native_runtime_resident.py::test_hook_worker_shadow_compares_explicit_python_oracle",
+      "new_node": "ci/native_runtime/test_native_hook_worker_modes.py::test_hook_worker_shadow_compares_explicit_python_oracle",
+      "reason": "Unrelated hook-worker behavior preserved unchanged until its own semantic cutover."
+    },
+    {
+      "old_node": "ci/native_runtime/test_guard_native_runtime_resident.py::test_hook_worker_shadow_ignores_native_exception",
+      "new_node": "ci/native_runtime/test_native_hook_worker_modes.py::test_hook_worker_shadow_ignores_native_exception",
+      "reason": "Unrelated hook-worker behavior preserved unchanged until its own semantic cutover."
+    }
+  ],
+  "unchanged_regression_suites": [
+    "tests/test_native_runtime_admission.py",
+    "tests/test_native_resident_client_cleanup.py",
+    "tests/test_native_resident_client_pool.py",
+    "ci/native_runtime/test_native_hook_client.py",
+    "ci/native_runtime/test_native_hook_client_timeout.py",
+    "ci/native_runtime/test_native_hook_client_transport.py"
+  ],
+  "proof_status": {
+    "source_and_regression_tests": "local execution recorded in PR; required CI governs merge",
+    "installed_product": "required before acceptance",
+    "all_prd_tasks": "not_complete"
+  },
+  "implementation_base_sha": "1dc81dd4319cdf18e4b1c0fd3d061f732601b188"
+}

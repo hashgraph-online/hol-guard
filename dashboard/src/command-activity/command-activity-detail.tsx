@@ -160,21 +160,33 @@ export function CommandActivityDetail(props: {
       <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1">
         <CommandValue preview={props.activity.invocation_preview} />
         <EvidenceField label="Decision" value={commandDecisionLabel(props.activity.policy_action)} />
-        <EvidenceField label="Execution proof" value={commandExecutionLabel(props.activity.execution_status)} />
-        <EvidenceField label="Proof source" value={commandProofLabel(props.activity.proof_level)} />
-        <EvidenceField label="Interaction" value={commandInteractionLabel(props.activity)} />
-        <EvidenceField label="Decision reason" value={commandReasonLabel(props.activity.decision_reason_code)} />
-        <EvidenceField label="Parse result" value={parseConfidenceLabel(props.activity.parse_confidence)} />
-        <EvidenceField label="Authorization reuse" value={approvalReuseLabel(props.activity.approval_reuse_status)} />
-        <EvidenceField
-          label="Containment evidence"
-          value={props.activity.decision_reason_code === "containment" ? "Recorded as controlling reason; details unavailable" : "Not recorded as controlling reason"}
-        />
-        <EvidenceField
-          label="Workflow capability"
-          value={props.activity.decision_reason_code === "capability" ? "Recorded as controlling reason; details unavailable" : "Not recorded as controlling reason"}
-        />
+        <EvidenceField label="Run result" value={commandExecutionLabel(props.activity.execution_status)} />
       </dl>
+
+      {props.activity.execution_status === "allowed_unconfirmed" ? (
+        <p className="text-sm leading-6 text-slate-600">
+          Guard checked this command before the app could run it and allowed it. No matching result was recorded, so Guard cannot tell whether the app ran the command or whether it succeeded.
+        </p>
+      ) : null}
+
+      <details className="group border-t border-slate-100 pt-4">
+        <summary className="cursor-pointer text-sm font-medium text-brand-blue focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue">How Guard checked it</summary>
+        <dl className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1">
+          <EvidenceField label="Proof source" value={commandProofLabel(props.activity.proof_level)} />
+          <EvidenceField label="Interaction" value={commandInteractionLabel(props.activity)} />
+          <EvidenceField label="Decision reason" value={commandReasonLabel(props.activity.decision_reason_code)} />
+          <EvidenceField label="Parse result" value={parseConfidenceLabel(props.activity.parse_confidence)} />
+          <EvidenceField label="Authorization reuse" value={approvalReuseLabel(props.activity.approval_reuse_status)} />
+          <EvidenceField
+            label="Containment evidence"
+            value={props.activity.decision_reason_code === "containment" ? "Recorded as controlling reason; details unavailable" : "Not recorded as controlling reason"}
+          />
+          <EvidenceField
+            label="Workflow capability"
+            value={props.activity.decision_reason_code === "capability" ? "Recorded as controlling reason; details unavailable" : "Not recorded as controlling reason"}
+          />
+        </dl>
+      </details>
 
       <div>
         <SectionLabel>Rule evidence</SectionLabel>

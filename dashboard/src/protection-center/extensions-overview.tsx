@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 
 import {
   catalogRowSecondLine,
@@ -6,13 +6,12 @@ import {
   extensionStateLabel,
 } from "../extension-control-center-model";
 import type { EffectiveExtensionControls, ExtensionCatalogItem } from "../extension-controls-api";
-import { addedCustomExtensions, type LocalCliItem } from "../local-cli-api";
+import { connectorWorkspaceItems, refreshMcpInventory, type LocalCliItem } from "../local-cli-api";
 import { WorkspacePageHeader } from "../workspace-page-header";
-import {
-  AddCustomExtensionButton,
-  CustomExtensionsSection,
-} from "./local-clis-panel";
-import { CatalogFilterBar } from "./components/catalog-filter-bar";
+import { LocalSkillsWorkspace } from "./local-skills-workspace";
+import { AddCustomExtensionButton } from "./local-clis-panel";
+import { CustomExtensionsSection } from "./custom-extensions-section";
+import { CatalogFilterBar, CatalogFilterTrigger } from "./components/catalog-filter-bar";
 import { PatternSearchConsole } from "./components/pattern-search-console";
 import {
   InlineError,
@@ -69,6 +68,32 @@ function CatalogExtensionRow(props: {
   );
 }
 
+function ConnectorDiscoveryControl(props: {
+  discovering: boolean;
+  error: string | null;
+  onRetry: () => void;
+}) {
+  if (props.discovering) {
+    return (
+      <p role="status" className="px-1 text-xs text-brand-dark/60">
+        Checking host configuration for connectors…
+      </p>
+    );
+  }
+  return (
+    <div className="flex items-center gap-2">
+      {props.error ? (
+        <p role="status" className="max-w-56 truncate text-xs text-brand-dark/60" title={props.error}>
+          {props.error}
+        </p>
+      ) : null}
+      <button type="button" className="guard-extensions-chip" onClick={props.onRetry}>
+        {props.error ? "Check for connectors again" : "Check host connections"}
+      </button>
+    </div>
+  );
+}
+
 function CatalogFilterEmpty(props: { onClear: () => void }) {
   return (
     <div className="mt-6 rounded-2xl border border-[rgba(63,65,116,0.12)] bg-white px-4 py-6">
@@ -86,6 +111,7 @@ export function ExtensionsOverview(props: {
   effective: EffectiveExtensionControls;
   localCliItems: LocalCliItem[];
   localCliError: string | null;
+  localCliNotice: string | null;
   mutationError: string | null;
   recoveryStatus: string | null;
   healthBroken: boolean;
@@ -93,12 +119,38 @@ export function ExtensionsOverview(props: {
   active: boolean;
   onPrimaryStatusAction?: () => void;
   onRefresh: () => Promise<void> | void;
+  onReloadConnections: () => Promise<unknown> | void;
   onOpenExtension: (extension: ExtensionCatalogItem) => void;
   onOpenLocalCli: (cliId: string) => void;
   onAddCustom: () => void;
 }) {
   const [query, setQuery] = useState("");
+  const discoveryStarted = useRef(false);
+  const reloadConnections = useRef(props.onReloadConnections);
+  reloadConnections.current = props.onReloadConnections;
+  const [discoveryError, setDiscoveryError] = useState<string | null>(null);
+  const [discovering, setDiscovering] = useState(false);
+  const [discoveryAttempt, setDiscoveryAttempt] = useState(0);
+  useEffect(() => {
+    if (!props.active || discoveryStarted.current) return;
+    discoveryStarted.current = true;
+    const controller = new AbortController();
+    setDiscovering(true);
+    setDiscoveryError(null);
+    void refreshMcpInventory("inventory:configured", controller.signal, true, discoveryAttempt > 0).then(async () => {
+      if (!controller.signal.aborted) await reloadConnections.current();
+    }).catch(() => {
+      if (!controller.signal.aborted) setDiscoveryError("Could not check host configuration. Known connections remain available.");
+    }).finally(() => {
+      if (!controller.signal.aborted) setDiscovering(false);
+    });
+    return () => { controller.abort(); discoveryStarted.current = false; };
+  }, [props.active, discoveryAttempt]);
   const [filters, setFilters] = useState<CatalogFilterState>(EMPTY_CATALOG_FILTERS);
+  const [filterPanelOpen, setFilterPanelOpen] = useState(false);
+  const filterPanelId = useId();
+  const filterTriggerRef = useRef<HTMLButtonElement>(null);
+  const filterToolbarRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     setFilters((current) => {
       const next = pruneCatalogFilters(current, props.catalogExtensions);
@@ -106,6 +158,44 @@ export function ExtensionsOverview(props: {
       return next;
     });
   }, [props.catalogExtensions]);
+  // The filter popover overlays the catalog at sm+, so opening it must not
+  // strand the operator's scroll position: dismiss on any outside pointer.
+  useEffect(() => {
+    if (!filterPanelOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (filterToolbarRef.current?.contains(event.target as Node)) return;
+      setFilterPanelOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      // A modal dialog (e.g. the policy review sheet) owns Escape while open.
+      if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
+      setFilterPanelOpen(false);
+      filterTriggerRef.current?.focus();
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [filterPanelOpen]);
+  // "f" mirrors the existing "/" search shortcut for the filter popover.
+  useEffect(() => {
+    if (!props.active) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "f" || event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
+      // Never move focus out of a modal dialog such as the policy review sheet.
+      if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
+      const target = event.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+      event.preventDefault();
+      setFilterPanelOpen(true);
+      filterTriggerRef.current?.focus();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [props.active]);
   // An active search replaces the catalogs below it: results, then the Tools
   // match group. Rendering the full list under the results would force the
   // operator to visually skip fifty-nine unchanged rows.
@@ -118,13 +208,11 @@ export function ExtensionsOverview(props: {
   const handleClearFilters = useCallback(() => {
     setFilters(EMPTY_CATALOG_FILTERS);
   }, []);
-  // Suggestion-only responses (discovered servers, observed CLIs not yet
-  // added) render no custom section: the section lists added extensions, and
-  // its Add button would otherwise be the section's only content.
-  const addedCustomItems = addedCustomExtensions(props.localCliItems).filter((item) =>
+  const allCustomItems = connectorWorkspaceItems(props.localCliItems);
+  const addedCustomItems = allCustomItems.filter((item) =>
     customItemMatchesFilters(item, filters),
   );
-  const addedCustomCount = addedCustomItems.length;
+  const customItemsFilteredOut = filtering && allCustomItems.length > 0 && addedCustomItems.length === 0;
   return (
     <div hidden={!props.active} inert={!props.active || undefined}>
       <WorkspacePageHeader
@@ -151,33 +239,69 @@ export function ExtensionsOverview(props: {
           <InlineError message={props.localCliError} />
         </div>
       ) : null}
+      {props.localCliNotice ? (
+        <p role="status" className="mt-4 rounded-xl border border-brand-blue/20 bg-brand-blue/5 p-3 text-sm text-brand-dark">
+          {props.localCliNotice}
+        </p>
+      ) : null}
 
-      <PatternSearchConsole
-        catalog={visibleCatalog}
-        effective={props.effective}
-        active={props.active}
-        query={query}
-        onQueryChange={setQuery}
-        onRefresh={props.onRefresh}
-        onOpenExtension={props.onOpenExtension}
-        actionSlot={searching ? <AddCustomExtensionButton onClick={props.onAddCustom} /> : null}
-      />
-      <CatalogFilterBar
-        catalog={props.catalogExtensions}
-        filters={filters}
-        onChange={setFilters}
-      />
+      <div
+        ref={filterToolbarRef}
+        data-testid="catalog-filters"
+      >
+        <PatternSearchConsole
+          catalog={visibleCatalog}
+          effective={props.effective}
+          active={props.active}
+          query={query}
+          onQueryChange={setQuery}
+          onRefresh={props.onRefresh}
+          onOpenExtension={props.onOpenExtension}
+          actionSlot={searching ? <AddCustomExtensionButton onClick={props.onAddCustom} /> : null}
+          toolbarSlot={
+            <>
+              <CatalogFilterTrigger
+                open={filterPanelOpen}
+                activeCount={filters.trusts.length + filters.kinds.length + filters.areas.length}
+                panelId={filterPanelId}
+                buttonRef={filterTriggerRef}
+                onToggle={() => setFilterPanelOpen((open) => !open)}
+              />
+              {props.active ? (
+                <ConnectorDiscoveryControl
+                  discovering={discovering}
+                  error={discoveryError}
+                  onRetry={() => setDiscoveryAttempt((attempt) => attempt + 1)}
+                />
+              ) : null}
+            </>
+          }
+          subtoolbarSlot={
+            <CatalogFilterBar
+              catalog={props.catalogExtensions}
+              filters={filters}
+              onChange={setFilters}
+              open={filterPanelOpen}
+              onOpenChange={setFilterPanelOpen}
+              panelId={filterPanelId}
+              onAfterClear={() => filterTriggerRef.current?.focus()}
+            />
+          }
+        />
+      </div>
 
       {searching ? null : (
         <>
-          {addedCustomCount ? (
-            <CustomExtensionsSection
-              items={addedCustomItems}
-              onOpen={props.onOpenLocalCli}
-              onAdd={props.onAddCustom}
-            />
-          ) : null}
+          <CustomExtensionsSection
+            items={addedCustomItems}
+            onOpen={props.onOpenLocalCli}
+            onAdd={props.onAddCustom}
+            discovering={discovering}
+            filteredOut={customItemsFilteredOut}
+            onClearFilters={handleClearFilters}
+          />
 
+          <LocalSkillsWorkspace />
           <section className="mt-10" aria-labelledby="all-tools-heading">
             <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
               <div>
@@ -189,7 +313,6 @@ export function ExtensionsOverview(props: {
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-3">
-                {addedCustomCount ? null : <AddCustomExtensionButton onClick={props.onAddCustom} />}
                 <span className="text-sm text-brand-dark/70" data-testid="catalog-tool-count" aria-live="polite">
                   {catalogFilterCountCopy(visibleCatalog.length, props.catalogExtensions.length, filtering)}
                 </span>

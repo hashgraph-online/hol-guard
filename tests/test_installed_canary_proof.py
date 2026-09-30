@@ -12,6 +12,7 @@ import subprocess
 import sys
 import zipfile
 from pathlib import Path
+from types import SimpleNamespace
 from typing import cast
 
 import pytest
@@ -30,6 +31,7 @@ from scripts.installed_canary_proof import (
 )
 from scripts.run_installed_canary import (
     _no_post_execution_proof_smoke,  # pyright: ignore[reportPrivateUsage]
+    _run_corpus,  # pyright: ignore[reportPrivateUsage]
     _validate_corpus_bindings,  # pyright: ignore[reportPrivateUsage]
 )
 
@@ -48,6 +50,27 @@ def test_current_corpus_manifest_is_verified_by_its_canonical_bindings() -> None
         == hashlib.sha256((root / "tests/fixtures/guard-command-corpus/seed-manifest.json").read_bytes()).hexdigest()
     )
     assert bindings["source_files_verified"] == 1 + len(tuple((root / "tests").glob("guard_command_corpus_oracle*.py")))
+
+
+def test_installed_corpus_reports_malformed_json_clearly(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from scripts import run_installed_canary as canary
+
+    native_root = tmp_path / "codex_plugin_scanner/_native"
+    native_root.mkdir(parents=True)
+    suffix = ".exe" if sys.platform == "win32" else ""
+    (native_root / f"hol-guard-runtime{suffix}").touch()
+    (native_root / f"guard-command-source{suffix}").touch()
+    distribution_stub = SimpleNamespace(locate_file=lambda _path: native_root)
+    monkeypatch.setattr(canary, "distribution", lambda _name: distribution_stub)
+    monkeypatch.setattr(canary, "_validate_corpus_bindings", lambda _root: {})
+    monkeypatch.setattr(
+        canary.subprocess,
+        "run",
+        lambda *_args, **_kwargs: subprocess.CompletedProcess([], 0, "not-json", ""),
+    )
+
+    with pytest.raises(InstalledCanaryError, match="report is not valid JSON"):
+        _run_corpus(tmp_path)
 
 
 def test_harness_without_post_execution_proof_remains_unconfirmed(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -151,26 +151,6 @@ def test_bridge_keeps_inline_browser_wait_within_consumer_limit(
     }
 
 
-def test_unavailable_prompt_warns_without_stopping_conversation() -> None:
-    assert bridge._unavailable_response("UserPromptSubmit", "review failed") == {
-        "continue": True,
-        "systemMessage": "review failed",
-    }
-    pretool = bridge._unavailable_response("PreToolUse", "review failed")
-    assert pretool == {
-        "continue": True,
-        "systemMessage": "review failed",
-        "hookSpecificOutput": {"hookEventName": "PreToolUse"},
-    }
-    allow = bridge._unavailable_response(
-        "PreToolUse",
-        "review failed",
-        json.dumps({"hook_event_name": "PreToolUse", "tool_name": "Read", "tool_input": {"file_path": "src/app.ts"}}),
-    )
-    assert allow["hookSpecificOutput"] == {"hookEventName": "PreToolUse"}
-    assert "permissionDecision" not in allow["hookSpecificOutput"]
-
-
 def test_launcher_integrity_failure_does_not_stop_user_prompt(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

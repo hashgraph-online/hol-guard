@@ -35,7 +35,7 @@ fn request_id_is_safe(value: &str) -> bool {
     opaque_token || compact_uuid || dashed_uuid
 }
 
-fn request_payload_identity(payload: &Value) -> Result<Value, String> {
+fn request_payload_identity(payload: &Value, harness: &str, event: &str) -> Result<Value, String> {
     let Some(record) = payload.as_object() else {
         return Err("native_hook_payload_invalid".to_owned());
     };
@@ -62,6 +62,17 @@ fn request_payload_identity(payload: &Value) -> Result<Value, String> {
         "receivedAt",
     ] {
         identity.remove(key);
+    }
+    // Pi retries create a new transport call ID for the unchanged action.
+    // Keep nested tool arguments and session identity in the commitment.
+    if matches!(harness, "pi" | "omp")
+        && event == "PreToolUse"
+        && identity
+            .get("session_id")
+            .and_then(Value::as_str)
+            .is_some_and(|s| !s.is_empty())
+    {
+        identity.remove("tool_call_id");
     }
     Ok(Value::Object(identity))
 }
@@ -103,7 +114,7 @@ fn stable_policy_identity(snapshot: &Value, generation: u64) -> Value {
 pub(crate) fn request_identity(envelope: &GuardHookEnvelopeV2) -> Result<(String, String), String> {
     let harness = canonical_harness(&envelope.harness)?;
     let event = authoritative_event(envelope)?;
-    let payload = request_payload_identity(&envelope.raw_payload)?;
+    let payload = request_payload_identity(&envelope.raw_payload, &harness, &event)?;
     let source = serde_json::json!({
         "cwd": envelope.source.cwd,
         "guard_home": envelope.source.guard_home,
@@ -150,6 +161,7 @@ fn canonical_harness(value: &str) -> Result<String, String> {
         "pi-agent" | "pi-coding-agent" => "pi",
         "oh-my-pi" => "omp",
         "zai" | "z-code" | "zai-zcode" => "zcode",
+        "devin-cli" | "cognition-devin" => "devin",
         _ => normalized.as_str(),
     };
     if !canonical
@@ -166,6 +178,7 @@ fn canonical_harness(value: &str) -> Result<String, String> {
             | "codex"
             | "copilot"
             | "cursor"
+            | "devin"
             | "gemini"
             | "grok"
             | "hermes"
@@ -315,7 +328,7 @@ fn evaluate_validated_envelope(
     }
     let (result, receipt) = match event_name.as_str() {
         "PreToolUse" => {
-            let native = guard_command::pretool::evaluate_pre_tool_envelope_with_extensions(
+            let native = guard_command::pretool::evaluate_pre_tool_envelope_with_source(
                 &harness,
                 &event_name,
                 &envelope.raw_payload,
@@ -326,6 +339,8 @@ fn evaluate_validated_envelope(
                             envelope.deadline_budget_ms.unwrap_or(9_000).min(9_000),
                         ),
                 ),
+                Some(envelope.source.home_dir.as_str()),
+                envelope.source.cwd.as_deref(),
             );
             let evaluated = if let Some(snapshot) = policy_snapshot {
                 crate::policy_enforcement::apply_pre_tool_policy(
