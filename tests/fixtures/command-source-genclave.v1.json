@@ -10910,7 +10910,6 @@
           "command.cogext",
           "command.ctty",
           "command.digline",
-          "command.formicx",
           "command.genclave",
           "command.gitsync",
           "command.mcp-filesystem",
