@@ -96,8 +96,7 @@
       "command.repo2nb",
       "command.skill-base",
       "command.skill-sunset",
-      "command.uivoid",
-      "command.vaultsync"
+      "command.uivoid"
     ]
   }
 }
