@@ -21,6 +21,7 @@ from ..native_decision_receipt import (
 )
 from ..runtime.command_activity_contract import CorrelationHandle, CorrelationKind
 from ..runtime.command_activity_display import INVOCATION_PREVIEW_MAX_CHARS
+from .runtime_hook_mcp_evidence import _McpDiscoveryRecord
 
 try:
     import fcntl
@@ -213,7 +214,7 @@ class _NativeDecisionReceiptRecord:
         return cls(receipt=receipt, payload_bytes=len(record.serialized()))
 
 
-_EvidenceRecord = _CommandActivityRecord | _NativeDecisionReceiptRecord
+_EvidenceRecord = _CommandActivityRecord | _NativeDecisionReceiptRecord | _McpDiscoveryRecord
 
 
 def _read_journal_records_locked(path: Path, *, max_bytes: int) -> tuple[list[_EvidenceRecord], int]:
@@ -236,6 +237,8 @@ def _read_journal_records_locked(path: Path, *, max_bytes: int) -> tuple[list[_E
             record = _NativeDecisionReceiptRecord.from_json(decoded)
             if record is None:
                 record = _CommandActivityRecord.from_json(decoded)
+            if record is None:
+                record = _McpDiscoveryRecord.from_json(decoded)
         except (json.JSONDecodeError, UnicodeDecodeError):
             record = None
         if record is None:

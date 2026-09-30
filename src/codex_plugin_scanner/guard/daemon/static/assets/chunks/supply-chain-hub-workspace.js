@@ -1,5 +1,5 @@
 const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/supply-chain-workspace.js","assets/guard-dashboard.js","assets/index.css","assets/chunks/feed-health-workspace.js","assets/chunks/home-protection-module.js","assets/chunks/supply-chain-protection-stats.js","assets/chunks/approval-proof-modal.js","assets/chunks/audit-workspace.js"])))=>i.map(i=>d[i]);
-import { br as isSupplyChainAuditIncomplete, bs as isSupplyChainAuditEvidence, b4 as GuardHarnessActionError, bt as readString$1, bu as isRecord$1, r as reactExports, j as jsxRuntimeExports, s as HiMiniCheckCircle, am as HiMiniArrowPath, P as HiMiniExclamationTriangle, aJ as Tag, y as formatRelativeTime, bv as HiMiniClock, bw as IconActionButton, a7 as HiMiniXCircle, b6 as HiMiniTrash, w as HiMiniShieldCheck, a3 as HiMiniWrenchScrewdriver, bx as HiMiniBeaker, by as ActivationSummary, bz as ActionResultPanel, aG as HiMiniMagnifyingGlass, n as EmptyState, A as ActionButton, bA as HiMiniBugAnt, C as HiMiniXMark, aQ as buildApprovalProofCredentials, bB as GuardModalLayer, bC as ConnectFlowCard, bD as ApprovalProofInline, b1 as HiMiniArrowTopRightOnSquare, bE as HiMiniCloudArrowDown, aO as useResolvedApprovalGate, bF as fetchPackageFirewallStatus, bG as runPackageAudit, bH as resolveSupplyChainAuditFailure, bI as runPackageSync, bJ as startPackageFirewallConnect, a0 as openPackageFirewallAuthorizeFallback, bK as PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE, bL as repairSupplyChainProtection, bM as runPackageFirewallAction, bN as parseInterceptProofSnapshot, bO as activatePackageFirewallRuntime, S as SectionLabel, bP as EntitlementNotice, bQ as fetchReceipts, aF as WorkspacePageHeader, bR as lazyWorkspace, bS as __vitePreload } from "../guard-dashboard.js";
+import { bA as isSupplyChainAuditIncomplete, bB as isSupplyChainAuditEvidence, bd as GuardHarnessActionError, bC as readString$1, bD as isRecord$1, r as reactExports, j as jsxRuntimeExports, s as HiMiniCheckCircle, ar as HiMiniArrowPath, P as HiMiniExclamationTriangle, aR as Tag, y as formatRelativeTime, bE as HiMiniClock, bF as IconActionButton, ad as HiMiniXCircle, bf as HiMiniTrash, w as HiMiniShieldCheck, aa as HiMiniWrenchScrewdriver, bG as HiMiniBeaker, bH as ActivationSummary, bI as ActionResultPanel, aN as HiMiniMagnifyingGlass, n as EmptyState, A as ActionButton, bJ as HiMiniBugAnt, C as HiMiniXMark, au as buildApprovalProofCredentials, bb as GuardModalLayer, bK as ConnectFlowCard, bL as ApprovalProofInline, b9 as HiMiniArrowTopRightOnSquare, bM as HiMiniCloudArrowDown, aV as useResolvedApprovalGate, bN as fetchPackageFirewallStatus, bO as runPackageAudit, bP as resolveSupplyChainAuditFailure, bQ as runPackageSync, bR as startPackageFirewallConnect, a6 as openPackageFirewallAuthorizeFallback, bS as PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE, bT as repairSupplyChainProtection, bU as runPackageFirewallAction, bV as parseInterceptProofSnapshot, bW as activatePackageFirewallRuntime, S as SectionLabel, bX as EntitlementNotice, bY as chooseSupplyChainAuditFolder, bZ as fetchReceipts, aM as WorkspacePageHeader, b_ as lazyWorkspace, b$ as __vitePreload } from "../guard-dashboard.js";
 import { A as ApprovalProofModal } from "./approval-proof-modal.js";
 const SEVERITY_RANK = {
   critical: 4,
@@ -660,7 +660,13 @@ function isSupplyChainAuditWorkspaceInvalidError(error) {
 function supplyChainAuditUserMessage(error) {
   if (error instanceof GuardHarnessActionError) {
     if (isSupplyChainAuditWorkspaceRequiredError(error)) {
-      return "Enter the project folder to audit below, then run the audit again. Or run `hol-guard supply-chain audit --json` from that project folder.";
+      return "Choose a project folder with a package manifest or lockfile, then run the audit again.";
+    }
+    if (error.payload?.error === "folder_picker_busy") {
+      return "A folder selection is already open. Use that dialog, or paste the project folder path.";
+    }
+    if (error.payload?.error === "folder_picker_unavailable") {
+      return "Folder selection is unavailable right now. Paste the project folder path instead.";
     }
     if (isSupplyChainAuditWorkspaceInvalidError(error)) {
       return "Guard could not use that project folder. Choose an existing local folder and run the audit again.";
@@ -672,13 +678,52 @@ function supplyChainAuditUserMessage(error) {
   }
   return null;
 }
-function resolveSupplyChainAuditWorkspaceDir(managedInstalls) {
-  const ordered = [...managedInstalls].sort((left, right) => {
-    if (left.active !== right.active) {
-      return left.active ? -1 : 1;
+function normalizeSupplyChainAuditWorkspaceInput(value) {
+  let next = value?.trim() ?? "";
+  if (!next || next === "<project-folder>") {
+    return "";
+  }
+  if (next.startsWith('"') && next.endsWith('"') || next.startsWith("'") && next.endsWith("'")) {
+    next = next.slice(1, -1).trim();
+  }
+  if (next.toLowerCase().startsWith("file://")) {
+    let raw = next.slice("file://".length);
+    if (/^localhost(?=\/|$)/i.test(raw)) {
+      raw = raw.slice("localhost".length);
     }
-    return right.updated_at.localeCompare(left.updated_at);
-  });
+    try {
+      next = decodeURIComponent(raw);
+    } catch {
+      next = raw;
+    }
+  }
+  return next.trim();
+}
+function compareManagedInstalls(left, right) {
+  if (left.active !== right.active) {
+    return left.active ? -1 : 1;
+  }
+  return right.updated_at.localeCompare(left.updated_at);
+}
+function listSupplyChainAuditWorkspaceChoices(managedInstalls) {
+  const ordered = [...managedInstalls].sort(compareManagedInstalls);
+  const seen = /* @__PURE__ */ new Set();
+  const choices = [];
+  for (const install of ordered) {
+    const workspace = normalizeSupplyChainAuditWorkspaceInput(install.workspace);
+    if (!workspace || seen.has(workspace)) {
+      continue;
+    }
+    seen.add(workspace);
+    choices.push(workspace);
+    if (choices.length === 6) {
+      break;
+    }
+  }
+  return choices;
+}
+function resolveSupplyChainAuditWorkspaceDir(managedInstalls) {
+  const ordered = [...managedInstalls].sort(compareManagedInstalls);
   for (const install of ordered) {
     const workspace = install.workspace?.trim();
     if (workspace) {
@@ -688,15 +733,15 @@ function resolveSupplyChainAuditWorkspaceDir(managedInstalls) {
   return null;
 }
 function resolveSupplyChainAuditWorkspaceTarget(input) {
-  const selected = input.selectedWorkspaceDir?.trim();
+  const selected = normalizeSupplyChainAuditWorkspaceInput(input.selectedWorkspaceDir);
   if (selected) {
     return selected;
   }
-  const managed = input.managedWorkspaceDir?.trim();
+  const managed = normalizeSupplyChainAuditWorkspaceInput(input.managedWorkspaceDir);
   if (managed) {
     return managed;
   }
-  const status = input.statusWorkspaceDir?.trim();
+  const status = normalizeSupplyChainAuditWorkspaceInput(input.statusWorkspaceDir);
   if (status) {
     return status;
   }
@@ -735,6 +780,7 @@ function ManagerRow({
   shim,
   actions,
   anyPending,
+  repairAwaitingRefresh,
   isMine,
   isConfirmingRemove,
   onInstall,
@@ -844,7 +890,7 @@ function ManagerRow({
               label: "Fix PATH",
               icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniWrenchScrewdriver, { className: "h-4 w-4" }),
               onClick: handleRepair,
-              disabled: anyPending
+              disabled: anyPending || repairAwaitingRefresh
             }
           ),
           showTest && /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -921,6 +967,7 @@ function FirewallControlsView({
   activatingRuntime,
   data,
   pendingOp,
+  repairAwaitingRefresh,
   lastCompleted,
   lastFailed,
   confirmRemoveManager,
@@ -1044,6 +1091,7 @@ function FirewallControlsView({
           shim,
           actions: data.actions,
           anyPending,
+          repairAwaitingRefresh: repairAwaitingRefresh === manager,
           isMine: pendingOp?.manager === manager,
           isConfirmingRemove: confirmRemoveManager === manager,
           onInstall,
@@ -1161,6 +1209,7 @@ function SupplyChainManagerDrawer({
   shim,
   actions,
   anyPending,
+  repairAwaitingRefresh,
   isMine,
   actionHandlers,
   onClose
@@ -1251,7 +1300,7 @@ function SupplyChainManagerDrawer({
                   label: "Fix PATH",
                   icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniWrenchScrewdriver, { className: "h-4 w-4" }),
                   onClick: () => actionHandlers.repair?.(manager),
-                  disabled: anyPending
+                  disabled: anyPending || repairAwaitingRefresh
                 }
               ) : null,
               showTest && actionHandlers.test !== void 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -1560,8 +1609,8 @@ function LoadingSkeleton() {
     }
   );
 }
-function ErrorBanner({ message, onRetry }) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-3 px-4 py-4", children: [
+function ErrorBanner({ message, onRetry, retryLabel = "Retry" }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-3 px-4 py-4", role: "status", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(
         HiMiniExclamationTriangle,
@@ -1572,7 +1621,7 @@ function ErrorBanner({ message, onRetry }) {
       ),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-attention", children: message })
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: onRetry, children: "Retry" })
+    /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: onRetry, children: retryLabel })
   ] });
 }
 function RefreshButton({ disabled, spinning, onRefresh }) {
@@ -1601,6 +1650,7 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
     onAuditConnectGateChange,
     onAuditErrorChange,
     onAuditWorkspaceRequired,
+    onAuditWorkspaceDiscovered,
     onStateChanged,
     onAuditCompleted,
     onAuditStarted,
@@ -1612,6 +1662,10 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
   const recoveryConnectHandledRef = reactExports.useRef(false);
   const repairNeedsCloudConnectRef = reactExports.useRef(false);
   const [panelLoad, setPanelLoad] = reactExports.useState({ phase: "loading" });
+  const [refreshError, setRefreshError] = reactExports.useState(null);
+  const [sharedRefreshError, setSharedRefreshError] = reactExports.useState(null);
+  const [repairAwaitingRefresh, setRepairAwaitingRefresh] = reactExports.useState(null);
+  const statusRequestId = reactExports.useRef(0);
   const [pendingOp, setPendingOp] = reactExports.useState(null);
   const [lastCompleted, setLastCompleted] = reactExports.useState(null);
   const [lastFailed, setLastFailed] = reactExports.useState(null);
@@ -1651,11 +1705,16 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
     setAuditRecoveryError(null);
   }, []);
   const load = reactExports.useCallback(async () => {
+    const requestId = ++statusRequestId.current;
+    setRefreshError(null);
     setPanelLoad({ phase: "loading" });
     try {
       const data = await fetchPackageFirewallStatus();
+      if (requestId !== statusRequestId.current) return;
       setPanelLoad({ phase: "loaded", data });
+      setRepairAwaitingRefresh(null);
     } catch (err) {
+      if (requestId !== statusRequestId.current) return;
       const message = err instanceof Error ? err.message : "Failed to load package firewall status.";
       setPanelLoad({ phase: "error", message });
     }
@@ -1663,15 +1722,40 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
   reactExports.useEffect(() => {
     void load();
   }, [load]);
+  reactExports.useEffect(() => {
+    if (panelLoad.phase !== "loaded") {
+      return;
+    }
+    onAuditWorkspaceDiscovered?.(panelLoad.data.audit_workspace_dir ?? null);
+  }, [onAuditWorkspaceDiscovered, panelLoad]);
   const refreshAfterOp = reactExports.useCallback(async () => {
+    const requestId = ++statusRequestId.current;
     try {
       const data = await fetchPackageFirewallStatus();
+      if (requestId !== statusRequestId.current) return;
       setPanelLoad({ phase: "loaded", data });
+      setRepairAwaitingRefresh(null);
+      setRefreshError(null);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to refresh package firewall status.";
-      setPanelLoad({ phase: "error", message });
+      if (requestId !== statusRequestId.current) return;
+      setRefreshError(
+        "Guard could not check the latest package status. The last known state is shown; check again before retrying a repair."
+      );
     }
   }, []);
+  const refreshSharedState = reactExports.useCallback(async () => {
+    if (onStateChanged === void 0) return;
+    try {
+      await onStateChanged(true);
+      setSharedRefreshError(null);
+    } catch {
+      setSharedRefreshError("Guard could not refresh the rest of the dashboard. Check again before relying on other views.");
+    }
+  }, [onStateChanged]);
+  const refreshInBackground = reactExports.useCallback(() => {
+    void refreshAfterOp();
+    void refreshSharedState();
+  }, [refreshAfterOp, refreshSharedState]);
   reactExports.useEffect(() => {
     if (panelLoad.phase !== "loaded") {
       return;
@@ -1747,7 +1831,7 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
           openAuditConnectGate(true);
           return false;
         }
-        if (isSupplyChainAuditWorkspaceRequiredError(err)) {
+        if (isSupplyChainAuditWorkspaceRequiredError(err) || isSupplyChainAuditWorkspaceInvalidError(err)) {
           onAuditWorkspaceRequired?.();
         }
         const message = supplyChainAuditUserMessage(err) ?? "Operation failed.";
@@ -1910,11 +1994,10 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
       setPendingOp({ op: "fix_all", manager: null });
       try {
         const result = await repairSupplyChainProtection(credentials);
-        await refreshAfterOp();
-        await onStateChanged?.();
         const nextState = supplyChainFixAllStateFromRepair(result);
         repairNeedsCloudConnectRef.current = supplyChainFixAllNeedsCloudConnect(nextState);
         onFixAllStateChange?.(nextState);
+        refreshInBackground();
       } catch (error) {
         if (credentials === void 0 && isApprovalGateRequiredError(error)) {
           await resolveApprovalGate();
@@ -1948,9 +2031,8 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
     [
       beginFixAllConnectRecovery,
       onFixAllStateChange,
-      onStateChanged,
       panelLoad,
-      refreshAfterOp,
+      refreshInBackground,
       resolveApprovalGate
     ]
   );
@@ -2076,6 +2158,7 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
       try {
         const response = await runPackageFirewallAction(op, manager, credentials);
         setLastCompleted({ op, manager, response });
+        if (op === "repair" && manager !== null) setRepairAwaitingRefresh(manager);
         if (op === "test") {
           const proof = parseInterceptProofSnapshot(response);
           if (proof !== null) {
@@ -2083,8 +2166,7 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
             setInterceptProof(proof);
           }
         }
-        await refreshAfterOp();
-        await onStateChanged?.();
+        refreshInBackground();
       } catch (err) {
         if (credentials === void 0 && manager !== null && isApprovalGateRequiredError(err)) {
           await resolveApprovalGate();
@@ -2097,7 +2179,7 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
         setPendingOp(null);
       }
     },
-    [onStateChanged, refreshAfterOp, resolveApprovalGate]
+    [refreshInBackground, resolveApprovalGate]
   );
   const handleGlobalOp = reactExports.useCallback(
     async (op) => {
@@ -2198,14 +2280,13 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
     setActivationAssistError(null);
     try {
       await activatePackageFirewallRuntime();
-      await refreshAfterOp();
-      await onStateChanged?.();
+      refreshInBackground();
     } catch (error) {
       setActivationAssistError(error instanceof Error ? error.message : "Unable to activate package protection.");
     } finally {
       setActivatingRuntime(false);
     }
-  }, [onStateChanged, refreshAfterOp]);
+  }, [refreshInBackground]);
   const handleApprovalCancel = reactExports.useCallback(() => {
     if (pendingApprovalOp?.op === "fix_all") {
       onFixAllStateChange?.({
@@ -2286,6 +2367,8 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
     panelLoad.phase === "loading" && /* @__PURE__ */ jsxRuntimeExports.jsx(LoadingSkeleton, {}),
     panelLoad.phase === "error" && /* @__PURE__ */ jsxRuntimeExports.jsx(ErrorBanner, { message: panelLoad.message, onRetry: handleRetry }),
     panelLoad.phase === "loaded" && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+      refreshError !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(ErrorBanner, { message: refreshError, onRetry: handleRetry, retryLabel: "Check again" }),
+      sharedRefreshError !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(ErrorBanner, { message: sharedRefreshError, onRetry: () => void refreshSharedState(), retryLabel: "Check again" }),
       !panelLoad.data.entitlement.allowed && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "border-b border-slate-100", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
         EntitlementNotice,
         {
@@ -2303,6 +2386,7 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
         {
           data: panelLoad.data,
           pendingOp,
+          repairAwaitingRefresh,
           lastCompleted,
           lastFailed,
           confirmRemoveManager,
@@ -2346,6 +2430,7 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
         shim: managerDrawerShim,
         actions: panelLoad.data.actions,
         anyPending,
+        repairAwaitingRefresh: repairAwaitingRefresh === managerDrawerTarget,
         isMine: pendingOp?.manager === managerDrawerTarget,
         actionHandlers: {
           install: handleInstall,
@@ -2386,8 +2471,11 @@ function useSupplyChainAuditSession({
   const [auditSnapshot, setAuditSnapshot] = reactExports.useState(null);
   const [auditRunning, setAuditRunning] = reactExports.useState(false);
   const [auditError, setAuditError] = reactExports.useState(null);
-  const [auditWorkspaceDir, setAuditWorkspaceDir] = reactExports.useState("");
+  const [auditWorkspaceDir, setAuditWorkspaceDirState] = reactExports.useState("");
   const [auditWorkspaceSelectionRequired, setAuditWorkspaceSelectionRequired] = reactExports.useState(false);
+  const [folderPickerBusy, setFolderPickerBusy] = reactExports.useState(false);
+  const [folderPickerError, setFolderPickerError] = reactExports.useState(null);
+  const userEditedWorkspaceRef = reactExports.useRef(false);
   const [auditConnectGate, setAuditConnectGate] = reactExports.useState(null);
   const [auditPhase, setAuditPhase] = reactExports.useState("idle");
   const runAuditRef = reactExports.useRef(null);
@@ -2473,6 +2561,42 @@ function useSupplyChainAuditSession({
   const handleAuditWorkspaceRequired = reactExports.useCallback(() => {
     setAuditWorkspaceSelectionRequired(true);
   }, []);
+  const setAuditWorkspaceDir = reactExports.useCallback((workspaceDir) => {
+    userEditedWorkspaceRef.current = true;
+    setAuditWorkspaceDirState(workspaceDir);
+    setFolderPickerError(null);
+    if (workspaceDir.trim()) {
+      setAuditWorkspaceSelectionRequired(false);
+    }
+  }, []);
+  const adoptDiscoveredAuditWorkspace = reactExports.useCallback((workspaceDir) => {
+    const next = workspaceDir?.trim() ?? "";
+    if (!next || userEditedWorkspaceRef.current) {
+      return;
+    }
+    setAuditWorkspaceDirState((current) => current.trim() ? current : next);
+  }, []);
+  const handleChooseAuditWorkspace = reactExports.useCallback(() => {
+    if (folderPickerBusy) {
+      return;
+    }
+    setFolderPickerBusy(true);
+    setFolderPickerError(null);
+    void chooseSupplyChainAuditFolder().then((result) => {
+      if (result.workspaceDir) {
+        userEditedWorkspaceRef.current = true;
+        setAuditWorkspaceDirState(result.workspaceDir);
+        setAuditWorkspaceSelectionRequired(false);
+        setAuditError(null);
+      }
+    }).catch((error) => {
+      setFolderPickerError(
+        supplyChainAuditUserMessage(error) ?? "Folder selection is unavailable right now. Paste the project folder path instead."
+      );
+    }).finally(() => {
+      setFolderPickerBusy(false);
+    });
+  }, [folderPickerBusy]);
   const handleAuditRunningChange = reactExports.useCallback(
     (running) => {
       setAuditRunning(running);
@@ -2492,6 +2616,8 @@ function useSupplyChainAuditSession({
     auditError,
     auditWorkspaceDir,
     auditWorkspaceSelectionRequired,
+    folderPickerBusy,
+    folderPickerError,
     auditConnectGate,
     auditPhase,
     runAuditRef,
@@ -2501,6 +2627,8 @@ function useSupplyChainAuditSession({
     handleAuditErrorChange,
     handleAuditWorkspaceRequired,
     setAuditWorkspaceDir,
+    adoptDiscoveredAuditWorkspace,
+    handleChooseAuditWorkspace,
     handleAuditRunningChange,
     handleRunAudit
   };
@@ -2545,6 +2673,9 @@ function SupplyChainHubWorkspace(props) {
     () => resolveSupplyChainAuditWorkspaceDir(props.snapshot.managed_installs ?? []),
     [props.snapshot.managed_installs]
   );
+  reactExports.useEffect(() => {
+    auditSession.adoptDiscoveredAuditWorkspace(managedAuditWorkspaceDir);
+  }, [auditSession.adoptDiscoveredAuditWorkspace, managedAuditWorkspaceDir]);
   const handleTabChange = reactExports.useCallback(
     (value) => {
       const path = value === "supply-chain" ? "/supply-chain" : `/${value}`;
@@ -2600,6 +2731,7 @@ function SupplyChainHubWorkspace(props) {
         onAuditConnectGateChange: auditSession.setAuditConnectGate,
         onAuditErrorChange: auditSession.handleAuditErrorChange,
         onAuditWorkspaceRequired: auditSession.handleAuditWorkspaceRequired,
+        onAuditWorkspaceDiscovered: auditSession.adoptDiscoveredAuditWorkspace,
         onStateChanged: props.onRuntimeRefresh,
         onAuditStarted: auditSession.handleAuditStarted,
         onAuditCompleted: auditSession.handleAuditCompleted,
@@ -2626,6 +2758,8 @@ export {
   supplyChainHubWorkspace as d,
   filterPackageWorkbenchFindings as f,
   isApprovalGateRequiredError as i,
+  listSupplyChainAuditWorkspaceChoices as l,
+  normalizeSupplyChainAuditWorkspaceInput as n,
   packageWorkbenchEcosystems as p,
   supplyChainFixAllIsPending as s
 };

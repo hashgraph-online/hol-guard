@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "hol-guard"
-version = "3.3.0"
+version = "3.13.1"
 description = "Open-source antivirus and runtime protection for AI agents, tools, MCP servers, plugins, skills, and package installs."
 readme = "README.md"
 license = "Apache-2.0"
@@ -97,7 +97,7 @@ override-dependencies = [
     "litellm==1.93.2",
     "magika==1.0.3",
     "openai==2.41.1",
-    "pyjwt==2.13.0",
+    "pyjwt==2.14.0",
     "python-dotenv==1.2.2",
     "python-multipart==0.0.32",
     "starlette==1.3.1",
@@ -107,6 +107,7 @@ override-dependencies = [
 
 [project.scripts]
 hol-guard = "codex_plugin_scanner.cli:main"
+hol-guard-eval = "codex_plugin_scanner.guard.evaluation_cli:main"
 hol-guard-secrets = "codex_plugin_scanner.guard.secrets.cli:main"
 plugin-scanner = "codex_plugin_scanner.cli:main"
 plugin-guard = "codex_plugin_scanner.cli:main"
@@ -146,9 +147,12 @@ packages = ["src/codex_plugin_scanner"]
 "contributions/extensions/command.remote.essh.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contributions/command.remote.essh.json"
 "contributions/extensions/command.repo2nb.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contributions/command.repo2nb.json"
 "contributions/extensions/command.skill-sunset.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contributions/command.skill-sunset.json"
+"contributions/extensions/command.uivoid.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contributions/command.uivoid.json"
 "contracts/mcp-servers/contribution.v1.schema.json" = "codex_plugin_scanner/guard/contracts/data/mcp_servers/contribution.v1.schema.json"
 "contributions/mcp-servers/mcp.filesystem.json" = "codex_plugin_scanner/guard/contracts/data/mcp_servers/contributions/mcp.filesystem.json"
 "contributions/mcp-servers/mcp.instapods.json" = "codex_plugin_scanner/guard/contracts/data/mcp_servers/contributions/mcp.instapods.json"
+"contributions/mcp-servers/mcp.pr-ui-compare.json" = "codex_plugin_scanner/guard/contracts/data/mcp_servers/contributions/mcp.pr-ui-compare.json"
+"contributions/mcp-servers/mcp.reaper.json" = "codex_plugin_scanner/guard/contracts/data/mcp_servers/contributions/mcp.reaper.json"
 
 [tool.hatch.build]
 artifacts = [
@@ -171,7 +175,6 @@ exclude = [
     ".venv/**",
     ".venv-*/**",
     "dashboard/node_modules/**",
-    "src/codex_plugin_scanner/guard/native_runtime_resident.py",
 ]
 
 [tool.ruff.lint]
@@ -193,6 +196,7 @@ markers = [
   "daemon_headless_queue: enables request-triggered daemon cloud sync for focused tests",
   "daemon_headless_refresh: enables the daemon headless cloud sync worker for focused tests",
   "daemon_service_workers: enables command queue and live request sync workers for focused tests",
+  "fault_injection: destructive store fault tests; only run with GUARD_FAULT_INJECTION=1",
   "installed: requires verification through an installed package artifact",
   "integration: verifies multiple Guard subsystems together",
   "parser: verifies parsing or normalization security semantics",

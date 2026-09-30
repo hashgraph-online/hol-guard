@@ -457,8 +457,8 @@ def test_installed_adapter_corpus_covers_all_declared_routes_and_sizes(
 ) -> None:
     monkeypatch.chdir(tmp_path)
     routes = route_matrix()
-    assert len(routes) == 21
-    assert len({harness for harness, _ in routes}) == 13
+    assert len(routes) == 23
+    assert len({harness for harness, _ in routes}) == 14
     assert {event for _, event in routes} == {"PreToolUse", "PostToolUse"}
     for size_class in SIZE_CLASSES:
         encoded = json.dumps(payload("PostToolUse", size_class), separators=(",", ":"))

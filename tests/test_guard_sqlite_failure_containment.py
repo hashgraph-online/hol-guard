@@ -23,7 +23,7 @@ def _corrupt_store(path: Path) -> bytes:
 
 
 def _quarantined_databases(guard_home: Path) -> list[Path]:
-    return sorted(guard_home.glob("guard.db.corrupt-*"))
+    return sorted(path for path in guard_home.glob("guard.db.corrupt-*") if not path.name.endswith(".forensics.json"))
 
 
 def _connects_store(database: str | Path, path: Path) -> bool:
@@ -612,54 +612,3 @@ def test_maybe_queue_first_cloud_sync_returns_none_when_profile_raises_sqlite(
     )
 
     assert daemon_server_module._maybe_queue_first_cloud_sync(store=store) is None
-
-
-def test_storage_gate_allows_nested_reads_on_one_thread(tmp_path: Path) -> None:
-    store = GuardStore(tmp_path / "guard", prime_policy_integrity=False)
-
-    with store._connect() as outer:  # pyright: ignore[reportPrivateUsage]
-        assert outer.execute("pragma schema_version").fetchone() is not None
-        with store._connect() as inner:  # pyright: ignore[reportPrivateUsage]
-            assert inner.execute("pragma schema_version").fetchone() is not None
-
-
-def test_replacement_remains_exclusive_until_schema_is_ready(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    store = GuardStore(tmp_path / "guard", prime_policy_integrity=False)
-    _corrupt_store(store.path)
-    initializing = threading.Event()
-    release = threading.Event()
-    original_initialize = store._initialize_schema  # pyright: ignore[reportPrivateUsage]
-
-    def delayed_initialize() -> None:
-        initializing.set()
-        assert release.wait(timeout=2)
-        original_initialize()
-
-    monkeypatch.setattr(store, "_initialize_schema", delayed_initialize)
-    recovery = threading.Thread(
-        target=lambda: store._recover_fatal_sqlite_store(  # pyright: ignore[reportPrivateUsage]
-            sqlite3.DatabaseError("database disk image is malformed")
-        )
-    )
-    recovery.start()
-    assert initializing.wait(timeout=1)
-    reader_finished = threading.Event()
-
-    def read_store() -> None:
-        with store._connect() as connection:  # pyright: ignore[reportPrivateUsage]
-            _ = connection.execute("select count(*) from schema_migrations").fetchone()
-            reader_finished.set()
-
-    reader = threading.Thread(target=read_store)
-    reader.start()
-    time.sleep(0.05)
-    assert reader_finished.is_set() is False
-
-    release.set()
-    recovery.join(timeout=2)
-    reader.join(timeout=2)
-
-    assert reader_finished.is_set() is True

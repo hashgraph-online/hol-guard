@@ -107,6 +107,7 @@ jobs:
       channel: ${{ steps.version.outputs.channel }}
       release_train: ${{ steps.version.outputs.release_train }}
       source_sha: ${{ steps.version.outputs.source_sha }}
+      release_repair: ${{ steps.version.outputs.release_repair }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
@@ -222,9 +223,37 @@ jobs:
                 '$pypi + $testpypi + ($tags | map(select(. != $candidate))) | unique')
               EXPECTED_VERSION=$(uv run --no-sync python scripts/compute_main_release_version.py \
                 --base-version "$BASE_VERSION" <<< "$VERSIONS")
+              REPAIRING=false
               if [[ "$RELEASE_VERSION" != "$EXPECTED_VERSION" ]]; then
-                echo "Stable release version must match the next registry-derived version: ${EXPECTED_VERSION}" >&2
-                exit 1
+                LATEST_PYPI=$(uv run --no-sync python scripts/compute_main_release_version.py \
+                  --base-version "$BASE_VERSION" --latest-existing <<< "$PYPI_VERSIONS")
+                ASSET_NAMES_FILE=$(mktemp)
+                RELEASE_VIEW_ERROR=$(mktemp)
+                if gh release view "v${RELEASE_VERSION}" --repo "$GITHUB_REPOSITORY" --json assets \
+                  --jq '.assets[].name' > "$ASSET_NAMES_FILE" 2>"$RELEASE_VIEW_ERROR"; then
+                  REPAIR_ARGS=(--asset-names-file "$ASSET_NAMES_FILE")
+                elif grep -q "release not found" "$RELEASE_VIEW_ERROR"; then
+                  REPAIR_ARGS=(--release-missing)
+                else
+                  echo "Could not inspect the GitHub release for ${RELEASE_VERSION}" >&2
+                  exit 1
+                fi
+                if ! uv run --no-sync python scripts/stable_release_asset_repair.py \
+                  --requested "$RELEASE_VERSION" \
+                  --expected-next "$EXPECTED_VERSION" \
+                  --latest-pypi "$LATEST_PYPI" \
+                  "${REPAIR_ARGS[@]}"; then
+                  echo "Stable release version must match the next registry-derived version: ${EXPECTED_VERSION}" >&2
+                  exit 1
+                fi
+                git fetch --force --no-tags origin "+refs/tags/v${RELEASE_VERSION}:refs/tags/v${RELEASE_VERSION}"
+                SOURCE_SHA=$(git rev-parse "v${RELEASE_VERSION}^{commit}")
+                if ! git merge-base --is-ancestor "$SOURCE_SHA" HEAD; then
+                  echo "Published release is not an ancestor of this dispatch" >&2
+                  exit 1
+                fi
+                echo "release_repair=true" >> "$GITHUB_OUTPUT"
+                REPAIRING=true
               fi
               if git rev-parse -q --verify "v${RELEASE_VERSION}^{commit}" >/dev/null; then
                 tag_sha=$(git rev-parse "v${RELEASE_VERSION}^{commit}")
@@ -234,6 +263,10 @@ jobs:
                 fi
               fi
               VERSION="$RELEASE_VERSION"
+              if [[ "$REPAIRING" == "true" ]]; then
+                git checkout --detach "$SOURCE_SHA"
+                uv sync --frozen --extra dev --extra publish --extra cisco
+              fi
             else
               echo "Unsupported release channel and train: ${CHANNEL}:${TRAIN}" >&2
               exit 1
@@ -347,7 +380,8 @@ jobs:
           end = text.index("\n\n[project.urls]")
           scripts = "[project.scripts]\n" \
               'hol-guard = "codex_plugin_scanner.cli:main"\n' \
-              'plugin-guard = "codex_plugin_scanner.cli:main"'
+              'plugin-guard = "codex_plugin_scanner.cli:main"\n' \
+              'hol-guard-eval = "codex_plugin_scanner.guard.evaluation_cli:main"'
           text = text[:start] + scripts + text[end:]
           path.write_text(text, encoding="utf-8")
           PY
@@ -383,7 +417,9 @@ jobs:
           uv run --no-sync python -m build
           mv pyproject.toml.bak pyproject.toml
       - name: Verify distributions
-        run: uv run --no-sync twine check dist/*
+        run: |
+          uv run --no-sync twine check dist/*
+          python3 scripts/verify_guard_wheel_entrypoints.py dist
       - name: Record immutable distribution hashes
         run: |
           find dist -maxdepth 1 -type f -print0 | sort -z | xargs -0 sha256sum > distribution-sha256.txt
@@ -488,7 +524,7 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
-          ref: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || github.sha }}
+          ref: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || needs.build.outputs.source_sha }}
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: distributions
@@ -542,7 +578,12 @@ jobs:
         shell: bash
         env:
           SOURCE_COMPILER: ${{ matrix.source_compiler }}
-        run: python scripts/build_native_command_program.py --check --compiler "$SOURCE_COMPILER"
+        run: |
+          arguments=(--compiler "$SOURCE_COMPILER")
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            arguments+=(--changed-from "${{ github.event.pull_request.base.sha }}")
+          fi
+          python scripts/ci/verify_native_command_program.py "${arguments[@]}"
       - name: Verify native source compiler output
         shell: bash
         env:
@@ -711,10 +752,6 @@ jobs:
         with:
           name: distributions-native
           path: dist/
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          name: installed-canary-subject
-          path: installed-canary/
       - name: Download exact TestPyPI wheel bytes
         shell: bash
         env:
@@ -736,6 +773,17 @@ jobs:
             fi
             sleep 10
           done
+      - name: Bind compatible native canary wheel
+        shell: bash
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+          SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
+        run: |
+          uv run --no-project --with packaging==25.0 python scripts/select_installed_native_wheel.py \
+            --dist-dir dist --version "$VERSION" --output-dir selected-native
+          uv run --no-project --with packaging==25.0 python scripts/installed_canary_proof.py write-subject \
+            --dist-dir selected-native --version "$VERSION" --source-sha "$SOURCE_SHA" \
+            --output installed-canary/installed-canary-subject.json
       - name: Verify PR head, version, and TestPyPI bytes
         shell: bash
         env:
@@ -759,6 +807,7 @@ jobs:
             CANARY_PYTHON="$RUNNER_TEMP/hol-guard-canary-venv/bin/python"
           fi
           "$CANARY_PYTHON" -m pip install --no-compile --index-url https://pypi.org/simple "$WHEEL_REQUIREMENT"
+          "$CANARY_PYTHON" -m pip install --no-compile --index-url https://pypi.org/simple -r scripts/installed_canary_test_requirements.txt
           echo "CANARY_PYTHON=$CANARY_PYTHON" >> "$GITHUB_ENV"
       - name: Prove the harness rejects missing evidence
         shell: bash
@@ -1192,6 +1241,7 @@ jobs:
           SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
           VERSION: ${{ needs.build.outputs.version }}
           GITHUB_REF: ${{ github.ref }}
+          RELEASE_REPAIR: ${{ needs.build.outputs.release_repair }}
         run: |
           git fetch --force origin refs/heads/main:refs/remotes/origin/main
           if [[ "$GITHUB_REF" == "refs/tags/v${VERSION}" ]]; then
@@ -1202,8 +1252,12 @@ jobs:
           else
             remote_main_sha=$(git ls-remote --exit-code origin refs/heads/main | awk '{print $1}')
             if [[ "$remote_main_sha" != "$SOURCE_SHA" ]]; then
-              echo "Main publication source is no longer the branch head" >&2
-              exit 1
+              if [[ "$RELEASE_REPAIR" == "true" ]] && git merge-base --is-ancestor "$SOURCE_SHA" origin/main && [[ "$(git rev-parse "v${VERSION}^{commit}")" == "$SOURCE_SHA" ]]; then
+                :
+              else
+                echo "Main publication source is no longer the branch head" >&2
+                exit 1
+              fi
             fi
           fi
       - name: Inspect TestPyPI release state
@@ -1283,6 +1337,7 @@ jobs:
           SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
           VERSION: ${{ needs.build.outputs.version }}
           GITHUB_REF: ${{ github.ref }}
+          RELEASE_REPAIR: ${{ needs.build.outputs.release_repair }}
         run: |
           git fetch --force origin refs/heads/main:refs/remotes/origin/main
           if [[ "$GITHUB_REF" == "refs/tags/v${VERSION}" ]]; then
@@ -1293,8 +1348,12 @@ jobs:
           else
             remote_main_sha=$(git ls-remote --exit-code origin refs/heads/main | awk '{print $1}')
             if [[ "$remote_main_sha" != "$SOURCE_SHA" ]]; then
-              echo "Stable tag source is no longer the main branch head" >&2
-              exit 1
+              if [[ "$RELEASE_REPAIR" == "true" ]] && git merge-base --is-ancestor "$SOURCE_SHA" origin/main && [[ "$(git rev-parse "v${VERSION}^{commit}")" == "$SOURCE_SHA" ]]; then
+                :
+              else
+                echo "Stable tag source is no longer the main branch head" >&2
+                exit 1
+              fi
             fi
           fi
           tag="v${VERSION}"
@@ -1542,6 +1601,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
           VERSION: ${{ needs.build.outputs.version }}
+          RELEASE_REPAIR: ${{ needs.build.outputs.release_repair }}
+          GITHUB_SHA: ${{ github.sha }}
         run: |
           tag="v${VERSION}"
           git fetch --force --no-tags origin "+refs/tags/${tag}:refs/tags/${tag}"
@@ -1585,8 +1646,16 @@ jobs:
             remote_guard_files=("$existing_dir"/hol_guard-*)
             [[ "${#remote_guard_files[@]}" -gt 0 ]]
             for remote_file in "${remote_guard_files[@]}"; do
-              gh attestation verify "$remote_file" --repo "$GITHUB_REPOSITORY" \
-                --bundle "$bundle" --source-digest "$SOURCE_SHA" >/dev/null
+              if ! gh attestation verify "$remote_file" --repo "$GITHUB_REPOSITORY" \
+                --bundle "$bundle" --source-digest "$SOURCE_SHA" >/dev/null; then
+                if [[ "$RELEASE_REPAIR" != "true" ]]; then
+                  exit 1
+                fi
+                gh attestation verify "$remote_file" --repo "$GITHUB_REPOSITORY" \
+                  --bundle "$bundle" \
+                  --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/publish.yml" \
+                  --source-digest "$GITHUB_SHA" >/dev/null
+              fi
             done
             exit 0
           fi

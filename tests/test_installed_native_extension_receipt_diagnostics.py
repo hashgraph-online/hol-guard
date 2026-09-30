@@ -7,6 +7,7 @@ import sqlite3
 import threading
 from contextlib import contextmanager
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -88,11 +89,107 @@ def test_persisted_receipt_correlation_waits_for_a_receipt_persisted_after_polli
     assert receipt == {"decision_id": "current", "authority": "rust"}
 
 
+def test_persisted_receipt_correlation_waits_for_writer_progress_before_reading_sqlite(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _ReceiptStore(tmp_path / "receipts.sqlite3", ("prior",))
+    original = probe._support.persisted_native_receipt_ids
+    receipt_id_reads = 0
+    stats_observed = threading.Event()
+
+    def counted_receipt_ids(target: _ReceiptStore) -> set[str]:
+        nonlocal receipt_id_reads
+        receipt_id_reads += 1
+        return original(target)
+
+    monkeypatch.setattr(probe._support, "persisted_native_receipt_ids", counted_receipt_ids)
+
+    class _Writer:
+        def __init__(self) -> None:
+            self.processed = 0
+
+        def stats(self) -> dict[str, object]:
+            stats_observed.set()
+            return {"receipt_processed": self.processed}
+
+    writer = _Writer()
+
+    def persist_after_writer_polling_starts() -> None:
+        assert stats_observed.wait(timeout=1)
+        store.insert("current")
+        writer.processed = 1
+
+    persistence = threading.Thread(target=persist_after_writer_polling_starts)
+    persistence.start()
+    try:
+        receipt = probe.await_persisted_native_receipt(
+            store,
+            {"prior"},
+            writer=writer,
+            receipt_processed_before=0,
+            timeout_seconds=1.0,
+        )
+    finally:
+        persistence.join(timeout=1)
+
+    assert not persistence.is_alive()
+    assert receipt == {"decision_id": "current", "authority": "rust"}
+    assert receipt_id_reads == 1
+
+
 def test_persisted_receipt_correlation_rejects_multiple_unattributed_rows(tmp_path: Path) -> None:
     store = _ReceiptStore(tmp_path / "receipts.sqlite3", ("first", "second"))
 
     with pytest.raises(RuntimeError, match="receipt_persistence_ambiguous"):
         probe.await_persisted_native_receipt(store, set())
+
+
+def test_persisted_receipt_correlation_retries_after_writer_progress_stops(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = _ReceiptStore(tmp_path / "receipts.sqlite3", ("prior",))
+    original = probe._support.persisted_native_receipt_ids
+    reads = 0
+
+    def delayed_visibility(target: _ReceiptStore) -> set[str]:
+        nonlocal reads
+        reads += 1
+        if reads == 2:
+            store.insert("current")
+        return original(target)
+
+    monkeypatch.setattr(probe._support, "persisted_native_receipt_ids", delayed_visibility)
+    writer = SimpleNamespace(stats=lambda: {"receipt_processed": 1})
+    assert probe.await_persisted_native_receipt(
+        store, {"prior"}, writer=writer, receipt_processed_before=0, timeout_seconds=1.0
+    ) == {"decision_id": "current", "authority": "rust"}
+    assert reads == 2
+
+
+def test_persisted_receipt_correlation_does_not_read_before_writer_progress(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = _ReceiptStore(tmp_path / "receipts.sqlite3", ("prior",))
+
+    def unexpected_read(_target: _ReceiptStore) -> set[str]:
+        raise AssertionError("reader started before writer progress")
+
+    monkeypatch.setattr(probe._support, "persisted_native_receipt_ids", unexpected_read)
+    writer = SimpleNamespace(stats=lambda: {"receipt_processed": 0})
+    with pytest.raises(RuntimeError, match="receipt_persistence_missing"):
+        probe.await_persisted_native_receipt(
+            store, {"prior"}, writer=writer, receipt_processed_before=0, timeout_seconds=0.35
+        )
+
+
+def test_persisted_receipt_correlation_recovers_when_writer_counter_stalls(tmp_path: Path) -> None:
+    store = _ReceiptStore(tmp_path / "receipts.sqlite3", ("prior", "current"))
+    writer = SimpleNamespace(stats=lambda: {"receipt_processed": 0})
+
+    assert probe.await_persisted_native_receipt(
+        store, {"prior"}, writer=writer, receipt_processed_before=0, timeout_seconds=1.0
+    ) == {"decision_id": "current", "authority": "rust"}
 
 
 @pytest.mark.parametrize("reason", sorted(NATIVE_COMMAND_CONTROL_ERROR_CODES))

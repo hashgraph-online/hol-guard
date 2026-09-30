@@ -133,7 +133,7 @@ def test_malformed_daemon_and_fallback_outputs_fail_closed(
     assert exit_code == 0
     output = json.loads(capsys.readouterr().out)
     assert output["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
-    assert "permissionDecision" not in output["hookSpecificOutput"]
+    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
 def test_post_tool_use_stdout_is_exactly_one_json_object_with_noisy_fallback(
@@ -289,9 +289,9 @@ def test_authenticated_overload_fails_closed_without_fallback_or_restart(
     assert starts == []
     payload = json.loads(capsys.readouterr().out)
     output = payload["hookSpecificOutput"]
-    assert "permissionDecision" not in output
+    assert output["permissionDecision"] == "deny"
     assert output["hookEventName"] == "PreToolUse"
-    assert "temporarily saturated" in str(payload.get("systemMessage") or "")
+    assert "temporarily saturated" in output["permissionDecisionReason"]
 
 
 def test_typed_transient_overload_retries_once_when_deadline_fits(
@@ -324,6 +324,35 @@ def test_typed_transient_overload_retries_once_when_deadline_fits(
     payload = json.loads(capsys.readouterr().out)
     assert payload["hookSpecificOutput"] == {"hookEventName": "PreToolUse"}
     assert "permissionDecision" not in payload["hookSpecificOutput"]
+
+
+def test_daemon_rpc_budget_stays_below_approval_wait(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[float] = []
+
+    def fake_daemon(**kwargs: object) -> None:
+        timeout = kwargs["timeout_seconds"]
+        assert isinstance(timeout, float)
+        seen.append(timeout)
+        raise OSError("down")
+
+    monkeypatch.setattr(bridge_flow, "_daemon_response", fake_daemon)
+    monkeypatch.setattr(bridge_flow, "_trusted_launch_for_fallback", lambda **_kwargs: (None, True))
+
+    response, overloaded, integrity_failed = bridge_flow.bridge_review_response(
+        state_path="state.json",
+        fallback_command=["/bin/echo", "fallback"],
+        start_command=["/bin/echo", "start"],
+        query="probe",
+        data="{}",
+        deadline=time.monotonic() + 300,
+        manifest_path="hooks.manifest.json",
+        config_json="{}",
+    )
+
+    assert response is None
+    assert overloaded is False
+    assert integrity_failed is True
+    assert seen == [float(bridge_flow._DAEMON_RPC_TIMEOUT_SECONDS)]
 
 
 def test_daemon_failure_kind_separates_overload_transport_and_control_plane() -> None:

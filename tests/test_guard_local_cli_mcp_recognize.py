@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import os
+import shlex
 import sqlite3
 from pathlib import Path
 from shutil import which
+
+import pytest
 
 from codex_plugin_scanner.guard.adapters.harness_mcp_discovery import (
     discover_harness_mcp_servers,
@@ -17,6 +20,7 @@ from codex_plugin_scanner.guard.daemon.local_cli_http import (
 from codex_plugin_scanner.guard.daemon.local_cli_mcp_store import stored_mcp_recognition
 from codex_plugin_scanner.guard.local_cli_trust import utc_now
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
+from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity
 from codex_plugin_scanner.guard.runtime.local_mcp_stdio import probe_search_path
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -275,6 +279,52 @@ def test_recognize_retry_lists_tools_after_failed_store(tmp_path: Path, monkeypa
     commands = item["commands"]
     assert isinstance(commands, list)
     assert any(isinstance(entry, dict) and entry.get("name") == "list_pages" for entry in commands)
+
+
+def test_refresh_uses_exact_configured_launch_not_display_label(tmp_path: Path, monkeypatch) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    _shim_first_npx_path(tmp_path, monkeypatch)
+    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.local_cli_api.Path.home", staticmethod(lambda: home))
+    args = ("-y", "chrome-devtools-mcp@latest", "--workspace", "x" * 220, "--account", "fixture-account")
+    detection = _detection("cursor", _artifact(harness="cursor", name="fixture", command="npx", args=args))
+    servers = discover_harness_mcp_servers(home_dir=home, guard_home=home, detections=(detection,))
+    assert shlex.split(servers[0].launch_command) == ["npx", *args]
+    assert len(servers[0].identity.example_label) <= 160
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.local_cli_api.discover_harness_mcp_servers", lambda **_kwargs: servers
+    )
+    service = LocalCliApiService(store=GuardStore(home))
+    service._observe_harness_mcp_servers()
+    result = service.recognize({"cli_id": servers[0].identity.cli_id, "refresh": True, "command": "never-run"})
+    item = result["item"]
+    assert item["cli_id"] == servers[0].identity.cli_id
+    assert item["mcp_catalog"]["complete"]
+    assert item["mcp_catalog"]["protocol_version"] == "2024-11-05"
+
+
+def test_unavailable_refresh_never_guesses_a_launch_command(tmp_path: Path, monkeypatch) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.local_cli_api.Path.home", staticmethod(lambda: home))
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.local_cli_api.discover_harness_mcp_servers", lambda **_kwargs: []
+    )
+    identity = UnlistedCliIdentity(
+        cli_id="local-cli.mcp-unavailable", name="Fixture connector", kind="executable",
+        identity_hash="c" * 64, example_label="Observed through a host", interpreter_name=None,
+    )
+    store = GuardStore(home)
+    store.record_local_cli_observation(identity, seen_at=utc_now(), surface="mcp")
+
+    def unexpected_probe(*_args, **_kwargs):
+        raise AssertionError("An unavailable connection must not be launched")
+
+    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.local_cli_api.probe_stdio_mcp_server", unexpected_probe)
+    service = LocalCliApiService(store=store)
+    with pytest.raises(LocalCliApiError) as rejected:
+        service.recognize({"cli_id": identity.cli_id, "refresh": True, "command": "npx -y never-run"})
+    assert rejected.value.code == "mcp_refresh_unavailable"
 
 
 def test_handle_local_cli_post_extends_recognize_timeout() -> None:
