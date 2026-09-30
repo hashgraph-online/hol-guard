@@ -5,6 +5,23 @@ All notable changes to HOL Guard will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.14.0](https://github.com/hashgraph-online/hol-guard/compare/v3.13.1...v3.14.0) (2026-09-30)
+
+
+### Features
+
+* **hook:** native hook pipeline with context-token approval provenance ([#3154](https://github.com/hashgraph-online/hol-guard/issues/3154)) ([599617c](https://github.com/hashgraph-online/hol-guard/commit/599617c34e56a5840bdc79b4e3029a1b08aa8939))
+
+
+### Bug Fixes
+
+* **codex:** require trusted decisions during evaluator outages ([#3219](https://github.com/hashgraph-online/hol-guard/issues/3219)) ([96ab771](https://github.com/hashgraph-online/hol-guard/commit/96ab7714f4c1c5800c8e5ea00ec1a0e7879c2c43))
+* **cursor:** deny parsed actions when trusted evaluation is unavailable ([5f6a902](https://github.com/hashgraph-online/hol-guard/commit/5f6a902696fda77231b2338429ac941c7b21e874))
+* **cursor:** deny unparsed actions without mode authority ([9135fd7](https://github.com/hashgraph-online/hol-guard/commit/9135fd7bca2e75f0986be053fe4979899488db4a))
+* **deps:** bump urllib3 to 2.8.0 for CVE-2026-97687 and CVE-2026-97689 ([#3294](https://github.com/hashgraph-online/hol-guard/issues/3294)) ([58e41cc](https://github.com/hashgraph-online/hol-guard/commit/58e41cc259b19c9b39800a72611d510d83bdb1b7))
+* **hooks:** close daemon responses before reusing connections ([#3296](https://github.com/hashgraph-online/hol-guard/issues/3296)) ([62e2b6f](https://github.com/hashgraph-online/hol-guard/commit/62e2b6f373515bfdca719ac494b9ce6087b71d8f))
+* **hooks:** require trusted decisions in bounded fallback paths ([#3233](https://github.com/hashgraph-online/hol-guard/issues/3233)) ([903ae14](https://github.com/hashgraph-online/hol-guard/commit/903ae149c15d5b63088c0fde69acfbd2b6a8739c))
+
 ## [3.13.1](https://github.com/hashgraph-online/hol-guard/compare/v3.13.0...v3.13.1) (2026-09-30)
 
 
