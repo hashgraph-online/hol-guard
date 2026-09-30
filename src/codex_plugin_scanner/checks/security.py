@@ -126,9 +126,7 @@ DANGEROUS_MCP_PATTERNS: list[re.Pattern[str]] = [
 
 RISKY_APPROVAL_PATTERNS: list[re.Pattern[str]] = [
     # Assignment only. A bare enum value in generated API docs is not a default.
-    re.compile(
-        r"""(?:^|[\s{\[,])(?:["']?[A-Za-z_][\w.-]*["']?\s*)?[:=]\s*["']danger-full-access["']"""
-    ),
+    re.compile(r"""(?:^|[\s{\[,])(?:["']?[A-Za-z_][\w.-]*["']?\s*)?[:=]\s*["']danger-full-access["']"""),
     re.compile(r'approval[_ -]?policy["\']?\s*[:=]\s*["\']never["\']', re.I),
     re.compile(r'approvalMode["\']?\s*[:=]\s*["\']bypass["\']', re.I),
 ]
