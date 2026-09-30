@@ -78,7 +78,6 @@
       "command.storage.minio"
     ],
     "external": [
-      "command.agentbridge",
       "command.blitcp",
       "command.cloudg",
       "command.cogext",
