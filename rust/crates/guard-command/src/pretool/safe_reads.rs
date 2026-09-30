@@ -132,37 +132,6 @@ pub(super) fn bounded_file_read_target(
     safe_read_target(path)
 }
 
-/// Mirror of `guard-secure-fs`'s external sensitive component list; kept
-/// local so the native floor does not depend on crate-private constant
-/// internals beyond the exported helpers.
-const EXTERNAL_SENSITIVE_PARTS: [&str; 25] = [
-    ".aws",
-    ".docker",
-    ".env",
-    ".git-credentials",
-    ".kube",
-    ".netrc",
-    ".npmrc",
-    ".pypirc",
-    ".ssh",
-    "auth",
-    "authorization",
-    "credential",
-    "credentials",
-    "id_dsa",
-    "id_ecdsa",
-    "id_ed25519",
-    "id_rsa",
-    "passwd",
-    "password",
-    "private-key",
-    "private_key",
-    "secret",
-    "secrets",
-    "token",
-    "tokens",
-];
-
 /// The canonicalized target must be a regular file under a verified root
 /// and clear every sensitive-content screen.
 fn resolved_file_read_allowed(
@@ -203,7 +172,7 @@ fn resolved_file_read_allowed(
         || canonical.components().any(|component| {
             matches!(component, std::path::Component::Normal(part) if {
                 let part = part.to_string_lossy().to_ascii_lowercase();
-                EXTERNAL_SENSITIVE_PARTS.contains(&part.as_str())
+                guard_secure_fs::EXTERNAL_SENSITIVE_PARTS.contains(&part.as_str())
             })
         })
         || !(guard_secure_fs::hidden_read_parts_allowed(canonical) || guard_safety_doc(canonical))

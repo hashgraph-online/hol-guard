@@ -35,7 +35,9 @@ const SENSITIVE_SEARCH_BASENAMES: &[&str] = &[
     "credentials",
     "id_rsa",
 ];
-const EXTERNAL_SENSITIVE_PARTS: &[&str] = &[
+/// Path components that mark credential/secret material when a read
+/// escapes the workspace. Shared with the native PreToolUse read floor.
+pub const EXTERNAL_SENSITIVE_PARTS: &[&str] = &[
     ".aws",
     ".docker",
     ".env",
