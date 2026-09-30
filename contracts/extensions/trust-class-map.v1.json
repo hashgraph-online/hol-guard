@@ -78,7 +78,6 @@
       "command.storage.minio"
     ],
     "external": [
-      "command.ai-dev",
       "command.blitcp",
       "command.cloudg",
       "command.cogext",
