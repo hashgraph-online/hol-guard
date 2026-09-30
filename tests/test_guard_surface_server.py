@@ -1248,7 +1248,9 @@ class TestGuardSurfaceServer:
         monkeypatch.setattr(daemon_server_module, "_RUNTIME_HOOK_ADMISSION_TIMEOUT_SECONDS", 10.0)
         monkeypatch.setattr(daemon_server_module, "_RUNTIME_HOOK_PROCESS_TIMEOUT_SECONDS", 8.0)
         monkeypatch.setattr(runtime_hook_deadline_module, "_MAX_BUDGET_SECONDS", 12.0)
-        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        # This endpoint test owns shutdown; worker readiness can exceed the
+        # five-second ephemeral-home idle timeout on a traced runner.
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0, idle_timeout_seconds=0)
         monkeypatch.setattr(daemon._server.hook_process_runner, "_timeout_seconds", 8.0)
         daemon.start()
         try:

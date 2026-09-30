@@ -194,6 +194,25 @@ def test_retries_pagination_race_before_coverage_matrix_exists() -> None:
     assert logs[-1] == f"All {barrier.SHARD_COUNT} Python coverage shards succeeded in run {_RUN_ID}, attempt 2"
 
 
+def test_retries_pagination_race_after_coverage_matrix_exists() -> None:
+    jobs = _jobs()
+    calls, logs = _run([[*jobs, dict(jobs[0])], jobs], timeout_seconds=20)
+    assert len(calls) == 4
+    assert logs[-1] == f"All {barrier.SHARD_COUNT} Python coverage shards succeeded in run {_RUN_ID}, attempt 2"
+
+
+def test_duplicate_record_cannot_replace_a_missing_shard() -> None:
+    jobs = _jobs()[:-1]
+    with pytest.raises(barrier.ShardWaitError, match="Timed out"):
+        _run([[*jobs, dict(jobs[0])]], timeout_seconds=10)
+
+
+def test_rejects_conflicting_terminal_results_for_a_repeated_job() -> None:
+    jobs = _jobs()
+    with pytest.raises(barrier.ShardWaitError, match="conflicting duplicate job results"):
+        _run([[*jobs, dict(jobs[0], conclusion="failure")]])
+
+
 def test_retries_unexpanded_matrix_name_before_planning() -> None:
     pending = [dict(_job(1000), name="coverage (3.12, ${{ matrix.shard }})")]
     calls, logs = _run([pending, _jobs()], timeout_seconds=20)

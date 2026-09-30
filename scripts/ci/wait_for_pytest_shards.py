@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import argparse
+import http.client
 import json
 import math
 import os
 import re
+import ssl
 import sys
 import time
 import urllib.error
@@ -40,6 +42,10 @@ class _SchedulingRaceError(ShardWaitError):
     """Pagination changed while GitHub was creating the coverage matrix."""
 
 
+class _TransientApiError(ShardWaitError):
+    """A transport failure may be retried without trusting partial results."""
+
+
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         raise ShardWaitError("Unexpected GitHub API redirect")
@@ -68,9 +74,17 @@ def github_json(path: str, timeout_seconds: float) -> object:
             raise ShardWaitError("GitHub jobs API response exceeded its size limit")
         return json.loads(raw)
     except urllib.error.HTTPError as error:
+        if error.code in {408, 429, 500, 502, 503, 504}:
+            raise _TransientApiError(f"GitHub jobs API returned HTTP {error.code}") from None
         raise ShardWaitError(f"GitHub jobs API returned HTTP {error.code}") from None
-    except (OSError, urllib.error.URLError):
-        raise ShardWaitError("GitHub jobs API request failed") from None
+    except ssl.SSLCertVerificationError:
+        raise ShardWaitError("GitHub jobs API TLS verification failed") from None
+    except urllib.error.URLError as error:
+        if isinstance(error.reason, ssl.SSLCertVerificationError):
+            raise ShardWaitError("GitHub jobs API TLS verification failed") from None
+        raise _TransientApiError("GitHub jobs API request failed") from None
+    except (OSError, http.client.IncompleteRead):
+        raise _TransientApiError("GitHub jobs API request failed") from None
     except (UnicodeError, json.JSONDecodeError):
         raise ShardWaitError("GitHub jobs API returned invalid JSON") from None
 
@@ -125,7 +139,7 @@ def _snapshot(
     clock: Callable[[], float],
 ) -> tuple[str, ...]:
     states = ["absent"] * SHARD_COUNT
-    job_ids: set[int] = set()
+    jobs_by_id: dict[int, dict[str, object]] = {}
     seen_shards: set[int] = set()
     plan_seen = False
     total_count = 0
@@ -149,15 +163,23 @@ def _snapshot(
             job_id, name = job.get("id"), job.get("name")
             if type(job_id) is not int or job_id <= 0 or not isinstance(name, str):
                 raise ShardWaitError("GitHub jobs API returned an invalid job identity")
-            if job_id in job_ids:
-                if not plan_seen and not seen_shards:
-                    raise _SchedulingRaceError("GitHub jobs API paginated a changing job list")
-                raise ShardWaitError("GitHub jobs API returned a duplicate job")
-            job_ids.add(job_id)
             if type(job.get("run_id")) is not int or job["run_id"] != run_id:
                 raise ShardWaitError("GitHub jobs API returned a job from another run")
             if "run_attempt" in job and (type(job["run_attempt"]) is not int or job["run_attempt"] != attempt):
                 raise ShardWaitError("GitHub jobs API returned a job from another attempt")
+            if previous := jobs_by_id.get(job_id):
+                if previous["name"] == name:
+                    if previous.get("status") == job.get("status") == "completed" and previous.get(
+                        "conclusion"
+                    ) != job.get("conclusion"):
+                        raise ShardWaitError("GitHub jobs API returned conflicting duplicate job results")
+                    # Scheduling shifts offset pages even after matrix expansion.
+                    # Retry the whole snapshot; duplicates cannot fill missing shards.
+                    raise _SchedulingRaceError("GitHub jobs API paginated a changing job list")
+                if not plan_seen and not seen_shards:
+                    raise _SchedulingRaceError("GitHub jobs API paginated a changing job list")
+                raise ShardWaitError("GitHub jobs API returned a duplicate job")
+            jobs_by_id[job_id] = job
             if name == "coverage-plan":
                 if plan_seen:
                     raise ShardWaitError("GitHub jobs API returned duplicate coverage-plan jobs")
@@ -178,9 +200,9 @@ def _snapshot(
             states[index] = _job_state(job, label)
             if states[index] == "success":
                 _require_current_execution(job, label)
-        if len(job_ids) == total_count:
+        if len(jobs_by_id) == total_count:
             return tuple(states)
-        if len(jobs) != 100 or len(job_ids) > total_count:
+        if len(jobs) != 100 or len(jobs_by_id) > total_count:
             raise ShardWaitError("GitHub jobs API returned an incomplete job list")
     raise ShardWaitError("GitHub jobs API exceeded its pagination limit")
 
@@ -208,6 +230,7 @@ def wait_for_shards(
         raise ShardWaitError("Poll interval must be between 0 and 30 seconds")
     deadline = clock() + timeout_seconds
     previous: tuple[str, ...] | None = None
+    api_failures = 0
     log(f"Waiting for {SHARD_COUNT} Python coverage shards in run {run_id}, attempt {attempt}")
     while True:
         try:
@@ -216,6 +239,17 @@ def wait_for_shards(
             if clock() >= deadline:
                 raise ShardWaitError("Timed out waiting for Python coverage shard jobs") from None
             sleep(min(poll_seconds, max(0.0, deadline - clock())))
+            continue
+        except _TransientApiError:
+            api_failures += 1
+            remaining = deadline - clock()
+            if remaining <= 0:
+                raise ShardWaitError("Timed out waiting for Python coverage shard jobs") from None
+            if api_failures > 3:
+                raise ShardWaitError("GitHub jobs API failed after three bounded retries") from None
+            delay = min(poll_seconds * 2 ** (api_failures - 1), 30.0, remaining)
+            log(f"GitHub jobs API transport unavailable; retry {api_failures}/3 in {delay:g}s")
+            sleep(delay)
             continue
         if clock() >= deadline:
             raise ShardWaitError("Timed out waiting for Python coverage shard jobs")

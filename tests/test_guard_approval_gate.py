@@ -529,6 +529,45 @@ def test_approval_gate_cooldown_works_expires_and_revokes(tmp_path: Path) -> Non
     assert revoked.value.code == "approval_gate_required"
 
 
+def test_approval_gate_cooldown_reuse_expires_at_exact_boundary(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    _enable_gate(store, cooldown_seconds=900)
+
+    first = require_approval_decision(
+        store.guard_home,
+        action="allow",
+        scope="artifact",
+        subject="cooldown-start",
+        approval_gate_input=ApprovalGateInput(password=PASSWORD, use_cooldown=True),
+        now="2026-04-11T00:00:00+00:00",
+    )
+    assert first is not None
+    assert first.password_verified is True
+    assert first.used_cooldown is False
+
+    before_boundary = require_approval_decision(
+        store.guard_home,
+        action="allow",
+        scope="artifact",
+        subject="cooldown-before-boundary",
+        approval_gate_input=None,
+        now="2026-04-11T00:14:59+00:00",
+    )
+    assert before_boundary is not None
+    assert before_boundary.used_cooldown is True
+
+    with pytest.raises(ApprovalGateError) as expired:
+        require_approval_decision(
+            store.guard_home,
+            action="allow",
+            scope="artifact",
+            subject="cooldown-at-boundary",
+            approval_gate_input=None,
+            now="2026-04-11T00:15:00+00:00",
+        )
+    assert expired.value.code == "approval_gate_required"
+
+
 def test_approval_gate_cooldown_opt_out_does_not_start_session(tmp_path: Path) -> None:
     store = _store(tmp_path)
     _enable_gate(store, cooldown_seconds=900)

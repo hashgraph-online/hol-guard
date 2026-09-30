@@ -289,7 +289,7 @@ def test_linux_feed_publishes_digest_verified_gnu_sidecar() -> None:
     assert isinstance(build_run, str)
     assert "publish-linux-x64" not in workflow()["jobs"]
     assert linux_workflow_text().count("\n") <= 500
-    assert job["runs-on"] == "ubuntu-24.04"
+    assert job["runs-on"] == "ubuntu-22.04"
     assert job["env"]["RELEASE_TARGET"] == "x86_64-unknown-linux-gnu"
     assert job["env"]["NATIVE_RUNTIME_TARGET"] == "x86_64-unknown-linux-musl"
     assert job["permissions"] == {"contents": "write", "id-token": "write", "attestations": "write"}
