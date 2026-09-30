@@ -101,9 +101,9 @@
                 "inverse_flag_pairs": [],
                 "leading_options_with_values": [],
                 "options_with_values": [
-                  "-i", "--input", "-o", "--output", "-b", "--block-size", "-c",
-                  "--count", "-l", "--limit", "-s", "--size", "-e", "--engine", "--skip",
-                  "--seek", "--queue-depth"
+                  "-i", "--input", "-o", "--output", "-b", "--block-size", "--bs", "-c",
+                  "--count", "-l", "--limit", "-s", "--size", "--bytes", "-e", "--engine",
+                  "--skip", "--seek", "--queue-depth"
                 ],
                 "required_flags": ["--force"],
                 "required_flags_in_all_arguments": false,
@@ -351,9 +351,9 @@
                 "minimum_operands": 2,
                 "operand_prefixes": ["/dev/"],
                 "options_with_values": [
-                  "-i", "--input", "-o", "--output", "-b", "--block-size", "-c",
-                  "--count", "-l", "--limit", "-s", "--size", "-e", "--engine", "--skip",
-                  "--seek", "--queue-depth"
+                  "-i", "--input", "-o", "--output", "-b", "--block-size", "--bs", "-c",
+                  "--count", "-l", "--limit", "-s", "--size", "--bytes", "-e", "--engine",
+                  "--skip", "--seek", "--queue-depth"
                 ],
                 "required_flags": []
               },
