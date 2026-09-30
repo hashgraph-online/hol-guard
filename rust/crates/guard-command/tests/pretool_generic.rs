@@ -1,4 +1,6 @@
-use guard_command::pretool::{evaluate_pre_tool_envelope, evaluate_pre_tool_envelope_with_source};
+use guard_command::pretool::evaluate_pre_tool_envelope;
+#[cfg(unix)]
+use guard_command::pretool::evaluate_pre_tool_envelope_with_source;
 use guard_command::MAX_COMMAND_BYTES;
 use guard_contracts::{PreToolActionTypeV1, PreToolResultV1};
 use serde_json::{json, Value};
