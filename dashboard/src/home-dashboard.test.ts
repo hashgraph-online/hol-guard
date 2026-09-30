@@ -141,6 +141,7 @@ const displayNames = [
   { harness: "openclaw", expected: "OpenClaw" },
   { harness: "kimi", expected: "Kimi" },
   { harness: "grok", expected: "Grok" },
+  { harness: "devin", expected: "Devin" },
   { harness: "omp", expected: "Oh My Pi" },
   { harness: "guard-cli", expected: "Guard CLI" },
 ];

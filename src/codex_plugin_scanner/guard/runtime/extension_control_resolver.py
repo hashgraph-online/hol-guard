@@ -6,7 +6,7 @@ from collections.abc import Iterable
 from itertools import islice
 from typing import cast
 
-from .command_dns_extensions import expand_legacy_dns_layers
+from .command_dns_control_migration import expand_legacy_dns_layers
 from .command_extensions import CommandSafetyExtensionRegistry
 from .effect_contract import DecisionBasis
 from .effect_decision import DecisionFactor, DecisionFactorSource

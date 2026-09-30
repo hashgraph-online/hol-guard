@@ -8,9 +8,11 @@ import json
 import marshal
 import os
 import struct
+import subprocess
 import sys
 import zipfile
 from pathlib import Path
+from types import SimpleNamespace
 from typing import cast
 
 import pytest
@@ -29,6 +31,7 @@ from scripts.installed_canary_proof import (
 )
 from scripts.run_installed_canary import (
     _no_post_execution_proof_smoke,  # pyright: ignore[reportPrivateUsage]
+    _run_corpus,  # pyright: ignore[reportPrivateUsage]
     _validate_corpus_bindings,  # pyright: ignore[reportPrivateUsage]
 )
 
@@ -49,15 +52,58 @@ def test_current_corpus_manifest_is_verified_by_its_canonical_bindings() -> None
     assert bindings["source_files_verified"] == 1 + len(tuple((root / "tests").glob("guard_command_corpus_oracle*.py")))
 
 
-def test_harness_without_post_execution_proof_remains_unconfirmed() -> None:
+def test_installed_corpus_reports_malformed_json_clearly(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from scripts import run_installed_canary as canary
+
+    native_root = tmp_path / "codex_plugin_scanner/_native"
+    native_root.mkdir(parents=True)
+    suffix = ".exe" if sys.platform == "win32" else ""
+    (native_root / f"hol-guard-runtime{suffix}").touch()
+    (native_root / f"guard-command-source{suffix}").touch()
+    distribution_stub = SimpleNamespace(locate_file=lambda _path: native_root)
+    monkeypatch.setattr(canary, "distribution", lambda _name: distribution_stub)
+    monkeypatch.setattr(canary, "_validate_corpus_bindings", lambda _root: {})
+    monkeypatch.setattr(
+        canary.subprocess,
+        "run",
+        lambda *_args, **_kwargs: subprocess.CompletedProcess([], 0, "not-json", ""),
+    )
+
+    with pytest.raises(InstalledCanaryError, match="report is not valid JSON"):
+        _run_corpus(tmp_path)
+
+
+def test_harness_without_post_execution_proof_remains_unconfirmed(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Exercise the installed native route in the child process; the unit-test
+    # oracle callbacks do not cross the subprocess boundary with their env vars.
+    monkeypatch.setenv("HOL_GUARD_NATIVE", "auto")
+    monkeypatch.delenv("HOL_GUARD_PYTHON_ORACLE", raising=False)
+    monkeypatch.delenv("HOL_GUARD_NATIVE_DIAGNOSTIC", raising=False)
+    run = subprocess.run
+    hook_responses: list[dict[str, object]] = []
+
+    def capture_native_hook(command: list[str], **kwargs):
+        is_hook = command[:3] == [sys.executable, "-m", "codex_plugin_scanner.cli"]
+        completed = run(command, **kwargs)
+        if is_hook:
+            assert completed.returncode == 0, (completed.stdout, completed.stderr)
+            hook_responses.append(json.loads(completed.stdout))
+        return completed
+
+    monkeypatch.setattr(subprocess, "run", capture_native_hook)
     assert _no_post_execution_proof_smoke() == {
         "harness": "opencode",
         "post_execution_surface": False,
         "execution_status": "allowed_unconfirmed",
         "proof_level": "pre_hook",
         "policy_action": "warn",
-        "decision_reason_code": "no_match",
+        "decision_reason_code": "policy",
     }
+    assert len(hook_responses) == 1
+    # The fresh guard-home has no resident-ACKed policy. Its availability warning
+    # must remain explicit and must never be promoted to execution proof.
+    assert hook_responses[0]["reason_code"] == "native_pre_tool_unavailable"
+    assert hook_responses[0]["policy_action"] == "warn"
 
 
 class _ConsoleScriptDistribution(importlib.metadata.Distribution):

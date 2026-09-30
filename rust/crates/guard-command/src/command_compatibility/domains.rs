@@ -1,5 +1,10 @@
 //! Context-dependent classifiers keep a narrow exact subset and explicit uncertainty.
+use crate::is_contained_compile_check_arguments;
+
 use super::{basename, CanonicalCommandV1, CommandSegmentV1, CompatibilityObservations};
+
+#[path = "interpreter.rs"]
+mod interpreter;
 
 fn sensitive(value: &str) -> bool {
     let value = value.to_ascii_lowercase().replace('\\', "/");
@@ -48,6 +53,20 @@ fn docker(segment: &CommandSegmentV1, index: usize, output: &mut CompatibilityOb
         )
     {
         return;
+    }
+    if matches!(arguments.get(..2), Some(prefix) if prefix == ["compose", "down"]) {
+        let invalid_rmi = match &arguments[2..] {
+            [option, value] if option == "--rmi" => !matches!(value.as_str(), "all" | "local"),
+            [option] => option
+                .strip_prefix("--rmi=")
+                .is_some_and(|value| !matches!(value, "all" | "local")),
+            _ => false,
+        };
+        if invalid_rmi {
+            // Compose rejects this closed invocation before changing anything.
+            // Additional options remain outside this proof (for example -v).
+            return;
+        }
     }
     // Python has additional option-value, Compose, Buildx, exported environment
     // and credential-context logic. Do not silently turn those into no-match.
@@ -191,12 +210,15 @@ pub(super) fn observe(
         );
     if interpreter {
         // Interpreter programs can construct accesses that are absent from raw
-        // tokens. No claim of complete environment/dataflow analysis is made.
-        output.rule(
-            "command.shell-mutations.process-environment-secret-read",
-            index,
-            true,
-        );
+        // tokens. Only bounded literal/CLI forms remove this attribution; they
+        // do not remove the independent pre-tool execution review requirement.
+        if let Some(uncertain) = interpreter::environment_observation(&executable, arguments) {
+            output.rule(
+                "command.shell-mutations.process-environment-secret-read",
+                index,
+                uncertain,
+            );
+        }
     }
     let write_command = matches!(
         executable.as_str(),
@@ -222,32 +244,50 @@ pub(super) fn observe(
         {
             output.rule("command.shell-mutations.managed-config-write", index, true);
         }
-        if sensitive(&segment.text) {
+        // An environment API such as os.environ is not a filesystem path.
+        // Interpreter writes need an actual write operation as well as a
+        // sensitive path; other interpreter uncertainty remains owned above.
+        let interpreter_write = [
+            "write(",
+            "writetext(",
+            "write_text(",
+            "unlink(",
+            "remove(",
+            "rename(",
+            "chmod(",
+        ]
+        .iter()
+        .any(|operation| normalized.contains(operation));
+        if sensitive(&segment.text) && (write_command || redirect || interpreter_write) {
             output.rule("command.shell-mutations.sensitive-file-write", index, true);
         }
     }
-    if matches!(
-        executable.as_str(),
-        "rm" | "rmdir"
-            | "shred"
-            | "wipefs"
-            | "mkfs"
-            | "mkfs.ext4"
-            | "mkfs.xfs"
-            | "shutdown"
-            | "reboot"
-            | "poweroff"
-            | "halt"
-            | "diskutil"
-            | "dd"
-            | "truncate"
-    ) || (executable == "find"
-        && option(
-            arguments,
-            &["-delete", "-exec", "-execdir", "-ok", "-okdir"],
-        ))
-        || (matches!(executable.as_str(), "sed" | "perl")
-            && arguments.iter().any(|value| value.starts_with("-i")))
+    let introspection_only =
+        matches!(arguments.as_slice(), [only] if matches!(only.as_str(), "--help" | "--version"));
+    if !introspection_only
+        && (matches!(
+            executable.as_str(),
+            "rm" | "rmdir"
+                | "shred"
+                | "wipefs"
+                | "mkfs"
+                | "mkfs.ext4"
+                | "mkfs.xfs"
+                | "shutdown"
+                | "reboot"
+                | "poweroff"
+                | "halt"
+                | "diskutil"
+                | "dd"
+                | "truncate"
+        ) || (executable == "find"
+            && !is_contained_compile_check_arguments(arguments)
+            && option(
+                arguments,
+                &["-delete", "-exec", "-execdir", "-ok", "-okdir"],
+            ))
+            || (matches!(executable.as_str(), "sed" | "perl")
+                && arguments.iter().any(|value| value.starts_with("-i"))))
     {
         output.rule("command.shell-mutations.destructive-shell", index, true);
     }

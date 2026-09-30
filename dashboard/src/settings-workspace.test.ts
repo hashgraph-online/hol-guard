@@ -12,6 +12,7 @@ import {
   hasApprovalGateSettingsChanged,
   resolveTotpSetupModalTitle,
   resolveInitialSettingsTab,
+  resolveRepairApprovalCenterMessage,
 } from "./settings-workspace";
 import { resolveApprovalPasswordSectionCopy } from "./settings/approval-password-copy";
 import { repairApprovalCenter, setupDesktopNotifications } from "./guard-api";
@@ -144,20 +145,32 @@ assert(
   "approval-password: configured copy points to save flow",
 );
 assert(
-  resolveApprovalPasswordSectionCopy(true, false).includes("Save settings"),
-  "approval-password: configured copy wins when the gate is disabled",
+  resolveApprovalPasswordSectionCopy(true, false).includes("Turn on Ask for proof"),
+  "approval-password: configured copy explains credentials stay put while the gate is off",
 );
 assert(
   resolveApprovalPasswordSectionCopy(false).includes("setup action"),
   "approval-password: first-time copy points to the explicit setup action",
 );
 assert(
-  resolveApprovalPasswordSectionCopy(false, false).includes("Enable the approval gate"),
-  "approval-password: disabled gate copy points to the gate toggle",
+  resolveApprovalPasswordSectionCopy(false, false).includes("turns on Ask for proof"),
+  "approval-password: disabled first-time copy explains setup turns the gate on",
 );
 assert(
   approvalPasswordCopySource.includes("Set up approval password"),
   "approval-password: first-time setup has an explicit action",
+);
+assert(
+  !approvalPasswordCopySource.includes("!props.wasConfigured && props.enabled"),
+  "approval-password: setup action is reachable while the gate is off",
+);
+assert(
+  settingsWorkspaceSource.includes("gateActiveOnDevice"),
+  "approval-gate: credential actions follow the saved on-device gate state",
+);
+assert(
+  !settingsWorkspaceSource.includes("showGateDetails"),
+  "approval-gate: password and authenticator sections stay visible while the gate is off",
 );
 assert(
   settingsWorkspaceSource.includes('"setup-gate"'),
@@ -166,4 +179,21 @@ assert(
 assert(
   resolveTotpSetupModalTitle(true) === "Confirm your approval password",
   "totp-modal: confirm step title",
+);
+assert(
+  resolveRepairApprovalCenterMessage([]) === "Nothing needed repair. The approval center is already reachable from this dashboard.",
+  "repair: empty cleared list reports nothing needed repair",
+);
+assert(
+  resolveRepairApprovalCenterMessage(["locator"]).includes("stale approval link"),
+  "repair: single code maps to a human label",
+);
+const repairListMessage = resolveRepairApprovalCenterMessage(["locator", "daemon_state", "daemon_discovery_key"]);
+assert(
+  repairListMessage.includes("stale approval link, stale service record, and invalid discovery key"),
+  "repair: multiple codes join with commas and 'and'",
+);
+assert(
+  repairListMessage.startsWith("Approval center repaired:"),
+  "repair: cleared list reports a repaired approval center",
 );

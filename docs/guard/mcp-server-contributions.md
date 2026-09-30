@@ -5,6 +5,12 @@ For exported command metadata or MCP tool inventories, start with the
 files and an integration plan while keeping every contribution External and off.
 Semantic review and the activation requirements below still apply.
 
+MCP contributions keep their existing JSON contract in `contributions/mcp-servers/`.
+The Rust source compiler lowers these files into the native catalog alongside
+command sources. The [command source format](extension-contributions.md) is a
+separate input for CLI coverage; MCP authors do not need to create a Python
+detector or rewrite a server contribution as a command source.
+
 Community MCP servers can ship in the Guard catalog the same way command-safety extensions do: a reviewed JSON file, an External badge, and **off until you turn it on**.
 
 Operators can still add an unlisted MCP server with **Add custom extension**. Custom this-device grants override contributed defaults.
@@ -21,8 +27,11 @@ Operators can still add an unlisted MCP server with **Add custom extension**. Cu
 
 1. Add `contributions/mcp-servers/mcp.<name>.json`.
 2. Add catalog id `command.mcp-<name>` to the `external` list in `contracts/extensions/trust-class-map.v1.json`.
-3. Package the JSON through Hatch force-include and the packaged-contract copy script.
-4. Do not declare `trusted-library` or `first-party`. The schema only allows `external`.
+3. Package the JSON through Hatch force-include and the packaged-contract copy script. The Builder's reviewed `apply` plan handles these integration edits for generated kits.
+4. [Regenerate the complete native program and catalog](extension-builder/VALIDATION.md#native-source-and-fixture-checks), rebuild the native binaries, and refresh the public directory. Commit those generated projections with the MCP input.
+5. Run `tests/test_guard_mcp_server_contribution.py`, the trust checks, and any generated MCP test file using the [validation workflow](extension-builder/VALIDATION.md#source-tree-checks).
+
+Do not declare `trusted-library` or `first-party`. The schema only allows `external`.
 
 The schema is `contracts/mcp-servers/contribution.v1.schema.json`. Required metadata: id, name, description, publisher, icon, launch identity, risk classes, and tool defaults.
 

@@ -62,7 +62,12 @@ def live_approval_review_url(url: str, *, guard_home: Path | None) -> str:
     return tokenized if tokenized else url
 
 
-def authenticated_approval_review_url(url: str, *, guard_home: Path | None) -> str | None:
+def authenticated_approval_review_url(
+    url: str,
+    *,
+    guard_home: Path | None,
+    surface: str = "approval-center",
+) -> str | None:
     """Return a signed loopback link, an unchanged external link, or no safe local link."""
 
     if not url or not is_loopback_approval_url(url):
@@ -73,7 +78,7 @@ def authenticated_approval_review_url(url: str, *, guard_home: Path | None) -> s
         token = load_guard_daemon_auth_token(guard_home)
         if not token:
             return None
-        return build_approval_browser_url(url, auth_token=token) or None
+        return build_approval_browser_url(url, auth_token=token, surface=surface) or None
     except Exception:
         return None
 

@@ -131,7 +131,7 @@ fn valid_component(value: &str, query: bool) -> bool {
     true
 }
 
-fn valid_remote_mcp_url(value: &str) -> bool {
+pub(super) fn valid_remote_mcp_url(value: &str) -> bool {
     // Retain the existing native metadata bound. This is not a network URL
     // parser: accept only the explicit public-HTTPS grammar the compiler emits.
     if value.len() > 260 || !value.is_ascii() || value.bytes().any(|b| b <= 0x20 || b == 0x7f) {

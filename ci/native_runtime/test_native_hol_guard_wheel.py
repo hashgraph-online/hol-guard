@@ -26,6 +26,7 @@ _SOURCE_SHA = "a" * 40
 _RULE_DIGEST = "b" * 64
 _PLATFORM_TAG = "manylinux_2_28_x86_64"
 _TARGET = "x86_64-unknown-linux-gnu"
+_NATIVE_PROGRAM_PATH = "codex_plugin_scanner/guard/contracts/data/extensions/native-command-program.v1.json"
 
 
 class _DaemonStub(GuardDaemonServer):
@@ -102,12 +103,36 @@ def _write_runtime(tmp_path: Path) -> Path:
     return path
 
 
+def _write_source_compiler(tmp_path: Path) -> Path:
+    path = tmp_path / "guard-command-source"
+    path.write_bytes(b"native-source-compiler-fixture-v1")
+    path.chmod(0o755)
+    return path
+
+
 def _record_digest(content: bytes) -> str:
     encoded = base64.urlsafe_b64encode(hashlib.sha256(content).digest()).rstrip(b"=").decode()
     return f"sha256={encoded}"
 
 
-def _build(tmp_path: Path, *, wheel: Path | None = None, runtime: Path | None = None) -> Path:
+def _build(
+    tmp_path: Path,
+    *,
+    wheel: Path | None = None,
+    runtime: Path | None = None,
+    source_compiler: Path | None = None,
+    implementation_digest: str | None = None,
+    base_program_digest: str | None = None,
+) -> Path:
+    if wheel is None and source_compiler is not None:
+        wheel = _write_source_wheel(
+            tmp_path,
+            extra_entries={
+                _NATIVE_PROGRAM_PATH: json.dumps(
+                    {"program_digest": _RULE_DIGEST}, separators=(",", ":")
+                ).encode()
+            },
+        )
     return build_native_wheel(
         source_wheel=wheel or _write_source_wheel(tmp_path),
         runtime=runtime or _write_runtime(tmp_path),
@@ -117,6 +142,9 @@ def _build(tmp_path: Path, *, wheel: Path | None = None, runtime: Path | None = 
         target=_TARGET,
         source_sha=_SOURCE_SHA,
         rule_digest=_RULE_DIGEST,
+        source_compiler=source_compiler,
+        implementation_digest=implementation_digest,
+        base_program_digest=base_program_digest,
     )
 
 
@@ -379,6 +407,65 @@ def test_native_wheel_injects_runtime_manifest_and_valid_record(tmp_path: Path) 
         for name in names - {record_path}:
             content = archive.read(name)
             assert by_name[name] == [_record_digest(content), str(len(content))]
+
+
+def test_native_wheel_injects_verified_source_compiler_manifest(tmp_path: Path) -> None:
+    compiler = _write_source_compiler(tmp_path)
+    implementation_digest = "c" * 64
+    base_program_digest = _RULE_DIGEST
+    output = _build(
+        tmp_path,
+        source_compiler=compiler,
+        implementation_digest=implementation_digest,
+        base_program_digest=base_program_digest,
+    )
+
+    with zipfile.ZipFile(output) as archive:
+        compiler_path = "codex_plugin_scanner/_native/guard-command-source"
+        manifest_path = "codex_plugin_scanner/_native/source-compiler-manifest.json"
+        assert archive.read(compiler_path) == compiler.read_bytes()
+        assert json.loads(archive.read(manifest_path)) == {
+            "compiler_sha256": hashlib.sha256(compiler.read_bytes()).hexdigest(),
+            "compiler_size": compiler.stat().st_size,
+            "base_program_digest": base_program_digest,
+            "implementation_digest": implementation_digest,
+            "package_version": _VERSION,
+            "platform_tag": _PLATFORM_TAG,
+            "protocol_version": 1,
+            "schema": "hol-guard-native-source-compiler.v1",
+            "source_sha": _SOURCE_SHA,
+            "target": _TARGET,
+        }
+        compiler_mode = stat.S_IMODE(archive.getinfo(compiler_path).external_attr >> 16)
+        assert compiler_mode == 0o755
+
+
+def test_native_wheel_requires_source_compiler_identity_pair(tmp_path: Path) -> None:
+    with pytest.raises(NativeWheelError, match="supplied together"):
+        _build(tmp_path, source_compiler=_write_source_compiler(tmp_path))
+    with pytest.raises(NativeWheelError, match="supplied together"):
+        _build(tmp_path, base_program_digest=_RULE_DIGEST)
+
+
+def test_native_wheel_rejects_source_compiler_program_identity_mismatch(tmp_path: Path) -> None:
+    with pytest.raises(NativeWheelError, match="match the packaged native command program"):
+        _build(
+            tmp_path,
+            source_compiler=_write_source_compiler(tmp_path),
+            implementation_digest="c" * 64,
+            base_program_digest="d" * 64,
+        )
+
+
+def test_native_wheel_requires_packaged_program_for_source_compiler(tmp_path: Path) -> None:
+    with pytest.raises(NativeWheelError, match="missing the packaged native command program"):
+        _build(
+            tmp_path,
+            wheel=_write_source_wheel(tmp_path),
+            source_compiler=_write_source_compiler(tmp_path),
+            implementation_digest="c" * 64,
+            base_program_digest=_RULE_DIGEST,
+        )
 
 
 def test_builder_does_not_modify_source_wheel(tmp_path: Path) -> None:

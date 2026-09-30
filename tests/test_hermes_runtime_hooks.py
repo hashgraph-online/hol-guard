@@ -21,8 +21,8 @@ from codex_plugin_scanner.guard.adapters.hermes_runtime_hooks import (
     hermes_native_decision,
 )
 from codex_plugin_scanner.guard.runtime.actions import normalize_hermes_payload
-from codex_plugin_scanner.guard.runtime.command_inspection import inspect_command
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.native_command_test_support import inspect_command_native_test as inspect_command
 
 
 def _ctx(tmp_path: Path) -> HarnessContext:

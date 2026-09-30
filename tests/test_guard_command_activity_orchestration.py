@@ -22,6 +22,7 @@ from codex_plugin_scanner.guard.mcp_tool_calls import ToolCallDecision
 from codex_plugin_scanner.guard.models import GuardAction, GuardArtifact
 from codex_plugin_scanner.guard.runtime import command_activity_cursor
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.native_command_activity_test_support import use_real_native_activity_reviews
 
 
 def _context(tmp_path: Path) -> HarnessContext:
@@ -202,6 +203,7 @@ def test_repeated_native_pre_hook_with_new_receipt_is_one_logical_activity(
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    use_real_native_activity_reviews(monkeypatch)
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     home_dir.mkdir()

@@ -101,7 +101,7 @@ jobs:
             --runtime "$HOL_GUARD_NATIVE_BINARY" \
             --warm-iterations 30 --cold-iterations 2 \
             --json rust-posttool-performance.json --enforce
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
           name: rust-posttool-authority-batch-2-evidence

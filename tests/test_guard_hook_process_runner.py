@@ -404,7 +404,7 @@ def test_worker_request_fails_safe_on_invalid_json() -> None:
 
 
 def test_prewarmed_runner_handles_real_hook_and_closes(tmp_path: Path) -> None:
-    runner = HookProcessRunner(process_limit=1, timeout_seconds=2)
+    runner = HookProcessRunner(process_limit=1, timeout_seconds=2 * under_coverage_scale(3.0))
     try:
         runner.start()
         result = runner.review(
@@ -648,10 +648,16 @@ def test_scheduler_and_runner_complete_48_routine_reviews_without_capacity_denia
         per_harness_queued_limit=64,
         per_client_queued_limit=16,
     )
+    timing_scale = under_coverage_scale(4.0)
+    # This contract measures capacity fan-in, not the production transport SLA.
+    # Keep the test deadline bounded while allowing loaded CI hosts to schedule
+    # all 48 fake-worker IPC calls without turning scheduler coverage flaky.
+    runner_timeout_seconds = 8.0 * timing_scale
+    review_timeout_seconds = 10.0 * timing_scale
     runner = HookProcessRunner(
         guard_home=tmp_path,
         process_limit=8,
-        timeout_seconds=4.0,
+        timeout_seconds=runner_timeout_seconds,
         capacity_listener=scheduler.set_active_limit,
     )
     # Exercise the real runner/scheduler IPC and lifecycle while avoiding the
@@ -660,7 +666,6 @@ def test_scheduler_and_runner_complete_48_routine_reviews_without_capacity_denia
     # Keep all 48 callers synchronized; the scheduler must queue more callers
     # than the eight-worker process pool while the runner remains integrated.
     barrier = threading.Barrier(48)
-    timing_scale = under_coverage_scale(4.0)
 
     def review(index: int) -> HookProcessReview:
         barrier.wait(timeout=3 * timing_scale)
@@ -680,7 +685,7 @@ def test_scheduler_and_runner_complete_48_routine_reviews_without_capacity_denia
                 guard_home=tmp_path,
                 workspace=tmp_path,
                 hook_env={},
-                deadline=time.monotonic() + 6 * timing_scale,
+                deadline=time.monotonic() + review_timeout_seconds,
             )
 
     try:
