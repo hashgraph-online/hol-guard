@@ -221,7 +221,7 @@ fn build_action_identity(
 pub(super) fn derive_context_with_snapshot(
     envelope: &guard_contracts::GuardHookEnvelopeV2,
     store: &crate::policy_store::PolicySnapshotStore,
-    snapshot: &guard_policy_snapshot::PolicySnapshotV3,
+    snapshot: &crate::policy_enforcement::AdmittedPolicySnapshot,
 ) -> Result<ApprovalContext, String> {
     let edge_bytes = crate::edge::evaluate_envelope_with_snapshot(envelope.clone(), snapshot)
         .map_err(|error| {
@@ -258,10 +258,14 @@ pub(super) fn derive_context_with_snapshot(
         .map_err(|_| "native_approval_result_invalid".to_owned())?;
     crate::policy_enforcement::validate_pre_tool_result_matrix(&result)
         .map_err(|_| "native_approval_action_reconstruction_failed".to_owned())?;
-    let intrinsic = guard_command::pretool::evaluate_pre_tool_envelope(
+    let intrinsic = guard_command::pretool::evaluate_pre_tool_envelope_with_source(
         &edge_result.harness,
         &edge_result.event_name,
         &envelope.raw_payload,
+        None,
+        None,
+        Some(envelope.source.home_dir.as_str()),
+        envelope.source.cwd.as_deref(),
     );
     if result.action != intrinsic.action
         || action_rank(&intrinsic.minimum_action).is_none()

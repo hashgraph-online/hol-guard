@@ -27,6 +27,8 @@ jobs:
       - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
         with:
           version: "0.9.26"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
       - name: Install policy dependencies
         run: uv sync --frozen --extra dev
       - name: Validate workflow policy code
@@ -48,6 +50,11 @@ jobs:
         with:
           python-version: "3.12"
       - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+          cache-dependency-glob: .github/workflows/security-gates.yml
+          cache-suffix: semgrep
       - name: Run Semgrep
         run: uvx --from semgrep semgrep --config p/owasp-top-ten --error src/codex_plugin_scanner/guard
 
@@ -80,13 +87,23 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
+      - name: Cache pinned Gitleaks binary
+        id: gitleaks-cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: ${{ runner.temp }}/gitleaks-bin
+          key: gitleaks-${{ runner.os }}-${{ runner.arch }}-go1.23-v8.24.2
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        if: steps.gitleaks-cache.outputs.cache-hit != 'true'
         with:
           go-version: "1.23"
+          cache: false
       - name: Install Gitleaks
+        if: steps.gitleaks-cache.outputs.cache-hit != 'true'
         run: |
-          GOBIN="$RUNNER_TEMP/bin" go install github.com/zricethezav/gitleaks/v8@v8.24.2
-          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          GOBIN="$RUNNER_TEMP/gitleaks-bin" go install github.com/zricethezav/gitleaks/v8@v8.24.2
+      - name: Add Gitleaks to PATH
+        run: echo "$RUNNER_TEMP/gitleaks-bin" >> "$GITHUB_PATH"
       - name: Determine Gitleaks scope
         id: gitleaks-scope
         env:

@@ -162,13 +162,17 @@ def run_guard_command(
     if isinstance(grok_executable, str) and grok_executable.strip():
         executable_overrides["grok"] = grok_executable.strip()
     context = HarnessContext(
-        home_dir=Path(home_override).resolve() if home_override else Path.home().resolve(),
+        home_dir=Path(home_override).expanduser().resolve() if home_override else Path.home().resolve(),
         workspace_dir=workspace,
         guard_home=guard_home,
         executable_overrides=executable_overrides,
         home_override_explicit=bool(home_override),
         workspace_override_explicit=bool(getattr(args, "workspace", None)),
     )
+    if args.guard_command == "doctor" and bool(getattr(args, "incident", False)):
+        from .doctor_incident import run_codex_incident_export
+
+        return run_codex_incident_export(args, context, output_stream=output_stream)
     try:
         enforce_lifecycle_gate(args, guard_home=guard_home)
     except ApprovalGateError as error:

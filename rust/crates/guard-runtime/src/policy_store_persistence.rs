@@ -149,6 +149,25 @@ pub(super) fn persist_authority(
     snapshot: Option<&PolicySnapshotV3>,
     verifier_key: &[u8; VERIFIER_KEY_BYTES],
 ) -> Result<(), String> {
+    let floor = super::policy_store_command_floor::snapshot_floor(snapshot);
+    persist_authority_with_control_floor(
+        path,
+        generation_floor,
+        policy_digest,
+        snapshot,
+        verifier_key,
+        floor.as_ref(),
+    )
+}
+
+pub(super) fn persist_authority_with_control_floor(
+    path: &Path,
+    generation_floor: u64,
+    policy_digest: &str,
+    snapshot: Option<&PolicySnapshotV3>,
+    verifier_key: &[u8; VERIFIER_KEY_BYTES],
+    command_control_floor: Option<&super::policy_store_command_floor::CommandControlFloor>,
+) -> Result<(), String> {
     let private_root = path
         .parent()
         .ok_or_else(|| "native_policy_snapshot_authority_parent_missing".to_owned())
@@ -166,7 +185,13 @@ pub(super) fn persist_authority(
         generation_floor,
         policy_digest: policy_digest.to_owned(),
         snapshot: snapshot.cloned(),
-        floor_mac: generation_floor_mac(generation_floor, policy_digest, verifier_key),
+        floor_mac: super::policy_store_command_floor::authority_floor_mac(
+            generation_floor,
+            policy_digest,
+            command_control_floor,
+            verifier_key,
+        )?,
+        command_control_floor: command_control_floor.cloned(),
     };
     let value = serde_json::to_value(record)
         .map_err(|_| "native_policy_snapshot_authority_encode_failed".to_owned())?;

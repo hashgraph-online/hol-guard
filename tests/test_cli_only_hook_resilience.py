@@ -83,6 +83,10 @@ def test_frozen_managed_cli_hooks_enter_supported_bridge_mode(
     factory: CommandFactory,
 ) -> None:
     monkeypatch.setattr("sys.frozen", True, raising=False)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge.isolated_cursor_hook_python",
+        lambda: None,
+    )
 
     command = factory(_context(tmp_path))
 
@@ -90,6 +94,38 @@ def test_frozen_managed_cli_hooks_enter_supported_bridge_mode(
     config = cast(dict[str, object], json.loads(command[2]))
     assert config["frozen_launcher"] is True
     assert config["harness"] == harness
+
+
+@pytest.mark.parametrize(
+    ("harness", "factory"),
+    [
+        ("copilot", _copilot_command),
+        ("grok", GrokHarnessAdapter._hook_command_parts),  # pyright: ignore[reportPrivateUsage]
+        ("kimi", KimiHarnessAdapter._hook_command_parts),  # pyright: ignore[reportPrivateUsage]
+        ("zcode", ZCodeHarnessAdapter._hook_command_parts),  # pyright: ignore[reportPrivateUsage]
+    ],
+)
+def test_frozen_managed_cli_hooks_prefer_isolated_stdlib_client(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    harness: str,
+    factory: CommandFactory,
+) -> None:
+    monkeypatch.setattr("sys.frozen", True, raising=False)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge.isolated_cursor_hook_python",
+        lambda: "/usr/bin/python3",
+    )
+
+    context = _context(tmp_path)
+    command = factory(context)
+
+    assert command[:2] == ("/usr/bin/python3", "-I")
+    assert "managed/bounded-hooks" in command[2].replace("\\", "/")
+    assert Path(command[2]).name == f"{harness}.py"
+    source = Path(command[2]).read_text(encoding="utf-8")
+    assert f'HARNESS = "{harness}"' in source
+    assert "daemon --serve" not in source
 
 
 @pytest.mark.parametrize(

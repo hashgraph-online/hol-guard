@@ -11,6 +11,7 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     is_explicitly_benign_tool_action_request,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.guard_signed_approval_fixtures import write_synthetic_daemon_auth_token
 
 
 @pytest.mark.parametrize(
@@ -57,6 +58,7 @@ def test_codex_unmatched_tool_block_returns_real_review_request(
     workspace = tmp_path / "x-ads-api-tools"
     workspace.mkdir()
     guard_home.mkdir()
+    write_synthetic_daemon_auth_token(guard_home)
     (guard_home / "config.toml").write_text(
         'mode = "enforce"\nsecurity_level = "balanced"\ndefault_action = "require-reapproval"\n'
     )
@@ -115,6 +117,7 @@ def test_codex_unmatched_tool_block_returns_real_review_request(
     assert len(pending) == 1, payload
     reason = payload["hookSpecificOutput"]["permissionDecisionReason"]
     assert "Open HOL Guard to approve or keep this blocked:" in reason
+    assert "guard-token=gld1." in reason
     assert "Approve it in HOL Guard, then retry." not in reason
     assert pending[0]["artifact_type"] == "tool_action_request"
     assert str(pending[0]["approval_url"]).endswith(f"/requests/{pending[0]['request_id']}")

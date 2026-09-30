@@ -35,7 +35,9 @@ const SENSITIVE_SEARCH_BASENAMES: &[&str] = &[
     "credentials",
     "id_rsa",
 ];
-const EXTERNAL_SENSITIVE_PARTS: &[&str] = &[
+/// Path components that mark credential/secret material when a read
+/// escapes the workspace. Shared with the native PreToolUse read floor.
+pub const EXTERNAL_SENSITIVE_PARTS: &[&str] = &[
     ".aws",
     ".docker",
     ".env",
@@ -97,7 +99,11 @@ fn hidden_parts_allowed(parts: &[String]) -> bool {
     workflow_prefix && hidden == [".github"]
 }
 
-fn sensitive_external_filename(path: &Path) -> bool {
+/// True when the basename or stem matches a sensitive filename family
+/// (`credentials`, `secrets`, `token`, `password`, `id_rsa`, `.env`, …).
+/// Unlike `sensitive_path_family`, this also catches plain filenames such
+/// as `credentials.txt` that carry no well-known parent directory.
+pub fn sensitive_external_filename(path: &Path) -> bool {
     let filename = path
         .file_name()
         .and_then(|value| value.to_str())
@@ -116,6 +122,52 @@ fn sensitive_external_filename(path: &Path) -> bool {
     stem.replace(['-', '.'], "_")
         .split('_')
         .any(|token| !token.is_empty() && EXTERNAL_SENSITIVE_PARTS.contains(&token))
+}
+
+pub fn credential_named_path(path: &Path) -> bool {
+    let normalized = path.to_string_lossy().replace('\\', "/");
+    let Some(last) = normalized.rsplit('/').find(|part| !part.is_empty()) else {
+        return false;
+    };
+    let last = Path::new(last);
+    let extension = last
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default();
+    // Keep bounded source-code inspection; credential data directories still
+    // retain review even when their final filename has no credential marker.
+    !is_source_code_extension(extension)
+        && normalized
+            .split('/')
+            .any(|part| sensitive_external_filename(Path::new(part)))
+}
+
+/// Code syntax eligible for source inspection. Data formats such as JSON,
+/// TOML, YAML, and Markdown still require credential-name and glob checks.
+pub fn is_source_code_extension(extension: &str) -> bool {
+    matches!(
+        extension.to_ascii_lowercase().as_str(),
+        "c" | "cc"
+            | "cpp"
+            | "css"
+            | "go"
+            | "h"
+            | "hpp"
+            | "html"
+            | "java"
+            | "js"
+            | "jsx"
+            | "mjs"
+            | "py"
+            | "rs"
+            | "sh"
+            | "ts"
+            | "tsx"
+    )
+}
+
+pub fn credential_path_markers() -> &'static [&'static str] {
+    EXTERNAL_SENSITIVE_PARTS
 }
 
 fn source_shape_allowed(path: &Path, parts: &[String]) -> bool {
@@ -416,6 +468,14 @@ pub fn sensitive_path_family(path: &Path) -> Option<(&'static str, &'static str)
         }
     }
     None
+}
+
+/// True when every hidden (`.`-prefixed) path component is on the benign
+/// dotfile list or the `.github/workflows` prefix. Used by the native
+/// PreToolUse floor so absolute/home-relative reads cannot silently enter
+/// dot-directories such as `.hol-guard`, `.git`, or `.config`.
+pub fn hidden_read_parts_allowed(path: &Path) -> bool {
+    hidden_parts_allowed(&lowered_parts(path))
 }
 
 pub fn source_like(path: &Path) -> bool {

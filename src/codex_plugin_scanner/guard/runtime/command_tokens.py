@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import shlex
 
@@ -34,10 +35,69 @@ def executable_name(value: str | None) -> str | None:
     return value.replace("\\", "/").rsplit("/", 1)[-1].lower()
 
 
+def _windows_shell_tokens(command: str) -> tuple[str, ...]:
+    """Keep unquoted Windows path separators and quoted POSIX escapes."""
+
+    tokens: list[str] = []
+    token: list[str] = []
+    started = False
+    quote = ""
+    escaped = False
+    for current in command:
+        if escaped:
+            if quote == '"' and current not in {'"', "\\", "$", "`"}:
+                token.append("\\")
+            token.append(current)
+            started = True
+            escaped = False
+            continue
+        if quote == "'":
+            if current == "'":
+                quote = ""
+            else:
+                token.append(current)
+                started = True
+            continue
+        if quote == '"':
+            if current == '"':
+                quote = ""
+            elif current == "\\":
+                escaped = True
+                started = True
+            else:
+                token.append(current)
+                started = True
+            continue
+        if current == "'":
+            quote = "'"
+            started = True
+        elif current == '"':
+            quote = '"'
+            started = True
+        elif current == "\\":
+            token.append("\\")
+            started = True
+        elif current in " \t\r\n":
+            if started:
+                tokens.append("".join(token))
+                token = []
+                started = False
+        else:
+            token.append(current)
+            started = True
+    if quote or escaped:
+        raise ValueError("malformed shell quoting")
+    if started:
+        tokens.append("".join(token))
+    return tuple(tokens)
+
+
 def shell_tokens(command: str) -> tuple[tuple[str, ...], bool]:
     """Tokenize shell text, reporting whether strict parsing succeeded."""
 
     try:
+        if os.name == "nt":
+            return _windows_shell_tokens(command), True
         return tuple(shlex.split(command, posix=True, comments=False)), True
     except ValueError:
         return tuple(command.split()), False
