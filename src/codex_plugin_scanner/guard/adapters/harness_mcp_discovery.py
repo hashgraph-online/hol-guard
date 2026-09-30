@@ -2,21 +2,24 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import shlex
 import subprocess
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from ..models import HarnessDetection
 from ..runtime.local_cli_identity import UnlistedCliIdentity
 from ..runtime.local_mcp_probe import mcp_launch_tokens
+from ..runtime.mcp_connection_identity import McpConnectionIdentity, build_mcp_connection_identity
 from ..runtime.mcp_protection import McpServerIdentity, build_mcp_server_identity
 from .contracts import display_name_for
-from .mcp_servers import ManagedMcpServer, managed_stdio_servers, proxy_process_env
+from .mcp_servers import ManagedMcpServer, observable_stdio_servers_with_proxy, proxy_process_env
 
 MAX_DISCOVERED_MCP_SERVERS = 40
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,6 +31,7 @@ class DiscoveredHarnessMcpServer:
     source_label: str
     launch_command: str
     env: tuple[tuple[str, str], ...] = ()
+    connection_identity: McpConnectionIdentity | None = None
 
 
 def discover_harness_mcp_servers(
@@ -40,14 +44,14 @@ def discover_harness_mcp_servers(
     """Return unique stdio MCP servers from harness configs. Does not probe."""
 
     loaded = detections if detections is not None else _safe_detections(home_dir, guard_home, workspace_dir)
-    groups: dict[tuple[str, str], _DiscoveryGroup] = {}
+    groups: dict[str, _DiscoveryGroup] = {}
     for detection in loaded:
-        for server in managed_stdio_servers(detection):
+        for server in observable_stdio_servers_with_proxy(detection):
             built = _identity_for(server)
             if built is None:
                 continue
-            identity, server_identity = built
-            key = (server_identity.command, server_identity.args_hash)
+            identity, server_identity, connection_identity = built
+            key = identity.identity_hash
             label = display_name_for(server.harness)
             current = groups.get(key)
             launch_command = _raw_launch_label(server.command, server.args)
@@ -58,22 +62,12 @@ def discover_harness_mcp_servers(
                     server_identity=server_identity,
                     launch_command=launch_command,
                     labels=[label],
-                    env_key_count=len(server_identity.env_keys),
                     env=env,
+                    connection_identity=connection_identity,
                 )
                 continue
             if label not in current.labels:
                 current.labels.append(label)
-            if env:
-                if current.env and current.env != env:
-                    current.env = ()
-                elif not current.env:
-                    current.env = env
-            if len(server_identity.env_keys) > current.env_key_count:
-                current.identity = identity
-                current.server_identity = server_identity
-                current.launch_command = launch_command
-                current.env_key_count = len(server_identity.env_keys)
     ranked = sorted(
         groups.values(),
         key=lambda group: (
@@ -90,6 +84,7 @@ def discover_harness_mcp_servers(
             source_label=_join_labels(group.labels),
             launch_command=group.launch_command,
             env=group.env,
+            connection_identity=group.connection_identity,
         )
         for group in ranked[:MAX_DISCOVERED_MCP_SERVERS]
     )
@@ -115,6 +110,9 @@ def persist_discovered_harness_mcp_servers(
             server_command=server.server_identity.command,
             server_args_hash=server.server_identity.args_hash,
             source_label=server.source_label,
+            connection_identity_hash=server.connection_identity.identity_hash
+            if server.connection_identity is not None
+            else None,
         )
         if isinstance(cli_id, str) and cli_id:
             labels[cli_id] = server.source_label
@@ -127,20 +125,46 @@ def discovered_server_for_observation(
     cli_id: str | None = None,
     server_command: str | None = None,
     args_hash: str | None = None,
+    server_identity_hash: str | None = None,
+    source_label: str | None = None,
 ) -> DiscoveredHarnessMcpServer | None:
     """Return the live discovered server for a stored observation. Does not persist."""
 
-    for server in servers:
-        if cli_id and server.identity.cli_id == cli_id:
-            return server
+    if cli_id:
+        matches = [
+            server
+            for server in servers
+            if server.identity.cli_id == cli_id
+            and (not server_identity_hash or server.server_identity.identity_hash == server_identity_hash)
+        ]
         if (
-            server_command
+            not matches
+            and server_identity_hash
+            and server_command
+            and args_hash
+            and source_label
+            and cli_id == f"local-cli.mcp-{server_identity_hash[:8]}"
+        ):
+            matches = [
+                server
+                for server in servers
+                if server.server_identity.identity_hash == server_identity_hash
+                and server.server_identity.command == server_command
+                and server.server_identity.args_hash == args_hash
+                and server.source_label == source_label
+            ]
+    elif server_identity_hash:
+        matches = [server for server in servers if server.server_identity.identity_hash == server_identity_hash]
+    else:
+        matches = [
+            server
+            for server in servers
+            if server_command
             and args_hash
             and server.server_identity.command == server_command
             and server.server_identity.args_hash == args_hash
-        ):
-            return server
-    return None
+        ]
+    return matches[0] if len(matches) == 1 else None
 
 
 def extra_env_for_mcp_launch(
@@ -152,7 +176,7 @@ def extra_env_for_mcp_launch(
     """Return harness-configured env for a listing probe. Values stay in memory."""
 
     matched = discovered_server_for_observation(servers, cli_id=cli_id)
-    if matched is None:
+    if matched is None and not cli_id:
         tokens = mcp_launch_tokens(command, cwd=Path.home(), home_dir=Path.home())
         if tokens is not None:
             identity = build_mcp_server_identity(
@@ -200,8 +224,8 @@ class _DiscoveryGroup:
     server_identity: McpServerIdentity
     launch_command: str
     labels: list[str]
-    env_key_count: int
     env: tuple[tuple[str, str], ...]
+    connection_identity: McpConnectionIdentity
 
 
 def _safe_detections(home_dir: Path, guard_home: Path, workspace_dir: Path | None) -> list[HarnessDetection]:
@@ -211,27 +235,56 @@ def _safe_detections(home_dir: Path, guard_home: Path, workspace_dir: Path | Non
     context = HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=guard_home)
     detections: list[HarnessDetection] = []
     for adapter in list_adapters():
-        try:
-            detections.append(adapter.detect(context))
-        except (OSError, RuntimeError, TypeError, ValueError, KeyError, UnicodeError):
-            continue
+        contexts = (context,)
+        if adapter.harness == "codex" and workspace_dir is not None:
+            # A managed Codex hook manifest binds the installation workspace
+            # and whether home was explicit. Both contexts still authenticate
+            # that manifest before their inventory can be used.
+            contexts = (
+                replace(context, home_override_explicit=True, workspace_override_explicit=True),
+                replace(context, home_override_explicit=False, workspace_override_explicit=True),
+            )
+        for adapter_context in contexts:
+            try:
+                detections.append(adapter.detect(adapter_context))
+                break
+            except (OSError, RuntimeError, UnicodeError) as exc:
+                logger.debug("MCP inventory skipped %s adapter after %s", adapter.harness, type(exc).__name__)
+                continue
+            except (TypeError, ValueError, KeyError) as exc:
+                logger.warning(
+                    "MCP inventory skipped %s adapter after invalid data (%s)",
+                    adapter.harness,
+                    type(exc).__name__,
+                )
+                continue
     return detections
 
 
-def _identity_for(server: ManagedMcpServer) -> tuple[UnlistedCliIdentity, McpServerIdentity] | None:
+def _identity_for(
+    server: ManagedMcpServer,
+) -> tuple[UnlistedCliIdentity, McpServerIdentity, McpConnectionIdentity] | None:
     server_identity = server.identity
     if server_identity is None or not server.command.strip():
         return None
     name = server.name.strip() or server_identity.package_name or Path(server.command).name or "mcp-server"
+    connection = build_mcp_connection_identity(
+        host=server.harness,
+        source_scope=server.source_scope,
+        config_path=server.config_path,
+        server_name=server.name,
+        server_identity_hash=server_identity.identity_hash,
+    )
     return (
         UnlistedCliIdentity(
-            cli_id=f"local-cli.mcp-{server_identity.identity_hash[:8]}",
+            cli_id=f"local-cli.mcp-{connection.identity_hash}",
             name=name[:120],
             kind="executable",
-            identity_hash=server_identity.identity_hash,
+            identity_hash=connection.identity_hash,
             example_label=_launch_label(server.command, server.args),
         ),
         server_identity,
+        connection,
     )
 
 
@@ -247,7 +300,10 @@ def _launch_label(command: str, args: tuple[str, ...]) -> str:
 
 
 def _raw_launch_label(command: str, args: tuple[str, ...]) -> str:
-    return _join_tokens((command, *args))
+    # Only presentation labels may be truncated; discovery must launch exact argv.
+    if os.name == "nt":
+        return subprocess.list2cmdline([command, *args])
+    return shlex.join((command, *args))
 
 
 def _join_tokens(tokens: Sequence[str]) -> str:

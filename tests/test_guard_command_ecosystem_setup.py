@@ -16,9 +16,9 @@ from codex_plugin_scanner.guard.runtime.command_ecosystem_detection import (
 )
 from codex_plugin_scanner.guard.runtime.command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
-    CommandSafetyExtension,
     CommandSafetyExtensionRegistry,
 )
+from tests.generated_command_catalog_test_support import generated_extension
 
 
 def test_package_extensions_delegate_to_existing_package_firewall() -> None:
@@ -50,7 +50,7 @@ def test_package_extensions_delegate_to_existing_package_firewall() -> None:
 
 
 def test_registry_rejects_incomplete_or_rule_owning_delegated_extensions() -> None:
-    incomplete = CommandSafetyExtension(
+    incomplete = generated_extension(
         extension_id="command.package.incomplete",
         version="1.0.0",
         name="Incomplete",
@@ -63,7 +63,7 @@ def test_registry_rejects_incomplete_or_rule_owning_delegated_extensions() -> No
     with pytest.raises(ValueError, match="requires ecosystem and executable metadata"):
         _ = CommandSafetyExtensionRegistry((incomplete,))
 
-    owning = CommandSafetyExtension(
+    owning = generated_extension(
         extension_id="command.package.owning",
         version="1.0.0",
         name="Owning",
@@ -92,7 +92,7 @@ def test_registry_rejects_path_bearing_detection_metadata(
     project_markers: tuple[str, ...],
     message: str,
 ) -> None:
-    extension = CommandSafetyExtension(
+    extension = generated_extension(
         extension_id="command.package.unsafe",
         version="1.0.0",
         name="Unsafe",
@@ -157,6 +157,21 @@ def test_command_setup_detect_json_is_deterministic_and_side_effect_free(
     assert payload["recommended_extension_ids"] == ["command.package.python"]
     assert payload["recommended_count"] == 1
     assert payload["detected_count"] == 1
+
+
+def test_command_setup_preserves_workspace_before_subcommand(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "pyproject.toml").write_text("[project]\nname='demo'\n", encoding="utf-8")
+    monkeypatch.setattr(command_ecosystem_detection.shutil, "which", lambda _executable: None)
+
+    rc = main(["guard", "command", "--workspace", str(tmp_path), "setup", "--detect", "--json"])
+
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["recommended_extension_ids"] == ["command.package.python"]
 
 
 def test_command_setup_detect_rejects_missing_workspace(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

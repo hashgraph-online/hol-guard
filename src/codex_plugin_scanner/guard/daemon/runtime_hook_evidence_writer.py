@@ -25,13 +25,17 @@ from ..runtime.command_activity_correlation import (
     load_or_create_installation_correlation_key,
 )
 from ..runtime.command_activity_display import build_invocation_preview_from_payload
-from ..runtime.command_activity_lifecycle import build_native_pre_hook_evidence
+from ..runtime.command_activity_lifecycle import build_policy_only_pre_hook_evidence
 from ..runtime.command_activity_privacy import InstallationCorrelationKey
+from ..runtime.composio_discovery import composio_discovered_actions
+from ..runtime.composio_workflows import composio_workflow_proposals
+from ..runtime.observed_mcp_tools import observed_mcp_tool
 from ..sqlite_tuning import sqlite_connect_timeout_override
 from ..store import GuardStore
 from .runtime_hook_evidence_journal import (
     _CommandActivityRecord,
     _EvidenceRecord,
+    _McpDiscoveryRecord,
     _NativeDecisionReceiptRecord,
     _payload_has_command,
     append_journal,
@@ -182,6 +186,52 @@ class RuntimeHookEvidenceWriter:
             self._condition.notify()
         return True
 
+    def submit_composio_discovery(
+        self,
+        *,
+        harness: str,
+        payload: Mapping[str, object],
+        succeeded: bool,
+    ) -> bool:
+        """Queue only bounded provider metadata; exclude raw outputs and account/session data."""
+        tool_name = payload.get("tool_name")
+        if not succeeded or not isinstance(tool_name, str):
+            return False
+        source = observed_mcp_tool(harness, tool_name)
+        if source is None:
+            return False
+        actions = composio_discovered_actions(tool_name, payload.get("tool_response"))
+        if actions is None:
+            return False
+        proposals = composio_workflow_proposals(tool_name, payload.get("tool_response"))
+        if proposals is None:
+            # Guidance is optional and advisory. Keep valid schema evidence when
+            # a provider adds an unsupported or malformed recommendation shape.
+            proposals = ()
+        record = _McpDiscoveryRecord(
+            uuid4().hex,
+            source.harness,
+            source.qualified_name,
+            datetime.now(timezone.utc).isoformat(),
+            actions,
+            proposals,
+        )
+        record = replace(record, payload_bytes=len(record.serialized()))
+        with self._condition:
+            if (
+                self._stopping
+                or len(self._records) >= self._max_records
+                or self._queued_bytes + record.payload_bytes > self._max_bytes
+            ):
+                self._dropped += 1
+                self._degraded = True
+                return False
+            self._records.append(record)
+            self._queued_bytes += record.payload_bytes
+            self._accepted += 1
+            self._condition.notify()
+        return True
+
     def submit_native_decision_receipt(self, receipt: Mapping[str, object]) -> bool:
         """Queue one Rust receipt without touching SQLite or waiting on I/O."""
 
@@ -313,6 +363,16 @@ class RuntimeHookEvidenceWriter:
                             )
                             if not persisted:
                                 raise RuntimeError("native receipt persistence was not acknowledged")
+                        elif isinstance(record, _McpDiscoveryRecord):
+                            source = observed_mcp_tool(record.harness, record.tool_name)
+                            if source is None:
+                                raise ValueError("provider discovery source changed")
+                            self._store.record_composio_discovery(
+                                source,
+                                record.actions,
+                                proposals=record.proposals,
+                                seen_at=record.occurred_at,
+                            )
                         elif record.event == "PreToolUse":
                             if (
                                 record.has_command
@@ -336,7 +396,7 @@ class RuntimeHookEvidenceWriter:
                                         ).encode("utf-8")
                                     ).hexdigest()
                                     correlation = replace(correlation, digest=digest)
-                                evidence = build_native_pre_hook_evidence(
+                                evidence = build_policy_only_pre_hook_evidence(
                                     activity_id=record.record_id,
                                     occurred_at=datetime.fromisoformat(record.occurred_at),
                                     harness=record.harness,

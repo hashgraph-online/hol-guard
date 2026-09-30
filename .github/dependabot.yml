@@ -21,6 +21,24 @@ updates:
         update-types:
           - "major"
 
+  - package-ecosystem: "pip"
+    directory: "/tests/dockerlabs/codex-cli-resume"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "05:05"
+      timezone: "America/New_York"
+    open-pull-requests-limit: 2
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "deps(pip)"
+    groups:
+      codex-lab-patch-minor:
+        update-types:
+          - "minor"
+          - "patch"
+
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
@@ -38,7 +56,12 @@ updates:
     # permission/runtime change can be reviewed before its SHA moves.
 
   - package-ecosystem: "docker"
-    directory: "/"
+    directories:
+      - "/"
+      - "/scripts/dockerlabs"
+      - "/scripts/mdm"
+      - "/tests/dockerlabs/codex-cli-resume"
+      - "/tests/dockerlabs/command-extension-analytics"
     schedule:
       interval: "weekly"
       day: "monday"
@@ -53,3 +76,42 @@ updates:
       docker-all:
         patterns:
           - "*"
+
+  - package-ecosystem: "npm"
+    directories:
+      - "/dashboard"
+      - "/.github/tools/mcpb-cli"
+      - "/.github/tools/containment-ci"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "05:45"
+      timezone: "America/New_York"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "deps(npm)"
+    groups:
+      npm-patch-minor:
+        update-types:
+          - "minor"
+          - "patch"
+
+  - package-ecosystem: "bun"
+    directory: "/dashboard"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "America/New_York"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "deps(bun)"
+    groups:
+      bun-patch-minor:
+        update-types:
+          - "minor"
+          - "patch"

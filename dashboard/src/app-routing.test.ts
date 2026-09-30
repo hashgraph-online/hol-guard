@@ -32,6 +32,8 @@ assert(resolveView("/apps/%2A") === "fleet", "encoded wildcard app route falls b
 assert(resolveView(PROTECT_ROUTE) === "fleet", "/protect resolves to protect workspace view");
 assert(resolveView("/about") === "about", "/about resolves to about view");
 assert(TODAY_EVIDENCE_ROUTE === "/evidence?time=today", "daily activity opens Evidence filtered to today");
+assert(resolveView("/protection/repair") === "protection-repair", "the repair link opens the one-button repair page");
+assert(viewTitle("protection-repair") === "Repair protection", "the repair page title names the action");
 assert(resolveView("/extensions/command.git") === "extensions", "canonical extension detail route resolves to extensions view");
 assert(resolveView("/extensions/%2Fetc%2Fpasswd") === "extensions", "invalid nested extension route stays inside extensions fail-closed view");
 assert(viewTitle("about") === "About", "about view title is About");
@@ -92,6 +94,7 @@ assert(harnessDisplayName("*") === "All apps", "wildcard pseudo-harness never re
 assert(harnessDisplayName("grok") === "Grok", "grok harness displays as Grok");
 assert(harnessDisplayName("omp") === "Oh My Pi", "omp harness displays as Oh My Pi");
 assert(harnessDisplayName("zcode") === "ZCode", "zcode harness displays as ZCode");
+assert(harnessDisplayName("guard-cli") === "Guard CLI", "guard-cli harness displays as Guard CLI");
 assert(harnessDisplayName("grok") !== "*", "grok harness never renders as wildcard");
 assert(
   harnessDisplayName("Ce2b7ac2ccab4fab9902347b033bf25e") === "Unknown app",

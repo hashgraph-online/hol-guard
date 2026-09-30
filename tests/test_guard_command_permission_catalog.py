@@ -15,7 +15,6 @@ from codex_plugin_scanner.guard.runtime.command_permission_catalog import (
     CommandPermissionCatalog,
     CommandPermissionSpec,
 )
-from codex_plugin_scanner.guard.runtime.command_rules import ExecutableMatcher
 from codex_plugin_scanner.guard.runtime.github_capability_contract import GitHubCommandCapability
 
 _GITHUB_PERMISSION_IDS = {
@@ -203,16 +202,17 @@ def test_permission_catalog_serialization_and_digest_are_deterministic() -> None
     )
 
 
-def test_registry_digest_changes_when_nested_matcher_contract_changes() -> None:
+def test_registry_digest_changes_when_generated_matcher_contract_changes() -> None:
     registry = BUILT_IN_COMMAND_EXTENSION_REGISTRY
     extension = next(item for item in registry.extensions if item.extension_id == "command.container-runtime")
-    rule_index = next(
-        index for index, item in enumerate(extension.rules) if isinstance(item.matcher, ExecutableMatcher)
-    )
+    rule_index = next(index for index, item in enumerate(extension.rules) if item.matcher_kind == "native-matcher.v1")
     rule = extension.rules[rule_index]
-    assert isinstance(rule.matcher, ExecutableMatcher)
-    changed_matcher = replace(rule.matcher, required_flags=rule.matcher.required_flags | {"--identity-test"})
-    changed_rule = replace(rule, matcher=changed_matcher)
+    changed_rule = replace(
+        rule,
+        matcher_contract_digest=canonical_contract_digest(
+            {"matcher_contract_digest": rule.matcher_contract_digest, "required_flags": ["--identity-test"]}
+        ),
+    )
     changed_extension = replace(
         extension,
         rules=(*extension.rules[:rule_index], changed_rule, *extension.rules[rule_index + 1 :]),
@@ -224,9 +224,7 @@ def test_registry_digest_changes_when_nested_matcher_contract_changes() -> None:
     assert changed_rule.to_dict()["matcher_contract_digest"] != rule.to_dict()["matcher_contract_digest"]
     assert changed_registry.catalog_digest != registry.catalog_digest
 
-    family_extension = next(
-        item for item in registry.extensions if any(rule.family is not None for rule in item.rules)
-    )
+    family_extension = next(item for item in registry.extensions if any(rule.family is not None for rule in item.rules))
     family_rule_index = next(index for index, item in enumerate(family_extension.rules) if item.family is not None)
     family_rule = family_extension.rules[family_rule_index]
     assert family_rule.family is not None
