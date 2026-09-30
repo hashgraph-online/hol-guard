@@ -15,13 +15,11 @@ def test_command_extension_registry_is_deterministic_and_complete() -> None:
     assert ids == sorted(ids)
     assert payload["count"] == len(BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions)
     assert "command.shell-mutations" in ids
-    assert "command.kim" in ids
     assert "command.ollama" in ids
     assert BUILT_IN_COMMAND_EXTENSION_REGISTRY.for_action_class("destructive shell command") is not None
     assert BUILT_IN_COMMAND_EXTENSION_REGISTRY.rule_for_action_class("destructive shell command") is not None
     assert BUILT_IN_COMMAND_EXTENSION_REGISTRY.for_action_class("GitHub merge command") is not None
     assert BUILT_IN_COMMAND_EXTENSION_REGISTRY.rule_for_action_class("GitHub merge command") is not None
-    assert BUILT_IN_COMMAND_EXTENSION_REGISTRY.for_action_class("kim reminder add command") is not None
     assert BUILT_IN_COMMAND_EXTENSION_REGISTRY.for_action_class("Ollama model publication command") is not None
     program_path = Path(__file__).resolve().parents[1] / "contracts/extensions/native-command-program.v1.json"
     program = json.loads(program_path.read_bytes())
