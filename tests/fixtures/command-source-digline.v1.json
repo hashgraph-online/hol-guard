@@ -16541,6 +16541,7 @@
     "trust": {
       "classes": {
         "external": [
+          "command.agentbridge",
           "command.blitcp",
           "command.cloudg",
           "command.cogext",
