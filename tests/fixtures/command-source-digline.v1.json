@@ -16541,6 +16541,7 @@
     "trust": {
       "classes": {
         "external": [
+          "command.aether-vault",
           "command.blitcp",
           "command.cloudg",
           "command.cogext",
