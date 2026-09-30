@@ -1,0 +1,39 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.x-reader",
+  "version": "1.0.0",
+  "name": "x-reader MCP",
+  "description": "Reviews x-reader tools that ingest untrusted external content or return locally cached source material. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.runesleo",
+    "displayName": "Leo (@runes_leo)",
+    "url": "https://github.com/runesleo/x-reader"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniGlobeAlt", "background": "#0F172A" },
+  "homepage": "https://github.com/runesleo/x-reader#readme",
+  "license": "MIT",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "uvx",
+    "package": "git+https://github.com/runesleo/x-reader.git"
+  },
+  "riskClasses": ["external-content-ingestion", "local-content-read"],
+  "tools": [
+    { "name": "read_url", "state": "review" },
+    { "name": "read_batch", "state": "review" },
+    { "name": "list_inbox", "state": "review" },
+    { "name": "detect_platform", "state": "inherit" },
+    { "name": "other", "state": "inherit" }
+  ],
+  "referenceUrls": [
+    "https://github.com/runesleo/x-reader",
+    "https://github.com/runesleo/x-reader/blob/main/README.md",
+    "https://github.com/runesleo/x-reader/blob/main/SECURITY.md"
+  ],
+  "saferAlternatives": [
+    "Use detect_platform when you only need routing information; it does not fetch the source.",
+    "Keep authenticated browser or session configuration out of x-reader unless gated-source access is required."
+  ]
+}
