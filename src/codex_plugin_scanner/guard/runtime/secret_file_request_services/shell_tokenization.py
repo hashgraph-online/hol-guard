@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import shlex
 
@@ -232,6 +233,9 @@ def _split_shell_parts(command_text: str) -> list[str]:
             punctuation_chars=";&|",
         )
         lexer.whitespace_split = True
+        if os.name == "nt":
+            # cmd and PowerShell treat backslash as a path separator.
+            lexer.escape = "\x00"
         parts = [token.replace(_SHELL_NOCLOBBER_SENTINEL, ">|") for token in lexer]
     except ValueError:
         parts = command_text.split()

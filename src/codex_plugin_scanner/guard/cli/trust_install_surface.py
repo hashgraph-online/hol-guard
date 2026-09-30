@@ -53,6 +53,12 @@ def _installed_trust_cli_payload(
             installation_mode = "editable"
         else:
             installation_mode = "packaged"
+    if install_surface.get("installer") == "desktop" and binary_diagnostics.get("path_status") == "bundled":
+        # Frozen Core can retain editable metadata from its build environment.
+        # That metadata does not describe how the running bundle is installed.
+        installation_mode = "desktop-managed"
+        editable_install = False
+        official_install = False
     active_command_status = str(binary_diagnostics.get("path_status") or "unknown")
     active_command_verified = active_command_status in {
         "pipx_shim_detected",

@@ -18,6 +18,7 @@ from codex_plugin_scanner.guard.runtime.extension_control_contract import CONTRO
 from codex_plugin_scanner.guard.runtime.extension_control_limits import advertised_extension_control_limits
 from codex_plugin_scanner.guard.runtime.extension_control_runtime import ExtensionControlRuntime
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.support.extension_freshness import requires_fresh_projections
 
 _FIXTURE = Path(__file__).parent / "fixtures" / "extension-controls" / "catalog-baseline.v1.json"
 _API_SCHEMA = "guard.daemon.extension-controls.v1"
@@ -63,6 +64,7 @@ def _identity_snapshot() -> dict[str, object]:
     }
 
 
+@requires_fresh_projections
 def test_catalog_identity_matches_generated_baseline_fixture() -> None:
     baseline = json.loads(_FIXTURE.read_text(encoding="utf-8"))
     actual = _identity_snapshot()

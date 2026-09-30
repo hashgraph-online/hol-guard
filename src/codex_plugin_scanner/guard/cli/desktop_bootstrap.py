@@ -54,15 +54,19 @@ def run_desktop_bootstrap_cli(*, output_stream: TextIO | None = None) -> int:
         print(f"Error: {error}", file=sys.stderr)
         return 2
     args = argparse.Namespace(guard_command="desktop", desktop_command="bootstrap", json=True)
-    return _run_guard_desktop_command(
-        args,
-        guard_home=guard_home,
-        workspace=None,
-        context=context,
-        store=store,
-        config=config,
-        output_stream=output_stream,
-    )
+    try:
+        return _run_guard_desktop_command(
+            args,
+            guard_home=guard_home,
+            workspace=None,
+            context=context,
+            store=store,
+            config=config,
+            output_stream=output_stream,
+        )
+    except RuntimeError as error:
+        print(f"Error: {error}", file=sys.stderr)
+        return 3
 
 
 __all__ = [

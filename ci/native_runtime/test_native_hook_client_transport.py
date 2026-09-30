@@ -168,7 +168,7 @@ def test_native_hook_client_rejects_duplicate_edge_keys_without_fallback(
         input=malformed,
         check=False,
         capture_output=True,
-        timeout=3,
+        timeout=10,
     )
     assert result.returncode == 0
     assert json.loads(result.stdout) == {

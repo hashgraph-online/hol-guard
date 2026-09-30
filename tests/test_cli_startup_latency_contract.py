@@ -281,3 +281,54 @@ def test_install_dry_run_reports_every_requested_harness(tmp_path: Path, monkeyp
 
     payload = json.loads(output)
     assert [plan.get("harness") for plan in payload.get("setup_plans", [])] == ["cursor", "codex"]
+
+
+def test_desktop_bootstrap_runtime_error_from_command_body_exits_3(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from codex_plugin_scanner.guard.cli import commands_dispatch_desktop, desktop_bootstrap
+
+    home_dir = tmp_path / "home"
+    home_dir.mkdir()
+    monkeypatch.setattr(Path, "home", lambda: home_dir)
+    monkeypatch.setenv("HOL_GUARD_HOME", str(tmp_path / "guard-home"))
+    monkeypatch.setattr(
+        commands_dispatch_desktop,
+        "_run_guard_desktop_command",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            RuntimeError("Guard daemon is still starting; retry shortly.")
+        ),
+    )
+
+    captured_err = io.StringIO()
+    captured_out = io.StringIO()
+    with contextlib.redirect_stderr(captured_err), contextlib.redirect_stdout(captured_out):
+        code = desktop_bootstrap.run_desktop_bootstrap_cli()
+
+    assert code == 3
+    assert captured_err.getvalue() == "Error: Guard daemon is still starting; retry shortly.\n"
+    assert captured_out.getvalue() == ""
+
+
+def test_desktop_bootstrap_store_open_oserror_still_exits_2(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from codex_plugin_scanner.guard import store as store_module
+    from codex_plugin_scanner.guard.cli import desktop_bootstrap
+
+    monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+    monkeypatch.setenv("HOL_GUARD_HOME", str(tmp_path / "guard-home"))
+    monkeypatch.setattr(
+        store_module,
+        "GuardStore",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("disk gone")),
+    )
+
+    captured_err = io.StringIO()
+    with contextlib.redirect_stderr(captured_err):
+        code = desktop_bootstrap.run_desktop_bootstrap_cli()
+
+    assert code == 2
+    assert captured_err.getvalue().startswith("Error: ")

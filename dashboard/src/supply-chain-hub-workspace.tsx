@@ -1,4 +1,4 @@
-import { Suspense, useCallback, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { GuardApprovalGatePublicConfig, GuardPolicyDecision, GuardReceipt, GuardRuntimeSnapshot } from "./guard-types";
 import { WorkspacePageHeader } from "./workspace-page-header";
 import { SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS } from "./supply-chain-workspace-layout";
@@ -67,6 +67,10 @@ export function SupplyChainHubWorkspace(props: {
     [props.snapshot.managed_installs],
   );
 
+  useEffect(() => {
+    auditSession.adoptDiscoveredAuditWorkspace(managedAuditWorkspaceDir);
+  }, [auditSession.adoptDiscoveredAuditWorkspace, managedAuditWorkspaceDir]);
+
   const handleTabChange = useCallback(
     (value: HubTab) => {
       const path = value === "supply-chain" ? "/supply-chain" : `/${value}`;
@@ -120,6 +124,7 @@ export function SupplyChainHubWorkspace(props: {
           onAuditConnectGateChange={auditSession.setAuditConnectGate}
           onAuditErrorChange={auditSession.handleAuditErrorChange}
           onAuditWorkspaceRequired={auditSession.handleAuditWorkspaceRequired}
+          onAuditWorkspaceDiscovered={auditSession.adoptDiscoveredAuditWorkspace}
           onStateChanged={props.onRuntimeRefresh}
           onAuditStarted={auditSession.handleAuditStarted}
           onAuditCompleted={auditSession.handleAuditCompleted}
