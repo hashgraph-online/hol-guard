@@ -89,6 +89,9 @@ fn snapshot(policy: EffectiveNativePolicyV3) -> PolicySnapshotV3 {
 #[path = "policy_enforcement_observed_mcp_tests.rs"]
 mod observed_mcp;
 
+#[path = "policy_enforcement_codex_budget_tests.rs"]
+mod codex_budget;
+
 fn generic_result(minimum_action: &str) -> PreToolResultV1 {
     PreToolResultV1 {
         schema: "guard-pre-tool-result.v1".into(),

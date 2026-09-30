@@ -68,10 +68,7 @@ pub(super) fn safe_read_target(argument: &str) -> bool {
         || lowered.starts_with('~')
         || super::sensitive_command(argument)
         || super::sensitive_command(&normalized)
-        || guard_secure_fs::sensitive_path_family(std::path::Path::new(
-            normalized.trim_start_matches("./"),
-        ))
-        .is_some()
+        || super::sensitive_read_path_argument(&normalized)
     {
         return false;
     }
