@@ -408,7 +408,10 @@ const {{ ExtensionRunner, createExtensionRuntime }} = await import(
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const handler = async () => {{
-  await delay(5_500);
+  const deadline = performance.now() + 5_500;
+  while (performance.now() < deadline) {{
+    await delay(Math.ceil(deadline - performance.now()));
+  }}
   return undefined;
 }};
 const extension = {{

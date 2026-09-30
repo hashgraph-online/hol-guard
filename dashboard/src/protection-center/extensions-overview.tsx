@@ -9,10 +9,8 @@ import type { EffectiveExtensionControls, ExtensionCatalogItem } from "../extens
 import { connectorWorkspaceItems, refreshMcpInventory, type LocalCliItem } from "../local-cli-api";
 import { WorkspacePageHeader } from "../workspace-page-header";
 import { LocalSkillsWorkspace } from "./local-skills-workspace";
-import {
-  AddCustomExtensionButton,
-  CustomExtensionsSection,
-} from "./local-clis-panel";
+import { AddCustomExtensionButton } from "./local-clis-panel";
+import { CustomExtensionsSection } from "./custom-extensions-section";
 import { CatalogFilterBar, CatalogFilterTrigger } from "./components/catalog-filter-bar";
 import { PatternSearchConsole } from "./components/pattern-search-console";
 import {
@@ -210,10 +208,11 @@ export function ExtensionsOverview(props: {
   const handleClearFilters = useCallback(() => {
     setFilters(EMPTY_CATALOG_FILTERS);
   }, []);
-  const addedCustomItems = connectorWorkspaceItems(props.localCliItems).filter((item) =>
+  const allCustomItems = connectorWorkspaceItems(props.localCliItems);
+  const addedCustomItems = allCustomItems.filter((item) =>
     customItemMatchesFilters(item, filters),
   );
-  const addedCustomCount = addedCustomItems.length;
+  const customItemsFilteredOut = filtering && allCustomItems.length > 0 && addedCustomItems.length === 0;
   return (
     <div hidden={!props.active} inert={!props.active || undefined}>
       <WorkspacePageHeader
@@ -293,13 +292,14 @@ export function ExtensionsOverview(props: {
 
       {searching ? null : (
         <>
-          {addedCustomCount ? (
-            <CustomExtensionsSection
-              items={addedCustomItems}
-              onOpen={props.onOpenLocalCli}
-              onAdd={props.onAddCustom}
-            />
-          ) : null}
+          <CustomExtensionsSection
+            items={addedCustomItems}
+            onOpen={props.onOpenLocalCli}
+            onAdd={props.onAddCustom}
+            discovering={discovering}
+            filteredOut={customItemsFilteredOut}
+            onClearFilters={handleClearFilters}
+          />
 
           <LocalSkillsWorkspace />
           <section className="mt-10" aria-labelledby="all-tools-heading">
@@ -313,7 +313,6 @@ export function ExtensionsOverview(props: {
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-3">
-                {addedCustomCount ? null : <AddCustomExtensionButton onClick={props.onAddCustom} />}
                 <span className="text-sm text-brand-dark/70" data-testid="catalog-tool-count" aria-live="polite">
                   {catalogFilterCountCopy(visibleCatalog.length, props.catalogExtensions.length, filtering)}
                 </span>

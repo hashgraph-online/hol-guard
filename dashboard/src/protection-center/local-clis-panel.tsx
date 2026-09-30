@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { HiMiniArrowLeft, HiMiniPlus } from "react-icons/hi2";
 
 import {
-  connectorWorkspaceItems,
   applyBulkCommandState,
   applyLocalCliMutation,
   bulkCommandState,
@@ -20,12 +19,12 @@ import { BulkPolicyPicker } from "./add-custom-extension-catalog";
 import { CustomExtensionCommandList, commandStatesPayload, withCommandState } from "./custom-extension-commands";
 import { McpDeclaredSkills } from "./mcp-declared-skills";
 import { useResolvedApprovalGate } from "../use-resolved-approval-gate";
-import { InlineError, ProtectionModuleRow } from "./components/protection-primitives";
+import { InlineError } from "./components/protection-primitives";
 import { customExtensionContinuityView } from "../managed-controls/custom-extension-continuity";
 import { commandPermissionChanges, mcpCatalogCopy, mcpToolCanReceiveDirectAllow, rebaseCommandDraft } from "./mcp-catalog-state";
 import { McpProviderActions, type ProviderActionDraft } from "./mcp-provider-actions";
 import { ProviderWorkflows } from "./provider-workflows";
-import { bulkPolicyCopy, continuityCopy, customExtensionRowDescription, customExtensionStateLabel, detailCatalogHeading, detailCatalogHelper, detailPolicyCopy, mcpPermissionStatusLabel, nativePublicationMessage, randomToken } from "./local-cli-panel-copy";
+import { bulkPolicyCopy, detailCatalogHeading, detailCatalogHelper, detailPolicyCopy, mcpPermissionStatusLabel, nativePublicationMessage, randomToken } from "./local-cli-panel-copy";
 import { CustomExtensionReviewModal } from "./local-cli-review-modal";
 
 export { customExtensionStateLabel } from "./local-cli-panel-copy";
@@ -33,82 +32,12 @@ export { customExtensionStateLabel } from "./local-cli-panel-copy";
 export { AddCustomExtensionWorkspace } from "./add-custom-extension-dialog";
 export { useLocalCliCatalog } from "./use-local-cli-catalog";
 
-export function CustomExtensionsSection(props: {
-  items: LocalCliItem[];
-  onOpen: (cliId: string) => void;
-  onAdd: () => void;
-}) {
-  const [search, setSearch] = useState("");
-  const [page, setPage] = useState(0);
-  const added = connectorWorkspaceItems(props.items, search);
-  const currentPage = Math.min(page, Math.max(0, Math.ceil(added.length / 25) - 1));
-  const visible = added.slice(currentPage * 25, (currentPage + 1) * 25);
-  return (
-    <section className="mt-10" aria-labelledby="custom-extensions-heading">
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h2 id="custom-extensions-heading" className="text-xl font-semibold tracking-tight text-brand-dark">Custom extensions</h2>
-          <p className="mt-1 text-sm text-slate-500">Detected connectors and your own tools. Inspect a connection to choose its permissions.</p>
-        </div>
-        <button type="button" onClick={props.onAdd} className="inline-flex min-h-11 items-center gap-2 rounded-xl px-3 text-sm font-semibold text-brand-blue">
-          <HiMiniPlus className="size-4" aria-hidden="true" />
-          Add custom extension
-        </button>
-      </div>
-      <label className="mt-4 block max-w-xl text-sm font-semibold text-brand-dark">
-        Find a connector or custom tool
-        <input type="search" value={search} onChange={(event) => { setSearch(event.target.value); setPage(0); }}
-          placeholder="Name, host, or tool identifier"
-          className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 font-normal" />
-      </label>
-      {added.length === 0 ? (
-        <p className="mt-4 text-sm leading-6 text-brand-dark/75">{search ? "No connections match this search."
-          : "No connectors found yet. Add a connection or refresh its inventory in your host app."}</p>
-      ) : (
-        <div className="mt-4">
-          {visible.map((item) => (
-            <CustomExtensionRow key={item.cli_id} item={item} onOpen={props.onOpen} />
-          ))}
-        </div>
-      )}
-      {added.length > 25 ? <nav aria-label="Custom extension pages" className="mt-4 flex flex-wrap items-center gap-3">
-        <button type="button" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}
-          className="min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold disabled:opacity-50">Previous</button>
-        <span className="text-sm text-brand-dark/75">Page {currentPage + 1} of {Math.ceil(added.length / 25)}</span>
-        <button type="button" disabled={(currentPage + 1) * 25 >= added.length} onClick={() => setPage(currentPage + 1)}
-          className="min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold disabled:opacity-50">Next</button>
-      </nav> : null}
-    </section>
-  );
-}
-
 export function AddCustomExtensionButton(props: { onClick: () => void }) {
   return (
     <button type="button" onClick={props.onClick} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-brand-dark">
       <HiMiniPlus className="size-4" aria-hidden="true" />
       Add custom extension
     </button>
-  );
-}
-
-function CustomExtensionRow(props: { item: LocalCliItem; onOpen: (cliId: string) => void }) {
-  const cliId = props.item.cli_id;
-  const onOpen = props.onOpen;
-  const handleOpen = useCallback(() => {
-    onOpen(cliId);
-  }, [cliId, onOpen]);
-  const continuity = continuityCopy(props.item);
-  const catalog = mcpCatalogCopy(props.item);
-  return (
-    <ProtectionModuleRow
-      extensionId={props.item.cli_id}
-      name={props.item.name}
-      description={customExtensionRowDescription(props.item, catalog?.title ?? null)}
-      behavior={continuity ? `${continuity.title}. ${continuity.description}` : customExtensionStateLabel(props.item)}
-      custom
-      executables={[props.item.name]}
-      onOpen={handleOpen}
-    />
   );
 }
 

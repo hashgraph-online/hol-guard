@@ -317,7 +317,7 @@ def _hol_guard_command_name(command: str) -> str | None:
         if cmd_name.endswith(suffix):
             cmd_name = cmd_name[: -len(suffix)]
             break
-    return cmd_name if cmd_name == "hol-guard" else None
+    return cmd_name if cmd_name in {"hol-guard", "current-hol-guard"} else None
 
 
 def is_guard_proxy_command(command: str | None, args: tuple[str, ...]) -> bool:
