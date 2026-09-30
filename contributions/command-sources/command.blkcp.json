@@ -90,7 +90,7 @@
             {
               "config": {
                 "allow_leading_options": false,
-                "executables": ["blkcp", "blkcp.cmd", "blkcp.exe"],
+                "executables": ["blkcp"],
                 "fail_secure_unknown_options": true,
                 "forbidden_flags": [],
                 "interspersed_flags": [
@@ -115,7 +115,7 @@
             {
               "config": {
                 "allow_leading_options": false,
-                "executables": ["blkcp", "blkcp.cmd", "blkcp.exe"],
+                "executables": ["blkcp"],
                 "fail_secure_unknown_options": true,
                 "forbidden_flags": [],
                 "interspersed_flags": [
@@ -140,7 +140,7 @@
             {
               "config": {
                 "allow_leading_options": true,
-                "executables": ["exec", "exec.cmd", "exec.exe"],
+                "executables": ["exec"],
                 "fail_secure_unknown_options": true,
                 "forbidden_flags": [],
                 "interspersed_flags": [
@@ -165,7 +165,7 @@
             {
               "config": {
                 "allow_leading_options": true,
-                "executables": ["exec", "exec.cmd", "exec.exe"],
+                "executables": ["exec"],
                 "fail_secure_unknown_options": true,
                 "forbidden_flags": [],
                 "interspersed_flags": [
@@ -190,7 +190,7 @@
             {
               "config": {
                 "allow_leading_options": true,
-                "executables": ["xargs", "xargs.cmd", "xargs.exe"],
+                "executables": ["xargs"],
                 "fail_secure_unknown_options": true,
                 "forbidden_flags": [],
                 "interspersed_flags": [
@@ -215,7 +215,7 @@
             {
               "config": {
                 "allow_leading_options": true,
-                "executables": ["xargs", "xargs.cmd", "xargs.exe"],
+                "executables": ["xargs"],
                 "fail_secure_unknown_options": true,
                 "forbidden_flags": [],
                 "interspersed_flags": [
@@ -253,7 +253,7 @@
                 {
                   "config": {
                     "allow_leading_options": false,
-                    "executables": ["blkcp", "blkcp.cmd", "blkcp.exe"],
+                    "executables": ["blkcp"],
                     "fail_secure_unknown_options": true,
                     "forbidden_flags": [],
                     "interspersed_flags": [],
@@ -271,7 +271,7 @@
                 {
                   "config": {
                     "allow_leading_options": false,
-                    "executables": ["blkcp", "blkcp.cmd", "blkcp.exe"],
+                    "executables": ["blkcp"],
                     "fail_secure_unknown_options": true,
                     "forbidden_flags": [],
                     "interspersed_flags": [],
@@ -289,7 +289,7 @@
                 {
                   "config": {
                     "allow_leading_options": false,
-                    "executables": ["blkcp", "blkcp.cmd", "blkcp.exe"],
+                    "executables": ["blkcp"],
                     "fail_secure_unknown_options": true,
                     "forbidden_flags": [],
                     "interspersed_flags": [],
@@ -307,7 +307,7 @@
                 {
                   "config": {
                     "allow_leading_options": false,
-                    "executables": ["blkcp", "blkcp.cmd", "blkcp.exe"],
+                    "executables": ["blkcp"],
                     "fail_secure_unknown_options": true,
                     "forbidden_flags": [],
                     "interspersed_flags": [],
@@ -346,7 +346,7 @@
             {
               "config": {
                 "excluded_first_arguments": [],
-                "executables": ["blkcp", "blkcp.cmd", "blkcp.exe"],
+                "executables": ["blkcp"],
                 "forbidden_flags": ["--help", "-h", "--version", "-v"],
                 "minimum_operands": 2,
                 "operand_prefixes": ["/dev/"],
@@ -362,7 +362,7 @@
             {
               "config": {
                 "allow_leading_options": false,
-                "executables": ["blkcp", "blkcp.cmd", "blkcp.exe"],
+                "executables": ["blkcp"],
                 "fail_secure_unknown_options": true,
                 "options_with_values": [
                   "-i", "--input", "-o", "--output", "-b", "--block-size", "-c",
@@ -393,7 +393,7 @@
                 {
                   "config": {
                     "allow_leading_options": false,
-                    "executables": ["blkcp", "blkcp.cmd", "blkcp.exe"],
+                    "executables": ["blkcp"],
                     "fail_secure_unknown_options": true,
                     "forbidden_flags": [],
                     "interspersed_flags": [],
@@ -411,7 +411,7 @@
                 {
                   "config": {
                     "allow_leading_options": false,
-                    "executables": ["blkcp", "blkcp.cmd", "blkcp.exe"],
+                    "executables": ["blkcp"],
                     "fail_secure_unknown_options": true,
                     "forbidden_flags": [],
                     "interspersed_flags": [],
@@ -429,7 +429,7 @@
                 {
                   "config": {
                     "allow_leading_options": false,
-                    "executables": ["blkcp", "blkcp.cmd", "blkcp.exe"],
+                    "executables": ["blkcp"],
                     "fail_secure_unknown_options": true,
                     "forbidden_flags": [],
                     "interspersed_flags": [],
@@ -447,7 +447,7 @@
                 {
                   "config": {
                     "allow_leading_options": false,
-                    "executables": ["blkcp", "blkcp.cmd", "blkcp.exe"],
+                    "executables": ["blkcp"],
                     "fail_secure_unknown_options": true,
                     "forbidden_flags": [],
                     "interspersed_flags": [],
