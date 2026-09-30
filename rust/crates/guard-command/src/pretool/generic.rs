@@ -305,10 +305,9 @@ fn infer_action_type(
     (PreToolActionTypeV1::Unknown, PreToolOperationV1::Unknown)
 }
 
-/// Evaluate the complete raw PreToolUse payload in native code.
-///
-/// This remains separate from `evaluate_pre_tool`, the compatibility
-/// command-model operation used by older clients.
+/// Evaluate the complete raw PreToolUse payload in native code. This stays
+/// separate from `evaluate_pre_tool`, the compatibility command-model
+/// operation used by older clients.
 pub fn evaluate_pre_tool_envelope(harness: &str, event: &str, payload: &Value) -> PreToolResultV1 {
     evaluate_pre_tool_envelope_with_extensions(harness, event, payload, None, None)
 }
@@ -323,10 +322,9 @@ pub fn evaluate_pre_tool_envelope_with_extensions(
     evaluate_pre_tool_envelope_with_source(harness, event, payload, controls, deadline, None, None)
 }
 
-/// Like [`evaluate_pre_tool_envelope_with_extensions`] but additionally
-/// carries the envelope's verified `home_dir` and `cwd` so harness tool calls
-/// that report `~/`-relative paths (Devin sends `~/...` verbatim) can be checked
-/// against the same non-sensitive read floor as workspace-relative reads.
+/// Like [`evaluate_pre_tool_envelope_with_extensions`] but also carries the
+/// envelope's verified `home_dir`/`cwd` so `~/`-relative and absolute harness
+/// paths (Devin sends `~/...` verbatim) share the non-sensitive read floor.
 pub fn evaluate_pre_tool_envelope_with_source(
     harness: &str,
     event: &str,
@@ -443,16 +441,13 @@ fn evaluate_signals(
         );
     }
     if let Some(command_decision) = command_decision {
-        let command_decision = match command_decision {
-            Ok(value) => value,
-            Err(_) => {
-                return generic_result(
-                    action,
-                    "block",
-                    "native_pre_tool_malformed_payload",
-                    "HOL Guard blocked a malformed PreToolUse command before execution.",
-                )
-            }
+        let Ok(command_decision) = command_decision else {
+            return generic_result(
+                action,
+                "block",
+                "native_pre_tool_malformed_payload",
+                "HOL Guard blocked a malformed PreToolUse command before execution.",
+            );
         };
         if command_decision.minimum_action == "block" {
             return generic_result(

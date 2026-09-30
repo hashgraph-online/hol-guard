@@ -193,6 +193,7 @@ fn allows_one_non_sensitive_file_read() {
     assert_eq!(aliased.minimum_action, "review");
 }
 
+#[cfg(unix)]
 fn devin(payload: Value, home: &std::path::Path) -> PreToolResultV1 {
     evaluate_pre_tool_envelope_with_source(
         "devin",
@@ -208,6 +209,7 @@ fn devin(payload: Value, home: &std::path::Path) -> PreToolResultV1 {
 /// A real temporary "home" so `~` expansion and canonicalization resolve
 /// against fixture files the same way they resolve against the verified
 /// envelope roots at runtime.
+#[cfg(unix)]
 fn devin_home() -> std::path::PathBuf {
     // Keep the fixture root outside $TMPDIR: on macOS it canonicalizes
     // under /private/var, which the sensitive-root check must reject.
@@ -221,6 +223,7 @@ fn devin_home() -> std::path::PathBuf {
         "project/credentials.txt",
         "project/.env",
         ".ssh/id_rsa",
+        ".hol-support/SAFETY.md",
     ] {
         let path = root.join(file);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -232,6 +235,7 @@ fn devin_home() -> std::path::PathBuf {
     std::fs::canonicalize(&root).unwrap()
 }
 
+#[cfg(unix)]
 #[test]
 fn devin_exec_uses_the_command_model() {
     let home = devin_home();
@@ -265,6 +269,7 @@ fn devin_exec_uses_the_command_model() {
     assert_ne!(compound.minimum_action, "allow");
 }
 
+#[cfg(unix)]
 #[test]
 fn devin_reads_allow_only_bounded_existing_files() {
     let home = devin_home();
@@ -291,6 +296,16 @@ fn devin_reads_allow_only_bounded_existing_files() {
         &home,
     );
     assert_eq!(absolute.minimum_action, "allow");
+
+    // The harness safety guide has an explicit dot-directory exception.
+    let safety = devin(
+        json!({
+            "tool_name": "read",
+            "tool_input": {"file_path": "~/.hol-support/SAFETY.md"}
+        }),
+        &home,
+    );
+    assert_eq!(safety.minimum_action, "allow");
 
     // A grep whose path is a real file is a bounded read.
     let grep_file = devin(

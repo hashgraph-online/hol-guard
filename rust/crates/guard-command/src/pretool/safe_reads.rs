@@ -60,7 +60,15 @@ pub(super) fn safe_read_target(argument: &str) -> bool {
         return false;
     };
     let lowered = normalized.to_ascii_lowercase();
-    const ROOTS: [&str; 6] = ["/etc", "/dev", "/proc", "/sys", "/var", "/private/etc"];
+    const ROOTS: [&str; 7] = [
+        "/etc",
+        "/dev",
+        "/proc",
+        "/sys",
+        "/var",
+        "/private/etc",
+        "/private/var",
+    ];
     if lowered.starts_with('/')
         || ROOTS
             .iter()
@@ -101,6 +109,9 @@ pub(super) fn bounded_file_read_target(
     if path.split(['/', '\\']).any(|part| part == "..") {
         return false;
     }
+    if path.starts_with('~') && expand_home_read_path(path, home_dir).is_none() {
+        return false;
+    }
     let expanded = expand_home_read_path(path, home_dir).unwrap_or_else(|| path.to_owned());
     let expanded_path = std::path::Path::new(&expanded);
     let candidate = if expanded_path.is_absolute() {
@@ -120,6 +131,37 @@ pub(super) fn bounded_file_read_target(
     }
     safe_read_target(path)
 }
+
+/// Mirror of `guard-secure-fs`'s external sensitive component list; kept
+/// local so the native floor does not depend on crate-private constant
+/// internals beyond the exported helpers.
+const EXTERNAL_SENSITIVE_PARTS: [&str; 25] = [
+    ".aws",
+    ".docker",
+    ".env",
+    ".git-credentials",
+    ".kube",
+    ".netrc",
+    ".npmrc",
+    ".pypirc",
+    ".ssh",
+    "auth",
+    "authorization",
+    "credential",
+    "credentials",
+    "id_dsa",
+    "id_ecdsa",
+    "id_ed25519",
+    "id_rsa",
+    "passwd",
+    "password",
+    "private-key",
+    "private_key",
+    "secret",
+    "secrets",
+    "token",
+    "tokens",
+];
 
 /// The canonicalized target must be a regular file under a verified root
 /// and clear every sensitive-content screen.
@@ -158,11 +200,30 @@ fn resolved_file_read_allowed(
         || super::sensitive_command(&rendered)
         || guard_secure_fs::sensitive_path_family(canonical).is_some()
         || guard_secure_fs::sensitive_external_filename(canonical)
-        || !guard_secure_fs::hidden_read_parts_allowed(canonical)
+        || canonical.components().any(|component| {
+            matches!(component, std::path::Component::Normal(part) if {
+                let part = part.to_string_lossy().to_ascii_lowercase();
+                EXTERNAL_SENSITIVE_PARTS.contains(&part.as_str())
+            })
+        })
+        || !(guard_secure_fs::hidden_read_parts_allowed(canonical) || guard_safety_doc(canonical))
     {
         return false;
     }
     true
+}
+
+/// `~/.hol-support/SAFETY.md` is the harness-facing safety guide that agents
+/// are instructed to read before acting; it gets the same explicit allowance
+/// the Python source-path classifier grants.
+fn guard_safety_doc(canonical: &std::path::Path) -> bool {
+    canonical
+        .file_name()
+        .is_some_and(|name| name == "SAFETY.md")
+        && canonical
+            .parent()
+            .and_then(|dir| dir.file_name())
+            .is_some_and(|dir| dir == ".hol-support")
 }
 
 fn expand_home_read_path(path: &str, home_dir: Option<&str>) -> Option<String> {
