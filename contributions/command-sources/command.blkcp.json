@@ -358,6 +358,23 @@
                 "required_flags": []
               },
               "op": "trailing-operand-prefix.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": ["blkcp", "blkcp.cmd", "blkcp.exe"],
+                "fail_secure_unknown_options": true,
+                "options_with_values": [
+                  "-i", "--input", "-o", "--output", "-b", "--block-size", "-c",
+                  "--count", "-l", "--limit", "-s", "--size", "-e", "--engine", "--skip",
+                  "--seek", "--queue-depth"
+                ],
+                "required_option_values": [
+                  {"option": "--output", "prefix": "/dev/"},
+                  {"option": "-o", "prefix": "/dev/"}
+                ]
+              },
+              "op": "executable.v1"
             }
           ],
           "op": "any.v1"

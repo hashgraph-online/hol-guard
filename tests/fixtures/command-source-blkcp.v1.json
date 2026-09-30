@@ -10990,6 +10990,32 @@
       "rule_id": "command.blkcp.device-write"
     },
     {
+      "command": "blkcp image.raw -o /dev/sda",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.blkcp"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "write-device-output-short",
+      "rule_id": "command.blkcp.device-write"
+    },
+    {
+      "command": "blkcp --output /dev/sda image.raw",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.blkcp"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "write-device-output-long",
+      "rule_id": "command.blkcp.device-write"
+    },
+    {
       "command": "blkcp -b 1M image.raw /dev/sda",
       "disabled_permissions": [],
       "enabled_extensions": [
