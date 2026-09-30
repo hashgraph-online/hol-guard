@@ -11,6 +11,8 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import cast
 
+from ..file_identity import full_stat_identity
+from ..windows_paths import open_windows_locked_regular_descriptor
 from .secret_sensitivity import classify_secret_content, classify_secret_path
 
 _MAX_PR_BODY_BYTES = 128 * 1024
@@ -88,17 +90,27 @@ def github_pr_body_file_is_safe(
     if authored_root is None or not _ancestor_chain_is_controlled(candidate, root=authored_root):
         return False
     try:
-        path_metadata = candidate.stat(follow_symlinks=False)
+        path_metadata = os.lstat(candidate)
     except OSError:
         return False
-    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
     try:
-        descriptor = os.open(candidate, flags)
+        descriptor = (
+            open_windows_locked_regular_descriptor(candidate)
+            if os.name == "nt"
+            else os.open(candidate, os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0))
+        )
     except OSError:
         return False
     try:
         metadata = os.fstat(descriptor)
         if (metadata.st_dev, metadata.st_ino) != (path_metadata.st_dev, path_metadata.st_ino):
+            return False
+        # The Windows handle reads binary bytes and denies write/delete sharing.
+        # Retain the descriptor-to-path object identity check above. Compare
+        # the remaining fields within each API because Windows path and CRT
+        # descriptor stats can expose different timestamps.
+        opened_path = os.lstat(candidate) if os.name == "nt" else metadata
+        if full_stat_identity(opened_path) != full_stat_identity(path_metadata):
             return False
         if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
             return False
@@ -116,6 +128,12 @@ def github_pr_body_file_is_safe(
         payload = os.read(descriptor, _MAX_PR_BODY_BYTES + 1)
         if len(payload) != metadata.st_size:
             return False
+        if full_stat_identity(os.fstat(descriptor)) != full_stat_identity(metadata):
+            return False
+        if full_stat_identity(os.lstat(candidate)) != full_stat_identity(path_metadata):
+            return False
+    except OSError:
+        return False
     finally:
         os.close(descriptor)
     try:

@@ -66,6 +66,7 @@ from ..runtime.approval_context import (
 )
 from ..runtime.approval_reuse import APPROVAL_REUSE_CLAIM_FAILED
 from ..runtime.browser_mcp_intent import normalize_browser_mcp_intent
+from ..runtime.composio_contract import composio_requires_action_review
 from ..runtime.harness_attribution import origin_harness_env
 from ..runtime.mcp_protection import McpServerIdentity, build_mcp_server_identity
 from ..runtime.package_execution_policy import is_execution_permitted
@@ -1032,7 +1033,24 @@ class RuntimeMcpGuardProxy:
             server_identity=self._session_server_identity(),
             tool_schema=tool_schema,
             tool_description=tool_description_value if isinstance(tool_description_value, str) else None,
+            tool_definition=tool_definition,
+            provider_catalog_hash=(
+                self.store.read_mcp_provider_authority_hash() if composio_requires_action_review(tool_name) else None
+            ),
         )
+        if tool_name in self._tool_catalog:
+            from ..store_mcp_catalog import tool_definition_authority_hash
+
+            # Catalog entries omit their name because it is the map key. Bind
+            # the full definition for local grants without changing the
+            # artifact hash used by existing exact saved blocks.
+            artifact = replace(
+                artifact,
+                runtime_private_metadata={
+                    **artifact.runtime_private_metadata,
+                    "mcp_tool_authority_hash": tool_definition_authority_hash({"name": tool_name, **tool_definition}),
+                },
+            )
         artifact_hash = build_tool_call_hash(
             artifact,
             arguments,
@@ -1362,7 +1380,7 @@ class RuntimeMcpGuardProxy:
                             now=_now(),
                             signals=decision.signals,
                             risk_categories=decision.risk_categories,
-                            remember=True,
+                            remember=not composio_requires_action_review(tool_name),
                             arguments=_safe_mcp_arguments(arguments),
                             additional_scanner_evidence=decision_scanner_evidence,
                             emit_runtime_evidence=False,
@@ -1395,7 +1413,7 @@ class RuntimeMcpGuardProxy:
                         expected_catalog_generation=authority.catalog_generation,
                         expected_catalog_state=authority.catalog_state,
                         expected_catalog_fingerprint=authority.catalog_fingerprint,
-                        remember_allow=True,
+                        remember_allow=not composio_requires_action_review(tool_name),
                         remember_decision_source="inline-approved",
                         remember_signals=decision.signals,
                         remember_risk_categories=decision.risk_categories,
@@ -1496,7 +1514,7 @@ class RuntimeMcpGuardProxy:
                     signals=decision.signals,
                     risk_categories=decision.risk_categories,
                     params=params,
-                    remember=True,
+                    remember=not composio_requires_action_review(tool_name),
                     scanner_evidence=decision_scanner_evidence,
                     policy_action="allow",
                     expected_catalog_generation=authority.catalog_generation,

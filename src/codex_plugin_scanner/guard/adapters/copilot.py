@@ -134,7 +134,7 @@ def _hook_entry(context: HarnessContext, *, include_workspace: bool) -> dict[str
     return entry
 
 
-def _is_managed_hook_command(command: str) -> bool:
+def _is_managed_hook_command(command: str, *, guard_home: Path | None = None) -> bool:
     normalized_command = command.lower()
     if all(pattern.search(normalized_command) is not None for pattern in _LEGACY_MANAGED_HOOK_PATTERNS):
         return True
@@ -156,6 +156,23 @@ def _is_managed_hook_command(command: str) -> bool:
             return False
         normalized_args = tuple(item.lower() for item in cli_args if isinstance(item, str))
         return len(normalized_args) == len(cli_args) and _argv_targets_copilot(normalized_args)
+    if len(tokens) == 3 and tokens[1] == "-I":
+        if guard_home is None:
+            return False
+        from .bounded_cli_hook_bridge import bounded_hook_script_path
+        from .cursor_hook_config import isolated_cursor_hook_python
+
+        expected_script = bounded_hook_script_path(guard_home, "copilot")
+        interpreter = isolated_cursor_hook_python()
+        if expected_script is None or interpreter is None:
+            return False
+        try:
+            return (
+                Path(tokens[0]).resolve() == Path(interpreter).resolve()
+                and Path(tokens[2]).resolve() == expected_script.resolve()
+            )
+        except OSError:
+            return False
     if len(tokens) < 3:
         return False
     executable = Path(tokens[0]).name.lower()
@@ -218,7 +235,13 @@ def _argv_targets_copilot(argv: tuple[str, ...]) -> bool:
     return False
 
 
-def _is_managed_hook_entry(entry: object, bash_command: str, powershell_command: str) -> bool:
+def _is_managed_hook_entry(
+    entry: object,
+    bash_command: str,
+    powershell_command: str,
+    *,
+    guard_home: Path | None = None,
+) -> bool:
     if not isinstance(entry, dict):
         return False
     if entry.get("bash") == bash_command and entry.get("powershell") == powershell_command:
@@ -228,25 +251,42 @@ def _is_managed_hook_entry(entry: object, bash_command: str, powershell_command:
             continue
         if command in {bash_command, powershell_command}:
             return True
-        if _is_managed_hook_command(command):
+        if _is_managed_hook_command(command, guard_home=guard_home):
             return True
     return False
 
 
-def _merge_hook_entries(entries: object, hook_entry: dict[str, object]) -> list[object]:
+def _merge_hook_entries(
+    entries: object,
+    hook_entry: dict[str, object],
+    *,
+    guard_home: Path | None = None,
+) -> list[object]:
     normalized = list(entries) if isinstance(entries, list) else []
     bash_command = str(hook_entry["bash"])
     powershell_command = str(hook_entry["powershell"])
     preserved_entries = [
-        entry for entry in normalized if not _is_managed_hook_entry(entry, bash_command, powershell_command)
+        entry
+        for entry in normalized
+        if not _is_managed_hook_entry(entry, bash_command, powershell_command, guard_home=guard_home)
     ]
     return [*preserved_entries, hook_entry]
 
 
-def _remove_hook_entries(entries: object, bash_command: str, powershell_command: str) -> list[object]:
+def _remove_hook_entries(
+    entries: object,
+    bash_command: str,
+    powershell_command: str,
+    *,
+    guard_home: Path | None = None,
+) -> list[object]:
     if not isinstance(entries, list):
         return []
-    return [entry for entry in entries if not _is_managed_hook_entry(entry, bash_command, powershell_command)]
+    return [
+        entry
+        for entry in entries
+        if not _is_managed_hook_entry(entry, bash_command, powershell_command, guard_home=guard_home)
+    ]
 
 
 def _hooks_payload(payload: dict[str, object]) -> dict[str, object]:
@@ -531,7 +571,11 @@ class CopilotHarnessAdapter(HarnessAdapter):
         hooks_payload = _inline_hooks_payload(config_payload)
         hook_entry = _hook_entry(context, include_workspace=False)
         for hook_name in _MANAGED_HOOK_EVENTS:
-            hooks_payload[hook_name] = _merge_hook_entries(hooks_payload.get(hook_name), hook_entry)
+            hooks_payload[hook_name] = _merge_hook_entries(
+                hooks_payload.get(hook_name),
+                hook_entry,
+                guard_home=context.guard_home,
+            )
         config_path.parent.mkdir(parents=True, exist_ok=True)
         write_text_at_authorized_path(config_path, json.dumps(config_payload, indent=2) + "\n")
         managed_hook_path = self._hook_path(context)
@@ -546,6 +590,7 @@ class CopilotHarnessAdapter(HarnessAdapter):
                 managed_workspace_hooks[hook_name] = _merge_hook_entries(
                     managed_workspace_hooks.get(hook_name),
                     managed_workspace_entry,
+                    guard_home=context.guard_home,
                 )
             managed_hook_path.parent.mkdir(parents=True, exist_ok=True)
             write_text_at_authorized_path(managed_hook_path, json.dumps(managed_hook_payload, indent=2) + "\n")
@@ -607,7 +652,12 @@ class CopilotHarnessAdapter(HarnessAdapter):
         bash_command, powershell_command = _hook_shell_commands(context, include_workspace=False)
         if len(remaining_state_entries) == 0:
             for hook_name in _MANAGED_HOOK_EVENTS:
-                updated_entries = _remove_hook_entries(hooks_payload.get(hook_name), bash_command, powershell_command)
+                updated_entries = _remove_hook_entries(
+                    hooks_payload.get(hook_name),
+                    bash_command,
+                    powershell_command,
+                    guard_home=context.guard_home,
+                )
                 if len(updated_entries) > 0:
                     hooks_payload[hook_name] = updated_entries
                     continue
@@ -629,6 +679,7 @@ class CopilotHarnessAdapter(HarnessAdapter):
                     managed_workspace_hooks.get(hook_name),
                     managed_bash_command,
                     managed_powershell_command,
+                    guard_home=context.guard_home,
                 )
                 if len(updated_entries) > 0:
                     managed_workspace_hooks[hook_name] = updated_entries

@@ -1,0 +1,79 @@
+name: Release Please
+
+on:
+  push:
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  group: hol-guard-release-please-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    name: Open or tag the next stable release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+      sha: ${{ steps.release.outputs.sha }}
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      - name: Require a token that can open pull requests
+        env:
+          RELEASE_PLEASE_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+        run: |
+          if [[ -z "$RELEASE_PLEASE_TOKEN" ]]; then
+            echo "RELEASE_PLEASE_TOKEN is not configured." >&2
+            echo "The default Actions token cannot open pull requests." >&2
+            exit 1
+          fi
+
+      - id: release
+        uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4.4.1
+        with:
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          target-branch: main
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  dispatch-stable-publish:
+    name: Dispatch stable PyPI publish
+    if: needs.release-please.outputs.release_created == 'true'
+    needs: release-please
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Dispatch the exact tagged stable version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          VERSION: ${{ needs.release-please.outputs.version }}
+          TAG_NAME: ${{ needs.release-please.outputs.tag_name }}
+          SHA: ${{ needs.release-please.outputs.sha }}
+        run: |
+          if [[ -z "$VERSION" ]]; then
+            VERSION="${TAG_NAME#v}"
+          fi
+          if [[ -z "$TAG_NAME" ]]; then
+            TAG_NAME="v${VERSION}"
+          fi
+          if [[ -z "$VERSION" || -z "$SHA" || -z "$TAG_NAME" ]]; then
+            echo "Release Please did not report a version, tag, and SHA" >&2
+            exit 1
+          fi
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Release version is not a canonical stable X.Y.Z" >&2
+            exit 1
+          fi
+          gh workflow run "Publish to PyPI" --repo "$GITHUB_REPOSITORY" --ref "$TAG_NAME" \
+            -f release_channel=stable \
+            -f release_train=main \
+            -f release_version="$VERSION" \
+            -f expected_sha="$SHA"

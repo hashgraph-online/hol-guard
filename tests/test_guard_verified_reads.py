@@ -15,7 +15,6 @@ from codex_plugin_scanner.guard.cli.commands import add_guard_root_parser, run_g
 from codex_plugin_scanner.guard.mdm.contracts import ManagedNetworkPolicy
 from codex_plugin_scanner.guard.runtime import verified_github_reads as github_reads
 from codex_plugin_scanner.guard.runtime import verified_read_execution as local_reads
-from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
 from codex_plugin_scanner.guard.runtime.command_verified_read_candidates import verified_read_candidate_operation
 from codex_plugin_scanner.guard.runtime.effect_contract import ProofRoute
 from codex_plugin_scanner.guard.runtime.effect_decision import FinalDisposition
@@ -27,6 +26,7 @@ from codex_plugin_scanner.guard.runtime.verified_github_reads import try_read_ve
 from codex_plugin_scanner.guard.runtime.verified_read_execution import try_execute_verified_local_read
 from tests.guard_command_corpus import iter_benign_corpus
 from tests.guard_command_corpus_oracle import iter_benign_oracle
+from tests.native_command_test_support import iter_native_command_evaluations, real_native_command_evaluation
 
 
 def _workspace(tmp_path: Path) -> tuple[Path, Path, Path]:
@@ -46,7 +46,10 @@ def test_every_cdx_060_corpus_case_requires_proof_instead_of_inheriting_allow() 
         if oracle.owner == "CDX-060"
     )
     evaluations = tuple(
-        evaluate_command(case.command, cwd=Path("workspace"), home_dir=Path("home")) for case, _oracle in records
+        reviewed.evaluation
+        for reviewed in iter_native_command_evaluations(
+            (case.command for case, _oracle in records), cwd=Path("workspace"), home_dir=Path("home")
+        )
     )
     assert len(evaluations) == 350
     assert {item.minimum_action for item in evaluations} == {"review"}
@@ -69,7 +72,7 @@ def test_raw_shell_candidates_never_mint_positive_proof(tmp_path: Path) -> None:
         "gh pr view 17 --repo hol-fake/example --json number,state,mergeable",
     )
     for command in commands:
-        evaluation = evaluate_command(command, cwd=cwd, home_dir=home)
+        evaluation = real_native_command_evaluation(command, cwd=cwd, home_dir=home).evaluation
         assert verified_read_candidate_operation(evaluation.command) is not None
         assert evaluation.decision_plane.action == "review"
         assert evaluation.decision_plane.proof_routes == frozenset()
@@ -81,7 +84,7 @@ def test_raw_search_without_cwd_evidence_retains_approval_floor(tmp_path: Path) 
     missing = home / "missing-workspace"
     assert not missing.exists()
 
-    evaluation = evaluate_command("rg -n GuardAction src", cwd=missing, home_dir=home)
+    evaluation = real_native_command_evaluation("rg -n GuardAction src", cwd=missing, home_dir=home).evaluation
 
     assert verified_read_candidate_operation(evaluation.command) == "workspace-read"
     assert evaluation.decision_plane.action == "require-reapproval"
@@ -90,7 +93,9 @@ def test_raw_search_without_cwd_evidence_retains_approval_floor(tmp_path: Path) 
 
 
 def test_git_read_overlap_reaches_the_frozen_cdx_064_pair_baseline() -> None:
-    evaluation = evaluate_command("git diff --check", cwd=Path("workspace"), home_dir=Path("home"))
+    evaluation = real_native_command_evaluation(
+        "git diff --check", cwd=Path("workspace"), home_dir=Path("home")
+    ).evaluation
 
     assert verified_read_candidate_operation(evaluation.command) == "workspace-read"
     assert evaluation.minimum_action == "review"
@@ -355,7 +360,7 @@ def test_proof_apis_do_not_accept_syntax_proof_or_transport_injection(tmp_path: 
     assert "proof" not in github_parameters and "transport" not in github_parameters
 
     workspace, repository, cwd = _workspace(tmp_path)
-    command = evaluate_command("pwd", cwd=cwd).command
+    command = real_native_command_evaluation("pwd", cwd=cwd).evaluation.command
     observation = observe_launch_identity_binding(
         command=command,
         workspace=workspace,
@@ -367,4 +372,4 @@ def test_proof_apis_do_not_accept_syntax_proof_or_transport_injection(tmp_path: 
     )
     assert observation.can_issue_positive_proof is False
     assert observation.unresolved_requirements == observation.required_requirements
-    assert evaluate_command("pwd").decision_plane.proof_routes == frozenset()
+    assert real_native_command_evaluation("pwd").evaluation.decision_plane.proof_routes == frozenset()

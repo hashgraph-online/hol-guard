@@ -10,6 +10,7 @@ from .command_extensions import CommandSafetyExtensionRegistry
 from .command_model import CanonicalCommand
 from .extension_control_runtime import current_extension_control_snapshot
 from .extension_trust import filter_inert_external_observations
+from .native_command_extension_evidence import observations_from_native_evidence
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,13 +28,22 @@ class CommandExtensionInteraction:
 def classify_command_extension_interaction(
     command: CanonicalCommand,
     registry: CommandSafetyExtensionRegistry,
+    *,
+    native_extension_evidence: object,
 ) -> CommandExtensionInteraction:
     """Return sanitized legacy interaction projections from the central plane."""
 
     snapshot = current_extension_control_snapshot()
+    if snapshot is None:
+        return CommandExtensionInteraction(None, None)
     observations = filter_inert_external_observations(
-        registry.observations(command),
-        snapshot.layers if snapshot is not None else (),
+        observations_from_native_evidence(
+            native_extension_evidence,
+            registry,
+            command=command,
+            control_snapshot=snapshot,
+        ),
+        snapshot.layers,
     )
     reviewable_signal = any(
         bool(item.uncertainty_reasons)

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
 from codex_plugin_scanner.guard.runtime.shell_secret_reads import assess_shell_reads
+from tests.native_command_test_support import real_native_command_evaluation
 
 
 def test_path_qualified_executable_outside_guarded_roots_fails_closed(tmp_path: Path) -> None:
@@ -21,7 +21,9 @@ def test_path_qualified_executable_outside_guarded_roots_fails_closed(tmp_path: 
     assert assessment.script_requested
     assert assessment.incomplete
     assert assessment.requires_review
-    assert evaluate_command("../check", cwd=workspace, home_dir=home).minimum_action == "review"
+    assert (
+        real_native_command_evaluation("../check", cwd=workspace, home_dir=home).evaluation.minimum_action == "review"
+    )
 
 
 def test_failed_literal_cd_skips_the_entire_and_pipeline_branch(tmp_path: Path) -> None:

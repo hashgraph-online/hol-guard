@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   catalogRowSecondLine,
@@ -6,8 +6,9 @@ import {
   extensionStateLabel,
 } from "../extension-control-center-model";
 import type { EffectiveExtensionControls, ExtensionCatalogItem } from "../extension-controls-api";
-import { addedCustomExtensions, type LocalCliItem } from "../local-cli-api";
+import { connectorWorkspaceItems, refreshMcpInventory, type LocalCliItem } from "../local-cli-api";
 import { WorkspacePageHeader } from "../workspace-page-header";
+import { LocalSkillsWorkspace } from "./local-skills-workspace";
 import {
   AddCustomExtensionButton,
   CustomExtensionsSection,
@@ -86,6 +87,7 @@ export function ExtensionsOverview(props: {
   effective: EffectiveExtensionControls;
   localCliItems: LocalCliItem[];
   localCliError: string | null;
+  localCliNotice: string | null;
   mutationError: string | null;
   recoveryStatus: string | null;
   healthBroken: boolean;
@@ -93,11 +95,33 @@ export function ExtensionsOverview(props: {
   active: boolean;
   onPrimaryStatusAction?: () => void;
   onRefresh: () => Promise<void> | void;
+  onReloadConnections: () => Promise<unknown> | void;
   onOpenExtension: (extension: ExtensionCatalogItem) => void;
   onOpenLocalCli: (cliId: string) => void;
   onAddCustom: () => void;
 }) {
   const [query, setQuery] = useState("");
+  const discoveryStarted = useRef(false);
+  const reloadConnections = useRef(props.onReloadConnections);
+  reloadConnections.current = props.onReloadConnections;
+  const [discoveryError, setDiscoveryError] = useState<string | null>(null);
+  const [discovering, setDiscovering] = useState(false);
+  const [discoveryAttempt, setDiscoveryAttempt] = useState(0);
+  useEffect(() => {
+    if (!props.active || discoveryStarted.current) return;
+    discoveryStarted.current = true;
+    const controller = new AbortController();
+    setDiscovering(true);
+    setDiscoveryError(null);
+    void refreshMcpInventory("inventory:configured", controller.signal, true, discoveryAttempt > 0).then(async () => {
+      if (!controller.signal.aborted) await reloadConnections.current();
+    }).catch(() => {
+      if (!controller.signal.aborted) setDiscoveryError("Could not check host configuration. Known connections remain available.");
+    }).finally(() => {
+      if (!controller.signal.aborted) setDiscovering(false);
+    });
+    return () => { controller.abort(); discoveryStarted.current = false; };
+  }, [props.active, discoveryAttempt]);
   const [filters, setFilters] = useState<CatalogFilterState>(EMPTY_CATALOG_FILTERS);
   useEffect(() => {
     setFilters((current) => {
@@ -118,10 +142,7 @@ export function ExtensionsOverview(props: {
   const handleClearFilters = useCallback(() => {
     setFilters(EMPTY_CATALOG_FILTERS);
   }, []);
-  // Suggestion-only responses (discovered servers, observed CLIs not yet
-  // added) render no custom section: the section lists added extensions, and
-  // its Add button would otherwise be the section's only content.
-  const addedCustomItems = addedCustomExtensions(props.localCliItems).filter((item) =>
+  const addedCustomItems = connectorWorkspaceItems(props.localCliItems).filter((item) =>
     customItemMatchesFilters(item, filters),
   );
   const addedCustomCount = addedCustomItems.length;
@@ -151,6 +172,11 @@ export function ExtensionsOverview(props: {
           <InlineError message={props.localCliError} />
         </div>
       ) : null}
+      {props.localCliNotice ? (
+        <p role="status" className="mt-4 rounded-xl border border-brand-blue/20 bg-brand-blue/5 p-3 text-sm text-brand-dark">
+          {props.localCliNotice}
+        </p>
+      ) : null}
 
       <PatternSearchConsole
         catalog={visibleCatalog}
@@ -170,6 +196,14 @@ export function ExtensionsOverview(props: {
 
       {searching ? null : (
         <>
+          <div className="mt-4" role="status">
+            {discovering ? <p className="text-sm text-brand-dark/75">Checking host configuration for connectors…</p> : null}
+            {discoveryError ? <p className="text-sm text-brand-dark/75">{discoveryError}</p> : null}
+            {!discovering ? <button type="button" onClick={() => setDiscoveryAttempt((attempt) => attempt + 1)}
+              className="mt-2 min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-brand-dark">
+              {discoveryError ? "Check for connectors again" : "Check host connections"}
+            </button> : null}
+          </div>
           {addedCustomCount ? (
             <CustomExtensionsSection
               items={addedCustomItems}
@@ -178,6 +212,7 @@ export function ExtensionsOverview(props: {
             />
           ) : null}
 
+          <LocalSkillsWorkspace />
           <section className="mt-10" aria-labelledby="all-tools-heading">
             <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
               <div>

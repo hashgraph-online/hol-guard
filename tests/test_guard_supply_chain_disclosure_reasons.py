@@ -68,9 +68,7 @@ def test_cloud_fail_closed_policy_config_maps_security_levels(tmp_path: Path) ->
     assert _cloud_fail_closed_decision(store=store, workspace_dir=tmp_path / "workspace") == "ask"
 
 
-def test_strict_mode_timeout_requires_explicit_review(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_strict_mode_timeout_requires_explicit_review(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store = GuardStore(tmp_path / "guard-home")
     (store.guard_home / "config.toml").write_text('security_level = "strict"\n', encoding="utf-8")
     _seed_guard_cloud(store, workspace_id=WORKSPACE_ID)
@@ -202,6 +200,214 @@ def test_unidentified_package_reason_fires_for_supported_ecosystem(tmp_path: Pat
     assert "unidentified_package" in codes
     unidentified = next(r for r in result.packages[0]["reasons"] if r["code"] == "unidentified_package")
     assert unidentified["severity"] == "medium"
+    assert "Local Guard" not in result.user_copy.harness_message
+    assert "HOL Guard on this device" in result.packages[0]["reasons"][0]["message"]
+
+
+def _running_guard_release(name: str) -> str | None:
+    if name in {"hol-guard", "plugin-scanner"}:
+        return "3.0.182"
+    return None
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "pipx install hol-guard --force",
+        "pip install plugin-scanner==3.0.182",
+        "pip install hol-guard==9.9.9",
+    ],
+)
+def test_new_or_unpinned_guard_release_stays_on_review(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    command: str,
+) -> None:
+    monkeypatch.setattr(evaluator_module, "_installed_project_version", lambda _name: None)
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    result = evaluate_package_request_artifact(
+        artifact=artifact_from_command_fixture(command, workspace=workspace_dir),
+        store=GuardStore(tmp_path / "home"),
+        workspace_dir=workspace_dir,
+        now="2026-05-19T00:00:00Z",
+    )
+
+    assert result.decision == "ask"
+    assert result.policy_action == "require-reapproval"
+    codes = {reason["code"] for reason in result.packages[0]["reasons"]}
+    assert "installed_release_reinstall" not in codes
+    assert "compromised release" in result.packages[0]["reasons"][0]["message"]
+    assert "HOL Guard allowed" not in result.user_copy.harness_message
+    assert "Local Guard" not in result.user_copy.harness_message
+
+
+@pytest.mark.parametrize(
+    "command",
+    ["pip install hol-guard==3.0.182", "pipx install plugin-scanner==3.0.182"],
+)
+def test_reinstall_of_running_guard_release_is_allowed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    command: str,
+) -> None:
+    for name in evaluator_module._PACKAGE_SOURCE_ENV_NAMES:
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(evaluator_module, "_installed_project_version", _running_guard_release)
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    result = evaluate_package_request_artifact(
+        artifact=artifact_from_command_fixture(command, workspace=workspace_dir),
+        store=GuardStore(tmp_path / "home"),
+        workspace_dir=workspace_dir,
+        now="2026-05-19T00:00:00Z",
+    )
+
+    assert result.decision == "allow"
+    assert result.policy_action == "allow"
+    assert result.packages[0]["reasons"][0]["code"] == "installed_release_reinstall"
+    assert "already running on this device" in result.user_copy.harness_message
+    assert "Local Guard" not in result.user_copy.harness_message
+
+
+def test_non_registry_install_of_hol_guard_still_requires_review(tmp_path: Path) -> None:
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    result = evaluate_package_request_artifact(
+        artifact=artifact_from_command_fixture(
+            "pip install 'hol-guard @ git+https://github.com/example/hol-guard.git'",
+            workspace=workspace_dir,
+        ),
+        store=GuardStore(tmp_path / "home"),
+        workspace_dir=workspace_dir,
+        now="2026-05-19T00:00:00Z",
+    )
+
+    assert result.decision == "ask"
+    assert result.policy_action == "require-reapproval"
+    assert result.packages[0]["reasons"][0]["code"] != "installed_release_reinstall"
+
+
+def test_alternate_index_install_of_hol_guard_still_requires_review(tmp_path: Path) -> None:
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    result = evaluate_package_request_artifact(
+        artifact=artifact_from_command_fixture(
+            "pipx install hol-guard --index-url https://example.invalid/simple",
+            workspace=workspace_dir,
+        ),
+        store=GuardStore(tmp_path / "home"),
+        workspace_dir=workspace_dir,
+        now="2026-05-19T00:00:00Z",
+    )
+
+    assert result.decision == "ask"
+    assert result.policy_action == "require-reapproval"
+    assert "installed_release_reinstall" not in {reason["code"] for reason in result.packages[0]["reasons"]}
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "pip install hol-guard -f https://example.invalid/simple",
+        "PIP_INDEX_URL=https://example.invalid/simple pip install hol-guard",
+        "uv pip install hol-guard --default-index https://example.invalid/simple",
+    ],
+)
+def test_relocated_registry_install_of_hol_guard_still_requires_review(tmp_path: Path, command: str) -> None:
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    result = evaluate_package_request_artifact(
+        artifact=artifact_from_command_fixture(command, workspace=workspace_dir),
+        store=GuardStore(tmp_path / "home"),
+        workspace_dir=workspace_dir,
+        now="2026-05-19T00:00:00Z",
+    )
+
+    assert result.decision in {"ask", "block"}
+    assert result.policy_action != "allow"
+    assert "HOL Guard allowed" not in result.user_copy.harness_message
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "PIP_INDEX_URL=https://example.invalid/simple pip install hol-guard==3.0.182",
+        "UV_FIND_LINKS=https://example.invalid/simple uv pip install hol-guard==3.0.182",
+        "PIP_NO_INDEX=1 pip install hol-guard==3.0.182",
+    ],
+)
+def test_same_running_release_from_another_index_stays_on_review(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    command: str,
+) -> None:
+    for name in evaluator_module._PACKAGE_SOURCE_ENV_NAMES:
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(evaluator_module, "_installed_project_version", _running_guard_release)
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    result = evaluate_package_request_artifact(
+        artifact=artifact_from_command_fixture(command, workspace=workspace_dir),
+        store=GuardStore(tmp_path / "home"),
+        workspace_dir=workspace_dir,
+        now="2026-05-19T00:00:00Z",
+    )
+
+    assert result.decision == "ask"
+    assert result.policy_action == "require-reapproval"
+    assert "installed_release_reinstall" not in {reason["code"] for reason in result.packages[0]["reasons"]}
+    assert "HOL Guard allowed" not in result.user_copy.harness_message
+
+
+def test_inherited_find_links_keeps_same_release_on_review(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for name in evaluator_module._PACKAGE_SOURCE_ENV_NAMES:
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("UV_FIND_LINKS", "https://example.invalid/simple")
+    monkeypatch.setattr(evaluator_module, "_installed_project_version", _running_guard_release)
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    result = evaluate_package_request_artifact(
+        artifact=artifact_from_command_fixture("pip install hol-guard==3.0.182", workspace=workspace_dir),
+        store=GuardStore(tmp_path / "home"),
+        workspace_dir=workspace_dir,
+        now="2026-05-19T00:00:00Z",
+    )
+
+    assert result.decision == "ask"
+    assert result.policy_action == "require-reapproval"
+    assert "HOL Guard allowed" not in result.user_copy.harness_message
+
+
+def test_local_build_version_is_not_a_reinstall_anchor(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("importlib.metadata.version", lambda _name: "3.0.182+local")
+
+    assert evaluator_module._installed_project_version("hol-guard") is None
+
+
+def test_mixed_install_does_not_claim_the_guard_package_allowed_the_command(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(evaluator_module, "_installed_project_version", _running_guard_release)
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    result = evaluate_package_request_artifact(
+        artifact=artifact_from_command_fixture(
+            "pip install hol-guard==3.0.182 requests",
+            workspace=workspace_dir,
+        ),
+        store=GuardStore(tmp_path / "home"),
+        workspace_dir=workspace_dir,
+        now="2026-05-19T00:00:00Z",
+    )
+
+    assert result.decision == "ask"
+    assert "HOL Guard allowed" not in result.user_copy.harness_message
+    assert "requests" in result.user_copy.harness_message
 
 
 def test_unidentified_package_blocks_under_strict_policy(tmp_path: Path) -> None:

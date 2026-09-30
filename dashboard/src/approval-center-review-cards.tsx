@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef, type ChangeEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
 import { HiMiniCheck, HiMiniXMark, HiMiniKey } from "react-icons/hi2";
 import type { GuardApprovalRequest, GuardApprovalGatePublicConfig } from "./guard-types";
-import { approvalGateCooldownLabel } from "./approval-gate-utils";
+import { approvalGateCooldownLabel, approvalGateLockRemainingSeconds } from "./approval-gate-utils";
 import {
   ApprovalProofFieldInputs,
   approvalProofRecentlySatisfied,
@@ -109,7 +109,8 @@ type ApprovalPasswordModalProps = {
   submitLabel: string;
 };
 
-function approvalProofModalTitle(recentlySatisfied: boolean, needsPassword: boolean): string {
+function approvalProofModalTitle(locked: boolean, recentlySatisfied: boolean, needsPassword: boolean): string {
+  if (locked) return "Approval gate temporarily locked";
   if (recentlySatisfied) return "Recently confirmed";
   if (needsPassword) return "Approval password required";
   return "Authenticator code required";
@@ -117,13 +118,21 @@ function approvalProofModalTitle(recentlySatisfied: boolean, needsPassword: bool
 
 export function ApprovalPasswordModal(props: ApprovalPasswordModalProps) {
   const passwordRef = useRef<HTMLInputElement>(null);
+  const [now, setNow] = useState(() => Date.now());
   const recentlySatisfied = approvalProofRecentlySatisfied(props.gate);
   const needsPassword = approvalProofRequiresPassword(props.gate);
+  const lockRemainingSeconds = approvalGateLockRemainingSeconds(props.gate, now);
+  const gateLocked = lockRemainingSeconds > 0;
   const submitDisabled = isApprovalProofSubmitDisabled(
     props.gate,
     { approvalPassword: props.approvalPassword, approvalTotpCode: props.approvalTotpCode },
     false,
   );
+  useEffect(() => {
+    if (!gateLocked) return undefined;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [gateLocked]);
   useEffect(() => {
     if (recentlySatisfied) return undefined;
     const timer = setTimeout(() => {
@@ -131,6 +140,14 @@ export function ApprovalPasswordModal(props: ApprovalPasswordModalProps) {
     }, 50);
     return () => window.clearTimeout(timer);
   }, [recentlySatisfied]);
+
+  let modalDescription = "Guard needs a fresh proof before it can save this decision.";
+  if (recentlySatisfied) {
+    modalDescription = "A new authenticator code is not needed yet.";
+  }
+  if (gateLocked) {
+    modalDescription = `Approval gate is temporarily locked. Try again in ${lockRemainingSeconds} seconds.`;
+  }
 
   const showCooldownOption =
     props.gate.cooldown_seconds > 0 &&
@@ -173,35 +190,39 @@ export function ApprovalPasswordModal(props: ApprovalPasswordModalProps) {
               id="approval-password-modal-title"
               className="text-lg font-semibold tracking-tight text-brand-dark"
             >
-              {approvalProofModalTitle(recentlySatisfied, needsPassword)}
+              {approvalProofModalTitle(gateLocked, recentlySatisfied, needsPassword)}
             </h2>
-            <p className="text-sm text-brand-dark/70">
-              {recentlySatisfied
-                ? "A new authenticator code is not needed yet."
-                : "Guard needs a fresh proof before it can save this decision."}
-            </p>
+            <p className="text-sm text-brand-dark/70">{modalDescription}</p>
           </div>
         </div>
 
         <div className="mt-5 space-y-3">
-          <ApprovalProofFieldInputs
-            approvalGate={props.gate}
-            approvalPassword={props.approvalPassword}
-            approvalTotpCode={props.approvalTotpCode}
-            passwordRef={passwordRef}
-            onApprovalPasswordChange={props.onApprovalPasswordChange}
-            onApprovalTotpCodeChange={props.onApprovalTotpCodeChange}
-          />
-          {showCooldownOption && (
-            <label className="flex cursor-pointer items-center gap-2 text-sm text-brand-dark">
-              <input
-                type="checkbox"
-                checked={props.useCooldown}
-                onChange={props.onUseCooldownChange}
-                className="h-4 w-4 accent-brand-blue"
+          {gateLocked ? (
+            <p className="rounded-xl border border-brand-attention/25 bg-brand-attention/[0.06] px-4 py-3 text-sm leading-relaxed text-brand-dark" role="status">
+              Guard will accept a new approval proof after the lock expires. No decision was saved.
+            </p>
+          ) : (
+            <>
+              <ApprovalProofFieldInputs
+                approvalGate={props.gate}
+                approvalPassword={props.approvalPassword}
+                approvalTotpCode={props.approvalTotpCode}
+                passwordRef={passwordRef}
+                onApprovalPasswordChange={props.onApprovalPasswordChange}
+                onApprovalTotpCodeChange={props.onApprovalTotpCodeChange}
               />
-              Skip password for next {approvalGateCooldownLabel(props.gate.cooldown_seconds).toLowerCase()} (use cooldown)
-            </label>
+              {showCooldownOption && (
+                <label className="flex cursor-pointer items-center gap-2 text-sm text-brand-dark">
+                  <input
+                    type="checkbox"
+                    checked={props.useCooldown}
+                    onChange={props.onUseCooldownChange}
+                    className="h-4 w-4 accent-brand-blue"
+                  />
+                  Skip password for next {approvalGateCooldownLabel(props.gate.cooldown_seconds).toLowerCase()} (use cooldown)
+                </label>
+              )}
+            </>
           )}
         </div>
 
