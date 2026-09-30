@@ -1145,6 +1145,65 @@ def evaluate_detection(
         current_artifact_ids.add(artifact.artifact_id)
         previous = previous_snapshots.get(artifact.artifact_id)
         diff = diff_artifact(previous, artifact)
+        if (
+            detection.harness == "codex"
+            and artifact.artifact_type == "skill"
+            and artifact.metadata.get("enabled") is False
+            and artifact.runtime_private_metadata.get("inventory_only") is True
+        ):
+            inventory_decision = build_authoritative_decision(
+                "allow",
+                reason="inventory_only",
+                composition_trace={"inventory_only": True},
+                authority_finalized=False,
+            )
+            if persist:
+                store.record_inventory_artifact(
+                    artifact=artifact,
+                    artifact_hash=str(diff["current_hash"]),
+                    policy_action=inventory_decision.action,
+                    changed=bool(diff["changed"]),
+                    now=now,
+                    approved=False,
+                )
+                store.save_artifact_capability(
+                    harness=detection.harness,
+                    artifact_id=artifact.artifact_id,
+                    capability_snapshot=normalize_artifact_capabilities(artifact).to_dict(),
+                    now=now,
+                )
+                if diff["changed"]:
+                    previous_hash = diff["previous_hash"] if isinstance(diff["previous_hash"], str) else None
+                    store.record_diff(
+                        detection.harness,
+                        artifact.artifact_id,
+                        list(diff["changed_fields"]),
+                        previous_hash,
+                        str(diff["current_hash"]),
+                        now,
+                    )
+                store.save_snapshot(
+                    detection.harness,
+                    artifact.artifact_id,
+                    {**diff["current_snapshot"], "artifact_hash": diff["current_hash"]},
+                    str(diff["current_hash"]),
+                    now,
+                )
+            results.append(
+                {
+                    "artifact_id": artifact.artifact_id,
+                    "artifact_name": artifact.name,
+                    "changed": diff["changed"],
+                    "changed_fields": diff["changed_fields"],
+                    **inventory_decision.to_artifact_projection(),
+                    "artifact_hash": diff["current_hash"],
+                    "artifact_type": artifact.artifact_type,
+                    "config_path": artifact.config_path,
+                    "source_scope": artifact.source_scope,
+                    "inventory_only": True,
+                }
+            )
+            continue
         is_first_seen = diff["changed_fields"] == ["first_seen"]
         configured_action = config.resolve_action_override(
             detection.harness,

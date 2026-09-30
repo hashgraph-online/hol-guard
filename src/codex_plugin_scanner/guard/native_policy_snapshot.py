@@ -386,6 +386,22 @@ def notify_native_policy_mutation(guard_home: Path) -> None:
         publisher.request_publish()
 
 
+def local_cli_publication_status(guard_home: Path, revision: int) -> dict[str, object]:
+    """Inspect existing publishers without starting a runtime or claiming readiness."""
+    with _PUBLISHER_LOCK:
+        publishers = tuple(_PUBLISHERS.get(_publisher_key(guard_home), ()))
+    for publisher in publishers:
+        receipt = publisher.local_cli_publication_receipt(revision)
+        if receipt is not None:
+            return {"state": "acknowledged", **receipt}
+    errors = [publisher.last_error for publisher in publishers if not publisher.closed and publisher.last_error]
+    return {
+        "state": "failed" if errors else "pending" if publishers else "unavailable",
+        "revision": revision,
+        **({"reason": errors[0]} if errors else {}),
+    }
+
+
 def get_native_policy_snapshot_publisher(store: GuardStore) -> NativePolicySnapshotPublisher:
     """Return the per-Guard-home publisher shared by daemon hook workers."""
 

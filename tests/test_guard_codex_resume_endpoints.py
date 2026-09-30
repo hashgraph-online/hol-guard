@@ -309,7 +309,7 @@ def test_codex_approve_stale_live_hook_wait_requires_app_server_socket(
     assert payload["codexResume"]["status"] == "failed"
     assert payload["codexResume"]["reason"] == "socket_not_available"
     assert payload["codexResume"]["strategy"] == "codex-app-server-thread"
-    assert "original chat" in payload["codexResume"]["message"]
+    assert "original Codex chat" in payload["codexResume"]["message"]
 
 
 def test_codex_block_does_not_defer_to_live_hook_waiting_on_browser_decision(
@@ -386,7 +386,7 @@ def test_codex_deferred_live_hook_resume_retry_reports_missing_chat_channel(
     assert retried["status"] == "failed"
     assert retried["reason"] == "socket_not_available"
     assert retried["strategy"] == "codex-app-server-thread"
-    assert "original chat" in retried["message"]
+    assert "original Codex chat" in retried["message"]
 
 
 def test_request_resume_status_endpoint_returns_persisted_result(tmp_path: Path) -> None:
@@ -749,7 +749,7 @@ def test_codex_approve_fails_without_app_server_socket_and_never_starts_exec_res
     assert payload["codexResume"]["status"] == "failed"
     assert payload["codexResume"]["reason"] == "socket_not_available"
     assert payload["codexResume"]["strategy"] == "codex-app-server-thread"
-    assert "original chat" in payload["codexResume"]["message"]
+    assert "original Codex chat" in payload["codexResume"]["message"]
 
 
 def test_codex_approve_uses_default_app_server_when_hook_omits_socket(

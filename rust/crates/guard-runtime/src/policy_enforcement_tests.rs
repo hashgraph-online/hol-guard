@@ -50,6 +50,8 @@ fn policy(default_action: &str) -> EffectiveNativePolicyV3 {
         publisher_actions: BTreeMap::new(),
         artifact_actions: BTreeMap::new(),
         mcp_tool_actions: BTreeMap::new(),
+        mcp_provider_actions: BTreeMap::new(),
+        mcp_provider_catalog_hash: None,
         sandbox_analysis: "off".into(),
         receipt_redaction_level: "full".into(),
     }
@@ -86,6 +88,9 @@ fn snapshot(policy: EffectiveNativePolicyV3) -> PolicySnapshotV3 {
 
 #[path = "policy_enforcement_observed_mcp_tests.rs"]
 mod observed_mcp;
+
+#[path = "policy_enforcement_codex_budget_tests.rs"]
+mod codex_budget;
 
 fn generic_result(minimum_action: &str) -> PreToolResultV1 {
     PreToolResultV1 {

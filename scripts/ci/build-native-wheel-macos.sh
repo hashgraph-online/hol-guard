@@ -10,8 +10,7 @@ if [[ "$TARGET" == "x86_64-apple-darwin" ]]; then
   build_target=(--target "$TARGET")
   target_dir="$target_dir/$TARGET"
 fi
-cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime "${build_target[@]}"
-cargo build --manifest-path rust/Cargo.toml --locked --release -p guard-command --bin guard-command-source "${build_target[@]}"
+cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime -p guard-command --bin hol-guard-runtime --bin guard-command-source "${build_target[@]}"
 runtime="$target_dir/release/hol-guard-runtime"
 source_compiler="$target_dir/release/guard-command-source"
 # The ARM image includes Rosetta for this build-time sanity check.

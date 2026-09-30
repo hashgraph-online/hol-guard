@@ -16,6 +16,7 @@ import platform
 import secrets
 import socket
 import sqlite3
+import sys
 import tempfile
 import threading
 import time
@@ -125,6 +126,7 @@ from ..local_dashboard_session import (
     LOCAL_DASHBOARD_SESSION_AUDIENCE,
     LOCAL_DASHBOARD_SESSION_STARTED_AT_CLAIM,
     MAX_LOCAL_DASHBOARD_SESSION_AGE_SECONDS,
+    PROTECTION_REPAIR_DASHBOARD_SURFACE,
     build_local_dashboard_session_token,
 )
 from ..local_supply_chain import (
@@ -135,7 +137,13 @@ from ..local_supply_chain import (
     sync_supply_chain_cloud_state,
 )
 from ..managed_controls_policy_fields import ParsedManagedControlsPolicy
-from ..models import DECISION_SCOPE_VALUES, DecisionScope, PolicyDecision, format_local_http_origin
+from ..models import (
+    DECISION_SCOPE_VALUES,
+    DecisionScope,
+    GuardRuntimeRegistration,
+    PolicyDecision,
+    format_local_http_origin,
+)
 from ..native_mode import native_mode_requires_rust as _native_mode_requires_rust
 from ..native_mode import python_oracle_surface_enabled
 from ..package_firewall_action_rate_limit import PackageFirewallActionRateLimiter
@@ -221,6 +229,7 @@ from ..shims import (
     probe_package_shim_intercepts,
     uninstall_package_shims,
 )
+from ..sqlite_recovery import quarantined_store_summary
 from ..sqlite_tuning import sqlite_connect_timeout_override
 from ..stable_digest import stable_digest_hex
 from ..store import GuardStore
@@ -288,7 +297,13 @@ from .manager import (
     repair_approval_center_locator,
     write_guard_daemon_state,
 )
-from .protection_repair_retry import confirmed_containment_repair_signals, incomplete_protection_repair_payload
+from .protection_repair_retry import containment_repair_outcome, incomplete_protection_repair_payload
+from .protection_repair_stages import (
+    harness_hooks_repair_reason,
+    integrity_repair_reasons,
+    record_incomplete_protection_repair,
+    repair_daemon_registration,
+)
 from .request_executor import BoundedRequestExecutor as _BoundedRequestExecutor
 from .runtime_heartbeat import RuntimeHeartbeatWriter
 from .runtime_hook_deadline import RuntimeHookDeadline
@@ -345,6 +360,13 @@ _LOCAL_CLI_PATHS = frozenset(
         "/v1/local-clis/apply",
         "/v1/local-clis/recognize",
         "/v1/local-clis/discover",
+        "/v1/local-clis/provider-actions",
+        "/v1/local-clis/provider-workflows",
+        "/v1/local-clis/registry-search",
+        "/v1/local-clis/registry-setup",
+        "/v1/local-clis/refresh-job",
+        "/v1/local-clis/skills",
+        "/v1/local-clis/mcp-skills",
     }
 )
 
@@ -503,6 +525,7 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
     shutdown_started: threading.Event
     package_firewall_connect_state: dict[str, object] | None
     package_firewall_connect_state_lock: threading.Lock
+    onefile_extraction_status: dict[str, object] | None
     guard_cloud_connect_state: dict[str, object] | None
     guard_cloud_connect_state_lock: threading.Lock
     guard_cloud_browser_session_lock: threading.Lock
@@ -618,6 +641,7 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         self.command_queue_lifecycle = None
         self.package_firewall_connect_state = None
         self.package_firewall_connect_state_lock = threading.Lock()
+        self.onefile_extraction_status = None
         self.guard_cloud_connect_state = None
         self.guard_cloud_connect_state_lock = threading.Lock()
         self.guard_cloud_browser_session_lock = threading.Lock()
@@ -2087,7 +2111,14 @@ def _complete_browser_oauth_connect(
 _PROTECTION_REPAIR_PROBE_COMMAND = "git status --porcelain=v1"
 
 
-def _repair_command_activity_persistence_health(store: GuardStore) -> None:
+def _repair_command_activity_persistence_health(store: GuardStore) -> str | None:
+    """Probe command-evidence persistence; return the reason it could not run.
+
+    A probe that cannot evaluate the native policy engine proves nothing, so it
+    must not mutate persistence health. Real probe failures still surface through
+    ``probe_command_activity_persistence``.
+    """
+
     snapshot = current_extension_control_snapshot()
     if snapshot is None:
         try:
@@ -2112,12 +2143,7 @@ def _repair_command_activity_persistence_health(store: GuardStore) -> None:
     except Exception:
         evaluation = None
     if evaluation is None:
-        with suppress(Exception):
-            store.record_command_activity_persistence_failure(
-                error_code="native_evaluation_unavailable",
-                occurred_at=datetime.now(timezone.utc),
-            )
-        return
+        return "native_evaluation_unavailable"
     occurred_at = datetime.now(timezone.utc)
     activity_id = f"activity:protection-repair-probe:{uuid.uuid4().hex}"
     decision_reason = ActivityDecisionReason.EXTENSION_MATCH if evaluation.matches else ActivityDecisionReason.NO_MATCH
@@ -2160,6 +2186,7 @@ def _repair_command_activity_persistence_health(store: GuardStore) -> None:
         shadow=shadow,
         shadow_evaluation_succeeded=shadow_evaluation_succeeded,
     )
+    return None
 
 
 _GuardDaemonHttpServer = _GuardDaemonHTTPServer
@@ -2330,17 +2357,25 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 managed_controls_publish=_managed_controls_publish_for(self._daemon_server()),
             )
             config = load_guard_config(store.guard_home)
+            daemon_server = self._daemon_server()
             include_receipts = self._query_bool(parsed.query, "include_receipts", default=True)
             snapshot = build_runtime_snapshot(
                 store=store,
                 approval_center_url=format_local_http_origin(
-                    self._daemon_server().daemon_host(),
-                    self._daemon_server().daemon_port(),
+                    daemon_server.daemon_host(),
+                    daemon_server.daemon_port(),
                 ),
                 active_request_id=self._query_string(parsed.query, "active_request_id"),
                 include_items=self._query_bool(parsed.query, "include_items", default=True),
                 receipt_limit=25 if include_receipts else 0,
                 containment_health=self._containment_health_payload(),
+                serving_runtime={
+                    "session_id": daemon_server.runtime_session_id,
+                    "daemon_host": daemon_server.runtime_host,
+                    "daemon_port": daemon_server.daemon_port(),
+                    "started_at": daemon_server.runtime_started_at,
+                    "last_heartbeat_at": _now(),
+                },
             )
             self._write_json(
                 {
@@ -2809,7 +2844,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 elif parsed.path.endswith("/acknowledge-degraded"):
                     response = self._daemon_server().extension_control_api.acknowledge_degraded(payload)
                 elif parsed.path.endswith("/recover-authority"):
-                    response = self._daemon_server().extension_control_api.recover_authority(payload)
+                    response = self._daemon_server().extension_control_api.recover_authority(
+                        payload,
+                        require_fresh_totp=self._request_uses_protection_repair_session(),
+                    )
                 else:
                     response = self._daemon_server().extension_control_api.refresh()
             except ExtensionControlApiError as error:
@@ -2882,6 +2920,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/v1/read-state":
             self._handle_read_state_update(payload)
+            return
+        if parsed.path == "/v1/protection/repair/approval-gate/setup":
+            self._handle_protection_repair_approval_gate_setup(payload)
             return
         if parsed.path == "/v1/settings":
             self._handle_settings_update(payload)
@@ -4882,10 +4923,34 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return None
         return parsed if isinstance(parsed, dict) else None
 
+    def _record_incomplete_protection_repair(self, check_reasons: Mapping[str, str]) -> None:
+        record_incomplete_protection_repair(self._daemon_server().diagnostics, check_reasons)
+
     def _handle_protection_repair(self, payload: dict[str, object]) -> None:
         check_id = self._optional_string(payload.get("check_id"))
         store = self.server.store  # type: ignore[attr-defined]
         if check_id in {"all", "policy_engine", "rule_packs", "tamper_checks"}:
+            repaired_check_ids: list[str] = []
+            pending_check_ids: list[str] = []
+            failed_check_ids: list[str] = []
+            check_reasons: dict[str, str] = {}
+            if check_id == "all":
+                daemon_server = self._daemon_server()
+                registration_reason = repair_daemon_registration(
+                    store,
+                    session_id=daemon_server.runtime_session_id,
+                    registration=GuardRuntimeRegistration(
+                        daemon_host=daemon_server.runtime_host,
+                        daemon_port=daemon_server.daemon_port(),
+                        started_at=daemon_server.runtime_started_at,
+                    ),
+                    last_heartbeat_at=_now(),
+                )
+                if registration_reason is None:
+                    repaired_check_ids.append("daemon")
+                else:
+                    failed_check_ids.append("daemon")
+                    check_reasons["daemon"] = registration_reason
             try:
                 status = store.setup_policy_integrity(now=_now(), include_items=False)
                 if status.get("mode") != "protected":
@@ -4895,10 +4960,13 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                         include_items=False,
                     )
             except (OSError, RuntimeError, TypeError, ValueError):
+                check_reasons.update(integrity_repair_reasons(restored=False))
+                self._record_incomplete_protection_repair(check_reasons)
                 self._write_json(
                     {
                         "error": "protection_repair_failed",
                         "message": "Guard could not restore integrity protection automatically.",
+                        "check_reasons": check_reasons,
                     },
                     status=409,
                 )
@@ -4906,9 +4974,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             repaired = status.get("mode") == "protected"
             degraded_reasons = status.get("degraded_reasons")
             reason_count = len(degraded_reasons) if isinstance(degraded_reasons, list) else 0
-            repaired_check_ids = ["policy_engine", "rule_packs", "tamper_checks"]
-            pending_check_ids: list[str] = []
-            failed_check_ids: list[str] = []
+            if repaired:
+                repaired_check_ids.extend(["policy_engine", "rule_packs", "tamper_checks"])
+            else:
+                failed_check_ids.extend(["policy_engine", "rule_packs", "tamper_checks"])
+                check_reasons.update(integrity_repair_reasons(restored=False))
+            hook_failures: list[str] | tuple[str, ...] = []
             if check_id == "all":
                 hook_repair_unknown = False
                 try:
@@ -4922,17 +4993,26 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 )
                 if hook_failures or hook_repair_unknown or not has_active_hooks:
                     failed_check_ids.append("harness_hooks")
+                    check_reasons["harness_hooks"] = harness_hooks_repair_reason(
+                        has_active_hooks=has_active_hooks,
+                        hook_failures=hook_failures,
+                        hook_repair_unknown=hook_repair_unknown,
+                    )
                 else:
                     repaired_check_ids.append("harness_hooks")
                 if repaired:
-                    containment_repaired, containment_failed = confirmed_containment_repair_signals(
-                        lambda: self._containment_health_payload(force_refresh=True)
-                    )
+                    (
+                        containment_repaired,
+                        containment_failed,
+                        containment_reasons,
+                    ) = containment_repair_outcome(lambda: self._containment_health_payload(force_refresh=True))
                     repaired_check_ids.extend(containment_repaired)
                     failed_check_ids.extend(containment_failed)
+                    for failed_check_id in containment_failed:
+                        check_reasons[failed_check_id] = containment_reasons[failed_check_id]
                     try:
                         config = load_guard_config(store.guard_home)
-                        _repair_command_activity_persistence_health(store)
+                        probe_reason = _repair_command_activity_persistence_health(store)
                         store.maintain_command_activity(
                             now=datetime.now(timezone.utc),
                             detail_retain_days=config.evidence_retain_days,
@@ -4940,11 +5020,17 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                         evidence_health = store.get_command_activity_persistence_health()
                         if evidence_health.active_error_count > 0:
                             failed_check_ids.append("decision_stream")
+                            check_reasons["decision_stream"] = "decision_stream_degraded"
+                        elif probe_reason is not None:
+                            pending_check_ids.append("decision_stream")
+                            check_reasons["decision_stream"] = probe_reason
                         else:
                             repaired_check_ids.append("decision_stream")
                     except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
                         failed_check_ids.append("decision_stream")
+                        check_reasons["decision_stream"] = "decision_stream_health_unavailable"
                 if repaired and (failed_check_ids or pending_check_ids):
+                    self._record_incomplete_protection_repair(check_reasons)
                     self._write_json(
                         incomplete_protection_repair_payload(
                             repaired_check_ids=repaired_check_ids,
@@ -4954,17 +5040,22 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                             has_active_hooks=has_active_hooks,
                             hook_failures=hook_failures,
                             hook_repair_unknown=hook_repair_unknown,
+                            check_reasons=check_reasons,
                         ),
                         status=409,
                     )
                     return
+            if not repaired or failed_check_ids or pending_check_ids:
+                self._record_incomplete_protection_repair(check_reasons)
             self._write_json(
                 {
                     **({"error": "local_integrity_repair_incomplete"} if not repaired else {}),
                     "repaired": repaired,
                     "repair_scope": "local_integrity",
                     "check_ids": repaired_check_ids,
+                    **({"failed_check_ids": failed_check_ids} if failed_check_ids else {}),
                     "pending_check_ids": pending_check_ids,
+                    "check_reasons": check_reasons,
                     "message": (
                         "Integrity protection restored."
                         if repaired
@@ -4980,29 +5071,69 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             )
             return
         if check_id == "decision_stream":
+            check_reasons: dict[str, str] = {}
             try:
                 config = load_guard_config(store.guard_home)
-                _repair_command_activity_persistence_health(store)
+                probe_reason = _repair_command_activity_persistence_health(store)
+            except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
+                check_reasons["decision_stream"] = "decision_stream_health_unavailable"
+                self._record_incomplete_protection_repair(check_reasons)
+                self._write_json(
+                    {
+                        "error": "protection_repair_failed",
+                        "message": "Guard could not verify the command evidence store.",
+                        "check_reasons": check_reasons,
+                    },
+                    status=409,
+                )
+                return
+            if probe_reason is not None:
+                check_reasons["decision_stream"] = probe_reason
+                self._record_incomplete_protection_repair(check_reasons)
+                self._write_json(
+                    {
+                        "repaired": False,
+                        "repair_scope": "local_integrity",
+                        "check_ids": [],
+                        "pending_check_ids": ["decision_stream"],
+                        "check_reasons": check_reasons,
+                        "message": (
+                            "Guard could not run the native policy engine to prove command evidence. "
+                            "Existing evidence was not changed."
+                        ),
+                    },
+                    status=409,
+                )
+                return
+            try:
                 store.maintain_command_activity(
                     now=datetime.now(timezone.utc),
                     detail_retain_days=config.evidence_retain_days,
                 )
                 health = store.get_command_activity_persistence_health()
             except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
+                check_reasons["decision_stream"] = "decision_stream_health_unavailable"
+                self._record_incomplete_protection_repair(check_reasons)
                 self._write_json(
                     {
                         "error": "protection_repair_failed",
                         "message": "Guard could not verify the command evidence store.",
+                        "check_reasons": check_reasons,
                     },
                     status=409,
                 )
                 return
             repaired = health.active_error_count == 0
+            if not repaired:
+                check_reasons["decision_stream"] = "decision_stream_degraded"
+                self._record_incomplete_protection_repair(check_reasons)
             self._write_json(
                 {
                     "repaired": repaired,
                     "repair_scope": "local_integrity",
-                    "check_ids": ["decision_stream"],
+                    "check_ids": ["decision_stream"] if repaired else [],
+                    **({"failed_check_ids": ["decision_stream"]} if not repaired else {}),
+                    "check_reasons": check_reasons,
                     "message": (
                         "Command evidence is healthy."
                         if repaired
@@ -5016,6 +5147,30 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
 
     def _handle_settings_update(self, payload: dict[str, object]) -> None:
         self._apply_settings_payload(payload, missing_error="invalid_settings")
+
+    def _handle_protection_repair_approval_gate_setup(self, payload: dict[str, object]) -> None:
+        if not self._protection_repair_approval_gate_setup_payload_is_allowed(payload):
+            self._write_json({"error": "invalid_settings"}, status=400)
+            return
+        guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
+        gate_config = approval_gate_public_config(guard_home)
+        if gate_config.configured or gate_config.enabled:
+            self._write_json({"error": "approval_gate_setup_unavailable"}, status=409)
+            return
+        self._apply_settings_payload(payload, missing_error="invalid_settings")
+
+    def _protection_repair_approval_gate_setup_payload_is_allowed(self, payload: object) -> bool:
+        if not isinstance(payload, dict) or set(payload) != {"settings"}:
+            return False
+        settings = payload.get("settings")
+        if not isinstance(settings, dict) or set(settings) != {"approval_gate"}:
+            return False
+        gate_payload = settings.get("approval_gate")
+        return (
+            isinstance(gate_payload, dict)
+            and set(gate_payload) == {"enabled", "new_password", "confirm_password"}
+            and gate_payload.get("enabled") is True
+        )
 
     def _apply_settings_payload(self, payload: dict[str, object], *, missing_error: str) -> None:
         settings = payload.get("settings")
@@ -6786,13 +6941,34 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         remaining_seconds = absolute_expires_at - time.time()
         if remaining_seconds < 1:
             return None
-        refreshed_surface = surface if surface in {"approval-center", "dashboard", "cloud-dashboard"} else "dashboard"
+        claim_surface = self._optional_string(claims.get("surface"))
+        if claim_surface == PROTECTION_REPAIR_DASHBOARD_SURFACE:
+            refreshed_surface = PROTECTION_REPAIR_DASHBOARD_SURFACE
+        elif surface in {"approval-center", "dashboard", "cloud-dashboard"}:
+            refreshed_surface = surface
+        else:
+            refreshed_surface = "dashboard"
         return build_local_dashboard_session_token(
             auth_token=self.server.auth_token,  # type: ignore[attr-defined]
             surface=refreshed_surface,
             expires_in_seconds=min(DEFAULT_LOCAL_DASHBOARD_SESSION_TTL_SECONDS, int(remaining_seconds)),
             session_started_at=started_at,
         )
+
+    def _request_uses_protection_repair_session(self) -> bool:
+        session_token = self.headers.get("X-Guard-Dashboard-Session")
+        authorization = self.headers.get("Authorization")
+        bearer_token = None
+        if isinstance(authorization, str) and authorization.lower().startswith("bearer "):
+            bearer_token = authorization[7:].strip()
+        candidates = [
+            candidate for candidate in (session_token, bearer_token) if isinstance(candidate, str) and candidate.strip()
+        ]
+        for candidate in candidates:
+            claims = self._dashboard_session_token_claims(candidate)
+            if claims is not None and claims.get("surface") == PROTECTION_REPAIR_DASHBOARD_SURFACE:
+                return True
+        return False
 
     def _refreshable_dashboard_session_claims(self) -> dict[str, object] | None:
         session_token = self.headers.get("X-Guard-Dashboard-Session")
@@ -6811,7 +6987,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             if claims is None:
                 continue
             surface = self._optional_string(claims.get("surface"))
-            if surface in {"approval-center", "dashboard", "cloud-dashboard"}:
+            if surface in {
+                "approval-center",
+                "dashboard",
+                "cloud-dashboard",
+                PROTECTION_REPAIR_DASHBOARD_SURFACE,
+            }:
                 return claims
         return None
 
@@ -6824,6 +7005,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         surface = self._optional_string(claims.get("surface"))
         path = urlparse(self.path).path
         path_parts = [part for part in path.split("/") if part]
+        if surface == PROTECTION_REPAIR_DASHBOARD_SURFACE:
+            return self._protection_repair_session_request_is_allowed(path, payload=payload)
         if surface in {"approval-center", "dashboard", "cloud-dashboard"}:
             return self._path_supports_dashboard_session(path, path_parts)
         action_path = self._optional_string(claims.get("action_path"))
@@ -6982,6 +7165,26 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             ):
                 return True
         return False
+
+    def _protection_repair_session_request_is_allowed(
+        self,
+        path: str,
+        *,
+        payload: dict[str, object] | None,
+    ) -> bool:
+        if self.command == "GET" and path in {
+            "/v1/runtime",
+            "/v1/settings",
+            "/v1/extension-controls/effective",
+            "/v1/update/status",
+        }:
+            return True
+        if self.command != "POST":
+            return False
+        return path in {
+            "/v1/initialize",
+            "/v1/extension-controls/recover-authority",
+        }
 
     def _path_supports_dashboard_session(self, path: str, path_parts: list[str]) -> bool:
         return self._is_hosted_dashboard_api_path(path, path_parts) or self._local_surface_session_request_is_allowed(
@@ -7254,6 +7457,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/receipts/latest",
             "/v1/runtime",
             "/v1/settings",
+            "/v1/protection/repair/approval-gate/setup",
             "/v1/settings/export",
             "/v1/settings/import",
             "/v1/settings/reset",
@@ -7386,6 +7590,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "hook_evidence_writer": evidence_writer_stats,
             "sqlite_profile": sqlite_profile,
             "sqlite_migration_gate": sqlite_migration_gate,
+            "quarantined_store": quarantined_store_summary(store.guard_home),
+            "onefile_extraction": daemon_server.onefile_extraction_status,
             "uptime_seconds": uptime,
             "pid": os.getpid(),
             "tables": store.list_table_names(),
@@ -7829,6 +8035,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/approval-gate/totp/disable",
             "/v1/daemon/repair",
             "/v1/protection/repair",
+            "/v1/protection/repair/approval-gate/setup",
             "/v1/insights/share",
             "/v1/cloud/connect",
             "/v1/notifications/setup",
@@ -7988,6 +8195,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/feed-health",
             "/settings",
             "/about",
+            "/protection/repair",
             "/requests",
             "/approvals",
         }:
@@ -8110,6 +8318,7 @@ class GuardDaemonServer:
         self._command_queue_worker: CommandQueueWorker | None = None
         self._headless_cloud_sync_thread: threading.Thread | None = None
         self._command_activity_maintenance_thread: threading.Thread | None = None
+        self._onefile_extraction_reclaim_thread: threading.Thread | None = None
         self._extension_control_refresh_thread: threading.Thread | None = None
         self._extension_control_refresh_interval_seconds = extension_control_refresh_interval_seconds
         self._cloud_review_sync_worker: CloudReviewSyncWorker | None = None
@@ -8202,6 +8411,13 @@ class GuardDaemonServer:
     def _publish_listen_state(self) -> None:
         self._server.last_activity_monotonic = time.monotonic()
         self._server.publish_trust_state()
+        self._server.runtime_heartbeat.register(
+            GuardRuntimeRegistration(
+                daemon_host=self._server.runtime_host,
+                daemon_port=self.port,
+                started_at=self._server.runtime_started_at,
+            )
+        )
         self._server.store.upsert_runtime_state(
             session_id=self._server.runtime_session_id,
             daemon_host=self._server.runtime_host,
@@ -8234,6 +8450,11 @@ class GuardDaemonServer:
             start_serve_thread(self, already_locked=True)
             if not self._serve_loop_started.wait(timeout=_DAEMON_SERVE_THREAD_START_TIMEOUT_SECONDS):
                 raise RuntimeError("Guard daemon serve thread did not become ready")
+            # Re-check under _finish_service_lock: shutdown may have been
+            # requested while the serve loop was coming up. Publishing or
+            # registering after shutdown would resurrect a stopped daemon.
+            if self._shutdown_started.is_set() or not startup_generation_is_current(self, generation):
+                raise RuntimeError("Guard daemon stopped during startup")
             self._publish_listen_state()
             self._diagnostics.record("daemon_listen_ready")
             self._warm_desktop_bootstrap_cache()
@@ -8259,7 +8480,12 @@ class GuardDaemonServer:
         self._persist_aibom_inventory_context()
 
         def start_post_listen_workers() -> None:
-            if generation is not None and not startup_generation_is_current(self, generation):
+            # The shutdown/generation re-check and the registration publish
+            # must stay atomic under _finish_service_lock: _finish_service
+            # takes the same lock, so a completed shutdown can never be
+            # followed by a late register()/heartbeat start resurrecting the
+            # runtime row.
+            if self._shutdown_started.is_set() or not startup_generation_is_current(self, generation):
                 raise RuntimeError("Guard daemon stopped during startup")
             self._publish_listen_state()
             self._server.start_unclassified_watchdog()
@@ -8278,6 +8504,7 @@ class GuardDaemonServer:
                 self._cloud_review_sync_worker,
             )
             self._start_command_activity_maintenance()
+            self._start_onefile_extraction_reclaim()
             self._record_lifecycle("ready")
             self._owned_service_ready = True
             self._diagnostics.record("daemon_ready")
@@ -8441,6 +8668,58 @@ class GuardDaemonServer:
             self._maintain_command_activity_best_effort()
             storage_complete = self._maintain_storage_best_effort()
 
+    def _start_onefile_extraction_reclaim(self) -> None:
+        if not getattr(sys, "frozen", False):
+            return
+        if self._onefile_extraction_reclaim_thread is not None and self._onefile_extraction_reclaim_thread.is_alive():
+            return
+        self._onefile_extraction_reclaim_thread = threading.Thread(
+            target=self._onefile_extraction_reclaim_loop,
+            daemon=True,
+        )
+        self._onefile_extraction_reclaim_thread.start()
+
+    def _onefile_extraction_reclaim_loop(self) -> None:
+        while not self._shutdown_started.is_set():
+            self._reclaim_onefile_extraction_dirs_once()
+            if self._shutdown_started.wait(3_600):
+                return
+
+    def _reclaim_onefile_extraction_dirs_once(self) -> None:
+        try:
+            from ..onefile_extraction import reclaim_orphaned_extraction_dirs
+
+            result = reclaim_orphaned_extraction_dirs(
+                temp_root=Path(tempfile.gettempdir()),
+                current_meipass=getattr(sys, "_MEIPASS", None),
+                now=datetime.now(timezone.utc),
+                should_stop=self._shutdown_started.is_set,
+            )
+        except Exception:
+            self._diagnostics.record_exception("onefile_extraction_reclaim_failed")
+            self._server.onefile_extraction_status = {
+                "last_run_at": datetime.now(timezone.utc).isoformat(),
+                "error": "reclaim_failed",
+            }
+            return
+        self._server.onefile_extraction_status = {
+            "last_run_at": datetime.now(timezone.utc).isoformat(),
+            "reclaimed_count": result.reclaimed_count,
+            "reclaimed_bytes": result.reclaimed_bytes,
+            "killed_launches_last_run": result.killed_launches,
+            "unmarked_legacy_count": result.unmarked_count,
+            "unmarked_legacy_bytes_estimate": result.unmarked_bytes_estimate,
+            "error_count": len(result.errors),
+        }
+        self._diagnostics.record(
+            "onefile_extraction_reclaimed",
+            detail=(
+                f"reclaimed={result.reclaimed_count} bytes={result.reclaimed_bytes} "
+                f"killed={result.killed_launches} unmarked={result.unmarked_count} "
+                f"unmarked_bytes_estimate={result.unmarked_bytes_estimate} errors={len(result.errors)}"
+            ),
+        )
+
     def _persist_aibom_inventory_context(self) -> None:
         persist_aibom_inventory_context(
             store=self._server.store,
@@ -8505,6 +8784,12 @@ class GuardDaemonServer:
         self._owned_service_ready = False
         self._shutdown_started.set()
         contained = True
+        close_discovery = getattr(getattr(self._server, "local_cli_api", None), "close_discovery", None)
+        if callable(close_discovery):
+            try:
+                contained = close_discovery() is not False and contained
+            except Exception:
+                contained = False
         stop_request_executors = getattr(self._server, "_stop_request_executors", None)
         if callable(stop_request_executors):
             try:
@@ -8535,6 +8820,10 @@ class GuardDaemonServer:
             contained = False
         runtime_heartbeat = getattr(self._server, "runtime_heartbeat", None)
         if runtime_heartbeat is not None:
+            try:
+                runtime_heartbeat.clear_registration()
+            except Exception:
+                contained = False
             try:
                 contained = runtime_heartbeat.stop(timeout_seconds=1.0) is not False and contained
             except Exception:
@@ -8618,6 +8907,10 @@ class GuardDaemonServer:
             getattr(self, "_command_activity_maintenance_thread", None),
             deadline=deadline,
         )
+        self._onefile_extraction_reclaim_thread = self._join_service_thread(
+            getattr(self, "_onefile_extraction_reclaim_thread", None),
+            deadline=deadline,
+        )
         return all(
             thread is None
             for thread in (
@@ -8627,6 +8920,7 @@ class GuardDaemonServer:
                 self._extension_control_refresh_thread,
                 self._headless_cloud_sync_thread,
                 self._command_activity_maintenance_thread,
+                self._onefile_extraction_reclaim_thread,
             )
         )
 

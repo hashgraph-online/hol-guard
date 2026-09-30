@@ -46,9 +46,9 @@ function cloneLayers(effective: EffectiveExtensionControls) {
   return effective.layers.map((layer) => ({ ...layer, controls: layer.controls.map((control) => ({ ...control })) }));
 }
 
-export function extensionPolicyRadioTabStop(
-  choices: Array<{ value: PermissionDraftState; disabled?: boolean }>,
-  state: PermissionDraftState,
+export function extensionPolicyRadioTabStop<T extends string>(
+  choices: Array<{ value: T; disabled?: boolean }>,
+  state: T,
   groupDisabled: boolean,
 ): number {
   if (groupDisabled) return -1;

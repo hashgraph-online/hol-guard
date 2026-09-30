@@ -81,6 +81,7 @@ jobs:
     env:
       RELEASE_TARGET: aarch64-apple-darwin
       MINIMUM_DESKTOP_VERSION: 0.1.0-beta.0
+      MINIMUM_DESKTOP_VERSION_ONEDIR: "3.0.113"
     steps:
       - name: Require trusted main workflow invocation
         shell: bash
@@ -207,6 +208,11 @@ jobs:
           gh release download "$CORE_TAG" --repo "$GITHUB_REPOSITORY" --pattern "$BASE" --dir "$DIST"
           gh release download "$CORE_TAG" --repo "$GITHUB_REPOSITORY" --pattern "$BASE.json" --dir "$DIST"
           gh release download "$CORE_TAG" --repo "$GITHUB_REPOSITORY" --pattern "$BASE.attested.json" --dir "$DIST"
+          if [[ "${{ steps.existing.outputs.onedir }}" == "true" ]]; then
+            gh release download "$CORE_TAG" --repo "$GITHUB_REPOSITORY" --pattern "$BASE.onedir.zip" --dir "$DIST"
+            gh release download "$CORE_TAG" --repo "$GITHUB_REPOSITORY" --pattern "$BASE.onedir.json" --dir "$DIST"
+            gh release download "$CORE_TAG" --repo "$GITHUB_REPOSITORY" --pattern "$BASE.onedir.attested.json" --dir "$DIST"
+          fi
       - name: Verify prior feed provenance before reusing assets
         if: steps.release.outputs.available == 'true' && steps.existing.outputs.mode == 'verify_existing'
         env:
@@ -229,6 +235,18 @@ jobs:
             --base "$BASE" --marker "$BASE.attested.json" --version "$CORE_VERSION" --source-commit "$SOURCE_SHA" \
             --source-tag "$CORE_TAG" --target "$RELEASE_TARGET" --apple-signing-identity "$APPLE_SIGNING_IDENTITY" \
             --apple-team-id "$APPLE_TEAM_ID"
+          if [[ "${{ steps.existing.outputs.onedir }}" == "true" ]]; then
+            for asset in "$BASE.onedir.zip" "$BASE.onedir.json" "$BASE.onedir.attested.json"; do
+              gh attestation verify "$asset" --repo "$GITHUB_REPOSITORY" \
+                --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/desktop-core-alpha-feed.yml" \
+                --source-ref refs/heads/main --deny-self-hosted-runners >/dev/null
+            done
+            python3 -I scripts/release/desktop_core_alpha_feed.py validate-marker \
+              --base "$BASE" --marker "$BASE.onedir.attested.json" --base-suffix .onedir \
+              --version "$CORE_VERSION" --source-commit "$SOURCE_SHA" \
+              --source-tag "$CORE_TAG" --target "$RELEASE_TARGET" \
+              --apple-signing-identity "$APPLE_SIGNING_IDENTITY" --apple-team-id "$APPLE_TEAM_ID"
+          fi
       - name: Import Apple signing identity
         if: steps.release.outputs.available == 'true'
         env:
@@ -342,6 +360,71 @@ jobs:
           python3 -I scripts/release/desktop_core_alpha_feed.py verify-bootstrap \
             --payload "$RUNNER_TEMP/bootstrap.json" --version "$CORE_VERSION" --subject "Standalone Core"
           mv "$BUILT" "$ASSET"
+          mkdir -p "$RUNNER_TEMP/pyinstaller-onedir" "$RUNNER_TEMP/spec-onedir" "$RUNNER_TEMP/dist-onedir"
+          (
+            cd "$SOURCE"
+            uv run --no-sync pyinstaller --codesign-identity "$APPLE_SIGNING_IDENTITY" \
+              --clean --noconfirm --onedir --name hol-guard \
+              --collect-submodules codex_plugin_scanner --collect-data codex_plugin_scanner \
+              --add-data "$NATIVE_RUNTIME:codex_plugin_scanner/_native" \
+              --add-data "$NATIVE_MANIFEST:codex_plugin_scanner/_native" \
+              --add-data "$SOURCE/src/codex_plugin_scanner/version.py:." \
+              --distpath "$RUNNER_TEMP/dist-onedir" \
+              --workpath "$RUNNER_TEMP/pyinstaller-onedir" --specpath "$RUNNER_TEMP/spec-onedir" \
+              scripts/mdm/hol-guard-entry.py
+          )
+          ONEDIR="$RUNNER_TEMP/dist-onedir/hol-guard"
+          test -f "$ONEDIR/_internal/version.py"
+          test -f "$ONEDIR/_internal/codex_plugin_scanner/_native/hol-guard-runtime"
+          test -f "$ONEDIR/_internal/codex_plugin_scanner/_native/runtime-manifest.json"
+          test -f "$ONEDIR/_internal/codex_plugin_scanner/guard/contracts/data/guard-cloud-review/v2/contract.json"
+          while IFS= read -r -d '' macho_path; do
+            case "$macho_path" in
+              */_internal/codex_plugin_scanner/_native/*) continue ;;
+            esac
+            if file "$macho_path" | grep -q "Mach-O"; then
+              codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$macho_path"
+            fi
+          done < <(find "$ONEDIR" -type f -print0)
+          python3 -I scripts/release/seal_pyinstaller_native_manifest.py \
+            --onedir "$ONEDIR"
+          python3 -I scripts/release/verify_pyinstaller_native_runtime.py \
+            --onedir "$ONEDIR" --team-id "$APPLE_TEAM_ID"
+          cat > "$ONEDIR/Info.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleExecutable</key>
+            <string>hol-guard</string>
+            <key>CFBundleIdentifier</key>
+            <string>org.hol.guard.core</string>
+            <key>CFBundleName</key>
+            <string>hol-guard</string>
+            <key>CFBundlePackageType</key>
+            <string>APPL</string>
+            <key>CFBundleShortVersionString</key>
+            <string>$CORE_VERSION</string>
+            <key>CFBundleVersion</key>
+            <string>$CORE_VERSION</string>
+            <key>LSUIElement</key>
+            <true/>
+          </dict>
+          </plist>
+          EOF
+          plutil -lint "$ONEDIR/Info.plist"
+          codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$ONEDIR"
+          python3 -I scripts/release/verify_pyinstaller_macos_signing.py \
+            --onedir "$ONEDIR" --team-id "$APPLE_TEAM_ID"
+          codesign --verify --strict "$ONEDIR/hol-guard"
+          test "$("$ONEDIR/hol-guard" --version | sed -E 's/^hol-guard[[:space:]]+//')" = "$CORE_VERSION"
+          export HOL_GUARD_HOME="$RUNNER_TEMP/smoke-home-onedir"
+          mkdir -p "$HOL_GUARD_HOME"
+          "$ONEDIR/hol-guard" desktop bootstrap --json > "$RUNNER_TEMP/bootstrap-onedir.json"
+          python3 -I scripts/release/desktop_core_alpha_feed.py verify-bootstrap \
+            --payload "$RUNNER_TEMP/bootstrap-onedir.json" --version "$CORE_VERSION" --subject "Onedir Core"
+          ditto -c -k --norsrc --noextattr --keepParent "$ONEDIR" \
+            "$DIST/hol-guard-core-${CORE_VERSION}-${RELEASE_TARGET}.onedir.zip"
       - name: Sign and notarize new Core sidecar
         if: steps.release.outputs.available == 'true' && steps.existing.outputs.mode == 'build'
         env:
@@ -366,12 +449,35 @@ jobs:
             cat "$RUNNER_TEMP/notary-result.json" >&2
             exit 1
           }
+          ONEDIR_ZIP="$RUNNER_TEMP/dist/hol-guard-core-${CORE_VERSION}-${RELEASE_TARGET}.onedir.zip"
+          xcrun notarytool submit "$ONEDIR_ZIP" \
+            --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" \
+            --wait --output-format json > "$RUNNER_TEMP/notary-result-onedir.json"
+          jq -e '.status == "Accepted"' "$RUNNER_TEMP/notary-result-onedir.json" >/dev/null || {
+            cat "$RUNNER_TEMP/notary-result-onedir.json" >&2
+            exit 1
+          }
+      - name: Onedir activation under onefile load
+        if: steps.release.outputs.available == 'true' && steps.existing.outputs.mode == 'build'
+        env:
+          CORE_VERSION: ${{ steps.release.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -I scripts/release/verify_onedir_activation_under_load.py \
+            --onedir-launcher "$RUNNER_TEMP/dist-onedir/hol-guard/hol-guard" \
+            --onefile "$RUNNER_TEMP/dist/hol-guard-core-${CORE_VERSION}-${RELEASE_TARGET}" \
+            --noise 8 --budget-seconds 150 \
+            --home "$RUNNER_TEMP/onedir-contract-home" \
+            --version "$CORE_VERSION" \
+            --summary "$RUNNER_TEMP/onedir-contract.json"
       - name: Verify exact Apple identity, notarization, and Core contract
         if: steps.release.outputs.available == 'true'
         env:
           CORE_VERSION: ${{ steps.release.outputs.version }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           MODE: ${{ steps.existing.outputs.mode }}
+          HAS_ONEDIR: ${{ steps.existing.outputs.onedir }}
         shell: bash
         run: |
           set -euo pipefail
@@ -414,6 +520,45 @@ jobs:
           python3 -I scripts/release/desktop_core_alpha_feed.py verify-bootstrap \
             --payload "$RUNNER_TEMP/bootstrap.json" --version "$CORE_VERSION" --subject "Immutable Core"
           rm -f "$VERIFY"
+          if [[ "$MODE" == "build" || "$HAS_ONEDIR" == "true" ]]; then
+            ONEDIR_ZIP="$RUNNER_TEMP/dist/hol-guard-core-${CORE_VERSION}-${RELEASE_TARGET}.onedir.zip"
+            EXTRACT="$RUNNER_TEMP/onedir-verify"
+            rm -rf "$EXTRACT"
+            mkdir -p "$EXTRACT"
+            ditto -x -k "$ONEDIR_ZIP" "$EXTRACT"
+            LAUNCHER="$EXTRACT/hol-guard/hol-guard"
+            test -f "$LAUNCHER"
+            chmod 0755 "$LAUNCHER"
+            codesign --verify --strict --verbose=2 "$LAUNCHER"
+            codesign --display --verbose=4 "$LAUNCHER" 2> "$RUNNER_TEMP/codesign-onedir.txt"
+            grep -Fx "TeamIdentifier=$APPLE_TEAM_ID" "$RUNNER_TEMP/codesign-onedir.txt"
+            rm -rf "$CERT_DIR"
+            mkdir -p "$CERT_DIR"
+            if ! (
+              cd "$CERT_DIR"
+              codesign --display --extract-certificates "$LAUNCHER" >/dev/null 2> "$RUNNER_TEMP/codesign-onedir-certs.txt"
+            ); then
+              cat "$RUNNER_TEMP/codesign-onedir-certs.txt" >&2
+              exit 1
+            fi
+            test -s "$CERT_DIR/codesign0"
+            ONEDIR_FINGERPRINT=$(openssl x509 -inform DER -in "$CERT_DIR/codesign0" -noout -fingerprint -sha1 \
+              | sed -E 's/^[^=]+=//; s/://g' | tr '[:lower:]' '[:upper:]')
+            test "$ONEDIR_FINGERPRINT" = "$EXPECTED_FINGERPRINT"
+            python3 -I scripts/release/verify_pyinstaller_macos_signing.py \
+              --onedir "$EXTRACT/hol-guard" --team-id "$APPLE_TEAM_ID"
+            if [[ "$MODE" == "build" ]]; then
+              test -s "$RUNNER_TEMP/notary-result-onedir.json"
+              jq -e '.status == "Accepted" and (.id | type == "string" and length > 0)' \
+                "$RUNNER_TEMP/notary-result-onedir.json" >/dev/null
+            fi
+            test "$("$LAUNCHER" --version | sed -E 's/^hol-guard[[:space:]]+//')" = "$CORE_VERSION"
+            export HOL_GUARD_HOME="$RUNNER_TEMP/verify-home-onedir"
+            mkdir -p "$HOL_GUARD_HOME"
+            "$LAUNCHER" desktop bootstrap --json > "$RUNNER_TEMP/bootstrap-onedir.json"
+            python3 -I scripts/release/desktop_core_alpha_feed.py verify-bootstrap \
+              --payload "$RUNNER_TEMP/bootstrap-onedir.json" --version "$CORE_VERSION" --subject "Immutable onedir Core"
+          fi
       - name: Create or validate update manifest
         if: steps.release.outputs.available == 'true'
         env:
@@ -421,6 +566,7 @@ jobs:
           CORE_TAG: ${{ steps.release.outputs.tag }}
           SOURCE_SHA: ${{ steps.source.outputs.sha }}
           MODE: ${{ steps.existing.outputs.mode }}
+          HAS_ONEDIR: ${{ steps.existing.outputs.onedir }}
         shell: bash
         run: |
           set -euo pipefail
@@ -432,6 +578,23 @@ jobs:
             python3 -I scripts/release/desktop_core_alpha_feed.py create-manifest "${COMMON[@]}"
           fi
           python3 -I scripts/release/desktop_core_alpha_feed.py validate-manifest "${COMMON[@]}"
+          if [[ "$MODE" == "build" || "$HAS_ONEDIR" == "true" ]]; then
+            ONEDIR_ZIP="$RUNNER_TEMP/dist/hol-guard-core-${CORE_VERSION}-${RELEASE_TARGET}.onedir.zip"
+            if [[ "$MODE" == "build" ]]; then
+              ONEDIR_TREE="$RUNNER_TEMP/dist-onedir"
+            else
+              ONEDIR_TREE="$RUNNER_TEMP/onedir-manifest-tree"
+              mkdir -p "$ONEDIR_TREE"
+              ditto -x -k "$ONEDIR_ZIP" "$ONEDIR_TREE"
+            fi
+            OCOMMON=(--archive "$ONEDIR_ZIP" --tree "$ONEDIR_TREE" --manifest "$BINARY.onedir.json" \
+              --version "$CORE_VERSION" --source-commit "$SOURCE_SHA" --source-tag "$CORE_TAG" \
+              --target "$RELEASE_TARGET" --minimum-desktop-version "$MINIMUM_DESKTOP_VERSION_ONEDIR")
+            if [[ "$MODE" == "build" ]]; then
+              python3 -I scripts/release/desktop_core_alpha_feed.py create-onedir-manifest "${OCOMMON[@]}"
+            fi
+            python3 -I scripts/release/desktop_core_alpha_feed.py validate-onedir-manifest "${OCOMMON[@]}"
+          fi
       - name: Create or validate immutable marker
         if: steps.release.outputs.available == 'true'
         env:
@@ -439,6 +602,7 @@ jobs:
           CORE_TAG: ${{ steps.release.outputs.tag }}
           SOURCE_SHA: ${{ steps.source.outputs.sha }}
           MODE: ${{ steps.existing.outputs.mode }}
+          HAS_ONEDIR: ${{ steps.existing.outputs.onedir }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         shell: bash
@@ -454,6 +618,23 @@ jobs:
             python3 -I scripts/release/desktop_core_alpha_feed.py validate-marker "${COMMON[@]}"
           fi
           python3 -I scripts/release/verify_desktop_core_attestation.py --binary "$BASE" --manifest "$BASE.json" --marker "$BASE.attested.json" --version "$CORE_VERSION" --source-commit "$SOURCE_SHA" --source-tag "$CORE_TAG" --target "$RELEASE_TARGET" --team-id "$APPLE_TEAM_ID" --output "$RUNNER_TEMP/desktop-core-evidence.json"
+          if [[ "$MODE" == "build" || "$HAS_ONEDIR" == "true" ]]; then
+            OCOMMON=(--base "$BASE" --marker "$BASE.onedir.attested.json" --base-suffix .onedir \
+              --version "$CORE_VERSION" --source-commit "$SOURCE_SHA" --source-tag "$CORE_TAG" \
+              --target "$RELEASE_TARGET" --apple-signing-identity "$APPLE_SIGNING_IDENTITY" \
+              --apple-team-id "$APPLE_TEAM_ID")
+            if [[ "$MODE" == "build" ]]; then
+              python3 -I scripts/release/desktop_core_alpha_feed.py create-marker "${OCOMMON[@]}" \
+                --workflow-run "$GITHUB_RUN_ID"
+            else
+              python3 -I scripts/release/desktop_core_alpha_feed.py validate-marker "${OCOMMON[@]}"
+            fi
+            python3 -I scripts/release/verify_desktop_core_attestation.py \
+              --archive "$BASE.onedir.zip" --manifest "$BASE.onedir.json" \
+              --marker "$BASE.onedir.attested.json" --version "$CORE_VERSION" \
+              --source-commit "$SOURCE_SHA" --source-tag "$CORE_TAG" --target "$RELEASE_TARGET" \
+              --team-id "$APPLE_TEAM_ID" --output "$RUNNER_TEMP/desktop-core-onedir-evidence.json"
+          fi
       - name: Attest complete hardened Core asset set
         if: steps.release.outputs.available == 'true' && steps.existing.outputs.mode == 'build'
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8
@@ -462,6 +643,9 @@ jobs:
             ${{ runner.temp }}/dist/hol-guard-core-${{ steps.release.outputs.version }}-${{ env.RELEASE_TARGET }}
             ${{ runner.temp }}/dist/hol-guard-core-${{ steps.release.outputs.version }}-${{ env.RELEASE_TARGET }}.json
             ${{ runner.temp }}/dist/hol-guard-core-${{ steps.release.outputs.version }}-${{ env.RELEASE_TARGET }}.attested.json
+            ${{ runner.temp }}/dist/hol-guard-core-${{ steps.release.outputs.version }}-${{ env.RELEASE_TARGET }}.onedir.zip
+            ${{ runner.temp }}/dist/hol-guard-core-${{ steps.release.outputs.version }}-${{ env.RELEASE_TARGET }}.onedir.json
+            ${{ runner.temp }}/dist/hol-guard-core-${{ steps.release.outputs.version }}-${{ env.RELEASE_TARGET }}.onedir.attested.json
       - name: Publish immutable Core assets
         if: steps.release.outputs.available == 'true' && steps.existing.outputs.mode == 'build'
         env:
@@ -472,13 +656,16 @@ jobs:
         run: |
           set -euo pipefail
           BASE="$RUNNER_TEMP/dist/hol-guard-core-${CORE_VERSION}-${RELEASE_TARGET}"
-          gh release upload "$CORE_TAG" "$BASE" "$BASE.json" "$BASE.attested.json" --repo "$GITHUB_REPOSITORY"
+          gh release upload "$CORE_TAG" "$BASE" "$BASE.json" "$BASE.attested.json" \
+            "$BASE.onedir.zip" "$BASE.onedir.json" "$BASE.onedir.attested.json" \
+            --repo "$GITHUB_REPOSITORY"
       - name: Verify final release assets and provenance
         if: steps.release.outputs.available == 'true'
         env:
           CORE_VERSION: ${{ steps.release.outputs.version }}
           CORE_TAG: ${{ steps.release.outputs.tag }}
           MODE: ${{ steps.existing.outputs.mode }}
+          HAS_ONEDIR: ${{ steps.existing.outputs.onedir }}
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
@@ -489,7 +676,11 @@ jobs:
           mkdir -p "$PUBLISHED"
           gh release view "$CORE_TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' \
             > "$RUNNER_TEMP/final-assets.txt"
-          for asset in "$BASE" "$BASE.json" "$BASE.attested.json"; do
+          for asset in "$BASE" "$BASE.json" "$BASE.attested.json" \
+            "$BASE.onedir.zip" "$BASE.onedir.json" "$BASE.onedir.attested.json"; do
+            if [[ "$MODE" != "build" && "$asset" == *.onedir.* && "$HAS_ONEDIR" != "true" ]]; then
+              continue
+            fi
             grep -Fx "$asset" "$RUNNER_TEMP/final-assets.txt"
             gh release download "$CORE_TAG" --repo "$GITHUB_REPOSITORY" --pattern "$asset" --dir "$PUBLISHED"
             test -f "$PUBLISHED/$asset"

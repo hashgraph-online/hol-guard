@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import shutil
+import threading
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -19,9 +20,10 @@ from .local_mcp_stdio import (
     MAX_MCP_PROBE_TOOLS,
     MCP_PACKAGE_PROBE_TIMEOUT_SECONDS,
     MCP_PROBE_TIMEOUT_SECONDS,
+    McpCatalogResult,
     is_package_shim_executable,
     probe_search_path,
-    run_mcp_tools_list,
+    run_mcp_catalog,
 )
 from .mcp_protection import McpServerIdentity, build_mcp_server_identity
 
@@ -39,6 +41,7 @@ class McpProbeResult:
     tools: tuple[LocalCliCommand, ...]
     status: McpProbeStatus
     argv: tuple[str, ...]
+    catalog: McpCatalogResult | None = None
 
 
 def mcp_launch_tokens(
@@ -101,6 +104,8 @@ def probe_stdio_mcp_server(
     runner: McpToolsRunner | None = None,
     timeout: float | None = None,
     extra_env: Mapping[str, str] | None = None,
+    cancel: threading.Event | None = None,
+    connection_identity_hash: str | None = None,
 ) -> McpProbeResult | None:
     """Launch a stdio MCP server and list tools, or return None when it is not MCP."""
 
@@ -117,13 +122,26 @@ def probe_stdio_mcp_server(
     if argv is None:
         return None
     resolved_timeout = _timeout_for(tokens, timeout)
-    raw_tools = (
-        runner(argv) if runner is not None else run_mcp_tools_list(argv, timeout=resolved_timeout, extra_env=extra_env)
-    )
-    if raw_tools is None:
-        return None
+    if runner is not None:
+        raw_tools = runner(argv)
+        if raw_tools is None:
+            return None
+        catalog = McpCatalogResult(tuple(raw_tools), complete=True)
+    else:
+        catalog = run_mcp_catalog(
+            argv,
+            timeout=resolved_timeout,
+            extra_env=extra_env,
+            cancel=cancel,
+            connection_identity_hash=connection_identity_hash or server_identity.identity_hash,
+        )
+        if catalog.protocol_version is None:
+            return None
+        raw_tools = list(catalog.tools)
     tools = _tools_from_payload(raw_tools, server_name=_display_name(server_identity, tokens))
     status: McpProbeStatus = "ok" if any(tool.command_id != OTHER_COMMAND_ID for tool in tools) else "empty"
+    if not catalog.complete and not raw_tools:
+        status = "failed"
     identity = UnlistedCliIdentity(
         cli_id=f"local-cli.mcp-{server_identity.identity_hash[:8]}",
         name=_display_name(server_identity, tokens),
@@ -138,6 +156,7 @@ def probe_stdio_mcp_server(
         tools=tools,
         status=status,
         argv=argv,
+        catalog=catalog,
     )
 
 
@@ -215,7 +234,7 @@ def _tools_from_payload(raw_tools: Sequence[dict[str, object]], *, server_name: 
                 description=description.strip()[:240] if isinstance(description, str) else "",
             )
         )
-        if len(discovered) >= MAX_MCP_PROBE_TOOLS - 1:
+        if len(discovered) >= MAX_MCP_PROBE_TOOLS:
             break
     discovered.append(
         LocalCliCommand(

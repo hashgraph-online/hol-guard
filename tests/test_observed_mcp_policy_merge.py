@@ -5,7 +5,10 @@ from types import SimpleNamespace
 import pytest
 
 from codex_plugin_scanner.guard import native_policy_snapshot_publisher_inputs as inputs_module
-from codex_plugin_scanner.guard.native_policy_snapshot_constants import POLICY_SNAPSHOT_MAX_MCP_TOOL_ACTIONS
+from codex_plugin_scanner.guard.native_policy_snapshot_constants import (
+    POLICY_SNAPSHOT_MAX_MCP_TOOL_ACTIONS,
+    NativePolicySnapshotError,
+)
 from codex_plugin_scanner.guard.runtime import observed_mcp_tools
 
 
@@ -41,7 +44,7 @@ def test_observed_choices_preserve_configured_restrictions(
 def test_combined_action_capacity_is_deterministic_and_keeps_configured_blocks() -> None:
     configured = "codex:mcp__zz_configured__blocked"
     namespace = "codex:mcp__zz_namespace__*"
-    actions = {f"codex:mcp__server__tool_{index}": "block" for index in range(1100)}
+    actions = {f"codex:mcp__server__tool_{index}": "allow" for index in range(1100)}
     actions[configured] = "block"
     actions[namespace] = "block"
     actions["codex:mcp__server__allowed"] = "allow"
@@ -52,4 +55,13 @@ def test_combined_action_capacity_is_deterministic_and_keeps_configured_blocks()
     assert result == reversed_result
     assert len(result) == POLICY_SNAPSHOT_MAX_MCP_TOOL_ACTIONS
     assert result[configured] == result[namespace] == "block"
-    assert "codex:mcp__server__allowed" not in result
+
+
+@pytest.mark.parametrize("restriction", ["block", "review"])
+def test_permission_capacity_never_silently_discards_restrictions(restriction: str) -> None:
+    actions = {
+        f"codex:mcp__server__tool_{index}": restriction
+        for index in range(POLICY_SNAPSHOT_MAX_MCP_TOOL_ACTIONS + 1)
+    }
+    with pytest.raises(NativePolicySnapshotError, match="native_mcp_permission_capacity_exceeded"):
+        observed_mcp_tools.bound_native_mcp_tool_actions(actions)

@@ -386,7 +386,41 @@ def get_approval_request(connection: sqlite3.Connection, request_id: str) -> dic
     ).fetchone()
     if row is None:
         return None
-    return _row_to_payload(row)
+    payload = _row_to_payload(row)
+    reason = row["reason"]
+    if (
+        row["status"] == "expired"
+        and isinstance(reason, str)
+        and reason.startswith("superseded_by_fresh_review:")
+        and {"oauth_source", "queue_group_id"} <= columns
+    ):
+        replacement = reason.removeprefix("superseded_by_fresh_review:")
+        if re.fullmatch(r"[A-Za-z0-9-]{1,64}", replacement):
+            candidate = connection.execute(
+                """select policy_action, decision_v2_json, action_envelope_json from approval_requests
+                where request_id = ? and status = 'pending' and harness = ?
+                and artifact_id = ? and workspace IS ? and oauth_source IS ? and queue_group_id IS ?""",
+                (
+                    replacement,
+                    row["harness"],
+                    row["artifact_id"],
+                    row["workspace"],
+                    row["oauth_source"],
+                    row["queue_group_id"],
+                ),
+            ).fetchone()
+            if (
+                candidate is not None
+                and canonical_approval_surfaces(
+                    candidate[0],
+                    _optional_json_object(candidate[1]) or candidate[1],
+                    _optional_json_object(candidate[2]) or candidate[2],
+                    reject_contradiction=False,
+                ).contract_error
+                is None
+            ):
+                payload["superseded_by_request_id"] = replacement
+    return payload
 
 
 def _approval_columns(connection: sqlite3.Connection) -> set[str]:

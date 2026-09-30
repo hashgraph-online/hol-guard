@@ -88,6 +88,21 @@ def managed_stdio_servers(detection: HarnessDetection) -> tuple[ManagedMcpServer
     return tuple(managed)
 
 
+def observable_stdio_servers_with_proxy(detection: HarnessDetection) -> tuple[ManagedMcpServer, ...]:
+    """Include original servers recovered from Guard's managed proxy config.
+
+    Discovery only observes these connections; ``managed_stdio_servers`` must
+    continue excluding them so install never wraps a Guard proxy again.
+    """
+
+    servers: list[ManagedMcpServer] = []
+    for artifact in detection.artifacts:
+        server = _managed_stdio_server(artifact, include_guard_managed_proxy=True)
+        if server is not None:
+            servers.append(server)
+    return tuple(servers)
+
+
 def skipped_stdio_server_names(detection: HarnessDetection) -> tuple[str, ...]:
     """Return server names Guard cannot manage through the runtime proxy."""
 
@@ -198,12 +213,14 @@ def proxy_launcher_entry(
     return entry
 
 
-def _managed_stdio_server(artifact: GuardArtifact) -> ManagedMcpServer | None:
+def _managed_stdio_server(
+    artifact: GuardArtifact, *, include_guard_managed_proxy: bool = False
+) -> ManagedMcpServer | None:
     if artifact.artifact_type != "mcp_server":
         return None
     if is_verified_guard_mcp_companion(artifact.name, artifact.command, artifact.args):
         return None
-    if _bool_metadata(artifact.metadata.get("guard_managed_proxy"), default=False):
+    if not include_guard_managed_proxy and _bool_metadata(artifact.metadata.get("guard_managed_proxy"), default=False):
         return None
     if artifact.command is None or not artifact.name.strip():
         return None
@@ -300,7 +317,7 @@ def _hol_guard_command_name(command: str) -> str | None:
         if cmd_name.endswith(suffix):
             cmd_name = cmd_name[: -len(suffix)]
             break
-    return cmd_name if cmd_name == "hol-guard" else None
+    return cmd_name if cmd_name in {"hol-guard", "current-hol-guard"} else None
 
 
 def is_guard_proxy_command(command: str | None, args: tuple[str, ...]) -> bool:
@@ -325,6 +342,7 @@ __all__ = [
     "is_guard_proxy_command",
     "is_verified_guard_mcp_companion",
     "managed_stdio_servers",
+    "observable_stdio_servers_with_proxy",
     "proxy_cli_args",
     "proxy_launcher_entry",
     "proxy_process_env",

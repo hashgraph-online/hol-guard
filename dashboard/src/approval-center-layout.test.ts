@@ -3,6 +3,8 @@ import { fileURLToPath } from "node:url";
 import { createElement } from "react";
 import {
   resolveEnvelopeDisplayText,
+  resolveActionEnvelopeDetailText,
+  friendlyMcpToolName,
   resolveStoppedCommandText,
   resolveTerminalLabel,
   displayArtifactName,
@@ -251,6 +253,22 @@ assert(
   resolveTerminalLabel(mcpRequest) === "MCP server / tool",
   "T482: resolveTerminalLabel returns 'MCP server / tool' for mcp_tool action type"
 );
+const qualifiedComposio = "mcp__codex_apps__composio__composio_search_tools";
+assert(friendlyMcpToolName(qualifiedComposio) === "Composio · Search Tools",
+  "review shows the connector and action without requiring qualified-name parsing");
+assert(displayArtifactName({ ...mcpRequest, artifact_type: "tool_call", artifact_name: qualifiedComposio })
+  === "Composio · Search Tools", "queue uses a friendly connector-action title");
+assert(resolveActionEnvelopeDetailText({ ...BASE_ENVELOPE, action_type: "mcp_tool",
+  tool_name: qualifiedComposio, mcp_tool: qualifiedComposio }) === "Composio · Search Tools",
+"review action uses a friendly label while retaining the bound underlying artifact");
+assert(friendlyMcpToolName("mcp__unsafe__../../send") === null,
+  "malformed qualified names stay uninterpreted");
+assert(friendlyMcpToolName("mcp__evil__github__delete_repo") === "Evil · Github Delete Repo",
+  "a nested tool name keeps the real server visible");
+assert(friendlyMcpToolName("mcp__github__issues__list") === "Github · Issues List",
+  "nested tools remain readable without impersonating another server");
+assert(friendlyMcpToolName("mcp__codex_apps__composio__search__tools") === "Composio · Search Tools",
+  "Codex app labels retain all action segments");
 
 const queuedBrowserTool: GuardApprovalRequest = {
   ...BASE_REQUEST,
@@ -468,6 +486,11 @@ assert(
   requestResolutionBlockReason(inconsistentRequest)?.includes("cannot be approved") === true,
   "P45: inconsistent stored authority has explicit non-resolvable UI copy",
 );
+const supersededRequest: GuardApprovalRequest = {
+  ...BASE_REQUEST, status: "expired", superseded_by_request_id: "fresh-review",
+};
+assert(requestResolutionBlockReason(supersededRequest)?.includes("superseded by a fresh review") === true,
+  "expired requests expose the fresh review link rather than hiding it");
 
 assert(
   scopeLabel("workspace") === "Same action in this project",

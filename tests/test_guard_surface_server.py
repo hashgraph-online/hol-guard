@@ -222,6 +222,7 @@ class TestGuardSurfaceServer:
             "repair_scope": "local_integrity",
             "check_ids": ["policy_engine", "rule_packs", "tamper_checks"],
             "pending_check_ids": [],
+            "check_reasons": {},
             "message": "Integrity protection restored.",
         }
         assert authenticated_state is not None
@@ -270,6 +271,11 @@ class TestGuardSurfaceServer:
             GuardStore, "get_command_activity_persistence_health", lambda self: SimpleNamespace(active_error_count=0)
         )
         monkeypatch.setattr(GuardStore, "count_command_activities", lambda self: 0)
+        monkeypatch.setattr(
+            daemon_server_module,
+            "_repair_command_activity_persistence_health",
+            lambda _store: None,
+        )
         monkeypatch.setattr(daemon_server_module, "repair_failing_managed_harness_hooks", lambda _store: ((), ()))
         monkeypatch.setattr(GuardStore, "list_managed_installs", lambda self: [{"harness": "codex", "active": True}])
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
@@ -290,6 +296,7 @@ class TestGuardSurfaceServer:
             daemon.stop()
         assert payload["repaired"] is True
         assert payload["check_ids"] == [
+            "daemon",
             "policy_engine",
             "rule_packs",
             "tamper_checks",
@@ -300,6 +307,7 @@ class TestGuardSurfaceServer:
             "decision_stream",
         ]
         assert payload["pending_check_ids"] == []
+        assert payload["check_reasons"] == {}
         assert payload["message"] == "Integrity protection restored."
         assert maintained
         assert containment_probes == [True]
@@ -527,12 +535,218 @@ class TestGuardSurfaceServer:
         assert claims["expires_at"] != "1970-01-01T00:00:00+00:00"
         assert claims["custom"] == "value"
 
+    def test_protection_repair_session_cannot_call_integrity_repair(self, tmp_path) -> None:
+        store = GuardStore(tmp_path / "guard-home")
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+        token = build_local_dashboard_session_token(
+            auth_token=daemon._server.auth_token,
+            surface="protection-repair",
+        )
+        try:
+            repair = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/protection/repair",
+                data=json.dumps({"check_id": "all"}).encode(),
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {token}",
+                },
+                method="POST",
+            )
+            with pytest.raises(urllib.error.HTTPError) as error:
+                urllib.request.urlopen(repair, timeout=5)
+            assert error.value.code == 401
+
+            anonymous_setup = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/protection/repair/approval-gate/setup",
+                data=json.dumps(
+                    {
+                        "settings": {
+                            "approval_gate": {
+                                "enabled": True,
+                                "new_password": "correct-horse",
+                                "confirm_password": "correct-horse",
+                            }
+                        }
+                    }
+                ).encode(),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with pytest.raises(urllib.error.HTTPError) as anonymous_error:
+                urllib.request.urlopen(anonymous_setup, timeout=5)
+            assert anonymous_error.value.code == 401
+
+            settings_write = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/settings",
+                data=json.dumps({"settings": {"desktop_notifications": False}}).encode(),
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {token}",
+                },
+                method="POST",
+            )
+            with pytest.raises(urllib.error.HTTPError) as settings_error:
+                urllib.request.urlopen(settings_write, timeout=5)
+            assert settings_error.value.code == 401
+
+            effective = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/extension-controls/effective",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            with urllib.request.urlopen(effective, timeout=5) as response:
+                assert response.status == 200
+
+            initialize = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/initialize",
+                data=json.dumps({"client_name": "guard-dashboard-web", "surface": "dashboard"}).encode(),
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Guard-Dashboard-Session": token,
+                },
+                method="POST",
+            )
+            with urllib.request.urlopen(initialize, timeout=5) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+            assert _decode_dashboard_session_claims(payload["dashboard_session_token"])["surface"] == (
+                "protection-repair"
+            )
+
+            dashboard_token = build_local_dashboard_session_token(
+                auth_token=daemon._server.auth_token,
+                surface="dashboard",
+            )
+            invalid_setup = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/protection/repair/approval-gate/setup",
+                data=json.dumps({"settings": {}}).encode(),
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {dashboard_token}",
+                },
+                method="POST",
+            )
+            with pytest.raises(urllib.error.HTTPError) as invalid_setup_error:
+                urllib.request.urlopen(invalid_setup, timeout=5)
+            assert invalid_setup_error.value.code == 400
+
+            setup_body = json.dumps(
+                {
+                    "settings": {
+                        "approval_gate": {
+                            "enabled": True,
+                            "new_password": "correct-horse",
+                            "confirm_password": "correct-horse",
+                        }
+                    }
+                }
+            ).encode()
+            first_setup = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/protection/repair/approval-gate/setup",
+                data=setup_body,
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {dashboard_token}",
+                },
+                method="POST",
+            )
+            with urllib.request.urlopen(first_setup, timeout=5) as response:
+                assert response.status == 200
+            second_setup = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/protection/repair/approval-gate/setup",
+                data=setup_body,
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {dashboard_token}",
+                },
+                method="POST",
+            )
+            with pytest.raises(urllib.error.HTTPError) as second_setup_error:
+                urllib.request.urlopen(second_setup, timeout=5)
+            assert second_setup_error.value.code == 409
+
+            other_surface = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/initialize",
+                data=json.dumps({"client_name": "guard-dashboard-web", "surface": "other"}).encode(),
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Guard-Dashboard-Session": dashboard_token,
+                },
+                method="POST",
+            )
+            with urllib.request.urlopen(other_surface, timeout=5) as response:
+                other_payload = json.loads(response.read().decode("utf-8"))
+            assert _decode_dashboard_session_claims(other_payload["dashboard_session_token"])["surface"] == (
+                "dashboard"
+            )
+
+            get_other = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/protection/repair",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            with pytest.raises(urllib.error.HTTPError) as get_other_error:
+                urllib.request.urlopen(get_other, timeout=5)
+            assert get_other_error.value.code == 401
+
+            captured: dict[str, bool] = {}
+
+            def recover(_payload: dict[str, object], *, require_fresh_totp: bool = False) -> dict[str, object]:
+                captured["require_fresh_totp"] = require_fresh_totp
+                return {"ok": True}
+
+            daemon._server.extension_control_api.recover_authority = recover
+            repair_recover = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/extension-controls/recover-authority",
+                data=b"{}",
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {token}",
+                },
+                method="POST",
+            )
+            with urllib.request.urlopen(repair_recover, timeout=5) as response:
+                assert response.status == 200
+            assert captured["require_fresh_totp"] is True
+
+            dashboard_token = build_local_dashboard_session_token(
+                auth_token=daemon._server.auth_token,
+                surface="dashboard",
+            )
+            dashboard_recover = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/extension-controls/recover-authority",
+                data=b"{}",
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {dashboard_token}",
+                },
+                method="POST",
+            )
+            with urllib.request.urlopen(dashboard_recover, timeout=5) as response:
+                assert response.status == 200
+            assert captured["require_fresh_totp"] is False
+
+            mixed = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/extension-controls/recover-authority",
+                data=b"{}",
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Guard-Dashboard-Session": dashboard_token,
+                    "Authorization": f"Bearer {token}",
+                },
+                method="POST",
+            )
+            with urllib.request.urlopen(mixed, timeout=5) as response:
+                assert response.status == 200
+            assert captured["require_fresh_totp"] is True
+        finally:
+            daemon.stop()
+
     def test_guard_daemon_serves_dashboard_shell_for_home_and_section_routes(self, tmp_path) -> None:
         store = GuardStore(tmp_path / "guard-home")
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
         daemon.start()
 
         try:
+            assert getattr(daemon._server.hook_worker, "policy_repair", None) is None
             for route in (
                 "/",
                 "/home",
@@ -545,6 +759,7 @@ class TestGuardSurfaceServer:
                 "/policy",
                 "/feed-health",
                 "/settings",
+                "/protection/repair",
             ):
                 with urllib.request.urlopen(
                     f"http://127.0.0.1:{daemon.port}{route}",
@@ -1033,7 +1248,9 @@ class TestGuardSurfaceServer:
         monkeypatch.setattr(daemon_server_module, "_RUNTIME_HOOK_ADMISSION_TIMEOUT_SECONDS", 10.0)
         monkeypatch.setattr(daemon_server_module, "_RUNTIME_HOOK_PROCESS_TIMEOUT_SECONDS", 8.0)
         monkeypatch.setattr(runtime_hook_deadline_module, "_MAX_BUDGET_SECONDS", 12.0)
-        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        # This endpoint test owns shutdown; worker readiness can exceed the
+        # five-second ephemeral-home idle timeout on a traced runner.
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0, idle_timeout_seconds=0)
         monkeypatch.setattr(daemon._server.hook_process_runner, "_timeout_seconds", 8.0)
         daemon.start()
         try:

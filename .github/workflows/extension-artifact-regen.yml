@@ -12,7 +12,8 @@ name: Extension artifact regen
 # caused by the default GITHUB_TOKEN do not trigger workflows, so a
 # GITHUB_TOKEN-created regen PR would sit without checks.
 
-permissions: {}
+permissions:
+  contents: read
 
 on:
   push:
@@ -89,6 +90,7 @@ jobs:
             src/codex_plugin_scanner/guard/extension_builder tests/fixtures/extension-controls \
             tests/fixtures/command-source-*.v1.json \
             tests/fixtures/guard-command-corpus/decision-diff-report.json \
+            tests/fixtures/guard-command-corpus/decision-diff-report.framed-sha256 \
             tests/test_guard_extension_trust.py tests/test_policy_bundle_delivery_runtime.py
           close_superseded() {
             stale_prs=$(gh pr list --repo "${GH_REPO}" --state open --limit 200 \

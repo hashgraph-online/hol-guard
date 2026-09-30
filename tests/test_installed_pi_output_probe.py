@@ -101,6 +101,48 @@ def test_negative_cli_wrapper_does_not_claim_daemon_recovery(tmp_path: Path) -> 
     assert probe._read_records(log)["negative-malformed"][0]["invocation_kind"] == "hook"
 
 
+@pytest.mark.parametrize("case", _negative_cases(), ids=lambda case: case["id"])
+def test_negative_cli_fixture_captures_exact_response(tmp_path: Path, case: dict[str, object]) -> None:
+    wrapper = tmp_path / "hol-guard"
+    log = tmp_path / "cli.jsonl"
+    probe._write_cli_wrapper(wrapper, python_path=Path(sys.executable), log_path=log, negative=True)
+    payload = json.dumps({"tool_call_id": case["id"], "padding": "unicode: \u00e9"}, ensure_ascii=False).encode()
+    completed = subprocess.run([str(wrapper), "hook", "--json"], input=payload, capture_output=True, check=False)
+    record = probe._read_records(log)[str(case["id"])][0]
+    assert base64.b64decode(record["stdin_b64"]) == payload
+    assert base64.b64decode(record["stdout_b64"]) == completed.stdout
+    assert base64.b64decode(record["stderr_b64"]) == completed.stderr
+    assert record["returncode"] == completed.returncode
+    assert completed.returncode == (2 if case["id"] == "negative-nonzero-allow" else 0)
+    assert record["invocation_kind"] == "hook"
+    expected_stdout = {
+        "negative-empty": b"",
+        "negative-malformed": b"not-json\n",
+        "negative-missing-decision": b'{"policy_action":"allow"}\n',
+        "negative-missing-proof": b'{"decision":"allow","model_output_action":"allow_original"}\n',
+        "negative-mismatch-proof": (
+            b'{"decision":"allow","model_output_action":"allow_original","reviewed_output_sha256":"'
+            + b"0" * 64
+            + b'"}\n'
+        ),
+        "negative-nonzero-allow": b'{"decision":"allow"}\n',
+        "negative-observe": b'{"decision":"allow","observe_mode":true}\n',
+    }
+    assert completed.stdout == expected_stdout[case["id"]]
+    assert completed.stderr == (b"cli failed\n" if case["id"] == "negative-nonzero-allow" else b"")
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="compiled negative fixture is POSIX-only")
+def test_compiled_negative_cli_fixture_rejects_oversized_input(tmp_path: Path) -> None:
+    wrapper = tmp_path / "hol-guard"
+    log = tmp_path / "cli.jsonl"
+    probe._write_cli_wrapper(wrapper, python_path=Path(sys.executable), log_path=log, negative=True)
+    completed = subprocess.run([str(wrapper), "hook", "--json"], input=b"x" * 32769, capture_output=True, check=False)
+    assert completed.returncode == 125
+    assert completed.stdout == b""
+    assert not log.exists()
+
+
 def test_installed_origin_guard_rejects_checkout_package_only(tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     checkout_package = repo_root / "src" / "codex_plugin_scanner" / "__init__.py"

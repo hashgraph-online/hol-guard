@@ -25,6 +25,6 @@ strings; it never executes the target CLI.
 
 The canonical JSON source repeats complete native matcher objects because the
 source contract has no include or template mechanism. The portable fixture
-embeds the exact source in its build envelope; the preparation flow verifies
-that binding before compiling. Explicitly disabling a permission creates a
+embeds the exact Kranz source in an addition build envelope against the packaged
+baseline; the preparation flow verifies that binding before compiling. Explicitly disabling a permission creates a
 blocking control for that capability, so its matched segment stays effective.
