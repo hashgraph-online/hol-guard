@@ -209,6 +209,7 @@ fn is_command_tool(tool: &str) -> bool {
             "execute_command",
             "exec_command",
             "execute_command_line",
+            "exec",
         ],
     )
 }
@@ -304,10 +305,9 @@ fn infer_action_type(
     (PreToolActionTypeV1::Unknown, PreToolOperationV1::Unknown)
 }
 
-/// Evaluate the complete raw PreToolUse payload in native code.
-///
-/// This remains separate from `evaluate_pre_tool`, the compatibility
-/// command-model operation used by older clients.
+/// Evaluate the complete raw PreToolUse payload in native code. This stays
+/// separate from `evaluate_pre_tool`, the compatibility command-model
+/// operation used by older clients.
 pub fn evaluate_pre_tool_envelope(harness: &str, event: &str, payload: &Value) -> PreToolResultV1 {
     evaluate_pre_tool_envelope_with_extensions(harness, event, payload, None, None)
 }
@@ -318,6 +318,21 @@ pub fn evaluate_pre_tool_envelope_with_extensions(
     payload: &Value,
     controls: Option<&CompiledNativeCommandControls>,
     deadline: Option<Instant>,
+) -> PreToolResultV1 {
+    evaluate_pre_tool_envelope_with_source(harness, event, payload, controls, deadline, None, None)
+}
+
+/// Like [`evaluate_pre_tool_envelope_with_extensions`] but also carries the
+/// envelope's verified `home_dir`/`cwd` so `~/`-relative and absolute harness
+/// paths (Devin sends `~/...` verbatim) share the non-sensitive read floor.
+pub fn evaluate_pre_tool_envelope_with_source(
+    harness: &str,
+    event: &str,
+    payload: &Value,
+    controls: Option<&CompiledNativeCommandControls>,
+    deadline: Option<Instant>,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
 ) -> PreToolResultV1 {
     let signals = match extract_generic_signals(payload) {
         Ok(value) => value,
@@ -331,7 +346,14 @@ pub fn evaluate_pre_tool_envelope_with_extensions(
             extraction_provenance: "pre-tool-generic".to_owned(),
         })
     });
-    let result = evaluate_signals(harness, event, &signals, command_decision.as_ref());
+    let result = evaluate_signals(
+        harness,
+        event,
+        &signals,
+        command_decision.as_ref(),
+        home_dir,
+        cwd,
+    );
     match (controls, command_decision) {
         (Some(controls), Some(Ok(decision))) => controls.apply_with_tool(
             Some(&decision.command_model),
@@ -356,6 +378,8 @@ fn evaluate_signals(
     event: &str,
     signals: &GenericSignals,
     command_decision: Option<&Result<PreToolDecisionV1, String>>,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
 ) -> PreToolResultV1 {
     let (mut action_type, mut operation) = infer_action_type(
         event,
@@ -417,16 +441,13 @@ fn evaluate_signals(
         );
     }
     if let Some(command_decision) = command_decision {
-        let command_decision = match command_decision {
-            Ok(value) => value,
-            Err(_) => {
-                return generic_result(
-                    action,
-                    "block",
-                    "native_pre_tool_malformed_payload",
-                    "HOL Guard blocked a malformed PreToolUse command before execution.",
-                )
-            }
+        let Ok(command_decision) = command_decision else {
+            return generic_result(
+                action,
+                "block",
+                "native_pre_tool_malformed_payload",
+                "HOL Guard blocked a malformed PreToolUse command before execution.",
+            );
         };
         if command_decision.minimum_action == "block" {
             return generic_result(
@@ -464,7 +485,7 @@ fn evaluate_signals(
         && !signals.sensitive_target
         && signals.url_values.is_empty()
         && signals.path_values.len() == 1
-        && bounded_workspace_read_path(&signals.path_values[0])
+        && super::safe_reads::bounded_file_read_target(&signals.path_values[0], home_dir, cwd)
     {
         return generic_result(
             action,
@@ -475,20 +496,4 @@ fn evaluate_signals(
     }
     let (reason_code, reason) = review_reason(action_type);
     generic_result(action, "review", reason_code, reason)
-}
-
-fn bounded_workspace_read_path(value: &str) -> bool {
-    let path = value.trim();
-    if path.is_empty() || path.len() > 4096 {
-        return false;
-    }
-    if path.contains([
-        '$', '`', '|', ';', '&', '<', '>', '\n', '\r', '\0', '*', '?', '[', ']', '{', '}',
-    ]) {
-        return false;
-    }
-    if path.split(['/', '\\']).any(|part| part == "..") {
-        return false;
-    }
-    super::safe_reads::safe_read_target(path)
 }

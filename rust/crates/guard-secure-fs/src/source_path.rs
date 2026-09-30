@@ -35,7 +35,9 @@ const SENSITIVE_SEARCH_BASENAMES: &[&str] = &[
     "credentials",
     "id_rsa",
 ];
-const EXTERNAL_SENSITIVE_PARTS: &[&str] = &[
+/// Path components that mark credential/secret material when a read
+/// escapes the workspace. Shared with the native PreToolUse read floor.
+pub const EXTERNAL_SENSITIVE_PARTS: &[&str] = &[
     ".aws",
     ".docker",
     ".env",
@@ -97,7 +99,11 @@ fn hidden_parts_allowed(parts: &[String]) -> bool {
     workflow_prefix && hidden == [".github"]
 }
 
-fn sensitive_external_filename(path: &Path) -> bool {
+/// True when the basename or stem matches a sensitive filename family
+/// (`credentials`, `secrets`, `token`, `password`, `id_rsa`, `.env`, …).
+/// Unlike `sensitive_path_family`, this also catches plain filenames such
+/// as `credentials.txt` that carry no well-known parent directory.
+pub fn sensitive_external_filename(path: &Path) -> bool {
     let filename = path
         .file_name()
         .and_then(|value| value.to_str())
@@ -462,6 +468,14 @@ pub fn sensitive_path_family(path: &Path) -> Option<(&'static str, &'static str)
         }
     }
     None
+}
+
+/// True when every hidden (`.`-prefixed) path component is on the benign
+/// dotfile list or the `.github/workflows` prefix. Used by the native
+/// PreToolUse floor so absolute/home-relative reads cannot silently enter
+/// dot-directories such as `.hol-guard`, `.git`, or `.config`.
+pub fn hidden_read_parts_allowed(path: &Path) -> bool {
+    hidden_parts_allowed(&lowered_parts(path))
 }
 
 pub fn source_like(path: &Path) -> bool {
