@@ -51,7 +51,7 @@ from scripts.native_slo_capacity import (  # noqa: E402, F401
     _stabilize_ready_hook_workers,
     measure_capacity,
 )
-from scripts.native_slo_contract import SIZE_CLASSES  # noqa: E402
+from scripts.native_slo_contract import SAFE_ROUTE_NAMES, SIZE_CLASSES  # noqa: E402
 from scripts.native_slo_reporting import (  # noqa: E402
     SloMeasurements,
     safe_failure_rate,
@@ -196,16 +196,76 @@ def _run_cold(runtime: Path, session: AdapterSession, iterations: int) -> list[f
 def _run_recovery(session: AdapterSession, iterations: int) -> list[float]:
     values: list[float] = []
     for index in range(iterations):
-        _ = session.observe("claude-code", "PostToolUse", "1k")
+        warm = session.observe("claude-code", "PostToolUse", "1k")
         _require(
-            session.stop_resident(),
+            warm.allowed and warm.route == "native_resident", f"recovery sample {index} was not resident before stop"
+        )
+        _require(
+            # A resident restart leaves the installed adapter's persistent
+            # Rust client alive. That stream re-discovers/authenticates the
+            # new generation on the next request; destroying it here would
+            # add a separate client cold start to the resident recovery SLO.
+            session.stop_resident(preserve_clients=True),
             f"resident stop failed during recovery sample {index}",
         )
         started = time.perf_counter()
         observation = session.observe("claude-code", "PostToolUse", "1k")
-        values.append((time.perf_counter() - started) * 1_000.0)
+        elapsed_ms = (time.perf_counter() - started) * 1_000.0
+        values.append(elapsed_ms)
+        print(
+            json.dumps(
+                {
+                    "schema": "hol-guard.native-recovery-sample.v1",
+                    "sample": index,
+                    "adapter_ms": round(observation.latency_ms, 3),
+                    "elapsed_ms": round(elapsed_ms, 3),
+                    "route": observation.route,
+                    "allowed": observation.allowed,
+                },
+                sort_keys=True,
+            ),
+            file=sys.stderr,
+            flush=True,
+        )
         _require(observation.allowed and observation.route == "native_resident", f"recovery sample {index} failed")
     return values
+
+
+def _run_serialized_warmup(session: AdapterSession, harness: str, event: str) -> None:
+    observation = session.observe(harness, event, "1k")
+    passed = observation.allowed and observation.route == "native_resident"
+    if not passed:
+        from codex_plugin_scanner.guard.native_approval_errors import NATIVE_COMMAND_CONTROL_ERROR_CODES
+
+        publisher = session.daemon._server.hook_worker.policy_snapshot_publisher
+        error = publisher.last_error
+        reasons = NATIVE_COMMAND_CONTROL_ERROR_CODES | {
+            "native_policy_snapshot_resident_changed",
+            "native_policy_snapshot_expired",
+            "native_policy_snapshot_runtime_unavailable",
+            "native_policy_snapshot_publish_failed",
+            "native_policy_snapshot_native_disabled",
+            "native_policy_snapshot_protocol_unsupported",
+        }
+        binding = publisher.current_snapshot_binding()
+        generation = binding.get("generation") if isinstance(binding, dict) else None
+        print(
+            json.dumps(
+                {
+                    "schema": "hol-guard.native-serialized-warmup-failure.v1",
+                    "route": observation.route if observation.route in SAFE_ROUTE_NAMES else "unknown",
+                    "allowed": observation.allowed,
+                    "adapter_ms": round(observation.latency_ms, 3),
+                    "publisher_error": error if error in reasons else None,
+                    "publisher_ready": binding is not None,
+                    "policy_generation": generation if type(generation) is int and 0 <= generation < 2**64 else None,
+                },
+                sort_keys=True,
+            ),
+            file=sys.stderr,
+            flush=True,
+        )
+    _require(passed, "serialized resident pool warmup did not stay on the allowed native route")
 
 
 def _measure_slo(
@@ -228,11 +288,7 @@ def _measure_slo(
         sizes = _run_sizes(session, routes)
         recovery = _run_recovery(session, recovery_iterations)
         warmup_harness, warmup_event = routes[0]
-        serialized_warmup = session.observe(warmup_harness, warmup_event, "1k")
-        _require(
-            serialized_warmup.allowed and serialized_warmup.route == "native_resident",
-            "serialized resident pool warmup did not stay on the allowed native route",
-        )
+        _run_serialized_warmup(session, warmup_harness, warmup_event)
         capacity = measure_capacity(session, routes, include_capacity=include_capacity)
         readiness = [session.readiness_ms]
     if readiness_samples > 1:

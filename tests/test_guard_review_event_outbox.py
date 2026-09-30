@@ -102,7 +102,10 @@ def test_identity_incomplete_event_is_quarantined_with_valid_hash(tmp_path) -> N
         machine_installation_id=event["machine_installation_id"],
     )
     assert store.list_ready_review_events(now=_NOW, limit=10) == []
-    assert store.review_event_outbox_status(now=_NOW)["quarantined_depth"] == 1
+    status = store.review_event_outbox_status(now=_NOW)
+    assert status["quarantined_depth"] == 1
+    assert status["binding_state"] == "quarantined"
+    assert status["binding_hint"] == "Review events require explicit identity repair."
 
 
 def test_later_credential_availability_does_not_silently_adopt_quarantine(tmp_path) -> None:
@@ -190,6 +193,35 @@ def test_acknowledgement_compacts_only_contiguous_binding_prefix(tmp_path) -> No
     assert cursor is not None
     assert cursor["acknowledged_stream_sequence"] == third
     assert [(row["stream_sequence"], row["binding_status"]) for row in retained] == [(quarantined, "quarantined")]
+    status = store.review_event_outbox_status(now=_NOW, **binding)
+    assert status["quarantined_depth"] == 1
+    assert status["binding_state"] == "healthy"
+    assert status["binding_hint"] is None
+    assert status["identity_mismatch_depth"] == 0
+
+
+def test_quarantine_cannot_reclassify_an_acknowledged_event(tmp_path) -> None:
+    store = GuardStore(tmp_path / "guard")
+    binding = _connect(store)
+    store.add_approval_request(_request("pending-prefix"), _NOW)
+    store.add_approval_request(_request("acknowledged-later"), _NOW)
+    rows = store.list_ready_review_events(now=_NOW, limit=10, **binding)
+    first, second = (as_int(row["sequence"]) for row in rows)
+    assert store.acknowledge_review_events([second], **binding) == 0
+    assert (
+        store.quarantine_review_event(
+            second, reason="review_continuation_binding_mismatch", error="late rejection", **binding
+        )
+        == 0
+    )
+    with store._connect() as connection:
+        row = connection.execute(
+            "select binding_status, acknowledged_at from guard_review_outbox_events where stream_sequence = ?",
+            (second,),
+        ).fetchone()
+    assert row is not None and row["binding_status"] == "ready" and row["acknowledged_at"] is not None
+    assert store.acknowledge_review_events([first], **binding) == 2
+    assert store.review_event_outbox_status(now=_NOW)["quarantined_depth"] == 0
 
 
 def test_request_mutations_roll_back_when_event_append_fails(tmp_path) -> None:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -119,7 +120,11 @@ _SENSITIVE_INLINE_PREFIX_PATTERNS: tuple[re.Pattern[str], ...] = (
         r'dpop[_-]?private[_-]?key(?:[_-]?(?:pem|ref))?)"?\s*[:=]\s*',
     ),
 )
-_SENSITIVE_TEXT_PATTERN = re.compile(r"(?i)(sk-[a-z0-9_-]+|(?:token|secret|api[_-]?key)(?:\s*[:=]\s*|\s+)[^\s,;]+)")
+_SENSITIVE_TEXT_PATTERN = re.compile(
+    r"(?i)(sk-[a-z0-9_-]+|(?:token|secret|password|passwd|credential(?:s)?|authorization|"
+    r"access[_-]?key|api[_-]?key)(?:\s*[:=]\s*|\s+)(?:bearer\s+|basic\s+)?"
+    r"(?P<value>\"(?:\\[^\r\n]|[^\"\\\r\n])*\"|'(?:\\[^\r\n]|[^'\\\r\n])*'|\"(?:\\[^\r\n]|[^\"\\\r\n])*|'(?:\\[^\r\n]|[^'\\\r\n])*|[^\s,;\"']+))"
+)
 _POSIX_USER_PATH_PATTERN = re.compile(
     r"(?P<prefix>^|[\s\"'=({\[])(?P<root>/(?:Users|home)/[^/\s\"'`,;:)}\]]+)(?P<rest>(?:/[^\s\"'`,;:)}\]]*)?)"
 )
@@ -127,6 +132,60 @@ _WINDOWS_USER_PATH_PATTERN = re.compile(
     r"(?P<prefix>^|[\s\"'=({\[])(?P<root>[A-Za-z]:[\\/]+Users[\\/]+[^\\/\s\"'`,;:)}\]]+)"
     r"(?P<rest>(?:[\\/][^\s\"'`,;:)}\]]*)?)"
 )
+
+
+_REVIEW_SENSITIVE_KEYS = frozenset(
+    {
+        "api_key",
+        "apikey",
+        "access_token",
+        "auth",
+        "authorization",
+        "client_secret",
+        "content",
+        "cookie",
+        "credential",
+        "credentials",
+        "id_token",
+        "output",
+        "password",
+        "private_key",
+        "refresh_token",
+        "secret",
+        "session_token",
+        "set_cookie",
+        "stderr",
+        "stdout",
+        "token",
+        "tool_response",
+    }
+)
+_REVIEW_SENSITIVE_ALIASES = frozenset(key.replace("_", "") for key in _REVIEW_SENSITIVE_KEYS)
+
+
+def is_sensitive_review_key(key: str) -> bool:
+    """Recognize credential/output field aliases without inspecting files."""
+    normalized = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", key.replace("-", "_")).lower()
+    return normalized in _REVIEW_SENSITIVE_KEYS or normalized.replace("_", "") in _REVIEW_SENSITIVE_ALIASES
+
+
+def redact_review_payload(payload: Mapping[str, object]) -> dict[str, object]:
+    """Redact an in-memory JSON review payload without resolving paths or truncating code."""
+    return {key: _redact_review_value(key, value) for key, value in payload.items()}
+
+
+def _redact_review_value(key: str, value: object) -> object:
+    if is_sensitive_review_key(key):
+        return "[redacted]"
+    if isinstance(value, Mapping):
+        return redact_review_payload(value)
+    if isinstance(value, list):
+        return [_redact_review_value(key, item) for item in value]
+    if isinstance(value, str):
+        return redact_local_path(redact_sensitive_text(redact_text(value).text))
+    if value is None or isinstance(value, (bool, int, float)):
+        return value
+    raise ValueError("Review input must contain only JSON values")
 
 
 def redact_text(value: str) -> RedactedText:
@@ -153,7 +212,16 @@ def redact_sensitive_text(value: str) -> str:
     redacted = value
     for pattern in _SENSITIVE_INLINE_PREFIX_PATTERNS:
         redacted = _redact_inline_secret_assignments(redacted, pattern)
-    return _SENSITIVE_TEXT_PATTERN.sub("[redacted]", redacted)
+    return _SENSITIVE_TEXT_PATTERN.sub(_replace_sensitive_text_match, redacted)
+
+
+def _replace_sensitive_text_match(match: re.Match[str]) -> str:
+    """Preserve already-masked command labels without restoring credential values."""
+
+    value = match.group("value")
+    if value is not None and value.strip("\"'") in {"[redacted]", "***", "*****"}:
+        return match.group(0)
+    return "[redacted]"
 
 
 def _redact_inline_secret_assignments(value: str, pattern: re.Pattern[str]) -> str:

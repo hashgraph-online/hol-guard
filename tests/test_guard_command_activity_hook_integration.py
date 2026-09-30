@@ -26,11 +26,32 @@ from codex_plugin_scanner.guard.runtime.command_activity_correlation import (
     derive_proven_request_correlation,
     load_or_create_installation_correlation_key,
 )
-from codex_plugin_scanner.guard.runtime.secret_file_requests import (
-    build_tool_action_request_artifact,
-    extract_sensitive_tool_action_request,
-)
+from codex_plugin_scanner.guard.runtime.native_command_evaluation import review_command_native
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.native_command_test_support import RealNativeReviewFixture, real_native_review_fixture
+
+
+@pytest.fixture(autouse=True)
+def _real_native_command_reviews(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard.cli import commands_support_command_activity as activity_support
+    from codex_plugin_scanner.guard.runtime import native_command_evaluation
+
+    fixtures: dict[str, RealNativeReviewFixture] = {}
+
+    def review(command: str, **_kwargs: object) -> dict[str, object]:
+        fixture = fixtures.get(command)
+        if fixture is None:
+            fixture = real_native_review_fixture(command)
+            fixtures[command] = fixture
+        return fixture.payload
+
+    seed = real_native_review_fixture("printf native-fixture")
+    monkeypatch.setattr(native_command_evaluation, "review_pre_tool_native", review)
+    monkeypatch.setattr(
+        activity_support.ExtensionControlRuntimeSnapshot,
+        "from_authority_view",
+        staticmethod(lambda _view: seed.snapshot),
+    )
 
 
 def _command_payload(*, request_id: str | None = "toolcall_abcdef1234567890") -> dict[str, object]:
@@ -168,58 +189,53 @@ def test_same_request_id_with_changed_decision_is_a_counted_conflict(tmp_path: P
     assert health.last_error_code == "pre_record_failed"
 
 
-def test_persisted_rule_ids_match_authoritative_runtime_artifact_evaluation(tmp_path: Path) -> None:
+def test_unsupported_native_wrapper_records_no_fabricated_rule_ids(tmp_path: Path) -> None:
     guard_home = tmp_path / "guard-home"
     store = _store(guard_home)
-    command = "sudo --command-timeout 10 git push origin main --force"
+    command = "sudo -u alternate-user git push origin main --force"
     payload: dict[str, object] = {
         "tool_name": "Shell",
         "tool_input": {"command": command},
         "tool_call_id": "toolcall_wrapped_abcdef1234567890",
     }
-    request = extract_sensitive_tool_action_request(
-        "Shell",
-        {"command": command},
+    native = real_native_review_fixture(command)
+    reviewed = review_command_native(
+        command,
+        guard_home=guard_home,
         cwd=tmp_path,
         home_dir=tmp_path,
+        extension_control_snapshot=native.snapshot,
     )
-    assert request is not None
-    artifact = build_tool_action_request_artifact(
-        "codex",
-        request,
-        config_path="config.toml",
-        source_scope="project",
-    )
-    authoritative_matches = artifact.metadata["command_rule_matches"]
-    assert isinstance(authoritative_matches, list)
-    authoritative_rule_ids: set[str] = set()
-    for raw_item in cast(list[object], authoritative_matches):
-        if not isinstance(raw_item, dict):
-            continue
-        item = cast(dict[object, object], raw_item)
-        rule_id = item.get("rule_id")
-        if isinstance(rule_id, str):
-            authoritative_rule_ids.add(rule_id)
+    assert native.payload["minimum_action"] == "block"
+    model = cast(dict[str, object], native.payload["command_model"])
+    assert model["confidence"] == "uncertain"
+    assert model["uncertainty_reason"] == "transparent_wrapper_not_yet_supported"
+    extension_evidence = cast(dict[str, object], native.payload["command_extensions"])
+    assert extension_evidence["evaluation_error"] == "native_command_evaluation_failed"
+    assert extension_evidence["observations"] == []
+    assert reviewed is not None
+    assert reviewed.evaluation.minimum_action == "block"
+    assert reviewed.evaluation.matches == ()
+    assert reviewed.evaluation.controlling_rule_id is None
+    assert reviewed.payload["command_extensions"] == extension_evidence
 
-    assert record_pre_hook_command_activity_best_effort(
+    # Offline native classification does not issue the linked receipt required
+    # for recording a review-or-stronger final decision.
+    assert not record_pre_hook_command_activity_best_effort(
         store=store,
         guard_home=guard_home,
         harness="codex",
         event="PreToolUse",
         payload=payload,
-        policy_action="allow",
+        policy_action="block",
         receipt_id=None,
         prompted=False,
         cwd=tmp_path,
         home_dir=tmp_path,
     )
+    assert store.count_command_activities() == 0
     with sqlite3.connect(store.path) as connection:
-        rows = cast(
-            list[tuple[str]],
-            connection.execute("select rule_id from command_activity_matches").fetchall(),
-        )
-        persisted_rule_ids = {row[0] for row in rows}
-    assert persisted_rule_ids == authoritative_rule_ids
+        assert connection.execute("select rule_id from command_activity_matches").fetchall() == []
 
 
 def test_failure_post_transitions_with_same_native_identifier(tmp_path: Path) -> None:
@@ -337,7 +353,7 @@ def test_non_hook_command_event_does_not_create_pre_evidence(tmp_path: Path) -> 
     assert store.count_command_activities() == 0
 
 
-def test_unmatched_pre_and_post_record_one_no_match_activity(tmp_path: Path) -> None:
+def test_native_git_diff_match_records_one_activity(tmp_path: Path) -> None:
     guard_home = tmp_path / "guard-home"
     store = _store(guard_home)
     payload = {
@@ -378,8 +394,10 @@ def test_unmatched_pre_and_post_record_one_no_match_activity(tmp_path: Path) -> 
     activity = store.get_command_activity_by_request_correlation(correlation)
     assert activity is not None
     assert activity.execution_status is CommandExecutionStatus.CONFIRMED_SUCCESS
-    assert activity.decision_reason_code is ActivityDecisionReason.NO_MATCH
-    assert activity.match_count == 0
+    assert activity.decision_reason_code is ActivityDecisionReason.EXTENSION_MATCH
+    with sqlite3.connect(store.path) as connection:
+        assert connection.execute("select rule_id from command_activity_matches").fetchall() == [("command.git.diff",)]
+    assert activity.match_count == 1
 
 
 def test_cursor_before_and_trusted_after_events_pair_by_generation_id(tmp_path: Path) -> None:

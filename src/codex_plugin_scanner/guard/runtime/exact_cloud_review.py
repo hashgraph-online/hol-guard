@@ -16,7 +16,12 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
-from ..review_contracts import GuardReviewContractError, GuardReviewOAuthMetadata, guard_review_oauth_metadata
+from ..review_contracts import (
+    GuardReviewContractError,
+    GuardReviewOAuthMetadata,
+    guard_review_oauth_metadata,
+    remote_approval_uses_workspace_admin_mfa,
+)
 from ..stable_digest import sha256_content_digest
 from ..stable_json import stable_json_serialize
 from .exact_cloud_review_diagnostics import enrich_exact_cloud_review_status
@@ -304,8 +309,17 @@ def _revoke_binding_drift(store: GuardStore, capability: dict[str, object], *, n
 
 
 def exact_cloud_review_operations(store: GuardStore, *, now: str | None = None) -> tuple[str, ...]:
+    if store.get_sync_payload(EXACT_CLOUD_REVIEW_REVOCATION_STATE_KEY) is not None:
+        return ()
     try:
         _verified_capability(store, now=now)
+        return (EXACT_CLOUD_REVIEW_OPERATION,)
+    except (AttributeError, ExactCloudReviewError):
+        pass
+    if store.get_sync_payload(EXACT_CLOUD_REVIEW_REVOCATION_STATE_KEY) is not None:
+        return ()
+    try:
+        _oauth_metadata(store)
     except (AttributeError, ExactCloudReviewError):
         return ()
     return (EXACT_CLOUD_REVIEW_OPERATION,)
@@ -358,25 +372,37 @@ def authorize_exact_cloud_review_job(
     )
 
     try:
-        capability = _verified_capability(store, now=now)
         identity = _exact_job_identity(job)
         expires_at = parse_utc_timestamp(identity.get("expiresAt"))
         if expires_at is None or expires_at <= _now(now):
             raise ExactCloudReviewError("remote_exact_job_expired")
         if expires_at > _now(now) + timedelta(hours=24):
             raise ExactCloudReviewError("remote_exact_job_expiry_too_distant")
-        if identity["deviceId"] != capability["deviceId"]:
-            raise ExactCloudReviewError("remote_exact_job_wrong_target")
-        if identity["workspaceId"] != capability["workspaceId"]:
-            raise ExactCloudReviewError("remote_exact_job_wrong_workspace")
         payload = job.get("payload")
         remote_approval = payload.get("remoteApproval") if isinstance(payload, Mapping) else None
         if not isinstance(remote_approval, Mapping):
             raise ExactCloudReviewError("remote_exact_job_invalid")
-        if remote_approval.get("grantId") != capability["grantId"]:
-            raise ExactCloudReviewError("remote_exact_job_wrong_grant")
-        if remote_approval.get("capabilityId") != _capability_digest(capability):
-            raise ExactCloudReviewError("remote_exact_job_capability_mismatch")
+        approval = {str(key): value for key, value in remote_approval.items() if isinstance(key, str)}
+        if remote_approval_uses_workspace_admin_mfa(approval):
+            if store.get_sync_payload(EXACT_CLOUD_REVIEW_REVOCATION_STATE_KEY) is not None:
+                raise ExactCloudReviewError("cloud_review_capability_revoked")
+            oauth = _oauth_metadata(store)
+            if identity["deviceId"] != oauth.device_id:
+                raise ExactCloudReviewError("remote_exact_job_wrong_target")
+            if identity["workspaceId"] != oauth.workspace_id:
+                raise ExactCloudReviewError("remote_exact_job_wrong_workspace")
+            if approval.get("grantId") != oauth.grant_id:
+                raise ExactCloudReviewError("remote_exact_job_wrong_grant")
+        else:
+            capability = _verified_capability(store, now=now)
+            if identity["deviceId"] != capability["deviceId"]:
+                raise ExactCloudReviewError("remote_exact_job_wrong_target")
+            if identity["workspaceId"] != capability["workspaceId"]:
+                raise ExactCloudReviewError("remote_exact_job_wrong_workspace")
+            if approval.get("grantId") != capability["grantId"]:
+                raise ExactCloudReviewError("remote_exact_job_wrong_grant")
+            if approval.get("capabilityId") != _capability_digest(capability):
+                raise ExactCloudReviewError("remote_exact_job_capability_mismatch")
         if _command_job_seen(store, identity, now=now):
             raise ExactCloudReviewError("remote_exact_job_replayed")
     except (ExactCloudReviewError, KeyError) as error:

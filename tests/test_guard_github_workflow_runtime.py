@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import json
 import os
+import shlex
 import subprocess
 import sys
 from collections.abc import Mapping
@@ -22,7 +23,6 @@ from codex_plugin_scanner.guard.approvals import _artifact_scope_runtime_exact_m
 from codex_plugin_scanner.guard.cli.commands_hook_runtime_eval import _evaluate_runtime_artifact_hook
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.models import GuardApprovalRequest, GuardArtifact
-from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
 from codex_plugin_scanner.guard.runtime.command_model import parse_shell_command
 from codex_plugin_scanner.guard.runtime.effect_decision import FinalDisposition
 from codex_plugin_scanner.guard.runtime.github_capability_interaction import GITHUB_MAINTENANCE_ACTION_CLASS
@@ -49,11 +49,13 @@ from codex_plugin_scanner.guard.workflow_capabilities import (
     canonical_framed_payload,
     format_utc_timestamp,
 )
+from tests.native_workflow_test_support import evaluate_native_workflow_command
 
 _ISSUED = datetime(2026, 7, 20, 12, tzinfo=timezone.utc)
-_COMMAND = f"{Path(sys.executable).resolve()} issue lock 17 --repo example/repo"
+_GH_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "github-workflow" / "gh"
+_COMMAND = f"{shlex.quote(str(_GH_FIXTURE))} issue lock 17 --repo example/repo"
 _GRAPHQL_COMMAND = (
-    f"{Path(sys.executable).resolve()} api graphql -f query="
+    f"{shlex.quote(str(_GH_FIXTURE))} api graphql -f query="
     "'mutation($threadId:ID!){resolveReviewThread(input:{threadId:$threadId}){thread{id}}}' -f threadId=THREAD_1"
 )
 
@@ -76,7 +78,7 @@ def _framed_digest(purpose: str, payload: object) -> str:
 
 
 def _descriptor(command: str = _COMMAND) -> GitHubWorkflowDescriptor:
-    executable = str(Path(sys.executable).resolve())
+    executable = str(_GH_FIXTURE)
     operation = parse_github_workflow_operation(
         parse_shell_command(command),
         repository="example/repo",
@@ -233,7 +235,7 @@ def test_resolved_guard_lineage_issues_bounded_retry_capability(tmp_path: Path) 
     assert issue_resolved_github_workflow_capability(store, request, resolved_at=format_utc_timestamp(_ISSUED))
     authorization = claim_resolved_github_workflow_authorization(store, "request-github-1", descriptor)
     assert authorization is not None
-    evaluation = evaluate_command(
+    evaluation = evaluate_native_workflow_command(
         _COMMAND,
         compatibility_action_class=GITHUB_MAINTENANCE_ACTION_CLASS,
         workflow_authorization=authorization,
@@ -359,7 +361,7 @@ def test_cli_descriptor_requires_workspace_remote_and_authenticated_viewer(
 ) -> None:
     import codex_plugin_scanner.guard.runtime.github_workflow_context as context_module
 
-    monkeypatch.setattr(context_module, "_resolve_executable", lambda _name, _env: Path(sys.executable).resolve())
+    monkeypatch.setattr(context_module, "_resolve_executable", lambda _name, _env: _GH_FIXTURE)
 
     def response(arguments: tuple[str, ...], **_kwargs: object) -> bytes:
         if "remote.origin.url" in arguments:
@@ -384,7 +386,7 @@ def test_review_thread_descriptor_uses_exact_identity_bound_locator(
 ) -> None:
     import codex_plugin_scanner.guard.runtime.github_workflow_context as context_module
 
-    monkeypatch.setattr(context_module, "_resolve_executable", lambda _name, _env: Path(sys.executable).resolve())
+    monkeypatch.setattr(context_module, "_resolve_executable", lambda _name, _env: _GH_FIXTURE)
     located = {
         "data": {
             "node": {
@@ -434,7 +436,7 @@ def test_review_thread_locator_malformed_or_oversized_response_fails_closed(
 ) -> None:
     import codex_plugin_scanner.guard.runtime.github_workflow_context as context_module
 
-    monkeypatch.setattr(context_module, "_resolve_executable", lambda _name, _env: Path(sys.executable).resolve())
+    monkeypatch.setattr(context_module, "_resolve_executable", lambda _name, _env: _GH_FIXTURE)
 
     def response(arguments: tuple[str, ...], **_kwargs: object) -> bytes:
         if "remote.origin.url" in arguments:
@@ -458,7 +460,7 @@ def test_review_thread_locator_malformed_or_oversized_response_fails_closed(
 def test_destructive_operation_never_gets_a_descriptor(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     import codex_plugin_scanner.guard.runtime.github_workflow_context as context_module
 
-    monkeypatch.setattr(context_module, "_resolve_executable", lambda _name, _env: Path(sys.executable).resolve())
+    monkeypatch.setattr(context_module, "_resolve_executable", lambda _name, _env: _GH_FIXTURE)
     monkeypatch.setattr(
         context_module,
         "_run_bounded",

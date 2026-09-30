@@ -201,10 +201,11 @@ class StoreExactCloudReviewMixin:
         resolution_action: str,
         resolution_scope: str,
         reason: str,
-        expected_capability: dict[str, object],
+        expected_capability: dict[str, object] | None,
         expected_oauth_binding: dict[str, object],
         expected_request: dict[str, object],
         receipt_expires_at: str,
+        skip_exact_capability: bool = False,
     ) -> dict[str, object]:
         """Claim and apply an exact receipt after rechecking all mutable state."""
 
@@ -220,11 +221,6 @@ class StoreExactCloudReviewMixin:
         with self.hold_oauth_credential_lock(), self._connect() as connection:
             connection.execute("begin immediate")
             resolved_at = StoreExactCloudReviewMixin._exact_transaction_now()
-            capability = StoreExactCloudReviewMixin._load_exact_state(connection, _CAPABILITY_KEY)
-            if capability != expected_capability:
-                return _exact_error("remote_exact_capability_changed", now=resolved_at)
-            if StoreExactCloudReviewMixin._load_exact_state(connection, _REVOCATION_KEY) is not None:
-                return _exact_error("cloud_review_capability_revoked", now=resolved_at)
             oauth_state = StoreExactCloudReviewMixin._load_exact_state(connection, _OAUTH_KEY)
             oauth_secret = (
                 self._load_oauth_secret_payload(oauth_state, promote=False, allow_primary=False)
@@ -234,14 +230,27 @@ class StoreExactCloudReviewMixin:
             oauth_binding = _oauth_binding_from_state(connection, oauth_state, oauth_secret)
             if oauth_binding != expected_oauth_binding:
                 return _exact_error("remote_exact_oauth_changed", now=resolved_at)
-            if not _capability_matches_oauth_binding(capability, oauth_binding):
-                return _exact_error("cloud_review_capability_binding_mismatch", now=resolved_at)
             current = parse_utc_timestamp(resolved_at)
-            capability_expires_at = (
-                parse_utc_timestamp(capability.get("expiresAt")) if isinstance(capability, dict) else None
-            )
-            if current is None or capability_expires_at is None or capability_expires_at <= current:
-                return _exact_error("cloud_review_capability_expired", now=resolved_at)
+            if current is None:
+                return _exact_error("remote_exact_apply_failed", now=resolved_at)
+            capability_expires_at = None
+            revoked = StoreExactCloudReviewMixin._load_exact_state(connection, _REVOCATION_KEY) is not None
+            if skip_exact_capability:
+                if revoked:
+                    return _exact_error("cloud_review_capability_revoked", now=resolved_at)
+            else:
+                capability = StoreExactCloudReviewMixin._load_exact_state(connection, _CAPABILITY_KEY)
+                if capability != expected_capability:
+                    return _exact_error("remote_exact_capability_changed", now=resolved_at)
+                if revoked:
+                    return _exact_error("cloud_review_capability_revoked", now=resolved_at)
+                if not _capability_matches_oauth_binding(capability, oauth_binding):
+                    return _exact_error("cloud_review_capability_binding_mismatch", now=resolved_at)
+                capability_expires_at = (
+                    parse_utc_timestamp(capability.get("expiresAt")) if isinstance(capability, dict) else None
+                )
+                if current is None or capability_expires_at is None or capability_expires_at <= current:
+                    return _exact_error("cloud_review_capability_expired", now=resolved_at)
             expires_at = parse_utc_timestamp(receipt_expires_at)
             if expires_at is None or expires_at <= current:
                 return _exact_error("remote_approval_expired", now=resolved_at)
@@ -298,7 +307,11 @@ class StoreExactCloudReviewMixin:
                     publisher=_optional_text(request.get("publisher")),
                     action="allow",
                     created_at=resolved_at,
-                    expires_at=min(capability_expires_at, expires_at).isoformat(),
+                    expires_at=(
+                        min(capability_expires_at, expires_at)
+                        if not skip_exact_capability and capability_expires_at is not None
+                        else expires_at
+                    ).isoformat(),
                     integrity_key=local_integrity_key,
                     integrity_key_id=local_integrity_key_id,
                 )
