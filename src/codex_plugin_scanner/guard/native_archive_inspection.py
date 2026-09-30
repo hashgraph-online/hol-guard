@@ -17,6 +17,7 @@ import os
 import re
 import secrets
 import sys
+import time
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
@@ -110,8 +111,13 @@ def inspect_archive_native(
 ) -> ArchiveInspectionResult:
     """Inspect a digest-bound local blob through the native worker."""
 
+    # The caller's timeout covers the whole adapter — including the cold-start
+    # capabilities probe — so capture the deadline up front and hand it to the
+    # bounded runner rather than starting a fresh timeout at spawn time.
+    deadline_monotonic = time.monotonic() + timeout_seconds + 0.5
     if (
         timeout_seconds <= 0
+        or not math.isfinite(timeout_seconds)
         or max_archive_bytes <= 0
         or max_files <= 0
         or max_expanded_bytes <= 0
@@ -165,12 +171,20 @@ def inspect_archive_native(
             "External archive offline inspector sandbox is unavailable.",
             severity="high",
         )
+    worker_budget = deadline_monotonic - time.monotonic() - 0.5
+    if worker_budget <= 0:
+        return _result(
+            "incomplete",
+            "external_archive_inspection_timeout",
+            "External archive inspection exceeded Guard's time limit.",
+            severity="high",
+        )
     request = {
         "schema": _REQUEST_SCHEMA,
         "request_id": secrets.token_hex(16),
         "archive_path": str(archive_path),
         "expected_sha256": expected_sha256,
-        "timeout_ms": math.ceil(timeout_seconds * 1000),
+        "timeout_ms": math.ceil(worker_budget * 1000),
         "caps": {
             "max_archive_bytes": max_archive_bytes,
             "max_files": max_files,
@@ -214,7 +228,7 @@ def inspect_archive_native(
             input_text=request_bytes.decode("utf-8"),
             cwd=archive_path.parent,
             environment=_worker_environment(),
-            timeout_seconds=timeout_seconds + 0.5,
+            deadline_monotonic=deadline_monotonic,
             output_limit=_RESULT_MAX_BYTES + 1024,
         )
         if completed.timed_out:

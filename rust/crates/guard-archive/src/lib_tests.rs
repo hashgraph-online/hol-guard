@@ -164,6 +164,36 @@ fn dependency_external_source_blocked() {
 }
 
 #[test]
+fn manifest_bom_rejected() {
+    // The retired worker's decode+json.loads rejected BOM-prefixed manifests.
+    let pkg = b"\xef\xbb\xbf{}";
+    let tar = tar_archive(vec![tar_member(
+        "package.json",
+        b'0',
+        pkg.len() as u64,
+        "",
+        pkg,
+    )]);
+    let outcome = inspect_bytes(&tar);
+    assert_eq!(outcome.status, ArchiveStatus::Blocked);
+    assert_eq!(outcome.code, "external_archive_manifest_invalid");
+}
+
+#[test]
+fn manifest_null_fields_are_absent() {
+    let pkg = br#"{"name":"x","scripts":null,"dependencies":null}"#;
+    let tar = tar_archive(vec![tar_member(
+        "package.json",
+        b'0',
+        pkg.len() as u64,
+        "",
+        pkg,
+    )]);
+    let outcome = inspect_bytes(&tar);
+    assert_eq!(outcome.status, ArchiveStatus::Clean, "{outcome:?}");
+}
+
+#[test]
 fn setup_py_blocked() {
     let tar = tar_archive(vec![tar_member(
         "pkg/setup.py",

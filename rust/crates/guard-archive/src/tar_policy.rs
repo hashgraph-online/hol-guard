@@ -36,14 +36,6 @@ enum HashFailure {
     OverLimit,
 }
 
-fn blocked(code: &'static str, message: &'static str, sha256: Option<String>) -> ArchiveOutcome {
-    ArchiveOutcome::blocked(code, message, sha256)
-}
-
-fn incomplete(code: &'static str, message: &'static str, sha256: Option<String>) -> ArchiveOutcome {
-    ArchiveOutcome::incomplete(code, message, sha256)
-}
-
 /// Stream a SHA-256 over `source`, honoring the byte cap, deadline, and halt
 /// predicate exactly like `_hash_stream`.
 fn hash_stream(
@@ -86,19 +78,19 @@ pub(crate) fn inspect(
         SecureReadError::SymlinkInPath
         | SecureReadError::NotRegularFile
         | SecureReadError::HardLinkedFile
-        | SecureReadError::MutableLeaf => blocked(
+        | SecureReadError::MutableLeaf => ArchiveOutcome::blocked(
             "external_archive_blob_rejected",
             "External archive blob is not a regular immutable file.",
             None,
         ),
-        _ => incomplete(
+        _ => ArchiveOutcome::incomplete(
             "external_archive_inspection_incomplete",
             "External archive could not be opened for offline inspection.",
             None,
         ),
     })?;
     if blob.identity.size > caps.max_archive_bytes {
-        return Err(blocked(
+        return Err(ArchiveOutcome::blocked(
             "external_archive_download_size_limit",
             "External archive exceeded Guard's inspection size limit.",
             None,
@@ -111,7 +103,7 @@ pub(crate) fn inspect(
             Err(HashFailure::Timeout) => return Err(ArchiveOutcome::timeout(None)),
             Err(HashFailure::Halted) => return Err(ArchiveOutcome::halted()),
             Err(_) => {
-                return Err(incomplete(
+                return Err(ArchiveOutcome::incomplete(
                     "external_archive_inspection_incomplete",
                     "External archive could not be read completely for offline inspection.",
                     None,
@@ -119,7 +111,7 @@ pub(crate) fn inspect(
             }
         };
     if actual_size != blob.identity.size || actual_sha256 != expected_sha256 {
-        return Err(blocked(
+        return Err(ArchiveOutcome::blocked(
             "external_archive_digest_mismatch",
             "External archive changed between download and offline inspection.",
             Some(actual_sha256),
@@ -131,7 +123,7 @@ pub(crate) fn inspect(
     // Post-inspection rehash: the launched artifact must be the inspected
     // bytes, so the digest is verified once more on the same descriptor.
     file.seek(SeekFrom::Start(0)).map_err(|_| {
-        incomplete(
+        ArchiveOutcome::incomplete(
             "external_archive_inspection_incomplete",
             "External archive could not be parsed completely in offline inspection.",
             actual.clone(),
@@ -140,7 +132,7 @@ pub(crate) fn inspect(
     match hash_stream(&mut file, caps.max_archive_bytes, deadline, halt) {
         Ok((final_sha256, final_size)) => {
             if final_size != actual_size || final_sha256 != expected_sha256 {
-                return Err(blocked(
+                return Err(ArchiveOutcome::blocked(
                     "external_archive_digest_mismatch",
                     "External archive changed during offline inspection.",
                     Some(final_sha256),
@@ -150,7 +142,7 @@ pub(crate) fn inspect(
         Err(HashFailure::Timeout) => return Err(ArchiveOutcome::timeout(actual.clone())),
         Err(HashFailure::Halted) => return Err(ArchiveOutcome::halted()),
         Err(_) => {
-            return Err(incomplete(
+            return Err(ArchiveOutcome::incomplete(
                 "external_archive_inspection_incomplete",
                 "External archive could not be parsed completely in offline inspection.",
                 actual.clone(),
@@ -173,7 +165,7 @@ fn scan_bound_stream(
 ) -> Result<InspectStats, ArchiveOutcome> {
     let gzipped = preflight_expanded_stream(file, compressed_size, caps, deadline, halt, actual)?;
     file.seek(SeekFrom::Start(0)).map_err(|_| {
-        incomplete(
+        ArchiveOutcome::incomplete(
             "external_archive_inspection_incomplete",
             "External archive could not be parsed completely in offline inspection.",
             actual.clone(),
@@ -199,7 +191,7 @@ fn preflight_expanded_stream(
     actual: &Option<String>,
 ) -> Result<bool, ArchiveOutcome> {
     file.seek(SeekFrom::Start(0)).map_err(|_| {
-        incomplete(
+        ArchiveOutcome::incomplete(
             "external_archive_inspection_incomplete",
             "External archive could not be parsed completely in offline inspection.",
             actual.clone(),
@@ -209,7 +201,7 @@ fn preflight_expanded_stream(
     let mut magic_len = 0;
     while magic_len < magic.len() {
         let count = file.read(&mut magic[magic_len..]).map_err(|_| {
-            incomplete(
+            ArchiveOutcome::incomplete(
                 "external_archive_inspection_incomplete",
                 "External archive could not be parsed completely in offline inspection.",
                 actual.clone(),
@@ -221,7 +213,7 @@ fn preflight_expanded_stream(
         magic_len += count;
     }
     file.seek(SeekFrom::Start(0)).map_err(|_| {
-        incomplete(
+        ArchiveOutcome::incomplete(
             "external_archive_inspection_incomplete",
             "External archive could not be parsed completely in offline inspection.",
             actual.clone(),
@@ -229,7 +221,7 @@ fn preflight_expanded_stream(
     })?;
     let magic = &magic[..magic_len];
     if magic.starts_with(b"BZh") || magic.starts_with(b"\xfd7zXZ\x00") {
-        return Err(blocked(
+        return Err(ArchiveOutcome::blocked(
             "external_archive_unsupported_format",
             "External archive uses an unsupported compression format.",
             actual.clone(),
@@ -247,7 +239,7 @@ fn preflight_expanded_stream(
                 return Err(ArchiveOutcome::timeout(actual.clone()));
             }
             let count = reader.read(&mut buffer).map_err(|_| {
-                incomplete(
+                ArchiveOutcome::incomplete(
                     "external_archive_inspection_incomplete",
                     "External archive could not be parsed completely in offline inspection.",
                     actual.clone(),
@@ -258,14 +250,14 @@ fn preflight_expanded_stream(
             }
             expanded += count as u64;
             if expanded > caps.max_expanded_bytes {
-                return Err(blocked(
+                return Err(ArchiveOutcome::blocked(
                     "external_archive_expanded_size_limit",
                     "External archive exceeded Guard's expanded-stream limit.",
                     actual.clone(),
                 ));
             }
             if (expanded as f64) > (compressed_size.max(1) as f64) * caps.max_decompression_ratio {
-                return Err(blocked(
+                return Err(ArchiveOutcome::blocked(
                     "external_archive_decompression_ratio_limit",
                     "External archive exceeded Guard's decompression-ratio limit.",
                     actual.clone(),
@@ -301,7 +293,7 @@ fn scan_tar_members(
     actual: &Option<String>,
 ) -> Result<InspectStats, ArchiveOutcome> {
     let parse_failed = || {
-        incomplete(
+        ArchiveOutcome::incomplete(
             "external_archive_inspection_incomplete",
             "External archive could not be parsed completely in offline inspection.",
             actual.clone(),
@@ -324,7 +316,7 @@ fn scan_tar_members(
         let mut entry = entry.map_err(|_| parse_failed())?;
         member_count += 1;
         if member_count > caps.max_files {
-            return Err(blocked(
+            return Err(ArchiveOutcome::blocked(
                 "tarball_file_count_limit",
                 "External archive exceeded Guard's file-count limit.",
                 actual.clone(),
@@ -333,21 +325,21 @@ fn scan_tar_members(
         let raw_name = replace_backslashes(&entry.path_bytes());
         let normalized_name = posix_path::normpath(&raw_name);
         if unsafe_member_reason(&entry, &raw_name, &normalized_name).is_some() {
-            return Err(blocked(
+            return Err(ArchiveOutcome::blocked(
                 "tarball_zip_slip",
                 "External archive contains unsafe paths, links, or special files.",
                 actual.clone(),
             ));
         }
         if normalized_name.split(|b| *b == b'/').count() as u64 > caps.max_path_depth {
-            return Err(blocked(
+            return Err(ArchiveOutcome::blocked(
                 "external_archive_path_depth_limit",
                 "External archive exceeded Guard's path-depth limit.",
                 actual.clone(),
             ));
         }
         let Some(kind) = member_kind(&entry) else {
-            return Err(blocked(
+            return Err(ArchiveOutcome::blocked(
                 "external_archive_unsupported_member",
                 "External archive contains an unsupported member type.",
                 actual.clone(),
@@ -356,7 +348,7 @@ fn scan_tar_members(
         let portable_path =
             caseless::default_case_fold_str(&String::from_utf8_lossy(&normalized_name));
         if member_path_conflicts(&portable_path, kind, &seen_paths) {
-            return Err(blocked(
+            return Err(ArchiveOutcome::blocked(
                 "external_archive_path_conflict",
                 "External archive contains duplicate or conflicting member paths.",
                 actual.clone(),
@@ -365,7 +357,7 @@ fn scan_tar_members(
         seen_paths.insert(portable_path, kind);
         if matches!(kind, MemberKind::Symlink | MemberKind::Hardlink) {
             let Some(link_target) = normalized_link_target(&entry, &normalized_name) else {
-                return Err(blocked(
+                return Err(ArchiveOutcome::blocked(
                     "tarball_zip_slip",
                     "External archive contains unsafe paths, links, or special files.",
                     actual.clone(),
@@ -379,7 +371,7 @@ fn scan_tar_members(
         }
         let member_size = entry.header().size().map_err(|_| parse_failed())?;
         if member_size > caps.max_member_bytes {
-            return Err(blocked(
+            return Err(ArchiveOutcome::blocked(
                 "external_archive_member_size_limit",
                 "External archive contains an oversized member.",
                 actual.clone(),
@@ -387,7 +379,7 @@ fn scan_tar_members(
         }
         expanded_bytes = expanded_bytes.saturating_add(member_size);
         if expanded_bytes > caps.max_expanded_bytes {
-            return Err(blocked(
+            return Err(ArchiveOutcome::blocked(
                 "external_archive_expanded_size_limit",
                 "External archive exceeded Guard's expanded-size limit.",
                 actual.clone(),
@@ -395,7 +387,7 @@ fn scan_tar_members(
         }
         if (expanded_bytes as f64) > (compressed_size.max(1) as f64) * caps.max_decompression_ratio
         {
-            return Err(blocked(
+            return Err(ArchiveOutcome::blocked(
                 "external_archive_decompression_ratio_limit",
                 "External archive exceeded Guard's decompression-ratio limit.",
                 actual.clone(),
@@ -408,7 +400,7 @@ fn scan_tar_members(
         {
             nested_archives += 1;
             if nested_archives > caps.max_nested_archives {
-                return Err(blocked(
+                return Err(ArchiveOutcome::blocked(
                     "external_archive_nesting_limit",
                     "External archive exceeded Guard's nested-archive limit.",
                     actual.clone(),
@@ -423,14 +415,14 @@ fn scan_tar_members(
         if (is_package_manifest || is_python_build_manifest || is_node_gyp_manifest)
             && kind != MemberKind::File
         {
-            return Err(blocked(
+            return Err(ArchiveOutcome::blocked(
                 "external_archive_manifest_link",
                 "External archive build manifest must be an independent regular file.",
                 actual.clone(),
             ));
         }
         if is_node_gyp_manifest {
-            return Err(blocked(
+            return Err(ArchiveOutcome::blocked(
                 "node_gyp_implicit_install_script",
                 "External archive contains a native build manifest that npm may execute implicitly.",
                 actual.clone(),
@@ -440,7 +432,7 @@ fn scan_tar_members(
             continue;
         }
         if member_size > caps.max_package_json_bytes {
-            return Err(blocked(
+            return Err(ArchiveOutcome::blocked(
                 "tarball_package_json_limit",
                 "External archive package manifest exceeded Guard's scan limit.",
                 actual.clone(),
@@ -458,7 +450,7 @@ fn scan_tar_members(
             .take(read_limit)
             .read_to_end(&mut manifest_payload)
             .map_err(|_| {
-                incomplete(
+                ArchiveOutcome::incomplete(
                     "external_archive_inspection_incomplete",
                     "External archive package manifest could not be read completely.",
                     actual.clone(),
@@ -467,7 +459,7 @@ fn scan_tar_members(
         if manifest_payload.len() as u64 != member_size
             || manifest_payload.len() as u64 > caps.max_package_json_bytes
         {
-            return Err(incomplete(
+            return Err(ArchiveOutcome::incomplete(
                 "external_archive_inspection_incomplete",
                 "External archive package manifest could not be read completely.",
                 actual.clone(),
@@ -479,14 +471,14 @@ fn scan_tar_members(
             python_build_script_risk(&manifest_name)
         };
         if let Some((code, message)) = risk {
-            return Err(blocked(code, message, actual.clone()));
+            return Err(ArchiveOutcome::blocked(code, message, actual.clone()));
         }
     }
     if hardlink_targets
         .iter()
         .any(|target| seen_paths.get(target.as_str()) != Some(&MemberKind::File))
     {
-        return Err(blocked(
+        return Err(ArchiveOutcome::blocked(
             "external_archive_unsafe_hardlink",
             "External archive contains a hard link without a regular in-archive target.",
             actual.clone(),

@@ -52,8 +52,8 @@ const MANIFEST_INVALID: (&str, &str) = (
 /// `_install_script_risk`: dependency-source and install-script policy for a
 /// bounded `package.json` payload.
 pub fn install_script_risk(payload: &[u8]) -> Option<(&'static str, &'static str)> {
-    // CPython's json.loads accepts a UTF-8 BOM; strip it for parity.
-    let payload = payload.strip_prefix(b"\xef\xbb\xbf").unwrap_or(payload);
+    // Parity note: the retired worker decoded UTF-8 then called json.loads,
+    // which rejects a BOM-prefixed manifest; serde_json does the same.
     let parsed: Value = match serde_json::from_slice(payload) {
         Ok(value) => value,
         Err(_) => return Some(MANIFEST_INVALID),
@@ -62,7 +62,8 @@ pub fn install_script_risk(payload: &[u8]) -> Option<(&'static str, &'static str
         return Some(MANIFEST_INVALID);
     };
     for group in DEPENDENCY_GROUPS {
-        let Some(dependencies) = object.get(group) else {
+        // JSON null is a present-but-absent field, matching `get() is None`.
+        let Some(dependencies) = object.get(group).filter(|value| !value.is_null()) else {
             continue;
         };
         let Some(table) = dependencies.as_object() else {
@@ -91,7 +92,7 @@ pub fn install_script_risk(payload: &[u8]) -> Option<(&'static str, &'static str
             ));
         }
     }
-    let scripts = object.get("scripts")?;
+    let scripts = object.get("scripts").filter(|value| !value.is_null())?;
     let Some(table) = scripts.as_object() else {
         return Some((
             "external_archive_manifest_invalid",

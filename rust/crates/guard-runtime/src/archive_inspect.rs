@@ -321,8 +321,6 @@ fn apply_seccomp_deny_list() -> Result<(), ()> {
     for syscall in [
         libc::SYS_socket,
         libc::SYS_socketpair,
-        libc::SYS_fork,
-        libc::SYS_vfork,
         libc::SYS_clone,
         libc::SYS_clone3,
         libc::SYS_execve,
@@ -344,32 +342,20 @@ fn apply_seccomp_deny_list() -> Result<(), ()> {
         libc::SYS_io_uring_setup,
         libc::SYS_io_uring_enter,
         libc::SYS_io_uring_register,
-        libc::SYS_creat,
-        libc::SYS_mkdir,
         libc::SYS_mkdirat,
-        libc::SYS_rmdir,
-        libc::SYS_unlink,
         libc::SYS_unlinkat,
-        libc::SYS_rename,
         libc::SYS_renameat,
         libc::SYS_renameat2,
-        libc::SYS_link,
         libc::SYS_linkat,
-        libc::SYS_symlink,
         libc::SYS_symlinkat,
-        libc::SYS_mknod,
         libc::SYS_mknodat,
-        libc::SYS_chmod,
         libc::SYS_fchmod,
         libc::SYS_fchmodat,
-        libc::SYS_chown,
         libc::SYS_fchown,
-        libc::SYS_lchown,
         libc::SYS_fchownat,
         libc::SYS_truncate,
-        libc::SYS_utime,
-        libc::SYS_utimes,
-        libc::SYS_futimesat,
+        libc::SYS_ftruncate,
+        libc::SYS_fallocate,
         libc::SYS_utimensat,
         libc::SYS_setxattr,
         libc::SYS_lsetxattr,
@@ -377,6 +363,11 @@ fn apply_seccomp_deny_list() -> Result<(), ()> {
         libc::SYS_removexattr,
         libc::SYS_lremovexattr,
         libc::SYS_fremovexattr,
+        // openat2 flags live in a user-space struct the filter cannot
+        // inspect, and open_by_handle_at bypasses the path walk; both must
+        // be denied unconditionally to keep the write denial complete.
+        libc::SYS_openat2,
+        libc::SYS_open_by_handle_at,
         libc::SYS_open_tree,
         libc::SYS_move_mount,
         libc::SYS_fsopen,
@@ -384,6 +375,29 @@ fn apply_seccomp_deny_list() -> Result<(), ()> {
         libc::SYS_fsconfig,
         libc::SYS_fspick,
         libc::SYS_mount_setattr,
+    ] {
+        rules.insert(syscall, deny(syscall).1);
+    }
+    // Legacy single-argument syscalls absent on aarch64/riscv64 (the *at
+    // variants above already cover their semantics there).
+    #[cfg(target_arch = "x86_64")]
+    for syscall in [
+        libc::SYS_fork,
+        libc::SYS_vfork,
+        libc::SYS_creat,
+        libc::SYS_mkdir,
+        libc::SYS_rmdir,
+        libc::SYS_unlink,
+        libc::SYS_rename,
+        libc::SYS_link,
+        libc::SYS_symlink,
+        libc::SYS_mknod,
+        libc::SYS_chmod,
+        libc::SYS_chown,
+        libc::SYS_lchown,
+        libc::SYS_utime,
+        libc::SYS_utimes,
+        libc::SYS_futimesat,
     ] {
         rules.insert(syscall, deny(syscall).1);
     }
@@ -399,6 +413,7 @@ fn apply_seccomp_deny_list() -> Result<(), ()> {
         libc::O_APPEND as u64,
         libc::O_TMPFILE as u64,
     ] {
+        #[cfg(target_arch = "x86_64")]
         rules
             .entry(libc::SYS_open)
             .or_default()
@@ -412,9 +427,9 @@ fn apply_seccomp_deny_list() -> Result<(), ()> {
         rules,
         seccompiler::SeccompAction::Allow,
         seccompiler::SeccompAction::Errno(libc::EPERM as u32),
-        std::env::consts::ARCH
-            .try_into()
-            .unwrap_or(TargetArch::x86_64),
+        // Unknown architectures must not silently receive x86_64's filter;
+        // seccompiler kills the process on arch mismatch, so fail closed.
+        TargetArch::try_from(std::env::consts::ARCH).map_err(|_| ())?,
     )
     .map_err(|_| ())?;
     let program: seccompiler::BpfProgram = filter.try_into().map_err(|_| ())?;
