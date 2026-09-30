@@ -6,7 +6,7 @@
     "canonical_diff_digest",
     "effective"
   ],
-  "catalog_digest": "417712a82f1799d268ab0ae3fb2ad22a839fbf93cc9768ec4d63f472d738398d",
+  "catalog_digest": "056c18582aed5d5126196ea92eba8542f2d6a1c7c85698bd244e28e5035a965f",
   "control_schema_version": "1.0.0",
   "daemon_api_schema": "guard.daemon.extension-controls.v1",
   "effective_shape": [
@@ -20,7 +20,7 @@
     "failures",
     "projection"
   ],
-  "extension_count": 81,
+  "extension_count": 82,
   "extension_ids": [
     "command.api-gateway",
     "command.backup.borg",
@@ -36,6 +36,7 @@
     "command.cloud.azure",
     "command.cloud.gcp",
     "command.cloudg",
+    "command.codex-migrate",
     "command.cogext",
     "command.container-runtime",
     "command.ctty",
@@ -107,7 +108,7 @@
   "extension_schema_version": 2,
   "installed_browser_config": "dashboard/playwright.installed.config.ts",
   "overview_route": "/extensions",
-  "permission_count": 280,
+  "permission_count": 282,
   "permission_examples": {
     "command.api-gateway.permission.delete": "aws apigateway delete-rest-api",
     "command.backup.borg.permission.mutation": "borg delete",
@@ -129,6 +130,8 @@
     "command.cloudg.permission.collect": "cloudg collect -p aws --profile prod --region us-east-1",
     "command.cloudg.permission.run": "cloudg run -p aws --profile prod --terraform",
     "command.cloudg.permission.scan": "cloudg scan -p aws --scanners prowler,checkov",
+    "command.codex-migrate.permission.apply": "codex-migrate vault install --vault ~/v --apply",
+    "command.codex-migrate.permission.remote-session": "codex-migrate export --target user@new-mac.local --target-home /Users/user",
     "command.cogext.permission.add": "cogext add \"Send the report by Friday\"",
     "command.cogext.permission.fail": "cogext fail abc-123",
     "command.cogext.permission.fulfill": "cogext fulfill abc-123",
@@ -507,6 +510,8 @@
     "command.cloudg.permission.collect",
     "command.cloudg.permission.run",
     "command.cloudg.permission.scan",
+    "command.codex-migrate.permission.apply",
+    "command.codex-migrate.permission.remote-session",
     "command.cogext.permission.add",
     "command.cogext.permission.fail",
     "command.cogext.permission.fulfill",
@@ -778,7 +783,7 @@
     "controls",
     "semantic_preview"
   ],
-  "rule_count": 264,
+  "rule_count": 267,
   "rule_ids": [
     "command.api-gateway.delete",
     "command.backup.borg.mutation",
@@ -800,6 +805,9 @@
     "command.cloudg.collect",
     "command.cloudg.run",
     "command.cloudg.scan",
+    "command.codex-migrate.apply",
+    "command.codex-migrate.remote-session",
+    "command.codex-migrate.ssh-bridge",
     "command.cogext.add",
     "command.cogext.fulfill",
     "command.cogext.fail",
