@@ -221,7 +221,8 @@ def test_package_shim_status_repairs_trusted_old_runtime_binding(
     command = ast.literal_eval(command_line.split("=", 1)[1].strip())
     assert command[0] == str(current)
     assert command[command.index("--home") + 1] == str(context.home_dir)
-    assert command[command.index("--workspace") + 1] == str(context.workspace_dir)
+    assert "--workspace" not in command
+    assert "guard_workspace = None" in restored_sidecar
 
 
 @pytest.mark.parametrize(
@@ -286,12 +287,14 @@ def test_package_shim_status_does_not_classify_trusted_runtime_tampering_as_stal
     else:
         changed_path = tmp_path / f"attacker-{tampering}"
         sidecar_lines = sidecar_path.read_text(encoding="utf-8").splitlines()
-        changed_flag = "--home" if tampering == "sidecar-home" else "--workspace"
         for index, line in enumerate(sidecar_lines):
             if line.startswith("base_command = "):
                 parts = line.split("=", 1)
                 command = ast.literal_eval(parts[1].strip())
-                command[command.index(changed_flag) + 1] = str(changed_path)
+                if tampering == "sidecar-home":
+                    command[command.index("--home") + 1] = str(changed_path)
+                else:
+                    command.extend(["--workspace", str(changed_path)])
                 sidecar_lines[index] = f"{parts[0].strip()} = {command!r}"
                 break
         sidecar_path.write_text("\n".join(sidecar_lines) + "\n", encoding="utf-8")

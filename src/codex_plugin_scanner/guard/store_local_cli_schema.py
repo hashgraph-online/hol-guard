@@ -6,12 +6,18 @@ import hashlib
 import sqlite3
 from typing import Final, cast
 
-LOCAL_CLI_SCHEMA_VERSION: Final = 5
+LOCAL_CLI_SCHEMA_VERSION: Final = 11
 _V1_CHECKSUM: Final = hashlib.sha256(b"hol-guard.local-cli-allowlist.schema.v1").hexdigest()
 _V2_CHECKSUM: Final = hashlib.sha256(b"hol-guard.local-cli-allowlist.schema.v2").hexdigest()
 _V3_CHECKSUM: Final = hashlib.sha256(b"hol-guard.local-cli-allowlist.schema.v3").hexdigest()
 _V4_CHECKSUM: Final = hashlib.sha256(b"hol-guard.local-cli-allowlist.schema.v4").hexdigest()
-_SCHEMA_CHECKSUM: Final = hashlib.sha256(b"hol-guard.local-cli-allowlist.schema.v5").hexdigest()
+_V5_CHECKSUM: Final = hashlib.sha256(b"hol-guard.local-cli-allowlist.schema.v5").hexdigest()
+_V6_CHECKSUM: Final = hashlib.sha256(b"hol-guard.local-cli-allowlist.schema.v6").hexdigest()
+_V7_CHECKSUM: Final = hashlib.sha256(b"hol-guard.local-cli-allowlist.schema.v7").hexdigest()
+_V8_CHECKSUM: Final = hashlib.sha256(b"hol-guard.local-cli-allowlist.schema.v8").hexdigest()
+_V9_CHECKSUM: Final = hashlib.sha256(b"hol-guard.local-cli-allowlist.schema.v9").hexdigest()
+_V10_CHECKSUM: Final = hashlib.sha256(b"hol-guard.local-cli-allowlist.schema.v10").hexdigest()
+_SCHEMA_CHECKSUM: Final = hashlib.sha256(b"hol-guard.local-cli-allowlist.schema.v11").hexdigest()
 
 
 class LocalCliSchemaError(ValueError):
@@ -29,7 +35,19 @@ class LocalCliSchemaError(ValueError):
         self.supported_version = supported_version
 
 
-def ensure_local_cli_schema(connection: sqlite3.Connection) -> None:
+def ensure_local_cli_schema(connection: sqlite3.Connection, *, for_read: bool = False) -> None:
+    if for_read:
+        exists = connection.execute(
+            "select 1 from sqlite_master where type = 'table' and name = 'local_cli_schema_migration'"
+        ).fetchone()
+        if exists is not None:
+            marker = connection.execute(
+                "select version, checksum from local_cli_schema_migration where singleton = 1"
+            ).fetchone()
+            if marker is not None and _marker(marker) == (LOCAL_CLI_SCHEMA_VERSION, _SCHEMA_CHECKSUM):
+                # A current schema needs no writes. In particular, INSERT OR
+                # IGNORE would acquire a writer lock on an authorization read.
+                return
     _ = connection.execute(
         """
         create table if not exists local_cli_schema_migration (
@@ -61,7 +79,50 @@ def ensure_local_cli_schema(connection: sqlite3.Connection) -> None:
             version, checksum = 4, _V4_CHECKSUM
         if version == 4 and checksum == _V4_CHECKSUM:
             _migrate_v4_to_v5(connection)
-            version, checksum = 5, _SCHEMA_CHECKSUM
+            version, checksum = 5, _V5_CHECKSUM
+        if version == 5 and checksum == _V5_CHECKSUM:
+            _migrate_v5_to_v6(connection)
+            version, checksum = 6, _V6_CHECKSUM
+        if version == 6 and checksum == _V6_CHECKSUM:
+            _migrate_v6_to_v7(connection)
+            version, checksum = 7, _V7_CHECKSUM
+        if version == 7 and checksum == _V7_CHECKSUM:
+            _migrate_v7_to_v8(connection)
+            version, checksum = 8, _V8_CHECKSUM
+        if version == 8 and checksum == _V8_CHECKSUM:
+            _ensure_mcp_provider_grant_table(connection)
+            connection.execute(
+                "update local_cli_schema_migration set version = ?, checksum = ? where singleton = 1",
+                (9, _V9_CHECKSUM),
+            )
+            version, checksum = 9, _V9_CHECKSUM
+        if version == 9 and checksum == _V9_CHECKSUM:
+            _ensure_provider_authority_table(connection)
+            from .store_mcp_provider_catalog import rebuild_provider_authority
+
+            for cli_id, identity_hash in connection.execute(
+                "select distinct cli_id, identity_hash from local_mcp_provider_action"
+            ).fetchall():
+                rebuild_provider_authority(connection, cli_id, identity_hash)
+            connection.execute(
+                "update local_cli_schema_migration set version = ?, checksum = ? where singleton = 1",
+                (10, _V10_CHECKSUM),
+            )
+            version, checksum = 10, _V10_CHECKSUM
+        if version == 10 and checksum == _V10_CHECKSUM:
+            _ensure_mcp_tool_authority_table(connection)
+            _ensure_workflow_proposal_table(connection)
+            from .store_mcp_catalog import rebuild_tool_authority
+
+            for cli_id, identity_hash, raw, revision in connection.execute(
+                "select cli_id, identity_hash, catalog_json, revision from local_mcp_catalog"
+            ).fetchall():
+                rebuild_tool_authority(connection, cli_id, identity_hash, raw, revision)
+            connection.execute(
+                "update local_cli_schema_migration set version = ?, checksum = ? where singleton = 1",
+                (11, _SCHEMA_CHECKSUM),
+            )
+            version, checksum = 11, _SCHEMA_CHECKSUM
         if version != LOCAL_CLI_SCHEMA_VERSION or checksum != _SCHEMA_CHECKSUM:
             if version > LOCAL_CLI_SCHEMA_VERSION:
                 raise LocalCliSchemaError(
@@ -119,6 +180,8 @@ def ensure_local_cli_schema(connection: sqlite3.Connection) -> None:
     )
     _ = connection.execute("insert or ignore into local_cli_authority (singleton, revision) values (1, 0)")
     _ensure_command_tables(connection)
+    _ensure_mcp_catalog_table(connection)
+    _ensure_mcp_provider_catalog_table(connection)
 
 
 def _migrate_v1_to_v2(connection: sqlite3.Connection) -> None:
@@ -199,7 +262,119 @@ def _migrate_v4_to_v5(connection: sqlite3.Connection) -> None:
         _ = connection.execute("alter table local_cli_observation add column source_label text")
     _ = connection.execute(
         "update local_cli_schema_migration set version = ?, checksum = ? where singleton = 1",
-        (LOCAL_CLI_SCHEMA_VERSION, _SCHEMA_CHECKSUM),
+        (5, _V5_CHECKSUM),
+    )
+
+
+def _migrate_v5_to_v6(connection: sqlite3.Connection) -> None:
+    _ensure_mcp_catalog_table(connection)
+    _ = connection.execute(
+        "update local_cli_schema_migration set version = ?, checksum = ? where singleton = 1",
+        (6, _V6_CHECKSUM),
+    )
+
+
+def _migrate_v6_to_v7(connection: sqlite3.Connection) -> None:
+    _ensure_command_tables(connection)
+    _ = connection.execute("alter table local_cli_command_grant rename to local_cli_command_grant_v6")
+    _ensure_command_tables(connection)
+    _ = connection.execute(
+        "insert into local_cli_command_grant (cli_id, command_id, state) "
+        "select cli_id, command_id, state from local_cli_command_grant_v6"
+    )
+    _ = connection.execute("drop table local_cli_command_grant_v6")
+    _ = connection.execute(
+        "update local_cli_schema_migration set version = ?, checksum = ? where singleton = 1",
+        (7, _V7_CHECKSUM),
+    )
+
+
+def _migrate_v7_to_v8(connection: sqlite3.Connection) -> None:
+    _ensure_mcp_provider_catalog_table(connection)
+    connection.execute(
+        "update local_cli_schema_migration set version = ?, checksum = ? where singleton = 1",
+        (8, _V8_CHECKSUM),
+    )
+
+
+def _ensure_mcp_provider_catalog_table(connection: sqlite3.Connection) -> None:
+    _ensure_mcp_provider_grant_table(connection)
+    _ensure_provider_authority_table(connection)
+    connection.execute(
+        """create table if not exists local_mcp_provider_action (
+            cli_id text not null,
+            identity_hash text not null,
+            provider text not null check (provider = 'composio'),
+            tool_slug text not null,
+            toolkit text not null,
+            description text not null,
+            input_schema_json text not null,
+            authority_hash text not null,
+            full_schema integer not null check (full_schema in (0, 1)),
+            source_tool text not null,
+            revision integer not null check (revision >= 1),
+            updated_at text not null,
+            primary key (cli_id, identity_hash, provider, tool_slug)
+        )"""
+    )
+
+
+def _ensure_mcp_provider_grant_table(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """create table if not exists local_mcp_provider_grant (
+            cli_id text not null,
+            identity_hash text not null,
+            tool_slug text not null,
+            state text not null check (state in ('review', 'block')),
+            updated_at text not null,
+            primary key (cli_id, identity_hash, tool_slug)
+        )"""
+    )
+
+
+def _ensure_provider_authority_table(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """create table if not exists local_mcp_provider_authority (
+            cli_id text not null, identity_hash text not null, digest text not null,
+            primary key (cli_id, identity_hash)
+        )"""
+    )
+
+
+def _ensure_mcp_catalog_table(connection: sqlite3.Connection) -> None:
+    _ensure_mcp_tool_authority_table(connection)
+    _ensure_workflow_proposal_table(connection)
+    _ = connection.execute(
+        """
+        create table if not exists local_mcp_catalog (
+            cli_id text primary key,
+            identity_hash text not null,
+            catalog_json text not null,
+            revision integer not null check (revision >= 1),
+            updated_at text not null,
+            last_complete_at text
+        )
+        """
+    )
+
+
+def _ensure_mcp_tool_authority_table(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """create table if not exists local_mcp_tool_authority (
+            cli_id text not null, identity_hash text not null, tool_name text not null,
+            catalog_revision integer not null, authority_hash text not null,
+            primary key (cli_id, identity_hash, tool_name)
+        )"""
+    )
+
+
+def _ensure_workflow_proposal_table(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """create table if not exists local_mcp_workflow_proposal (
+            cli_id text not null, identity_hash text not null, proposal_id text not null,
+            proposal_json text not null, seen_at text not null,
+            primary key (cli_id, identity_hash, proposal_id)
+        )"""
     )
 
 
@@ -223,7 +398,7 @@ def _ensure_command_tables(connection: sqlite3.Connection) -> None:
         create table if not exists local_cli_command_grant (
             cli_id text not null,
             command_id text not null,
-            state text not null check (state in ('inherit', 'allow', 'block')),
+            state text not null check (state in ('inherit', 'allow', 'review', 'block')),
             primary key (cli_id, command_id)
         )
         """

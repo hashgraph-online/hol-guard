@@ -151,6 +151,46 @@ def test_pypi_release_state_maps_not_found_to_absent(monkeypatch: pytest.MonkeyP
     assert version_module._pypi_release_state("2.2.14") == "absent"
 
 
+def test_pypi_release_state_retries_service_unavailable_then_preserves_absence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    attempts: list[int] = []
+    delays: list[int] = []
+
+    def _transient_error(request: object, timeout: int) -> _FakePyPIResponse:
+        del timeout
+        attempts.append(1)
+        status = 503 if len(attempts) == 1 else 404
+        raise version_module.urllib.error.HTTPError(str(request), status, "unavailable", None, None)
+
+    monkeypatch.setattr(version_module.urllib.request, "urlopen", _transient_error)
+    monkeypatch.setattr(version_module.time, "sleep", delays.append)
+
+    assert version_module._pypi_release_state("2.2.14") == "absent"
+    assert len(attempts) == 2
+    assert delays == [2]
+
+
+def test_pypi_release_state_exhausts_service_unavailable_without_failing_open(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    attempts: list[int] = []
+    delays: list[int] = []
+
+    def _service_unavailable(request: object, timeout: int) -> _FakePyPIResponse:
+        del timeout
+        attempts.append(1)
+        raise version_module.urllib.error.HTTPError(str(request), 503, "unavailable", None, None)
+
+    monkeypatch.setattr(version_module.urllib.request, "urlopen", _service_unavailable)
+    monkeypatch.setattr(version_module.time, "sleep", delays.append)
+
+    with pytest.raises(ValueError, match="HTTP 503"):
+        version_module._pypi_release_state("2.2.14")
+    assert len(attempts) == 6
+    assert delays == [2, 4, 8, 16, 30]
+
+
 def test_default_publication_anchor_uses_pypi_yank_metadata(monkeypatch: pytest.MonkeyPatch) -> None:
     seen: list[str] = []
 

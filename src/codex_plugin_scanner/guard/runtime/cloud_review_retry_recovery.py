@@ -45,3 +45,39 @@ def repair_retry_identity_failures(
         (sequence, result) for sequence, result in zip(sequences, results, strict=True) if sequence not in repaired
     ]
     return [sequence for sequence, _ in retained], [result for _, result in retained]
+
+
+def quarantine_terminal_binding_failures(
+    store: GuardStore,
+    *,
+    sequences: list[int],
+    results: list[dict[str, object]],
+    events: dict[int, dict[str, object]],
+    binding: dict[str, str],
+) -> tuple[list[int], list[dict[str, object]]]:
+    """Retain retryable results and quarantine immutable continuation mismatches.
+
+    A failed store transition stays retryable so concurrent delivery or a
+    changed binding cannot silently discard unacknowledged evidence.
+    Unknown event sequences also stay retryable instead of aborting the batch.
+    """
+    retained: list[tuple[int, dict[str, object]]] = []
+    for sequence, result in zip(sequences, results, strict=True):
+        event_type = events.get(sequence, {}).get("eventType")
+        # A frozen terminal result cannot acquire a different continuation
+        # binding through retries. Keep the rejected evidence unacknowledged.
+        if (
+            result.get("code") == "review_continuation_binding_mismatch"
+            and isinstance(event_type, str)
+            and event_type.startswith("continuation_")
+            and store.quarantine_review_event(
+                sequence,
+                reason="review_continuation_binding_mismatch",
+                error="Cloud rejected the immutable continuation binding; retained for diagnostics.",
+                **binding,
+            )
+            > 0
+        ):
+            continue
+        retained.append((sequence, result))
+    return [sequence for sequence, _ in retained], [result for _, result in retained]

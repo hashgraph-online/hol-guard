@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shlex
 from pathlib import Path
 
 import pytest
@@ -145,7 +146,7 @@ def test_affinity_plan_caps_large_files_without_duration_telemetry() -> None:
 
     large_nodes_per_shard = [sum(node_file(node_id) == "tests/test_slow.py" for node_id in shard) for shard in shards]
     assert max(large_nodes_per_shard) <= 32
-    assert sum(count > 0 for count in large_nodes_per_shard) == 5
+    assert sum(count > 0 for count in large_nodes_per_shard) == 8
 
 
 def test_affinity_plan_rejects_duplicate_or_invalid_nodes() -> None:
@@ -174,8 +175,8 @@ def test_write_shard_plan_emits_response_files_and_metadata(tmp_path: Path) -> N
         manifest_used=True,
     )
 
-    assert (tmp_path / "shard-00.txt").read_text(encoding="utf-8") == "tests/test_a.py::test_a\n"
-    assert (tmp_path / "shard-01.txt").read_text(encoding="utf-8") == (
+    assert (tmp_path / "shard-000.txt").read_text(encoding="utf-8") == "tests/test_a.py::test_a\n"
+    assert (tmp_path / "shard-001.txt").read_text(encoding="utf-8") == (
         "tests/test_b.py::test_b\ntests/test_b.py::test_c\n"
     )
     response_nodes = [
@@ -196,12 +197,72 @@ def test_write_shard_plan_emits_response_files_and_metadata(tmp_path: Path) -> N
     }
 
 
-def test_large_matrix_response_names_match_three_digit_workflow_format(tmp_path: Path) -> None:
-    shards = [[f"tests/test_matrix.py::test_case_{index}"] for index in range(192)]
+@pytest.mark.parametrize("count", [2, 64, 100, 101, 128, 192, 1001])
+def test_write_shard_plan_uses_stable_minimum_width_at_every_matrix_size(tmp_path: Path, count: int) -> None:
+    shards = [[f"tests/test_matrix.py::test_case_{index}"] for index in range(count)]
 
-    write_shard_plan(tmp_path, shards=shards, estimated_loads=[1.0] * 192, manifest_used=True)
+    write_shard_plan(tmp_path, shards=shards, estimated_loads=[1.0] * count, manifest_used=True)
 
-    assert len(list(tmp_path.glob("shard-*.txt"))) == 192
+    assert len(list(tmp_path.glob("shard-*.txt"))) == count
     assert [
-        (tmp_path / f"shard-{index:03d}.txt").read_text(encoding="utf-8").splitlines() for index in range(192)
+        (tmp_path / f"shard-{index:03d}.txt").read_text(encoding="utf-8").splitlines() for index in range(count)
     ] == shards
+
+
+def _printf_format(command: str) -> str:
+    # Tokenize the shell instead of assuming one quoting style for its format.
+    lexer = shlex.shlex(command, posix=True, punctuation_chars=True)
+    lexer.whitespace_split = True
+    tokens = iter(lexer)
+    for token in tokens:
+        if token == "printf":
+            return next(tokens)
+    raise AssertionError("coverage command must select a shard with printf")
+
+
+@pytest.mark.parametrize(
+    "command,expected",
+    [
+        ("shard_file=$(printf 'shard-%03d.txt' 7)", "shard-%03d.txt"),
+        ('shard_file=$(printf "shard-%03d.txt" 7)', "shard-%03d.txt"),
+        ('printf "path with spaces/shard-%03d.txt" 7', "path with spaces/shard-%03d.txt"),
+        (r"printf 'shard-'\''%03d.txt' 7", "shard-'%03d.txt"),
+        ("shard_file=$(printf shard-%03d.txt 7)", "shard-%03d.txt"),
+    ],
+)
+def test_printf_format_respects_shell_quoting(command: str, expected: str) -> None:
+    assert _printf_format(command) == expected
+
+
+def test_printf_format_requires_a_printf_command() -> None:
+    with pytest.raises(AssertionError, match="must select a shard"):
+        _printf_format("echo no-shard-selector")
+
+
+def test_live_coverage_matrix_opens_every_generated_response_file(tmp_path: Path) -> None:
+    import yaml
+
+    root = Path(__file__).resolve().parents[1]
+    jobs = yaml.safe_load((root / ".github/workflows/ci.yml").read_text(encoding="utf-8"))["jobs"]
+    planner = next(
+        step for step in jobs["coverage-plan"]["steps"] if step.get("uses") == "./.github/actions/plan-pytest"
+    )
+    count = int(planner["with"]["shard-count"])
+    indices = jobs["coverage"]["strategy"]["matrix"]["shard-index"]
+    assert indices == list(range(count))
+    command = next(
+        step["run"] for step in jobs["coverage"]["steps"] if step.get("name", "").startswith("Run coverage shard")
+    )
+    format_string = _printf_format(command)
+    shards = [[f"tests/test_matrix.py::test_case_{index}"] for index in indices]
+    write_shard_plan(tmp_path / "pytest-shards", shards=shards, estimated_loads=[1.0] * count, manifest_used=True)
+    assert [
+        (tmp_path / (format_string % index)).read_text(encoding="utf-8").splitlines() for index in indices
+    ] == shards
+
+
+def test_unmeasured_native_file_cannot_remain_one_large_serial_group() -> None:
+    nodes = [f"tests/test_unmeasured_native.py::test_case_{index:02d}" for index in range(28)]
+    shards, _loads = build_affinity_node_shards(nodes, 4, {})
+    assert sorted(node for shard in shards for node in shard) == nodes
+    assert all(0 < len(shard) <= 8 for shard in shards)

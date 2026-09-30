@@ -21,6 +21,8 @@ import type { AuditConnectGateViewState } from "./supply-chain-firewall-panel";
 import { FindingDetailPanel, FindingRow } from "./package-workbench-finding-detail";
 import { ActiveFilterChip, FilterModal, buildFilterSummary } from "./package-workbench-filter-modal";
 import { WorkbenchHeader, WorkbenchPagination } from "./package-workbench-common";
+import { normalizeSupplyChainAuditWorkspaceInput } from "./supply-chain-audit-workspace";
+import { WorkspaceAuditFolderField } from "./workspace-audit-folder-field";
 
 const WORKBENCH_PAGE_SIZE = 25;
 
@@ -31,8 +33,12 @@ type PackageWorkbenchPanelProps = {
   auditError?: string | null;
   auditSnapshot: SupplyChainAuditSnapshot | null;
   auditWorkspaceDir?: string;
+  auditWorkspaceChoices?: readonly string[];
   auditWorkspaceSelectionRequired?: boolean;
+  folderPickerBusy?: boolean;
+  folderPickerError?: string | null;
   onRunAudit?: () => void;
+  onChooseAuditWorkspace?: () => void;
   onAuditWorkspaceDirChange?: (workspaceDir: string) => void;
   auditRunning?: boolean;
   auditPhase?: AuditRunPhase;
@@ -92,34 +98,6 @@ function WorkbenchAuditErrorBanner({ message }: { message: string }) {
   );
 }
 
-function WorkspaceAuditFolderField(props: {
-  value: string;
-  onChange?: (workspaceDir: string) => void;
-}) {
-  return (
-    <div className="border-y border-slate-100 py-4" data-testid="workspace-audit-folder-field">
-      <label className="block text-sm font-semibold text-brand-dark" htmlFor="workspace-audit-folder">
-        Project folder
-      </label>
-      <p className="mt-1 text-xs leading-relaxed text-slate-600">
-        Enter the project folder you want Guard to audit. It must contain a supported package manifest or lockfile.
-      </p>
-      <input
-        id="workspace-audit-folder"
-        data-testid="workspace-audit-folder-input"
-        type="text"
-        inputMode="text"
-        autoComplete="off"
-        spellCheck={false}
-        value={props.value}
-        onChange={(event) => props.onChange?.(event.target.value)}
-        placeholder="<project-folder>"
-        className="mt-3 block min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark shadow-sm outline-none placeholder:text-slate-400 focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20"
-      />
-    </div>
-  );
-}
-
 function WorkbenchEmptyState({ auditConnectGate }: WorkbenchEmptyStateProps) {
   if (auditConnectGate !== null && auditConnectGate !== undefined) {
     return (
@@ -151,8 +129,12 @@ export function PackageWorkbenchPanel({
   auditError = null,
   auditSnapshot,
   auditWorkspaceDir = "",
+  auditWorkspaceChoices = [],
   auditWorkspaceSelectionRequired = false,
+  folderPickerBusy = false,
+  folderPickerError = null,
   onRunAudit,
+  onChooseAuditWorkspace,
   onAuditWorkspaceDirChange,
   auditRunning = false,
   auditPhase = "idle",
@@ -176,7 +158,8 @@ export function PackageWorkbenchPanel({
 
   const findings = auditSnapshot?.findings ?? [];
   const packages = auditSnapshot?.packages ?? [];
-  const workspacePathMissing = auditWorkspaceSelectionRequired && !auditWorkspaceDir.trim();
+  const showFolderField = auditWorkspaceSelectionRequired || auditSnapshot === null || Boolean(auditError) || Boolean(onChooseAuditWorkspace);
+  const workspacePathMissing = normalizeSupplyChainAuditWorkspaceInput(auditWorkspaceDir).length === 0;
   const tableSource = viewMode === "review" ? findings : packages;
   const progressActive = auditProgressActive(auditPhase, auditRunning);
   const showResults = auditSnapshot !== null && !progressActive && (auditConnectGate === null || auditConnectGate === undefined);
@@ -343,10 +326,15 @@ export function PackageWorkbenchPanel({
           <>
             {auditError ? <WorkbenchAuditErrorBanner message={auditError} /> : null}
 
-            {auditWorkspaceSelectionRequired ? (
+            {showFolderField ? (
               <WorkspaceAuditFolderField
                 value={auditWorkspaceDir}
+                choices={auditWorkspaceChoices}
+                choosing={folderPickerBusy}
+                disabled={auditRunning}
+                pickerError={folderPickerError}
                 onChange={onAuditWorkspaceDirChange}
+                onChoose={onChooseAuditWorkspace}
               />
             ) : null}
 
