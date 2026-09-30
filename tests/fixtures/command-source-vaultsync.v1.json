@@ -10089,171 +10089,160 @@
         "schema": "guard.command-extension-source.v1"
       },
       {
-        "schema": "guard.command-extension-source.v1",
         "extension": {
-          "extension_id": "command.vaultsync",
-          "version": "1.0.0",
-          "name": "VaultSync command protection",
-          "description": "Reviews VaultSync commands that prune snapshot history, restore backup data, unregister projects, or repoint project roots while keeping inspection-oriented commands outside the extension review boundary.",
           "action_classes": [
             "vaultsync snapshot prune command",
             "vaultsync restore command",
             "vaultsync project removal command",
             "vaultsync project path update command"
           ],
-          "risk_classes": [
-            "destructive_shell"
+          "aliases": [],
+          "conflicts": [],
+          "delegated_protection": null,
+          "dependencies": [],
+          "description": "Reviews VaultSync commands that prune snapshot history, restore backup data, unregister projects, or repoint project roots while keeping inspection-oriented commands outside the extension review boundary.",
+          "ecosystem_ids": [],
+          "executables": [
+            "vaultsync"
           ],
-          "safer_alternatives": [
-            "Use list-projects, history, diff, and verify to inspect backup state before making changes.",
-            "Use prune --dry-run before approving snapshot deletion.",
-            "Use restore --dry-run before approving restore writes or cleanup."
+          "extension_id": "command.vaultsync",
+          "homepage": "https://fglabs.dev/vaultsync",
+          "icon": null,
+          "license": "MIT",
+          "name": "VaultSync command protection",
+          "permissions": [
+            {
+              "action_classes": [
+                "vaultsync snapshot prune command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Reviews VaultSync prune operations that can permanently remove eligible local snapshot history.",
+              "example_command": "vaultsync prune Demo --keep-last 5",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "3.2.0",
+              "label": "VaultSync snapshot prune command",
+              "permission_id": "command.vaultsync.permission.prune",
+              "replacement_permission_id": null,
+              "risk_tier": "high",
+              "safer_guidance": [
+                "Run vaultsync prune with --dry-run first and inspect the planned deletions.",
+                "Use vaultsync history to inspect the project before pruning."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "vaultsync restore command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Reviews VaultSync restore operations that can write or delete files in the selected destination.",
+              "example_command": "vaultsync restore Demo ./Recovered",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "3.2.0",
+              "label": "VaultSync restore command",
+              "permission_id": "command.vaultsync.permission.restore",
+              "replacement_permission_id": null,
+              "risk_tier": "critical",
+              "safer_guidance": [
+                "Run vaultsync restore with --dry-run first and review the planned changes.",
+                "Inspect history, diff, and verify results before restoring."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "vaultsync project removal command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Reviews removal of a VaultSync project registration and its local indexed history. Source files and stored backup files are not deleted by this command.",
+              "example_command": "vaultsync remove-project Demo",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "3.2.0",
+              "label": "VaultSync project removal command",
+              "permission_id": "command.vaultsync.permission.remove-project",
+              "replacement_permission_id": null,
+              "risk_tier": "medium",
+              "safer_guidance": [
+                "Run vaultsync list-projects first and confirm the exact project registration.",
+                "Do not treat --yes or --quiet as a safe variant."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "vaultsync project path update command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Reviews VaultSync set-path and update-path operations that repoint a registered project to a different root directory.",
+              "example_command": "vaultsync set-path Demo /srv/projects/Demo",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "3.2.0",
+              "label": "VaultSync project path update command",
+              "permission_id": "command.vaultsync.permission.set-path",
+              "replacement_permission_id": null,
+              "risk_tier": "medium",
+              "safer_guidance": [
+                "Run vaultsync list-projects first and confirm the project's current path.",
+                "Confirm the replacement root directory before approving the change."
+              ],
+              "typed_capabilities": []
+            }
           ],
+          "project_markers": [],
+          "publisher": {
+            "display_name": "FG Labs",
+            "id": "community.vaultsync",
+            "url": "https://fglabs.dev/vaultsync"
+          },
           "reference_urls": [
             "https://github.com/ATAC-Helicopter/VaultSync",
             "https://fglabs.dev/vaultsync"
           ],
           "required": false,
-          "source": "built-in",
-          "aliases": [],
-          "dependencies": [],
-          "conflicts": [],
-          "ecosystem_ids": [],
-          "executables": [
-            "vaultsync"
-          ],
-          "project_markers": [],
-          "permissions": [
-            {
-              "permission_id": "command.vaultsync.permission.prune",
-              "implementation_version": "1.0.0",
-              "label": "VaultSync snapshot prune command",
-              "description": "Reviews VaultSync prune operations that can permanently remove eligible local snapshot history.",
-              "risk_tier": "high",
-              "baseline_floor": "review",
-              "default_enabled": true,
-              "configurable": true,
-              "typed_capabilities": [],
-              "action_classes": [
-                "vaultsync snapshot prune command"
-              ],
-              "dependencies": [],
-              "conflicts": [],
-              "implied_permissions": [],
-              "introduced_version": "3.2.0",
-              "deprecated": false,
-              "safer_guidance": [
-                "Run vaultsync prune with --dry-run first and inspect the planned deletions.",
-                "Use vaultsync history to inspect the project before pruning."
-              ],
-              "example_command": "vaultsync prune Demo --keep-last 5",
-              "family": null,
-              "fixed_reason": null,
-              "replacement_permission_id": null
-            },
-            {
-              "permission_id": "command.vaultsync.permission.restore",
-              "implementation_version": "1.0.0",
-              "label": "VaultSync restore command",
-              "description": "Reviews VaultSync restore operations that can write or delete files in the selected destination.",
-              "risk_tier": "critical",
-              "baseline_floor": "review",
-              "default_enabled": true,
-              "configurable": true,
-              "typed_capabilities": [],
-              "action_classes": [
-                "vaultsync restore command"
-              ],
-              "dependencies": [],
-              "conflicts": [],
-              "implied_permissions": [],
-              "introduced_version": "3.2.0",
-              "deprecated": false,
-              "safer_guidance": [
-                "Run vaultsync restore with --dry-run first and review the planned changes.",
-                "Inspect history, diff, and verify results before restoring."
-              ],
-              "example_command": "vaultsync restore Demo ./Recovered",
-              "family": null,
-              "fixed_reason": null,
-              "replacement_permission_id": null
-            },
-            {
-              "permission_id": "command.vaultsync.permission.remove-project",
-              "implementation_version": "1.0.0",
-              "label": "VaultSync project removal command",
-              "description": "Reviews removal of a VaultSync project registration and its local indexed history. Source files and stored backup files are not deleted by this command.",
-              "risk_tier": "medium",
-              "baseline_floor": "review",
-              "default_enabled": true,
-              "configurable": true,
-              "typed_capabilities": [],
-              "action_classes": [
-                "vaultsync project removal command"
-              ],
-              "dependencies": [],
-              "conflicts": [],
-              "implied_permissions": [],
-              "introduced_version": "3.2.0",
-              "deprecated": false,
-              "safer_guidance": [
-                "Run vaultsync list-projects first and confirm the exact project registration.",
-                "Do not treat --yes or --quiet as a safe variant."
-              ],
-              "example_command": "vaultsync remove-project Demo",
-              "family": null,
-              "fixed_reason": null,
-              "replacement_permission_id": null
-            },
-            {
-              "permission_id": "command.vaultsync.permission.set-path",
-              "implementation_version": "1.0.0",
-              "label": "VaultSync project path update command",
-              "description": "Reviews VaultSync set-path and update-path operations that repoint a registered project to a different root directory.",
-              "risk_tier": "medium",
-              "baseline_floor": "review",
-              "default_enabled": true,
-              "configurable": true,
-              "typed_capabilities": [],
-              "action_classes": [
-                "vaultsync project path update command"
-              ],
-              "dependencies": [],
-              "conflicts": [],
-              "implied_permissions": [],
-              "introduced_version": "3.2.0",
-              "deprecated": false,
-              "safer_guidance": [
-                "Run vaultsync list-projects first and confirm the project's current path.",
-                "Confirm the replacement root directory before approving the change."
-              ],
-              "example_command": "vaultsync set-path Demo /srv/projects/Demo",
-              "family": null,
-              "fixed_reason": null,
-              "replacement_permission_id": null
-            }
+          "risk_classes": [
+            "destructive_shell"
           ],
           "rules": [
             {
-              "rule_id": "command.vaultsync.prune",
-              "rule_version": "1.0.0",
-              "permission_id": "command.vaultsync.permission.prune",
-              "title": "VaultSync snapshot prune",
-              "description": "Identifies VaultSync prune operations. Dry-run and help are safe variants; quiet and JSON output do not change the review requirement for a real prune.",
-              "severity": "high",
-              "risk_classes": [
-                "destructive_shell"
-              ],
               "action_classes": [
                 "vaultsync snapshot prune command"
               ],
-              "safer_alternatives": [
-                "Run vaultsync prune with --dry-run first and inspect the planned deletions.",
-                "Use vaultsync history before deleting snapshot history."
-              ],
               "default_mode": "review",
+              "description": "Identifies VaultSync prune operations. Dry-run and help are safe variants; quiet and JSON output do not change the review requirement for a real prune.",
+              "family": null,
               "matcher": {
-                "op": "executable.v1",
                 "config": {
                   "allow_leading_options": false,
                   "executables": [
@@ -10282,14 +10271,19 @@
                   "subcommands": [
                     "prune"
                   ]
-                }
+                },
+                "op": "executable.v1"
               },
+              "native_capability": null,
+              "permission_id": "command.vaultsync.permission.prune",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "rule_id": "command.vaultsync.prune",
+              "rule_version": "1.0.0",
               "safe_variants": [
                 {
-                  "variant_id": "dry-run",
-                  "title": "VaultSync prune dry run",
                   "matcher": {
-                    "op": "executable.v1",
                     "config": {
                       "allow_leading_options": false,
                       "executables": [
@@ -10320,14 +10314,14 @@
                       "subcommands": [
                         "prune"
                       ]
-                    }
-                  }
+                    },
+                    "op": "executable.v1"
+                  },
+                  "title": "VaultSync prune dry run",
+                  "variant_id": "dry-run"
                 },
                 {
-                  "variant_id": "help",
-                  "title": "VaultSync prune help",
                   "matcher": {
-                    "op": "executable.v1",
                     "config": {
                       "allow_leading_options": false,
                       "executables": [
@@ -10359,33 +10353,28 @@
                       "subcommands": [
                         "prune"
                       ]
-                    }
-                  }
+                    },
+                    "op": "executable.v1"
+                  },
+                  "title": "VaultSync prune help",
+                  "variant_id": "help"
                 }
               ],
-              "family": null,
-              "native_capability": null
+              "safer_alternatives": [
+                "Run vaultsync prune with --dry-run first and inspect the planned deletions.",
+                "Use vaultsync history before deleting snapshot history."
+              ],
+              "severity": "high",
+              "title": "VaultSync snapshot prune"
             },
             {
-              "rule_id": "command.vaultsync.restore",
-              "rule_version": "1.0.0",
-              "permission_id": "command.vaultsync.permission.restore",
-              "title": "VaultSync restore",
-              "description": "Identifies VaultSync restore operations that can write or delete files at the destination. Dry-run and help are safe variants.",
-              "severity": "critical",
-              "risk_classes": [
-                "destructive_shell"
-              ],
               "action_classes": [
                 "vaultsync restore command"
               ],
-              "safer_alternatives": [
-                "Run vaultsync restore with --dry-run first and review the planned writes and deletions.",
-                "Confirm the recovery point and destination before approving the restore."
-              ],
               "default_mode": "review",
+              "description": "Identifies VaultSync restore operations that can write or delete files at the destination. Dry-run and help are safe variants.",
+              "family": null,
               "matcher": {
-                "op": "executable.v1",
                 "config": {
                   "allow_leading_options": false,
                   "executables": [
@@ -10415,14 +10404,19 @@
                   "subcommands": [
                     "restore"
                   ]
-                }
+                },
+                "op": "executable.v1"
               },
+              "native_capability": null,
+              "permission_id": "command.vaultsync.permission.restore",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "rule_id": "command.vaultsync.restore",
+              "rule_version": "1.0.0",
               "safe_variants": [
                 {
-                  "variant_id": "dry-run",
-                  "title": "VaultSync restore dry run",
                   "matcher": {
-                    "op": "executable.v1",
                     "config": {
                       "allow_leading_options": false,
                       "executables": [
@@ -10454,14 +10448,14 @@
                       "subcommands": [
                         "restore"
                       ]
-                    }
-                  }
+                    },
+                    "op": "executable.v1"
+                  },
+                  "title": "VaultSync restore dry run",
+                  "variant_id": "dry-run"
                 },
                 {
-                  "variant_id": "help",
-                  "title": "VaultSync restore help",
                   "matcher": {
-                    "op": "executable.v1",
                     "config": {
                       "allow_leading_options": false,
                       "executables": [
@@ -10494,33 +10488,28 @@
                       "subcommands": [
                         "restore"
                       ]
-                    }
-                  }
+                    },
+                    "op": "executable.v1"
+                  },
+                  "title": "VaultSync restore help",
+                  "variant_id": "help"
                 }
               ],
-              "family": null,
-              "native_capability": null
+              "safer_alternatives": [
+                "Run vaultsync restore with --dry-run first and review the planned writes and deletions.",
+                "Confirm the recovery point and destination before approving the restore."
+              ],
+              "severity": "critical",
+              "title": "VaultSync restore"
             },
             {
-              "rule_id": "command.vaultsync.remove-project",
-              "rule_version": "1.0.0",
-              "permission_id": "command.vaultsync.permission.remove-project",
-              "title": "VaultSync project removal",
-              "description": "Identifies VaultSync remove-project operations. The command removes project registration and local history index state; --yes and --quiet remain reviewed.",
-              "severity": "medium",
-              "risk_classes": [
-                "destructive_shell"
-              ],
               "action_classes": [
                 "vaultsync project removal command"
               ],
-              "safer_alternatives": [
-                "Run vaultsync list-projects first and confirm the project to unregister.",
-                "Review removal even when --yes or --quiet is supplied."
-              ],
               "default_mode": "review",
+              "description": "Identifies VaultSync remove-project operations. The command removes project registration and local history index state; --yes and --quiet remain reviewed.",
+              "family": null,
               "matcher": {
-                "op": "executable.v1",
                 "config": {
                   "allow_leading_options": false,
                   "executables": [
@@ -10546,14 +10535,19 @@
                   "subcommands": [
                     "remove-project"
                   ]
-                }
+                },
+                "op": "executable.v1"
               },
+              "native_capability": null,
+              "permission_id": "command.vaultsync.permission.remove-project",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "rule_id": "command.vaultsync.remove-project",
+              "rule_version": "1.0.0",
               "safe_variants": [
                 {
-                  "variant_id": "help",
-                  "title": "VaultSync remove-project help",
                   "matcher": {
-                    "op": "executable.v1",
                     "config": {
                       "allow_leading_options": false,
                       "executables": [
@@ -10582,37 +10576,31 @@
                       "subcommands": [
                         "remove-project"
                       ]
-                    }
-                  }
+                    },
+                    "op": "executable.v1"
+                  },
+                  "title": "VaultSync remove-project help",
+                  "variant_id": "help"
                 }
               ],
-              "family": null,
-              "native_capability": null
+              "safer_alternatives": [
+                "Run vaultsync list-projects first and confirm the project to unregister.",
+                "Review removal even when --yes or --quiet is supplied."
+              ],
+              "severity": "medium",
+              "title": "VaultSync project removal"
             },
             {
-              "rule_id": "command.vaultsync.set-path",
-              "rule_version": "1.0.0",
-              "permission_id": "command.vaultsync.permission.set-path",
-              "title": "VaultSync project path update",
-              "description": "Identifies VaultSync set-path and update-path operations. update-path is a CLI alias of set-path and is covered by the same rule.",
-              "severity": "medium",
-              "risk_classes": [
-                "destructive_shell"
-              ],
               "action_classes": [
                 "vaultsync project path update command"
               ],
-              "safer_alternatives": [
-                "Run vaultsync list-projects first and confirm the current project root.",
-                "Confirm the new path before approving the change."
-              ],
               "default_mode": "review",
+              "description": "Identifies VaultSync set-path and update-path operations. update-path is a CLI alias of set-path and is covered by the same rule.",
+              "family": null,
               "matcher": {
-                "op": "any.v1",
                 "config": {},
                 "matchers": [
                   {
-                    "op": "executable.v1",
                     "config": {
                       "allow_leading_options": false,
                       "executables": [
@@ -10637,10 +10625,10 @@
                       "subcommands": [
                         "set-path"
                       ]
-                    }
+                    },
+                    "op": "executable.v1"
                   },
                   {
-                    "op": "executable.v1",
                     "config": {
                       "allow_leading_options": false,
                       "executables": [
@@ -10665,20 +10653,25 @@
                       "subcommands": [
                         "update-path"
                       ]
-                    }
+                    },
+                    "op": "executable.v1"
                   }
-                ]
+                ],
+                "op": "any.v1"
               },
+              "native_capability": null,
+              "permission_id": "command.vaultsync.permission.set-path",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "rule_id": "command.vaultsync.set-path",
+              "rule_version": "1.0.0",
               "safe_variants": [
                 {
-                  "variant_id": "help",
-                  "title": "VaultSync path-update help",
                   "matcher": {
-                    "op": "any.v1",
                     "config": {},
                     "matchers": [
                       {
-                        "op": "executable.v1",
                         "config": {
                           "allow_leading_options": false,
                           "executables": [
@@ -10706,10 +10699,10 @@
                           "subcommands": [
                             "set-path"
                           ]
-                        }
+                        },
+                        "op": "executable.v1"
                       },
                       {
-                        "op": "executable.v1",
                         "config": {
                           "allow_leading_options": false,
                           "executables": [
@@ -10737,41 +10730,59 @@
                           "subcommands": [
                             "update-path"
                           ]
-                        }
+                        },
+                        "op": "executable.v1"
                       }
-                    ]
-                  }
+                    ],
+                    "op": "any.v1"
+                  },
+                  "title": "VaultSync path-update help",
+                  "variant_id": "help"
                 }
               ],
-              "family": null,
-              "native_capability": null
+              "safer_alternatives": [
+                "Run vaultsync list-projects first and confirm the current project root.",
+                "Confirm the new path before approving the change."
+              ],
+              "severity": "medium",
+              "title": "VaultSync project path update"
             }
           ],
-          "publisher": {
-            "id": "community.vaultsync",
-            "display_name": "FG Labs",
-            "url": "https://fglabs.dev/vaultsync"
-          },
-          "homepage": "https://fglabs.dev/vaultsync",
-          "license": "MIT",
-          "icon": null,
-          "delegated_protection": null
-        }
+          "safer_alternatives": [
+            "Use list-projects, history, diff, and verify to inspect backup state before making changes.",
+            "Use prune --dry-run before approving snapshot deletion.",
+            "Use restore --dry-run before approving restore writes or cleanup."
+          ],
+          "source": "built-in",
+          "version": "1.0.0"
+        },
+        "schema": "guard.command-extension-source.v1"
       }
     ],
     "trust": {
-      "schemaVersion": "guard.extension-trust-class-map.v1",
-      "publishers": {
-        "hol": {
-          "id": "hol",
-          "displayName": "Hashgraph Online"
-        },
-        "hol-curated": {
-          "id": "hol-curated",
-          "displayName": "HOL curated library"
-        }
-      },
       "classes": {
+        "external": [
+          "command.blitcp",
+          "command.cloudg",
+          "command.cogext",
+          "command.ctty",
+          "command.digline",
+          "command.genclave",
+          "command.gitsync",
+          "command.mcp-filesystem",
+          "command.mcp-instapods",
+          "command.mcp-pr-ui-compare",
+          "command.mcp-reaper",
+          "command.noodle",
+          "command.ollama",
+          "command.probe",
+          "command.remote.essh",
+          "command.repo2nb",
+          "command.skill-base",
+          "command.skill-sunset",
+          "command.uivoid",
+          "command.vaultsync"
+        ],
         "first-party": [
           "command.container-runtime",
           "command.data-protection",
@@ -10837,327 +10848,325 @@
           "command.storage.azure-blob",
           "command.storage.google-cloud",
           "command.storage.minio"
-        ],
-        "external": [
-          "command.blitcp",
-          "command.mcp-filesystem",
-          "command.mcp-instapods",
-          "command.noodle",
-          "command.ollama",
-          "command.probe",
-          "command.remote.essh",
-          "command.repo2nb",
-          "command.skill-sunset",
-          "command.uivoid",
-          "command.vaultsync"
         ]
-      }
+      },
+      "publishers": {
+        "hol": {
+          "displayName": "Hashgraph Online",
+          "id": "hol"
+        },
+        "hol-curated": {
+          "displayName": "HOL curated library",
+          "id": "hol-curated"
+        }
+      },
+      "schemaVersion": "guard.extension-trust-class-map.v1"
     }
   },
-  "schema": "guard.command-extension-fixtures.v1",
   "cases": [
     {
-      "id": "inactive-prune",
       "command": "vaultsync prune Demo --keep-last 5",
+      "disabled_permissions": [],
       "enabled_extensions": [],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.vaultsync.prune",
-      "expected_effective_segments": []
+      "expected_effective_segments": [],
+      "id": "inactive-prune",
+      "rule_id": "command.vaultsync.prune"
     },
     {
+      "command": "vaultsync prune Demo --keep-last 5",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.vaultsync"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
       "id": "prune-review",
-      "command": "vaultsync prune Demo --keep-last 5",
-      "enabled_extensions": [
-        "command.vaultsync"
-      ],
-      "disabled_permissions": [],
-      "expected_action": "review",
-      "rule_id": "command.vaultsync.prune",
-      "expected_effective_segments": [
-        0
-      ]
+      "rule_id": "command.vaultsync.prune"
     },
     {
-      "id": "prune-before-review",
       "command": "vaultsync prune Demo --before 2026-09-01 --json",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.vaultsync"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.vaultsync.prune",
       "expected_effective_segments": [
         0
-      ]
+      ],
+      "id": "prune-before-review",
+      "rule_id": "command.vaultsync.prune"
     },
     {
-      "id": "prune-dry-run-safe",
       "command": "vaultsync prune Demo --keep-last 5 --dry-run",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.vaultsync"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.vaultsync.prune",
-      "expected_effective_segments": []
+      "expected_effective_segments": [],
+      "id": "prune-dry-run-safe",
+      "rule_id": "command.vaultsync.prune"
     },
     {
-      "id": "prune-help-safe",
       "command": "vaultsync prune --help",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.vaultsync"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.vaultsync.prune",
-      "expected_effective_segments": []
+      "expected_effective_segments": [],
+      "id": "prune-help-safe",
+      "rule_id": "command.vaultsync.prune"
     },
     {
-      "id": "restore-review",
       "command": "vaultsync restore Demo ./Recovered",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.vaultsync"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.vaultsync.restore",
       "expected_effective_segments": [
         0
-      ]
+      ],
+      "id": "restore-review",
+      "rule_id": "command.vaultsync.restore"
     },
     {
-      "id": "restore-clean-review",
       "command": "vaultsync restore Demo ./Recovered --clean --json",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.vaultsync"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.vaultsync.restore",
       "expected_effective_segments": [
         0
-      ]
+      ],
+      "id": "restore-clean-review",
+      "rule_id": "command.vaultsync.restore"
     },
     {
-      "id": "restore-dry-run-safe",
       "command": "vaultsync restore Demo ./Recovered --snapshot 42 --dry-run",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.vaultsync"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.vaultsync.restore",
-      "expected_effective_segments": []
+      "expected_effective_segments": [],
+      "id": "restore-dry-run-safe",
+      "rule_id": "command.vaultsync.restore"
     },
     {
-      "id": "restore-help-safe",
       "command": "vaultsync restore --help",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.vaultsync"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.vaultsync.restore",
-      "expected_effective_segments": []
+      "expected_effective_segments": [],
+      "id": "restore-help-safe",
+      "rule_id": "command.vaultsync.restore"
     },
     {
-      "id": "remove-project-review",
       "command": "vaultsync remove-project Demo",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.vaultsync"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.vaultsync.remove-project",
       "expected_effective_segments": [
         0
-      ]
+      ],
+      "id": "remove-project-review",
+      "rule_id": "command.vaultsync.remove-project"
     },
     {
-      "id": "remove-project-yes-still-review",
       "command": "vaultsync remove-project Demo --yes",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.vaultsync"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.vaultsync.remove-project",
       "expected_effective_segments": [
         0
-      ]
+      ],
+      "id": "remove-project-yes-still-review",
+      "rule_id": "command.vaultsync.remove-project"
     },
     {
-      "id": "remove-project-quiet-still-review",
       "command": "vaultsync remove-project Demo --quiet",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.vaultsync"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.vaultsync.remove-project",
       "expected_effective_segments": [
         0
-      ]
+      ],
+      "id": "remove-project-quiet-still-review",
+      "rule_id": "command.vaultsync.remove-project"
     },
     {
-      "id": "remove-project-help-safe",
       "command": "vaultsync remove-project --help",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.vaultsync"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.vaultsync.remove-project",
-      "expected_effective_segments": []
+      "expected_effective_segments": [],
+      "id": "remove-project-help-safe",
+      "rule_id": "command.vaultsync.remove-project"
     },
     {
-      "id": "set-path-review",
       "command": "vaultsync set-path Demo \"/srv/projects/Demo Project\"",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.vaultsync"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.vaultsync.set-path",
       "expected_effective_segments": [
         0
-      ]
+      ],
+      "id": "set-path-review",
+      "rule_id": "command.vaultsync.set-path"
     },
     {
-      "id": "update-path-alias-review",
       "command": "vaultsync update-path Demo /srv/projects/Demo",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.vaultsync"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.vaultsync.set-path",
       "expected_effective_segments": [
         0
-      ]
+      ],
+      "id": "update-path-alias-review",
+      "rule_id": "command.vaultsync.set-path"
     },
     {
-      "id": "set-path-help-safe",
       "command": "vaultsync set-path --help",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.vaultsync"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.vaultsync.set-path",
-      "expected_effective_segments": []
+      "expected_effective_segments": [],
+      "id": "set-path-help-safe",
+      "rule_id": "command.vaultsync.set-path"
     },
     {
-      "id": "list-projects-safe-case",
       "command": "vaultsync list-projects --json",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.vaultsync"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.vaultsync.prune",
-      "expected_effective_segments": []
+      "expected_effective_segments": [],
+      "id": "list-projects-safe-case",
+      "rule_id": "command.vaultsync.prune"
     },
     {
-      "id": "history-safe-case",
       "command": "vaultsync history Demo --json",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.vaultsync"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.vaultsync.prune",
-      "expected_effective_segments": []
+      "expected_effective_segments": [],
+      "id": "history-safe-case",
+      "rule_id": "command.vaultsync.prune"
     },
     {
-      "id": "diff-safe-case",
       "command": "vaultsync diff Demo 10 9 --json",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.vaultsync"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.vaultsync.prune",
-      "expected_effective_segments": []
+      "expected_effective_segments": [],
+      "id": "diff-safe-case",
+      "rule_id": "command.vaultsync.prune"
     },
     {
-      "id": "verify-safe-case",
       "command": "vaultsync verify Demo ./Backup --full --json",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.vaultsync"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.vaultsync.prune",
-      "expected_effective_segments": []
+      "expected_effective_segments": [],
+      "id": "verify-safe-case",
+      "rule_id": "command.vaultsync.prune"
     },
     {
-      "id": "compound-safe-then-destructive",
       "command": "vaultsync list-projects; vaultsync prune Demo --keep-last 5",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.vaultsync"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.vaultsync.prune",
       "expected_effective_segments": [
         1
-      ]
+      ],
+      "id": "compound-safe-then-destructive",
+      "rule_id": "command.vaultsync.prune"
     },
     {
-      "id": "compound-dry-run-then-restore",
       "command": "vaultsync prune Demo --keep-last 5 --dry-run; vaultsync restore Demo ./Recovered",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.vaultsync"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.vaultsync.restore",
       "expected_effective_segments": [
         1
-      ]
+      ],
+      "id": "compound-dry-run-then-restore",
+      "rule_id": "command.vaultsync.restore"
     },
     {
-      "id": "disabled-prune-permission",
       "command": "vaultsync prune Demo --keep-last 5",
-      "enabled_extensions": [
-        "command.vaultsync"
-      ],
       "disabled_permissions": [
         "command.vaultsync.permission.prune"
       ],
+      "enabled_extensions": [
+        "command.vaultsync"
+      ],
       "expected_action": "block",
-      "rule_id": "command.vaultsync.prune",
       "expected_effective_segments": [
         0
-      ]
+      ],
+      "id": "disabled-prune-permission",
+      "rule_id": "command.vaultsync.prune"
     },
     {
-      "id": "exe-launcher-review",
       "command": "vaultsync.exe remove-project Demo --yes",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.vaultsync"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.vaultsync.remove-project",
       "expected_effective_segments": [
         0
-      ]
+      ],
+      "id": "exe-launcher-review",
+      "rule_id": "command.vaultsync.remove-project"
     },
     {
-      "id": "cmd-launcher-review",
       "command": "vaultsync.cmd set-path Demo C:\\\\Projects\\\\Demo",
+      "disabled_permissions": [],
       "enabled_extensions": [
         "command.vaultsync"
       ],
-      "disabled_permissions": [],
       "expected_action": "review",
-      "rule_id": "command.vaultsync.set-path",
       "expected_effective_segments": [
         0
-      ]
+      ],
+      "id": "cmd-launcher-review",
+      "rule_id": "command.vaultsync.set-path"
     }
-  ]
+  ],
+  "schema": "guard.command-extension-fixtures.v1"
 }

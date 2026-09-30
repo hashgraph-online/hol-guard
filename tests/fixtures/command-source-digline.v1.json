@@ -16559,7 +16559,8 @@
           "command.repo2nb",
           "command.skill-base",
           "command.skill-sunset",
-          "command.uivoid"
+          "command.uivoid",
+          "command.vaultsync"
         ],
         "first-party": [
           "command.container-runtime",

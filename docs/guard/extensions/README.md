@@ -157,6 +157,7 @@ Protection model meanings:
 | `command.repo2nb` | Reviews repo2nb commands that can overwrite an existing destination directory or silently drop untracked notebook cells. | 2 | External opt-in |
 | `command.skill-base` | Reviews authenticated Skill Base CLI publications before local Skill files are uploaded as a new version. | 1 | External opt-in |
 | `command.uivoid` | Reviews uivoid commands that create or reconfigure a live MCP server mapped from an existing API, rotate the credential it calls that API with, or write local session and skill files a later command or agent session will trust. | 5 | External opt-in |
+| `command.vaultsync` | Reviews VaultSync commands that prune snapshot history, restore backup data, unregister projects, or repoint project roots while keeping inspection-oriented commands outside the extension review boundary. | 4 | External opt-in |
 
 <!-- END GENERATED EXTENSION DIRECTORY -->
 
