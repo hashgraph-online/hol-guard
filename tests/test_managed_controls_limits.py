@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.runtime.command_extensions import (
+    BUILT_IN_COMMAND_EXTENSION_REGISTRY,
     CommandSafetyExtension,
     CommandSafetyExtensionRegistry,
 )
@@ -23,6 +24,7 @@ from codex_plugin_scanner.guard.runtime.extension_control_limits import (
     advertised_extension_control_limits,
     extension_control_limit_violation,
 )
+from tests.generated_command_catalog_test_support import generated_extension
 
 ROOT = Path(__file__).resolve().parents[1]
 LIMITS_PATH = ROOT / "contracts" / "managed-controls" / "v1" / "limits.json"
@@ -109,8 +111,11 @@ def test_resolution_boundaries(
 
 
 def _catalog_extension(index: int) -> CommandSafetyExtension:
-    extension = CommandSafetyExtension(
-        extension_id=f"command.limit{index}",
+    extension_id = f"command.limit{index}"
+    base = BUILT_IN_COMMAND_EXTENSION_REGISTRY.get("command.api-gateway")
+    assert base is not None
+    extension = generated_extension(
+        extension_id=extension_id,
         version="1.0.0",
         name=f"Limit {index}",
         description="Bounded catalog fixture.",
@@ -121,6 +126,15 @@ def _catalog_extension(index: int) -> CommandSafetyExtension:
         ecosystem_ids=(f"limit{index}",),
         executables=(f"limit{index}",),
         reference_urls=("https://example.com/managed-controls-limit-fixture",),
+        permissions=(
+            replace(
+                base.permissions[0],
+                permission_id=f"{extension_id}.permission.default",
+                extension_id=extension_id,
+                action_classes=(),
+                rule_ids=(),
+            ),
+        ),
     )
     return replace(
         extension,

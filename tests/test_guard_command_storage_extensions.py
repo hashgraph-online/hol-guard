@@ -5,10 +5,13 @@ from __future__ import annotations
 from pathlib import Path
 
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
-from codex_plugin_scanner.guard.runtime.command_inspection import inspect_command
 from codex_plugin_scanner.guard.runtime.command_storage_extensions import STORAGE_COMMAND_RULES
-from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sensitive_tool_action_request
 from tests.command_extension_contracts import assert_reviewed_command_cases, assert_safe_command_cases
+from tests.native_command_test_support import (
+    extract_sensitive_tool_action_request_native_test as extract_sensitive_tool_action_request,
+)
+from tests.native_command_test_support import inspect_command_native_test as inspect_command
+from tests.native_command_test_support import real_native_command_evaluation
 
 STORAGE_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
     (
@@ -216,28 +219,56 @@ STORAGE_SAFE_COMMANDS: tuple[str, ...] = (
     "mc rm --help",
     "aws s3 cp ./out s3://archive/private.json --dryrun",
     "aws s3 sync ./out s3://archive --dryrun",
-    "aws s3 ls s3://archive",
-    "aws --future-global-option account s3 ls s3://archive",
-    "aws s3api list-objects-v2 --bucket archive",
-    "aws s3api head-object --bucket archive --key private.json",
-    "aws s3api head-bucket --bucket archive",
     "aws s3api put-object --generate-cli-skeleton input",
     "aws s3api delete-objects --generate-cli-skeleton output",
     "aws s3api put-bucket-policy --generate-cli-skeleton yaml-input",
-    "gcloud storage ls gs://archive",
-    "gcloud --filter active storage ls gs://archive",
-    "az storage blob list --container-name archive",
-    "az --future-global-option tenant storage blob list --container-name archive",
-    "mc ls prod/archive",
-    "mc --config-dir /tmp/mc ls prod/archive",
     "mc --help rm prod/archive",
     "grep 's3 rm|storage rm|blob delete|mc rm' scripts/guard-test",
     "printf '%s\\n' 'aws s3 rm s3://archive/private.json'",
 )
 
 
-def test_storage_preview_and_read_commands_remain_safe(tmp_path: Path) -> None:
+def test_storage_preview_and_literal_commands_remain_safe(tmp_path: Path) -> None:
     assert_safe_command_cases(STORAGE_SAFE_COMMANDS, tmp_path)
+
+
+STORAGE_READ_CASES = (
+    ("aws s3 ls s3://archive", "command.storage.aws-s3.ls"),
+    ("aws --future-global-option account s3 ls s3://archive", "command.storage.aws-s3.ls"),
+    ("aws s3api list-objects-v2 --bucket archive", "command.storage.aws-s3.ls"),
+    ("aws s3api head-object --bucket archive --key private.json", "command.storage.aws-s3.get"),
+    ("aws s3api head-bucket --bucket archive", "command.storage.aws-s3.get"),
+    ("gcloud storage ls gs://archive", "command.storage.google-cloud.ls"),
+    ("gcloud --filter active storage ls gs://archive", "command.storage.google-cloud.ls"),
+    ("az storage blob list --container-name archive", "command.storage.azure-blob.list"),
+    ("az --future-global-option tenant storage blob list --container-name archive", "command.storage.azure-blob.list"),
+    ("mc ls prod/archive", "command.storage.minio.ls"),
+    ("mc --config-dir /tmp/mc ls prod/archive", "command.storage.minio.ls"),
+)
+
+
+def test_storage_reads_keep_owned_controls_without_claiming_native_authorization(tmp_path: Path) -> None:
+    for command, rule_id in STORAGE_READ_CASES:
+        reviewed = real_native_command_evaluation(command, cwd=tmp_path)
+        observations = reviewed.evaluation.extension_observations
+        assert [item.rule.rule_id for item in observations] == [rule_id], command
+        assert all(item.rule.default_mode == "disabled" for item in observations), command
+        # Read capability metadata is not an authenticated network/executable
+        # proof, so the independent native review floor must survive.
+        assert reviewed.native_minimum_action == "review", command
+        assert reviewed.evaluation.minimum_action == "review", command
+        assert reviewed.payload["explicitly_benign"] is False, command
+        assert not reviewed.evaluation.decision_plane.proof_routes, command
+        permission = next(
+            permission for permission in observations[0].extension.permissions if rule_id in permission.rule_ids
+        )
+        disabled = real_native_command_evaluation(
+            command,
+            cwd=tmp_path,
+            controls=(("permission", permission.permission_id, "disabled"),),
+        )
+        assert disabled.native_minimum_action == "block", command
+        assert disabled.evaluation.minimum_action == "block", command
 
 
 def test_storage_disabled_dry_run_alias_remains_runtime_sensitive(tmp_path: Path) -> None:

@@ -13,6 +13,7 @@ from codex_plugin_scanner.guard.adapters.opencode import OpenCodeHarnessAdapter
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.cli.commands import add_guard_root_parser, run_guard_command
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.guard_signed_approval_fixtures import write_synthetic_daemon_auth_token
 
 
 def _parse_guard_args(argv: list[str]) -> argparse.Namespace:
@@ -136,6 +137,7 @@ def test_gr076_codex_prompt_secret_read_returns_branded_approval_context(tmp_pat
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir(parents=True, exist_ok=True)
     (guard_home / "config.toml").write_text("approval_wait_timeout_seconds = 0\n", encoding="utf-8")
+    write_synthetic_daemon_auth_token(guard_home)
 
     exit_code, output = _run_hook(
         tmp_path,
@@ -192,6 +194,7 @@ def test_gr076b_codex_prompt_secret_read_caps_browser_approval_wait(
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir(parents=True, exist_ok=True)
     (guard_home / "config.toml").write_text("approval_wait_timeout_seconds = 120\n", encoding="utf-8")
+    write_synthetic_daemon_auth_token(guard_home)
     observed_timeouts: list[int] = []
 
     def unresolved_wait(*args: object, **kwargs: object) -> dict[str, object]:
@@ -230,6 +233,7 @@ def test_codex_post_tool_secret_output_caps_browser_approval_wait(
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir(parents=True, exist_ok=True)
     (guard_home / "config.toml").write_text("approval_wait_timeout_seconds = 120\n", encoding="utf-8")
+    write_synthetic_daemon_auth_token(guard_home)
     observed_timeouts: list[int] = []
 
     def unresolved_wait(*args: object, **kwargs: object) -> dict[str, object]:
@@ -409,7 +413,7 @@ def test_gr081c_codex_live_wait_opens_and_prints_approval_url(monkeypatch, capsy
             "approval_requests": [
                 {
                     "request_id": "req-1",
-                    "approval_url": "http://127.0.0.1:5475/requests/req-1",
+                    "approval_url": "https://example.invalid/requests/req-1",
                 }
             ]
         }
@@ -417,8 +421,8 @@ def test_gr081c_codex_live_wait_opens_and_prints_approval_url(monkeypatch, capsy
 
     captured = capsys.readouterr()
 
-    assert opened_urls == ["http://127.0.0.1:5475/requests/req-1"]
-    assert "http://127.0.0.1:5475/requests/req-1" in captured.err
+    assert opened_urls == ["https://example.invalid/requests/req-1"]
+    assert "https://example.invalid/requests/req-1" in captured.err
 
 
 def test_gr082_claude_pretooluse_brands_native_prompt(tmp_path: Path) -> None:

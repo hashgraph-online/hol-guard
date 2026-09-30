@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import os
@@ -54,6 +55,77 @@ def test_frozen_entrypoint_dispatches_multiprocessing_before_guard_imports(
         "private-command",
         "public-cli",
     ]
+
+
+def test_version_probe_answers_before_guard_imports(tmp_path: Path) -> None:
+    marker = tmp_path / "guard-imported"
+    package = tmp_path / "codex_plugin_scanner"
+    package.mkdir()
+    (package / "__init__.py").write_text(
+        "import os\nfrom pathlib import Path\nPath(os.environ['GUARD_IMPORT_MARKER']).write_text('imported')\n",
+        encoding="utf-8",
+    )
+    environment = dict(os.environ)
+    environment["PYTHONPATH"] = str(tmp_path)
+    environment["GUARD_IMPORT_MARKER"] = str(marker)
+    result = subprocess.run(
+        [sys.executable, str(FROZEN_ENTRYPOINT), "--version"],
+        capture_output=True,
+        env=environment,
+        check=False,
+        text=True,
+    )
+
+    version_file = ROOT / "src" / "codex_plugin_scanner" / "version.py"
+    version_tree = ast.parse(version_file.read_text(encoding="utf-8"))
+    version = next(
+        node.value.value
+        for node in version_tree.body
+        if isinstance(node, ast.Assign)
+        and any(isinstance(target, ast.Name) and target.id == "__version__" for target in node.targets)
+        and isinstance(node.value, ast.Constant)
+        and isinstance(node.value.value, str)
+    )
+    assert result.returncode == 0
+    assert result.stdout.strip() == f"{FROZEN_ENTRYPOINT.name} {version}"
+    assert result.stderr == ""
+    assert not marker.exists()
+
+
+def test_frozen_version_probe_reads_bundled_version_without_guard_imports(tmp_path: Path) -> None:
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    (bundle / "version.py").write_text('__version__ = "9.9.9"  # x-release-please-version\n', encoding="utf-8")
+    marker = tmp_path / "guard-imported"
+    package = tmp_path / "codex_plugin_scanner"
+    package.mkdir()
+    (package / "__init__.py").write_text(
+        "import os\nfrom pathlib import Path\nPath(os.environ['GUARD_IMPORT_MARKER']).write_text('imported')\n",
+        encoding="utf-8",
+    )
+    invocation = (
+        "import sys; "
+        f"sys.frozen=True; sys._MEIPASS={str(bundle)!r}; "
+        "sys.argv=['hol-guard','--version']; "
+        f"entrypoint={str(FROZEN_ENTRYPOINT)!r}; "
+        "exec(compile(open(entrypoint, 'rb').read(), entrypoint, 'exec'), "
+        "{'__name__':'__main__','__file__':entrypoint})"
+    )
+    environment = dict(os.environ)
+    environment["PYTHONPATH"] = str(tmp_path)
+    environment["GUARD_IMPORT_MARKER"] = str(marker)
+    result = subprocess.run(
+        [sys.executable, "-c", invocation],
+        capture_output=True,
+        env=environment,
+        check=False,
+        text=True,
+    )
+
+    assert result.returncode == 0
+    assert result.stdout.strip() == "hol-guard 9.9.9"
+    assert result.stderr == ""
+    assert not marker.exists()
 
 
 def test_frozen_entrypoint_rejects_held_gate_before_guard_package_import(

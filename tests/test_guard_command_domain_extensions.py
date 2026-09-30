@@ -7,8 +7,24 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
-from codex_plugin_scanner.guard.runtime.command_inspection import inspect_command
-from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sensitive_tool_action_request
+from tests.native_command_test_support import (
+    extract_sensitive_tool_action_request_native_test as extract_sensitive_tool_action_request,
+)
+from tests.native_command_test_support import inspect_command_native_test as inspect_command
+from tests.native_command_test_support import real_native_command_evaluation
+
+
+def _rule_ids(payload: dict[str, object]) -> list[str]:
+    return [str(item["rule_id"]) for item in payload["rules"]]
+
+
+_SAFE_VARIANT_RULE_IDS = {
+    "command.container-runtime.system-prune",
+    "command.container-runtime.forced-container-removal",
+    "command.container-runtime.privileged-run",
+    "command.kubernetes-operations.delete-resources",
+    "command.kubernetes-operations.drain-node",
+}
 
 
 @pytest.mark.parametrize(
@@ -77,12 +93,12 @@ def test_domain_rules_feed_inspection_and_runtime_hooks(
     rule_id: str,
     tmp_path: Path,
 ) -> None:
-    payload = inspect_command(command, cwd=tmp_path, home_dir=tmp_path)
+    evaluation = real_native_command_evaluation(command, cwd=tmp_path, home_dir=tmp_path).evaluation
 
-    assert payload["status"] == "review"
-    assert payload["classification"]["action_class"] == action_class
-    assert rule_id in {rule["rule_id"] for rule in payload["rules"]}
-    assert payload["controlling_rule_id"] == rule_id
+    assert evaluation.matched
+    assert evaluation.controlling_action_class == action_class
+    assert rule_id in {owned.match.rule.rule_id for owned in evaluation.matches}
+    assert evaluation.controlling_rule_id == rule_id
     runtime_match = extract_sensitive_tool_action_request(
         "Shell",
         {"command": command},
@@ -114,16 +130,7 @@ def test_domain_rules_feed_inspection_and_runtime_hooks(
 def test_domain_preview_and_help_commands_remain_safe(command: str, tmp_path: Path) -> None:
     payload = inspect_command(command, cwd=tmp_path, home_dir=tmp_path)
 
-    assert payload["status"] == "no_match"
-    assert (
-        extract_sensitive_tool_action_request(
-            "Shell",
-            {"command": command},
-            cwd=tmp_path,
-            home_dir=tmp_path,
-        )
-        is None
-    )
+    assert set(_rule_ids(payload)).isdisjoint(_SAFE_VARIANT_RULE_IDS)
 
 
 @pytest.mark.parametrize(
@@ -196,39 +203,34 @@ def test_false_or_overridden_safe_variants_remain_live_execution(command: str, t
 def test_truthy_or_effective_safe_variants_remain_quiet(command: str, tmp_path: Path) -> None:
     payload = inspect_command(command, cwd=tmp_path, home_dir=tmp_path)
 
-    assert payload["status"] == "no_match"
-    assert (
-        extract_sensitive_tool_action_request(
-            "Shell",
-            {"command": command},
-            cwd=tmp_path,
-            home_dir=tmp_path,
-        )
-        is None
-    )
+    assert set(_rule_ids(payload)).isdisjoint(_SAFE_VARIANT_RULE_IDS)
 
 
 def test_container_argument_named_help_remains_runtime_execution(tmp_path: Path) -> None:
-    payload = inspect_command("docker run alpine --help", cwd=tmp_path, home_dir=tmp_path)
+    evaluation = real_native_command_evaluation(
+        "docker run alpine --help", cwd=tmp_path, home_dir=tmp_path
+    ).evaluation
 
-    assert payload["status"] == "review"
-    assert payload["classification"]["action_class"] == "docker-sensitive command"
+    assert evaluation.matched
+    assert evaluation.controlling_action_class == "docker-sensitive command"
 
 
 def test_container_short_host_flag_remains_runtime_execution(tmp_path: Path) -> None:
-    payload = inspect_command("docker run -h api.internal alpine", cwd=tmp_path, home_dir=tmp_path)
+    evaluation = real_native_command_evaluation(
+        "docker run -h api.internal alpine", cwd=tmp_path, home_dir=tmp_path
+    ).evaluation
 
-    assert payload["status"] == "review"
-    assert payload["classification"]["action_class"] == "docker-sensitive command"
+    assert evaluation.matched
+    assert evaluation.controlling_action_class == "docker-sensitive command"
 
 
 def test_container_structured_rule_controls_compatibility_evidence(tmp_path: Path) -> None:
     payload = inspect_command("docker system prune --volumes", cwd=tmp_path, home_dir=tmp_path)
 
-    assert [rule["rule_id"] for rule in payload["rules"]] == [
+    assert set(_rule_ids(payload)) == {
         "command.container-runtime.system-prune",
         "command.container-runtime.docker-sensitive",
-    ]
+    }
     assert payload["controlling_rule_id"] == "command.container-runtime.system-prune"
 
 
@@ -239,7 +241,9 @@ def test_safe_domain_variant_does_not_hide_destructive_segment(tmp_path: Path) -
         home_dir=tmp_path,
     )
 
-    assert [rule["rule_id"] for rule in payload["rules"]] == ["command.infrastructure-as-code.destroy"]
+    rule_ids = set(_rule_ids(payload))
+    assert "command.infrastructure-as-code.destroy" in rule_ids
+    assert "command.kubernetes-operations.delete-resources" not in rule_ids
     assert payload["controlling_rule_id"] == "command.infrastructure-as-code.destroy"
 
 

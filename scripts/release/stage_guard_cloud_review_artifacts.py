@@ -7,6 +7,7 @@ import shutil
 from pathlib import Path
 
 _ARTIFACTS = {
+    "contracts/extensions/native-command-program.v1.json": "extensions/native-command-program.v1.json",
     "contracts/guard-cloud-review/v2/contract.json": "guard-cloud-review/v2/contract.json",
     "contracts/guard-cloud-review/v2/command-result.json": "guard-cloud-review/v2/command-result.json",
     "contracts/guard-cloud-review/v2/fixtures.json": "guard-cloud-review/v2/fixtures.json",
@@ -19,9 +20,12 @@ _ARTIFACTS = {
     "contributions/extensions/command.probe.json": "extensions/contributions/command.probe.json",
     "contributions/extensions/command.repo2nb.json": "extensions/contributions/command.repo2nb.json",
     "contributions/extensions/command.skill-sunset.json": "extensions/contributions/command.skill-sunset.json",
+    "contributions/extensions/command.uivoid.json": "extensions/contributions/command.uivoid.json",
     "contracts/mcp-servers/contribution.v1.schema.json": "mcp_servers/contribution.v1.schema.json",
     "contributions/mcp-servers/mcp.filesystem.json": "mcp_servers/contributions/mcp.filesystem.json",
     "contributions/mcp-servers/mcp.instapods.json": "mcp_servers/contributions/mcp.instapods.json",
+    "contributions/mcp-servers/mcp.pr-ui-compare.json": "mcp_servers/contributions/mcp.pr-ui-compare.json",
+    "contributions/mcp-servers/mcp.reaper.json": "mcp_servers/contributions/mcp.reaper.json",
 }
 
 

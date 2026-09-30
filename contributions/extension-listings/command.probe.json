@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "guard.extension-listing.v1",
+  "extensionId": "command.probe",
+  "tagline": "Reviews HTTP execution and OpenCollection workspace mutations through the Probe CLI.",
+  "category": "other",
+  "limitations": [
+    "Coverage is limited to the reviewed operations and the surrounding Guard policy.",
+    "A maintainer profile is not a security certification or an official upstream endorsement."
+  ],
+  "maintainerGithubIds": [
+    "8337876"
+  ]
+}

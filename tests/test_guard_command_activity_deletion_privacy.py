@@ -40,6 +40,7 @@ from codex_plugin_scanner.guard.store_command_activity_privacy import (
     _stable_distinct,
 )
 from tests.guard_command_activity_api_support import seed
+from tests.native_command_activity_test_support import use_real_native_activity_reviews
 
 _COMMAND_TABLES = (
     "command_activity",
@@ -333,7 +334,9 @@ def test_clear_is_atomic_and_preserves_unrelated_state(tmp_path: Path) -> None:
 def test_forbidden_sentinels_never_reach_command_activity_surfaces(
     tmp_path: Path,
     caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    use_real_native_activity_reviews(monkeypatch)
     store = _store(tmp_path)
     sentinels = (
         "ghp_0123456789FORBIDDEN",

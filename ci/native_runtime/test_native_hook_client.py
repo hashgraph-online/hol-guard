@@ -16,7 +16,7 @@ from native_hook_client_support import (
 )
 from native_hook_client_support import native_runtime as _native_runtime_fixture  # noqa: F401
 
-from ci.native_runtime.resident_test_support import process_is_alive
+from ci.native_runtime.native_process_test_support import process_is_alive
 
 
 def test_native_hook_client_reuses_one_authenticated_generation(

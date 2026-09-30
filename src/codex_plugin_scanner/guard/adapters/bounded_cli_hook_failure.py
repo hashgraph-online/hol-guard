@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from ..daemon.hook_availability_policy import (
     EMERGENCY_SAFE_REASON,
-    hook_action_is_emergency_safe,
     hook_event_is_permission_request,
     hook_event_pauses_when_unavailable,
 )
+from ..daemon.hook_launcher_recovery import hook_action_is_launcher_recovery_safe
 
 _DECISION_HOOK_HARNESSES = frozenset({"grok", "hermes", "openclaw"})
 
@@ -134,7 +134,7 @@ def failure_payload(
         pauses
         and not _is_permission_event(event_name)
         and isinstance(payload, dict)
-        and hook_action_is_emergency_safe(payload)
+        and hook_action_is_launcher_recovery_safe(payload)
     ):
         return _emergency_safe_payload(harness, event_name), 0
     if not pauses:

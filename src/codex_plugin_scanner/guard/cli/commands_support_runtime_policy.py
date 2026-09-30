@@ -138,6 +138,7 @@ def _native_approval_center_context(response_payload: dict[str, object], *, harn
         "codex": "Codex",
         "copilot": "Copilot",
         "cursor": "Cursor",
+        "devin": "Devin",
         "guard-cli": "package install",
         "opencode": "OpenCode",
         "kimi": "Kimi",

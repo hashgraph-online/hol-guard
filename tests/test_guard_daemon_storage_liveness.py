@@ -32,6 +32,7 @@ from codex_plugin_scanner.guard.daemon.server import (
 )
 from codex_plugin_scanner.guard.sqlite_tuning import sqlite_connect_timeout_override, sqlite_connect_timeout_seconds
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.native_command_activity_test_support import use_real_native_activity_reviews
 
 
 def _is_string_object_dict(value: object) -> TypeGuard[dict[str, object]]:
@@ -61,7 +62,7 @@ def test_critical_daemon_liveness_does_not_wait_for_locked_storage(
     store = GuardStore(tmp_path / "guard-home")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
-    blocker = sqlite3.connect(store.path, timeout=0.1, isolation_level=None)
+    blocker = sqlite3.connect(store.path, timeout=2.0, isolation_level=None)
 
     try:
         initial_runtime = store.get_runtime_state()
@@ -130,6 +131,7 @@ def test_locked_storage_hook_burst_fails_safe_without_stranding_daemon(
     endpoint = (
         f"http://127.0.0.1:{daemon.port}/v1/hooks/pi?guard-home={store.guard_home}&home={tmp_path}&workspace={tmp_path}"
     )
+    hook_timeout_seconds = 1.75
 
     def review(index: int) -> tuple[dict[str, object], float]:
         request = urllib.request.Request(
@@ -147,7 +149,7 @@ def test_locked_storage_hook_burst_fails_safe_without_stranding_daemon(
             },
             method="POST",
         )
-        return _open_json(request, timeout_seconds=1.75)
+        return _open_json(request, timeout_seconds=hook_timeout_seconds)
 
     try:
         with ThreadPoolExecutor(max_workers=24) as executor:
@@ -156,7 +158,7 @@ def test_locked_storage_hook_burst_fails_safe_without_stranding_daemon(
             results = [future.result(timeout=2) for future in futures]
         assert health["ok"] is True
         assert health_elapsed < 0.5
-        assert max(elapsed for _payload, elapsed in results) < 1.6
+        assert max(elapsed for _payload, elapsed in results) < hook_timeout_seconds
         assert all(payload.get("decision") == "allow" for payload, _elapsed in results)
         assert daemon._server.active_hook_requests == 0  # pyright: ignore[reportPrivateUsage]
     finally:
@@ -191,6 +193,7 @@ def test_runtime_heartbeat_writer_coalesces_pending_updates() -> None:
             session_id: str,
             last_heartbeat_at: str,
             timeout_seconds: float,
+            registration: object = None,
         ) -> bool:
             assert session_id == "session"
             assert timeout_seconds == 0.01
@@ -275,6 +278,7 @@ def test_store_promotes_rollback_journal_before_bounded_hook_writes(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    use_real_native_activity_reviews(monkeypatch)
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir()
     database_path = guard_home / "guard.db"

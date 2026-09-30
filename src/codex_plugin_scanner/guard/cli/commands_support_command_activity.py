@@ -11,7 +11,7 @@ from typing import cast
 
 from ..action_lattice import guard_action_severity
 from ..models import GuardAction
-from ..native_command_model import native_command_shadow_proposal
+from ..native_command_control_authority_io import NativeCommandControlMutationRequiredError
 from ..runtime.command_activity_contract import (
     ActivityApprovalReuseStatus,
     ActivityDecisionReason,
@@ -26,16 +26,20 @@ from ..runtime.command_activity_display import build_invocation_preview_from_pay
 from ..runtime.command_activity_lifecycle import (
     CommandActivityDecisionFacts,
     build_correlated_post_activity,
+    build_policy_only_pre_hook_evidence,
     build_pre_hook_evidence,
     build_unpaired_post_evidence,
 )
-from ..runtime.command_evaluation import CompositeCommandEvaluation, evaluate_command
+from ..runtime.command_evaluation import CompositeCommandEvaluation
+from ..runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from ..runtime.command_shadow_evaluation import (
     CommandShadowObservation,
     baseline_command_shadow_proposal,
     build_command_shadow_observation,
     load_command_shadow_control,
 )
+from ..runtime.extension_control_runtime import ExtensionControlRuntimeSnapshot
+from ..runtime.native_command_evaluation import evaluate_command_native
 from ..runtime.secret_file_requests import extract_sensitive_tool_action_request
 from ..store import GuardStore
 
@@ -71,12 +75,18 @@ def record_pre_hook_command_activity_best_effort(
     try:
         if event not in _PRE_HOOK_EVENTS:
             return False
-        evaluation = _evaluate_payload_command(
-            payload,
-            cwd=cwd,
-            home_dir=home_dir,
-        )
-        if evaluation is None:
+        try:
+            evaluation = _evaluate_payload_command(
+                payload,
+                store=store,
+                guard_home=guard_home,
+                cwd=cwd,
+                home_dir=home_dir,
+            )
+        except NativeCommandControlMutationRequiredError:
+            _record_persistence_failure(store, "pre_native_control_unavailable")
+            return False
+        if evaluation is None and _payload_command_text(payload) is None:
             return False
         key = load_or_create_installation_correlation_key(guard_home)
         correlation = derive_proven_request_correlation(
@@ -87,36 +97,53 @@ def record_pre_hook_command_activity_best_effort(
         )
         activity_id = _activity_id()
         occurred_at = _utc_now()
-        evidence = build_pre_hook_evidence(
-            evaluation,
-            CommandActivityDecisionFacts(
+        if evaluation is None:
+            evidence = build_policy_only_pre_hook_evidence(
+                activity_id=activity_id,
+                occurred_at=occurred_at,
+                harness=harness,
                 policy_action=policy_action,
-                decision_reason_code=_activity_decision_reason(
-                    evaluation,
-                    policy_action=policy_action,
-                    workflow_authorization_claimed=workflow_authorization_claimed,
-                ),
+                request_correlation=correlation,
+                receipt_id=receipt_id,
                 prompted=prompted,
                 approval_reuse_status=approval_reuse_status,
-                receipt_id=receipt_id,
                 workflow_authorization_claimed=workflow_authorization_claimed,
-            ),
-            activity_id=activity_id,
-            occurred_at=occurred_at,
-            harness=harness,
-            request_correlation=correlation,
-        )
+            )
+        else:
+            evidence = build_pre_hook_evidence(
+                evaluation,
+                CommandActivityDecisionFacts(
+                    policy_action=policy_action,
+                    decision_reason_code=_activity_decision_reason(
+                        evaluation,
+                        policy_action=policy_action,
+                        workflow_authorization_claimed=workflow_authorization_claimed,
+                    ),
+                    prompted=prompted,
+                    approval_reuse_status=approval_reuse_status,
+                    receipt_id=receipt_id,
+                    workflow_authorization_claimed=workflow_authorization_claimed,
+                ),
+                activity_id=activity_id,
+                occurred_at=occurred_at,
+                harness=harness,
+                request_correlation=correlation,
+            )
         if correlation is not None and store.is_exact_command_activity_pre_replay(evidence):
             return False
-        shadow, shadow_failed = _build_shadow_best_effort(
-            evaluation=evaluation,
-            command_text=_payload_command_text(payload),
-            guard_home=guard_home,
-            cwd=cwd,
-            home_dir=home_dir,
-            policy_action=policy_action,
-            activity_id=activity_id,
-            occurred_at=occurred_at,
+        shadow, shadow_failed = (
+            _build_shadow_best_effort(
+                evaluation=evaluation,
+                command_text=_payload_command_text(payload),
+                guard_home=guard_home,
+                cwd=cwd,
+                home_dir=home_dir,
+                policy_action=policy_action,
+                activity_id=activity_id,
+                occurred_at=occurred_at,
+            )
+            if evaluation is not None
+            else (None, False)
         )
         try:
             recorded = store.record_command_activity(
@@ -277,17 +304,6 @@ def record_command_activity_failure_best_effort(store: GuardStore, error_code: s
     _record_persistence_failure(store, error_code)
 
 
-def _compatibility_context(
-    evaluation: CompositeCommandEvaluation,
-) -> tuple[str | None, str | None]:
-    """Return only an explicit compatibility fallback already used by Python."""
-
-    for owned in evaluation.matches:
-        if owned.match.rule.compatibility_fallback and not owned.match.matcher_evidence:
-            return evaluation.controlling_action_class, evaluation.controlling_reason
-    return None, None
-
-
 def _build_shadow_best_effort(
     *,
     evaluation: CompositeCommandEvaluation,
@@ -301,19 +317,6 @@ def _build_shadow_best_effort(
 ) -> tuple[CommandShadowObservation | None, bool]:
     try:
         proposal = baseline_command_shadow_proposal(evaluation)
-        if command_text is not None:
-            compatibility_action_class, compatibility_reason = _compatibility_context(evaluation)
-            with suppress(Exception):
-                native_proposal = native_command_shadow_proposal(
-                    command_text,
-                    guard_home=guard_home,
-                    cwd=cwd,
-                    home_dir=home_dir,
-                    compatibility_action_class=compatibility_action_class,
-                    compatibility_reason=compatibility_reason,
-                )
-                if native_proposal is not None:
-                    proposal = native_proposal
         return (
             build_command_shadow_observation(
                 evaluation,
@@ -332,9 +335,18 @@ def _build_shadow_best_effort(
 def _evaluate_payload_command(
     payload: Mapping[str, object],
     *,
+    store: GuardStore,
+    guard_home: Path,
     cwd: Path | None,
     home_dir: Path | None,
 ):
+    """Let native control errors reach the caller, which records a failure without activity."""
+
+    authority = store.read_extension_control_authority_for_registry(
+        BUILT_IN_COMMAND_EXTENSION_REGISTRY,
+        read_only=True,
+    )
+    snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(authority)
     arguments = payload.get("tool_input", payload.get("arguments"))
     request = extract_sensitive_tool_action_request(
         payload.get("tool_name"),
@@ -344,16 +356,25 @@ def _evaluate_payload_command(
     )
     if request is not None:
         command_text = request.raw_command_text or request.command_text
-        return evaluate_command(
+        return evaluate_command_native(
             command_text,
-            canonical_command=(request.canonical_command if request.raw_command_text is None else None),
+            guard_home=guard_home,
+            cwd=cwd,
+            home_dir=home_dir,
+            extension_control_snapshot=snapshot,
             compatibility_action_class=request.action_class,
             compatibility_reason=request.reason,
         )
     command_text = _payload_command_text(payload)
     if command_text is None:
         return None
-    return evaluate_command(command_text)
+    return evaluate_command_native(
+        command_text,
+        guard_home=guard_home,
+        cwd=cwd,
+        home_dir=home_dir,
+        extension_control_snapshot=snapshot,
+    )
 
 
 def _payload_command_text(payload: Mapping[str, object]) -> str | None:
