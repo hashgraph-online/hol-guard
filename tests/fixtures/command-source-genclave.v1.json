@@ -10200,7 +10200,7 @@
           ],
           "project_markers": [],
           "publisher": {
-            "display_name": "R\u00e9nich Bon \u0106iri\u0107",
+            "display_name": "Rénich Bon Ćirić",
             "id": "community.renich",
             "url": "https://github.com/renich"
           },
@@ -10923,7 +10923,8 @@
           "command.repo2nb",
           "command.skill-base",
           "command.skill-sunset",
-          "command.uivoid"
+          "command.uivoid",
+          "command.vttforge"
         ],
         "first-party": [
           "command.container-runtime",
