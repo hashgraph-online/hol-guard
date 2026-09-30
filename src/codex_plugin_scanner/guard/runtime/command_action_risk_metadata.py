@@ -104,10 +104,30 @@ OLLAMA_ACTION_RISK_CLASSES: Final[dict[str, tuple[str, ...]]] = {
     "ollama model removal command": ("destructive_shell",),
 }
 
+KIM_ACTION_RISK_CLASSES: Final[dict[str, tuple[str, ...]]] = {
+    "kim reminder add command": ("destructive_shell",),
+    "kim reminder remove command": ("destructive_shell",),
+    "kim reminder update command": ("destructive_shell",),
+    "kim reminder enable command": ("destructive_shell",),
+    "kim reminder disable command": ("destructive_shell",),
+    "kim one-shot reminder command": ("destructive_shell",),
+    "kim reminder import command": ("destructive_shell",),
+    "kim reminder export command": ("destructive_shell",),
+    "kim daemon start command": ("destructive_shell",),
+    "kim daemon stop command": ("destructive_shell",),
+    "kim config edit command": ("destructive_shell",),
+    "kim sound settings command": ("destructive_shell",),
+    "kim slack settings command": ("destructive_shell",),
+    "kim interactive command": ("destructive_shell",),
+    "kim self-update command": ("destructive_shell",),
+    "kim uninstall command": ("destructive_shell",),
+}
+
 COMMAND_ACTION_RISK_CLASSES: Final[dict[str, tuple[str, ...]]] = {
     **_BASE_COMMAND_ACTION_RISK_CLASSES,
     **BLITCP_ACTION_RISK_CLASSES,
     **GITHUB_ACTION_RISK_CLASSES,
+    **KIM_ACTION_RISK_CLASSES,
     **OLLAMA_ACTION_RISK_CLASSES,
 }
 
@@ -115,5 +135,6 @@ __all__ = [
     "BLITCP_ACTION_RISK_CLASSES",
     "COMMAND_ACTION_RISK_CLASSES",
     "GITHUB_ACTION_RISK_CLASSES",
+    "KIM_ACTION_RISK_CLASSES",
     "OLLAMA_ACTION_RISK_CLASSES",
 ]
