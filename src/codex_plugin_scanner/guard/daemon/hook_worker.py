@@ -25,6 +25,7 @@ Security:
 
 from __future__ import annotations
 
+import sys
 import time
 from collections.abc import Mapping
 from contextlib import suppress
@@ -69,7 +70,12 @@ class CommandActivityWriter(Protocol):
     ) -> bool: ...
 
 
-_NATIVE_POLICY_READY_TIMEOUT_SECONDS = _PUBLISH_TIMEOUT_SECONDS
+# Startup priming keeps the publish bound so a slow first publication never
+# delays worker construction. Requests that arrive during a resident restart
+# wait on the readiness bound instead, which needs a wider window on macOS
+# and Windows where republication is slower.
+_NATIVE_POLICY_STARTUP_READY_TIMEOUT_SECONDS = _PUBLISH_TIMEOUT_SECONDS
+_NATIVE_POLICY_READY_TIMEOUT_SECONDS = 25.0 if sys.platform in {"darwin", "win32"} else _PUBLISH_TIMEOUT_SECONDS
 _TRANSIENT_RESIDENT_PUBLICATION_ERRORS = frozenset(
     {"native_policy_snapshot_resident_changed", "native_resident_restart_budget_busy"}
 )
@@ -124,7 +130,7 @@ class HookWorker(HookWorkerNativeMixin):
         if wait_for_native_policy and mode in {"auto", "force"}:
             wait_until_ready = getattr(self.policy_snapshot_publisher, "wait_until_ready", None)
             if callable(wait_until_ready):
-                _ = wait_until_ready(time.monotonic() + _NATIVE_POLICY_READY_TIMEOUT_SECONDS)
+                _ = wait_until_ready(time.monotonic() + _NATIVE_POLICY_STARTUP_READY_TIMEOUT_SECONDS)
 
     @property
     def last_native_decision_receipt(self) -> dict[str, object] | None:
