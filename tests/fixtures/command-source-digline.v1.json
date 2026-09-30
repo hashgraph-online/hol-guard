@@ -16541,7 +16541,6 @@
     "trust": {
       "classes": {
         "external": [
-          "command.agi-memory",
           "command.blitcp",
           "command.cloudg",
           "command.cogext",
