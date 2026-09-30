@@ -294,14 +294,14 @@ def test_availability_watch_config_allows_git_and_network(tmp_path: Path) -> Non
     assert gh_cmd["decision"] == "allow"
 
 
-def test_cursor_fallback_watch_allows_shell() -> None:
+def test_cursor_fallback_without_mode_authority_denies_shell() -> None:
     allow, code = cursor_fallback_permission(
         {"hook_event_name": "beforeShellExecution", "command": "rm -rf /"},
         hook_event_name="beforeShellExecution",
         recording_only=True,
     )
-    assert code == 0
-    assert allow["permission"] == "allow"
+    assert code == 2
+    assert allow["permission"] == "deny"
 
 
 def test_watch_unavailable_pretool_records_command_activity(

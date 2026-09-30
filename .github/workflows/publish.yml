@@ -852,6 +852,19 @@ jobs:
             --source-sha "$SOURCE_SHA" \
             --repo-root "$GITHUB_WORKSPACE" \
             --output installed-canary/evidence.json
+      - name: Qualify installed parsed Cursor outage decisions
+        shell: bash
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+          SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
+        run: |
+          PYTHONPATH= "$CANARY_PYTHON" -X "pycache_prefix=$RUNNER_TEMP/hol-guard-evidence-cache" \
+            -m scripts.run_installed_cursor_parsed_outage \
+            --subject installed-canary/installed-canary-subject.json \
+            --version "$VERSION" \
+            --source-sha "$SOURCE_SHA" \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --output installed-canary/cursor-parsed-outage-evidence.json
       - name: Run canonical command extension analytics Dockerlab
         if: runner.os == 'Linux'
         shell: bash
@@ -899,6 +912,7 @@ jobs:
           name: installed-canary-evidence-${{ runner.os }}
           path: |
             installed-canary/evidence.json
+            installed-canary/cursor-parsed-outage-evidence.json
             installed-canary/codex-outage-evidence.json
             installed-canary/command-extension-analytics.json
             .artifacts/command-extension-analytics/playwright-output/**/*.png

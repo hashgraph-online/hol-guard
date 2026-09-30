@@ -233,8 +233,8 @@ def test_cursor_hook_script_source_includes_daemon_fast_path(tmp_path: Path) -> 
     assert "_cursor_availability_response" in source
     assert "cursor_fallback_permission" in source
     assert "run_isolated_hook_process = None" in source
-    assert 'compact_event == "beforereadfile"' in source
-    assert "hook_action_is_emergency_safe" in source
+    assert 'hook_event_name.strip().lower() == "beforereadfile"' in source
+    assert "_cursor_permission" in source
     assert "/v1/hooks/cursor?" in source
     assert '"hook_env"' in source
     assert "subprocess.CompletedProcess(" in source
@@ -503,11 +503,15 @@ def test_cursor_hook_recovery_honors_total_deadline(tmp_path: Path) -> None:
 
     # Includes cold interpreter startup, which can dominate the injected 200 ms hook budget on loaded CI.
     assert time.monotonic() - started < 2
-    assert proc.returncode == 0
-    assert json.loads(proc.stdout)["permission"] == "allow"
+    assert proc.returncode == 2
+    response = json.loads(proc.stdout)
+    assert response["permission"] == "deny"
+    assert response["user_message"] == (
+        "Guard could not complete a trusted hook decision. Retry or repair Guard from a terminal."
+    )
 
 
-def test_cursor_hook_allows_workspace_read_without_blocking_on_dead_daemon(tmp_path: Path) -> None:
+def test_cursor_hook_denies_workspace_read_within_recovery_deadline(tmp_path: Path) -> None:
     from codex_plugin_scanner.guard.adapters.cursor_hooks import cursor_hook_script_source
 
     home_dir = tmp_path / "home"
@@ -531,14 +535,16 @@ def test_cursor_hook_allows_workspace_read_without_blocking_on_dead_daemon(tmp_p
     (guard_home / "daemon-auth-token").write_text("stale-token", encoding="utf-8")
     context = HarnessContext(home_dir=home_dir, guard_home=guard_home, workspace_dir=workspace_dir)
     script_path = tmp_path / "cursor-hook.py"
-    script_path.write_text(
-        cursor_hook_script_source(
-            context,
-            guard_cli=[sys.executable, str(fallback)],
-            recovery_command=[sys.executable, str(recovery)],
-        ),
-        encoding="utf-8",
+    source = cursor_hook_script_source(
+        context,
+        guard_cli=[sys.executable, str(fallback)],
+        recovery_command=[sys.executable, str(recovery)],
+    ).replace(
+        f"GUARD_HOOK_TIMEOUT_SECONDS = {_MANAGED_HOOK_TIMEOUT_SECONDS - 3}",
+        "GUARD_HOOK_TIMEOUT_SECONDS = 0.2",
+        1,
     )
+    script_path.write_text(source, encoding="utf-8")
     started = time.monotonic()
     proc = subprocess.run(
         [sys.executable, str(script_path)],
@@ -555,8 +561,12 @@ def test_cursor_hook_allows_workspace_read_without_blocking_on_dead_daemon(tmp_p
         timeout=3,
     )
     assert time.monotonic() - started < 2
-    assert proc.returncode == 0, proc.stderr
-    assert json.loads(proc.stdout) == {"permission": "allow"}
+    assert proc.returncode == 2, proc.stderr
+    response = json.loads(proc.stdout)
+    assert response["permission"] == "deny"
+    assert response["user_message"] == (
+        "Guard could not complete a trusted hook decision. Retry or repair Guard from a terminal."
+    )
     assert not fallback_marker.exists()
 
 
@@ -639,8 +649,8 @@ def test_cursor_hook_timeout_kills_fallback_descendants(
     )
     time.sleep(1)
 
-    assert proc.returncode == 0
-    assert json.loads(proc.stdout)["permission"] == "allow"
+    assert proc.returncode == 2
+    assert json.loads(proc.stdout)["permission"] == "deny"
     assert not marker.exists()
 
 
@@ -753,7 +763,7 @@ def test_cursor_hook_script_uses_daemon_fast_path(tmp_path: Path, monkeypatch: p
         ({"recorded": False}, 0),
     ],
 )
-def test_generated_cursor_hook_continues_for_missing_or_unknown_guard_action(
+def test_generated_cursor_hook_denies_missing_or_unknown_guard_action(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     guard_payload: dict[str, object],
@@ -795,9 +805,12 @@ def test_generated_cursor_hook_continues_for_missing_or_unknown_guard_action(
         timeout=10,
     )
 
-    assert proc.returncode == 0
+    assert proc.returncode == 2
     response = json.loads(proc.stdout)
-    assert response["permission"] == "allow"
+    assert response["permission"] == "deny"
+    assert response["user_message"] == (
+        "Guard could not complete a trusted hook decision. Retry or repair Guard from a terminal."
+    )
 
 
 def test_cursor_resolve_guard_cli_command_ignores_path_collisions(
