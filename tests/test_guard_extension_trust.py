@@ -89,6 +89,7 @@ def test_trust_map_covers_every_builtin_extension() -> None:
         "command.cogext",
         "command.ctty",
         "command.digline",
+        "command.errand",
         "command.genclave",
         "command.gitsync",
         "command.mcp-filesystem",

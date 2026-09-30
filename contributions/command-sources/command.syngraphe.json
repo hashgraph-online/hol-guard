@@ -1,0 +1,1814 @@
+{
+ "extension": {
+  "action_classes": [
+   "Syngraphe initialization command",
+   "Syngraphe agent policy command",
+   "Syngraphe document creation command",
+   "Syngraphe state archive command"
+  ],
+  "aliases": [],
+  "conflicts": [],
+  "delegated_protection": null,
+  "dependencies": [],
+  "description": "Reviews shared repository context initialization, document creation, state archiving, and agent policy creation through syngraphe or syg.",
+  "ecosystem_ids": [
+   "syngraphe"
+  ],
+  "executables": [
+   "syngraphe",
+   "syg"
+  ],
+  "extension_id": "command.syngraphe",
+  "icon": {
+   "background": "#4338CA",
+   "kind": "react-icon",
+   "name": "HiMiniFolder"
+  },
+  "license": "MIT",
+  "name": "Syngraphe repository context protection",
+  "permissions": [
+   {
+    "action_classes": [
+     "Syngraphe initialization command"
+    ],
+    "baseline_floor": "review",
+    "configurable": true,
+    "conflicts": [],
+    "default_enabled": true,
+    "dependencies": [],
+    "deprecated": false,
+    "description": "Identifies `syngraphe init`: creates .context/, inserts managed blocks in agent bootstrap files, replaces a managed body an earlier Syngraphe published, and with --policy also creates AGENT-POLICY.md.",
+    "example_command": "syngraphe init",
+    "family": null,
+    "fixed_reason": null,
+    "implementation_version": "1.0.0",
+    "implied_permissions": [],
+    "introduced_version": "2.2.0",
+    "label": "Syngraphe context initialization",
+    "permission_id": "command.syngraphe.permission.init",
+    "replacement_permission_id": null,
+    "risk_tier": "medium",
+    "safer_guidance": [
+     "Run the same command with --dry-run first to inspect the exact plan without modifying files."
+    ],
+    "typed_capabilities": []
+   },
+   {
+    "action_classes": [
+     "Syngraphe agent policy command"
+    ],
+    "baseline_floor": "review",
+    "configurable": true,
+    "conflicts": [],
+    "default_enabled": true,
+    "dependencies": [],
+    "deprecated": false,
+    "description": "Identifies `syngraphe policy add`: creates AGENT-POLICY.md at the repository root as a starting point for agent operating rules that the repository owns and Syngraphe never manages afterwards; --force replaces an existing one.",
+    "example_command": "syngraphe policy add",
+    "family": null,
+    "fixed_reason": null,
+    "implementation_version": "1.0.0",
+    "implied_permissions": [],
+    "introduced_version": "2.2.0",
+    "label": "Syngraphe agent policy creation",
+    "permission_id": "command.syngraphe.permission.policy-add",
+    "replacement_permission_id": null,
+    "risk_tier": "medium",
+    "safer_guidance": [
+     "Run the same command with --dry-run first to inspect the exact plan without modifying files."
+    ],
+    "typed_capabilities": []
+   },
+   {
+    "action_classes": [
+     "Syngraphe document creation command"
+    ],
+    "baseline_floor": "review",
+    "configurable": true,
+    "conflicts": [],
+    "default_enabled": true,
+    "dependencies": [],
+    "deprecated": false,
+    "description": "Identifies `syngraphe truth new domain-model`: creates persistent truth, decision, state, or history Markdown shared by humans and coding agents.",
+    "example_command": "syngraphe truth new domain-model",
+    "family": null,
+    "fixed_reason": null,
+    "implementation_version": "1.0.0",
+    "implied_permissions": [],
+    "introduced_version": "2.2.0",
+    "label": "Syngraphe shared context creation",
+    "permission_id": "command.syngraphe.permission.document-new",
+    "replacement_permission_id": null,
+    "risk_tier": "medium",
+    "safer_guidance": [
+     "Run the same command with --dry-run first to inspect the exact plan without modifying files."
+    ],
+    "typed_capabilities": []
+   },
+   {
+    "action_classes": [
+     "Syngraphe state archive command"
+    ],
+    "baseline_floor": "review",
+    "configurable": true,
+    "conflicts": [],
+    "default_enabled": true,
+    "dependencies": [],
+    "deprecated": false,
+    "description": "Identifies `syngraphe state archive phase-one`: creates a history document and resets .context/state/current.md, updating shared repository context.",
+    "example_command": "syngraphe state archive phase-one",
+    "family": null,
+    "fixed_reason": null,
+    "implementation_version": "1.0.0",
+    "implied_permissions": [],
+    "introduced_version": "2.2.0",
+    "label": "Syngraphe state archiving",
+    "permission_id": "command.syngraphe.permission.state-archive",
+    "replacement_permission_id": null,
+    "risk_tier": "medium",
+    "safer_guidance": [
+     "Run the same command with --dry-run first to inspect the exact plan without modifying files."
+    ],
+    "typed_capabilities": []
+   }
+  ],
+  "project_markers": [
+   ".context"
+  ],
+  "publisher": {
+   "display_name": "Lorenzo",
+   "id": "community.suffro"
+  },
+  "reference_urls": [
+   "https://github.com/suffro/syngraphe",
+   "https://syngraphe.dev/"
+  ],
+  "required": false,
+  "risk_classes": [
+   "destructive_shell"
+  ],
+  "rules": [
+   {
+    "action_classes": [
+     "Syngraphe initialization command"
+    ],
+    "default_mode": "review",
+    "description": "Creates .context/, inserts managed blocks in agent bootstrap files, replaces a managed body an earlier Syngraphe published, and with --policy also creates AGENT-POLICY.md.",
+    "family": null,
+    "matcher": {
+     "config": {
+      "executables": [
+       "syngraphe",
+       "syg",
+       "syngraphe.exe",
+       "syngraphe.cmd",
+       "syg.exe",
+       "syg.cmd"
+      ],
+      "forbidden_flags": [],
+      "forbidden_flags_before_delimiter": [
+       "--help",
+       "-h",
+       "--version",
+       "-v"
+      ],
+      "interleaved_options_with_values": [
+       "--scope",
+       "--title"
+      ],
+      "options_with_values": [
+       "--scope",
+       "--title"
+      ],
+      "required_flags_anywhere": [],
+      "subcommands": [
+       "init"
+      ]
+     },
+     "op": "leading-subcommand.v1"
+    },
+    "native_capability": null,
+    "permission_id": "command.syngraphe.permission.init",
+    "risk_classes": [
+     "destructive_shell"
+    ],
+    "rule_id": "command.syngraphe.init",
+    "rule_version": "1.0.0",
+    "safe_variants": [
+     {
+      "matcher": {
+       "config": {
+        "executables": [
+         "syngraphe",
+         "syg",
+         "syngraphe.exe",
+         "syngraphe.cmd",
+         "syg.exe",
+         "syg.cmd"
+        ],
+        "forbidden_flags": [],
+        "forbidden_flags_before_delimiter": [
+         "--help",
+         "-h",
+         "--version",
+         "-v"
+        ],
+        "interleaved_options_with_values": [
+         "--scope",
+         "--title"
+        ],
+        "options_with_values": [
+         "--scope",
+         "--title"
+        ],
+        "required_flags_anywhere": [
+         "--dry-run"
+        ],
+        "subcommands": [
+         "init"
+        ]
+       },
+       "op": "leading-subcommand.v1"
+      },
+      "title": "Syngraphe side-effect-free plan",
+      "variant_id": "dry-run"
+     },
+     {
+      "matcher": {
+       "config": {
+        "executables": [
+         "syngraphe",
+         "syg",
+         "syngraphe.exe",
+         "syngraphe.cmd",
+         "syg.exe",
+         "syg.cmd"
+        ],
+        "forbidden_flags": [],
+        "forbidden_flags_before_delimiter": [
+         "--help",
+         "-h",
+         "--version",
+         "-v"
+        ],
+        "interleaved_options_with_values": [
+         "--scope",
+         "--title"
+        ],
+        "options_with_values": [
+         "--scope",
+         "--title"
+        ],
+        "required_flags_anywhere": [
+         "--help"
+        ],
+        "subcommands": [
+         "init"
+        ]
+       },
+       "op": "leading-subcommand.v1"
+      },
+      "title": "Syngraphe command help",
+      "variant_id": "help"
+     },
+     {
+      "matcher": {
+       "config": {
+        "executables": [
+         "syngraphe",
+         "syg",
+         "syngraphe.exe",
+         "syngraphe.cmd",
+         "syg.exe",
+         "syg.cmd"
+        ],
+        "forbidden_flags": [],
+        "forbidden_flags_before_delimiter": [
+         "--help",
+         "-h",
+         "--version",
+         "-v"
+        ],
+        "interleaved_options_with_values": [
+         "--scope",
+         "--title"
+        ],
+        "options_with_values": [
+         "--scope",
+         "--title"
+        ],
+        "required_flags_anywhere": [
+         "-h"
+        ],
+        "subcommands": [
+         "init"
+        ]
+       },
+       "op": "leading-subcommand.v1"
+      },
+      "title": "Syngraphe command help",
+      "variant_id": "short-help"
+     },
+     {
+      "matcher": {
+       "config": {
+        "executables": [
+         "syngraphe",
+         "syg",
+         "syngraphe.exe",
+         "syngraphe.cmd",
+         "syg.exe",
+         "syg.cmd"
+        ],
+        "forbidden_flags": [],
+        "forbidden_flags_before_delimiter": [
+         "--help",
+         "-h",
+         "--version",
+         "-v"
+        ],
+        "interleaved_options_with_values": [
+         "--scope",
+         "--title"
+        ],
+        "options_with_values": [
+         "--scope",
+         "--title"
+        ],
+        "required_flags_anywhere": [
+         "--version"
+        ],
+        "subcommands": [
+         "init"
+        ]
+       },
+       "op": "leading-subcommand.v1"
+      },
+      "title": "Syngraphe version",
+      "variant_id": "version"
+     },
+     {
+      "matcher": {
+       "config": {
+        "executables": [
+         "syngraphe",
+         "syg",
+         "syngraphe.exe",
+         "syngraphe.cmd",
+         "syg.exe",
+         "syg.cmd"
+        ],
+        "forbidden_flags": [],
+        "forbidden_flags_before_delimiter": [
+         "--help",
+         "-h",
+         "--version",
+         "-v"
+        ],
+        "interleaved_options_with_values": [
+         "--scope",
+         "--title"
+        ],
+        "options_with_values": [
+         "--scope",
+         "--title"
+        ],
+        "required_flags_anywhere": [
+         "-v"
+        ],
+        "subcommands": [
+         "init"
+        ]
+       },
+       "op": "leading-subcommand.v1"
+      },
+      "title": "Syngraphe version",
+      "variant_id": "short-version"
+     }
+    ],
+    "safer_alternatives": [
+     "Run the same command with --dry-run first to inspect the exact plan without modifying files."
+    ],
+    "severity": "medium",
+    "title": "Syngraphe context initialization"
+   },
+   {
+    "action_classes": [
+     "Syngraphe agent policy command"
+    ],
+    "default_mode": "review",
+    "description": "Creates AGENT-POLICY.md at the repository root; --force replaces an existing one. Syngraphe never manages or restores the file afterwards.",
+    "family": null,
+    "matcher": {
+     "config": {
+      "executables": [
+       "syngraphe",
+       "syg",
+       "syngraphe.exe",
+       "syngraphe.cmd",
+       "syg.exe",
+       "syg.cmd"
+      ],
+      "forbidden_flags": [],
+      "forbidden_flags_before_delimiter": [
+       "--help",
+       "-h",
+       "--version",
+       "-v"
+      ],
+      "interleaved_options_with_values": [
+       "--scope",
+       "--title"
+      ],
+      "options_with_values": [
+       "--scope",
+       "--title"
+      ],
+      "required_flags_anywhere": [],
+      "subcommands": [
+       "policy",
+       "add"
+      ]
+     },
+     "op": "leading-subcommand.v1"
+    },
+    "native_capability": null,
+    "permission_id": "command.syngraphe.permission.policy-add",
+    "risk_classes": [
+     "destructive_shell"
+    ],
+    "rule_id": "command.syngraphe.policy-add",
+    "rule_version": "1.0.0",
+    "safe_variants": [
+     {
+      "matcher": {
+       "config": {
+        "executables": [
+         "syngraphe",
+         "syg",
+         "syngraphe.exe",
+         "syngraphe.cmd",
+         "syg.exe",
+         "syg.cmd"
+        ],
+        "forbidden_flags": [],
+        "forbidden_flags_before_delimiter": [
+         "--help",
+         "-h",
+         "--version",
+         "-v"
+        ],
+        "interleaved_options_with_values": [
+         "--scope",
+         "--title"
+        ],
+        "options_with_values": [
+         "--scope",
+         "--title"
+        ],
+        "required_flags_anywhere": [
+         "--dry-run"
+        ],
+        "subcommands": [
+         "policy",
+         "add"
+        ]
+       },
+       "op": "leading-subcommand.v1"
+      },
+      "title": "Syngraphe side-effect-free plan",
+      "variant_id": "dry-run"
+     },
+     {
+      "matcher": {
+       "config": {
+        "executables": [
+         "syngraphe",
+         "syg",
+         "syngraphe.exe",
+         "syngraphe.cmd",
+         "syg.exe",
+         "syg.cmd"
+        ],
+        "forbidden_flags": [],
+        "forbidden_flags_before_delimiter": [
+         "--help",
+         "-h",
+         "--version",
+         "-v"
+        ],
+        "interleaved_options_with_values": [
+         "--scope",
+         "--title"
+        ],
+        "options_with_values": [
+         "--scope",
+         "--title"
+        ],
+        "required_flags_anywhere": [
+         "--help"
+        ],
+        "subcommands": [
+         "policy",
+         "add"
+        ]
+       },
+       "op": "leading-subcommand.v1"
+      },
+      "title": "Syngraphe command help",
+      "variant_id": "help"
+     },
+     {
+      "matcher": {
+       "config": {
+        "executables": [
+         "syngraphe",
+         "syg",
+         "syngraphe.exe",
+         "syngraphe.cmd",
+         "syg.exe",
+         "syg.cmd"
+        ],
+        "forbidden_flags": [],
+        "forbidden_flags_before_delimiter": [
+         "--help",
+         "-h",
+         "--version",
+         "-v"
+        ],
+        "interleaved_options_with_values": [
+         "--scope",
+         "--title"
+        ],
+        "options_with_values": [
+         "--scope",
+         "--title"
+        ],
+        "required_flags_anywhere": [
+         "-h"
+        ],
+        "subcommands": [
+         "policy",
+         "add"
+        ]
+       },
+       "op": "leading-subcommand.v1"
+      },
+      "title": "Syngraphe command help",
+      "variant_id": "short-help"
+     },
+     {
+      "matcher": {
+       "config": {
+        "executables": [
+         "syngraphe",
+         "syg",
+         "syngraphe.exe",
+         "syngraphe.cmd",
+         "syg.exe",
+         "syg.cmd"
+        ],
+        "forbidden_flags": [],
+        "forbidden_flags_before_delimiter": [
+         "--help",
+         "-h",
+         "--version",
+         "-v"
+        ],
+        "interleaved_options_with_values": [
+         "--scope",
+         "--title"
+        ],
+        "options_with_values": [
+         "--scope",
+         "--title"
+        ],
+        "required_flags_anywhere": [
+         "--version"
+        ],
+        "subcommands": [
+         "policy",
+         "add"
+        ]
+       },
+       "op": "leading-subcommand.v1"
+      },
+      "title": "Syngraphe version",
+      "variant_id": "version"
+     },
+     {
+      "matcher": {
+       "config": {
+        "executables": [
+         "syngraphe",
+         "syg",
+         "syngraphe.exe",
+         "syngraphe.cmd",
+         "syg.exe",
+         "syg.cmd"
+        ],
+        "forbidden_flags": [],
+        "forbidden_flags_before_delimiter": [
+         "--help",
+         "-h",
+         "--version",
+         "-v"
+        ],
+        "interleaved_options_with_values": [
+         "--scope",
+         "--title"
+        ],
+        "options_with_values": [
+         "--scope",
+         "--title"
+        ],
+        "required_flags_anywhere": [
+         "-v"
+        ],
+        "subcommands": [
+         "policy",
+         "add"
+        ]
+       },
+       "op": "leading-subcommand.v1"
+      },
+      "title": "Syngraphe version",
+      "variant_id": "short-version"
+     }
+    ],
+    "safer_alternatives": [
+     "Run the same command with --dry-run first to inspect the exact plan without modifying files.",
+     "Read the existing AGENT-POLICY.md before --force replaces it; Syngraphe does not manage or restore its contents."
+    ],
+    "severity": "medium",
+    "title": "Syngraphe agent policy creation"
+   },
+   {
+    "action_classes": [
+     "Syngraphe document creation command"
+    ],
+    "default_mode": "review",
+    "description": "Creates persistent truth, decision, state, or history Markdown shared by humans and coding agents.",
+    "family": null,
+    "matcher": {
+     "config": {},
+     "matchers": [
+      {
+       "config": {
+        "executables": [
+         "syngraphe",
+         "syg",
+         "syngraphe.exe",
+         "syngraphe.cmd",
+         "syg.exe",
+         "syg.cmd"
+        ],
+        "forbidden_flags": [],
+        "forbidden_flags_before_delimiter": [
+         "--help",
+         "-h",
+         "--version",
+         "-v"
+        ],
+        "interleaved_options_with_values": [
+         "--scope",
+         "--title"
+        ],
+        "options_with_values": [
+         "--scope",
+         "--title"
+        ],
+        "required_flags_anywhere": [],
+        "subcommands": [
+         "truth",
+         "new"
+        ]
+       },
+       "op": "leading-subcommand.v1"
+      },
+      {
+       "config": {
+        "executables": [
+         "syngraphe",
+         "syg",
+         "syngraphe.exe",
+         "syngraphe.cmd",
+         "syg.exe",
+         "syg.cmd"
+        ],
+        "forbidden_flags": [],
+        "forbidden_flags_before_delimiter": [
+         "--help",
+         "-h",
+         "--version",
+         "-v"
+        ],
+        "interleaved_options_with_values": [
+         "--scope",
+         "--title"
+        ],
+        "options_with_values": [
+         "--scope",
+         "--title"
+        ],
+        "required_flags_anywhere": [],
+        "subcommands": [
+         "decision",
+         "new"
+        ]
+       },
+       "op": "leading-subcommand.v1"
+      },
+      {
+       "config": {
+        "executables": [
+         "syngraphe",
+         "syg",
+         "syngraphe.exe",
+         "syngraphe.cmd",
+         "syg.exe",
+         "syg.cmd"
+        ],
+        "forbidden_flags": [],
+        "forbidden_flags_before_delimiter": [
+         "--help",
+         "-h",
+         "--version",
+         "-v"
+        ],
+        "interleaved_options_with_values": [
+         "--scope",
+         "--title"
+        ],
+        "options_with_values": [
+         "--scope",
+         "--title"
+        ],
+        "required_flags_anywhere": [],
+        "subcommands": [
+         "state",
+         "new"
+        ]
+       },
+       "op": "leading-subcommand.v1"
+      },
+      {
+       "config": {
+        "executables": [
+         "syngraphe",
+         "syg",
+         "syngraphe.exe",
+         "syngraphe.cmd",
+         "syg.exe",
+         "syg.cmd"
+        ],
+        "forbidden_flags": [],
+        "forbidden_flags_before_delimiter": [
+         "--help",
+         "-h",
+         "--version",
+         "-v"
+        ],
+        "interleaved_options_with_values": [
+         "--scope",
+         "--title"
+        ],
+        "options_with_values": [
+         "--scope",
+         "--title"
+        ],
+        "required_flags_anywhere": [],
+        "subcommands": [
+         "history",
+         "new"
+        ]
+       },
+       "op": "leading-subcommand.v1"
+      }
+     ],
+     "op": "any.v1"
+    },
+    "native_capability": null,
+    "permission_id": "command.syngraphe.permission.document-new",
+    "risk_classes": [
+     "destructive_shell"
+    ],
+    "rule_id": "command.syngraphe.document-new",
+    "rule_version": "1.0.0",
+    "safe_variants": [
+     {
+      "matcher": {
+       "config": {},
+       "matchers": [
+        {
+         "config": {
+          "executables": [
+           "syngraphe",
+           "syg",
+           "syngraphe.exe",
+           "syngraphe.cmd",
+           "syg.exe",
+           "syg.cmd"
+          ],
+          "forbidden_flags": [],
+          "forbidden_flags_before_delimiter": [
+           "--help",
+           "-h",
+           "--version",
+           "-v"
+          ],
+          "interleaved_options_with_values": [
+           "--scope",
+           "--title"
+          ],
+          "options_with_values": [
+           "--scope",
+           "--title"
+          ],
+          "required_flags_anywhere": [
+           "--dry-run"
+          ],
+          "subcommands": [
+           "truth",
+           "new"
+          ]
+         },
+         "op": "leading-subcommand.v1"
+        },
+        {
+         "config": {
+          "executables": [
+           "syngraphe",
+           "syg",
+           "syngraphe.exe",
+           "syngraphe.cmd",
+           "syg.exe",
+           "syg.cmd"
+          ],
+          "forbidden_flags": [],
+          "forbidden_flags_before_delimiter": [
+           "--help",
+           "-h",
+           "--version",
+           "-v"
+          ],
+          "interleaved_options_with_values": [
+           "--scope",
+           "--title"
+          ],
+          "options_with_values": [
+           "--scope",
+           "--title"
+          ],
+          "required_flags_anywhere": [
+           "--dry-run"
+          ],
+          "subcommands": [
+           "decision",
+           "new"
+          ]
+         },
+         "op": "leading-subcommand.v1"
+        },
+        {
+         "config": {
+          "executables": [
+           "syngraphe",
+           "syg",
+           "syngraphe.exe",
+           "syngraphe.cmd",
+           "syg.exe",
+           "syg.cmd"
+          ],
+          "forbidden_flags": [],
+          "forbidden_flags_before_delimiter": [
+           "--help",
+           "-h",
+           "--version",
+           "-v"
+          ],
+          "interleaved_options_with_values": [
+           "--scope",
+           "--title"
+          ],
+          "options_with_values": [
+           "--scope",
+           "--title"
+          ],
+          "required_flags_anywhere": [
+           "--dry-run"
+          ],
+          "subcommands": [
+           "state",
+           "new"
+          ]
+         },
+         "op": "leading-subcommand.v1"
+        },
+        {
+         "config": {
+          "executables": [
+           "syngraphe",
+           "syg",
+           "syngraphe.exe",
+           "syngraphe.cmd",
+           "syg.exe",
+           "syg.cmd"
+          ],
+          "forbidden_flags": [],
+          "forbidden_flags_before_delimiter": [
+           "--help",
+           "-h",
+           "--version",
+           "-v"
+          ],
+          "interleaved_options_with_values": [
+           "--scope",
+           "--title"
+          ],
+          "options_with_values": [
+           "--scope",
+           "--title"
+          ],
+          "required_flags_anywhere": [
+           "--dry-run"
+          ],
+          "subcommands": [
+           "history",
+           "new"
+          ]
+         },
+         "op": "leading-subcommand.v1"
+        }
+       ],
+       "op": "any.v1"
+      },
+      "title": "Syngraphe side-effect-free plan",
+      "variant_id": "dry-run"
+     },
+     {
+      "matcher": {
+       "config": {},
+       "matchers": [
+        {
+         "config": {
+          "executables": [
+           "syngraphe",
+           "syg",
+           "syngraphe.exe",
+           "syngraphe.cmd",
+           "syg.exe",
+           "syg.cmd"
+          ],
+          "forbidden_flags": [],
+          "forbidden_flags_before_delimiter": [
+           "--help",
+           "-h",
+           "--version",
+           "-v"
+          ],
+          "interleaved_options_with_values": [
+           "--scope",
+           "--title"
+          ],
+          "options_with_values": [
+           "--scope",
+           "--title"
+          ],
+          "required_flags_anywhere": [
+           "--help"
+          ],
+          "subcommands": [
+           "truth",
+           "new"
+          ]
+         },
+         "op": "leading-subcommand.v1"
+        },
+        {
+         "config": {
+          "executables": [
+           "syngraphe",
+           "syg",
+           "syngraphe.exe",
+           "syngraphe.cmd",
+           "syg.exe",
+           "syg.cmd"
+          ],
+          "forbidden_flags": [],
+          "forbidden_flags_before_delimiter": [
+           "--help",
+           "-h",
+           "--version",
+           "-v"
+          ],
+          "interleaved_options_with_values": [
+           "--scope",
+           "--title"
+          ],
+          "options_with_values": [
+           "--scope",
+           "--title"
+          ],
+          "required_flags_anywhere": [
+           "--help"
+          ],
+          "subcommands": [
+           "decision",
+           "new"
+          ]
+         },
+         "op": "leading-subcommand.v1"
+        },
+        {
+         "config": {
+          "executables": [
+           "syngraphe",
+           "syg",
+           "syngraphe.exe",
+           "syngraphe.cmd",
+           "syg.exe",
+           "syg.cmd"
+          ],
+          "forbidden_flags": [],
+          "forbidden_flags_before_delimiter": [
+           "--help",
+           "-h",
+           "--version",
+           "-v"
+          ],
+          "interleaved_options_with_values": [
+           "--scope",
+           "--title"
+          ],
+          "options_with_values": [
+           "--scope",
+           "--title"
+          ],
+          "required_flags_anywhere": [
+           "--help"
+          ],
+          "subcommands": [
+           "state",
+           "new"
+          ]
+         },
+         "op": "leading-subcommand.v1"
+        },
+        {
+         "config": {
+          "executables": [
+           "syngraphe",
+           "syg",
+           "syngraphe.exe",
+           "syngraphe.cmd",
+           "syg.exe",
+           "syg.cmd"
+          ],
+          "forbidden_flags": [],
+          "forbidden_flags_before_delimiter": [
+           "--help",
+           "-h",
+           "--version",
+           "-v"
+          ],
+          "interleaved_options_with_values": [
+           "--scope",
+           "--title"
+          ],
+          "options_with_values": [
+           "--scope",
+           "--title"
+          ],
+          "required_flags_anywhere": [
+           "--help"
+          ],
+          "subcommands": [
+           "history",
+           "new"
+          ]
+         },
+         "op": "leading-subcommand.v1"
+        }
+       ],
+       "op": "any.v1"
+      },
+      "title": "Syngraphe command help",
+      "variant_id": "help"
+     },
+     {
+      "matcher": {
+       "config": {},
+       "matchers": [
+        {
+         "config": {
+          "executables": [
+           "syngraphe",
+           "syg",
+           "syngraphe.exe",
+           "syngraphe.cmd",
+           "syg.exe",
+           "syg.cmd"
+          ],
+          "forbidden_flags": [],
+          "forbidden_flags_before_delimiter": [
+           "--help",
+           "-h",
+           "--version",
+           "-v"
+          ],
+          "interleaved_options_with_values": [
+           "--scope",
+           "--title"
+          ],
+          "options_with_values": [
+           "--scope",
+           "--title"
+          ],
+          "required_flags_anywhere": [
+           "-h"
+          ],
+          "subcommands": [
+           "truth",
+           "new"
+          ]
+         },
+         "op": "leading-subcommand.v1"
+        },
+        {
+         "config": {
+          "executables": [
+           "syngraphe",
+           "syg",
+           "syngraphe.exe",
+           "syngraphe.cmd",
+           "syg.exe",
+           "syg.cmd"
+          ],
+          "forbidden_flags": [],
+          "forbidden_flags_before_delimiter": [
+           "--help",
+           "-h",
+           "--version",
+           "-v"
+          ],
+          "interleaved_options_with_values": [
+           "--scope",
+           "--title"
+          ],
+          "options_with_values": [
+           "--scope",
+           "--title"
+          ],
+          "required_flags_anywhere": [
+           "-h"
+          ],
+          "subcommands": [
+           "decision",
+           "new"
+          ]
+         },
+         "op": "leading-subcommand.v1"
+        },
+        {
+         "config": {
+          "executables": [
+           "syngraphe",
+           "syg",
+           "syngraphe.exe",
+           "syngraphe.cmd",
+           "syg.exe",
+           "syg.cmd"
+          ],
+          "forbidden_flags": [],
+          "forbidden_flags_before_delimiter": [
+           "--help",
+           "-h",
+           "--version",
+           "-v"
+          ],
+          "interleaved_options_with_values": [
+           "--scope",
+           "--title"
+          ],
+          "options_with_values": [
+           "--scope",
+           "--title"
+          ],
+          "required_flags_anywhere": [
+           "-h"
+          ],
+          "subcommands": [
+           "state",
+           "new"
+          ]
+         },
+         "op": "leading-subcommand.v1"
+        },
+        {
+         "config": {
+          "executables": [
+           "syngraphe",
+           "syg",
+           "syngraphe.exe",
+           "syngraphe.cmd",
+           "syg.exe",
+           "syg.cmd"
+          ],
+          "forbidden_flags": [],
+          "forbidden_flags_before_delimiter": [
+           "--help",
+           "-h",
+           "--version",
+           "-v"
+          ],
+          "interleaved_options_with_values": [
+           "--scope",
+           "--title"
+          ],
+          "options_with_values": [
+           "--scope",
+           "--title"
+          ],
+          "required_flags_anywhere": [
+           "-h"
+          ],
+          "subcommands": [
+           "history",
+           "new"
+          ]
+         },
+         "op": "leading-subcommand.v1"
+        }
+       ],
+       "op": "any.v1"
+      },
+      "title": "Syngraphe command help",
+      "variant_id": "short-help"
+     },
+     {
+      "matcher": {
+       "config": {},
+       "matchers": [
+        {
+         "config": {
+          "executables": [
+           "syngraphe",
+           "syg",
+           "syngraphe.exe",
+           "syngraphe.cmd",
+           "syg.exe",
+           "syg.cmd"
+          ],
+          "forbidden_flags": [],
+          "forbidden_flags_before_delimiter": [
+           "--help",
+           "-h",
+           "--version",
+           "-v"
+          ],
+          "interleaved_options_with_values": [
+           "--scope",
+           "--title"
+          ],
+          "options_with_values": [
+           "--scope",
+           "--title"
+          ],
+          "required_flags_anywhere": [
+           "--version"
+          ],
+          "subcommands": [
+           "truth",
+           "new"
+          ]
+         },
+         "op": "leading-subcommand.v1"
+        },
+        {
+         "config": {
+          "executables": [
+           "syngraphe",
+           "syg",
+           "syngraphe.exe",
+           "syngraphe.cmd",
+           "syg.exe",
+           "syg.cmd"
+          ],
+          "forbidden_flags": [],
+          "forbidden_flags_before_delimiter": [
+           "--help",
+           "-h",
+           "--version",
+           "-v"
+          ],
+          "interleaved_options_with_values": [
+           "--scope",
+           "--title"
+          ],
+          "options_with_values": [
+           "--scope",
+           "--title"
+          ],
+          "required_flags_anywhere": [
+           "--version"
+          ],
+          "subcommands": [
+           "decision",
+           "new"
+          ]
+         },
+         "op": "leading-subcommand.v1"
+        },
+        {
+         "config": {
+          "executables": [
+           "syngraphe",
+           "syg",
+           "syngraphe.exe",
+           "syngraphe.cmd",
+           "syg.exe",
+           "syg.cmd"
+          ],
+          "forbidden_flags": [],
+          "forbidden_flags_before_delimiter": [
+           "--help",
+           "-h",
+           "--version",
+           "-v"
+          ],
+          "interleaved_options_with_values": [
+           "--scope",
+           "--title"
+          ],
+          "options_with_values": [
+           "--scope",
+           "--title"
+          ],
+          "required_flags_anywhere": [
+           "--version"
+          ],
+          "subcommands": [
+           "state",
+           "new"
+          ]
+         },
+         "op": "leading-subcommand.v1"
+        },
+        {
+         "config": {
+          "executables": [
+           "syngraphe",
+           "syg",
+           "syngraphe.exe",
+           "syngraphe.cmd",
+           "syg.exe",
+           "syg.cmd"
+          ],
+          "forbidden_flags": [],
+          "forbidden_flags_before_delimiter": [
+           "--help",
+           "-h",
+           "--version",
+           "-v"
+          ],
+          "interleaved_options_with_values": [
+           "--scope",
+           "--title"
+          ],
+          "options_with_values": [
+           "--scope",
+           "--title"
+          ],
+          "required_flags_anywhere": [
+           "--version"
+          ],
+          "subcommands": [
+           "history",
+           "new"
+          ]
+         },
+         "op": "leading-subcommand.v1"
+        }
+       ],
+       "op": "any.v1"
+      },
+      "title": "Syngraphe version",
+      "variant_id": "version"
+     },
+     {
+      "matcher": {
+       "config": {},
+       "matchers": [
+        {
+         "config": {
+          "executables": [
+           "syngraphe",
+           "syg",
+           "syngraphe.exe",
+           "syngraphe.cmd",
+           "syg.exe",
+           "syg.cmd"
+          ],
+          "forbidden_flags": [],
+          "forbidden_flags_before_delimiter": [
+           "--help",
+           "-h",
+           "--version",
+           "-v"
+          ],
+          "interleaved_options_with_values": [
+           "--scope",
+           "--title"
+          ],
+          "options_with_values": [
+           "--scope",
+           "--title"
+          ],
+          "required_flags_anywhere": [
+           "-v"
+          ],
+          "subcommands": [
+           "truth",
+           "new"
+          ]
+         },
+         "op": "leading-subcommand.v1"
+        },
+        {
+         "config": {
+          "executables": [
+           "syngraphe",
+           "syg",
+           "syngraphe.exe",
+           "syngraphe.cmd",
+           "syg.exe",
+           "syg.cmd"
+          ],
+          "forbidden_flags": [],
+          "forbidden_flags_before_delimiter": [
+           "--help",
+           "-h",
+           "--version",
+           "-v"
+          ],
+          "interleaved_options_with_values": [
+           "--scope",
+           "--title"
+          ],
+          "options_with_values": [
+           "--scope",
+           "--title"
+          ],
+          "required_flags_anywhere": [
+           "-v"
+          ],
+          "subcommands": [
+           "decision",
+           "new"
+          ]
+         },
+         "op": "leading-subcommand.v1"
+        },
+        {
+         "config": {
+          "executables": [
+           "syngraphe",
+           "syg",
+           "syngraphe.exe",
+           "syngraphe.cmd",
+           "syg.exe",
+           "syg.cmd"
+          ],
+          "forbidden_flags": [],
+          "forbidden_flags_before_delimiter": [
+           "--help",
+           "-h",
+           "--version",
+           "-v"
+          ],
+          "interleaved_options_with_values": [
+           "--scope",
+           "--title"
+          ],
+          "options_with_values": [
+           "--scope",
+           "--title"
+          ],
+          "required_flags_anywhere": [
+           "-v"
+          ],
+          "subcommands": [
+           "state",
+           "new"
+          ]
+         },
+         "op": "leading-subcommand.v1"
+        },
+        {
+         "config": {
+          "executables": [
+           "syngraphe",
+           "syg",
+           "syngraphe.exe",
+           "syngraphe.cmd",
+           "syg.exe",
+           "syg.cmd"
+          ],
+          "forbidden_flags": [],
+          "forbidden_flags_before_delimiter": [
+           "--help",
+           "-h",
+           "--version",
+           "-v"
+          ],
+          "interleaved_options_with_values": [
+           "--scope",
+           "--title"
+          ],
+          "options_with_values": [
+           "--scope",
+           "--title"
+          ],
+          "required_flags_anywhere": [
+           "-v"
+          ],
+          "subcommands": [
+           "history",
+           "new"
+          ]
+         },
+         "op": "leading-subcommand.v1"
+        }
+       ],
+       "op": "any.v1"
+      },
+      "title": "Syngraphe version",
+      "variant_id": "short-version"
+     }
+    ],
+    "safer_alternatives": [
+     "Run the same command with --dry-run first to inspect the exact plan without modifying files."
+    ],
+    "severity": "medium",
+    "title": "Syngraphe shared context creation"
+   },
+   {
+    "action_classes": [
+     "Syngraphe state archive command"
+    ],
+    "default_mode": "review",
+    "description": "Creates a history document and resets .context/state/current.md, updating shared repository context.",
+    "family": null,
+    "matcher": {
+     "config": {
+      "executables": [
+       "syngraphe",
+       "syg",
+       "syngraphe.exe",
+       "syngraphe.cmd",
+       "syg.exe",
+       "syg.cmd"
+      ],
+      "forbidden_flags": [],
+      "forbidden_flags_before_delimiter": [
+       "--help",
+       "-h",
+       "--version",
+       "-v"
+      ],
+      "interleaved_options_with_values": [
+       "--scope",
+       "--title"
+      ],
+      "options_with_values": [
+       "--scope",
+       "--title"
+      ],
+      "required_flags_anywhere": [],
+      "subcommands": [
+       "state",
+       "archive"
+      ]
+     },
+     "op": "leading-subcommand.v1"
+    },
+    "native_capability": null,
+    "permission_id": "command.syngraphe.permission.state-archive",
+    "risk_classes": [
+     "destructive_shell"
+    ],
+    "rule_id": "command.syngraphe.state-archive",
+    "rule_version": "1.0.0",
+    "safe_variants": [
+     {
+      "matcher": {
+       "config": {
+        "executables": [
+         "syngraphe",
+         "syg",
+         "syngraphe.exe",
+         "syngraphe.cmd",
+         "syg.exe",
+         "syg.cmd"
+        ],
+        "forbidden_flags": [],
+        "forbidden_flags_before_delimiter": [
+         "--help",
+         "-h",
+         "--version",
+         "-v"
+        ],
+        "interleaved_options_with_values": [
+         "--scope",
+         "--title"
+        ],
+        "options_with_values": [
+         "--scope",
+         "--title"
+        ],
+        "required_flags_anywhere": [
+         "--dry-run"
+        ],
+        "subcommands": [
+         "state",
+         "archive"
+        ]
+       },
+       "op": "leading-subcommand.v1"
+      },
+      "title": "Syngraphe side-effect-free plan",
+      "variant_id": "dry-run"
+     },
+     {
+      "matcher": {
+       "config": {
+        "executables": [
+         "syngraphe",
+         "syg",
+         "syngraphe.exe",
+         "syngraphe.cmd",
+         "syg.exe",
+         "syg.cmd"
+        ],
+        "forbidden_flags": [],
+        "forbidden_flags_before_delimiter": [
+         "--help",
+         "-h",
+         "--version",
+         "-v"
+        ],
+        "interleaved_options_with_values": [
+         "--scope",
+         "--title"
+        ],
+        "options_with_values": [
+         "--scope",
+         "--title"
+        ],
+        "required_flags_anywhere": [
+         "--help"
+        ],
+        "subcommands": [
+         "state",
+         "archive"
+        ]
+       },
+       "op": "leading-subcommand.v1"
+      },
+      "title": "Syngraphe command help",
+      "variant_id": "help"
+     },
+     {
+      "matcher": {
+       "config": {
+        "executables": [
+         "syngraphe",
+         "syg",
+         "syngraphe.exe",
+         "syngraphe.cmd",
+         "syg.exe",
+         "syg.cmd"
+        ],
+        "forbidden_flags": [],
+        "forbidden_flags_before_delimiter": [
+         "--help",
+         "-h",
+         "--version",
+         "-v"
+        ],
+        "interleaved_options_with_values": [
+         "--scope",
+         "--title"
+        ],
+        "options_with_values": [
+         "--scope",
+         "--title"
+        ],
+        "required_flags_anywhere": [
+         "-h"
+        ],
+        "subcommands": [
+         "state",
+         "archive"
+        ]
+       },
+       "op": "leading-subcommand.v1"
+      },
+      "title": "Syngraphe command help",
+      "variant_id": "short-help"
+     },
+     {
+      "matcher": {
+       "config": {
+        "executables": [
+         "syngraphe",
+         "syg",
+         "syngraphe.exe",
+         "syngraphe.cmd",
+         "syg.exe",
+         "syg.cmd"
+        ],
+        "forbidden_flags": [],
+        "forbidden_flags_before_delimiter": [
+         "--help",
+         "-h",
+         "--version",
+         "-v"
+        ],
+        "interleaved_options_with_values": [
+         "--scope",
+         "--title"
+        ],
+        "options_with_values": [
+         "--scope",
+         "--title"
+        ],
+        "required_flags_anywhere": [
+         "--version"
+        ],
+        "subcommands": [
+         "state",
+         "archive"
+        ]
+       },
+       "op": "leading-subcommand.v1"
+      },
+      "title": "Syngraphe version",
+      "variant_id": "version"
+     },
+     {
+      "matcher": {
+       "config": {
+        "executables": [
+         "syngraphe",
+         "syg",
+         "syngraphe.exe",
+         "syngraphe.cmd",
+         "syg.exe",
+         "syg.cmd"
+        ],
+        "forbidden_flags": [],
+        "forbidden_flags_before_delimiter": [
+         "--help",
+         "-h",
+         "--version",
+         "-v"
+        ],
+        "interleaved_options_with_values": [
+         "--scope",
+         "--title"
+        ],
+        "options_with_values": [
+         "--scope",
+         "--title"
+        ],
+        "required_flags_anywhere": [
+         "-v"
+        ],
+        "subcommands": [
+         "state",
+         "archive"
+        ]
+       },
+       "op": "leading-subcommand.v1"
+      },
+      "title": "Syngraphe version",
+      "variant_id": "short-version"
+     }
+    ],
+    "safer_alternatives": [
+     "Run the same command with --dry-run first to inspect the exact plan without modifying files."
+    ],
+    "severity": "medium",
+    "title": "Syngraphe state archiving"
+   }
+  ],
+  "safer_alternatives": [
+   "Run the same command with --dry-run first to inspect the exact plan without modifying files."
+  ],
+  "source": "built-in",
+  "version": "1.0.0"
+ },
+ "schema": "guard.command-extension-source.v1"
+}

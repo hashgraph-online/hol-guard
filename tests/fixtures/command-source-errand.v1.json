@@ -10091,29 +10091,32 @@
       {
         "extension": {
           "action_classes": [
-            "Skill Base publication"
+            "Errand execution command",
+            "Errand checkout apply command"
           ],
           "aliases": [],
           "conflicts": [],
+          "delegated_protection": null,
           "dependencies": [],
-          "description": "Reviews authenticated Skill Base CLI publications before local Skill files are uploaded as a new version.",
-          "ecosystem_ids": [],
-          "executables": [
-            "skb",
-            "skb.cmd",
-            "skb.exe"
+          "description": "Requires Errand 0.4.2 or later. Reviews job execution (any operand-bearing invocation) and `fetch --apply`; flag-only and help invocations remain automatic. Conservative port of the v1 detector: declarative matchers cannot exclude known read-only subcommands, so operand-bearing calls like `errand ps` also review.",
+          "ecosystem_ids": [
+            "errand"
           ],
-          "extension_id": "command.skill-base",
-          "homepage": "https://github.com/ginuim/skill-base",
+          "executables": [
+            "errand"
+          ],
+          "extension_id": "command.errand",
           "icon": {
-            "kind": "none"
+            "background": "#4338CA",
+            "kind": "react-icon",
+            "name": "HiMiniCommandLine"
           },
           "license": "MIT",
-          "name": "Skill Base CLI",
+          "name": "Errand",
           "permissions": [
             {
               "action_classes": [
-                "Skill Base publication"
+                "Errand execution command"
               ],
               "baseline_floor": "review",
               "configurable": true,
@@ -10121,231 +10124,177 @@
               "default_enabled": true,
               "dependencies": [],
               "deprecated": false,
-              "description": "Reviews upload of a local Skill directory to Skill Base, where it creates a public Skill or publishes a new version.",
-              "example_command": "skb publish ./my-skill --changelog 'Initial release'",
+              "description": "Identifies operand-bearing `errand` invocations, which submit a job to the selected runner, may upload a working-tree snapshot, and may apply retained changes to the originating checkout.",
+              "example_command": "errand --on linux -- make test",
+              "family": null,
+              "fixed_reason": null,
               "implementation_version": "1.0.0",
               "implied_permissions": [],
-              "introduced_version": "1.0.0",
-              "label": "Publish a Skill version",
-              "permission_id": "command.skill-base.permission.publish",
+              "introduced_version": "2.2.0",
+              "label": "Errand job execution",
+              "permission_id": "command.errand.permission.exec",
+              "replacement_permission_id": null,
               "risk_tier": "high",
               "safer_guidance": [
-                "Run `skb publish --dry-run` and confirm the directory, Skill ID, and included files.",
-                "Check the name, description, and changelog flags; new Skills are public by default."
+                "Review the selected runner, snapshot scope, forwarded environment, and command before submission.",
+                "Use --no-apply to keep retained changes out of the originating checkout until explicitly applied."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "Errand checkout apply command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies `errand fetch --apply`, which merges retained runner changes into the originating checkout.",
+              "example_command": "errand fetch --apply linux/job",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "2.2.0",
+              "label": "Errand retained-change application",
+              "permission_id": "command.errand.permission.fetch-apply",
+              "replacement_permission_id": null,
+              "risk_tier": "high",
+              "safer_guidance": [
+                "Run errand fetch HANDLE to stage retained changes for inspection before applying them.",
+                "Check errand status HANDLE and review the destination checkout before applying retained changes."
               ],
               "typed_capabilities": []
             }
           ],
           "project_markers": [],
           "publisher": {
-            "display_name": "Skill Base",
-            "id": "ginuim",
-            "url": "https://github.com/ginuim/skill-base"
+            "display_name": "George Lydakis",
+            "id": "community.lydakis"
           },
-          "reference_urls": [
-            "https://github.com/ginuim/skill-base/blob/main/cli/lib/commands/publish.js",
-            "https://github.com/ginuim/skill-base/blob/main/docs/zh/cli.md"
-          ],
+          "reference_urls": [],
           "required": false,
           "risk_classes": [
-            "data_flow_exfiltration",
             "execution",
-            "network_egress"
+            "network_egress",
+            "destructive_shell"
           ],
           "rules": [
             {
               "action_classes": [
-                "Skill Base publication"
+                "Errand execution command"
               ],
               "default_mode": "review",
-              "description": "Identifies `skb publish`, which packages the selected local directory and uploads it with the saved Skill Base credential to create a Skill or publish a new version.",
+              "description": "Identifies operand-bearing `errand` invocations (`errand [options] -- COMMAND` or a job operand), which execute on the selected runner.",
+              "family": null,
               "matcher": {
                 "config": {
-                  "allow_leading_options": true,
                   "executables": [
-                    "skb",
-                    "skb.cmd",
-                    "skb.exe"
+                    "errand",
+                    "errand.cmd",
+                    "errand.exe"
                   ],
-                  "fail_secure_unknown_options": true,
-                  "forbidden_flags": [],
-                  "interspersed_flags": [
-                    "--dry-run",
+                  "forbidden_flags": [
                     "--help",
-                    "--no-gitignore",
-                    "-h"
+                    "-h",
+                    "--version"
                   ],
-                  "interspersed_options_with_values": [
-                    "--changelog",
-                    "--description",
-                    "--ignore",
-                    "--name"
-                  ],
-                  "inverse_flag_pairs": [],
-                  "leading_options_with_values": [
-                    "--changelog",
-                    "--description",
-                    "--ignore",
-                    "--name"
-                  ],
-                  "required_flags": [],
-                  "required_flags_in_all_arguments": false,
-                  "required_option_values": [],
-                  "subcommands": [
-                    "publish"
+                  "minimum_operands": 1,
+                  "options_with_values": [
+                    "--on",
+                    "--url",
+                    "--where",
+                    "--profile",
+                    "--workdir",
+                    "-w",
+                    "--env",
+                    "-e",
+                    "--env-file",
+                    "--passenv",
+                    "--forward",
+                    "-L",
+                    "--artifact",
+                    "--cache",
+                    "--workspace",
+                    "--workspace-root",
+                    "--output",
+                    "-o"
                   ]
                 },
-                "op": "executable.v1"
+                "op": "leading-operand-count.v1"
               },
-              "permission_id": "command.skill-base.permission.publish",
+              "native_capability": null,
+              "permission_id": "command.errand.permission.exec",
               "risk_classes": [
-                "data_flow_exfiltration",
                 "execution",
-                "network_egress"
+                "network_egress",
+                "destructive_shell"
               ],
-              "rule_id": "command.skill-base.publish",
+              "rule_id": "command.errand.run",
               "rule_version": "1.0.0",
-              "safe_variants": [
-                {
-                  "matcher": {
-                    "config": {
-                      "allow_leading_options": true,
-                      "executables": [
-                        "skb",
-                        "skb.cmd",
-                        "skb.exe"
-                      ],
-                      "fail_secure_unknown_options": true,
-                      "forbidden_flags": [],
-                      "interspersed_flags": [
-                        "--dry-run",
-                        "--no-gitignore"
-                      ],
-                      "interspersed_options_with_values": [
-                        "--changelog",
-                        "--description",
-                        "--ignore",
-                        "--name"
-                      ],
-                      "inverse_flag_pairs": [],
-                      "leading_options_with_values": [
-                        "--changelog",
-                        "--description",
-                        "--ignore",
-                        "--name"
-                      ],
-                      "required_flags": [
-                        "--dry-run"
-                      ],
-                      "required_flags_in_all_arguments": true,
-                      "required_option_values": [],
-                      "subcommands": [
-                        "publish"
-                      ]
-                    },
-                    "op": "executable.v1"
-                  },
-                  "title": "List the files without uploading",
-                  "variant_id": "dry-run"
-                },
-                {
-                  "matcher": {
-                    "config": {
-                      "allow_leading_options": true,
-                      "executables": [
-                        "skb",
-                        "skb.cmd",
-                        "skb.exe"
-                      ],
-                      "fail_secure_unknown_options": true,
-                      "forbidden_flags": [],
-                      "interspersed_flags": [
-                        "--dry-run",
-                        "--help",
-                        "--no-gitignore",
-                        "-h"
-                      ],
-                      "interspersed_options_with_values": [
-                        "--changelog",
-                        "--description",
-                        "--ignore",
-                        "--name"
-                      ],
-                      "inverse_flag_pairs": [],
-                      "leading_options_with_values": [
-                        "--changelog",
-                        "--description",
-                        "--ignore",
-                        "--name"
-                      ],
-                      "required_flags": [
-                        "--help"
-                      ],
-                      "required_flags_in_all_arguments": true,
-                      "required_option_values": [],
-                      "subcommands": [
-                        "publish"
-                      ]
-                    },
-                    "op": "executable.v1"
-                  },
-                  "title": "Publish command help (--help)",
-                  "variant_id": "help"
-                },
-                {
-                  "matcher": {
-                    "config": {
-                      "allow_leading_options": true,
-                      "executables": [
-                        "skb",
-                        "skb.cmd",
-                        "skb.exe"
-                      ],
-                      "fail_secure_unknown_options": true,
-                      "forbidden_flags": [],
-                      "interspersed_flags": [
-                        "--dry-run",
-                        "--help",
-                        "--no-gitignore",
-                        "-h"
-                      ],
-                      "interspersed_options_with_values": [
-                        "--changelog",
-                        "--description",
-                        "--ignore",
-                        "--name"
-                      ],
-                      "inverse_flag_pairs": [],
-                      "leading_options_with_values": [
-                        "--changelog",
-                        "--description",
-                        "--ignore",
-                        "--name"
-                      ],
-                      "required_flags": [
-                        "-h"
-                      ],
-                      "required_flags_in_all_arguments": true,
-                      "required_option_values": [],
-                      "subcommands": [
-                        "publish"
-                      ]
-                    },
-                    "op": "executable.v1"
-                  },
-                  "title": "Publish command help (-h)",
-                  "variant_id": "short-help"
-                }
-              ],
+              "safe_variants": [],
               "safer_alternatives": [
-                "Run `skb publish --dry-run` for the same directory and ignore rules, then review the included files before publishing."
+                "Review the selected runner, snapshot scope, forwarded environment, and command before submission.",
+                "Use --no-apply to keep retained changes out of the originating checkout until explicitly applied."
               ],
               "severity": "high",
-              "title": "Skill Base publication"
+              "title": "Errand job execution"
+            },
+            {
+              "action_classes": [
+                "Errand checkout apply command"
+              ],
+              "default_mode": "review",
+              "description": "Identifies `errand fetch --apply`, which merges retained runner changes into the originating checkout.",
+              "family": null,
+              "matcher": {
+                "config": {
+                  "executables": [
+                    "errand",
+                    "errand.cmd",
+                    "errand.exe"
+                  ],
+                  "forbidden_flags_before_delimiter": [
+                    "--help",
+                    "-h",
+                    "--version"
+                  ],
+                  "options_with_values": [
+                    "--on",
+                    "--url",
+                    "--output",
+                    "-o"
+                  ],
+                  "required_flags_anywhere": [
+                    "--apply"
+                  ],
+                  "subcommands": [
+                    "fetch"
+                  ]
+                },
+                "op": "leading-subcommand.v1"
+              },
+              "native_capability": null,
+              "permission_id": "command.errand.permission.fetch-apply",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "rule_id": "command.errand.fetch-apply",
+              "rule_version": "1.0.0",
+              "safe_variants": [],
+              "safer_alternatives": [
+                "Run errand fetch HANDLE to stage retained changes for inspection before applying them.",
+                "Check errand status HANDLE and review the destination checkout before applying retained changes."
+              ],
+              "severity": "high",
+              "title": "Errand retained-change application"
             }
           ],
           "safer_alternatives": [
-            "Run `skb publish --dry-run` for the same directory and ignore rules, then review the included files before publishing."
+            "Inspect jobs with errand ps or errand status HANDLE before executing or applying changes.",
+            "Stage retained changes with errand fetch HANDLE before applying them."
           ],
           "source": "built-in",
           "version": "1.0.0"
@@ -10460,179 +10409,91 @@
   },
   "cases": [
     {
-      "command": "skb publish ./my-skill --dry-run --ignore '.cursor/'",
+      "command": "errand --on linux -- make test",
       "disabled_permissions": [],
       "enabled_extensions": [
-        "command.skill-base"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [],
-      "id": "publish-dry-run-safe",
-      "rule_id": "command.skill-base.publish"
-    },
-    {
-      "command": "skb publish ./my-skill --ignore '.cursor/' --no-gitignore",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.skill-base"
+        "command.errand"
       ],
       "expected_action": "review",
       "expected_effective_segments": [
         0
       ],
-      "id": "publish-with-ignore-still-reviewable",
-      "rule_id": "command.skill-base.publish"
+      "id": "run-job",
+      "rule_id": "command.errand.run"
     },
     {
-      "command": "skb publish",
+      "command": "errand make test",
       "disabled_permissions": [],
       "enabled_extensions": [
-        "command.skill-base"
+        "command.errand"
       ],
       "expected_action": "review",
       "expected_effective_segments": [
         0
       ],
-      "id": "publish-current-directory",
-      "rule_id": "command.skill-base.publish"
+      "id": "run-operand",
+      "rule_id": "command.errand.run"
     },
     {
-      "command": "skb publish ./my-skill --name \"My Skill\" --description \"A useful skill\" --changelog \"Initial release\"",
+      "command": "errand fetch --apply linux/job",
       "disabled_permissions": [],
       "enabled_extensions": [
-        "command.skill-base"
+        "command.errand"
       ],
       "expected_action": "review",
       "expected_effective_segments": [
         0
       ],
-      "id": "publish-relative-directory-with-metadata",
-      "rule_id": "command.skill-base.publish"
+      "id": "fetch-apply",
+      "rule_id": "command.errand.fetch-apply"
     },
     {
-      "command": "skb --name \"My Skill\" --changelog \"Release\" publish /tmp/my-skill",
+      "command": "errand fetch --apply=true linux/job",
       "disabled_permissions": [],
       "enabled_extensions": [
-        "command.skill-base"
+        "command.errand"
       ],
       "expected_action": "review",
       "expected_effective_segments": [
         0
       ],
-      "id": "publish-global-options-before-subcommand",
-      "rule_id": "command.skill-base.publish"
+      "id": "fetch-apply-eq",
+      "rule_id": "command.errand.fetch-apply"
     },
     {
-      "command": "skb publish --help",
+      "command": "errand status",
       "disabled_permissions": [],
       "enabled_extensions": [
-        "command.skill-base"
+        "command.errand"
       ],
       "expected_action": "review",
-      "expected_effective_segments": [],
-      "id": "publish-help-long-safe",
-      "rule_id": "command.skill-base.publish"
-    },
-    {
-      "command": "skb publish -h",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.skill-base"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [],
-      "id": "publish-help-short-safe",
-      "rule_id": "command.skill-base.publish"
-    },
-    {
-      "command": "skb publish --name \"My Skill\" --help",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.skill-base"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [],
-      "id": "publish-with-extra-flag-and-help-safe",
-      "rule_id": "command.skill-base.publish"
-    },
-    {
-      "command": "skb publish ./my-skill",
-      "disabled_permissions": [],
-      "enabled_extensions": [],
-      "expected_action": "review",
-      "expected_effective_segments": [],
-      "id": "extension-inactive",
-      "rule_id": "command.skill-base.publish"
-    },
-    {
-      "command": "skb publish ./my-skill",
-      "disabled_permissions": [
-        "command.skill-base.permission.publish"
-      ],
-      "enabled_extensions": [
-        "command.skill-base"
-      ],
-      "expected_action": "block",
       "expected_effective_segments": [
         0
       ],
-      "id": "permission-disabled",
-      "rule_id": "command.skill-base.publish"
+      "id": "broad-operand-review",
+      "rule_id": "command.errand.run"
     },
     {
-      "command": "skb install team-rules",
+      "command": "errand --help",
       "disabled_permissions": [],
       "enabled_extensions": [
-        "command.skill-base"
+        "command.errand"
       ],
       "expected_action": "review",
       "expected_effective_segments": [],
-      "id": "skb-install-is-outside-publish-rule",
-      "rule_id": "command.skill-base.publish"
+      "id": "help-failclosed",
+      "rule_id": "command.errand.run"
     },
     {
-      "command": "skb search vue",
+      "command": "echo hello",
       "disabled_permissions": [],
       "enabled_extensions": [
-        "command.skill-base"
+        "command.errand"
       ],
-      "expected_action": "review",
+      "expected_action": "allow",
       "expected_effective_segments": [],
-      "id": "skb-search-is-outside-publish-rule",
-      "rule_id": "command.skill-base.publish"
-    },
-    {
-      "command": "skb import-github owner/repo",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.skill-base"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [],
-      "id": "skb-import-github-is-outside-publish-rule",
-      "rule_id": "command.skill-base.publish"
-    },
-    {
-      "command": "skb publishx ./my-skill",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.skill-base"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [],
-      "id": "similar-subcommand-does-not-match",
-      "rule_id": "command.skill-base.publish"
-    },
-    {
-      "command": "skb --help",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.skill-base"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [],
-      "id": "root-help-is-outside-publish-rule",
-      "rule_id": "command.skill-base.publish"
+      "id": "unrelated",
+      "rule_id": "command.errand.run"
     }
   ],
   "schema": "guard.command-extension-fixtures.v1"

@@ -16004,6 +16004,7 @@
           "command.cogext",
           "command.ctty",
           "command.digline",
+          "command.errand",
           "command.genclave",
           "command.gitsync",
           "command.mcp-filesystem",
