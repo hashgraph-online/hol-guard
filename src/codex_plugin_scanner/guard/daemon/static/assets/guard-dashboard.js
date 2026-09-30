@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard.js","assets/chunks/home-protection-module.js","assets/chunks/fleet-workspace.js","assets/chunks/app-catalog.js","assets/chunks/harness-detection.js","assets/chunks/connect-guard-cloud-button.js","assets/chunks/settings-workspace.js","assets/chunks/extensions-workspace.js","assets/chunks/approval-proof-modal.js","assets/chunks/app-detail-workspace.js","assets/chunks/supply-chain-hub-workspace.js","assets/chunks/policy-workspace-page.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard.js","assets/chunks/home-protection-module.js","assets/chunks/fleet-workspace.js","assets/chunks/app-catalog.js","assets/chunks/harness-detection.js","assets/chunks/connect-guard-cloud-button.js","assets/chunks/settings-workspace.js","assets/chunks/confirm-dialog.js","assets/chunks/extensions-workspace.js","assets/chunks/extension-controls-api.js","assets/chunks/approval-proof-modal.js","assets/chunks/app-detail-workspace.js","assets/chunks/supply-chain-hub-workspace.js","assets/chunks/policy-workspace-page.js","assets/chunks/protection-repair-page.js"])))=>i.map(i=>d[i]);
 (function polyfill() {
   const relList = document.createElement("link").relList;
   if (relList && relList.supports && relList.supports("modulepreload")) return;
@@ -14353,13 +14353,17 @@ function resolveActionTitle(receipt) {
   if (type === "Tool call" && mcpTool && mcpTool.length > 0) {
     return mcpTool;
   }
-  const packageName = envelope?.package_name?.trim();
-  if (type === "Package" && packageName && packageName.length > 0) {
-    return packageName;
-  }
   const signals = (receipt.scanner_evidence ?? []).filter(isRiskSignalEvidence);
   if (signals.length > 0 && signals[0]?.title) {
     return signals[0].title;
+  }
+  const rawCommand = receipt.raw_command_text?.trim();
+  if (rawCommand) {
+    return truncate(rawCommand, 80);
+  }
+  const packageName = envelope?.package_name?.trim();
+  if (type === "Package" && packageName && packageName.length > 0) {
+    return packageName;
   }
   const provenance = receipt.provenance_summary?.trim();
   const artifactName = receipt.artifact_name?.trim();
@@ -14381,6 +14385,18 @@ function resolveActionTitle(receipt) {
     return `${type}: ${name}`;
   }
   return type;
+}
+function resolveActionTitleTooltip(receipt) {
+  const title = resolveActionTitle(receipt);
+  const envelopeCommand = getEnvelope(receipt)?.command?.trim();
+  if (resolveActionType(receipt) === "Shell command" && envelopeCommand) {
+    return envelopeCommand;
+  }
+  const rawCommand = receipt.raw_command_text?.trim();
+  if (rawCommand && title === truncate(rawCommand, 80)) {
+    return rawCommand;
+  }
+  return title;
 }
 function resolveActionSubtitle(receipt) {
   const signals = (receipt.scanner_evidence ?? []).filter(isRiskSignalEvidence);
@@ -14404,9 +14420,13 @@ function resolveActionSubtitle(receipt) {
   const provenance = receipt.provenance_summary?.trim();
   const isCapsUseful = caps && caps !== "hook artifact · codex" && !caps.toLowerCase().startsWith("guard local daemon completed");
   const isProvenanceUseful = provenance && provenance !== "hook artifact · codex" && !provenance.toLowerCase().startsWith("guard local daemon completed");
-  if (isCapsUseful) {
+  const actionTitle = resolveActionTitle(receipt);
+  const fullActionTitle = resolveActionTitleTooltip(receipt);
+  const rawCommand = receipt.raw_command_text?.trim();
+  const capsRepeatsRawCommand = Boolean(rawCommand && caps?.toLowerCase() === rawCommand.toLowerCase());
+  if (isCapsUseful && caps?.toLowerCase() !== actionTitle.toLowerCase() && caps?.toLowerCase() !== fullActionTitle.toLowerCase() && !capsRepeatsRawCommand) {
     parts.push(caps);
-  } else if (isProvenanceUseful && provenance?.toLowerCase() !== caps?.toLowerCase() && provenance !== resolveActionTitle(receipt)) {
+  } else if (isProvenanceUseful && provenance?.toLowerCase() !== caps?.toLowerCase() && provenance !== actionTitle) {
     parts.push(provenance);
   }
   if (parts.length > 0) {
@@ -14741,7 +14761,7 @@ function normalizeDuplicateReviewText(value) {
 }
 function stripDuplicateReviewContextPrefix(value) {
   const stripped = value.replace(
-    /^\s*(codex|claude|claude code|claudecode|copilot|opencode|gemini|grok|kimi)?\s*(prompt|command|tool)\s+for\s+[`"']?[^:`"']+[`"']?\s*:\s*/i,
+    /^\s*(codex|claude|claude code|claudecode|copilot|opencode|gemini|grok|kimi|devin)?\s*(prompt|command|tool)\s+for\s+[`"']?[^:`"']+[`"']?\s*:\s*/i,
     ""
   );
   return stripped === value ? null : stripped;
@@ -14767,9 +14787,37 @@ function isDisplayableHarness(harness) {
   return normalizeHarnessSlug(harness) !== null;
 }
 function isWatchOnlyObservation(item) {
+  if (typeof item.watch_only_observation === "boolean") {
+    return item.watch_only_observation;
+  }
   return (item.scanner_evidence ?? []).some(
     (evidence) => typeof evidence === "object" && evidence !== null && "source" in evidence && evidence.source === "observe_mode_inbox"
   );
+}
+function watchObservedPolicyAction(item) {
+  if (!isWatchOnlyObservation(item)) return null;
+  const evidence = item.scanner_evidence?.find(
+    (entry) => typeof entry === "object" && entry !== null && "source" in entry && entry.source === "observe_mode_inbox"
+  );
+  const observedAction = evidence?.observed_policy_action;
+  return isGuardAction(observedAction) ? observedAction : null;
+}
+function watchProtectedOutcome(item) {
+  switch (watchObservedPolicyAction(item)) {
+    case "allow":
+    case "warn":
+      return "In Protected mode, Guard would have allowed it to continue.";
+    case "review":
+      return "In Protected mode, Guard would have sent it for review.";
+    case "require-reapproval":
+      return "In Protected mode, Guard would have required fresh approval before allowing it to continue.";
+    case "sandbox-required":
+      return "In Protected mode, Guard would have required a sandbox before allowing it to continue.";
+    case "block":
+      return "In Protected mode, Guard would have blocked it.";
+    default:
+      return "In Protected mode, Guard would have applied its policy before allowing it to continue.";
+  }
 }
 function deriveDataFlowEvidence(item) {
   const signals = item.decision_v2_json?.signals ?? [];
@@ -14832,11 +14880,11 @@ function buildRetryAfterApprovalCopy(item, action, persistedExactAction = false)
   return `Blocked. Return to ${harness} to continue with a different action, or ask it to try something else.`;
 }
 function resolveActionEnvelopeDetailText(envelope, options = {}) {
-  if (isApplyPatchEnvelope(envelope) && envelope.command !== null && envelope.command.length > 0) {
+  if (isApplyPatchEnvelope(envelope) && envelope.command !== null && envelope.command.trim().length > 0) {
     return envelope.command;
   }
-  if (envelope.action_type === "shell_command") {
-    return envelope.command !== null && envelope.command.length > 0 ? envelope.command : null;
+  if (envelope.action_type === "shell_command" && envelope.command !== null && envelope.command.trim().length > 0) {
+    return envelope.command;
   }
   const promptText = envelope.prompt_text ?? envelope.prompt_excerpt;
   if (envelope.action_type === "prompt") {
@@ -14848,14 +14896,6 @@ function resolveActionEnvelopeDetailText(envelope, options = {}) {
   if (envelope.action_type === "network_request" && envelope.network_hosts.length > 0) {
     return envelope.network_hosts.join("\n");
   }
-  if (envelope.action_type === "mcp_tool") {
-    const baseText = resolveEnvelopeDisplayText(envelope) ?? envelope.mcp_tool ?? envelope.tool_name ?? envelope.action_type;
-    const inputSummary = serializeMcpInput(envelope.raw_payload_redacted, options.mcpInputMaxLength ?? null);
-    return inputSummary === null ? baseText : `${baseText}
-
-Input:
-${inputSummary}`;
-  }
   if (envelope.action_type === "package_script") {
     if (envelope.package_manager && envelope.package_name) {
       return `${envelope.package_manager} install ${envelope.package_name}`;
@@ -14864,7 +14904,16 @@ ${inputSummary}`;
       return envelope.package_name;
     }
   }
-  return resolveEnvelopeDisplayText(envelope);
+  if (envelope.action_type === "mcp_tool" || envelope.event_name === "PreToolUse") {
+    const baseText = friendlyMcpToolName(envelope.tool_name) ?? friendlyMcpToolName(envelope.mcp_tool) ?? resolveEnvelopeDisplayText(envelope) ?? envelope.mcp_tool ?? envelope.tool_name ?? envelope.action_type;
+    const inputSummary = serializeMcpInput(envelope.raw_payload_redacted, options.mcpInputMaxLength ?? null);
+    if (inputSummary !== null) return `${baseText}
+
+Input:
+${inputSummary}`;
+    return envelope.action_type === "shell_command" ? null : baseText;
+  }
+  return envelope.action_type === "shell_command" ? null : resolveEnvelopeDisplayText(envelope);
 }
 function humanizeList(values) {
   if (values.length === 0) {
@@ -14957,6 +15006,9 @@ function requestResolutionBlockReason(item) {
   if (item.policy_action === "block") {
     return "Policy terminally blocked this action. This queue record is diagnostic and cannot be overridden by an approval.";
   }
+  if (item.status === "expired") {
+    return item.superseded_by_request_id ? "This request expired and was superseded by a fresh review." : "This request expired. Rerun the action to create a fresh review.";
+  }
   return null;
 }
 function resolveDecisionV2Title(item) {
@@ -14995,7 +15047,7 @@ function resolvePrimaryReviewText(item) {
   return resolveStoppedCommandText(item);
 }
 function serializeMcpInput(payload, maxLength = null) {
-  const input = payload.arguments ?? payload.input ?? payload.params ?? null;
+  const input = payload.tool_input ?? payload.toolInput ?? payload.arguments ?? payload.input ?? payload.params ?? null;
   if (input === null || input === void 0) {
     return null;
   }
@@ -15053,6 +15105,8 @@ function harnessDisplayName(harness) {
       return "Oh My Pi";
     case "zcode":
       return "ZCode";
+    case "devin":
+      return "Devin";
     case "guard-cli":
     case "hol-guard":
       return "Guard CLI";
@@ -15061,7 +15115,22 @@ function harnessDisplayName(harness) {
   }
 }
 function displayArtifactName(item) {
+  if (item.artifact_type === "tool_call") {
+    const friendly = friendlyMcpToolName(item.artifact_name);
+    if (friendly) return friendly;
+  }
   return item.artifact_name || item.artifact_id || "this action";
+}
+function friendlyMcpToolName(raw) {
+  if (!raw || raw.length > 256) return null;
+  const parts = raw.startsWith("mcp__") ? raw.slice(5).split("__") : [];
+  if (parts.length < 2 || parts.some((part) => !/^[a-zA-Z0-9_-]{1,80}$/.test(part))) return null;
+  const codexApp = parts[0] === "codex_apps" && parts.length > 2;
+  const connector = codexApp ? parts[1] : parts[0];
+  const tool = parts.slice(codexApp ? 2 : 1).join("__");
+  const humanize = (part) => part.replaceAll("_", " ").replaceAll("-", " ").toLowerCase().replace(/\s+/g, " ").replace(/\b[a-z]/g, (letter) => letter.toUpperCase());
+  const shortTool = tool.toLowerCase().startsWith(`${connector.toLowerCase()}_`) ? tool.slice(connector.length + 1) : tool;
+  return `${humanize(connector)} · ${humanize(shortTool)}`;
 }
 function formatNumber(n) {
   if (n >= 1e6) return `${(n / 1e6).toFixed(1).replace(/\.0$/, "")}M`;
@@ -15178,7 +15247,7 @@ function buildCodexResumeUx(resume) {
   }
   return {
     headline: "Guard could not locate the Codex chat.",
-    body: resume.message ?? "Return to Codex and retry the same request.",
+    body: resume.message ?? "Return to Codex and retry. A new tool call may need fresh approval.",
     showRetry: false
   };
 }
@@ -15390,11 +15459,11 @@ function computePeriodComparison(receipts, days, now2) {
 function nonNegativeNumber(value) {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : 0;
 }
-function isRecord$6(value) {
+function isRecord$7(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function normalizeOperatorHealth(raw) {
-  if (!isRecord$6(raw)) {
+  if (!isRecord$7(raw)) {
     return void 0;
   }
   const state = raw["state"];
@@ -15443,6 +15512,54 @@ function standardGuardDaemonOrigin(rawUrl, firstPort, portCount) {
   const port = Number(new URL(origin).port);
   return port >= firstPort && port < firstPort + portCount ? origin : null;
 }
+const PROTECTION_REASON_COPY = {
+  // Runtime registration and heartbeat.
+  daemon_registration_missing: "Guard is re-registering the running local runtime. This clears on the next check.",
+  daemon_registration_unavailable: "Guard could not write the local runtime registration.",
+  daemon_registration_foreign: "A different Guard session owns the runtime registration, so this runtime will not overwrite it.",
+  daemon_runtime_unavailable: "The local Guard runtime is not answering. Restart Guard to restore local protection.",
+  daemon_heartbeat_stale: "The local Guard runtime stopped reporting heartbeats. Restart Guard to restore local protection.",
+  daemon_heartbeat_unavailable: "Guard has no recorded heartbeat for the local runtime yet.",
+  daemon_heartbeat_invalid: "The recorded runtime heartbeat is unreadable.",
+  daemon_heartbeat_future: "The recorded runtime heartbeat is dated in the future, so Guard cannot trust it yet.",
+  daemon_healthy: "The local Guard runtime is healthy.",
+  daemon_runtime_drift: "The running runtime does not match the registered runtime. Restart Guard to converge.",
+  daemon_containment_health_invalid: "The runtime reported unreadable containment health. Guard stays fail-closed.",
+  // Containment compatibility.
+  containment_health_invalid: "Guard could not read containment health from the local runtime.",
+  containment_health_unavailable: "Guard could not obtain containment health from the local runtime.",
+  containment_probe_failed: "The containment self-probe did not confirm enforcement. Guard stays fail-closed.",
+  containment_probe_stale: "The containment self-probe proof is stale and needs to be refreshed.",
+  containment_probe_future: "The containment self-probe proof is dated in the future, so Guard cannot trust it yet.",
+  containment_schema_mismatch: "The containment schema version does not match this Guard build.",
+  policy_version_mismatch: "The containment policy version does not match this Guard build.",
+  policy_digest_mismatch: "The containment policy contents do not match this Guard build.",
+  effect_contract_mismatch: "The effect contract version does not match this Guard build.",
+  decision_plane_mismatch: "The decision plane schema version does not match this Guard build.",
+  unsupported_platform: "Containment controls are not available on this platform.",
+  // Command evidence.
+  native_evaluation_unavailable: "Guard could not run the native policy engine to prove command evidence.",
+  decision_stream_degraded: "Guard could not restore command evidence persistence.",
+  decision_stream_health_unavailable: "Guard could not read the command evidence health store.",
+  // App hooks.
+  no_managed_harness: "No managed AI app is connected, so there are no hooks to verify.",
+  hook_verification_failed: "Guard could not verify the managed app hooks.",
+  one_or_more_hooks_inactive: "One or more managed app hooks are inactive.",
+  hooks_inactive: "One or more managed app hooks are inactive.",
+  hook_attestation_unavailable: "Guard could not obtain hook attestation proof.",
+  hook_repair_failed: "Guard tried to repair managed app hooks and some did not recover.",
+  hook_repair_unknown: "Guard could not confirm whether managed app hook repair finished.",
+  // Integrity.
+  rule_pack_runtime_proof_unavailable: "Guard has no runtime proof for the active local rule packs yet.",
+  rule_packs_disabled: "Local rule packs are disabled until their integrity is proven.",
+  tamper_checks_failed: "Managed Guard files or hooks did not pass integrity checks.",
+  tamper_proof_unavailable: "Guard has no integrity proof for its managed files yet.",
+  local_integrity_unproven: "Guard could not establish a local integrity proof.",
+  proof_unavailable: "Guard has no proof for this check yet."
+};
+function protectionReasonText(reasonCode) {
+  return PROTECTION_REASON_COPY[reasonCode] ?? null;
+}
 const PROTECTION_CHECK_IDS = [
   "harness_hooks",
   "daemon",
@@ -15456,7 +15573,7 @@ const PROTECTION_CHECK_IDS = [
 ];
 const CORE_CHECK_IDS = PROTECTION_CHECK_IDS.filter((checkId) => checkId !== "decision_stream");
 const STABLE_ID$1 = /^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/;
-function isRecord$5(value) {
+function isRecord$6(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function copyForState(state) {
@@ -15489,7 +15606,7 @@ function deriveState(checks) {
   return byId.get("decision_stream")?.status === "pass" ? "protected" : "partial";
 }
 function normalizeCheck(value) {
-  if (!isRecord$5(value)) return null;
+  if (!isRecord$6(value)) return null;
   const checkId = value.check_id;
   const status = value.status;
   const reasonCode = value.reason_code;
@@ -15580,7 +15697,7 @@ function useProtectionPresentationState(health) {
   });
 }
 function normalizeApp(value) {
-  if (!isRecord$5(value)) return null;
+  if (!isRecord$6(value)) return null;
   const harness = value.harness;
   if (typeof harness !== "string" || harness.length > 64 || !STABLE_ID$1.test(harness)) return null;
   const checks = normalizeChecks(value.checks);
@@ -15588,7 +15705,7 @@ function normalizeApp(value) {
   return { harness, ...healthFromChecks(checks) };
 }
 function normalizeProtectionHealth(value) {
-  if (!isRecord$5(value) || value.schema_version !== "guard.protection-health.v1") {
+  if (!isRecord$6(value) || value.schema_version !== "guard.protection-health.v1") {
     return unavailableProtectionHealth();
   }
   const checks = normalizeChecks(value.checks);
@@ -15658,15 +15775,23 @@ function remainingProtectionRepairMessage(health, displayName) {
   const failedHookApps = remainingParts.failedHookHarnesses.map(displayName);
   const remainingMessages = [];
   const unsupportedCount = health.checks.filter(isUnsupportedPlatformCheck).length;
+  const daemonCheck = health.checks.find((check) => check.check_id === "daemon");
+  const decisionStreamCheck = health.checks.find((check) => check.check_id === "decision_stream");
   if (remainingParts.needsConnectedApp) {
     remainingMessages.push("Connect an AI app to start local protection.");
+  }
+  if (daemonCheck?.status !== "pass" && daemonCheck?.reason_code === "daemon_registration_missing") {
+    remainingMessages.push("The local runtime is re-registering; check again in a moment.");
   }
   if (failedHookApps.length > 0) {
     remainingMessages.push(
       `${failedHookApps.join(", ")} still ${failedHookApps.length === 1 ? "needs" : "need"} hook repair.`
     );
   }
-  if (remainingParts.evidenceFailed) remainingMessages.push("Command evidence still needs repair.");
+  if (remainingParts.evidenceFailed) {
+    const reasonText = decisionStreamCheck?.reason_code ? protectionReasonText(decisionStreamCheck.reason_code) : null;
+    remainingMessages.push(reasonText ?? "Command evidence still needs repair.");
+  }
   if (unsupportedCount > 0) {
     remainingMessages.push(
       "Containment remains unavailable on this platform, so full protection cannot be reached here."
@@ -15677,6 +15802,20 @@ function remainingProtectionRepairMessage(health, displayName) {
     failedHookHarnesses: remainingParts.failedHookHarnesses,
     message: `${remaining} Open the repair details below for the exact check.`
   };
+}
+function isRecord$5(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+const REASON_CODE_ID = /^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/;
+function checkReasonMapValue(value) {
+  if (!isRecord$5(value)) return {};
+  const reasons = {};
+  for (const [checkId, reason] of Object.entries(value)) {
+    if (!REASON_CODE_ID.test(checkId) || checkId.length > 96) continue;
+    if (typeof reason !== "string" || reason.length > 96 || !REASON_CODE_ID.test(reason)) continue;
+    reasons[checkId] = reason;
+  }
+  return reasons;
 }
 function isRecord$4(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -16608,7 +16747,7 @@ async function fetchExtensionControlApi(input, init) {
   return fetchWithGuardAuth(input, init);
 }
 async function fetchLocalCliApi(input, init) {
-  const approvedPath = typeof input === "string" && /^\/v1\/local-clis(?:\/(?:preview|apply|recognize|discover))?$/.test(input);
+  const approvedPath = typeof input === "string" && /^\/v1\/local-clis(?:\/(?:preview|apply|recognize|discover|provider-actions|provider-workflows|registry-search|registry-setup|refresh-job|skills|mcp-skills))?$/.test(input);
   if (!approvedPath) {
     throw new Error("Invalid local CLI API path");
   }
@@ -16757,8 +16896,8 @@ function parseActionEnvelope(raw) {
   const packageTargets = raw["package_targets"];
   const preExecutionResult = aliasedPreExecutionResult.value;
   const policyAction = aliasedPolicyAction.value;
-  const scriptName = raw["script_name"];
-  const rawPayloadRedacted = raw["raw_payload_redacted"];
+  const scriptName = raw["script_name"] === void 0 ? null : raw["script_name"];
+  const rawPayloadRedacted = raw["raw_payload_redacted"] === void 0 ? {} : raw["raw_payload_redacted"];
   if (typeof schemaVersion !== "number" || typeof actionId !== "string" || typeof harness !== "string" || typeof eventName !== "string" || !isGuardActionType(actionType)) {
     return null;
   }
@@ -16938,6 +17077,7 @@ function normalizeApprovalRequest(item) {
   const scopeRestrictions = parseStringList(item.scope_restrictions);
   return {
     ...baseItem,
+    superseded_by_request_id: item.status === "expired" && typeof item.superseded_by_request_id === "string" && /^[A-Za-z0-9-]{1,64}$/.test(item.superseded_by_request_id) ? item.superseded_by_request_id : void 0,
     policy_action: failClosedPolicyAction,
     recommended_scope: isDecisionScope(item.recommended_scope) ? item.recommended_scope : null,
     allowed_scopes: allowedScopes ?? void 0,
@@ -18218,6 +18358,7 @@ class GuardProtectionRepairError extends Error {
   failedCheckIds;
   failedHarnesses;
   pendingCheckIds;
+  checkReasons;
   constructor(status, payload) {
     const message = payload === null ? null : stringValue$1(payload.message);
     super(message ?? `Protection repair failed with ${status}`);
@@ -18228,6 +18369,7 @@ class GuardProtectionRepairError extends Error {
     this.failedCheckIds = stringArrayValue(payload?.failed_check_ids);
     this.failedHarnesses = stringArrayValue(payload?.failed_harnesses);
     this.pendingCheckIds = stringArrayValue(payload?.pending_check_ids);
+    this.checkReasons = checkReasonMapValue(payload?.check_reasons);
   }
 }
 function stringArrayValue(value) {
@@ -18822,6 +18964,29 @@ async function runAuditRemediation(input) {
     );
   }
   return normalizePackageFirewallAction(payload);
+}
+async function chooseSupplyChainAuditFolder() {
+  const response = await fetchGuardApi("/v1/supply-chain/choose-folder", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...guardAuthHeaders()
+    },
+    body: "{}"
+  });
+  const payloadBody = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new GuardHarnessActionError(
+      response.status,
+      isGuardHarnessActionErrorPayload(payloadBody) ? payloadBody : null
+    );
+  }
+  const record2 = payloadBody !== null && typeof payloadBody === "object" ? payloadBody : {};
+  const workspaceDir = typeof record2.workspace_dir === "string" && record2.workspace_dir.trim() ? record2.workspace_dir.trim() : null;
+  return {
+    workspaceDir,
+    cancelled: record2.cancelled === true || workspaceDir === null
+  };
 }
 async function runPackageAudit(input) {
   const workspaceDir = input?.workspaceDir?.trim() ?? null;
@@ -19842,14 +20007,92 @@ function TabBar(props) {
     tab.value
   )) });
 }
+function isBulkApproveGateReady(gate) {
+  return gate?.enabled === true && gate?.configured === true;
+}
+function validateBulkApproveCredentials(gate, credentials) {
+  if (!isBulkApproveGateReady(gate)) {
+    return "Set up an approval gate in Settings before bulk approval.";
+  }
+  if (gate?.totp_enabled === true) {
+    return credentials.totpCode.trim() ? null : "Enter your authenticator code to continue.";
+  }
+  if (!credentials.password.trim()) {
+    return "Enter your approval password to continue.";
+  }
+  return null;
+}
+function buildBulkGateCredentials(gate, password, totpCode) {
+  if (!isBulkApproveGateReady(gate)) {
+    return void 0;
+  }
+  if (gate?.totp_enabled === true) {
+    return {
+      approval_totp_code: totpCode.trim(),
+      approval_gate_use_cooldown: false
+    };
+  }
+  return {
+    approval_password: password.trim(),
+    approval_gate_use_cooldown: false
+  };
+}
+function approvalGateLockRemainingSeconds(gate, nowMs = Date.now()) {
+  if (gate?.enabled === false) return 0;
+  if (!gate?.locked_until) return 0;
+  const lockedUntilMs = Date.parse(gate.locked_until);
+  if (!Number.isFinite(lockedUntilMs)) return 0;
+  return Math.max(0, Math.ceil((lockedUntilMs - nowMs) / 1e3));
+}
+function approvalGateIsLocked(gate, nowMs = Date.now()) {
+  return approvalGateLockRemainingSeconds(gate, nowMs) > 0;
+}
+function approvalGateRequiredForResolution(gate, action, scope) {
+  return gate?.enabled === true && (action === "allow" || scope === "global" || gate.strict_all_decisions === true);
+}
+function approvalGateCooldownLabel(seconds) {
+  if (seconds === 0) return "Every approval";
+  if (seconds === 900) return "15 minutes";
+  if (seconds === 3600) return "1 hour";
+  return `${seconds} seconds`;
+}
+function requiresApprovalPasswordPrompt(cooldownActive, strictAllDecisions, selectedScope) {
+  if (selectedScope === "global") {
+    return true;
+  }
+  if (!cooldownActive) {
+    return true;
+  }
+  return strictAllDecisions;
+}
 function approvalProofRecentlySatisfied(gate) {
   return gate?.totp_enabled === true && gate.totp_recent_satisfied === true;
 }
 function approvalProofRequiresPassword(gate) {
   return gate?.totp_enabled !== true;
 }
-function isApprovalProofSubmitDisabled(gate, credentials, busy, requireFreshTotp = false) {
+function ApprovalGateSetupNotice() {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-brand-blue/20 bg-brand-blue/[0.04] px-4 py-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-blue/10", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniKey, { className: "h-5 w-5 text-brand-blue", "aria-hidden": "true" }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-sm font-semibold text-brand-dark", children: "Local approval isn't ready" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-relaxed text-slate-600", children: "This change needs proof from this device, but the approval gate is off or missing its password. Enable Ask for proof and set an approval password in Settings > Approval gate, then come back." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: "/settings?section=approval", variant: "primary", children: "Set up approval" }) })
+    ] })
+  ] }) });
+}
+function isApprovalProofSubmitDisabled(gate, credentials, busy, requireFreshTotp = false, requireGate = false) {
   if (busy) {
+    return true;
+  }
+  if (approvalGateIsLocked(gate)) {
+    return true;
+  }
+  if (requireGate && gate == null) {
+    return true;
+  }
+  if (gate != null && !isBulkApproveGateReady(gate)) {
+    if (!requireGate && gate.enabled === false) return false;
     return true;
   }
   if (!requireFreshTotp && approvalProofRecentlySatisfied(gate)) {
@@ -19861,6 +20104,12 @@ function isApprovalProofSubmitDisabled(gate, credentials, busy, requireFreshTotp
   return credentials.approvalTotpCode.trim() === "";
 }
 function buildApprovalProofCredentials(gate, credentials, requireFreshTotp = false) {
+  if (approvalGateIsLocked(gate)) {
+    return {};
+  }
+  if (gate != null && !isBulkApproveGateReady(gate)) {
+    return {};
+  }
   if (!requireFreshTotp && approvalProofRecentlySatisfied(gate)) {
     return {};
   }
@@ -19878,6 +20127,13 @@ function ApprovalProofFieldInputs(props) {
     event.target.value = digits;
     props.onApprovalTotpCodeChange(event);
   }, [props]);
+  if (props.requireGate && props.approvalGate === null) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm leading-6 text-brand-dark/75", role: "status", children: "Checking local approval settings. Try again when they are available." });
+  }
+  if (props.approvalGate !== null && !isBulkApproveGateReady(props.approvalGate)) {
+    if (!props.requireGate && props.approvalGate.enabled === false) return null;
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(ApprovalGateSetupNotice, {});
+  }
   if (!props.requireFreshTotp && approvalProofRecentlySatisfied(props.approvalGate)) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm leading-6 text-brand-dark/75", children: "Recently confirmed with your authenticator. A new code is not needed yet." });
   }
@@ -19922,6 +20178,14 @@ function ApprovalProofFieldInputs(props) {
 }
 function ApprovalProofInline(props) {
   const passwordRef = reactExports.useRef(null);
+  const [now2, setNow] = reactExports.useState(() => Date.now());
+  const lockRemainingSeconds = approvalGateLockRemainingSeconds(props.approvalGate, now2);
+  const gateLocked = lockRemainingSeconds > 0;
+  reactExports.useEffect(() => {
+    if (!gateLocked) return void 0;
+    const timer = window.setInterval(() => setNow(Date.now()), 1e3);
+    return () => window.clearInterval(timer);
+  }, [gateLocked]);
   reactExports.useEffect(() => {
     const timer = window.setTimeout(() => {
       passwordRef.current?.focus();
@@ -20214,6 +20478,7 @@ function useFocusTrap(active, containerRef) {
 }
 function GuardModalLayer({
   ariaLabel,
+  ariaDescribedBy,
   children,
   onClose,
   panelClassName = "w-full max-w-2xl"
@@ -20272,6 +20537,7 @@ function GuardModalLayer({
         role: "dialog",
         "aria-modal": "true",
         "aria-label": ariaLabel,
+        "aria-describedby": ariaDescribedBy,
         children: /* @__PURE__ */ jsxRuntimeExports.jsx(
           "div",
           {
@@ -20772,6 +21038,7 @@ const NAVIGATION_GROUPS = [
 function canonicalNavigationView(view) {
   if (view === "app-detail") return "fleet";
   if (view === "audit" || view === "feed-health") return "supply-chain";
+  if (view === "protection-repair") return "extensions";
   return view;
 }
 function navigationItemForView(view) {
@@ -22194,6 +22461,7 @@ function ActionRow({
   const category = detectCategory(receipt);
   const catInfo = getCategoryInfo(category);
   const actionTitle = resolveActionTitle(receipt);
+  const actionTitleTooltip = resolveActionTitleTooltip(receipt);
   const actionType = resolveActionType(receipt);
   const actionSubtitle = resolveActionSubtitle(receipt);
   const handleClick = reactExports.useCallback(() => {
@@ -22234,8 +22502,28 @@ function ActionRow({
       children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2.5", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `${catInfo.color}`, "aria-hidden": "true", children: catInfo.icon }) }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2.5", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col min-w-0", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-medium text-brand-dark truncate block max-w-[260px]", children: actionTitle }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[11px] text-slate-400 truncate block max-w-[260px]", children: actionSubtitle ?? actionType })
+          /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "span",
+            {
+              className: "text-sm font-medium text-brand-dark line-clamp-2 break-words block max-w-[70vw] sm:max-w-[420px] lg:max-w-[520px]",
+              title: actionTitleTooltip,
+              children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true", children: actionTitle }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: actionTitleTooltip })
+              ]
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "span",
+            {
+              className: "text-[11px] text-slate-400 truncate block max-w-[70vw] sm:max-w-[420px] lg:max-w-[520px]",
+              title: actionSubtitle ?? actionType,
+              children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true", children: actionSubtitle ?? actionType }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: actionSubtitle ?? actionType })
+              ]
+            }
+          )
         ] }) }),
         !hideHarnessColumn && /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2.5 hidden sm:table-cell", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
           "button",
@@ -25247,7 +25535,10 @@ const CONNECTABLE_HARNESS_ALIASES = /* @__PURE__ */ new Set([
   "zcode",
   "zai",
   "z-code",
-  "zai-zcode"
+  "zai-zcode",
+  "devin",
+  "devin-cli",
+  "cognition-devin"
 ]);
 const PACKAGE_FIREWALL_SOURCES = /* @__PURE__ */ new Set([
   "package-firewall",
@@ -25845,13 +26136,34 @@ function CategoryTabRaw({ receipts, onFilterCategory }) {
           const category = detectCategory(receipt);
           const catInfo = getCategoryInfo(category);
           const actionTitle = resolveActionTitle(receipt);
+          const actionTitleTooltip = resolveActionTitleTooltip(receipt);
           const actionType = resolveActionType(receipt);
           const actionSubtitle = resolveActionSubtitle(receipt);
           return /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { className: "border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2.5", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `${catInfo.color}`, "aria-hidden": "true", children: catInfo.icon }) }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2.5", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col min-w-0", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-medium text-brand-dark truncate block max-w-[260px]", children: actionTitle }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[11px] text-slate-400 truncate block max-w-[260px]", children: actionSubtitle ?? actionType })
+              /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                "span",
+                {
+                  className: "text-sm font-medium text-brand-dark line-clamp-2 break-words block max-w-[70vw] sm:max-w-[420px] lg:max-w-[520px]",
+                  title: actionTitleTooltip,
+                  children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true", children: actionTitle }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: actionTitleTooltip })
+                  ]
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                "span",
+                {
+                  className: "text-[11px] text-slate-400 truncate block max-w-[70vw] sm:max-w-[420px] lg:max-w-[520px]",
+                  title: actionSubtitle ?? actionType,
+                  children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true", children: actionSubtitle ?? actionType }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: actionSubtitle ?? actionType })
+                  ]
+                }
+              )
             ] }) }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2.5 hidden md:table-cell", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-slate-500", children: harnessDisplayName(receipt.harness) }) }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2.5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(DecisionBadge, { decision: receipt.policy_decision }) }),
@@ -25941,13 +26253,13 @@ const DECISION_LABELS = {
 const EXECUTION_LABELS = {
   attempted: "Attempt recorded",
   prevented: "Prevented before execution",
-  allowed_unconfirmed: "Allowed; execution not confirmed",
+  allowed_unconfirmed: "Result not recorded",
   confirmed_success: "Execution confirmed successful",
   confirmed_failure: "Execution confirmed failed",
   unpaired_post: "Execution observed; initial decision unavailable"
 };
 const PROOF_LABELS = {
-  pre_hook: "Pre-execution check only",
+  pre_hook: "Before-command check recorded",
   post_hook: "Post-execution proof recorded",
   unpaired_post: "Unpaired post-execution proof"
 };
@@ -26045,11 +26357,11 @@ function commandTrendPoints(analytics, limit = 14) {
 }
 function commandExecutionEvidenceCopy(harness, hasPostProof) {
   if (harness === null) {
-    return hasPostProof ? "This view includes correlated post-execution evidence on this page." : "No correlated post-execution evidence appears on this page. Allowed commands remain unconfirmed unless post-execution proof is recorded.";
+    return hasPostProof ? "Some commands on this page have a matching result recorded after Guard's decision." : "No matching run results appear on this page. For allowed commands, Guard checked them before they could run but cannot confirm what happened afterward.";
   }
   const source = harnessDisplayName(harness);
-  if (hasPostProof) return `${source} includes correlated post-execution evidence on this page.`;
-  return `No correlated post-execution evidence from ${source} appears on this page. Allowed commands remain unconfirmed unless post-execution proof is recorded.`;
+  if (hasPostProof) return `Some ${source} commands on this page have a matching result recorded after Guard's decision.`;
+  return `No matching ${source} run results appear on this page. For allowed commands, Guard checked them before they could run but cannot confirm what happened afterward.`;
 }
 function homeCommandActivityModel(analytics) {
   if (analytics.commands_checked === 0) return null;
@@ -26177,26 +26489,32 @@ function CommandActivityDetail(props) {
     /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(CommandValue, { preview: props.activity.invocation_preview }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceField, { label: "Decision", value: commandDecisionLabel(props.activity.policy_action) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceField, { label: "Execution proof", value: commandExecutionLabel(props.activity.execution_status) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceField, { label: "Proof source", value: commandProofLabel(props.activity.proof_level) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceField, { label: "Interaction", value: commandInteractionLabel(props.activity) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceField, { label: "Decision reason", value: commandReasonLabel(props.activity.decision_reason_code) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceField, { label: "Parse result", value: parseConfidenceLabel(props.activity.parse_confidence) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceField, { label: "Authorization reuse", value: approvalReuseLabel(props.activity.approval_reuse_status) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        EvidenceField,
-        {
-          label: "Containment evidence",
-          value: props.activity.decision_reason_code === "containment" ? "Recorded as controlling reason; details unavailable" : "Not recorded as controlling reason"
-        }
-      ),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        EvidenceField,
-        {
-          label: "Workflow capability",
-          value: props.activity.decision_reason_code === "capability" ? "Recorded as controlling reason; details unavailable" : "Not recorded as controlling reason"
-        }
-      )
+      /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceField, { label: "Run result", value: commandExecutionLabel(props.activity.execution_status) })
+    ] }),
+    props.activity.execution_status === "allowed_unconfirmed" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm leading-6 text-slate-600", children: "Guard checked this command before the app could run it and allowed it. No matching result was recorded, so Guard cannot tell whether the app ran the command or whether it succeeded." }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "group border-t border-slate-100 pt-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer text-sm font-medium text-brand-blue focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue", children: "How Guard checked it" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceField, { label: "Proof source", value: commandProofLabel(props.activity.proof_level) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceField, { label: "Interaction", value: commandInteractionLabel(props.activity) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceField, { label: "Decision reason", value: commandReasonLabel(props.activity.decision_reason_code) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceField, { label: "Parse result", value: parseConfidenceLabel(props.activity.parse_confidence) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceField, { label: "Authorization reuse", value: approvalReuseLabel(props.activity.approval_reuse_status) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          EvidenceField,
+          {
+            label: "Containment evidence",
+            value: props.activity.decision_reason_code === "containment" ? "Recorded as controlling reason; details unavailable" : "Not recorded as controlling reason"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          EvidenceField,
+          {
+            label: "Workflow capability",
+            value: props.activity.decision_reason_code === "capability" ? "Recorded as controlling reason; details unavailable" : "Not recorded as controlling reason"
+          }
+        )
+      ] })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Rule evidence" }),
@@ -26333,11 +26651,11 @@ function CommandActivityFiltersPanel(props) {
         /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: "All rules" }),
         rules.map((rule) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: rule.value, children: rule.label }, rule.value))
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs(SelectField, { label: "Execution proof", value: props.filters.execution_status ?? "", onChange: handleExecution, children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: "All execution states" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(SelectField, { label: "Run result", value: props.filters.execution_status ?? "", onChange: handleExecution, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: "All run results" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "attempted", children: "Attempt recorded" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "prevented", children: "Prevented" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "allowed_unconfirmed", children: "Allowed, unconfirmed" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "allowed_unconfirmed", children: "Result not recorded" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "confirmed_success", children: "Confirmed success" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "confirmed_failure", children: "Confirmed failure" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "unpaired_post", children: "Unpaired post proof" })
@@ -26613,17 +26931,17 @@ function CommandActivitySummary(props) {
       /* @__PURE__ */ jsxRuntimeExports.jsx(
         Metric,
         {
-          label: "Post-proof coverage",
+          label: "Run results recorded",
           value: globalOnly ? "Global only" : metrics.postProof,
-          detail: globalOnly ? "Not available for this filter" : `${commandProofCoveragePercent(analytics)}% of checks have correlated proof`
+          detail: globalOnly ? "Not available for this filter" : `${commandProofCoveragePercent(analytics)}% of checks have matching results`
         }
       ),
       /* @__PURE__ */ jsxRuntimeExports.jsx(
         Metric,
         {
-          label: "Allowed, unconfirmed",
+          label: "Allowed; result not recorded",
           value: globalOnly ? "Global only" : metrics.unconfirmed,
-          detail: globalOnly ? "Not available for this filter" : "Execution not confirmed"
+          detail: globalOnly ? "Not available for this filter" : "No matching result was recorded"
         }
       )
     ] }),
@@ -26689,7 +27007,7 @@ function CommandActivityTable(props) {
         /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-3 py-2.5", children: "Command" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-3 py-2.5", children: "App" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-3 py-2.5", children: "Decision" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-3 py-2.5", children: "Execution proof" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-3 py-2.5", children: "Run result" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-3 py-2.5", children: "Rule evidence" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-3 py-2.5", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Open detail" }) })
       ] }) }),
@@ -27978,41 +28296,34 @@ function useRequestReadState() {
   );
 }
 const REQUEST_READ_STATE_LIMIT = 5e4;
-function isBulkApproveGateReady(gate) {
-  return gate?.enabled === true && gate?.configured === true;
+function BulkDrawerShell(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "div",
+    {
+      className: "fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-0 backdrop-blur-sm sm:items-center sm:p-4",
+      role: "dialog",
+      "aria-modal": "true",
+      "aria-labelledby": props.labelledBy,
+      onClick: (event) => {
+        if (event.target === event.currentTarget) props.onClose();
+      },
+      children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "form",
+        {
+          onSubmit: (event) => {
+            event.preventDefault();
+            props.onSubmit?.(event);
+          },
+          className: "guard-fade-in flex max-h-[92vh] w-full max-w-xl flex-col overflow-hidden rounded-t-2xl border border-slate-200 bg-white shadow-2xl sm:rounded-2xl",
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex-1 overflow-y-auto px-5 py-6 sm:px-7", children: props.children }),
+            props.footer ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "border-t border-slate-100 bg-white/95 px-5 py-3.5 backdrop-blur sm:px-7", children: props.footer }) : null
+          ]
+        }
+      )
+    }
+  );
 }
-function validateBulkApproveCredentials(gate, credentials) {
-  if (!isBulkApproveGateReady(gate)) {
-    return "Set up an approval gate in Settings before bulk approval.";
-  }
-  if (gate?.totp_enabled === true) {
-    return credentials.totpCode.trim() ? null : "Enter your authenticator code to continue.";
-  }
-  if (!credentials.password.trim()) {
-    return "Enter your approval password to continue.";
-  }
-  return null;
-}
-function buildBulkGateCredentials(gate, password, totpCode) {
-  if (!isBulkApproveGateReady(gate)) {
-    return void 0;
-  }
-  if (gate?.totp_enabled === true) {
-    return {
-      approval_totp_code: totpCode.trim(),
-      approval_gate_use_cooldown: false
-    };
-  }
-  return {
-    approval_password: password.trim(),
-    approval_gate_use_cooldown: false
-  };
-}
-const TIER_LABEL = {
-  low: "Low risk",
-  elevated: "Elevated risk",
-  high: "High risk"
-};
 function toneRing(tone) {
   if (tone === "attention") {
     return "border-brand-attention/30 bg-brand-attention/[0.06]";
@@ -28037,6 +28348,11 @@ function toneIcon(tone) {
   }
   return HiMiniShieldCheck;
 }
+const TIER_LABEL = {
+  low: "Low risk",
+  elevated: "Elevated risk",
+  high: "High risk"
+};
 function QueueBulkStickyBar(props) {
   if (!props.visible) return null;
   const unit = props.selectedActionCount === 1 ? "read" : "reads";
@@ -28180,230 +28496,223 @@ function QueueBulkDrawer(props) {
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       "button",
       {
-        type: "button",
-        onClick: props.onConfirmApprove,
+        type: "submit",
         disabled: props.step === "submitting" || !props.canConfirm,
         className: "min-h-11 rounded-full bg-brand-blue px-6 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-blue/90 disabled:cursor-not-allowed disabled:opacity-50",
         children: submitLabel
       }
     )
   ] });
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs(BulkDrawerShell, { onClose: props.onCancel, labelledBy: "guard-bulk-drawer-title", footer: actionFooter, children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { className: "flex items-start justify-between gap-4", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "span",
-            {
-              className: `inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${toneChip(disclosure.tone)}`,
-              children: TIER_LABEL[disclosure.tier]
-            }
-          ),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-mono text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground", children: "Bulk approval" })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { id: "guard-bulk-drawer-title", className: "mt-2 text-xl font-semibold tracking-tight text-brand-dark", children: [
-          "Review ",
-          props.selectedActionCount,
-          " selected ",
-          unit
-        ] })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "button",
-        {
-          type: "button",
-          onClick: props.onCancel,
-          "aria-label": "Close bulk approval",
-          className: "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-brand-dark",
-          children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "h-4 w-4", "aria-hidden": "true" })
-        }
-      )
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      "section",
-      {
-        "aria-label": "Risk disclosure",
-        className: `mt-6 rounded-2xl border p-5 ${toneRing(disclosure.tone)}`,
-        children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "span",
-            {
-              className: `inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${disclosure.tone === "attention" ? "bg-brand-attention/10" : disclosure.tone === "amber" ? "bg-amber-100" : "bg-brand-green/10"}`,
-              children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-                DisclosureIcon,
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    BulkDrawerShell,
+    {
+      onClose: props.onCancel,
+      labelledBy: "guard-bulk-drawer-title",
+      footer: actionFooter,
+      onSubmit: (event) => {
+        event.preventDefault();
+        if (props.step !== "submitting" && props.canConfirm) props.onConfirmApprove();
+      },
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { className: "flex items-start justify-between gap-4", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "span",
                 {
-                  className: `h-5 w-5 ${disclosure.tone === "attention" ? "text-brand-attention" : disclosure.tone === "amber" ? "text-amber-600" : "text-brand-green"}`,
-                  "aria-hidden": "true"
+                  className: `inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${toneChip(disclosure.tone)}`,
+                  children: TIER_LABEL[disclosure.tier]
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-mono text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground", children: "Bulk approval" })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { id: "guard-bulk-drawer-title", className: "mt-2 text-xl font-semibold tracking-tight text-brand-dark", children: [
+              "Review ",
+              props.selectedActionCount,
+              " selected ",
+              unit
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              onClick: props.onCancel,
+              "aria-label": "Close bulk approval",
+              className: "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-brand-dark",
+              children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "h-4 w-4", "aria-hidden": "true" })
+            }
+          )
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "section",
+          {
+            "aria-label": "Risk disclosure",
+            className: `mt-6 rounded-2xl border p-5 ${toneRing(disclosure.tone)}`,
+            children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "span",
+                {
+                  className: `inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${disclosure.tone === "attention" ? "bg-brand-attention/10" : disclosure.tone === "amber" ? "bg-amber-100" : "bg-brand-green/10"}`,
+                  children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    DisclosureIcon,
+                    {
+                      className: `h-5 w-5 ${disclosure.tone === "attention" ? "text-brand-attention" : disclosure.tone === "amber" ? "text-amber-600" : "text-brand-green"}`,
+                      "aria-hidden": "true"
+                    }
+                  )
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-sm font-semibold text-brand-dark", children: disclosure.headline }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1.5 text-[13px] leading-relaxed text-brand-dark/75", children: disclosure.body }),
+                disclosure.bullets.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-3 space-y-1.5", children: disclosure.bullets.map((bullet) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                  "li",
+                  {
+                    className: "flex items-start gap-2 text-xs leading-5 text-brand-dark/85",
+                    children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-1.5 h-1 w-1 shrink-0 rounded-full bg-current opacity-50", "aria-hidden": "true" }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: bullet })
+                    ]
+                  },
+                  bullet
+                )) })
+              ] })
+            ] })
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": "Selected actions", className: "mt-6", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-baseline justify-between", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground", children: "What you are approving" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "font-mono text-[11px] text-muted-foreground", children: [
+              props.selectedActionCount,
+              " ",
+              unit
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2.5 space-y-3 rounded-xl bg-slate-50/80 px-4 py-3", children: [
+            shownGroups.map(([categoryLabel, lines]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-[11px] font-semibold text-brand-dark/70", children: [
+                categoryLabel,
+                " ",
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "font-normal text-muted-foreground", children: [
+                  "(",
+                  lines.length + lines.reduce((sum, l) => sum + l.duplicateCount, 0),
+                  ")"
+                ] })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("ul", { className: "mt-1.5 space-y-1.5", children: [
+                lines.slice(0, 3).map((line) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "text-xs text-brand-dark", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium", children: line.harnessLabel }),
+                  line.path !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block truncate font-mono text-[11px] text-brand-dark/60", children: line.path }) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block text-brand-dark/60", children: line.title })
+                ] }, line.requestId)),
+                lines.length > 3 && /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "text-[11px] text-muted-foreground", children: [
+                  "+ ",
+                  lines.length - 3,
+                  " more"
+                ] })
+              ] })
+            ] }, categoryLabel)),
+            hiddenCount > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-[11px] text-muted-foreground", children: [
+              "and ",
+              hiddenCount,
+              " more selected ",
+              unit
+            ] })
+          ] })
+        ] }),
+        props.sensitiveFileReadCount > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-3 text-[11px] leading-5 text-brand-attention", children: [
+          props.sensitiveFileReadCount,
+          " sensitive",
+          " ",
+          props.sensitiveFileReadCount === 1 ? "action stays" : "actions stay",
+          " in the queue for individual review."
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": "Confirm approval", className: "mt-6", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground", children: "Step 2 of 2" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-px flex-1 bg-slate-200", "aria-hidden": "true" })
+          ] }),
+          gateReady ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 space-y-3 rounded-xl border border-slate-200 bg-white p-4", children: [
+            props.approvalGate?.totp_enabled !== true && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniKey, { className: "h-4 w-4 text-brand-blue", "aria-hidden": "true" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "guard-bulk-approval-password", className: "text-sm font-semibold text-brand-dark", children: "Approval password" })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "input",
+                {
+                  id: "guard-bulk-approval-password",
+                  type: "password",
+                  value: props.bulkApprovePassword,
+                  onChange: props.onBulkApprovePasswordChange,
+                  placeholder: "Enter your approval password",
+                  autoComplete: "current-password",
+                  disabled: props.step === "submitting",
+                  className: "min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 disabled:opacity-60"
                 }
               )
-            }
-          ),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-sm font-semibold text-brand-dark", children: disclosure.headline }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1.5 text-[13px] leading-relaxed text-brand-dark/75", children: disclosure.body }),
-            disclosure.bullets.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-3 space-y-1.5", children: disclosure.bullets.map((bullet) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
-              "li",
+            ] }),
+            props.approvalGate?.totp_enabled === true && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniKey, { className: "h-4 w-4 text-brand-blue", "aria-hidden": "true" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "guard-bulk-approval-totp", className: "text-sm font-semibold text-brand-dark", children: "Authenticator code" })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "input",
+                {
+                  id: "guard-bulk-approval-totp",
+                  type: "text",
+                  inputMode: "numeric",
+                  pattern: "[0-9]*",
+                  value: props.bulkApproveTotpCode,
+                  onChange: props.onBulkApproveTotpCodeChange,
+                  placeholder: "6-digit code",
+                  disabled: props.step === "submitting",
+                  className: "min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 disabled:opacity-60"
+                }
+              )
+            ] }),
+            disclosure.requiresTypedConfirm && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-lg bg-brand-attention/[0.05] px-3 py-2.5", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { htmlFor: "guard-bulk-typed-confirm", className: "block text-xs font-semibold text-brand-dark", children: [
+                "Type",
+                " ",
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-mono font-bold text-brand-attention", children: disclosure.confirmPhrase }),
+                " ",
+                "to confirm"
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "input",
+                {
+                  id: "guard-bulk-typed-confirm",
+                  type: "text",
+                  value: props.typedConfirm,
+                  onChange: props.onTypedConfirmChange,
+                  autoComplete: "off",
+                  spellCheck: false,
+                  disabled: props.step === "submitting",
+                  "aria-invalid": props.typedConfirm.length > 0 && !props.confirmMatches,
+                  className: "mt-2 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 font-mono text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 disabled:opacity-60",
+                  placeholder: disclosure.confirmPhrase
+                }
+              )
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] leading-4 text-muted-foreground", children: buildBulkApproveConsequenceCopy(props.selectedActionCount) })
+          ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 rounded-xl border border-brand-attention/20 bg-brand-attention/[0.04] px-4 py-3", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Approval password required" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-5 text-brand-dark/70", children: "Set up your local approval gate before approving multiple actions at once." }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "a",
               {
-                className: "flex items-start gap-2 text-xs leading-5 text-brand-dark/85",
-                children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-1.5 h-1 w-1 shrink-0 rounded-full bg-current opacity-50", "aria-hidden": "true" }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: bullet })
-                ]
-              },
-              bullet
-            )) })
-          ] })
+                href: props.settingsHref,
+                className: "mt-2.5 inline-flex rounded-full border border-brand-blue/30 bg-white px-3.5 py-1.5 text-xs font-medium text-brand-blue no-underline transition-colors hover:bg-brand-blue/5",
+                children: "Open Settings"
+              }
+            )
+          ] }),
+          props.errorMessage !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-xs text-brand-purple", role: "alert", children: props.errorMessage })
         ] })
-      }
-    ),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": "Selected actions", className: "mt-6", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-baseline justify-between", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground", children: "What you are approving" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "font-mono text-[11px] text-muted-foreground", children: [
-          props.selectedActionCount,
-          " ",
-          unit
-        ] })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2.5 space-y-3 rounded-xl bg-slate-50/80 px-4 py-3", children: [
-        shownGroups.map(([categoryLabel, lines]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-[11px] font-semibold text-brand-dark/70", children: [
-            categoryLabel,
-            " ",
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "font-normal text-muted-foreground", children: [
-              "(",
-              lines.length + lines.reduce((sum, l) => sum + l.duplicateCount, 0),
-              ")"
-            ] })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("ul", { className: "mt-1.5 space-y-1.5", children: [
-            lines.slice(0, 3).map((line) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "text-xs text-brand-dark", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium", children: line.harnessLabel }),
-              line.path !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block truncate font-mono text-[11px] text-brand-dark/60", children: line.path }) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block text-brand-dark/60", children: line.title })
-            ] }, line.requestId)),
-            lines.length > 3 && /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "text-[11px] text-muted-foreground", children: [
-              "+ ",
-              lines.length - 3,
-              " more"
-            ] })
-          ] })
-        ] }, categoryLabel)),
-        hiddenCount > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-[11px] text-muted-foreground", children: [
-          "and ",
-          hiddenCount,
-          " more selected ",
-          unit
-        ] })
-      ] })
-    ] }),
-    props.sensitiveFileReadCount > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-3 text-[11px] leading-5 text-brand-attention", children: [
-      props.sensitiveFileReadCount,
-      " sensitive",
-      " ",
-      props.sensitiveFileReadCount === 1 ? "action stays" : "actions stay",
-      " in the queue for individual review."
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": "Confirm approval", className: "mt-6", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground", children: "Step 2 of 2" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-px flex-1 bg-slate-200", "aria-hidden": "true" })
-      ] }),
-      gateReady ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 space-y-3 rounded-xl border border-slate-200 bg-white p-4", children: [
-        props.approvalGate?.totp_enabled !== true && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniKey, { className: "h-4 w-4 text-brand-blue", "aria-hidden": "true" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "guard-bulk-approval-password", className: "text-sm font-semibold text-brand-dark", children: "Approval password" })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "input",
-            {
-              id: "guard-bulk-approval-password",
-              type: "password",
-              value: props.bulkApprovePassword,
-              onChange: props.onBulkApprovePasswordChange,
-              placeholder: "Enter your approval password",
-              autoComplete: "current-password",
-              disabled: props.step === "submitting",
-              className: "min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 disabled:opacity-60"
-            }
-          )
-        ] }),
-        props.approvalGate?.totp_enabled === true && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniKey, { className: "h-4 w-4 text-brand-blue", "aria-hidden": "true" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "guard-bulk-approval-totp", className: "text-sm font-semibold text-brand-dark", children: "Authenticator code" })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "input",
-            {
-              id: "guard-bulk-approval-totp",
-              type: "text",
-              inputMode: "numeric",
-              pattern: "[0-9]*",
-              value: props.bulkApproveTotpCode,
-              onChange: props.onBulkApproveTotpCodeChange,
-              placeholder: "6-digit code",
-              disabled: props.step === "submitting",
-              className: "min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 disabled:opacity-60"
-            }
-          )
-        ] }),
-        disclosure.requiresTypedConfirm && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-lg bg-brand-attention/[0.05] px-3 py-2.5", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { htmlFor: "guard-bulk-typed-confirm", className: "block text-xs font-semibold text-brand-dark", children: [
-            "Type",
-            " ",
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-mono font-bold text-brand-attention", children: disclosure.confirmPhrase }),
-            " ",
-            "to confirm"
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "input",
-            {
-              id: "guard-bulk-typed-confirm",
-              type: "text",
-              value: props.typedConfirm,
-              onChange: props.onTypedConfirmChange,
-              autoComplete: "off",
-              spellCheck: false,
-              disabled: props.step === "submitting",
-              "aria-invalid": props.typedConfirm.length > 0 && !props.confirmMatches,
-              className: "mt-2 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 font-mono text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 disabled:opacity-60",
-              placeholder: disclosure.confirmPhrase
-            }
-          )
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] leading-4 text-muted-foreground", children: buildBulkApproveConsequenceCopy(props.selectedActionCount) })
-      ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 rounded-xl border border-brand-attention/20 bg-brand-attention/[0.04] px-4 py-3", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Approval password required" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-5 text-brand-dark/70", children: "Set up your local approval gate before approving multiple actions at once." }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "a",
-          {
-            href: props.settingsHref,
-            className: "mt-2.5 inline-flex rounded-full border border-brand-blue/30 bg-white px-3.5 py-1.5 text-xs font-medium text-brand-blue no-underline transition-colors hover:bg-brand-blue/5",
-            children: "Open Settings"
-          }
-        )
-      ] }),
-      props.errorMessage !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-xs text-brand-purple", role: "alert", children: props.errorMessage })
-    ] })
-  ] });
-}
-function BulkDrawerShell(props) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(
-    "div",
-    {
-      className: "fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-0 backdrop-blur-sm sm:items-center sm:p-4",
-      role: "dialog",
-      "aria-modal": "true",
-      "aria-labelledby": props.labelledBy,
-      onClick: (event) => {
-        if (event.target === event.currentTarget) props.onClose();
-      },
-      children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "guard-fade-in flex max-h-[92vh] w-full max-w-xl flex-col overflow-hidden rounded-t-2xl border border-slate-200 bg-white shadow-2xl sm:rounded-2xl", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex-1 overflow-y-auto px-5 py-6 sm:px-7", children: props.children }),
-        props.footer ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "border-t border-slate-100 bg-white/95 px-5 py-3.5 backdrop-blur sm:px-7", children: props.footer }) : null
-      ] })
+      ]
     }
   );
 }
@@ -28835,35 +29144,29 @@ function useQueueBulkApprove(props) {
     }
   };
 }
-function approvalGateCooldownLabel(seconds) {
-  if (seconds === 0) return "Every approval";
-  if (seconds === 900) return "15 minutes";
-  if (seconds === 3600) return "1 hour";
-  return `${seconds} seconds`;
-}
-function requiresApprovalPasswordPrompt(cooldownActive, strictAllDecisions, selectedScope) {
-  if (selectedScope === "global") {
-    return true;
-  }
-  if (!cooldownActive) {
-    return true;
-  }
-  return strictAllDecisions;
-}
-function approvalProofModalTitle(recentlySatisfied, needsPassword) {
+function approvalProofModalTitle(locked, recentlySatisfied, needsPassword) {
+  if (locked) return "Approval gate temporarily locked";
   if (recentlySatisfied) return "Recently confirmed";
   if (needsPassword) return "Approval password required";
   return "Authenticator code required";
 }
 function ApprovalPasswordModal(props) {
   const passwordRef = reactExports.useRef(null);
+  const [now2, setNow] = reactExports.useState(() => Date.now());
   const recentlySatisfied = approvalProofRecentlySatisfied(props.gate);
   const needsPassword = approvalProofRequiresPassword(props.gate);
+  const lockRemainingSeconds = approvalGateLockRemainingSeconds(props.gate, now2);
+  const gateLocked = lockRemainingSeconds > 0;
   const submitDisabled = isApprovalProofSubmitDisabled(
     props.gate,
     { approvalPassword: props.approvalPassword, approvalTotpCode: props.approvalTotpCode },
     false
   );
+  reactExports.useEffect(() => {
+    if (!gateLocked) return void 0;
+    const timer = window.setInterval(() => setNow(Date.now()), 1e3);
+    return () => window.clearInterval(timer);
+  }, [gateLocked]);
   reactExports.useEffect(() => {
     if (recentlySatisfied) return void 0;
     const timer = setTimeout(() => {
@@ -28871,6 +29174,13 @@ function ApprovalPasswordModal(props) {
     }, 50);
     return () => window.clearTimeout(timer);
   }, [recentlySatisfied]);
+  let modalDescription = "Guard needs a fresh proof before it can save this decision.";
+  if (recentlySatisfied) {
+    modalDescription = "A new authenticator code is not needed yet.";
+  }
+  if (gateLocked) {
+    modalDescription = `Approval gate is temporarily locked. Try again in ${lockRemainingSeconds} seconds.`;
+  }
   const showCooldownOption = props.gate.cooldown_seconds > 0 && !props.gate.cooldown_active && props.gate.totp_enabled !== true;
   const handleBackdropClick = reactExports.useCallback(
     (e) => {
@@ -28905,13 +29215,13 @@ function ApprovalPasswordModal(props) {
               {
                 id: "approval-password-modal-title",
                 className: "text-lg font-semibold tracking-tight text-brand-dark",
-                children: approvalProofModalTitle(recentlySatisfied, needsPassword)
+                children: approvalProofModalTitle(gateLocked, recentlySatisfied, needsPassword)
               }
             ),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/70", children: recentlySatisfied ? "A new authenticator code is not needed yet." : "Guard needs a fresh proof before it can save this decision." })
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/70", children: modalDescription })
           ] })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 space-y-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5 space-y-3", children: gateLocked ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "rounded-xl border border-brand-attention/25 bg-brand-attention/[0.06] px-4 py-3 text-sm leading-relaxed text-brand-dark", role: "status", children: "Guard will accept a new approval proof after the lock expires. No decision was saved." }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             ApprovalProofFieldInputs,
             {
@@ -28937,7 +29247,7 @@ function ApprovalPasswordModal(props) {
             approvalGateCooldownLabel(props.gate.cooldown_seconds).toLowerCase(),
             " (use cooldown)"
           ] })
-        ] }),
+        ] }) }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             "button",
@@ -29263,7 +29573,7 @@ function ScannerEvidenceSection(props) {
 function buildTopAlertItems(item) {
   const items = [];
   const secondaryRiskSummary = resolveSecondaryRiskSummary(item);
-  const pauseReason = whyPaused(item);
+  const pauseReason = isWatchOnlyObservation(item) ? null : whyPaused(item);
   if (secondaryRiskSummary) {
     items.push({
       id: "secondary-risk",
@@ -29593,23 +29903,26 @@ function ReviewEmptyState({ runtime, resolutionMessage, codexResume, onRetryResu
 function PrimaryActionCard({ item }) {
   const action = buildPrimaryReviewAction(item);
   const workingDirectory = resolveRequestWorkingDirectory(item);
+  const watchOnlyObservation = isWatchOnlyObservation(item);
+  const actionDescription = watchOnlyObservation ? "observed action" : "stopped action";
+  const actionLabel = watchOnlyObservation ? "Would have stopped" : action.label;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "What was stopped" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: watchOnlyObservation ? "What Watch observed" : "What was stopped" }),
         action.detail !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-dark/70", children: action.detail })
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "rounded-full border border-brand-blue/15 bg-brand-blue/[0.04] px-3 py-1 font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-brand-blue", children: action.label })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "rounded-full border border-brand-blue/15 bg-brand-blue/[0.04] px-3 py-1 font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-brand-blue", children: actionLabel })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(
         LoggedActionPanel,
         {
-          label: action.label,
+          label: actionLabel,
           text: action.text,
-          copyAriaLabel: "Copy full stopped action to clipboard",
-          expandAriaLabel: "Expand full stopped action",
-          collapseAriaLabel: "Collapse full stopped action"
+          copyAriaLabel: `Copy full ${actionDescription} to clipboard`,
+          expandAriaLabel: `Expand full ${actionDescription}`,
+          collapseAriaLabel: `Collapse full ${actionDescription}`
         },
         item.request_id
       ),
@@ -29622,6 +29935,9 @@ function PrimaryActionCard({ item }) {
   ] });
 }
 function buildWhatWouldHappen(item) {
+  if (isWatchOnlyObservation(item)) {
+    return `Watch allowed this action to continue. ${watchProtectedOutcome(item)}`;
+  }
   const type = item.artifact_type;
   if (type?.includes("file_write") || type?.includes("file_read")) {
     return `Without Guard, ${harnessDisplayName(item.harness)} would access "${item.artifact_name ?? item.artifact_id}" immediately. Guard paused it so you can review first.`;
@@ -29659,6 +29975,9 @@ function resolvedActionCopy(item, action, persistedExactAction) {
   if (action === "allow") return "Approved: action can proceed";
   return "Blocked: action stopped";
 }
+function approvalGateRefreshFailureMessage(message) {
+  return `${message} Unable to refresh approval settings. Retry to refresh.`;
+}
 function ReviewDecisionCard(props) {
   const detail = props.detail;
   const item = detail?.item ?? null;
@@ -29677,7 +29996,9 @@ function ReviewDecisionCard(props) {
   const [pendingAction, setPendingAction] = reactExports.useState(null);
   const [pendingContractKey, setPendingContractKey] = reactExports.useState(null);
   const [rememberExactAction, setRememberExactAction] = reactExports.useState(false);
+  const [effectiveApprovalGate, setEffectiveApprovalGate] = reactExports.useState(props.approvalGate);
   const allowButtonRef = reactExports.useRef(null);
+  const approvalGate = effectiveApprovalGate;
   const availableScopeChoices = reactExports.useMemo(
     () => item ? standardScopeChoicesForRequest(item, "allow") : [],
     [item]
@@ -29703,6 +30024,9 @@ function ReviewDecisionCard(props) {
   const hasAllowScope = availableScopeChoices.length + advancedScopeOptions.length > 0;
   const decisionContractKey = item ? approvalDecisionContractKey(item) : null;
   const decisionSubjectKey = item ? approvalDecisionSubjectKey(item) : null;
+  reactExports.useEffect(() => {
+    setEffectiveApprovalGate(props.approvalGate);
+  }, [props.approvalGate]);
   reactExports.useEffect(() => {
     if (item) {
       setAllowScope(recommendedScopeForAction(item, "allow") ?? "artifact");
@@ -29734,18 +30058,29 @@ function ReviewDecisionCard(props) {
   const handleResolve = reactExports.useCallback(
     async (action) => {
       if (!item || resolutionBlockReason !== null) return;
+      const requestedScope = action === "allow" ? allowScope : blockScope;
+      const gate = approvalGate;
+      const gateRequired = approvalGateRequiredForResolution(gate, action, requestedScope);
+      if (gateRequired && approvalGateIsLocked(gate)) {
+        setErrorMessage(
+          `Approval gate is temporarily locked. Try again in ${approvalGateLockRemainingSeconds(gate)} seconds.`
+        );
+        return;
+      }
       setSubmitting(action);
       setErrorMessage(null);
       try {
-        const requestedScope = action === "allow" ? allowScope : blockScope;
         const persistExactAction = willPersistExactAction(
           item,
           action,
           requestedScope,
           action === "allow" ? rememberExactAction : watchOnlyObservation
         );
-        const gate = props.approvalGate;
-        const includeGateFields = gate?.enabled === true && gate?.configured === true && requiresApprovalPasswordPrompt(gate.cooldown_active, gate.strict_all_decisions, requestedScope);
+        const includeGateFields = gateRequired && gate?.configured === true && requiresApprovalPasswordPrompt(
+          gate.cooldown_active,
+          gate.strict_all_decisions,
+          requestedScope
+        );
         const proof = includeGateFields ? buildApprovalProofCredentials(gate, { approvalPassword, approvalTotpCode }) : {};
         await props.onResolve({
           ...buildDecisionPayload({
@@ -29765,7 +30100,17 @@ function ReviewDecisionCard(props) {
         setPendingAction(null);
         setPendingContractKey(null);
       } catch (err) {
-        setErrorMessage(err instanceof Error ? err.message : "Something went wrong. Try again.");
+        const message = err instanceof Error ? err.message : "Something went wrong. Try again.";
+        setErrorMessage(message);
+        if (err instanceof GuardRequestResolutionError && err.status === 423 && err.payload?.["error"] === "approval_gate_locked") {
+          setSubmitting(null);
+          try {
+            const refreshedGate = await fetchResolvedApprovalGate();
+            setEffectiveApprovalGate(refreshedGate);
+          } catch {
+            setErrorMessage(approvalGateRefreshFailureMessage(message));
+          }
+        }
       } finally {
         setSubmitting(null);
       }
@@ -29777,7 +30122,7 @@ function ReviewDecisionCard(props) {
       watchOnlyObservation,
       rememberExactAction,
       props.onResolve,
-      props.approvalGate,
+      approvalGate,
       approvalPassword,
       approvalTotpCode,
       useCooldown,
@@ -29797,8 +30142,19 @@ function ReviewDecisionCard(props) {
       }
       setLastAction(action);
       const requestedScope = action === "allow" ? allowScope : blockScope;
-      const gate = props.approvalGate;
-      const gateEnabled = gate?.enabled === true && gate?.configured === true && requiresApprovalPasswordPrompt(gate.cooldown_active, gate.strict_all_decisions, requestedScope);
+      const gate = approvalGate;
+      const gateRequired = approvalGateRequiredForResolution(gate, action, requestedScope);
+      if (gateRequired && approvalGateIsLocked(gate)) {
+        setErrorMessage(
+          `Approval gate is temporarily locked. Try again in ${approvalGateLockRemainingSeconds(gate)} seconds.`
+        );
+        return;
+      }
+      const gateEnabled = gateRequired && gate?.configured === true && requiresApprovalPasswordPrompt(
+        gate.cooldown_active,
+        gate.strict_all_decisions,
+        requestedScope
+      );
       if (!gateEnabled) {
         void handleResolve(action);
         return;
@@ -29826,7 +30182,7 @@ function ReviewDecisionCard(props) {
       decisionContractKey,
       handleResolve,
       hasAllowScope,
-      props.approvalGate,
+      approvalGate,
       resolutionBlockReason
     ]
   );
@@ -29958,6 +30314,7 @@ function ReviewDecisionCard(props) {
         /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: watchOnlyObservation ? "info" : actionPresentation.tone, children: watchOnlyObservation ? "Would have stopped" : actionPresentation.label })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(PrimaryActionCard, { item }),
+      item.scope_restrictions?.includes("provider_account_unverified_once_only") ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 text-sm leading-6 text-brand-dark", children: "Guard cannot verify this provider account. Approval applies once to this exact call; remembered approvals are unavailable." }) : null,
       resolutionBlockReason !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5 rounded-xl border border-brand-attention/30 bg-brand-attention/[0.06] p-4", role: "alert", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           HiMiniExclamationTriangle,
@@ -29968,7 +30325,15 @@ function ReviewDecisionCard(props) {
         ),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-attention", children: "This decision cannot be overridden" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-dark", children: resolutionBlockReason })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-dark", children: resolutionBlockReason }),
+          item.superseded_by_request_id ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "a",
+            {
+              className: "mt-3 inline-flex min-h-11 items-center font-semibold text-brand-blue underline",
+              href: guardAwareHref(`/requests/${encodeURIComponent(item.superseded_by_request_id)}`),
+              children: "Open the fresh review"
+            }
+          ) : null
         ] })
       ] }) }),
       topAlertItems.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5 rounded-xl border border-slate-100 bg-slate-50/50 p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ConsolidatedEvidenceAlert, { items: topAlertItems }, item.request_id) }),
@@ -29982,7 +30347,7 @@ function ReviewDecisionCard(props) {
             "aria-expanded": showConsequences,
             children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniInformationCircle, { className: "h-4 w-4", "aria-hidden": "true" }),
-              "What would happen without Guard?",
+              watchOnlyObservation ? "What Protected mode would do" : "What would happen without Guard?",
               showConsequences ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronUp, { className: "h-3 w-3", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronDown, { className: "h-3 w-3", "aria-hidden": "true" })
             ]
           }
@@ -30090,10 +30455,10 @@ function ReviewDecisionCard(props) {
         ] }, field)) })
       ] })
     ] }),
-    pendingAction !== null && props.approvalGate !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(
+    pendingAction !== null && approvalGate !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(
       ApprovalPasswordModal,
       {
-        gate: props.approvalGate,
+        gate: approvalGate,
         approvalPassword,
         approvalTotpCode,
         useCooldown,
@@ -31300,6 +31665,9 @@ function renderViewContent(props) {
   if (props.view === "extensions") {
     return props.extensionsContent;
   }
+  if (props.view === "protection-repair") {
+    return props.protectionRepairContent ?? null;
+  }
   if (props.view === "settings") {
     return props.settingsContent;
   }
@@ -31353,7 +31721,7 @@ function ApprovalCenterLayout(props) {
     onUpdateGuard,
     onReinstallGuard,
     onSetUpdateChannel
-  } = useGuardUpdate({ onReconnected: props.onGuardReconnected, enabled: props.enableUpdateStatus });
+  } = useGuardUpdate({ onReconnected: props.onGuardReconnected });
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-h-screen bg-white text-brand-dark", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       ShellNavigation,
@@ -31471,19 +31839,51 @@ function clearLabelForScope(scope) {
 }
 class ProtectionRepairFlowError extends Error {
   failedHarnesses;
-  constructor(message, failedHarnesses) {
+  signature;
+  checkReasons;
+  constructor(message, failedHarnesses, signature = "", checkReasons = {}) {
     super(message);
     this.name = "ProtectionRepairFlowError";
     this.failedHarnesses = failedHarnesses;
+    this.signature = signature;
+    this.checkReasons = checkReasons;
   }
+}
+function protectionGapSignature(checks) {
+  return repairableProtectionGaps(checks).map((check) => `${check.check_id}:${check.status}:${check.reason_code}`).sort().join("|");
+}
+const RECHECK_UNAVAILABLE_SIGNATURE = "recheck_unavailable";
+function nextProtectionRepairOutcome(tracker, signature, healthSignature = signature) {
+  return tracker?.signature === signature ? { signature, count: tracker.count + 1, healthSignature } : { signature, count: 1, healthSignature };
+}
+function repairOutcomeIsStalled(tracker, currentSignature) {
+  return tracker !== null && tracker.count >= 2 && tracker.healthSignature === currentSignature;
+}
+function resetRepairOutcomeTracker(tracker, currentSignature) {
+  return tracker !== null && tracker.healthSignature !== currentSignature ? null : tracker;
+}
+function gapReasons(checks) {
+  const reasons = {};
+  for (const check of repairableProtectionGaps(checks)) {
+    reasons[check.check_id] = check.reason_code;
+  }
+  return reasons;
 }
 function activeFailedHarnesses(failedHarnesses, repairHarnesses) {
   const repairable = new Set(repairHarnesses);
   return Array.from(new Set(failedHarnesses)).filter((harness) => repairable.has(harness));
 }
+function protectionRepairUnfinishedDetail(checkReasons) {
+  const details = Object.entries(checkReasons).sort(([left], [right]) => left.localeCompare(right)).map(([, reason]) => protectionReasonText(reason) ?? `Reason code: ${reason}`);
+  return `Guard could not finish: ${details.join(" ")}`;
+}
+function protectionRepairFinishMessage(checkReasons) {
+  return `Protection checks pass, but ${protectionRepairUnfinishedDetail(checkReasons)}`;
+}
 async function runAutomaticProtectionRepair(input) {
   const failures = [];
   const failedHarnesses = /* @__PURE__ */ new Set();
+  let repairCheckReasons = {};
   try {
     await repairApprovalCenter();
   } catch {
@@ -31504,6 +31904,7 @@ async function runAutomaticProtectionRepair(input) {
   } catch (error) {
     if (error instanceof GuardProtectionRepairError) {
       for (const harness of error.failedHarnesses) failedHarnesses.add(harness);
+      repairCheckReasons = error.checkReasons;
     }
     failures.push(error instanceof Error ? error.message : "integrity protection");
   }
@@ -31512,24 +31913,35 @@ async function runAutomaticProtectionRepair(input) {
     const detail = failures.length > 0 ? ` Repair reported: ${failures.join(", ")}.` : "";
     throw new ProtectionRepairFlowError(
       `Guard could not recheck protection. Check again in a moment.${detail}`,
-      []
+      [],
+      RECHECK_UNAVAILABLE_SIGNATURE,
+      repairCheckReasons
     );
   }
   const remainingHealth = protectionHealthFor(refreshedSnapshot);
   if (remainingHealth.state === "protected") {
+    if (Object.keys(repairCheckReasons).length > 0) {
+      return protectionRepairFinishMessage(repairCheckReasons);
+    }
     return "Automatic repairs completed. Guard rechecked every protection layer below.";
   }
   if (!hasRepairableProtectionGap(remainingHealth.checks)) {
     const hasUnsupportedGaps = remainingHealth.checks.some(isUnsupportedPlatformCheck);
     if (hasUnsupportedGaps) {
-      return "Supported protection repairs completed. Containment remains unavailable on this platform; Guard remains fail-closed.";
+      const base = "Supported protection repairs completed. Containment remains unavailable on this platform; Guard remains fail-closed.";
+      return Object.keys(repairCheckReasons).length > 0 ? `${base} ${protectionRepairUnfinishedDetail(repairCheckReasons)}` : base;
+    }
+    if (Object.keys(repairCheckReasons).length > 0) {
+      return protectionRepairFinishMessage(repairCheckReasons);
     }
     return "Automatic repairs completed. Guard rechecked every repairable protection layer below.";
   }
   const remaining = remainingProtectionRepairMessage(remainingHealth, input.displayName);
   throw new ProtectionRepairFlowError(
     remaining.message,
-    [...failedHarnesses].filter((harness) => remaining.failedHookHarnesses.includes(harness))
+    [...failedHarnesses].filter((harness) => remaining.failedHookHarnesses.includes(harness)),
+    protectionGapSignature(remainingHealth.checks),
+    { ...repairCheckReasons, ...gapReasons(remainingHealth.checks) }
   );
 }
 function useRouteFocus(view, mainSelector = "main#main-content") {
@@ -31551,24 +31963,28 @@ function useRouteFocus(view, mainSelector = "main#main-content") {
 }
 const HomeWorkspace = lazyWorkspace("home-dashboard", () => __vitePreload(() => import("./chunks/home-dashboard.js"), true ? __vite__mapDeps([0,1]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
 const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() => import("./chunks/fleet-workspace.js"), true ? __vite__mapDeps([2,3,4,5]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
-const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace.js"), true ? __vite__mapDeps([6,3,5]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
+const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace.js"), true ? __vite__mapDeps([6,3,7,5]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
 const ExtensionsWorkspace = lazyWorkspace(
   "extensions-workspace",
-  () => __vitePreload(() => import("./chunks/extensions-workspace.js"), true ? __vite__mapDeps([7,8]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
+  () => __vitePreload(() => import("./chunks/extensions-workspace.js"), true ? __vite__mapDeps([8,9,10,7]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
 );
-const AppDetailWorkspace = lazyWorkspace("app-detail-workspace", () => __vitePreload(() => import("./chunks/app-detail-workspace.js"), true ? __vite__mapDeps([9,8,4]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
+const AppDetailWorkspace = lazyWorkspace("app-detail-workspace", () => __vitePreload(() => import("./chunks/app-detail-workspace.js"), true ? __vite__mapDeps([11,10,4]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
 const HelpModal = lazyWorkspace("help-modal", () => __vitePreload(() => import("./chunks/help-modal.js"), true ? [] : void 0).then((m) => ({ default: m.HelpModal })));
 const SupplyChainHubWorkspace = lazyWorkspace(
   "supply-chain-hub-workspace",
-  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace.js").then((n) => n.d), true ? __vite__mapDeps([10,8]) : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
+  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace.js").then((n) => n.d), true ? __vite__mapDeps([12,10]) : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
 );
 const PolicyWorkspacePage = lazyWorkspace(
   "policy-workspace-page",
-  () => __vitePreload(() => import("./chunks/policy-workspace-page.js"), true ? __vite__mapDeps([11,5]) : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
+  () => __vitePreload(() => import("./chunks/policy-workspace-page.js"), true ? __vite__mapDeps([13,5]) : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
 );
 const AboutWorkspace = lazyWorkspace(
   "about-workspace",
   () => __vitePreload(() => import("./chunks/about-workspace.js"), true ? [] : void 0).then((m) => ({ default: m.AboutWorkspace }))
+);
+const ProtectionRepairPage = lazyWorkspace(
+  "protection-repair-page",
+  () => __vitePreload(() => import("./chunks/protection-repair-page.js"), true ? __vite__mapDeps([14,10,9]) : void 0).then((m) => ({ default: m.ProtectionRepairPage }))
 );
 function LazyFallback() {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex min-h-[200px] items-center justify-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-8 w-48" }) });
@@ -31610,6 +32026,7 @@ function viewTitle(view) {
   if (view === "feed-health") return "Feed Health";
   if (view === "about") return "About";
   if (view === "extensions") return "Extensions";
+  if (view === "protection-repair") return "Repair protection";
   return "App detail";
 }
 function parseAppDetail(pathname) {
@@ -31632,6 +32049,9 @@ function resolveView(pathname) {
   }
   if (pathname === "/extensions" || pathname.startsWith("/extensions/")) {
     return "extensions";
+  }
+  if (pathname === "/protection/repair") {
+    return "protection-repair";
   }
   if (pathname === "/settings") {
     return "settings";
@@ -32334,7 +32754,6 @@ function App() {
         onRetry: handleRetry,
         onRepair: handleRepair,
         onGuardReconnected: handleRetry,
-        enableUpdateStatus: view !== "inbox",
         onClearEvidence: handleClearEvidence,
         fleetContent: runtime.kind === "ready" ? /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(
           FleetWorkspace,
@@ -32351,6 +32770,7 @@ function App() {
         ) }) : null,
         appDetailContent: /* @__PURE__ */ jsxRuntimeExports.jsx(ErrorBoundary, { onReset: handleGoHome, children: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: appDetailContent }) }),
         extensionsContent: /* @__PURE__ */ jsxRuntimeExports.jsx(ErrorBoundary, { onReset: handleGoHome, children: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(ExtensionsWorkspace, { runtime: runtime.kind === "ready" ? runtime.snapshot : null, onRefreshRuntime: refreshStateAfterAction, onNavigate: navigate }) }) }),
+        protectionRepairContent: /* @__PURE__ */ jsxRuntimeExports.jsx(ErrorBoundary, { onReset: handleGoHome, children: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(ProtectionRepairPage, { onNavigate: navigate }) }) }),
         settingsContent: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(SettingsWorkspace, { onApprovalGateChange: setApprovalGate }) }),
         supplyChainHubContent: runtime.kind === "ready" ? /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(
           SupplyChainHubWorkspace,
@@ -32392,7 +32812,7 @@ clientExports.createRoot(container).render(
   /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.StrictMode, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(App, {}) })
 );
 export {
-  safeCloudConnectUrl as $,
+  protectionGapSignature as $,
   ActionButton as A,
   HiMiniSparkles as B,
   HiMiniXMark as C,
@@ -32413,170 +32833,180 @@ export {
   Badge as R,
   SectionLabel as S,
   HiMiniMinusCircle as T,
-  hasRepairableProtectionGap as U,
-  isUnsupportedPlatformCheck as V,
+  isUnsupportedPlatformCheck as U,
+  RECHECK_UNAVAILABLE_SIGNATURE as V,
   WatchProtectionBanner as W,
-  remainingProtectionRepairParts as X,
-  ProtectionRepairFlowError as Y,
-  waitForAuthorizeUrl as Z,
-  startOrRecoverCloudConnect as _,
+  protectionReasonText as X,
+  HiMiniExclamationCircle as Y,
+  hasRepairableProtectionGap as Z,
+  remainingProtectionRepairParts as _,
   EvidenceActivityHeatmapMini as a,
-  HiMiniCheck as a$,
-  openPackageFirewallAuthorizeFallback as a0,
-  waitForCloudConnection as a1,
-  activeFailedHarnesses as a2,
-  HiMiniWrenchScrewdriver as a3,
-  HiMiniExclamationCircle as a4,
-  ProofStrip as a5,
-  HiMiniEye as a6,
-  HiMiniXCircle as a7,
-  HiMiniClipboardDocumentCheck as a8,
-  HiMiniClipboard as a9,
-  clearEvidence as aA,
-  exportDiagnostics as aB,
-  repairApprovalCenter as aC,
-  exportSettings as aD,
-  setupDesktopNotifications as aE,
-  WorkspacePageHeader as aF,
-  HiMiniMagnifyingGlass as aG,
-  isProtectionPosture as aH,
-  deriveProtectionPosture as aI,
-  Tag as aJ,
-  approvalGateCooldownLabel as aK,
-  fetchLocalCliApi as aL,
-  fetchExtensionControlApi as aM,
-  HiMiniNoSymbol as aN,
-  useResolvedApprovalGate as aO,
-  HiMiniInformationCircle as aP,
-  buildApprovalProofCredentials as aQ,
-  GenIcon as aR,
-  HiMiniGlobeAlt as aS,
-  HiMiniCube as aT,
-  HiMiniServerStack as aU,
-  HiMiniFolder as aV,
-  FaWindows as aW,
-  FaAws as aX,
-  approvalProofRecentlySatisfied as aY,
-  HiMiniArrowLeft as aZ,
-  HiMiniPlus as a_,
-  PROTECTION_POSTURE_COPY as aa,
-  POSTURE_OUTCOME_COLUMNS as ab,
-  getDefaultExportFromCjs as ac,
-  React as ad,
-  HiMiniKey as ae,
-  HiMiniLockClosed as af,
-  HiMiniBellAlert as ag,
-  HiMiniAdjustmentsHorizontal as ah,
-  HiMiniCircleStack as ai,
-  TabBar as aj,
-  fetchCloudReviewSettings as ak,
-  isApprovalProofSubmitDisabled as al,
-  HiMiniArrowPath as am,
-  ApprovalProofFieldInputs as an,
-  changeCloudReviewSettings as ao,
-  resolveProtectionLevelCopy as ap,
-  fetchSettings as aq,
-  fetchRuntimeSnapshot as ar,
-  clearPolicy as as,
-  clearReviewQueue as at,
-  revokeApprovalGateCooldown as au,
-  disableApprovalGateTotp as av,
-  importSettings as aw,
-  resetSettings as ax,
-  enrollApprovalGateTotp as ay,
-  verifyApprovalGateTotp as az,
+  HiMiniFolder as a$,
+  repairOutcomeIsStalled as a0,
+  ProtectionRepairFlowError as a1,
+  nextProtectionRepairOutcome as a2,
+  waitForAuthorizeUrl as a3,
+  startOrRecoverCloudConnect as a4,
+  safeCloudConnectUrl as a5,
+  openPackageFirewallAuthorizeFallback as a6,
+  waitForCloudConnection as a7,
+  activeFailedHarnesses as a8,
+  resetRepairOutcomeTracker as a9,
+  clearReviewQueue as aA,
+  revokeApprovalGateCooldown as aB,
+  disableApprovalGateTotp as aC,
+  importSettings as aD,
+  resetSettings as aE,
+  enrollApprovalGateTotp as aF,
+  verifyApprovalGateTotp as aG,
+  clearEvidence as aH,
+  exportDiagnostics as aI,
+  repairApprovalCenter as aJ,
+  exportSettings as aK,
+  setupDesktopNotifications as aL,
+  WorkspacePageHeader as aM,
+  HiMiniMagnifyingGlass as aN,
+  humanizeList as aO,
+  isProtectionPosture as aP,
+  deriveProtectionPosture as aQ,
+  Tag as aR,
+  approvalGateCooldownLabel as aS,
+  fetchLocalCliApi as aT,
+  HiMiniNoSymbol as aU,
+  useResolvedApprovalGate as aV,
+  HiMiniInformationCircle as aW,
+  GenIcon as aX,
+  HiMiniGlobeAlt as aY,
+  HiMiniCube as aZ,
+  HiMiniServerStack as a_,
+  HiMiniWrenchScrewdriver as aa,
+  ProofStrip as ab,
+  HiMiniEye as ac,
+  HiMiniXCircle as ad,
+  HiMiniClipboardDocumentCheck as ae,
+  HiMiniClipboard as af,
+  PROTECTION_POSTURE_COPY as ag,
+  POSTURE_OUTCOME_COLUMNS as ah,
+  getDefaultExportFromCjs as ai,
+  React as aj,
+  HiMiniKey as ak,
+  HiMiniLockClosed as al,
+  HiMiniBellAlert as am,
+  HiMiniAdjustmentsHorizontal as an,
+  HiMiniCircleStack as ao,
+  TabBar as ap,
+  fetchCloudReviewSettings as aq,
+  HiMiniArrowPath as ar,
+  ApprovalProofFieldInputs as as,
+  isApprovalProofSubmitDisabled as at,
+  buildApprovalProofCredentials as au,
+  changeCloudReviewSettings as av,
+  resolveProtectionLevelCopy as aw,
+  fetchSettings as ax,
+  fetchRuntimeSnapshot as ay,
+  clearPolicy as az,
   HiMiniCommandLine as b,
-  createCloudExceptionRequest as b$,
-  startGuardCloudConnect as b0,
-  HiMiniArrowTopRightOnSquare as b1,
-  guardAwareHref as b2,
-  runHarnessAction as b3,
-  GuardHarnessActionError as b4,
-  HiMiniRocketLaunch as b5,
-  HiMiniTrash as b6,
-  isGuardDemoMode as b7,
-  fetchGuardApi as b8,
-  formatHarnessCommand as b9,
-  HiMiniBugAnt as bA,
-  GuardModalLayer as bB,
-  ConnectFlowCard as bC,
-  ApprovalProofInline as bD,
-  HiMiniCloudArrowDown as bE,
-  fetchPackageFirewallStatus as bF,
-  runPackageAudit as bG,
-  resolveSupplyChainAuditFailure as bH,
-  runPackageSync as bI,
-  startPackageFirewallConnect as bJ,
-  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as bK,
-  repairSupplyChainProtection as bL,
-  runPackageFirewallAction as bM,
-  parseInterceptProofSnapshot as bN,
-  activatePackageFirewallRuntime as bO,
-  EntitlementNotice as bP,
-  fetchReceipts as bQ,
-  lazyWorkspace as bR,
-  __vitePreload as bS,
-  scopeLabel as bT,
-  HiMiniDocumentText as bU,
-  HiMiniCloudArrowUp as bV,
-  HiMiniCodeBracket as bW,
-  HiMiniClipboardDocument as bX,
-  HiMiniUsers as bY,
-  HiMiniIdentification as bZ,
-  policyActionLabel as b_,
-  fetchApprovalPage as ba,
-  fetchPolicy as bb,
-  HiMiniHome as bc,
-  appSetupTarget as bd,
-  guardActionPresentation as be,
-  DEFAULT_FILTER_STATE as bf,
-  filterEvidence as bg,
-  sortEvidence as bh,
-  computeMetrics as bi,
-  CommandActivityWorkspace as bj,
-  EvidenceFilterBar as bk,
-  EvidenceInsightStrip as bl,
-  EvidenceActionList as bm,
-  EvidenceActionDetail as bn,
-  policyIdentityKey as bo,
-  clearLabelForScope as bp,
-  HiMiniChartBar as bq,
-  isSupplyChainAuditIncomplete as br,
-  isSupplyChainAuditEvidence as bs,
-  readString$1 as bt,
-  isRecord$3 as bu,
-  HiMiniClock as bv,
-  IconActionButton as bw,
-  HiMiniBeaker as bx,
-  ActivationSummary as by,
-  ActionResultPanel as bz,
+  __vitePreload as b$,
+  FaWindows as b0,
+  FaAws as b1,
+  approvalProofRecentlySatisfied as b2,
+  isBulkApproveGateReady as b3,
+  HiMiniArrowLeft as b4,
+  HiMiniPlus as b5,
+  guardAwareHref as b6,
+  HiMiniCheck as b7,
+  startGuardCloudConnect as b8,
+  HiMiniArrowTopRightOnSquare as b9,
+  isSupplyChainAuditIncomplete as bA,
+  isSupplyChainAuditEvidence as bB,
+  readString$1 as bC,
+  isRecord$3 as bD,
+  HiMiniClock as bE,
+  IconActionButton as bF,
+  HiMiniBeaker as bG,
+  ActivationSummary as bH,
+  ActionResultPanel as bI,
+  HiMiniBugAnt as bJ,
+  ConnectFlowCard as bK,
+  ApprovalProofInline as bL,
+  HiMiniCloudArrowDown as bM,
+  fetchPackageFirewallStatus as bN,
+  runPackageAudit as bO,
+  resolveSupplyChainAuditFailure as bP,
+  runPackageSync as bQ,
+  startPackageFirewallConnect as bR,
+  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as bS,
+  repairSupplyChainProtection as bT,
+  runPackageFirewallAction as bU,
+  parseInterceptProofSnapshot as bV,
+  activatePackageFirewallRuntime as bW,
+  EntitlementNotice as bX,
+  chooseSupplyChainAuditFolder as bY,
+  fetchReceipts as bZ,
+  lazyWorkspace as b_,
+  fetchExtensionControlApi as ba,
+  GuardModalLayer as bb,
+  runHarnessAction as bc,
+  GuardHarnessActionError as bd,
+  HiMiniRocketLaunch as be,
+  HiMiniTrash as bf,
+  isGuardDemoMode as bg,
+  fetchGuardApi as bh,
+  formatHarnessCommand as bi,
+  fetchApprovalPage as bj,
+  fetchPolicy as bk,
+  HiMiniHome as bl,
+  appSetupTarget as bm,
+  guardActionPresentation as bn,
+  DEFAULT_FILTER_STATE as bo,
+  filterEvidence as bp,
+  sortEvidence as bq,
+  computeMetrics as br,
+  CommandActivityWorkspace as bs,
+  EvidenceFilterBar as bt,
+  EvidenceInsightStrip as bu,
+  EvidenceActionList as bv,
+  EvidenceActionDetail as bw,
+  policyIdentityKey as bx,
+  clearLabelForScope as by,
+  HiMiniChartBar as bz,
   HiMiniChevronRight as c,
-  HiMiniArrowRight as c0,
-  HiMiniPuzzlePiece as c1,
-  fetchCloudExceptions as c2,
-  fetchCloudExceptionRequests as c3,
-  downloadBlob as c4,
-  PolicyStatField as c5,
-  PaginationControls as c6,
-  HiMiniArrowDownTray as c7,
-  HiMiniQueueList as c8,
-  Surface as c9,
-  HiMiniCheckBadge as ca,
-  fetchMcpPolicyRequest as cb,
-  resolveMcpPolicyRequest as cc,
-  HiMiniDocumentPlus as cd,
-  HiMiniDocumentMagnifyingGlass as ce,
-  fetchSupplyChainBundle as cf,
-  isSupplyChainScannerEvidence as cg,
-  isBlockedGuardAction as ch,
-  HiMiniShieldExclamation as ci,
-  HiMiniComputerDesktop as cj,
-  HiMiniChevronLeft as ck,
-  HiMiniFunnel as cl,
-  HiMiniArrowDown as cm,
-  HiMiniArrowUp as cn,
-  runAuditRemediation as co,
-  HiMiniSignal as cp,
+  scopeLabel as c0,
+  HiMiniDocumentText as c1,
+  HiMiniCloudArrowUp as c2,
+  HiMiniCodeBracket as c3,
+  HiMiniClipboardDocument as c4,
+  HiMiniUsers as c5,
+  HiMiniIdentification as c6,
+  policyActionLabel as c7,
+  createCloudExceptionRequest as c8,
+  HiMiniArrowRight as c9,
+  HiMiniPuzzlePiece as ca,
+  fetchCloudExceptions as cb,
+  fetchCloudExceptionRequests as cc,
+  downloadBlob as cd,
+  PolicyStatField as ce,
+  PaginationControls as cf,
+  HiMiniArrowDownTray as cg,
+  HiMiniQueueList as ch,
+  Surface as ci,
+  HiMiniCheckBadge as cj,
+  fetchResolvedApprovalGate as ck,
+  fetchMcpPolicyRequest as cl,
+  resolveMcpPolicyRequest as cm,
+  HiMiniDocumentPlus as cn,
+  HiMiniDocumentMagnifyingGlass as co,
+  fetchSupplyChainBundle as cp,
+  isSupplyChainScannerEvidence as cq,
+  isBlockedGuardAction as cr,
+  HiMiniShieldExclamation as cs,
+  HiMiniComputerDesktop as ct,
+  HiMiniChevronLeft as cu,
+  HiMiniFunnel as cv,
+  HiMiniArrowDown as cw,
+  HiMiniArrowUp as cx,
+  runAuditRemediation as cy,
+  HiMiniSignal as cz,
   createCommandActivityClient as d,
   updateSettings as e,
   fetchCommandActivityApi as f,

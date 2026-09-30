@@ -3,6 +3,7 @@ use guard_secure_fs::sensitive_path_family;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
+mod safe_reads;
 mod search;
 
 use search::safe_search_arguments;
@@ -90,6 +91,14 @@ pub(super) fn sensitive_command(value: &str) -> bool {
 }
 
 fn sensitive_path_argument(value: &str) -> bool {
+    sensitive_path_argument_with_credentials(value, false)
+}
+
+fn sensitive_read_path_argument(value: &str) -> bool {
+    sensitive_path_argument_with_credentials(value, true)
+}
+
+fn sensitive_path_argument_with_credentials(value: &str, include_credential_names: bool) -> bool {
     let normalized = normalized_haystack(value);
     let candidates = [
         normalized.as_str(),
@@ -99,6 +108,9 @@ fn sensitive_path_argument(value: &str) -> bool {
     candidates.iter().any(|candidate| {
         let relative = candidate.trim_start_matches("./");
         sensitive_path_family(Path::new(relative)).is_some()
+            || (include_credential_names
+                && (guard_secure_fs::credential_named_path(Path::new(relative))
+                    || search::glob_can_select_sensitive_path(relative)))
             || relative == ".git/config"
             || relative.ends_with("/.git/config")
     })
@@ -112,12 +124,19 @@ fn has_argument(arguments: &[String], exact: &[&str], prefixes: &[&str]) -> bool
 }
 
 fn safe_git_arguments(arguments: &[String], allow_helper_context: bool) -> bool {
+    // Git magic pathspec semantics are not proven by this classifier; retain review.
+    if arguments
+        .iter()
+        .any(|value| value.starts_with(':') || sensitive_read_path_argument(value))
+    {
+        return false;
+    }
     let Some(subcommand) = arguments.first().map(String::as_str) else {
         return false;
     };
     if !matches!(
         subcommand,
-        "status" | "diff" | "log" | "show" | "rev-parse" | "ls-files"
+        "status" | "diff" | "log" | "show" | "rev-parse" | "ls-files" | "remote"
     ) {
         return false;
     }
@@ -126,6 +145,14 @@ fn safe_git_arguments(arguments: &[String], allow_helper_context: bool) -> bool 
         .position(|argument| argument == "--")
         .unwrap_or(arguments.len());
     let active_options = &arguments[1..option_end];
+    if subcommand == "remote" {
+        let has_arguments_after_options = option_end + 1 < arguments.len();
+        return !active_options.is_empty()
+            && !has_arguments_after_options
+            && active_options
+                .iter()
+                .all(|argument| matches!(argument.as_str(), "-v" | "--verbose"));
+    }
     if !allow_helper_context
         && matches!(subcommand, "diff" | "log" | "show")
         && !(active_options
@@ -206,6 +233,18 @@ fn exfiltration_command(value: &str) -> bool {
         && upload.iter().any(|needle| lowered.contains(needle))
 }
 
+fn safe_gh_arguments(arguments: &[String]) -> bool {
+    match arguments {
+        [auth, status] if auth == "auth" && status == "status" => true,
+        [auth, status, flag]
+            if auth == "auth" && status == "status" && matches!(flag.as_str(), "--help" | "-h") =>
+        {
+            true
+        }
+        _ => false,
+    }
+}
+
 fn exact_safe_command(model: &CanonicalCommandV1, allow_git_helper_context: bool) -> bool {
     if model.confidence != "exact"
         || model.path_overridden
@@ -232,7 +271,12 @@ fn exact_safe_command(model: &CanonicalCommandV1, allow_git_helper_context: bool
         }
         match basename {
             "pwd" | "true" | "echo" | "printf" | "which" | "whoami" | "uname" | "stat" => true,
+            "date" => safe_reads::safe_date_arguments(&segment.arguments),
+            "ls" => safe_reads::safe_listing_arguments(&segment.arguments),
+            "cat" => safe_reads::safe_plain_file_arguments(&segment.arguments),
+            "head" | "tail" => safe_reads::safe_head_tail_arguments(&segment.arguments),
             "git" => safe_git_arguments(&segment.arguments, allow_git_helper_context),
+            "gh" => safe_gh_arguments(&segment.arguments),
             "rg" | "grep" => safe_search_arguments(basename, &segment.arguments),
             _ => false,
         }
@@ -334,186 +378,4 @@ pub fn evaluate_pre_tool(request: &CommandModelRequestV1) -> Result<PreToolDecis
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn request(command: &str) -> CommandModelRequestV1 {
-        CommandModelRequestV1 {
-            command: command.to_owned(),
-            dialect: "posix".to_owned(),
-            transport: "shell_string".to_owned(),
-            extraction_provenance: "guard-shell".to_owned(),
-        }
-    }
-
-    #[test]
-    fn blocks_destructive_and_device_commands() {
-        for command in [
-            "rm -rf /",
-            "rm -rf -- /",
-            "shred ~/.ssh/id_ed25519",
-            "dd if=/dev/zero of=/dev/sda",
-            "mkfs.ext4 /dev/sda1",
-            "shutdown -h now",
-            "reboot",
-            "wipefs -a /dev/sda",
-        ] {
-            let decision = evaluate_pre_tool(&request(command)).unwrap();
-            assert_eq!(decision.decision, "deny", "{command}");
-            assert_eq!(decision.minimum_action, "block", "{command}");
-        }
-    }
-
-    #[test]
-    fn reviews_home_relative_secret_paths() {
-        let decision = evaluate_pre_tool(&request("cat ~/.npmrc")).unwrap();
-        assert_eq!(decision.decision, "deny");
-        assert_eq!(decision.minimum_action, "review");
-        assert_eq!(decision.reason_code, "native_sensitive_access_review");
-    }
-
-    #[test]
-    fn reviews_dotenv_family_shell_reads() {
-        for command in [
-            "cat .env",
-            "cat .env.synthetic",
-            "cat /workspace/.env.local",
-        ] {
-            let decision = evaluate_pre_tool(&request(command)).unwrap();
-            assert_eq!(decision.decision, "deny", "{command}");
-            assert_eq!(decision.minimum_action, "review", "{command}");
-            assert_eq!(
-                decision.reason_code, "native_sensitive_access_review",
-                "{command}"
-            );
-        }
-    }
-
-    #[test]
-    fn allows_bounded_exact_commands() {
-        for command in [
-            "pwd",
-            "whoami",
-            "uname -a",
-            "git status --short",
-            "git rev-parse --show-toplevel",
-            "git diff --no-ext-diff --no-textconv --check",
-            "rg -n authority src",
-            "rg -g*.ts authority src",
-            "rg --glob '*.{ts,tsx}' authority src",
-            "rg --line-number --color=never authority src",
-            "grep -n authority README.md",
-            "grep --line-number --color=never authority README.md",
-            "grep -eerror README.md",
-            "grep -e 'terraform.tfvars' README.md",
-            "grep -d skip authority README.md",
-            "stat README.md",
-        ] {
-            let decision = evaluate_pre_tool(&request(command)).unwrap();
-            assert_eq!(decision.decision, "allow", "{command}");
-            assert!(decision.explicitly_benign, "{command}");
-        }
-    }
-
-    #[test]
-    fn allows_exact_destructive_tool_introspection() {
-        for command in ["shutdown --help", "mkfs --version"] {
-            let decision = evaluate_pre_tool(&request(command)).unwrap();
-            assert_eq!(decision.decision, "allow", "{command}");
-            assert!(decision.explicitly_benign, "{command}");
-        }
-    }
-
-    #[test]
-    fn reviews_only_materially_risky_variants_of_safe_commands() {
-        for command in [
-            "rg --pre /opt/guard-test/payload authority src",
-            "rg --hostname-bin=/opt/guard-test/payload --hyperlink-format='file://{host}{path}' TOKEN src",
-            "rg --hidden authority .",
-            "rg -uuu authority .",
-            "rg -L authority .",
-            "rg --no-ignore-files authority .",
-            "rg --glob '*.env' TOKEN .",
-            "rg --glob '*.{env,ts}' TOKEN .",
-            "rg --glob 'nested/*.env' TOKEN .",
-            "rg --glob 'nested/[.]env' TOKEN .",
-            r"rg --glob 'nested/[\.]env' TOKEN .",
-            "rg --glob 'nested/{safe,.env}' TOKEN .",
-            "rg TOKEN .env.local",
-            "rg -e '.env.local' src",
-            "grep -r password .",
-            "rg id_rsa /home",
-            "rg --glob 'nested/[.]env.local' TOKEN .",
-            "rg --glob 'nested/[.]env.production' TOKEN .",
-            "rg --glob 'nested/[.]e[n]v.production' TOKEN .",
-            "rg --glob 'nested/[.]e*v.production' TOKEN .",
-            "rg --glob 'my-private-[k]ey-prod.pem' TOKEN .",
-            "rg --glob 'my-private-[ak]ey-prod.pem' TOKEN .",
-            "rg --glob 'my-pr[i]vate-[k]ey-prod.pem' TOKEN .",
-            "rg --type-add 'secret:.env' -tsecret TOKEN .",
-            "rg TOKEN .aws/config",
-            "rg TOKEN terraform.tfvars",
-            "rg TOKEN wallet.key",
-            "rg TOKEN .gnupg/private-keys-v1.d/key",
-            "rg authority .env",
-            "grep authority .npmrc",
-            "grep TOKEN .*",
-            "grep TOKEN '.[a-z]*'",
-            "grep TOKEN nested/.*",
-            "grep -R authority .",
-            "grep -d recurse TOKEN .",
-            "grep --directories=recurse TOKEN .",
-            "grep --recursiv TOKEN .",
-            "grep --direct=recurse TOKEN .",
-            "rg --hidd TOKEN .",
-            "rg --globx '*.ts' TOKEN .",
-            "/opt/guard-test/rg authority src",
-            "FOO=bar git status --short",
-            "GIT_EXTERNAL_DIFF=/opt/guard-test/payload git diff --ext-diff README.md",
-            "git diff --output=/opt/guard-test/diff README.md",
-            "git log -1 --output=/opt/guard-test/log",
-            "git diff --check",
-            "git log -1",
-            "git show HEAD",
-            "git show HEAD:.env",
-            "git show HEAD:.git/config",
-        ] {
-            let decision = evaluate_pre_tool(&request(command)).unwrap();
-            assert_eq!(decision.decision, "deny", "{command}");
-            assert_eq!(decision.minimum_action, "review", "{command}");
-            assert!(!decision.explicitly_benign, "{command}");
-        }
-    }
-
-    #[test]
-    fn defers_only_exact_safe_git_helper_context() {
-        let contextual = evaluate_pre_tool(&request("git diff --check")).unwrap();
-        assert_eq!(contextual.reason_code, "native_git_helper_context_review");
-
-        let unsafe_output =
-            evaluate_pre_tool(&request("git diff --output=/tmp/diff README.md")).unwrap();
-        assert_eq!(unsafe_output.reason_code, "native_command_review_required");
-
-        let option_shaped_paths =
-            evaluate_pre_tool(&request("git diff -- --no-ext-diff --no-textconv")).unwrap();
-        assert_eq!(
-            option_shaped_paths.reason_code,
-            "native_git_helper_context_review"
-        );
-    }
-
-    #[test]
-    fn denies_uncertain_or_networked_commands() {
-        for command in [
-            "echo $(whoami)",
-            "pwd && rm -rf /",
-            "python -c 'print(1)'",
-            "git push origin main",
-            "PATH=/tmp:$PATH ls",
-        ] {
-            let decision = evaluate_pre_tool(&request(command)).unwrap();
-            assert_eq!(decision.decision, "deny", "{command}");
-            assert_ne!(decision.minimum_action, "allow", "{command}");
-        }
-    }
-}
+mod tests;

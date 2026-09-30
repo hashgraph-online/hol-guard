@@ -11,6 +11,7 @@ import { computeTrendBuckets } from "./evidence/evidence-metrics";
 import { normalizeOperatorHealth } from "./operator-health";
 import { canonicalizeGuardDaemonOrigin, standardGuardDaemonOrigin } from "./guard-daemon-origin";
 import { normalizeProtectionHealth, protectionHeadlineFor } from "./protection-health";
+import { checkReasonMapValue } from "./protection-repair-reasons";
 import { normalizeSupplyChainRepairResult } from "./supply-chain-repair-result";
 export { normalizeOperatorHealth } from "./operator-health";
 import {
@@ -1045,7 +1046,7 @@ export async function fetchExtensionControlApi(input: RequestInfo, init?: Reques
 export async function fetchLocalCliApi(input: RequestInfo, init?: RequestInit): Promise<Response> {
   const approvedPath =
     typeof input === "string" &&
-    /^\/v1\/local-clis(?:\/(?:preview|apply|recognize|discover))?$/.test(input);
+    /^\/v1\/local-clis(?:\/(?:preview|apply|recognize|discover|provider-actions|provider-workflows|registry-search|registry-setup|refresh-job|skills|mcp-skills))?$/.test(input);
   if (!approvedPath) {
     throw new Error("Invalid local CLI API path");
   }
@@ -1221,8 +1222,11 @@ export function parseActionEnvelope(raw: unknown): GuardActionEnvelope | null {
   const packageTargets = raw["package_targets"];
   const preExecutionResult = aliasedPreExecutionResult.value;
   const policyAction = aliasedPolicyAction.value;
-  const scriptName = raw["script_name"];
-  const rawPayloadRedacted = raw["raw_payload_redacted"];
+  // Native reviews queued before the envelope carried these presentation fields
+  // omitted them. Absence is not an action contradiction. A present value with
+  // the wrong type still fails closed below.
+  const scriptName = raw["script_name"] === undefined ? null : raw["script_name"];
+  const rawPayloadRedacted = raw["raw_payload_redacted"] === undefined ? {} : raw["raw_payload_redacted"];
   if (
     typeof schemaVersion !== "number" ||
     typeof actionId !== "string" ||
@@ -1509,6 +1513,10 @@ export function normalizeApprovalRequest(item: RawGuardApprovalRequest): GuardAp
   const scopeRestrictions = parseStringList(item.scope_restrictions);
   return {
     ...baseItem,
+    superseded_by_request_id: item.status === "expired"
+      && typeof item.superseded_by_request_id === "string"
+      && /^[A-Za-z0-9-]{1,64}$/.test(item.superseded_by_request_id)
+      ? item.superseded_by_request_id : undefined,
     policy_action: failClosedPolicyAction,
     recommended_scope: isDecisionScope(item.recommended_scope) ? item.recommended_scope : null,
     allowed_scopes: allowedScopes ?? undefined,
@@ -3240,6 +3248,7 @@ export class GuardProtectionRepairError extends Error {
   readonly failedCheckIds: string[];
   readonly failedHarnesses: string[];
   readonly pendingCheckIds: string[];
+  readonly checkReasons: Record<string, string>;
 
   constructor(status: number, payload: Record<string, unknown> | null) {
     const message = payload === null ? null : stringValue(payload.message);
@@ -3251,6 +3260,7 @@ export class GuardProtectionRepairError extends Error {
     this.failedCheckIds = stringArrayValue(payload?.failed_check_ids);
     this.failedHarnesses = stringArrayValue(payload?.failed_harnesses);
     this.pendingCheckIds = stringArrayValue(payload?.pending_check_ids);
+    this.checkReasons = checkReasonMapValue(payload?.check_reasons);
   }
 }
 
@@ -4028,6 +4038,35 @@ export async function runAuditRemediation(input: AuditRemediationInput): Promise
     );
   }
   return normalizePackageFirewallAction(payload);
+}
+
+export async function chooseSupplyChainAuditFolder(): Promise<{
+  workspaceDir: string | null;
+  cancelled: boolean;
+}> {
+  const response = await fetchGuardApi("/v1/supply-chain/choose-folder", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...guardAuthHeaders(),
+    },
+    body: "{}",
+  });
+  const payloadBody = (await response.json().catch(() => null)) as unknown;
+  if (!response.ok) {
+    throw new GuardHarnessActionError(
+      response.status,
+      isGuardHarnessActionErrorPayload(payloadBody) ? payloadBody : null,
+    );
+  }
+  const record = payloadBody !== null && typeof payloadBody === "object" ? payloadBody as Record<string, unknown> : {};
+  const workspaceDir = typeof record.workspace_dir === "string" && record.workspace_dir.trim()
+    ? record.workspace_dir.trim()
+    : null;
+  return {
+    workspaceDir,
+    cancelled: record.cancelled === true || workspaceDir === null,
+  };
 }
 
 export async function runPackageAudit(input?: {

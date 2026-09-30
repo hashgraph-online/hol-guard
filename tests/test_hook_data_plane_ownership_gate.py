@@ -290,7 +290,7 @@ def test_authority_workflow_gate_rejects_missing_cleanup_helper(workflow_sources
         MODULE._workflow_gate()
 
 
-@pytest.mark.parametrize("job_id", ["linux-x64", "macos"])
+@pytest.mark.parametrize("job_id", ["linux-proof", "macos-proof"])
 @pytest.mark.parametrize("replacement", ["# source", "echo source", "bash"])
 def test_authority_workflow_gate_requires_sourcing_in_each_proof_shell(
     workflow_sources: Path, job_id: str, replacement: str

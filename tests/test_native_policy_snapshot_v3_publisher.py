@@ -50,6 +50,9 @@ test_prepare_workspace_policy_uses_bounded_first_workspace_handshake = (
 test_prepare_workspace_policy_skips_wait_after_publisher_error = (
     _publisher_tests.test_prepare_workspace_policy_skips_wait_after_publisher_error
 )
+test_prepare_workspace_policy_waits_for_transient_resident_restart_lock = (
+    _publisher_tests.test_prepare_workspace_policy_waits_for_transient_resident_restart_lock
+)
 test_prepare_workspace_policy_waits_publish_budget_without_caller_deadline = (
     _publisher_tests.test_prepare_workspace_policy_waits_publish_budget_without_caller_deadline
 )
@@ -135,6 +138,7 @@ __all__ = [
     "test_policy_merge_never_downgrades_enforcing_posture_to_watch",
     "test_prepare_workspace_policy_skips_wait_after_publisher_error",
     "test_prepare_workspace_policy_uses_bounded_first_workspace_handshake",
+    "test_prepare_workspace_policy_waits_for_transient_resident_restart_lock",
     "test_prepare_workspace_policy_waits_publish_budget_without_caller_deadline",
     "test_publisher_does_not_ack_snapshot_after_concurrent_mutation",
     "test_publisher_does_not_republish_for_generation_created_by_own_ack",

@@ -86,6 +86,7 @@ def prompt_for_approval_gate(
         password=password,
         totp_code=totp_code,
         use_cooldown=use_cooldown and gate.cooldown_seconds > 0 and not gate.totp_enabled,
+        require_fresh_totp=require_fresh_totp,
     )
 
 
