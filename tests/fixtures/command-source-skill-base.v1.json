@@ -10363,6 +10363,7 @@
           "command.digline",
           "command.genclave",
           "command.gitsync",
+          "command.kim",
           "command.mcp-filesystem",
           "command.mcp-instapods",
           "command.mcp-pr-ui-compare",
