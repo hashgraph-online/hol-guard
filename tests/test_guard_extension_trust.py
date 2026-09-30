@@ -86,6 +86,7 @@ def test_trust_map_covers_every_builtin_extension() -> None:
     assert ids_for_class("external") == {
         "command.blitcp",
         "command.cloudg",
+        "command.codex-migrate",
         "command.cogext",
         "command.ctty",
         "command.digline",

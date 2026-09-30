@@ -10491,6 +10491,7 @@
         "external": [
           "command.blitcp",
           "command.cloudg",
+          "command.codex-migrate",
           "command.cogext",
           "command.ctty",
           "command.digline",
