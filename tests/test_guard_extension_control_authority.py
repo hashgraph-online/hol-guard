@@ -345,13 +345,23 @@ def _expanded_permission_registry() -> tuple[CommandSafetyExtensionRegistry, str
 
 def _rule_version_registry() -> tuple[CommandSafetyExtensionRegistry, str]:
     extensions = BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions
-    extension = extensions[0]
-    rule = extension.rules[0]
+    extension = next(item for item in extensions if item.extension_id == "command.container-runtime")
+    rule_index = next(
+        index for index, rule in enumerate(extension.rules) if rule.rule_id.endswith("compose-destructive-cleanup")
+    )
+    rule = extension.rules[rule_index]
     versioned_rule = replace(rule, rule_version="99.0.0")
-    versioned_extension = replace(extension, rules=(versioned_rule, *extension.rules[1:]))
-    return CommandSafetyExtensionRegistry((versioned_extension, *extensions[1:])), extension.permissions[
-        0
-    ].permission_id
+    versioned_extension = replace(
+        extension,
+        rules=(*extension.rules[:rule_index], versioned_rule, *extension.rules[rule_index + 1 :]),
+    )
+    permission_id = next(
+        permission.permission_id for permission in extension.permissions if permission.rule_ids == (rule.rule_id,)
+    )
+    return (
+        CommandSafetyExtensionRegistry((versioned_extension, *(item for item in extensions if item is not extension))),
+        permission_id,
+    )
 
 
 def _matcher_contract_registry() -> tuple[CommandSafetyExtensionRegistry, str]:
