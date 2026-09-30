@@ -25,7 +25,6 @@ Security:
 
 from __future__ import annotations
 
-import sys
 import time
 from collections.abc import Mapping
 from contextlib import suppress
@@ -72,10 +71,11 @@ class CommandActivityWriter(Protocol):
 
 # Startup priming keeps the publish bound so a slow first publication never
 # delays worker construction. Requests that arrive during a resident restart
-# wait on the readiness bound instead, which needs a wider window on macOS
-# and Windows where republication is slower.
+# wait on the readiness bound instead, which needs a wider window everywhere:
+# republication is slower on macOS and Windows, and Linux CI runners under
+# parallel shard load miss the publish bound too.
 _NATIVE_POLICY_STARTUP_READY_TIMEOUT_SECONDS = _PUBLISH_TIMEOUT_SECONDS
-_NATIVE_POLICY_READY_TIMEOUT_SECONDS = 25.0 if sys.platform in {"darwin", "win32"} else _PUBLISH_TIMEOUT_SECONDS
+_NATIVE_POLICY_READY_TIMEOUT_SECONDS = 25.0
 _TRANSIENT_RESIDENT_PUBLICATION_ERRORS = frozenset(
     {"native_policy_snapshot_resident_changed", "native_resident_restart_budget_busy"}
 )

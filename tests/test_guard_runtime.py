@@ -15725,7 +15725,6 @@ def test_guard_hook_codex_strict_default_allows_verified_benign_git_status(
         [
             "guard",
             "hook",
-            "--json",
             "--home",
             str(home_dir),
             "--workspace",
@@ -15738,9 +15737,9 @@ def test_guard_hook_codex_strict_default_allows_verified_benign_git_status(
     store = GuardStore(home_dir)
 
     assert rc == 0
-    assert json.loads(output)["policy_action"] == "require-reapproval"
-    assert store.list_approval_requests(limit=10) != []
-    assert store.list_receipts(limit=1) != []
+    assert output == ""
+    assert store.list_approval_requests(limit=10) == []
+    assert store.list_receipts(limit=1) == []
 
 
 @pytest.mark.parametrize(
