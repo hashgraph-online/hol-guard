@@ -2,6 +2,7 @@ import type { ExtensionCatalogItem, McpToolDefaultState } from "../extension-con
 
 function toolStateLabel(state: McpToolDefaultState): string {
   if (state === "allow") return "Allow";
+  if (state === "review") return "Review";
   if (state === "block") return "Block";
   return "Recommended";
 }
@@ -10,21 +11,40 @@ export function McpServerDefaults({ extension }: { extension: ExtensionCatalogIt
   if (extension.surface !== "mcp") return null;
   const launch = extension.mcp_launch;
   const tools = extension.mcp_tools ?? [];
+  const remoteLaunch = launch?.kind === "remote-http" ? launch : null;
+  const packageLaunch = launch?.kind === "package-launcher" ? launch : null;
   return (
     <article className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2" data-testid="mcp-server-defaults">
       <h2 className="text-lg font-semibold text-brand-dark">MCP server defaults</h2>
       <p className="mt-2 text-sm leading-6 text-brand-dark/75">
-        Matching launches use this package name. Defaults apply only after you turn the server on. A custom extension on this device still wins.
+        {remoteLaunch
+          ? "Matching hosted endpoints use these defaults after you turn the server on. A custom extension on this device still wins."
+          : "Matching launches use this package name. Defaults apply only after you turn the server on. A custom extension on this device still wins."}
       </p>
       <dl className="mt-5 grid gap-4 sm:grid-cols-2">
-        <div>
-          <dt className="text-xs font-semibold uppercase text-brand-dark/55">Launcher</dt>
-          <dd className="mt-1 text-sm text-brand-dark">{launch?.command ?? "Package launcher"}</dd>
-        </div>
-        <div>
-          <dt className="text-xs font-semibold uppercase text-brand-dark/55">Package</dt>
-          <dd className="mt-1 break-all font-mono text-sm text-brand-dark">{launch?.package ?? "Unknown package"}</dd>
-        </div>
+        {remoteLaunch ? (
+          <>
+            <div>
+              <dt className="text-xs font-semibold uppercase text-brand-dark/55">Endpoint</dt>
+              <dd className="mt-1 break-all font-mono text-sm text-brand-dark">{remoteLaunch.url}</dd>
+            </div>
+            <div>
+              <dt className="text-xs font-semibold uppercase text-brand-dark/55">Server names</dt>
+              <dd className="mt-1 text-sm text-brand-dark">{remoteLaunch.serverNames.join(", ")}</dd>
+            </div>
+          </>
+        ) : (
+          <>
+            <div>
+              <dt className="text-xs font-semibold uppercase text-brand-dark/55">Launcher</dt>
+              <dd className="mt-1 text-sm text-brand-dark">{packageLaunch?.command ?? "Package launcher"}</dd>
+            </div>
+            <div>
+              <dt className="text-xs font-semibold uppercase text-brand-dark/55">Package</dt>
+              <dd className="mt-1 break-all font-mono text-sm text-brand-dark">{packageLaunch?.package ?? "Unknown package"}</dd>
+            </div>
+          </>
+        )}
       </dl>
       {tools.length ? (
         <div className="mt-5 overflow-x-auto">

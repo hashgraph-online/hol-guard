@@ -15,6 +15,7 @@ on:
       - "ci/native_runtime/native_hook_client_support.py"
       - "ci/native_runtime/test_native_hook_client_transport.py"
       - ".github/workflows/rust-daemon-edge-hardening.yml"
+      - ".github/actions/setup-rust/**"
       - "docs/guard/rust-daemon-edge-hardening-*.md"
   push:
     branches: [main]
@@ -30,6 +31,7 @@ on:
       - "ci/native_runtime/native_hook_client_support.py"
       - "ci/native_runtime/test_native_hook_client_transport.py"
       - ".github/workflows/rust-daemon-edge-hardening.yml"
+      - ".github/actions/setup-rust/**"
   schedule:
     - cron: "37 4 * * 2,5"
   workflow_dispatch:
@@ -56,11 +58,31 @@ jobs:
         with:
           version: "0.9.26"
           enable-cache: true
-      - run: uv sync --frozen --extra dev --python 3.12
+      - run: uv sync --frozen --no-dev --extra dev --python 3.12
       - run: uv run --no-sync ruff check src/codex_plugin_scanner/guard/native_runtime_admission.py src/codex_plugin_scanner/guard/daemon/bounded_http.py tests/test_native_runtime_admission.py tests/test_daemon_bounded_http.py tests/test_rust_daemon_edge_hardening_contracts.py
       - run: uv run --no-sync ruff format --check src/codex_plugin_scanner/guard/native_runtime_admission.py src/codex_plugin_scanner/guard/daemon/bounded_http.py tests/test_native_runtime_admission.py tests/test_daemon_bounded_http.py tests/test_rust_daemon_edge_hardening_contracts.py
       - run: uv run --no-sync basedpyright --level error src/codex_plugin_scanner/guard/native_runtime_admission.py src/codex_plugin_scanner/guard/daemon/bounded_http.py
       - run: uv run --no-sync pytest -q tests/test_native_runtime_admission.py tests/test_daemon_bounded_http.py tests/test_rust_daemon_edge_hardening_contracts.py --tb=short
+
+  windows-workspace:
+    runs-on: windows-2025
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - uses: ./.github/actions/setup-rust
+        with:
+          components: rustfmt clippy
+      - name: Validate native workspace
+        shell: bash
+        run: |
+          cargo fmt --manifest-path rust/Cargo.toml --all --check
+          cargo clippy --manifest-path rust/Cargo.toml --locked --workspace --all-targets -- -D warnings
+          cargo test --manifest-path rust/Cargo.toml --locked --workspace --all-targets
 
   cross-platform:
     strategy:
@@ -80,13 +102,12 @@ jobs:
         with:
           version: "0.9.26"
           enable-cache: true
-      - name: Install Rust 1.88
-        shell: bash
-        run: |
-          rustup toolchain install 1.88.0 --profile minimal --component rustfmt --component clippy
-          rustup default 1.88.0
-      - run: uv sync --frozen --extra dev --python 3.12
+      - uses: ./.github/actions/setup-rust
+        with:
+          components: rustfmt clippy
+      - run: uv sync --frozen --no-dev --extra dev --python 3.12
       - name: Validate native workspace
+        if: runner.os != 'Windows'
         shell: bash
         run: |
           cargo fmt --manifest-path rust/Cargo.toml --all --check
@@ -97,7 +118,11 @@ jobs:
         run: uv run --no-sync pytest -q tests/test_native_runtime_admission.py tests/test_daemon_bounded_http.py tests/test_rust_daemon_edge_hardening_contracts.py --tb=short
       - name: Build and exercise the native hook client
         shell: bash
-        run: cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime
+        env:
+          RUNTIME: rust/target/release/hol-guard-runtime${{ runner.os == 'Windows' && '.exe' || '' }}
+        run: |
+          cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime
+          "$RUNTIME" self-test --json
       - name: Validate real native client lifecycle
         shell: bash
         env:
@@ -117,7 +142,7 @@ jobs:
       - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
         with:
           version: "0.9.26"
-      - run: uv sync --frozen --extra dev --python 3.12
+      - run: uv sync --frozen --no-dev --extra dev --python 3.12
       - name: Run with a constrained descriptor budget
         shell: bash
         run: |
@@ -138,7 +163,7 @@ jobs:
       - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
         with:
           version: "0.9.26"
-      - run: uv sync --frozen --extra dev --python 3.12
+      - run: uv sync --frozen --no-dev --extra dev --python 3.12
       - name: Run 100000 bounded admission operations
         shell: bash
         run: |

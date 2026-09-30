@@ -460,19 +460,33 @@ def test_live_identity_rejects_empty_health_guard_home(
 
 
 def test_live_identity_rejects_authenticated_probe_redirects() -> None:
-    request = live_identity.urllib.request.Request("http://127.0.0.1:5474/v1/healthz/details")
-    handler = live_identity._RejectRedirectHandler()
+    """The authenticated production client must not follow even a loopback redirect."""
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    from threading import Thread
 
-    redirected = handler.redirect_request(
-        request,
-        None,
-        302,
-        "Found",
-        {},
-        "https://example.invalid/collect",
-    )
+    paths: list[str] = []
 
-    assert redirected is None
+    class Redirect(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            """Record requests and redirect the health probe to a token collection path."""
+            paths.append(self.path)
+            self.send_response(302 if self.path.endswith("details") else 200)
+            self.send_header("Location", "/collect")
+            self.end_headers()
+
+        def log_message(self, *_args: object) -> None:
+            """Suppress loopback-test access logs."""
+
+    with ThreadingHTTPServer(("127.0.0.1", 0), Redirect) as server:
+        worker = Thread(target=server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
+        worker.start()
+        try:
+            result = live_identity._proxy_disabled_health_details(f"http://127.0.0.1:{server.server_port}", "token")
+            assert result is None
+            assert paths == ["/v1/healthz/details"]
+        finally:
+            server.shutdown()
+            worker.join(timeout=2)
 
 
 def test_daemon_start_lock_is_reentrant_for_repair_transaction(tmp_path: Path) -> None:

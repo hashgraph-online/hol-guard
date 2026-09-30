@@ -104,20 +104,27 @@ def remote_approval(
     issued_at: datetime | None = None,
     expires_at: datetime | None = None,
     source_claim: dict[str, object] | None = None,
+    authority: str | None = None,
+    reviewer_role: str = "owner",
+    step_up_challenge_id: str | None = None,
 ) -> dict[str, object]:
     request = store.get_approval_request(request_id)
     assert isinstance(request, dict)
     claim = source_claim or build_local_review_request_claim(
         request_row=request, oauth=_oauth_metadata(store), store=store
     )
-    advertisement = claim["exactReviewCapability"]
-    assert isinstance(advertisement, dict)
+    advertisement = claim.get("exactReviewCapability")
     issued_at = issued_at or datetime.now(timezone.utc).replace(microsecond=0)
     expires_at = expires_at or issued_at + timedelta(minutes=5)
+    if authority == "workspace_admin_mfa":
+        capability_id = "ab" * 32
+    else:
+        assert isinstance(advertisement, dict)
+        capability_id = advertisement["capabilityId"]
     envelope: dict[str, object] = {
         "actionEnvelopeHash": claim["actionEnvelopeHash"],
         "approvalId": claim["approvalId"],
-        "capabilityId": advertisement["capabilityId"],
+        "capabilityId": capability_id,
         "capabilityCategory": claim["capabilityCategory"],
         "contractVersion": "guard.remote-approval.v1",
         "decision": decision,
@@ -135,18 +142,20 @@ def remote_approval(
         "policyVersion": claim["policyVersion"],
         "projectIdentity": claim["projectIdentity"],
         "receiptId": receipt_id,
-        "reviewerRole": "owner",
+        "reviewerRole": reviewer_role,
         "reviewerUserId": "user-1",
         "riskCategory": claim["riskCategory"],
         "runtimeGrantId": "00000000-0000-4000-8000-000000000002",
         "runtimeId": claim["runtimeId"],
         "scope": "artifact",
         "sourceClaimHash": claim["claimHash"],
-        "stepUpChallengeId": None,
+        "stepUpChallengeId": step_up_challenge_id,
         "verificationKeys": review_verification_keys(),
         "signatureAlgorithm": "rsa-pss-sha256",
         "workspaceId": claim["workspaceId"],
     }
+    if authority is not None:
+        envelope["authority"] = authority
     envelope["payloadHash"] = payload_hash_for_remote_approval_envelope(envelope)
     envelope["signature"] = sign_review_payload(envelope)
     return envelope
@@ -162,8 +171,7 @@ def exact_review_job(
     credentials = store.get_oauth_local_credentials(allow_primary=False)
     assert isinstance(credentials, dict)
     capability = store.get_sync_payload("guard_exact_cloud_review_capability")
-    assert isinstance(capability, dict)
-    device_id = capability.get("deviceId")
+    device_id = capability.get("deviceId") if isinstance(capability, dict) else credentials.get("device_id")
     assert isinstance(device_id, str) and device_id
     return {
         "id": "exact-job-1",

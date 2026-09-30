@@ -20,6 +20,7 @@ from .action_lattice import normalize_guard_action_result
 from .adapters import get_adapter
 from .adapters.base import HarnessContext
 from .approval_gate import ApprovalGateGrant, ApprovalGateInput, require_approval_decision
+from .approval_once_eligibility import requires_local_once_approval
 from .approval_resolution import require_resolvable_approval_request
 from .approval_scope_support import (
     IneligibleApprovalScopeError,
@@ -66,7 +67,6 @@ from .runtime.approval_context import parse_approval_context_token
 from .runtime.command_capability import command_capability_status
 from .runtime.decisions import AUTHORITATIVE_DECISION_INCONSISTENT, authoritative_decision_from_artifact
 from .runtime.github_workflow_runtime import (
-    github_workflow_requires_local_once,
     issue_github_workflow_capability_for_resolution,
 )
 from .runtime.package_protect_projection import LOCAL_SUPPLY_CHAIN_HARNESS
@@ -148,7 +148,12 @@ def build_approval_request_url(approval_center_url: str, request_id: str) -> str
     return f"{approval_center_url.rstrip('/')}/requests/{request_id.strip()}"
 
 
-def build_approval_browser_url(approval_url: str | None, *, auth_token: str | None) -> str | None:
+def build_approval_browser_url(
+    approval_url: str | None,
+    *,
+    auth_token: str | None,
+    surface: str = "approval-center",
+) -> str | None:
     """Build a browser-openable approval URL with a scoped Guard session token."""
 
     if not approval_url or auth_token is None:
@@ -162,7 +167,7 @@ def build_approval_browser_url(approval_url: str | None, *, auth_token: str | No
             "guard-token",
             build_local_dashboard_session_token(
                 auth_token=auth_token,
-                surface="approval-center",
+                surface=surface,
             ),
         )
     )
@@ -796,7 +801,7 @@ def apply_approval_resolution(
             now=resolved_at,
         )
         store.upsert_policy(decision, resolved_at, approval_gate_grant=resolved_gate_grant)
-        if action == "allow" and _should_record_local_once_replay(request):
+        if action == "allow" and requires_local_once_approval(request):
             local_once_fallback = _record_local_once_approval(
                 store,
                 request_id=request_id,
@@ -819,7 +824,7 @@ def apply_approval_resolution(
             resolved_at,
             approval_gate_grant=resolved_gate_grant,
         )
-        if action == "allow" and _should_record_local_once_replay(request):
+        if action == "allow" and requires_local_once_approval(request):
             local_once_fallback = _record_local_once_approval(
                 store,
                 request_id=request_id,
@@ -1577,6 +1582,7 @@ def build_runtime_snapshot(
     active_request_id: str | None = None,
     include_items: bool = True,
     containment_health: object = None,
+    serving_runtime: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
     queue_page = store.list_pending_approval_summaries(limit=1, exclude_watch_only=True)
     queue_items = queue_page["items"] if isinstance(queue_page["items"], list) else []
@@ -1602,6 +1608,14 @@ def build_runtime_snapshot(
     hook_verification = _live_hook_verification(health_managed_installs, store)
     runtime_state = store.get_runtime_state()
     health_runtime_state = dict(runtime_state) if runtime_state is not None else None
+    if health_runtime_state is None and serving_runtime is not None:
+        # The store row is gone but this process is serving requests. Report a
+        # truthful "missing registration" state instead of claiming the runtime
+        # is offline; the heartbeat writer re-registers the row.
+        health_runtime_state = dict(serving_runtime)
+        health_runtime_state["registration_status"] = "missing"
+        if approval_center_url is not None:
+            health_runtime_state["approval_center_url"] = approval_center_url
     if health_runtime_state is not None and containment_health is not None:
         health_runtime_state["containment_health"] = containment_health
     protection_health = build_runtime_protection_health(
@@ -1614,7 +1628,7 @@ def build_runtime_snapshot(
     )
     headline_state = _resolve_runtime_headline_state(
         pending_count=pending_count,
-        runtime_state=runtime_state,
+        runtime_state=health_runtime_state,
         protection_state=str(protection_health["state"]),
     )
     return {
@@ -1835,21 +1849,6 @@ def _now() -> str:
 def _approval_once_policy_expires_at(resolved_at: str) -> str:
     parsed = datetime.fromisoformat(resolved_at.replace("Z", "+00:00"))
     return (parsed + _APPROVAL_ONCE_POLICY_TTL).isoformat()
-
-
-def _should_record_local_once_replay(request: Mapping[str, object]) -> bool:
-    artifact_type = request.get("artifact_type")
-    if artifact_type == "package_request":
-        return False
-    artifact_id = request.get("artifact_id")
-    if isinstance(artifact_id, str) and ":package-request:" in artifact_id:
-        return False
-    if github_workflow_requires_local_once(request):
-        return True
-    launch_target = request.get("launch_target")
-    if not isinstance(launch_target, str):
-        return False
-    return launch_target.startswith(("npm ", "npx ", "pnpm ", "yarn ", "bun "))
 
 
 def _record_local_once_approval(

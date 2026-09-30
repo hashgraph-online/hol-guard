@@ -8,19 +8,20 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.approval_once_eligibility import requires_local_once_approval
+from codex_plugin_scanner.guard.approvals import apply_approval_resolution
 from codex_plugin_scanner.guard.codex_live_decision import complete_codex_live_decision
 from codex_plugin_scanner.guard.codex_resume import seed_request_resume_record
 from codex_plugin_scanner.guard.live_process_identity import current_process_identity
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
+from codex_plugin_scanner.guard.review_correlation import cloud_review_correlation_id
 from codex_plugin_scanner.guard.store import GuardStore
 
 
-def _seed_resolved_request(
+def _seed_waiting_request(
     tmp_path: Path,
     *,
     request_id: str,
-    action: str,
-    with_exact_allow: bool,
 ) -> tuple[GuardStore, str]:
     store = GuardStore(tmp_path / "guard-home")
     observed = datetime.now(timezone.utc)
@@ -36,22 +37,29 @@ def _seed_resolved_request(
             harness="codex",
             artifact_id=artifact_id,
             artifact_name="Codex tool action",
-            artifact_type="tool_action_request",
+            artifact_type="file_read_request",
             artifact_hash=artifact_hash,
             publisher=None,
             policy_action="require-reapproval",
             recommended_scope="artifact",
-            changed_fields=("shell_command",),
+            changed_fields=("file_read",),
             source_scope="project",
             config_path=f"{workspace}/.guard/config.toml",
             workspace=workspace,
-            launch_target="npm install is-even@1.0.0",
+            launch_target=f"Read {workspace}/.npmrc",
             review_command=f"hol-guard approvals approve {request_id}",
             approval_url=f"http://127.0.0.1:5474/requests/{request_id}",
             action_envelope_json={
-                "action_type": "shell_command",
-                "command": "npm install is-even@1.0.0",
-                "tool_name": "Bash",
+                "action_type": "file_read",
+                "target_paths": [f"{workspace}/.npmrc"],
+                "tool_name": "Read",
+            },
+            continuation_snapshot={
+                "capability": "suspended-response",
+                "correlationId": cloud_review_correlation_id(request_id),
+                "hookAttached": True,
+                "opaqueTargetId": None,
+                "waitDeadline": (observed + timedelta(minutes=5)).isoformat(),
             },
         ),
         now,
@@ -86,6 +94,17 @@ def _seed_resolved_request(
         now=now,
     )
     assert seed_request_resume_record(store, request_id=request_id, now=now) is not None
+    return store, now
+
+
+def _seed_resolved_request(
+    tmp_path: Path,
+    *,
+    request_id: str,
+    action: str,
+    with_exact_allow: bool,
+) -> tuple[GuardStore, str]:
+    store, now = _seed_waiting_request(tmp_path, request_id=request_id)
     assert store.resolve_one_request_only(
         request_id,
         resolution_action=action,
@@ -97,15 +116,58 @@ def _seed_resolved_request(
         assert store.record_local_once_approval(
             request_id=request_id,
             harness="codex",
-            artifact_id=artifact_id,
-            artifact_hash=artifact_hash,
-            workspace=workspace,
+            artifact_id=f"codex:project:{request_id}",
+            artifact_hash=f"hash-{request_id}",
+            workspace="/workspace/project",
             publisher=None,
             action="allow",
             created_at=now,
-            expires_at=(observed + timedelta(minutes=5)).isoformat(),
+            expires_at=(datetime.fromisoformat(now) + timedelta(minutes=5)).isoformat(),
         )
     return store, now
+
+
+@pytest.mark.parametrize("persist_policy", [None, True])
+def test_local_file_read_approval_records_exact_continuation_authority(
+    tmp_path: Path, persist_policy: bool | None
+) -> None:
+    request_id = "request-live-local-read"
+    store, now = _seed_waiting_request(tmp_path, request_id=request_id)
+
+    apply_approval_resolution(
+        store=store,
+        request_id=request_id,
+        action="allow",
+        scope="artifact",
+        workspace="/workspace/project",
+        reason="reviewed file read",
+        now=now,
+        persist_policy=persist_policy,
+    )
+
+    result = complete_codex_live_decision(store, request_id=request_id, now=now, fresh_allow_authorized=True)
+    assert result["completed"] is True
+    assert result["action"] == "allow"
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"harness": "pi"},
+        {"artifact_type": "package_request"},
+        {"artifact_id": "codex:project:package-request:test"},
+        {"continuation_snapshot": None},
+        {"continuation_snapshot": {"capability": "suspended-response", "hookAttached": True}},
+    ],
+)
+def test_live_hook_authority_eligibility_does_not_expand_to_unbound_requests(
+    tmp_path: Path, change: dict[str, object]
+) -> None:
+    store, _ = _seed_waiting_request(tmp_path, request_id="request-live-ineligible")
+    request = store.get_approval_request("request-live-ineligible")
+    assert request is not None
+    assert requires_local_once_approval(request)
+    assert not requires_local_once_approval({**request, **change})
 
 
 def test_allow_consumes_exact_authority_and_records_terminal_continuation(tmp_path: Path) -> None:

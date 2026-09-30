@@ -172,6 +172,12 @@ def _install_fake_system_keyring(
     return module
 
 
+def _windows_no_such_logon_session_error() -> OSError:
+    error = OSError(1312, "A specified logon session does not exist.")
+    error.__dict__["winerror"] = 1312
+    return error
+
+
 def test_load_keyring_module_returns_none_when_dependency_missing(monkeypatch):
     """A genuinely missing keyring package must surface as None, not raise."""
     import importlib
@@ -199,6 +205,116 @@ def test_system_keyring_reads_return_none_when_keyring_missing(monkeypatch):
 
     assert store.get_secret("anything") is None
     assert store.get_secret_with_timeout("anything", timeout_seconds=1.0) is None
+
+
+def test_windows_keyring_read_session_failure_is_retryable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _FakeSystemKeyringModule()
+    read_calls = 0
+
+    def _read_after_session_recovery(_service_name: str, _secret_id: str) -> str | None:
+        nonlocal read_calls
+        read_calls += 1
+        if read_calls == 1:
+            raise _windows_no_such_logon_session_error()
+        return "recovered-secret"
+
+    monkeypatch.setattr(guard_store_module.sys, "platform", "win32", raising=False)
+    monkeypatch.setattr(SystemKeyringSecretStore, "_load_keyring_module", staticmethod(lambda: module))
+    monkeypatch.setattr(module, "get_password", _read_after_session_recovery)
+
+    store = SystemKeyringSecretStore(service_name="hol-guard.test")
+
+    assert store.get_secret("secret-id") is None
+    assert not store._is_unavailable()
+    assert store.get_secret("secret-id") == "recovered-secret"
+    assert read_calls == 2
+
+
+def test_windows_keyring_non_session_error_is_not_swallowed(monkeypatch: pytest.MonkeyPatch) -> None:
+    module = _FakeSystemKeyringModule()
+    error = OSError(5, "Access is denied.")
+    error.__dict__["winerror"] = 5
+
+    monkeypatch.setattr(guard_store_module.sys, "platform", "win32", raising=False)
+    monkeypatch.setattr(SystemKeyringSecretStore, "_load_keyring_module", staticmethod(lambda: module))
+    monkeypatch.setattr(module, "get_password", lambda *_args: (_ for _ in ()).throw(error))
+
+    store = SystemKeyringSecretStore(service_name="hol-guard.test")
+
+    with pytest.raises(OSError) as exc_info:
+        store.get_secret("secret-id")
+
+    assert exc_info.value is error
+    assert not store._is_unavailable()
+
+
+def test_windows_policy_integrity_keyring_write_session_failure_degrades_until_retry(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    module = _FakeSystemKeyringModule()
+    writes_available = False
+
+    def _fail_first_write(service_name: str, secret_id: str, value: str) -> None:
+        if not writes_available:
+            raise _windows_no_such_logon_session_error()
+        module._secrets[(service_name, secret_id)] = value
+
+    monkeypatch.setattr(guard_store_module.sys, "platform", "win32", raising=False)
+    monkeypatch.setattr(SystemKeyringSecretStore, "_load_keyring_module", staticmethod(lambda: module))
+    monkeypatch.setattr(module, "set_password", _fail_first_write)
+
+    with caplog.at_level(logging.WARNING, logger="codex_plugin_scanner.guard.store"):
+        store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
+        degraded = store.setup_policy_integrity(
+            now="2026-09-13T21:00:00Z",
+            include_items=False,
+        )
+
+    assert degraded["backend"] == "unavailable"
+    assert degraded["mode"] == "degraded"
+    assert degraded["degraded_reasons"] == [
+        "system_keyring_unavailable",
+        "policy_integrity_control_unavailable",
+    ]
+    assert store._policy_integrity_secret_store._is_unavailable()
+    assert "1312" not in caplog.text
+    assert "logon session" not in caplog.text
+
+    writes_available = True
+    recovered = store.setup_policy_integrity(
+        now="2026-09-13T21:01:00Z",
+        include_items=False,
+    )
+
+    assert recovered["backend"] == "system-keyring"
+    assert recovered["mode"] == "protected"
+    assert recovered["degraded_reasons"] == []
+    assert not store._policy_integrity_secret_store._is_unavailable()
+
+
+def test_windows_policy_integrity_uses_accessible_system_keyring(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _FakeSystemKeyringModule()
+    monkeypatch.setattr(guard_store_module.sys, "platform", "win32", raising=False)
+    monkeypatch.setattr(SystemKeyringSecretStore, "_load_keyring_module", staticmethod(lambda: module))
+
+    store = GuardStore(
+        tmp_path / "guard-home",
+        prime_policy_integrity=False,
+    )
+
+    assert isinstance(store._policy_integrity_secret_store, SystemKeyringSecretStore)
+    state = store.setup_policy_integrity(now="2026-09-13T21:00:00Z", include_items=False)
+
+    assert state["backend"] == "system-keyring"
+    assert state["mode"] == "protected"
+    assert state["degraded_reasons"] == []
 
 
 def test_migrating_fallback_no_ui_uses_bounded_primary_read(tmp_path, monkeypatch):

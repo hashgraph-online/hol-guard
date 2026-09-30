@@ -1,5 +1,6 @@
 """Native decisions reach activity storage without retrospective policy evaluation."""
 
+import hashlib
 import sqlite3
 from pathlib import Path
 from types import SimpleNamespace
@@ -7,22 +8,56 @@ from types import SimpleNamespace
 import pytest
 
 from codex_plugin_scanner.guard.daemon.runtime_hook_evidence_writer import RuntimeHookEvidenceWriter
+from codex_plugin_scanner.guard.native_decision_receipt import canonical_receipt_bytes
 from codex_plugin_scanner.guard.store import GuardStore
 
 
-@pytest.mark.parametrize("accepted", [True, False])
-def test_native_receipt_link_requires_writer_acceptance(accepted: bool) -> None:
+def _valid_native_receipt() -> dict[str, object]:
+    receipt: dict[str, object] = {
+        "schema": "guard-native-hook-decision-receipt.v1",
+        "version": 1,
+        "authority": "rust",
+        "decision_id": "0" * 64,
+        "request_id": "request-1",
+        "request_digest": "a" * 64,
+        "harness": "codex",
+        "event_name": "PreToolUse",
+        "payload_kind": "inline",
+        "policy_generation": 1,
+        "policy_digest": None,
+        "rule_digest": None,
+        "runtime_identity": None,
+        "decision": "deny",
+        "model_output_action": "not_applicable",
+        "policy_action": "review",
+        "observed_policy_action": None,
+        "reason_code": "native_network_review",
+        "workspace_bound": False,
+        "source_ref_external_allowed": False,
+        "reviewed_output_sha256": None,
+        "observe_mode": False,
+        "deadline_budget_ms": 100,
+    }
+    receipt["decision_id"] = hashlib.sha256(canonical_receipt_bytes(receipt)).hexdigest()
+    return receipt
+
+
+@pytest.mark.parametrize("writer_accepted", [True, False])
+def test_native_receipt_link_requires_validated_receipt(writer_accepted: bool) -> None:
     from codex_plugin_scanner.guard.daemon.hook_worker_native import HookWorkerNativeMixin
 
     host = SimpleNamespace(
-        activity_writer=SimpleNamespace(submit_native_decision_receipt=lambda **kwargs: accepted),
+        activity_writer=SimpleNamespace(submit_native_decision_receipt=lambda **kwargs: writer_accepted),
         _last_native_decision_receipt=None,
     )
-    receipt = {"decision_id": "native-receipt-example"}
-    result = HookWorkerNativeMixin._record_native_decision_receipt(host, receipt)
-    assert result == (receipt if accepted else None)
-    assert HookWorkerNativeMixin._record_native_decision_receipt(host, None) is None
+    incomplete = {"decision_id": "native-receipt-example"}
+    assert HookWorkerNativeMixin._record_native_decision_receipt(host, incomplete) is None
     assert host._last_native_decision_receipt is None
+    receipt = _valid_native_receipt()
+    result = HookWorkerNativeMixin._record_native_decision_receipt(host, receipt)
+    assert result == receipt
+    assert host._last_native_decision_receipt == receipt
+    assert HookWorkerNativeMixin._record_native_decision_receipt(host, None) is None
 
 
 @pytest.mark.parametrize(
@@ -70,6 +105,15 @@ def test_native_pre_and_post_keep_authoritative_decision(
             "SELECT policy_action, execution_status, parse_confidence, decision_reason_code FROM command_activity"
         ).fetchall()
     assert rows == [("warn", "confirmed_success", None, "policy")]
+    with sqlite3.connect(store.guard_home / "guard.db") as connection:
+        preview = connection.execute("select invocation_preview from command_activity_invocation").fetchone()
+    assert preview == ("echo example",)
+    journal_path = store.guard_home / "runtime-hook-evidence.jsonl"
+    if journal_path.exists():
+        assert "echo example" not in journal_path.read_text(encoding="utf-8")
+    sidecar_path = store.guard_home / "runtime-hook-evidence.preview.jsonl"
+    if sidecar_path.exists():
+        assert "echo example" not in sidecar_path.read_text(encoding="utf-8")
     assert writer.stats()["failures"] == 0
 
 

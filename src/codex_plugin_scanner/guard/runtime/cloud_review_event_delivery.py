@@ -138,6 +138,7 @@ def _normalize_response(
         )
     normalized_response: dict[str, object] = {
         "accepted": accepted_count,
+        "delivered": sum(item.get("status") == "accepted" for item in results),
         "rejected": len(events) - accepted_count,
         "perEventResults": normalized,
         "acknowledgedThrough": acknowledged_through,

@@ -117,6 +117,9 @@ class TestGrokInstallUninstall:
         assert "Read(~/" not in managed_text
         assert "[[hooks.PreToolUse]]" in managed_text and "[[hooks.SessionStart]]" in managed_text
         assert '"--json"' in pretool_entries[0]["hooks"][0]["command"].replace(" ", "")
+        assert "[compat.claude]" in managed_text
+        assert "[compat.cursor]" in managed_text
+        assert managed_text.count("hooks = false") >= 2
 
     def test_repeated_install_is_idempotent(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
@@ -222,7 +225,7 @@ class TestGrokHookResponses:
                 store=store,
             )
         assert rc == 0
-        assert json.loads(stdout_capture.getvalue()) == {"decision": "allow"}
+        assert json.loads(stdout_capture.getvalue()) == {}
 
     def test_grok_block_emits_deny_json_and_stderr(self, tmp_path: Path) -> None:
         from codex_plugin_scanner.guard.cli.commands_hook_generic import _run_hook_generic_payload
@@ -579,7 +582,14 @@ class TestGrokInventoryAndResponses:
             reason="Blocked by HOL Guard.",
             event_name="UserPromptSubmit",
         )
-        assert payload == {"decision": "allow"}
+        assert payload == {}
+        assert "allow" not in json.dumps(payload)
+        session = grok_hook_response_from_guard(
+            policy_action="allow",
+            reason="",
+            event_name="SessionStart",
+        )
+        assert session == {}
 
     def test_subagent_start_with_tool_name_is_not_prompt(self, tmp_path: Path) -> None:
         workspace = tmp_path / "ws"

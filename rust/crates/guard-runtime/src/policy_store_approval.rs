@@ -9,6 +9,34 @@ pub(crate) struct ApprovalPolicyFence<'a> {
 }
 
 impl PolicySnapshotStore {
+    /// Fence an approval challenge to the resident's current authenticated
+    /// snapshot. The callback runs while the state mutex is held, so action
+    /// reconstruction and binding derivation cannot observe a policy push in
+    /// between. The callback must not call APIs that reacquire `state`.
+    pub(crate) fn with_approval_fence<F, T>(
+        &self,
+        envelope: &guard_contracts::GuardHookEnvelopeV2,
+        callback: F,
+    ) -> Result<T, String>
+    where
+        F: FnOnce(&AdmittedPolicySnapshot) -> Result<T, String>,
+    {
+        let now = now_ms()?;
+        let state = self
+            .state
+            .lock()
+            .map_err(|_| "native_policy_snapshot_state_unavailable".to_owned())?;
+        let snapshot = self.validate_request_snapshot_locked(
+            &state,
+            &envelope.policy_snapshot,
+            &envelope.source.guard_home,
+            envelope.policy_generation,
+            now,
+        )?;
+        let _command_lease = self.command_authority_lease(snapshot.snapshot())?;
+        callback(snapshot.as_ref())
+    }
+
     pub(crate) fn approval_v4_authority(
         &self,
     ) -> Result<&crate::policy_store::approval_v4_authority::ApprovalV4Authority, String> {
@@ -125,6 +153,7 @@ impl PolicySnapshotStore {
         {
             return Err("native_approval_policy_context_mismatch".to_owned());
         }
+        let _command_lease = self.command_authority_lease(snapshot.snapshot())?;
         if snapshot.expires_at_ms <= now {
             return Err("native_approval_receipt_expired".to_owned());
         }
@@ -165,6 +194,7 @@ impl PolicySnapshotStore {
         {
             return Err("native_approval_policy_context_mismatch".to_owned());
         }
+        let _command_lease = self.command_authority_lease(snapshot.snapshot())?;
         if snapshot.expires_at_ms <= now {
             return Err("native_approval_receipt_expired".to_owned());
         }

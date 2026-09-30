@@ -24,9 +24,7 @@ test_floor_only_ack_materializes_strictly_new_generation = (
     _persistence_tests.test_floor_only_ack_materializes_strictly_new_generation
 )
 test_floor_recovery_requires_exact_typed_ack = _persistence_tests.test_floor_recovery_requires_exact_typed_ack
-test_publisher_surfaces_resident_start_timeout = (
-    _persistence_tests.test_publisher_surfaces_resident_start_timeout
-)
+test_publisher_surfaces_resident_start_timeout = _persistence_tests.test_publisher_surfaces_resident_start_timeout
 test_lost_ack_retries_identical_payload = _persistence_tests.test_lost_ack_retries_identical_payload
 test_publisher_process_restart_reuses_cached_payload = (
     _persistence_tests.test_publisher_process_restart_reuses_cached_payload
@@ -51,6 +49,9 @@ test_prepare_workspace_policy_uses_bounded_first_workspace_handshake = (
 )
 test_prepare_workspace_policy_skips_wait_after_publisher_error = (
     _publisher_tests.test_prepare_workspace_policy_skips_wait_after_publisher_error
+)
+test_prepare_workspace_policy_waits_for_transient_resident_restart_lock = (
+    _publisher_tests.test_prepare_workspace_policy_waits_for_transient_resident_restart_lock
 )
 test_prepare_workspace_policy_waits_publish_budget_without_caller_deadline = (
     _publisher_tests.test_prepare_workspace_policy_waits_publish_budget_without_caller_deadline
@@ -95,6 +96,9 @@ test_windows_atomic_writer_cleans_temp_on_precommit_failure = (
 test_windows_verifier_key_provisioning_holds_state_binding = (
     _windows_storage_tests.test_windows_verifier_key_provisioning_holds_state_binding
 )
+test_windows_private_state_binding_closes_replaced_state_handle = (
+    _windows_storage_tests.test_windows_private_state_binding_closes_replaced_state_handle
+)
 test_windows_cache_reader_closes_handle_on_all_failures = (
     _windows_tests.test_windows_cache_reader_closes_handle_on_all_failures
 )
@@ -134,6 +138,7 @@ __all__ = [
     "test_policy_merge_never_downgrades_enforcing_posture_to_watch",
     "test_prepare_workspace_policy_skips_wait_after_publisher_error",
     "test_prepare_workspace_policy_uses_bounded_first_workspace_handshake",
+    "test_prepare_workspace_policy_waits_for_transient_resident_restart_lock",
     "test_prepare_workspace_policy_waits_publish_budget_without_caller_deadline",
     "test_publisher_does_not_ack_snapshot_after_concurrent_mutation",
     "test_publisher_does_not_republish_for_generation_created_by_own_ack",
@@ -162,6 +167,7 @@ __all__ = [
     "test_windows_open_handle_uses_disk_nonreparse_read_contract",
     "test_windows_pending_cleanup_uses_bound_file_handle",
     "test_windows_private_descriptor_deduplicates_system_owner_ace",
+    "test_windows_private_state_binding_closes_replaced_state_handle",
     "test_windows_scope_aliases_share_one_digest_identity",
     "test_windows_snapshot_write_holds_parent_binding_across_commit",
     "test_windows_storage_writer_has_no_path_replace_in_native_branch",

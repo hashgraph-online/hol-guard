@@ -7,7 +7,7 @@ import os
 import sqlite3
 import subprocess
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePath
 
 import pytest
 
@@ -121,7 +121,15 @@ def _install_fake_package_manager(
     monkeypatch.setenv("PATH", os.pathsep.join(filter(None, (str(package_bin), inherited_path))))
 
 
-@pytest.mark.parametrize("origin,harness", [("environment", "zcode"), ("zcode-cli", "zcode"), ("grok", "grok")])
+@pytest.mark.parametrize(
+    "origin,harness",
+    [
+        ("environment", "zcode"),
+        ("zcode-cli", "zcode"),
+        ("grok", "grok"),
+        ("/Applications/Codex.app/Contents/MacOS/Codex", "codex"),
+    ],
+)
 @pytest.mark.parametrize("package_manager", ["npm", "bun"])
 def test_guard_protect_attributes_package_requests_to_invoking_harness(
     tmp_path: Path,
@@ -152,7 +160,8 @@ def test_guard_protect_attributes_package_requests_to_invoking_harness(
 
         def process_snapshot(command, **kwargs):
             if command == ["/bin/ps", "-axo", "pid=,ppid=,comm="]:
-                return subprocess.CompletedProcess(command, 0, f"42 41 /bin/sh\n41 1 {origin}\n", "")
+                executable = PurePath(origin).name if "/" in origin or "\\" in origin else origin
+                return subprocess.CompletedProcess(command, 0, f"42 41 /bin/sh\n41 1 {executable}\n", "")
             return original_run(command, **kwargs)
 
         monkeypatch.setattr(harness_attribution.os, "getppid", lambda: 42)
@@ -195,6 +204,84 @@ def test_guard_protect_attributes_package_requests_to_invoking_harness(
     ]
     assert install_events
     assert all(event["payload"].get("harness") == harness for event in install_events)
+
+
+def test_guard_protect_attributes_package_requests_from_grok_env(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True)
+    store = GuardStore(home_dir)
+    _seed_review_advisory(store)
+    strip_harness_env_markers(monkeypatch)
+    monkeypatch.setenv("GROK_AGENT", "1")
+    _stub_approval_daemon(monkeypatch)
+
+    rc = main(
+        [
+            "guard",
+            "protect",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+            "--dry-run",
+            "npm",
+            "install",
+            "reviewpkg",
+        ]
+    )
+
+    output = json.loads(capsys.readouterr().out)
+    assert output["request"]["harness"] == "grok"
+    assert output["receipt"]["harness"] == "grok"
+    queued = store.list_approval_requests(status="pending", limit=10)
+    assert queued
+    assert all(item["harness"] == "grok" for item in queued)
+    assert rc == 2
+
+
+def test_guard_protect_attributes_package_requests_from_origin_stamp(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True)
+    store = GuardStore(home_dir)
+    _seed_review_advisory(store)
+    strip_harness_env_markers(monkeypatch)
+    monkeypatch.setenv("HOL_GUARD_ORIGIN_HARNESS", "codex")
+    _stub_approval_daemon(monkeypatch)
+
+    rc = main(
+        [
+            "guard",
+            "protect",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+            "--dry-run",
+            "npm",
+            "install",
+            "reviewpkg",
+        ]
+    )
+
+    output = json.loads(capsys.readouterr().out)
+    assert output["request"]["harness"] == "codex"
+    assert output["receipt"]["harness"] == "codex"
+    queued = store.list_approval_requests(status="pending", limit=10)
+    assert queued
+    assert all(item["harness"] == "codex" for item in queued)
+    assert rc == 2
 
 
 def test_guard_protect_keeps_guard_cli_attribution_outside_harness_env(

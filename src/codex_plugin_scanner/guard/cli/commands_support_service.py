@@ -348,7 +348,7 @@ def _dispatch_guard_daemon_command(
     if store is None:
         store = GuardStore(
             guard_home,
-            prime_policy_integrity=bool(getattr(args, "serve", False)),
+            prime_policy_integrity=False,
         )
     workspace_dir = (
         context.workspace_dir if context is not None and context.workspace_dir is not None else workspace

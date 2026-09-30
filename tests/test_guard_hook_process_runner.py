@@ -404,7 +404,7 @@ def test_worker_request_fails_safe_on_invalid_json() -> None:
 
 
 def test_prewarmed_runner_handles_real_hook_and_closes(tmp_path: Path) -> None:
-    runner = HookProcessRunner(process_limit=1, timeout_seconds=2)
+    runner = HookProcessRunner(process_limit=1, timeout_seconds=2 * under_coverage_scale(3.0))
     try:
         runner.start()
         result = runner.review(
@@ -648,10 +648,16 @@ def test_scheduler_and_runner_complete_48_routine_reviews_without_capacity_denia
         per_harness_queued_limit=64,
         per_client_queued_limit=16,
     )
+    timing_scale = under_coverage_scale(4.0)
+    # This contract measures capacity fan-in, not the production transport SLA.
+    # Keep the test deadline bounded while allowing loaded CI hosts to schedule
+    # all 48 fake-worker IPC calls without turning scheduler coverage flaky.
+    runner_timeout_seconds = 8.0 * timing_scale
+    review_timeout_seconds = 10.0 * timing_scale
     runner = HookProcessRunner(
         guard_home=tmp_path,
         process_limit=8,
-        timeout_seconds=2.8,
+        timeout_seconds=runner_timeout_seconds,
         capacity_listener=scheduler.set_active_limit,
     )
     # Exercise the real runner/scheduler IPC and lifecycle while avoiding the
@@ -660,7 +666,6 @@ def test_scheduler_and_runner_complete_48_routine_reviews_without_capacity_denia
     # Keep all 48 callers synchronized; the scheduler must queue more callers
     # than the eight-worker process pool while the runner remains integrated.
     barrier = threading.Barrier(48)
-    timing_scale = under_coverage_scale(4.0)
 
     def review(index: int) -> HookProcessReview:
         barrier.wait(timeout=3 * timing_scale)
@@ -680,7 +685,7 @@ def test_scheduler_and_runner_complete_48_routine_reviews_without_capacity_denia
                 guard_home=tmp_path,
                 workspace=tmp_path,
                 hook_env={},
-                deadline=time.monotonic() + 4 * timing_scale,
+                deadline=time.monotonic() + review_timeout_seconds,
             )
 
     try:
@@ -818,7 +823,8 @@ def test_prewarmed_runner_scans_post_tool_output_in_isolated_worker(tmp_path: Pa
 
 
 def test_idempotent_review_retries_once_after_worker_death(tmp_path: Path) -> None:
-    runner = HookProcessRunner(guard_home=tmp_path, process_limit=2, timeout_seconds=2)
+    timeout_seconds = 2.0 * under_coverage_scale(3.0)
+    runner = HookProcessRunner(guard_home=tmp_path, process_limit=2, timeout_seconds=timeout_seconds)
     try:
         runner.start()
         first_slot = next(iter(runner._all_slots.values()))  # pyright: ignore[reportPrivateUsage]
@@ -846,7 +852,7 @@ def test_idempotent_review_retries_once_after_worker_death(tmp_path: Path) -> No
             guard_home=tmp_path,
             workspace=tmp_path,
             hook_env={},
-            deadline=time.monotonic() + 2,
+            deadline=time.monotonic() + timeout_seconds,
         )
     finally:
         runner.close()
@@ -1448,3 +1454,17 @@ def test_trusted_recovery_overlays_only_valid_failure_kind(
 
     assert environments[0]["HOL_GUARD_HOOK_FAILURE_KIND"] == "overload"
     assert environments[1]["HOL_GUARD_HOOK_FAILURE_KIND"] == "transport-failure"
+
+
+def test_empty_wire_payload_keeps_envelope_reason_code_metrics() -> None:
+    runner = HookProcessRunner(process_limit=1)
+    try:
+        runner._record_response_metrics(  # pyright: ignore[reportPrivateUsage]
+            {},
+            envelope_reason_code="native_hook_event_unavailable",
+        )
+        stats = runner.stats()
+        assert stats["reason_codes"]["native_hook_event_unavailable"] == 1
+        assert stats["decisions"]["unknown"] == 1
+    finally:
+        runner.close()

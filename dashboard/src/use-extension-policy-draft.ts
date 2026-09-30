@@ -77,6 +77,9 @@ export function useExtensionPolicyDraft(props: {
   const { onRefresh } = props;
   const dirty = useMemo(() => extensionPolicyDraftIsDirty(baseEffective, draftLayers), [baseEffective, draftLayers]);
 
+  // Integrity health and lockdown transitions can change the effective layers
+  // without advancing the revision or digest; both must re-seed the draft so
+  // lock notices and editing gates never go stale on a health-only change.
   useEffect(() => {
     draftGeneration.current += 1;
     setBaseEffective(props.effective);
@@ -88,7 +91,7 @@ export function useExtensionPolicyDraft(props: {
     setError(null);
     setStale(false);
     setPendingRebase(null);
-  }, [props.effective.revision, props.effective.catalog_digest]);
+  }, [props.effective.revision, props.effective.catalog_digest, props.effective.health, props.effective.global_lockdown]);
 
   const changeCountFor = useCallback((permissionIds: readonly string[]) => {
     return permissionIds.filter((permissionId) =>

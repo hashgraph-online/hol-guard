@@ -14,7 +14,7 @@ from typing import Literal, TypeGuard
 
 from ..action_lattice import is_action_bearing_key
 from ..adapters.hermes_runtime_hooks import prepare_hermes_hook_payload
-from ..redaction import redact_text
+from ..redaction import is_sensitive_review_key, redact_text
 from .secret_sensitivity import redacted_secret_path_context
 from .shell_command_wrappers import normalize_transparent_shell_command
 
@@ -87,33 +87,6 @@ _EXPLICIT_COMMAND_KEYS = ("command", "cmd", "shell_command", "shellCommand")
 _SEARCH_PATTERN_KEYS = ("pattern", "query", "search", "regex")
 _PATCH_INPUT_KEYS = ("patch", "input", "command")
 _PATCH_FILE_HEADER_PATTERN = re.compile(r"^\*\*\* (?:Add|Delete|Update) File: (?P<path>.+)$", re.MULTILINE)
-_SENSITIVE_RAW_KEYS = frozenset(
-    {
-        "api_key",
-        "apikey",
-        "access_token",
-        "auth",
-        "authorization",
-        "client_secret",
-        "content",
-        "cookie",
-        "credential",
-        "credentials",
-        "id_token",
-        "output",
-        "password",
-        "private_key",
-        "refresh_token",
-        "secret",
-        "session_token",
-        "set_cookie",
-        "stderr",
-        "stdout",
-        "token",
-        "tool_response",
-    }
-)
-_SENSITIVE_RAW_KEY_ALIASES = frozenset(key.replace("_", "") for key in _SENSITIVE_RAW_KEYS)
 _HOOK_EVENT_NAME_MAP = {
     "prompt": "UserPromptSubmit",
     "userpromptsubmit": "UserPromptSubmit",
@@ -500,6 +473,29 @@ def normalize_zcode_hook_payload(
     )
 
 
+def normalize_devin_hook_payload(
+    payload: Mapping[str, object],
+    *,
+    workspace: Path | str | None = None,
+    home_dir: Path | str | None = None,
+) -> GuardActionEnvelope:
+    """Normalize a Devin CLI hook payload into a typed action envelope.
+
+    Devin speaks the Claude Code wire protocol, so payloads normalize onto the
+    shared Guard shape through the Devin hook helpers.
+    """
+
+    from ..adapters.devin_hooks import prepare_devin_hook_payload
+
+    return _normalize_action_payload(
+        prepare_devin_hook_payload(payload),
+        harness="devin",
+        default_event_name=None,
+        workspace=workspace,
+        home_dir=home_dir,
+    )
+
+
 def _normalize_pi_family_payload(
     payload: Mapping[str, object],
     *,
@@ -573,6 +569,9 @@ _ACTION_PAYLOAD_NORMALIZERS = {
     "omp": normalize_omp_payload,
     "zcode": normalize_zcode_hook_payload,
     "zai": normalize_zcode_hook_payload,
+    "devin": normalize_devin_hook_payload,
+    "devin-cli": normalize_devin_hook_payload,
+    "cognition-devin": normalize_devin_hook_payload,
 }
 
 
@@ -1130,8 +1129,7 @@ def _redacted_payload(payload: Mapping[str, object], *, home_dir: Path | str | N
 
 
 def _redacted_value(key: str, value: object, *, home_dir: Path | str | None) -> object:
-    normalized_key = _normalized_secret_key(key)
-    if normalized_key in _SENSITIVE_RAW_KEYS or normalized_key.replace("_", "") in _SENSITIVE_RAW_KEY_ALIASES:
+    if is_sensitive_review_key(key):
         return "[redacted]"
     if isinstance(value, Mapping):
         return {

@@ -47,7 +47,7 @@ from scripts.native_probe_receipts import (
     wait_for_route_corpus,
 )
 from scripts.native_slo_adapter import is_allowed
-from scripts.native_slo_contract import proof_environment_violations
+from scripts.native_slo_contract import MAX_READINESS_P95_MS, proof_environment_violations
 
 _HOOK_CLIENT_SPEC = importlib.util.spec_from_file_location(
     "hol_guard_installed_hook_client",
@@ -219,7 +219,11 @@ def _exercise_installed_routes(
                 )
             )
         for event, payload in events:
-            response_payload = _installed_hook_request(daemon, guard_home, workspace, harness, event, payload)
+            try:
+                response_payload = _installed_hook_request(daemon, guard_home, workspace, harness, event, payload)
+            except TimeoutError as error:
+                # Report the failed route without exposing tokens or replaying a possibly dispatched request.
+                raise RuntimeError(f"installed hook transport timed out: harness={harness} event={event}") from error
             if response_payload is None:
                 raise RuntimeError(f"empty response for {harness} {event}")
             _require(
@@ -291,7 +295,7 @@ def _installed_hook_corpus(root: Path) -> dict[str, object]:
     # Register the actual installed-hook workspace before timing the readiness
     # barrier. The publisher is already started by HookWorker construction;
     # pre-registering prevents the measured first request from paying for a
-    # second workspace-overlay publication and keeps the strict 250 ms budget
+    # second workspace-overlay publication and keeps the shared readiness budget
     # meaningful on slower Intel runners.
     register_workspace = getattr(daemon._server.hook_worker.policy_snapshot_publisher, "register_workspace", None)
     if callable(register_workspace):
@@ -302,15 +306,16 @@ def _installed_hook_corpus(root: Path) -> dict[str, object]:
     daemon.start()
     mode_invariants: dict[str, dict[str, object]] = {}
     worker_stats = evidence_stats = None
+    readiness_budget_seconds = MAX_READINESS_P95_MS / 1_000.0
     try:
         readiness_started = time.monotonic()
         prepared_policy = daemon._server.hook_worker.prepare_workspace_policy(
             workspace,
-            deadline=readiness_started + 0.25,
+            deadline=readiness_started + readiness_budget_seconds,
         )
         readiness_elapsed = time.monotonic() - readiness_started
         _require(
-            prepared_policy is not None and readiness_elapsed <= 0.25,
+            prepared_policy is not None and readiness_elapsed <= readiness_budget_seconds,
             {
                 "elapsed_ms": round(readiness_elapsed * 1_000, 2),
                 "policy_ready": prepared_policy is not None,
@@ -320,10 +325,15 @@ def _installed_hook_corpus(root: Path) -> dict[str, object]:
         worker_stats = wait_for_route_corpus(
             daemon._server.hook_worker.metrics,
             expected=len(route_receipts),
+            timeout_seconds=45.0 if os.name == "nt" else 5.0,
         )
         writer = daemon._server.runtime_hook_evidence_writer
         mode_invariants = _exercise_mode_invariants(daemon, guard_home, workspace)
-        evidence_stats = wait_for_receipt_corpus(writer, expected=len(route_receipts))
+        evidence_stats = wait_for_receipt_corpus(
+            writer,
+            expected=len(route_receipts),
+            timeout_seconds=45.0 if os.name == "nt" else 5.0,
+        )
     finally:
         daemon.stop()
     if not isinstance(worker_stats, Mapping) or not isinstance(evidence_stats, Mapping):
@@ -334,7 +344,7 @@ def _installed_hook_corpus(root: Path) -> dict[str, object]:
         raise RuntimeError(f"native_default_auto_probe_failed: invalid route metrics: {worker_stats}")
     observed_routes = cast(dict[str, int], observed_routes_raw)
     _require(expected > 0, "installed hook corpus is empty")
-    _require(expected == 21, {"expected": expected, "routes": routes})
+    _require(expected == 23, {"expected": expected, "routes": routes})
     _require(sum(observed_routes.values()) == expected, worker_stats)
     _require(observed_routes.get("native_resident") == expected, worker_stats)
     _require(receipt_corpus_is_complete(evidence_stats, expected=expected), evidence_stats)
