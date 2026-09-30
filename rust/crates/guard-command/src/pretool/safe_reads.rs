@@ -78,30 +78,106 @@ pub(super) fn safe_read_target(argument: &str) -> bool {
     true
 }
 
-/// Like [`safe_read_target`] but for already-absolute paths reported by
-/// structured file tools (Devin `read`/`grep`/`glob`, Cursor `read_file`,
-/// and similar callers that send `~/`-expanded or `/`-rooted targets).
-/// Absolute targets must stay outside the sensitive roots, avoid credential
-/// families, and not descend into hidden directories; `~` expansion happens
-/// in the caller against the envelope's verified `home_dir`.
-pub(super) fn safe_absolute_read_target(argument: &str) -> bool {
-    let Some(normalized) = lexical_read_path(argument) else {
+/// Structured file-tool read floor. `home_dir`/`cwd` are the envelope's
+/// verified roots; `~` expands against `home_dir`. Absolute and anchored
+/// candidates must canonicalize to an existing regular file inside a
+/// verified root — symlink escapes resolve to their real target — and stay
+/// outside the sensitive roots, credential families, sensitive filenames,
+/// and hidden directories. Workspace-relative paths keep the legacy
+/// lexical allowance, but when `cwd` is known and the file resolves, the
+/// canonical check applies to them as well. Directories and unresolvable
+/// absolute/`~` targets are not provable here and stay under review.
+pub(super) fn bounded_file_read_target(
+    value: &str,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+) -> bool {
+    let path = value.trim();
+    if path.is_empty() || path.len() > 4096 {
         return false;
+    }
+    if path.contains([
+        '$', '`', '|', ';', '&', '<', '>', '\n', '\r', '\0', '*', '?', '[', ']', '{', '}',
+    ]) {
+        return false;
+    }
+    if path.split(['/', '\\']).any(|part| part == "..") {
+        return false;
+    }
+    let expanded = expand_home_read_path(path, home_dir).unwrap_or_else(|| path.to_owned());
+    let expanded_path = std::path::Path::new(&expanded);
+    let candidate = if expanded_path.is_absolute() {
+        expanded_path.to_path_buf()
+    } else if let Some(root) = cwd.map(str::trim).filter(|root| root.starts_with('/')) {
+        std::path::Path::new(root).join(expanded_path)
+    } else {
+        return safe_read_target(path);
     };
-    let lowered = normalized.to_ascii_lowercase();
-    const ROOTS: [&str; 6] = ["/etc", "/dev", "/proc", "/sys", "/var", "/private/etc"];
-    if !lowered.starts_with('/')
-        || ROOTS
-            .iter()
-            .any(|prefix| lowered == *prefix || lowered.starts_with(&format!("{prefix}/")))
-        || super::sensitive_command(argument)
-        || super::sensitive_command(&normalized)
-        || guard_secure_fs::sensitive_path_family(std::path::Path::new(&normalized)).is_some()
-        || !guard_secure_fs::hidden_read_parts_allowed(std::path::Path::new(&normalized))
+    if let Ok(canonical) = std::fs::canonicalize(&candidate) {
+        return resolved_file_read_allowed(&canonical, home_dir, cwd);
+    }
+    // An unresolvable absolute or `~` target cannot prove a bounded file;
+    // a workspace-relative spelling keeps the pre-existing lexical floor.
+    if expanded.starts_with('/') {
+        return false;
+    }
+    safe_read_target(path)
+}
+
+/// The canonicalized target must be a regular file under a verified root
+/// and clear every sensitive-content screen.
+fn resolved_file_read_allowed(
+    canonical: &std::path::Path,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+) -> bool {
+    if !canonical.is_file() {
+        return false;
+    }
+    let under_root = [home_dir, cwd]
+        .into_iter()
+        .flatten()
+        .map(str::trim)
+        .filter(|root| root.starts_with('/'))
+        .filter_map(|root| std::fs::canonicalize(root).ok())
+        .any(|root| canonical.starts_with(root));
+    if !under_root {
+        return false;
+    }
+    let rendered = canonical.to_string_lossy().replace('\\', "/");
+    let lowered = rendered.to_ascii_lowercase();
+    const ROOTS: [&str; 7] = [
+        "/etc",
+        "/dev",
+        "/proc",
+        "/sys",
+        "/var",
+        "/private/etc",
+        "/private/var",
+    ];
+    if ROOTS
+        .iter()
+        .any(|prefix| lowered == *prefix || lowered.starts_with(&format!("{prefix}/")))
+        || super::sensitive_command(&rendered)
+        || guard_secure_fs::sensitive_path_family(canonical).is_some()
+        || guard_secure_fs::sensitive_external_filename(canonical)
+        || !guard_secure_fs::hidden_read_parts_allowed(canonical)
     {
         return false;
     }
     true
+}
+
+fn expand_home_read_path(path: &str, home_dir: Option<&str>) -> Option<String> {
+    let rest = path.strip_prefix('~')?;
+    if !rest.is_empty() && !rest.starts_with('/') {
+        return None;
+    }
+    let home = home_dir?.trim().trim_end_matches('/');
+    if home.is_empty() || !home.starts_with('/') {
+        return None;
+    }
+    Some(format!("{home}{rest}"))
 }
 
 fn lexical_read_path(value: &str) -> Option<String> {

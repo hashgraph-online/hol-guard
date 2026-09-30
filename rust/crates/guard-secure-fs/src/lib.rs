@@ -16,7 +16,8 @@ mod source_path;
 
 use secure_open::{secure_open, SecureOpenError};
 pub use source_path::{
-    classify_source_path, hidden_read_parts_allowed, sensitive_path_family, source_like,
+    classify_source_path, hidden_read_parts_allowed, sensitive_external_filename,
+    sensitive_path_family, source_like,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]

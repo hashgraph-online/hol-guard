@@ -86,8 +86,10 @@ logged by Devin but does not block the action.
 Guard queues a Devin action in the approval center only when the native
 policy cannot prove it benign. Bounded read-only `exec` commands (for
 example `pwd`, `date`, or a single-file `cat`) and single-target
-`read`/`grep`/`glob` calls on non-sensitive workspace-relative, absolute,
-or `~/`-relative paths are allowed locally. Writes, edits, MCP calls,
+`read`/`grep`/`glob` calls that resolve to a single existing regular file
+under the workspace or home directory — spelled as a workspace-relative,
+absolute, or `~/`-relative path — are allowed locally once they clear the
+sensitive-file screens. Writes, edits, MCP calls,
 network fetches, reads of sensitive files or hidden directories
 (`.ssh`, `.aws`, `.env`, `.git`, `.hol-guard`, …), and anything the
 native evaluator cannot classify keep going to the approval center.

@@ -97,7 +97,11 @@ fn hidden_parts_allowed(parts: &[String]) -> bool {
     workflow_prefix && hidden == [".github"]
 }
 
-fn sensitive_external_filename(path: &Path) -> bool {
+/// True when the basename or stem matches a sensitive filename family
+/// (`credentials`, `secrets`, `token`, `password`, `id_rsa`, `.env`, …).
+/// Unlike `sensitive_path_family`, this also catches plain filenames such
+/// as `credentials.txt` that carry no well-known parent directory.
+pub fn sensitive_external_filename(path: &Path) -> bool {
     let filename = path
         .file_name()
         .and_then(|value| value.to_str())

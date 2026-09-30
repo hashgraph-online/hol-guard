@@ -193,88 +193,170 @@ fn allows_one_non_sensitive_file_read() {
     assert_eq!(aliased.minimum_action, "review");
 }
 
-fn devin(payload: Value) -> PreToolResultV1 {
+fn devin(payload: Value, home: &std::path::Path) -> PreToolResultV1 {
     evaluate_pre_tool_envelope_with_source(
         "devin",
         "PreToolUse",
         &payload,
         None,
         None,
-        Some("/Users/tester"),
-        Some("/Users/tester"),
+        home.to_str(),
+        home.to_str(),
     )
+}
+
+/// A real temporary "home" so `~` expansion and canonicalization resolve
+/// against fixture files the same way they resolve against the verified
+/// envelope roots at runtime.
+fn devin_home() -> std::path::PathBuf {
+    // Keep the fixture root outside $TMPDIR: on macOS it canonicalizes
+    // under /private/var, which the sensitive-root check must reject.
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../target/pretool-devin")
+        .join(format!("home-{}", std::process::id()));
+    for file in [
+        "project/state/current_run.json",
+        "project/pyproject.toml",
+        "project/scripts/notes.txt",
+        "project/credentials.txt",
+        "project/.env",
+        ".ssh/id_rsa",
+    ] {
+        let path = root.join(file);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, "fixture").unwrap();
+    }
+    std::fs::create_dir_all(root.join("project/sub")).unwrap();
+    // Canonicalize once so callers never spell the root with `..` segments,
+    // which the traversal guard rejects.
+    std::fs::canonicalize(&root).unwrap()
 }
 
 #[test]
 fn devin_exec_uses_the_command_model() {
-    let pwd = devin(json!({
-        "hook_event_name": "PreToolUse",
-        "tool_name": "exec",
-        "tool_input": {"command": "pwd"}
-    }));
+    let home = devin_home();
+    let pwd = devin(
+        json!({
+            "hook_event_name": "PreToolUse",
+            "tool_name": "exec",
+            "tool_input": {"command": "pwd"}
+        }),
+        &home,
+    );
     assert_eq!(pwd.action.action_type, PreToolActionTypeV1::Command);
     assert_eq!(pwd.minimum_action, "allow");
 
-    let destructive = devin(json!({
-        "tool_name": "exec",
-        "tool_input": {"command": "rm -rf /"}
-    }));
+    let destructive = devin(
+        json!({
+            "tool_name": "exec",
+            "tool_input": {"command": "rm -rf /"}
+        }),
+        &home,
+    );
     assert_eq!(destructive.minimum_action, "block");
 
-    let compound = devin(json!({
-        "tool_name": "exec",
-        "tool_input": {"command": "pwd; rm -rf ~"}
-    }));
+    let compound = devin(
+        json!({
+            "tool_name": "exec",
+            "tool_input": {"command": "pwd; rm -rf ~"}
+        }),
+        &home,
+    );
     assert_ne!(compound.minimum_action, "allow");
 }
 
 #[test]
-fn devin_reads_allow_only_bounded_non_sensitive_targets() {
-    let home_relative = devin(json!({
-        "tool_name": "read",
-        "tool_input": {"file_path": "~/project/state/current_run.json"}
-    }));
+fn devin_reads_allow_only_bounded_existing_files() {
+    let home = devin_home();
+    let home_str = home.to_string_lossy().into_owned();
+
+    let home_relative = devin(
+        json!({
+            "tool_name": "read",
+            "tool_input": {"file_path": "~/project/state/current_run.json"}
+        }),
+        &home,
+    );
     assert_eq!(
         home_relative.action.action_type,
         PreToolActionTypeV1::FileRead
     );
     assert_eq!(home_relative.minimum_action, "allow");
 
-    let absolute = devin(json!({
-        "tool_name": "read",
-        "tool_input": {"file_path": "/Users/tester/project/pyproject.toml"}
-    }));
+    let absolute = devin(
+        json!({
+            "tool_name": "read",
+            "tool_input": {"file_path": format!("{home_str}/project/pyproject.toml")}
+        }),
+        &home,
+    );
     assert_eq!(absolute.minimum_action, "allow");
 
-    let grep = devin(json!({
-        "tool_name": "grep",
-        "tool_input": {"pattern": "fixture", "path": "~/project/scripts"}
-    }));
-    assert_eq!(grep.action.action_type, PreToolActionTypeV1::FileRead);
-    assert_eq!(grep.minimum_action, "allow");
+    // A grep whose path is a real file is a bounded read.
+    let grep_file = devin(
+        json!({
+            "tool_name": "grep",
+            "tool_input": {"pattern": "fixture", "path": "~/project/scripts/notes.txt"}
+        }),
+        &home,
+    );
+    assert_eq!(grep_file.minimum_action, "allow");
 
-    let glob = devin(json!({
-        "tool_name": "glob",
-        "tool_input": {"pattern": "hol-guard*", "path": "~/project"}
-    }));
-    assert_eq!(glob.minimum_action, "allow");
+    // Directory scopes cannot prove which descendant files a recursive
+    // search will touch, so they remain under review.
+    let grep_dir = devin(
+        json!({
+            "tool_name": "grep",
+            "tool_input": {"pattern": "fixture", "path": "~/project/scripts"}
+        }),
+        &home,
+    );
+    assert_eq!(grep_dir.action.action_type, PreToolActionTypeV1::FileRead);
+    assert_ne!(grep_dir.minimum_action, "allow");
+
+    let glob_dir = devin(
+        json!({
+            "tool_name": "glob",
+            "tool_input": {"pattern": "*.json", "path": "~/project"}
+        }),
+        &home,
+    );
+    assert_ne!(glob_dir.minimum_action, "allow");
+
+    // A symlink under the home root that escapes it must not auto-allow.
+    #[cfg(unix)]
+    {
+        let escaped = home.join("project/etc-passwd-link");
+        std::os::unix::fs::symlink("/etc/passwd", &escaped).unwrap();
+        let via_symlink = devin(
+            json!({
+                "tool_name": "read",
+                "tool_input": {"file_path": "~/project/etc-passwd-link"}
+            }),
+            &home,
+        );
+        assert_ne!(via_symlink.minimum_action, "allow");
+    }
 
     for sensitive in [
         "~/project/.env",
+        "~/project/credentials.txt",
         "~/.ssh/id_rsa",
-        "~/.aws/credentials",
-        "~/.hol-guard/config.toml",
-        "~/project/.git/config",
+        "~/project/state/missing.json",
+        "~/project",
         "/etc/passwd",
         "/var/root/.ssh/id_rsa",
         "~root/project/file.json",
         "/opt/outside/file.txt",
         "/Users/other/notes.txt",
     ] {
-        let result = devin(json!({
-            "tool_name": "read",
-            "tool_input": {"file_path": sensitive}
-        }));
+        let result = devin(
+            json!({
+                "tool_name": "read",
+                "tool_input": {"file_path": sensitive}
+            }),
+            &home,
+        );
         assert_eq!(result.action.action_type, PreToolActionTypeV1::FileRead);
         assert_ne!(
             result.minimum_action, "allow",
@@ -293,28 +375,40 @@ fn devin_reads_allow_only_bounded_non_sensitive_targets() {
 
     // A workspace root also proves an absolute read bounded even when the
     // target is outside the home directory.
+    let workspace = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../target/pretool-devin")
+        .join(format!("workspace-{}", std::process::id()));
+    std::fs::create_dir_all(&workspace).unwrap();
+    std::fs::write(workspace.join("lib.py"), "fixture").unwrap();
+    let workspace = std::fs::canonicalize(&workspace).unwrap();
     let workspace_only = evaluate_pre_tool_envelope_with_source(
         "devin",
         "PreToolUse",
-        &json!({"tool_name": "read", "tool_input": {"file_path": "/work/repo/src/lib.py"}}),
+        &json!({"tool_name": "read", "tool_input": {"file_path": workspace.join("lib.py").to_string_lossy()}}),
         None,
         None,
-        Some("/Users/tester"),
-        Some("/work/repo"),
+        Some("/nonexistent-home"),
+        workspace.to_str(),
     );
     assert_eq!(workspace_only.minimum_action, "allow");
 
-    let write = devin(json!({
-        "tool_name": "write",
-        "tool_input": {"file_path": "~/project/state/out.json", "content": "{}"}
-    }));
+    let write = devin(
+        json!({
+            "tool_name": "write",
+            "tool_input": {"file_path": "~/project/state/out.json", "content": "{}"}
+        }),
+        &home,
+    );
     assert_eq!(write.action.action_type, PreToolActionTypeV1::FileWrite);
     assert_eq!(write.minimum_action, "review");
 
-    let mcp = devin(json!({
-        "tool_name": "mcp__composio__COMPOSIO_MANAGE_CONNECTIONS",
-        "tool_input": {"toolkits": []}
-    }));
+    let mcp = devin(
+        json!({
+            "tool_name": "mcp__composio__COMPOSIO_MANAGE_CONNECTIONS",
+            "tool_input": {"toolkits": []}
+        }),
+        &home,
+    );
     assert_eq!(mcp.action.action_type, PreToolActionTypeV1::McpTool);
     assert_eq!(mcp.minimum_action, "review");
 }

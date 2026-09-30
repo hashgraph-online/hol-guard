@@ -488,7 +488,7 @@ fn evaluate_signals(
         && !signals.sensitive_target
         && signals.url_values.is_empty()
         && signals.path_values.len() == 1
-        && bounded_file_read_target(&signals.path_values[0], home_dir, cwd)
+        && super::safe_reads::bounded_file_read_target(&signals.path_values[0], home_dir, cwd)
     {
         return generic_result(
             action,
@@ -499,46 +499,4 @@ fn evaluate_signals(
     }
     let (reason_code, reason) = review_reason(action_type);
     generic_result(action, "review", reason_code, reason)
-}
-
-/// File-tool read targets may be workspace-relative, absolute, or
-/// `~/`-relative (Devin). Absolute and home-relative candidates must live
-/// under a verified root — the envelope's `home_dir` or `cwd` — and pass
-/// the stricter sensitive-root, credential-family, and hidden-directory
-/// checks in `safe_absolute_read_target`.
-fn bounded_file_read_target(value: &str, home_dir: Option<&str>, cwd: Option<&str>) -> bool {
-    let path = value.trim();
-    if path.is_empty() || path.len() > 4096 {
-        return false;
-    }
-    if path.contains([
-        '$', '`', '|', ';', '&', '<', '>', '\n', '\r', '\0', '*', '?', '[', ']', '{', '}',
-    ]) {
-        return false;
-    }
-    if path.split(['/', '\\']).any(|part| part == "..") {
-        return false;
-    }
-    if super::safe_reads::safe_read_target(path) {
-        return true;
-    }
-    let expanded = expand_home_read_path(path, home_dir);
-    let candidate = expanded.as_deref().unwrap_or(path);
-    let under_known_root = [home_dir, cwd].into_iter().flatten().any(|root| {
-        let root = root.trim().trim_end_matches('/');
-        root.starts_with('/') && (candidate == root || candidate.starts_with(&format!("{root}/")))
-    });
-    under_known_root && super::safe_reads::safe_absolute_read_target(candidate)
-}
-
-fn expand_home_read_path(path: &str, home_dir: Option<&str>) -> Option<String> {
-    let rest = path.strip_prefix('~')?;
-    if !rest.is_empty() && !rest.starts_with('/') {
-        return None;
-    }
-    let home = home_dir?.trim().trim_end_matches('/');
-    if home.is_empty() || !home.starts_with('/') {
-        return None;
-    }
-    Some(format!("{home}{rest}"))
 }
