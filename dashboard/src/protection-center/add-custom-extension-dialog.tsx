@@ -51,6 +51,8 @@ import {
 import { CustomExtensionCommandList, withCommandState } from "./custom-extension-commands";
 import { useResolvedApprovalGate } from "../use-resolved-approval-gate";
 import { InlineError } from "./components/protection-primitives";
+import { McpRegistrySearch } from "./mcp-registry-search";
+import type { LocalCliDiscoveryOutcome } from "./use-local-cli-catalog";
 
 function randomToken(): string {
   return crypto.randomUUID().replaceAll("-", "");
@@ -62,6 +64,7 @@ export function AddCustomExtensionWorkspace(props: {
   discovering?: boolean;
   onBack: () => void;
   onAdded: (cliId: string) => void;
+  onConfigured: () => Promise<LocalCliDiscoveryOutcome>;
 }) {
   const { resolvedApprovalGate, resolveApprovalGate, refreshApprovalGate } = useResolvedApprovalGate(null);
   const [command, setCommand] = useState("");
@@ -76,6 +79,7 @@ export function AddCustomExtensionWorkspace(props: {
   const [error, setError] = useState<string | null>(null);
   const [reviewingScripts, setReviewingScripts] = useState(false);
   const [toolQuery, setToolQuery] = useState("");
+  const [registryOpen, setRegistryOpen] = useState(false);
   const recognizeGeneration = useRef(0);
   const autoRecognizedCommand = useRef("");
   const didAutoSelect = useRef(false);
@@ -315,9 +319,9 @@ export function AddCustomExtensionWorkspace(props: {
   } else if (showingMcpCatalog) {
     visibleCommands = commands.filter((entry) => `${entry.name} ${entry.description}`.toLowerCase().includes(toolQuery.trim().toLowerCase()));
   }
-  let confirmTitle = allowActionLabel(recognized?.surface);
+  let confirmTitle = allowActionLabel(recognized?.surface ?? "cli");
   if (pending === "blocked") {
-    confirmTitle = blockActionLabel(recognized?.surface);
+    confirmTitle = blockActionLabel(recognized?.surface ?? "cli");
   } else if (observedMcp) {
     confirmTitle = "Save tool permissions";
   }
@@ -467,6 +471,7 @@ export function AddCustomExtensionWorkspace(props: {
               ) : null}
             </section>
           ) : (
+            <>
             <SuggestionPanel
               query={command}
               discovering={props.discovering === true}
@@ -476,11 +481,14 @@ export function AddCustomExtensionWorkspace(props: {
               seenSuggestions={seenSuggestions}
               onSelect={selectSuggestion}
             />
+            <McpRegistrySearch items={props.items} approvalGate={resolvedApprovalGate}
+              onOpenChange={setRegistryOpen} onConfigured={props.onConfigured} />
+            </>
           )}
         </>
       )}
       {error ? <div className="mt-4 max-w-xl"><InlineError message={error} /></div> : null}
-      <div className="sticky bottom-0 mt-auto border-t border-slate-200 bg-white py-4">
+      <div className={`${registryOpen && !recognized ? "relative" : "sticky bottom-0"} mt-auto border-t border-slate-200 bg-white py-4`}>
         <div className="flex flex-wrap items-center gap-3">
           <button type="submit" disabled={submitDisabled} className="min-h-11 rounded-xl bg-brand-blue px-5 text-sm font-semibold text-white disabled:opacity-60">
             {addDialogSubmitLabel({ recognized, busy, pending, step: recognized ? step : "pick" })}

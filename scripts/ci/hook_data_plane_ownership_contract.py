@@ -110,16 +110,20 @@ def validate_installed_proof_environment(source: str) -> None:
         r"^\.venv/bin/python (?:-I )?(?:ci/native_runtime/probe_(?:native_default_auto|installed_pi_output|"
         r"installed_native_extensions)\.py|scripts/bench_guard_native_installed_slo\.py)(?: |$)"
     )
-    for job_id in ("linux-x64", "macos", "windows-x64"):
+    for platform, job_id in (
+        ("linux-x64", "linux-proof"),
+        ("macos", "macos-proof"),
+        ("windows-x64", "windows-proof"),
+    ):
         job = jobs.get(job_id, {})
         steps = job.get("steps", []) if isinstance(job, dict) else []
         runs = [step["run"] for step in steps if isinstance(step, dict) and isinstance(step.get("run"), str)]
-        interpreter = "uv run --no-sync python" if job_id == "windows-x64" else ".venv/bin/python"
+        interpreter = "uv run --no-sync python" if platform == "windows-x64" else ".venv/bin/python"
         expected_probe = f"{interpreter} {default_probe}"
         default_runs = [run for run in runs if expected_probe in [line.strip() for line in run.splitlines()]]
         if len(default_runs) != 1:
-            raise RuntimeError(f"installed no-env workflow is missing its default proof: {job_id}")
-        if job_id == "windows-x64":
+            raise RuntimeError(f"installed no-env workflow is missing its default proof: {platform}")
+        if platform == "windows-x64":
             lines = [line.strip() for line in default_runs[0].splitlines()]
             cleared = {
                 match[1]
@@ -145,7 +149,9 @@ def validate_installed_proof_environment(source: str) -> None:
             )
             first_proof = min(proof_indices)
             if first_proof == 0 or lines[first_proof - 1] != f"source {helper}":
-                raise RuntimeError(f"installed proof environment helper must be sourced before each proof: {job_id}")
+                raise RuntimeError(
+                    f"installed proof environment helper must be sourced before each proof: {platform}"
+                )
 
 
 def registered_harnesses() -> frozenset[str]:

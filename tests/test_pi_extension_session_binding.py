@@ -20,16 +20,33 @@ def test_generated_pre_tool_payload_binds_sdk_session(tmp_path: Path, harness: s
     )
     start = source.index('pi.on("tool_call", async (event, ctx) => {')
     # Execute the actual payload-construction slice; downstream delivery is covered separately.
-    end = source.index("    if (", start)
+    end = source.index('    if (response.decision === "deny")', start)
     fragment = source[start:end] + "\n});"
-    for field in ("input", "toolInput", "arguments"):
-        fragment = fragment.replace(f"(event as {{ {field}?: Record<string, unknown> }}).{field}", f"event.{field}")
     javascript = (
         """
 const GUARD_CONFIG_PATH = '/fixture/settings.json';
 let handler;
 let captured;
 const pi = { on: (_, callback) => { handler = callback; } };
+function snapshotToolCall(event, ctx) {
+  return {
+    payload: {
+      hook_event_name: 'PreToolUse',
+      config_path: GUARD_CONFIG_PATH,
+      tool_call_id: event.toolCallId,
+      session_id: ctx.sessionManager?.getSessionId?.(),
+      tool_name: event.toolName,
+      tool_input: event.input,
+    },
+    canonicalPayload: 'fixture',
+    cwd: ctx.cwd,
+  };
+}
+function toolCallStillMatches() { return true; }
+function handlerAbortSignal(ctx) { return ctx.signal; }
+function approvalContinuationActivity() { return undefined; }
+function continuationIsActive(activity) { return !activity || activity(); }
+function approvalContinuationFailureReason(_response, result) { return `continuation-${result}`; }
 async function runGuard(payload) { captured = payload; return {}; }
 """
         + fragment

@@ -334,6 +334,43 @@ def test_duplicate_sources_do_not_consume_catalog_capacity(tmp_path: Path, monke
     assert len(store.read_local_cli_command_catalog(tool.identity.cli_id)) == MAX_OBSERVED_MCP_TOOLS
 
 
+def test_saturated_observed_connector_is_reported_without_blocking_other_connectors(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from codex_plugin_scanner.guard.runtime.local_cli_commands import LocalCliCommand
+
+    store = GuardStore(tmp_path / "guard-home")
+    existing = [observed_mcp_tool("codex", f"mcp__server__tool_{index}") for index in range(MAX_OBSERVED_MCP_TOOLS)]
+    assert all(tool is not None for tool in existing)
+    first = existing[0]
+    assert first is not None
+    store.merge_local_cli_commands(
+        first.identity.cli_id,
+        [
+            LocalCliCommand(
+                command_id=tool.command_id, name=tool.name, usage=tool.qualified_name, description="Observed"
+            )
+            for tool in existing
+            if tool is not None
+        ],
+        limit=MAX_OBSERVED_MCP_TOOLS,
+    )
+    monkeypatch.setattr(
+        store,
+        "list_approval_requests",
+        lambda status, limit: [
+            {"harness": "codex", "raw_command_text": "tool:mcp__server__new_tool"},
+            {"harness": "codex", "raw_command_text": "tool:mcp__other__read"},
+        ],
+    )
+    monkeypatch.setattr(store, "list_receipts", lambda limit: [])
+    assert discover_observed_mcp_tools(store, seen_at="2026-01-01T00:00:00Z") == 1
+    assert len(store.read_local_cli_command_catalog(first.identity.cli_id)) == MAX_OBSERVED_MCP_TOOLS
+    other = observed_mcp_tool("codex", "mcp__other__read")
+    assert other is not None
+    assert len(store.read_local_cli_command_catalog(other.identity.cli_id)) == 1
+
+
 def test_large_tool_catalog_is_authenticated_in_native_snapshot(tmp_path: Path) -> None:
     import hashlib
     import hmac

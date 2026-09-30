@@ -14,7 +14,10 @@ import secrets
 import stat
 import subprocess
 import sys
+import tempfile
 import time
+from contextlib import suppress
+from datetime import datetime, timezone
 from multiprocessing import freeze_support
 from pathlib import Path
 
@@ -847,6 +850,52 @@ def _try_codex_daemon_bridge() -> bool:
     return True
 
 
+def _record_extraction_owner() -> None:
+    """Stamp a onefile extraction dir so a hard-killed launch can be reclaimed.
+
+    Mirrors ``onefile_extraction.record_extraction_owner`` but stays
+    stdlib-only: this runs before the daemon bridge fast path, which must not
+    pay for the Guard package import graph. The filename and schema literals
+    must match ``OWNER_MARKER_NAME`` / ``_OWNER_MARKER_SCHEMA`` in
+    ``codex_plugin_scanner.guard.onefile_extraction`` (asserted by test).
+    """
+
+    meipass = getattr(sys, "_MEIPASS", None)
+    if not isinstance(meipass, str) or not meipass:
+        return
+    try:
+        extraction_dir = Path(meipass)
+        if not re.fullmatch(r"_MEI[0-9A-Za-z]{4,}", extraction_dir.name):
+            return
+        if extraction_dir.is_symlink() or not extraction_dir.is_dir():
+            return
+        if extraction_dir.resolve().parent != Path(tempfile.gettempdir()).resolve():
+            return
+        try:
+            guard_version = _packaged_version()
+        except (Exception, SystemExit):
+            guard_version = "unknown"
+        payload = {
+            "schema": "guard.onefile-extraction-owner.v1",
+            "pid": os.getpid(),
+            "parent_pid": os.getppid(),
+            "started_at": datetime.now(timezone.utc).isoformat(),
+            "guard_version": guard_version,
+        }
+        marker = extraction_dir / ".hol-guard-extraction-owner.json"
+        descriptor, temp_name = tempfile.mkstemp(dir=extraction_dir, prefix=".owner-", suffix=".tmp")
+        try:
+            with os.fdopen(descriptor, "wb") as handle:
+                handle.write(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
+            os.chmod(temp_name, 0o600)
+            os.replace(temp_name, marker)
+        finally:
+            with suppress(OSError):
+                os.unlink(temp_name)
+    except Exception:
+        return
+
+
 if __name__ == "__main__":
     # Dispatch PyInstaller multiprocessing children before importing Guard.
     # Otherwise private resource-tracker argv is parsed as a public CLI command.
@@ -856,6 +905,7 @@ if __name__ == "__main__":
         raise SystemExit(0)
     if _try_proxy_running_desktop_bootstrap():
         raise SystemExit(0)
+    _record_extraction_owner()
     if _try_codex_daemon_bridge():
         raise SystemExit(0)
 

@@ -1167,6 +1167,7 @@ def test_ensure_guard_daemon_serializes_parallel_start_attempts(tmp_path, monkey
     launched_envs: list[dict[str, str]] = []
     launched_event = threading.Event()
     barrier = threading.Barrier(8)
+    original_popen = subprocess.Popen
 
     _disable_daemon_adoption(monkeypatch)
     _disable_duplicate_retire(monkeypatch)
@@ -1179,6 +1180,9 @@ def test_ensure_guard_daemon_serializes_parallel_start_attempts(tmp_path, monkey
         return None
 
     def fake_popen(command, **_kwargs):
+        # Background process queries share subprocess, but are not daemon launches.
+        if daemon_manager_module._GUARD_DAEMON_BOOTSTRAP not in command:
+            return original_popen(command, **_kwargs)
         launched_commands.append(list(command))
         launched_envs.append(dict(_kwargs["env"]))
         launched_event.set()
