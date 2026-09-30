@@ -1,0 +1,14 @@
+{
+  "builderVersion": "1.0.0",
+  "contributionId": "mcp.mail-server",
+  "managedFiles": {
+    "contributions/authoring/mcp.mail-server/README.md": "3e8122255473e2cc294a9cc57f6590e766d25c43f650154bf29f5c80dbd6c543",
+    "contributions/authoring/mcp.mail-server/discovery.json": "4c3ed84d132b1ba8134e3c5ebbb4d51a638e9037ce442e2fa8c0c964196126c9",
+    "contributions/authoring/mcp.mail-server/report.json": "d660bec927c4f42d95669ea7504a13620ce44d2f37566503fa2945b713390f0c",
+    "contributions/authoring/mcp.mail-server/review.json": "d39d96076403d656bc76bc363c2bde3dd82e8f6f9c1d5c40e9e24ece92dc2a5f",
+    "contributions/mcp-servers/mcp.mail-server.json": "309656cfc29737589a6b7d6c67f6911c3074ea413f45348caf18d3a4b0d5475d",
+    "tests/test_generated_mcp_mail_server_extension.py": "0c9c8fd1e77e86cf62d2f90a0fb210ec5b5da9059a59ce39c60898dce3690042"
+  },
+  "revisionDigest": "e465bfa68d7c4f12bbd6417705ab9fdd4fa9b036c6f17ddda8d87067ef382e66",
+  "schemaVersion": "guard.extension-authoring-install.v1"
+}

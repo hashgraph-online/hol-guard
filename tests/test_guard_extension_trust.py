@@ -93,6 +93,7 @@ def test_trust_map_covers_every_builtin_extension() -> None:
         "command.gitsync",
         "command.mcp-filesystem",
         "command.mcp-instapods",
+        "command.mcp-mail-server",
         "command.mcp-pr-ui-compare",
         "command.mcp-reaper",
         "command.noodle",

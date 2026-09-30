@@ -268,7 +268,7 @@ Keep `schemaVersion`, `discoveryDigest`, all operation IDs, and every other
 entry intact. The example URL describes the synthetic fixture; a real review
 must cite the actual upstream reference. CLI states are `review` or `block`;
 safe invocations use `safeArgv` on a reviewed `review` entry, excluding the
-executable. MCP states are `inherit`, `allow`, or `block` and do not use
+executable. MCP states are `inherit`, `allow`, `review`, or `block` and do not use
 `safeArgv`. These profile choices still operate within Guard's host policy and
 authenticated controls.
 

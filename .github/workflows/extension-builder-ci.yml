@@ -126,7 +126,6 @@ jobs:
             if git diff --name-only "${{ github.event.pull_request.base.sha }}" HEAD -- \
                 contracts/extensions/command-catalog.v1.json \
                 contracts/extensions/native-command-program.v1.json \
-                contracts/extensions/trust-class-map.v1.json \
                 contracts/extensions/native-command-control-authority.v1.fixtures.json \
                 src/codex_plugin_scanner/guard/contracts/data/extensions \
                 ':(glob)src/codex_plugin_scanner/guard/extension_builder/*.v1.json' \
