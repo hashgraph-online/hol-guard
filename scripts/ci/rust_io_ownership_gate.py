@@ -72,9 +72,11 @@ _TRANSPORT_IDENTITY_PATHS: Final = frozenset(
     {
         "src/codex_plugin_scanner/guard/native_runtime.py",
         "src/codex_plugin_scanner/guard/native_resident_client.py",
-        "src/codex_plugin_scanner/guard/native_runtime_resident.py",
         "src/codex_plugin_scanner/guard/native_runtime_resilience.py",
         "src/codex_plugin_scanner/guard/codex_hook_launch_runtime.py",
+        "src/codex_plugin_scanner/guard/daemon/discovery.py",
+        "src/codex_plugin_scanner/guard/daemon/manager.py",
+        "src/codex_plugin_scanner/guard/frozen_runtime_commands.py",
     }
 )
 _TRANSPORT_INTEGRITY_PATHS: Final = frozenset(
@@ -120,6 +122,7 @@ _PERSISTENCE_PATH_PREFIXES: Final = (
     "src/codex_plugin_scanner/guard/daemon/hook_metrics.py",
     "src/codex_plugin_scanner/guard/private_file_io.py",
     "src/codex_plugin_scanner/guard/local_dashboard_session.py",
+    "src/codex_plugin_scanner/guard/guard_home_state.py",
 )
 
 

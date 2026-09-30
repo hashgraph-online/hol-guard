@@ -70,3 +70,27 @@ def test_batch_keeps_managed_disable_above_local_enable() -> None:
 def test_batch_bounds_fail_before_starting_native_evaluation(commands: tuple[str, ...]) -> None:
     with pytest.raises(ValueError, match="between 1 and 256"):
         real_native_review_fixtures(commands)
+
+
+@pytest.mark.parametrize("size", [0, 1, 127, 128, 129, 257])
+def test_iterator_keeps_all_commands_in_bounded_ordered_batches(size: int, monkeypatch: pytest.MonkeyPatch) -> None:
+    commands = [f"command-{index}" for index in range(size)]
+    batches: list[tuple[str, ...]] = []
+    projection_contexts: list[dict[str, object]] = []
+
+    def fixtures(batch: tuple[str, ...]) -> tuple[str, ...]:
+        batches.append(batch)
+        return batch
+
+    def project(fixture: str, **context: object) -> str:
+        projection_contexts.append(context)
+        return fixture
+
+    monkeypatch.setattr(native_support, "real_native_review_fixtures", fixtures)
+    monkeypatch.setattr(native_support, "project_native_review_fixture", project)
+
+    assert list(native_support.iter_native_command_evaluations(iter(commands))) == commands
+    assert [command for batch in batches for command in batch] == commands
+    assert all(1 <= len(batch) <= 128 for batch in batches)
+    assert len(batches) == (size + 127) // 128
+    assert projection_contexts == [{"cwd": None, "home_dir": None}] * size

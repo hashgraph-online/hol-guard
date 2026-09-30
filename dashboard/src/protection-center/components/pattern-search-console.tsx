@@ -67,6 +67,10 @@ export function PatternSearchConsole(props: {
   onQueryChange?: (query: string) => void;
   /** Rendered under the input while the parent hides its own header actions. */
   actionSlot?: ReactNode;
+  /** Rendered beside the search input on wide viewports (e.g. the Filters trigger). */
+  toolbarSlot?: ReactNode;
+  /** Rendered directly under the search row (filter tokens and the popover panel anchor). */
+  subtoolbarSlot?: ReactNode;
 }) {
   const [internalQuery, setInternalQuery] = useState("");
   const query = props.query ?? internalQuery;
@@ -139,7 +143,9 @@ export function PatternSearchConsole(props: {
 
   return <section aria-labelledby="pattern-search-heading" className="mt-6">
     <h2 id="pattern-search-heading" className="sr-only">Search command patterns</h2>
-    <label className="relative block">
+    <div className="relative">
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+        <label className="relative block min-w-0 flex-1 sm:min-w-60">
       <span className="sr-only">Search command patterns</span>
       <HiMiniMagnifyingGlass className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-brand-dark/55" aria-hidden="true" />
       <input
@@ -152,7 +158,7 @@ export function PatternSearchConsole(props: {
         onChange={(event) => setQuery(event.target.value.slice(0, 160))}
         placeholder='Search any command Guard watches — "squash", "git push --force", "kubectl"…'
         aria-describedby="pattern-search-hint"
-        className="min-h-12 w-full rounded-2xl border border-[rgba(63,65,116,0.14)] bg-white/85 py-2.5 pl-9 pr-10 text-sm text-brand-dark shadow-sm focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-blue-100"
+        className="min-h-11 w-full rounded-xl border border-[rgba(63,65,116,0.14)] bg-white/85 py-2.5 pl-9 pr-10 text-sm text-brand-dark shadow-sm focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-blue-100"
       />
       {showResults ? (
         <button
@@ -164,7 +170,12 @@ export function PatternSearchConsole(props: {
           <HiMiniXMark className="size-4" aria-hidden="true" />
         </button>
       ) : null}
-    </label>
+        </label>
+        {props.toolbarSlot ? <div className="flex shrink-0 flex-wrap items-center gap-2">{props.toolbarSlot}</div> : null}
+      </div>
+      {props.subtoolbarSlot}
+    </div>
+
     <p id="pattern-search-hint" className={`mt-2 text-xs text-brand-dark/60 ${focused || showResults ? "" : "sr-only"}`}>
       Matches patterns across every tool. Press / to focus search from anywhere on this page.
     </p>

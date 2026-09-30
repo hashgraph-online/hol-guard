@@ -28,14 +28,41 @@ from tests.guard_command_decision_diff import (
     report_framed_sha256,
     source_binding_id,
 )
+from tests.support.extension_freshness import requires_fresh_projections
 
 _OPAQUE_ID = re.compile(r"c-[0-9a-f]{24}")
+_REPORT_FRAMED_DIGEST_PATH = REPORT_PATH.with_name("decision-diff-report.framed-sha256")
 
 
 def _fixture() -> dict[str, object]:
     value = cast(object, json.loads(REPORT_PATH.read_text(encoding="utf-8")))
     assert isinstance(value, dict)
     return cast(dict[str, object], value)
+
+
+def _golden_report_framed_digest() -> str:
+    value = _REPORT_FRAMED_DIGEST_PATH.read_text(encoding="ascii")
+    assert re.fullmatch(r"[0-9a-f]{64}\n", value), "invalid report framed digest fixture"
+    return value[:-1]
+
+
+def test_report_cli_writes_and_checks_framed_digest(tmp_path: Path, monkeypatch) -> None:
+    from tests import guard_command_decision_diff as module
+
+    report = {"schema": "synthetic-report"}
+    path = tmp_path / "decision-diff-report.json"
+    digest_path = path.with_name("decision-diff-report.framed-sha256")
+    monkeypatch.setattr(module, "REPORT_PATH", path)
+    monkeypatch.setattr(module, "_generate_decision_diff_report", lambda: (report, 1.0))
+    monkeypatch.setattr(sys, "argv", ["guard_command_decision_diff.py", "--write"])
+    module._main()
+    assert path.read_bytes() == canonical_json_bytes(report)
+    assert digest_path.read_text(encoding="ascii") == report_framed_sha256(report) + "\n"
+    monkeypatch.setattr(sys, "argv", ["guard_command_decision_diff.py", "--check"])
+    module._main()
+    digest_path.write_text("0" * 64 + "\n", encoding="ascii")
+    with pytest.raises(SystemExit, match="framed digest is stale"):
+        module._main()
 
 
 def teardown_module() -> None:
@@ -126,6 +153,7 @@ def test_decision_diff_import_restores_preloaded_package_bindings() -> None:
         assert completed.returncode == 0, completed.stderr
 
 
+@requires_fresh_projections
 def test_report_is_exactly_reproducible_and_source_bound() -> None:
     report = generate_decision_diff_report()
     assert REPORT_PATH.read_bytes() == canonical_json_bytes(report)
@@ -276,7 +304,7 @@ def test_fresh_process_report_is_environment_independent_and_bounded(
     hash_seed: str, timezone: str, locale: str
 ) -> None:
     script = Path(__file__).with_name("guard_command_decision_diff.py")
-    expected_digest = report_framed_sha256(_fixture())
+    expected_digest = _golden_report_framed_digest()
     manifest = load_seed_manifest()
     evaluation_budget_seconds = int(str(manifest["evaluation_budget_seconds"]))
     spawn_overhead_seconds = 15
