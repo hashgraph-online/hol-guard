@@ -126,14 +126,14 @@ export function CommandActivitySummary(props: {
           detail={globalOnly ? "Not available for this filter" : "Guard asked for a decision"}
         />
         <Metric
-          label="Post-proof coverage"
+          label="Run results recorded"
           value={globalOnly ? "Global only" : metrics.postProof}
-          detail={globalOnly ? "Not available for this filter" : `${commandProofCoveragePercent(analytics)}% of checks have correlated proof`}
+          detail={globalOnly ? "Not available for this filter" : `${commandProofCoveragePercent(analytics)}% of checks have matching results`}
         />
         <Metric
-          label="Allowed, unconfirmed"
+          label="Allowed; result not recorded"
           value={globalOnly ? "Global only" : metrics.unconfirmed}
-          detail={globalOnly ? "Not available for this filter" : "Execution not confirmed"}
+          detail={globalOnly ? "Not available for this filter" : "No matching result was recorded"}
         />
       </div>
       <div className="grid gap-5 border-t border-slate-100 pt-5 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,0.8fr)_minmax(0,0.8fr)]">

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import patch
 
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.command_inspection import inspect_command
@@ -16,6 +17,7 @@ from codex_plugin_scanner.guard.runtime.extension_control_contract import (
     ExtensionControlLayer,
 )
 from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sensitive_tool_action_request
+from tests.native_command_test_support import real_native_command_evaluation
 
 ReviewedCommandCase = tuple[str, str, str]
 
@@ -46,7 +48,12 @@ def assert_reviewed_command_cases(cases: tuple[ReviewedCommandCase, ...], tmp_pa
     """
     failures: list[str] = []
     for command, action_class, rule_id in cases:
-        payload = inspect_command(command, cwd=tmp_path, home_dir=tmp_path)
+        reviewed = real_native_command_evaluation(command, cwd=tmp_path)
+        with patch(
+            "codex_plugin_scanner.guard.runtime.command_inspection.review_command_native",
+            return_value=reviewed,
+        ):
+            payload = inspect_command(command, cwd=tmp_path, home_dir=tmp_path)
         classification = payload.get("classification")
         actual_action_class = classification.get("action_class") if isinstance(classification, dict) else None
         raw_rules = payload.get("rules")
@@ -60,6 +67,8 @@ def assert_reviewed_command_cases(cases: tuple[ReviewedCommandCase, ...], tmp_pa
             {"command": command},
             cwd=tmp_path,
             home_dir=tmp_path,
+            canonical_command=reviewed.evaluation.command,
+            native_evaluation=reviewed.evaluation,
         )
         actual_runtime_action = runtime_match.action_class if runtime_match is not None else None
         if (
@@ -83,12 +92,19 @@ def assert_review_required_cases(cases: tuple[str, ...], tmp_path: Path) -> None
     """Prove a command remains reviewable without duplicating its rule contract."""
     failures: list[str] = []
     for command in cases:
-        payload = inspect_command(command, cwd=tmp_path, home_dir=tmp_path)
+        reviewed = real_native_command_evaluation(command, cwd=tmp_path)
+        with patch(
+            "codex_plugin_scanner.guard.runtime.command_inspection.review_command_native",
+            return_value=reviewed,
+        ):
+            payload = inspect_command(command, cwd=tmp_path, home_dir=tmp_path)
         runtime_match = extract_sensitive_tool_action_request(
             "Shell",
             {"command": command},
             cwd=tmp_path,
             home_dir=tmp_path,
+            canonical_command=reviewed.evaluation.command,
+            native_evaluation=reviewed.evaluation,
         )
         if payload.get("status") != "review" or runtime_match is None:
             failures.append(
@@ -102,12 +118,19 @@ def assert_safe_command_cases(cases: tuple[str, ...], tmp_path: Path) -> None:
     """Prove preview, help, and observer cases remain non-reviewable."""
     failures: list[str] = []
     for command in cases:
-        payload = inspect_command(command, cwd=tmp_path, home_dir=tmp_path)
+        reviewed = real_native_command_evaluation(command, cwd=tmp_path)
+        with patch(
+            "codex_plugin_scanner.guard.runtime.command_inspection.review_command_native",
+            return_value=reviewed,
+        ):
+            payload = inspect_command(command, cwd=tmp_path, home_dir=tmp_path)
         runtime_match = extract_sensitive_tool_action_request(
             "Shell",
             {"command": command},
             cwd=tmp_path,
             home_dir=tmp_path,
+            canonical_command=reviewed.evaluation.command,
+            native_evaluation=reviewed.evaluation,
         )
         if payload.get("status") != "no_match" or runtime_match is not None:
             failures.append(

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -131,6 +132,60 @@ _WINDOWS_USER_PATH_PATTERN = re.compile(
     r"(?P<prefix>^|[\s\"'=({\[])(?P<root>[A-Za-z]:[\\/]+Users[\\/]+[^\\/\s\"'`,;:)}\]]+)"
     r"(?P<rest>(?:[\\/][^\s\"'`,;:)}\]]*)?)"
 )
+
+
+_REVIEW_SENSITIVE_KEYS = frozenset(
+    {
+        "api_key",
+        "apikey",
+        "access_token",
+        "auth",
+        "authorization",
+        "client_secret",
+        "content",
+        "cookie",
+        "credential",
+        "credentials",
+        "id_token",
+        "output",
+        "password",
+        "private_key",
+        "refresh_token",
+        "secret",
+        "session_token",
+        "set_cookie",
+        "stderr",
+        "stdout",
+        "token",
+        "tool_response",
+    }
+)
+_REVIEW_SENSITIVE_ALIASES = frozenset(key.replace("_", "") for key in _REVIEW_SENSITIVE_KEYS)
+
+
+def is_sensitive_review_key(key: str) -> bool:
+    """Recognize credential/output field aliases without inspecting files."""
+    normalized = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", key.replace("-", "_")).lower()
+    return normalized in _REVIEW_SENSITIVE_KEYS or normalized.replace("_", "") in _REVIEW_SENSITIVE_ALIASES
+
+
+def redact_review_payload(payload: Mapping[str, object]) -> dict[str, object]:
+    """Redact an in-memory JSON review payload without resolving paths or truncating code."""
+    return {key: _redact_review_value(key, value) for key, value in payload.items()}
+
+
+def _redact_review_value(key: str, value: object) -> object:
+    if is_sensitive_review_key(key):
+        return "[redacted]"
+    if isinstance(value, Mapping):
+        return redact_review_payload(value)
+    if isinstance(value, list):
+        return [_redact_review_value(key, item) for item in value]
+    if isinstance(value, str):
+        return redact_local_path(redact_sensitive_text(redact_text(value).text))
+    if value is None or isinstance(value, (bool, int, float)):
+        return value
+    raise ValueError("Review input must contain only JSON values")
 
 
 def redact_text(value: str) -> RedactedText:

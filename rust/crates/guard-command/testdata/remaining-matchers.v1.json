@@ -1,0 +1,11188 @@
+{
+  "semantic_profile": "cpython-3.12-ucd-15.0.0",
+  "source": "c4bd916fb0d0f375a4e2de0d1e498a0a533f63c8",
+  "definitions": [
+    {
+      "op": "argument-command.v1",
+      "config": {
+        "executables": [
+          "db"
+        ],
+        "command": "reset",
+        "minimum_abbreviation_length": 3,
+        "minimum_position": 1
+      }
+    },
+    {
+      "op": "command-sequence.v1",
+      "config": {
+        "executables": [
+          "db"
+        ],
+        "command_arities": [
+          [
+            "get",
+            1
+          ],
+          [
+            "set",
+            2
+          ],
+          [
+            "delete",
+            1
+          ],
+          [
+            "debug",
+            0
+          ],
+          [
+            "reset",
+            0
+          ]
+        ],
+        "target_commands": [
+          "delete",
+          "reset"
+        ],
+        "options_with_values": [
+          "--host",
+          "-H"
+        ],
+        "forbidden_flags": [
+          "--help",
+          "-h"
+        ]
+      }
+    },
+    {
+      "op": "leading-subcommand.v1",
+      "config": {
+        "executables": [
+          "db"
+        ],
+        "subcommands": [
+          "cluster",
+          "delete"
+        ],
+        "options_with_values": [
+          "--host",
+          "-H"
+        ],
+        "forbidden_flags": [
+          "--dry-run"
+        ],
+        "required_flags_anywhere": [
+          "--force"
+        ],
+        "interleaved_options_with_values": [
+          "--context",
+          "-n"
+        ],
+        "forbidden_flags_before_delimiter": [
+          "--help",
+          "-h"
+        ]
+      }
+    },
+    {
+      "op": "php-artisan-script.v1",
+      "config": {
+        "subcommands": [
+          "migrate:fresh"
+        ],
+        "required_flags": []
+      }
+    },
+    {
+      "op": "php-artisan-script.v1",
+      "config": {
+        "subcommands": [
+          "migrate:fresh"
+        ],
+        "required_flags": [
+          "--help"
+        ]
+      }
+    },
+    {
+      "op": "zero-operand-flags.v1",
+      "config": {
+        "executables": [
+          "deploy"
+        ],
+        "required_flags": [
+          "--prod"
+        ],
+        "options_with_values": [
+          "--cwd",
+          "-C"
+        ]
+      }
+    },
+    {
+      "op": "curl-elasticsearch-delete.v1",
+      "config": {
+        "executables": [
+          "curl",
+          "curl.cmd",
+          "curl.exe"
+        ],
+        "service_ports": [
+          9200
+        ]
+      }
+    },
+    {
+      "op": "repo2nb-expansion.v1",
+      "config": {
+        "subcommand": "reverse",
+        "launchers": [
+          [
+            "repo2nb"
+          ],
+          [
+            "python",
+            "-m",
+            "repo2nb"
+          ],
+          [
+            "python3",
+            "-m",
+            "repo2nb"
+          ],
+          [
+            "py",
+            "-m",
+            "repo2nb"
+          ],
+          [
+            "exec",
+            "repo2nb"
+          ],
+          [
+            "exec",
+            "python",
+            "-m",
+            "repo2nb"
+          ],
+          [
+            "exec",
+            "python3",
+            "-m",
+            "repo2nb"
+          ],
+          [
+            "exec",
+            "py",
+            "-m",
+            "repo2nb"
+          ],
+          [
+            "xargs",
+            "repo2nb"
+          ],
+          [
+            "xargs",
+            "python",
+            "-m",
+            "repo2nb"
+          ],
+          [
+            "xargs",
+            "python3",
+            "-m",
+            "repo2nb"
+          ],
+          [
+            "xargs",
+            "py",
+            "-m",
+            "repo2nb"
+          ]
+        ],
+        "leading_options_with_values": [
+          "-I",
+          "-L",
+          "-P",
+          "-n",
+          "-s"
+        ],
+        "expansion_markers": [
+          "$",
+          "`"
+        ]
+      }
+    },
+    {
+      "op": "php-artisan-script.v1",
+      "config": {
+        "subcommands": [
+          "migrate:fresh"
+        ],
+        "required_flags": [
+          "-k"
+        ]
+      }
+    },
+    {
+      "op": "php-artisan-script.v1",
+      "config": {
+        "subcommands": [
+          "migrate:fresh"
+        ],
+        "required_flags": [
+          "-i"
+        ]
+      }
+    },
+    {
+      "op": "php-artisan-script.v1",
+      "config": {
+        "subcommands": [
+          "migrate:fresh"
+        ],
+        "required_flags": [
+          "-h"
+        ]
+      }
+    },
+    {
+      "op": "repo2nb-expansion.v1",
+      "config": {
+        "subcommand": "reverse",
+        "launchers": [
+          [
+            "k"
+          ]
+        ],
+        "leading_options_with_values": [
+          "-I",
+          "-L",
+          "-P",
+          "-n",
+          "-s"
+        ],
+        "expansion_markers": [
+          "i"
+        ]
+      }
+    },
+    {
+      "op": "repo2nb-expansion.v1",
+      "config": {
+        "subcommand": "reverse",
+        "launchers": [
+          [
+            "k"
+          ]
+        ],
+        "leading_options_with_values": [
+          "-I",
+          "-L",
+          "-P",
+          "-n",
+          "-s"
+        ],
+        "expansion_markers": [
+          "k"
+        ]
+      }
+    },
+    {
+      "op": "reviewed-literal.v1",
+      "config": {
+        "executable": "tool",
+        "arguments": [
+          "--help"
+        ]
+      }
+    }
+  ],
+  "cases": [
+    {
+      "definition": 0,
+      "segments": [
+        [
+          "/usr/bin/DB",
+          [
+            "ignored",
+            "reset database"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 0,
+      "segments": [
+        [
+          "/usr/bin/DB",
+          [
+            "ignored",
+            "res data"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 0,
+      "segments": [
+        [
+          "/usr/bin/DB",
+          [
+            "ignored",
+            "re data"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 0,
+      "segments": [
+        [
+          "/usr/bin/DB",
+          [
+            "ignored",
+            "reset"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 0,
+      "segments": [
+        [
+          "/usr/bin/DB",
+          [
+            "ignored",
+            "reset "
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 0,
+      "segments": [
+        [
+          "/usr/bin/DB",
+          [
+            "ignored",
+            "reset\tdata"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 0,
+      "segments": [
+        [
+          "/usr/bin/DB",
+          [
+            "ignored",
+            "RESET\u001cDATA"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 0,
+      "segments": [
+        [
+          "/usr/bin/DB",
+          [
+            "ignored",
+            " reset payload "
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 0,
+      "segments": [
+        [
+          "/usr/bin/DB",
+          [
+            "ignored",
+            "reset 数据"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 0,
+      "segments": [
+        [
+          "/usr/bin/DB",
+          [
+            "ignored",
+            "resetting data"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 0,
+      "segments": [
+        [
+          "/usr/bin/DB",
+          [
+            "ignored",
+            "help reset data"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 0,
+      "segments": [
+        [
+          "/usr/bin/DB",
+          [
+            "ignored",
+            "res\u001c\u001f数据"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 0,
+      "segments": [
+        [
+          "db",
+          [
+            "reset data"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 0,
+      "segments": [
+        [
+          "other",
+          [
+            "ignored",
+            "reset data"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 0,
+      "segments": [
+        [
+          "db",
+          [
+            "ignored",
+            "réset data"
+          ]
+        ]
+      ],
+      "expected": [],
+      "native_error": "unsupported_unicode_case_mapping"
+    },
+    {
+      "definition": 0,
+      "segments": [
+        [
+          null,
+          [
+            "ignored",
+            "reset data"
+          ]
+        ],
+        [
+          "db",
+          [
+            "ignored",
+            "reset data"
+          ]
+        ],
+        [
+          "db",
+          [
+            "ignored",
+            "res data"
+          ]
+        ]
+      ],
+      "expected": [
+        1,
+        2
+      ]
+    },
+    {
+      "definition": 1,
+      "segments": [
+        [
+          "db",
+          []
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 1,
+      "segments": [
+        [
+          "db",
+          [
+            "delete"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 1,
+      "segments": [
+        [
+          "db",
+          [
+            "del",
+            "key"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 1,
+      "segments": [
+        [
+          "db",
+          [
+            "d",
+            "key"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 1,
+      "segments": [
+        [
+          "db",
+          [
+            "de",
+            "key"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 1,
+      "segments": [
+        [
+          "db",
+          [
+            "get",
+            "reset"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 1,
+      "segments": [
+        [
+          "db",
+          [
+            "get",
+            "key",
+            "reset"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 1,
+      "segments": [
+        [
+          "db",
+          [
+            "set",
+            "key",
+            "reset"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 1,
+      "segments": [
+        [
+          "db",
+          [
+            "set",
+            "key",
+            "value",
+            "reset"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 1,
+      "segments": [
+        [
+          "db",
+          [
+            "get",
+            "key",
+            "unknown",
+            "reset"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 1,
+      "segments": [
+        [
+          "db",
+          [
+            "--host",
+            "reset",
+            "get",
+            "key"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 1,
+      "segments": [
+        [
+          "db",
+          [
+            "--host=host",
+            "reset"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 1,
+      "segments": [
+        [
+          "db",
+          [
+            "-Hhost",
+            "reset"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 1,
+      "segments": [
+        [
+          "db",
+          [
+            "-h",
+            "reset"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 1,
+      "segments": [
+        [
+          "db",
+          [
+            "reset",
+            "--help"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 1,
+      "segments": [
+        [
+          "db",
+          [
+            "--host",
+            "--help",
+            "reset"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 1,
+      "segments": [
+        [
+          "db",
+          [
+            "--",
+            "reset",
+            "--help"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 1,
+      "segments": [
+        [
+          "db",
+          [
+            "RESET"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 1,
+      "segments": [
+        [
+          "db",
+          [
+            "  reset  "
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 1,
+      "segments": [
+        [
+          "db",
+          [
+            "",
+            "reset"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 1,
+      "segments": [
+        [
+          "db",
+          [
+            "--unknown",
+            "reset"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 1,
+      "segments": [
+        [
+          "db",
+          [
+            "--HOST",
+            "host",
+            "reset"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 1,
+      "segments": [
+        [
+          "db",
+          [
+            "-H",
+            "host",
+            "res"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 1,
+      "segments": [
+        [
+          "db",
+          [
+            "rÉset"
+          ]
+        ]
+      ],
+      "expected": [],
+      "native_error": "unsupported_unicode_case_mapping"
+    },
+    {
+      "definition": 2,
+      "segments": [
+        [
+          "db",
+          [
+            "cluster",
+            "delete",
+            "--force"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 2,
+      "segments": [
+        [
+          "db",
+          [
+            "cluster",
+            "delete"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 2,
+      "segments": [
+        [
+          "db",
+          [
+            "--force",
+            "cluster",
+            "delete"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 2,
+      "segments": [
+        [
+          "db",
+          [
+            "-H",
+            "host",
+            "cluster",
+            "delete",
+            "--force"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 2,
+      "segments": [
+        [
+          "db",
+          [
+            "--host",
+            "--force",
+            "cluster",
+            "delete"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 2,
+      "segments": [
+        [
+          "db",
+          [
+            "cluster",
+            "--context",
+            "prod",
+            "delete",
+            "--force"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 2,
+      "segments": [
+        [
+          "db",
+          [
+            "cluster",
+            "--context=prod",
+            "delete",
+            "--force"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 2,
+      "segments": [
+        [
+          "db",
+          [
+            "cluster",
+            "--context",
+            "delete",
+            "--force"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 2,
+      "segments": [
+        [
+          "db",
+          [
+            "cluster",
+            "-n",
+            "namespace",
+            "delete",
+            "--force"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 2,
+      "segments": [
+        [
+          "db",
+          [
+            "cluster",
+            "-nnamespace",
+            "delete",
+            "--force"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 2,
+      "segments": [
+        [
+          "db",
+          [
+            "cluster",
+            "delete",
+            "--help",
+            "--force"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 2,
+      "segments": [
+        [
+          "db",
+          [
+            "cluster",
+            "delete",
+            "-vh",
+            "--force"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 2,
+      "segments": [
+        [
+          "db",
+          [
+            "cluster",
+            "delete",
+            "-v=h",
+            "--force"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 2,
+      "segments": [
+        [
+          "db",
+          [
+            "--host",
+            "--help",
+            "cluster",
+            "delete",
+            "--force"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 2,
+      "segments": [
+        [
+          "db",
+          [
+            "--",
+            "cluster",
+            "delete",
+            "--force"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 2,
+      "segments": [
+        [
+          "db",
+          [
+            "--dry-run",
+            "cluster",
+            "delete",
+            "--force"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 2,
+      "segments": [
+        [
+          "db",
+          [
+            "cluster",
+            "delete",
+            "--dry-run",
+            "--force"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 2,
+      "segments": [
+        [
+          "db",
+          [
+            "CLUSTER",
+            "DELETE",
+            "--FORCE"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 2,
+      "segments": [
+        [
+          "db",
+          [
+            "cluster",
+            "delete",
+            "--force=false"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 2,
+      "segments": [
+        [
+          "db",
+          [
+            "cluster",
+            "delete",
+            "--force",
+            "--no-force"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 2,
+      "segments": [
+        [
+          "db",
+          [
+            "cluster",
+            "--context"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 2,
+      "segments": [
+        [
+          "db",
+          [
+            "cluster",
+            "--context=prod"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 2,
+      "segments": [
+        [
+          "db",
+          [
+            "cluster",
+            "delete",
+            "--force",
+            "dataé"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ],
+      "native_error": "unsupported_unicode_case_mapping"
+    },
+    {
+      "definition": 3,
+      "segments": [
+        [
+          "PHP.EXE",
+          [
+            "artisan",
+            "migrate:fresh"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 4,
+      "segments": [
+        [
+          "PHP.EXE",
+          [
+            "artisan",
+            "migrate:fresh"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 3,
+      "segments": [
+        [
+          "PHP.EXE",
+          [
+            "/srv/artisan",
+            "migrate:fresh"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 4,
+      "segments": [
+        [
+          "PHP.EXE",
+          [
+            "/srv/artisan",
+            "migrate:fresh"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 3,
+      "segments": [
+        [
+          "PHP.EXE",
+          [
+            "C:\\app\\ARTISAN",
+            "MIGRATE:FRESH"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 4,
+      "segments": [
+        [
+          "PHP.EXE",
+          [
+            "C:\\app\\ARTISAN",
+            "MIGRATE:FRESH"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 3,
+      "segments": [
+        [
+          "PHP.EXE",
+          [
+            "-c",
+            "config.ini",
+            "artisan",
+            "migrate:fresh"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 4,
+      "segments": [
+        [
+          "PHP.EXE",
+          [
+            "-c",
+            "config.ini",
+            "artisan",
+            "migrate:fresh"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 3,
+      "segments": [
+        [
+          "PHP.EXE",
+          [
+            "-dfoo=bar",
+            "artisan",
+            "migrate:fresh"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 4,
+      "segments": [
+        [
+          "PHP.EXE",
+          [
+            "-dfoo=bar",
+            "artisan",
+            "migrate:fresh"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 3,
+      "segments": [
+        [
+          "PHP.EXE",
+          [
+            "--define=x",
+            "artisan",
+            "migrate:fresh"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 4,
+      "segments": [
+        [
+          "PHP.EXE",
+          [
+            "--define=x",
+            "artisan",
+            "migrate:fresh"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 3,
+      "segments": [
+        [
+          "PHP.EXE",
+          [
+            "--php-ini",
+            "artisan",
+            "migrate:fresh"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 4,
+      "segments": [
+        [
+          "PHP.EXE",
+          [
+            "--php-ini",
+            "artisan",
+            "migrate:fresh"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 3,
+      "segments": [
+        [
+          "PHP.EXE",
+          [
+            "artisan.php",
+            "migrate:fresh"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 4,
+      "segments": [
+        [
+          "PHP.EXE",
+          [
+            "artisan.php",
+            "migrate:fresh"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 3,
+      "segments": [
+        [
+          "PHP.EXE",
+          [
+            "artisan",
+            "--env",
+            "production",
+            "migrate:fresh"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 4,
+      "segments": [
+        [
+          "PHP.EXE",
+          [
+            "artisan",
+            "--env",
+            "production",
+            "migrate:fresh"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 3,
+      "segments": [
+        [
+          "PHP.EXE",
+          [
+            "artisan",
+            "--env",
+            "--help",
+            "migrate:fresh"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 4,
+      "segments": [
+        [
+          "PHP.EXE",
+          [
+            "artisan",
+            "--env",
+            "--help",
+            "migrate:fresh"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 3,
+      "segments": [
+        [
+          "PHP.EXE",
+          [
+            "artisan",
+            "migrate:fresh",
+            "--help"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 4,
+      "segments": [
+        [
+          "PHP.EXE",
+          [
+            "artisan",
+            "migrate:fresh",
+            "--help"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 3,
+      "segments": [
+        [
+          "PHP.EXE",
+          [
+            "artisan",
+            "migrate:fresh",
+            "--help=false"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 4,
+      "segments": [
+        [
+          "PHP.EXE",
+          [
+            "artisan",
+            "migrate:fresh",
+            "--help=false"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 3,
+      "segments": [
+        [
+          "PHP.EXE",
+          [
+            "artisan",
+            "migrate:fresh",
+            "--help",
+            "--no-help"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 4,
+      "segments": [
+        [
+          "PHP.EXE",
+          [
+            "artisan",
+            "migrate:fresh",
+            "--help",
+            "--no-help"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 3,
+      "segments": [
+        [
+          "PHP.EXE",
+          [
+            "artisan",
+            "--",
+            "migrate:fresh",
+            "--help"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 4,
+      "segments": [
+        [
+          "PHP.EXE",
+          [
+            "artisan",
+            "--",
+            "migrate:fresh",
+            "--help"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 3,
+      "segments": [
+        [
+          "PHP.EXE",
+          [
+            "artisan",
+            "migrate:fresh",
+            "--",
+            "--help"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 4,
+      "segments": [
+        [
+          "PHP.EXE",
+          [
+            "artisan",
+            "migrate:fresh",
+            "--",
+            "--help"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 3,
+      "segments": [
+        [
+          "PHP.EXE",
+          [
+            "artisan",
+            "other",
+            "migrate:fresh"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 4,
+      "segments": [
+        [
+          "PHP.EXE",
+          [
+            "artisan",
+            "other",
+            "migrate:fresh"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 3,
+      "segments": [
+        [
+          "PHP.EXE",
+          [
+            "-c"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 4,
+      "segments": [
+        [
+          "PHP.EXE",
+          [
+            "-c"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 3,
+      "segments": [
+        [
+          "PHP.EXE",
+          []
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 4,
+      "segments": [
+        [
+          "PHP.EXE",
+          []
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 3,
+      "segments": [
+        [
+          "php",
+          [
+            "artisan",
+            "migrate:fresh",
+            "é"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 5,
+      "segments": [
+        [
+          "deploy",
+          []
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 5,
+      "segments": [
+        [
+          "deploy",
+          [
+            "--prod"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 5,
+      "segments": [
+        [
+          "deploy",
+          [
+            "--prod=false"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 5,
+      "segments": [
+        [
+          "deploy",
+          [
+            "--prod",
+            "--no-prod"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 5,
+      "segments": [
+        [
+          "deploy",
+          [
+            "--prod",
+            "project"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 5,
+      "segments": [
+        [
+          "deploy",
+          [
+            "--cwd",
+            "project",
+            "--prod"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 5,
+      "segments": [
+        [
+          "deploy",
+          [
+            "--cwd",
+            "--prod"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 5,
+      "segments": [
+        [
+          "deploy",
+          [
+            "-Cproject",
+            "--prod"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 5,
+      "segments": [
+        [
+          "deploy",
+          [
+            "--prod",
+            "--"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 5,
+      "segments": [
+        [
+          "deploy",
+          [
+            "--",
+            "--prod"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 5,
+      "segments": [
+        [
+          "deploy",
+          [
+            "--unknown",
+            "--prod"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 5,
+      "segments": [
+        [
+          "deploy",
+          [
+            "--PROD"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 5,
+      "segments": [
+        [
+          "deploy",
+          [
+            "--prod",
+            "--cwd"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 5,
+      "segments": [
+        [
+          "deploy",
+          [
+            "--prod",
+            "-"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 5,
+      "segments": [
+        [
+          "deploy",
+          [
+            "--prod",
+            "-vh"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-X",
+            "DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-vXDELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-X",
+            "DELETE",
+            "-X",
+            "GET",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-X",
+            "GET",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--REQUEST",
+            "DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-xDELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--request",
+            "DELETE",
+            "--url",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--request=DELETE",
+            "--url=http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "http://localhost:9200/items",
+            "--next",
+            "-XGET",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "https://example.com/",
+            "--next",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XGET",
+            "http://localhost:9200/items",
+            "--next",
+            "-XDELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--",
+            "-XDELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--request"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--url"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--request",
+            "--next",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--url",
+            "--next",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--unknown",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "-éXGET",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "-éXDELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--abstract-unix-socket",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--abstract-unix-socket",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--alt-svc",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--alt-svc",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--aws-sigv4",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--aws-sigv4",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--cacert",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--cacert",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--capath",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--capath",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--cert",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--cert",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--cert-type",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--cert-type",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--ciphers",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--ciphers",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--config",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--config",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--connect-timeout",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--connect-timeout",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--connect-to",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--connect-to",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--cookie",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--cookie",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--cookie-jar",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--cookie-jar",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--create-file-mode",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--create-file-mode",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--crlfile",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--crlfile",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--curves",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--curves",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--data",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--data",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--data-ascii",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--data-ascii",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--data-binary",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--data-binary",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--data-raw",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--data-raw",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--data-urlencode",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--data-urlencode",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--delegation",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--delegation",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--dns-interface",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--dns-interface",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--dns-ipv4-addr",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--dns-ipv4-addr",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--dns-ipv6-addr",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--dns-ipv6-addr",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--dns-servers",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--dns-servers",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--doh-url",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--doh-url",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--dump-header",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--dump-header",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--ech",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--ech",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--egd-file",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--egd-file",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--engine",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--engine",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--etag-compare",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--etag-compare",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--etag-save",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--etag-save",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--expect100-timeout",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--expect100-timeout",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--form",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--form",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--form-string",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--form-string",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--ftp-account",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--ftp-account",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--ftp-alternative-to-user",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--ftp-alternative-to-user",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--ftp-method",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--ftp-method",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--ftp-port",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--ftp-port",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--ftp-ssl-ccc-mode",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--ftp-ssl-ccc-mode",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--happy-eyeballs-timeout-ms",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--happy-eyeballs-timeout-ms",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--haproxy-clientip",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--haproxy-clientip",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--header",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--header",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--hostpubmd5",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--hostpubmd5",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--hostpubsha256",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--hostpubsha256",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--hsts",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--hsts",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--interface",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--interface",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--ip-tos",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--ip-tos",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--ipfs-gateway",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--ipfs-gateway",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--json",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--json",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--keepalive-cnt",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--keepalive-cnt",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--keepalive-time",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--keepalive-time",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--key",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--key",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--key-type",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--key-type",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--krb",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--krb",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--libcurl",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--libcurl",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--limit-rate",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--limit-rate",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--local-port",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--local-port",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--login-options",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--login-options",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--mail-auth",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--mail-auth",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--mail-from",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--mail-from",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--mail-rcpt",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--mail-rcpt",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--max-filesize",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--max-filesize",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--max-redirs",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--max-redirs",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--max-time",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--max-time",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--netrc-file",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--netrc-file",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--noproxy",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--noproxy",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--oauth2-bearer",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--oauth2-bearer",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--output",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--output",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--output-dir",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--output-dir",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--parallel-max",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--parallel-max",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--parallel-max-host",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--parallel-max-host",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--pass",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--pass",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--pinnedpubkey",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--pinnedpubkey",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--preproxy",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--preproxy",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--proto",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--proto",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--proto-default",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--proto-default",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--proto-redir",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--proto-redir",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--proxy",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--proxy",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--proxy-cacert",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--proxy-cacert",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--proxy-capath",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--proxy-capath",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--proxy-cert",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--proxy-cert",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--proxy-cert-type",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--proxy-cert-type",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--proxy-ciphers",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--proxy-ciphers",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--proxy-crlfile",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--proxy-crlfile",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--proxy-header",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--proxy-header",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--proxy-key",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--proxy-key",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--proxy-key-type",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--proxy-key-type",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--proxy-pass",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--proxy-pass",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--proxy-pinnedpubkey",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--proxy-pinnedpubkey",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--proxy-service-name",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--proxy-service-name",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--proxy-tls13-ciphers",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--proxy-tls13-ciphers",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--proxy-tlsauthtype",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--proxy-tlsauthtype",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--proxy-tlspassword",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--proxy-tlspassword",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--proxy-tlsuser",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--proxy-tlsuser",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--proxy-user",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--proxy-user",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--proxy1.0",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--proxy1.0",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--pubkey",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--pubkey",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--quote",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--quote",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--random-file",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--random-file",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--range",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--range",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--rate",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--rate",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--referer",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--referer",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--request-target",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--request-target",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--resolve",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--resolve",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--retry",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--retry",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--retry-delay",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--retry-delay",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--retry-max-time",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--retry-max-time",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--sasl-authzid",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--sasl-authzid",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--service-name",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--service-name",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--socks4",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--socks4",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--socks4a",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--socks4a",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--socks5",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--socks5",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--socks5-gssapi-service",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--socks5-gssapi-service",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--socks5-hostname",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--socks5-hostname",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--speed-limit",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--speed-limit",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--speed-time",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--speed-time",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--stderr",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--stderr",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--telnet-option",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--telnet-option",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--tftp-blksize",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--tftp-blksize",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--time-cond",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--time-cond",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--tls-earlydata",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--tls-earlydata",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--tls-max",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--tls-max",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--tls13-ciphers",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--tls13-ciphers",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--tlsauthtype",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--tlsauthtype",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--tlspassword",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--tlspassword",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--tlsuser",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--tlsuser",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--trace",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--trace",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--trace-ascii",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--trace-ascii",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--trace-config",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--trace-config",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--unix-socket",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--unix-socket",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--upload-file",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--upload-file",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--upload-flags",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--upload-flags",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--url-query",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--url-query",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--user",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--user",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--user-agent",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--user-agent",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--variable",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--variable",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--vlan-priority",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--vlan-priority",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--write-out",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--write-out",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-vA",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "-A",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-vC",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "-C",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-vD",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "-D",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-vE",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "-E",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-vF",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "-F",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-vH",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "-H",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-vK",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "-K",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-vP",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "-P",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-vQ",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "-Q",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-vT",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "-T",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-vU",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "-U",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-vX",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "-X",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-vY",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "-Y",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-vb",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "-b",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-vc",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "-c",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-vd",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "-d",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-ve",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "-e",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-vm",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "-m",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-vo",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "-o",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-vr",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "-r",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-vt",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "-t",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-vu",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "-u",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-vw",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "-w",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-vx",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "-x",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-vy",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "-y",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-vz",
+            "--request=DELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "-z",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "elasticsearch/items"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "https://elasticsearch/items"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "ftp://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "http://elasticsearch"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "http://elasticsearch/"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "http://elasticsearch/?x=1"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "http://elasticsearch/#x"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "http://foo.elasticsearch.test/items"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "http://notelasticsearch/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "http://user:password@localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "http://user@user@localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "http://:9200/items"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "http:///items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "http://localhost:/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "http://elasticsearch:65536/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "http://elasticsearch:-1/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "http://elasticsearch:+9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "http://elasticsearch: 9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "http://localhost:0009200/items"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "http://elasticsearch:abc/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "http://[::1]:9200/items"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "http://[::1%eth0]:9200/items"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "http://[::1%]:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "http://[::1%a%b]:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "http://[::1]extra:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "http://prefix[::1]:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "http://[127.0.0.1]:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "http://[v1.elasticsearch]/items"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "http://[V1.elasticsearch]/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "http://[vAB.a]:9200/items"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "http://[v1.]:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "http://[::1/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "http://a]b/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "http://[user]@localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "http://[user]@elasticsearch/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "http://[user]@[::1]:9200/items"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "\u0000 HTTP://elasticsearch/items"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "http://elastic\tsearch/items"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "http://elasticsearch/a\nb"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "http://localhost:9200/数据"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "elasticsearch/数据"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "'http://elasticsearch/items'"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "\"http://elasticsearch/items\""
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "$ELASTICSEARCH_HOST/items"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "${ELASTICSEARCH_URL}/items"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "$ELASTICSEARCH_HOST"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "http://localhost:9200//"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "http://localhost:9200?path=/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "//localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "http://elasticsearch./items"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "http://.elasticsearch/items"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "http://é:9200/items"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ],
+      "native_error": "unsupported_url_authority_normalization"
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "http://elasticsearch：9200/items"
+          ]
+        ]
+      ],
+      "expected": [],
+      "native_error": "unsupported_url_authority_normalization"
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "http://ｅlasticsearch/items"
+          ]
+        ]
+      ],
+      "expected": [],
+      "native_error": "unsupported_url_authority_normalization"
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--héader",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ],
+      "native_error": "unsupported_unicode_case_mapping"
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--url",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "http://localhost:9200/items",
+            "-XDELETE"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--request",
+            "delete",
+            "--next"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--header",
+            "-XDELETE",
+            "--request",
+            "delete",
+            "-XGET",
+            "-XGET",
+            "--next",
+            "--request",
+            "delete"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--url",
+            "http://localhost:9200/items",
+            "--url",
+            "http://localhost:9200/items",
+            "http://localhost:9200/items",
+            "-XDELETE"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--",
+            "--header",
+            "-XDELETE",
+            "--request",
+            "delete",
+            "--header",
+            "-XDELETE"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-v",
+            "--request",
+            "delete",
+            "--",
+            "--",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--request",
+            "delete",
+            "--header",
+            "-XDELETE"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-v",
+            "-XGET",
+            "--header",
+            "-XDELETE",
+            "--next",
+            "--request",
+            "delete",
+            "--header",
+            "-XDELETE"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--url",
+            "http://localhost:9200/items",
+            "--url",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-v",
+            "--data",
+            "http://localhost:9200/items",
+            "-XDELETE"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-v"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--",
+            "--request",
+            "delete",
+            "--",
+            "--next",
+            "http://localhost:9200/items",
+            "-XGET"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-v",
+            "--next",
+            "--data",
+            "http://localhost:9200/items",
+            "-XGET"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--next",
+            "-XDELETE",
+            "-XGET",
+            "-v",
+            "--data",
+            "http://localhost:9200/items",
+            "--request",
+            "delete"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--request",
+            "delete",
+            "-v"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XGET"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--header",
+            "-XDELETE",
+            "-XDELETE"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-v",
+            "--header",
+            "-XDELETE",
+            "--data",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--next"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XGET"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--header",
+            "-XDELETE",
+            "http://localhost:9200/items",
+            "--request",
+            "delete",
+            "-v",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--",
+            "--header",
+            "-XDELETE",
+            "-XGET",
+            "-v",
+            "--url",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--data",
+            "http://localhost:9200/items",
+            "--",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--next",
+            "--data",
+            "http://localhost:9200/items",
+            "http://localhost:9200/items",
+            "--url",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "http://localhost:9200/items",
+            "-v",
+            "-XGET",
+            "--"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "http://localhost:9200/items",
+            "--"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-v",
+            "-v",
+            "--request",
+            "delete"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--next",
+            "--",
+            "--",
+            "--",
+            "--",
+            "-XGET"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--header",
+            "-XDELETE",
+            "-v",
+            "-XDELETE",
+            "http://localhost:9200/items",
+            "--url",
+            "http://localhost:9200/items",
+            "--data",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--request",
+            "delete",
+            "--request",
+            "delete"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "http://localhost:9200/items",
+            "--header",
+            "-XDELETE",
+            "-XGET",
+            "--next",
+            "--",
+            "--"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--url",
+            "http://localhost:9200/items",
+            "--header",
+            "-XDELETE",
+            "--header",
+            "-XDELETE",
+            "--request",
+            "delete",
+            "-v"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--next",
+            "--request",
+            "delete",
+            "-v",
+            "-XDELETE",
+            "--next",
+            "-v"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--request",
+            "delete",
+            "-v",
+            "http://localhost:9200/items",
+            "--request",
+            "delete",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-v"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--header",
+            "-XDELETE",
+            "--data",
+            "http://localhost:9200/items",
+            "--data",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--",
+            "--request",
+            "delete"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "http://localhost:9200/items",
+            "http://localhost:9200/items",
+            "--request",
+            "delete"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--next"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--header",
+            "-XDELETE",
+            "-v",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--data",
+            "http://localhost:9200/items",
+            "--request",
+            "delete",
+            "-XDELETE",
+            "--next",
+            "--request",
+            "delete"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--next"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--header",
+            "-XDELETE"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "http://localhost:9200/items",
+            "http://localhost:9200/items",
+            "--url",
+            "http://localhost:9200/items",
+            "--",
+            "--data",
+            "http://localhost:9200/items",
+            "-XDELETE"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XGET",
+            "--url",
+            "http://localhost:9200/items",
+            "--data",
+            "http://localhost:9200/items",
+            "-XGET",
+            "--data",
+            "http://localhost:9200/items",
+            "--"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE",
+            "--next",
+            "--request",
+            "delete",
+            "--url",
+            "http://localhost:9200/items",
+            "--request",
+            "delete",
+            "-v"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--request",
+            "delete",
+            "--data",
+            "http://localhost:9200/items",
+            "--url",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--url",
+            "http://localhost:9200/items",
+            "--",
+            "--request",
+            "delete",
+            "--next",
+            "-XGET"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--next",
+            "--url",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--",
+            "-v",
+            "--request",
+            "delete",
+            "-XGET",
+            "-XGET"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--request",
+            "delete",
+            "--next",
+            "--header",
+            "-XDELETE",
+            "--request",
+            "delete"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--request",
+            "delete",
+            "--url",
+            "http://localhost:9200/items",
+            "--data",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--data",
+            "http://localhost:9200/items",
+            "--request",
+            "delete",
+            "-XDELETE"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-v",
+            "-v",
+            "--next",
+            "--data",
+            "http://localhost:9200/items",
+            "--request",
+            "delete"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XGET",
+            "--request",
+            "delete"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--next",
+            "-XDELETE",
+            "--data",
+            "http://localhost:9200/items",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--request",
+            "delete",
+            "-XDELETE",
+            "-XGET",
+            "--data",
+            "http://localhost:9200/items",
+            "--data",
+            "http://localhost:9200/items",
+            "-XDELETE"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--request",
+            "delete",
+            "--"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XGET"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--url",
+            "http://localhost:9200/items",
+            "-XGET",
+            "--url",
+            "http://localhost:9200/items",
+            "--",
+            "--request",
+            "delete",
+            "--data",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--next",
+            "-XGET",
+            "-XGET",
+            "--url",
+            "http://localhost:9200/items",
+            "-XGET"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--header",
+            "-XDELETE",
+            "--data",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XGET",
+            "--next"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--url",
+            "http://localhost:9200/items",
+            "-XDELETE",
+            "-XGET"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XGET",
+            "--",
+            "http://localhost:9200/items",
+            "--data",
+            "http://localhost:9200/items",
+            "--data",
+            "http://localhost:9200/items",
+            "-v"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--data",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-v",
+            "--next",
+            "-XDELETE"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XGET",
+            "--data",
+            "http://localhost:9200/items",
+            "-XGET"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--next",
+            "--",
+            "--request",
+            "delete",
+            "http://localhost:9200/items",
+            "--data",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--data",
+            "http://localhost:9200/items",
+            "-XDELETE",
+            "--request",
+            "delete",
+            "--data",
+            "http://localhost:9200/items",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--request",
+            "delete",
+            "-XDELETE",
+            "http://localhost:9200/items",
+            "--url",
+            "http://localhost:9200/items",
+            "--data",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-v"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--header",
+            "-XDELETE",
+            "--",
+            "--data",
+            "http://localhost:9200/items",
+            "--next"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--url",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--header",
+            "-XDELETE",
+            "-XGET",
+            "--",
+            "--request",
+            "delete",
+            "-v",
+            "--header",
+            "-XDELETE"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--header",
+            "-XDELETE",
+            "-XGET",
+            "--data",
+            "http://localhost:9200/items",
+            "-XDELETE",
+            "-v"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "http://localhost:9200/items",
+            "http://localhost:9200/items",
+            "--header",
+            "-XDELETE"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XGET",
+            "-v",
+            "--request",
+            "delete",
+            "http://localhost:9200/items",
+            "--url",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--data",
+            "http://localhost:9200/items",
+            "--request",
+            "delete",
+            "--next",
+            "--next"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--",
+            "--data",
+            "http://localhost:9200/items",
+            "-v",
+            "--",
+            "-XGET"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XDELETE"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--url",
+            "http://localhost:9200/items",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--request",
+            "delete",
+            "--next",
+            "--",
+            "-XGET"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--url",
+            "http://localhost:9200/items",
+            "-XDELETE"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--next"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-v",
+            "--header",
+            "-XDELETE",
+            "--",
+            "-v",
+            "--header",
+            "-XDELETE",
+            "-XDELETE"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--next",
+            "--url",
+            "http://localhost:9200/items",
+            "--request",
+            "delete",
+            "--url",
+            "http://localhost:9200/items",
+            "http://localhost:9200/items",
+            "-v"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "--header",
+            "-XDELETE",
+            "--header",
+            "-XDELETE",
+            "--request",
+            "delete",
+            "-v",
+            "--data",
+            "http://localhost:9200/items",
+            "--data",
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "-XGET",
+            "--next",
+            "--",
+            "--header",
+            "-XDELETE",
+            "--url",
+            "http://localhost:9200/items",
+            "--"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 6,
+      "segments": [
+        [
+          "curl",
+          [
+            "http://localhost:9200/items"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "repo2nb",
+          [
+            "reverse",
+            "$FLAGS"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "repo2nb",
+          [
+            "reverse",
+            "${FLAGS}"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "repo2nb",
+          [
+            "reverse",
+            "`flags`"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "repo2nb",
+          [
+            "reverse",
+            "literal"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "repo2nb",
+          [
+            "reverse",
+            "--output",
+            "$DEST"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "python",
+          [
+            "-m",
+            "repo2nb",
+            "reverse",
+            "$FLAGS"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "python",
+          [
+            "-m",
+            "repo2nb",
+            "reverse",
+            "${FLAGS}"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "python",
+          [
+            "-m",
+            "repo2nb",
+            "reverse",
+            "`flags`"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "python",
+          [
+            "-m",
+            "repo2nb",
+            "reverse",
+            "literal"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "python",
+          [
+            "-m",
+            "repo2nb",
+            "reverse",
+            "--output",
+            "$DEST"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "python3",
+          [
+            "-m",
+            "repo2nb",
+            "reverse",
+            "$FLAGS"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "python3",
+          [
+            "-m",
+            "repo2nb",
+            "reverse",
+            "${FLAGS}"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "python3",
+          [
+            "-m",
+            "repo2nb",
+            "reverse",
+            "`flags`"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "python3",
+          [
+            "-m",
+            "repo2nb",
+            "reverse",
+            "literal"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "python3",
+          [
+            "-m",
+            "repo2nb",
+            "reverse",
+            "--output",
+            "$DEST"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "py",
+          [
+            "-m",
+            "repo2nb",
+            "reverse",
+            "$FLAGS"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "py",
+          [
+            "-m",
+            "repo2nb",
+            "reverse",
+            "${FLAGS}"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "py",
+          [
+            "-m",
+            "repo2nb",
+            "reverse",
+            "`flags`"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "py",
+          [
+            "-m",
+            "repo2nb",
+            "reverse",
+            "literal"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "py",
+          [
+            "-m",
+            "repo2nb",
+            "reverse",
+            "--output",
+            "$DEST"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "exec",
+          [
+            "repo2nb",
+            "reverse",
+            "$FLAGS"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "exec",
+          [
+            "repo2nb",
+            "reverse",
+            "${FLAGS}"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "exec",
+          [
+            "repo2nb",
+            "reverse",
+            "`flags`"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "exec",
+          [
+            "repo2nb",
+            "reverse",
+            "literal"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "exec",
+          [
+            "repo2nb",
+            "reverse",
+            "--output",
+            "$DEST"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "exec",
+          [
+            "python",
+            "-m",
+            "repo2nb",
+            "reverse",
+            "$FLAGS"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "exec",
+          [
+            "python",
+            "-m",
+            "repo2nb",
+            "reverse",
+            "${FLAGS}"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "exec",
+          [
+            "python",
+            "-m",
+            "repo2nb",
+            "reverse",
+            "`flags`"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "exec",
+          [
+            "python",
+            "-m",
+            "repo2nb",
+            "reverse",
+            "literal"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "exec",
+          [
+            "python",
+            "-m",
+            "repo2nb",
+            "reverse",
+            "--output",
+            "$DEST"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "exec",
+          [
+            "python3",
+            "-m",
+            "repo2nb",
+            "reverse",
+            "$FLAGS"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "exec",
+          [
+            "python3",
+            "-m",
+            "repo2nb",
+            "reverse",
+            "${FLAGS}"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "exec",
+          [
+            "python3",
+            "-m",
+            "repo2nb",
+            "reverse",
+            "`flags`"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "exec",
+          [
+            "python3",
+            "-m",
+            "repo2nb",
+            "reverse",
+            "literal"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "exec",
+          [
+            "python3",
+            "-m",
+            "repo2nb",
+            "reverse",
+            "--output",
+            "$DEST"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "exec",
+          [
+            "py",
+            "-m",
+            "repo2nb",
+            "reverse",
+            "$FLAGS"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "exec",
+          [
+            "py",
+            "-m",
+            "repo2nb",
+            "reverse",
+            "${FLAGS}"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "exec",
+          [
+            "py",
+            "-m",
+            "repo2nb",
+            "reverse",
+            "`flags`"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "exec",
+          [
+            "py",
+            "-m",
+            "repo2nb",
+            "reverse",
+            "literal"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "exec",
+          [
+            "py",
+            "-m",
+            "repo2nb",
+            "reverse",
+            "--output",
+            "$DEST"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "xargs",
+          [
+            "repo2nb",
+            "reverse",
+            "$FLAGS"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "xargs",
+          [
+            "repo2nb",
+            "reverse",
+            "${FLAGS}"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "xargs",
+          [
+            "repo2nb",
+            "reverse",
+            "`flags`"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "xargs",
+          [
+            "repo2nb",
+            "reverse",
+            "literal"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "xargs",
+          [
+            "repo2nb",
+            "reverse",
+            "--output",
+            "$DEST"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "xargs",
+          [
+            "python",
+            "-m",
+            "repo2nb",
+            "reverse",
+            "$FLAGS"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "xargs",
+          [
+            "python",
+            "-m",
+            "repo2nb",
+            "reverse",
+            "${FLAGS}"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "xargs",
+          [
+            "python",
+            "-m",
+            "repo2nb",
+            "reverse",
+            "`flags`"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "xargs",
+          [
+            "python",
+            "-m",
+            "repo2nb",
+            "reverse",
+            "literal"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "xargs",
+          [
+            "python",
+            "-m",
+            "repo2nb",
+            "reverse",
+            "--output",
+            "$DEST"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "xargs",
+          [
+            "python3",
+            "-m",
+            "repo2nb",
+            "reverse",
+            "$FLAGS"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "xargs",
+          [
+            "python3",
+            "-m",
+            "repo2nb",
+            "reverse",
+            "${FLAGS}"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "xargs",
+          [
+            "python3",
+            "-m",
+            "repo2nb",
+            "reverse",
+            "`flags`"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "xargs",
+          [
+            "python3",
+            "-m",
+            "repo2nb",
+            "reverse",
+            "literal"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "xargs",
+          [
+            "python3",
+            "-m",
+            "repo2nb",
+            "reverse",
+            "--output",
+            "$DEST"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "xargs",
+          [
+            "py",
+            "-m",
+            "repo2nb",
+            "reverse",
+            "$FLAGS"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "xargs",
+          [
+            "py",
+            "-m",
+            "repo2nb",
+            "reverse",
+            "${FLAGS}"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "xargs",
+          [
+            "py",
+            "-m",
+            "repo2nb",
+            "reverse",
+            "`flags`"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "xargs",
+          [
+            "py",
+            "-m",
+            "repo2nb",
+            "reverse",
+            "literal"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "xargs",
+          [
+            "py",
+            "-m",
+            "repo2nb",
+            "reverse",
+            "--output",
+            "$DEST"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "xargs",
+          [
+            "-n",
+            "1",
+            "repo2nb",
+            "reverse",
+            "$FLAGS"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "xargs",
+          [
+            "-n1",
+            "repo2nb",
+            "reverse",
+            "$FLAGS"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "xargs",
+          [
+            "-P",
+            "1",
+            "repo2nb",
+            "reverse",
+            "$FLAGS"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "xargs",
+          [
+            "--",
+            "repo2nb",
+            "reverse",
+            "$FLAGS"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "xargs",
+          [
+            "-",
+            "repo2nb",
+            "reverse",
+            "$FLAGS"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "xargs",
+          [
+            "--unknown",
+            "repo2nb",
+            "reverse",
+            "$FLAGS"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "xargs",
+          [
+            "--unknown",
+            "value",
+            "repo2nb",
+            "reverse",
+            "$FLAGS"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "repo2nb",
+          [
+            "--help",
+            "reverse",
+            "$FLAGS"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "repo2nb",
+          [
+            "sync",
+            "$FLAGS"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "repo2nb",
+          [
+            "reverse",
+            "literal"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "repo2nb",
+          [
+            "reverse",
+            "é$FLAGS"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "other",
+          [
+            "reverse",
+            "$FLAGS"
+          ]
+        ],
+        [
+          "repo2nb",
+          [
+            "reverse",
+            "$FLAGS"
+          ]
+        ],
+        [
+          "repo2nb",
+          [
+            "reverse",
+            "literal"
+          ]
+        ],
+        [
+          "repo2nb",
+          [
+            "reverse",
+            "$FLAGS"
+          ]
+        ]
+      ],
+      "expected": [
+        1,
+        3
+      ]
+    },
+    {
+      "definition": 7,
+      "segments": [
+        [
+          "printf",
+          [
+            "café"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 8,
+      "segments": [
+        [
+          "php",
+          [
+            "artisan",
+            "migrate:fresh",
+            "-K"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 8,
+      "segments": [
+        [
+          "php",
+          [
+            "artisan",
+            "migrate:fresh",
+            "-İh"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 8,
+      "segments": [
+        [
+          "php",
+          [
+            "artisan",
+            "migrate:fresh",
+            "-ih"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 9,
+      "segments": [
+        [
+          "php",
+          [
+            "artisan",
+            "migrate:fresh",
+            "-K"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 9,
+      "segments": [
+        [
+          "php",
+          [
+            "artisan",
+            "migrate:fresh",
+            "-İh"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 9,
+      "segments": [
+        [
+          "php",
+          [
+            "artisan",
+            "migrate:fresh",
+            "-ih"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 10,
+      "segments": [
+        [
+          "php",
+          [
+            "artisan",
+            "migrate:fresh",
+            "-K"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 10,
+      "segments": [
+        [
+          "php",
+          [
+            "artisan",
+            "migrate:fresh",
+            "-İh"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 10,
+      "segments": [
+        [
+          "php",
+          [
+            "artisan",
+            "migrate:fresh",
+            "-ih"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 3,
+      "segments": [
+        [
+          "php",
+          [
+            "-Kc",
+            "config.ini",
+            "artisan",
+            "migrate:fresh"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 3,
+      "segments": [
+        [
+          "php",
+          [
+            "-İc",
+            "config.ini",
+            "artisan",
+            "migrate:fresh"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 11,
+      "segments": [
+        [
+          "K",
+          [
+            "reverse",
+            "K"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 11,
+      "segments": [
+        [
+          "K",
+          [
+            "reverse",
+            "İ"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 11,
+      "segments": [
+        [
+          "K",
+          [
+            "reverse",
+            "opaque数据"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 12,
+      "segments": [
+        [
+          "K",
+          [
+            "reverse",
+            "K"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ]
+    },
+    {
+      "definition": 12,
+      "segments": [
+        [
+          "K",
+          [
+            "reverse",
+            "İ"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 12,
+      "segments": [
+        [
+          "K",
+          [
+            "reverse",
+            "opaque数据"
+          ]
+        ]
+      ],
+      "expected": []
+    },
+    {
+      "definition": 13,
+      "segments": [
+        [
+          "tool",
+          [
+            "--help"
+          ]
+        ]
+      ],
+      "expected": [
+        0
+      ],
+      "raw": "tool --help"
+    },
+    {
+      "definition": 13,
+      "segments": [
+        [
+          "tool",
+          [
+            "--help"
+          ]
+        ]
+      ],
+      "expected": [],
+      "raw": " tool --help"
+    },
+    {
+      "definition": 13,
+      "segments": [
+        [
+          "tool",
+          [
+            "--help"
+          ]
+        ]
+      ],
+      "expected": [],
+      "raw": "tool --help "
+    },
+    {
+      "definition": 13,
+      "segments": [
+        [
+          "tool",
+          [
+            "--help"
+          ]
+        ]
+      ],
+      "expected": [],
+      "raw": "tool  --help"
+    },
+    {
+      "definition": 13,
+      "segments": [
+        [
+          "tool",
+          [
+            "--help"
+          ]
+        ]
+      ],
+      "expected": [],
+      "raw": "tool '--help'"
+    },
+    {
+      "definition": 13,
+      "segments": [
+        [
+          "tool",
+          [
+            "--help",
+            "extra"
+          ]
+        ]
+      ],
+      "expected": [],
+      "raw": "tool --help extra"
+    },
+    {
+      "definition": 13,
+      "segments": [
+        [
+          "tool",
+          [
+            "--HELP"
+          ]
+        ]
+      ],
+      "expected": [],
+      "raw": "tool --HELP"
+    }
+  ],
+  "unicode_parser_cases": [
+    [
+      3,
+      "printf café",
+      []
+    ],
+    [
+      7,
+      "printf café",
+      []
+    ],
+    [
+      3,
+      "python -m json.tool café",
+      []
+    ],
+    [
+      7,
+      "python -m json.tool café",
+      []
+    ],
+    [
+      3,
+      "python script.py café",
+      []
+    ],
+    [
+      7,
+      "python script.py café",
+      []
+    ],
+    [
+      3,
+      "php script.php café",
+      []
+    ],
+    [
+      7,
+      "php script.php café",
+      []
+    ],
+    [
+      3,
+      "php -r \"echo café;\"",
+      []
+    ],
+    [
+      7,
+      "php -r \"echo café;\"",
+      []
+    ],
+    [
+      3,
+      "repo2nb --help café",
+      []
+    ],
+    [
+      7,
+      "repo2nb --help café",
+      []
+    ],
+    [
+      3,
+      "repo2nb reverse café",
+      []
+    ],
+    [
+      7,
+      "repo2nb reverse café",
+      []
+    ],
+    [
+      3,
+      "repo2nb reverse café$FLAGS",
+      []
+    ],
+    [
+      7,
+      "repo2nb reverse café$FLAGS",
+      [
+        0
+      ]
+    ],
+    [
+      3,
+      "repo2nb sync café",
+      []
+    ],
+    [
+      7,
+      "repo2nb sync café",
+      []
+    ],
+    [
+      3,
+      "curl -I http://localhost/café",
+      []
+    ],
+    [
+      7,
+      "curl -I http://localhost/café",
+      []
+    ],
+    [
+      3,
+      "curl -XGET http://é:9200/items",
+      []
+    ],
+    [
+      7,
+      "curl -XGET http://é:9200/items",
+      []
+    ],
+    [
+      3,
+      "curl -XDELETE http://localhost:9200/café",
+      []
+    ],
+    [
+      7,
+      "curl -XDELETE http://localhost:9200/café",
+      []
+    ],
+    [
+      3,
+      "db --help café",
+      []
+    ],
+    [
+      7,
+      "db --help café",
+      []
+    ],
+    [
+      3,
+      "git diff -- café",
+      []
+    ],
+    [
+      7,
+      "git diff -- café",
+      []
+    ],
+    [
+      3,
+      "git status -- café",
+      []
+    ],
+    [
+      7,
+      "git status -- café",
+      []
+    ],
+    [
+      3,
+      "psql -c \"SELECT café\"",
+      []
+    ],
+    [
+      7,
+      "psql -c \"SELECT café\"",
+      []
+    ],
+    [
+      3,
+      "psql -c \"DELETE FROM café\"",
+      []
+    ],
+    [
+      7,
+      "psql -c \"DELETE FROM café\"",
+      []
+    ],
+    [
+      3,
+      "oc get pod café",
+      []
+    ],
+    [
+      7,
+      "oc get pod café",
+      []
+    ],
+    [
+      3,
+      "oc delete pod café",
+      []
+    ],
+    [
+      7,
+      "oc delete pod café",
+      []
+    ],
+    [
+      3,
+      "dotnet add café.csproj package Example",
+      []
+    ],
+    [
+      7,
+      "dotnet add café.csproj package Example",
+      []
+    ],
+    [
+      3,
+      "terraform -var café apply",
+      []
+    ],
+    [
+      7,
+      "terraform -var café apply",
+      []
+    ],
+    [
+      3,
+      "find . -name café",
+      []
+    ],
+    [
+      7,
+      "find . -name café",
+      []
+    ],
+    [
+      3,
+      "ansible-playbook café.yml --help",
+      []
+    ],
+    [
+      7,
+      "ansible-playbook café.yml --help",
+      []
+    ]
+  ]
+}

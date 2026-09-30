@@ -1,0 +1,1178 @@
+{
+  "extension": {
+    "action_classes": [
+      "Azure DNS destructive command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews Azure public DNS, private DNS, virtual-network link, and DNS resolver deletion through Azure CLI.",
+    "ecosystem_ids": [],
+    "executables": [
+      "az"
+    ],
+    "extension_id": "command.dns.azure",
+    "homepage": null,
+    "icon": {
+      "kind": "none"
+    },
+    "license": null,
+    "name": "Azure DNS command protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "Azure DNS destructive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies azure private dns virtual-network link deletion operations.",
+        "example_command": "az network private-dns link vnet delete -g app -n spoke -z example.test",
+        "family": "azure-dns",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Azure private DNS virtual-network link deletion",
+        "permission_id": "command.dns.azure.permission.private-link-deletion",
+        "replacement_permission_id": null,
+        "risk_tier": "critical",
+        "safer_guidance": [
+          "Export records and confirm recovery or delegation controls before deletion."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "Azure DNS destructive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies azure private dns record-set deletion operations.",
+        "example_command": "az network private-dns record-set a delete -g app -z example.test -n www",
+        "family": "azure-dns",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Azure private DNS record-set deletion",
+        "permission_id": "command.dns.azure.permission.private-record-deletion",
+        "replacement_permission_id": null,
+        "risk_tier": "critical",
+        "safer_guidance": [
+          "Export records and confirm recovery or delegation controls before deletion."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "Azure DNS destructive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies azure private dns zone deletion operations.",
+        "example_command": "az network private-dns zone delete -g app -n example.test",
+        "family": "azure-dns",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Azure private DNS zone deletion",
+        "permission_id": "command.dns.azure.permission.private-zone-deletion",
+        "replacement_permission_id": null,
+        "risk_tier": "critical",
+        "safer_guidance": [
+          "Export records and confirm recovery or delegation controls before deletion."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "Azure DNS destructive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies azure dns record-set deletion operations.",
+        "example_command": "az network dns record-set a delete -g app -z example.test -n www",
+        "family": "azure-dns",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Azure DNS record-set deletion",
+        "permission_id": "command.dns.azure.permission.public-record-deletion",
+        "replacement_permission_id": null,
+        "risk_tier": "critical",
+        "safer_guidance": [
+          "Export records and confirm recovery or delegation controls before deletion."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "Azure DNS destructive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies azure dns zone deletion operations.",
+        "example_command": "az network dns zone delete -g app -n example.test",
+        "family": "azure-dns",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Azure DNS zone deletion",
+        "permission_id": "command.dns.azure.permission.public-zone-deletion",
+        "replacement_permission_id": null,
+        "risk_tier": "critical",
+        "safer_guidance": [
+          "Export records and confirm recovery or delegation controls before deletion."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "Azure DNS destructive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies azure dns resolver deletion operations.",
+        "example_command": "az dns-resolver delete -g app -n office",
+        "family": "azure-dns",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Azure DNS resolver deletion",
+        "permission_id": "command.dns.azure.permission.resolver-deletion",
+        "replacement_permission_id": null,
+        "risk_tier": "critical",
+        "safer_guidance": [
+          "Export records and confirm recovery or delegation controls before deletion."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": null,
+    "reference_urls": [
+      "https://learn.microsoft.com/cli/azure/network/dns/zone",
+      "https://learn.microsoft.com/cli/azure/network/dns/record-set",
+      "https://learn.microsoft.com/cli/azure/network/private-dns/zone",
+      "https://learn.microsoft.com/cli/azure/dns-resolver"
+    ],
+    "required": false,
+    "risk_classes": [
+      "destructive_shell",
+      "network_egress"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "Azure DNS destructive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies azure dns zone deletion operations.",
+        "family": "azure-dns",
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "az",
+                  "az.cmd",
+                  "az.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--only-show-errors",
+                  "--verbose"
+                ],
+                "interspersed_options_with_values": [
+                  "--output",
+                  "--query",
+                  "--subscription",
+                  "-o"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "network",
+                  "dns",
+                  "zone",
+                  "delete"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.dns.azure.permission.public-zone-deletion",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.dns.azure.public-zone-deletion",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "az",
+                      "az.cmd",
+                      "az.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--only-show-errors",
+                      "--verbose"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--output",
+                      "--query",
+                      "--subscription",
+                      "-o"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "network",
+                      "dns",
+                      "zone",
+                      "delete"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Azure DNS zone deletion help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Export records and confirm recovery or delegation controls before deletion."
+        ],
+        "severity": "critical",
+        "title": "Azure DNS zone deletion"
+      },
+      {
+        "action_classes": [
+          "Azure DNS destructive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies azure dns record-set deletion operations.",
+        "family": "azure-dns",
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "az",
+                  "az.cmd",
+                  "az.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--only-show-errors",
+                  "--verbose"
+                ],
+                "interspersed_options_with_values": [
+                  "--output",
+                  "--query",
+                  "--subscription",
+                  "-o"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "paths": [
+                  [
+                    "network",
+                    "dns",
+                    "record-set",
+                    "a",
+                    "delete"
+                  ],
+                  [
+                    "network",
+                    "dns",
+                    "record-set",
+                    "aaaa",
+                    "delete"
+                  ],
+                  [
+                    "network",
+                    "dns",
+                    "record-set",
+                    "caa",
+                    "delete"
+                  ],
+                  [
+                    "network",
+                    "dns",
+                    "record-set",
+                    "cname",
+                    "delete"
+                  ],
+                  [
+                    "network",
+                    "dns",
+                    "record-set",
+                    "ds",
+                    "delete"
+                  ],
+                  [
+                    "network",
+                    "dns",
+                    "record-set",
+                    "mx",
+                    "delete"
+                  ],
+                  [
+                    "network",
+                    "dns",
+                    "record-set",
+                    "ns",
+                    "delete"
+                  ],
+                  [
+                    "network",
+                    "dns",
+                    "record-set",
+                    "ptr",
+                    "delete"
+                  ],
+                  [
+                    "network",
+                    "dns",
+                    "record-set",
+                    "srv",
+                    "delete"
+                  ],
+                  [
+                    "network",
+                    "dns",
+                    "record-set",
+                    "tlsa",
+                    "delete"
+                  ],
+                  [
+                    "network",
+                    "dns",
+                    "record-set",
+                    "txt",
+                    "delete"
+                  ]
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.dns.azure.permission.public-record-deletion",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.dns.azure.public-record-deletion",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "az",
+                      "az.cmd",
+                      "az.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--only-show-errors",
+                      "--verbose"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--output",
+                      "--query",
+                      "--subscription",
+                      "-o"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "paths": [
+                      [
+                        "network",
+                        "dns",
+                        "record-set",
+                        "a",
+                        "delete"
+                      ],
+                      [
+                        "network",
+                        "dns",
+                        "record-set",
+                        "aaaa",
+                        "delete"
+                      ],
+                      [
+                        "network",
+                        "dns",
+                        "record-set",
+                        "caa",
+                        "delete"
+                      ],
+                      [
+                        "network",
+                        "dns",
+                        "record-set",
+                        "cname",
+                        "delete"
+                      ],
+                      [
+                        "network",
+                        "dns",
+                        "record-set",
+                        "ds",
+                        "delete"
+                      ],
+                      [
+                        "network",
+                        "dns",
+                        "record-set",
+                        "mx",
+                        "delete"
+                      ],
+                      [
+                        "network",
+                        "dns",
+                        "record-set",
+                        "ns",
+                        "delete"
+                      ],
+                      [
+                        "network",
+                        "dns",
+                        "record-set",
+                        "ptr",
+                        "delete"
+                      ],
+                      [
+                        "network",
+                        "dns",
+                        "record-set",
+                        "srv",
+                        "delete"
+                      ],
+                      [
+                        "network",
+                        "dns",
+                        "record-set",
+                        "tlsa",
+                        "delete"
+                      ],
+                      [
+                        "network",
+                        "dns",
+                        "record-set",
+                        "txt",
+                        "delete"
+                      ]
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": []
+                  },
+                  "op": "executable-path-set.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Azure DNS record-set deletion help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Export records and confirm recovery or delegation controls before deletion."
+        ],
+        "severity": "critical",
+        "title": "Azure DNS record-set deletion"
+      },
+      {
+        "action_classes": [
+          "Azure DNS destructive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies azure private dns zone deletion operations.",
+        "family": "azure-dns",
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "az",
+                  "az.cmd",
+                  "az.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--only-show-errors",
+                  "--verbose"
+                ],
+                "interspersed_options_with_values": [
+                  "--output",
+                  "--query",
+                  "--subscription",
+                  "-o"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "network",
+                  "private-dns",
+                  "zone",
+                  "delete"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.dns.azure.permission.private-zone-deletion",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.dns.azure.private-zone-deletion",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "az",
+                      "az.cmd",
+                      "az.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--only-show-errors",
+                      "--verbose"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--output",
+                      "--query",
+                      "--subscription",
+                      "-o"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "network",
+                      "private-dns",
+                      "zone",
+                      "delete"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Azure private DNS zone deletion help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Export records and confirm recovery or delegation controls before deletion."
+        ],
+        "severity": "critical",
+        "title": "Azure private DNS zone deletion"
+      },
+      {
+        "action_classes": [
+          "Azure DNS destructive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies azure private dns record-set deletion operations.",
+        "family": "azure-dns",
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "az",
+                  "az.cmd",
+                  "az.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--only-show-errors",
+                  "--verbose"
+                ],
+                "interspersed_options_with_values": [
+                  "--output",
+                  "--query",
+                  "--subscription",
+                  "-o"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "paths": [
+                  [
+                    "network",
+                    "private-dns",
+                    "record-set",
+                    "a",
+                    "delete"
+                  ],
+                  [
+                    "network",
+                    "private-dns",
+                    "record-set",
+                    "aaaa",
+                    "delete"
+                  ],
+                  [
+                    "network",
+                    "private-dns",
+                    "record-set",
+                    "cname",
+                    "delete"
+                  ],
+                  [
+                    "network",
+                    "private-dns",
+                    "record-set",
+                    "mx",
+                    "delete"
+                  ],
+                  [
+                    "network",
+                    "private-dns",
+                    "record-set",
+                    "ptr",
+                    "delete"
+                  ],
+                  [
+                    "network",
+                    "private-dns",
+                    "record-set",
+                    "srv",
+                    "delete"
+                  ],
+                  [
+                    "network",
+                    "private-dns",
+                    "record-set",
+                    "txt",
+                    "delete"
+                  ]
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.dns.azure.permission.private-record-deletion",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.dns.azure.private-record-deletion",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "az",
+                      "az.cmd",
+                      "az.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--only-show-errors",
+                      "--verbose"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--output",
+                      "--query",
+                      "--subscription",
+                      "-o"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "paths": [
+                      [
+                        "network",
+                        "private-dns",
+                        "record-set",
+                        "a",
+                        "delete"
+                      ],
+                      [
+                        "network",
+                        "private-dns",
+                        "record-set",
+                        "aaaa",
+                        "delete"
+                      ],
+                      [
+                        "network",
+                        "private-dns",
+                        "record-set",
+                        "cname",
+                        "delete"
+                      ],
+                      [
+                        "network",
+                        "private-dns",
+                        "record-set",
+                        "mx",
+                        "delete"
+                      ],
+                      [
+                        "network",
+                        "private-dns",
+                        "record-set",
+                        "ptr",
+                        "delete"
+                      ],
+                      [
+                        "network",
+                        "private-dns",
+                        "record-set",
+                        "srv",
+                        "delete"
+                      ],
+                      [
+                        "network",
+                        "private-dns",
+                        "record-set",
+                        "txt",
+                        "delete"
+                      ]
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": []
+                  },
+                  "op": "executable-path-set.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Azure private DNS record-set deletion help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Export records and confirm recovery or delegation controls before deletion."
+        ],
+        "severity": "critical",
+        "title": "Azure private DNS record-set deletion"
+      },
+      {
+        "action_classes": [
+          "Azure DNS destructive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies azure private dns virtual-network link deletion operations.",
+        "family": "azure-dns",
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "az",
+                  "az.cmd",
+                  "az.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--only-show-errors",
+                  "--verbose"
+                ],
+                "interspersed_options_with_values": [
+                  "--output",
+                  "--query",
+                  "--subscription",
+                  "-o"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "network",
+                  "private-dns",
+                  "link",
+                  "vnet",
+                  "delete"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.dns.azure.permission.private-link-deletion",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.dns.azure.private-link-deletion",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "az",
+                      "az.cmd",
+                      "az.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--only-show-errors",
+                      "--verbose"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--output",
+                      "--query",
+                      "--subscription",
+                      "-o"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "network",
+                      "private-dns",
+                      "link",
+                      "vnet",
+                      "delete"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Azure private DNS virtual-network link deletion help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Export records and confirm recovery or delegation controls before deletion."
+        ],
+        "severity": "critical",
+        "title": "Azure private DNS virtual-network link deletion"
+      },
+      {
+        "action_classes": [
+          "Azure DNS destructive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies azure dns resolver deletion operations.",
+        "family": "azure-dns",
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "az",
+                  "az.cmd",
+                  "az.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--only-show-errors",
+                  "--verbose"
+                ],
+                "interspersed_options_with_values": [
+                  "--output",
+                  "--query",
+                  "--subscription",
+                  "-o"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "paths": [
+                  [
+                    "dns-resolver",
+                    "delete"
+                  ],
+                  [
+                    "dns-resolver",
+                    "domain-list",
+                    "delete"
+                  ],
+                  [
+                    "dns-resolver",
+                    "forwarding-rule",
+                    "delete"
+                  ],
+                  [
+                    "dns-resolver",
+                    "forwarding-ruleset",
+                    "delete"
+                  ],
+                  [
+                    "dns-resolver",
+                    "inbound-endpoint",
+                    "delete"
+                  ],
+                  [
+                    "dns-resolver",
+                    "outbound-endpoint",
+                    "delete"
+                  ],
+                  [
+                    "dns-resolver",
+                    "vnet-link",
+                    "delete"
+                  ]
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.dns.azure.permission.resolver-deletion",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.dns.azure.resolver-deletion",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "az",
+                      "az.cmd",
+                      "az.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--only-show-errors",
+                      "--verbose"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--output",
+                      "--query",
+                      "--subscription",
+                      "-o"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "paths": [
+                      [
+                        "dns-resolver",
+                        "delete"
+                      ],
+                      [
+                        "dns-resolver",
+                        "domain-list",
+                        "delete"
+                      ],
+                      [
+                        "dns-resolver",
+                        "forwarding-rule",
+                        "delete"
+                      ],
+                      [
+                        "dns-resolver",
+                        "forwarding-ruleset",
+                        "delete"
+                      ],
+                      [
+                        "dns-resolver",
+                        "inbound-endpoint",
+                        "delete"
+                      ],
+                      [
+                        "dns-resolver",
+                        "outbound-endpoint",
+                        "delete"
+                      ],
+                      [
+                        "dns-resolver",
+                        "vnet-link",
+                        "delete"
+                      ]
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": []
+                  },
+                  "op": "executable-path-set.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Azure DNS resolver deletion help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Export records and confirm recovery or delegation controls before deletion."
+        ],
+        "severity": "critical",
+        "title": "Azure DNS resolver deletion"
+      }
+    ],
+    "safer_alternatives": [
+      "Export zone records and inspect private DNS links before deletion."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

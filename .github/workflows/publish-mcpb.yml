@@ -72,7 +72,7 @@ jobs:
       !contains(github.event.workflow_run.head_commit.message || '', '[skip release publish]')
     needs: [verify, validate]
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 5
     permissions:
       contents: write
     steps:
@@ -83,28 +83,28 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Wait for canonical release tag
+      - name: Resolve the completed release tag
         id: release
         env:
           SOURCE_SHA: ${{ needs.verify.outputs.sha }}
           SOURCE_REF: refs/heads/${{ needs.verify.outputs.branch }}
         run: |
           set -euo pipefail
-          tag=""
-          for attempt in $(seq 1 180); do
-            git fetch --force --tags origin
-            if [[ "$SOURCE_REF" == "refs/heads/release/3.0" ]]; then
-              tag=$(git tag --points-at "$SOURCE_SHA" --list 'alpha/v3.0.1a*' | sort -V | tail -n 1)
-            elif [[ "$SOURCE_REF" == "refs/heads/main" ]]; then
-              tag=$(git tag --points-at "$SOURCE_SHA" --list 'v*' | sort -V | tail -n 1)
-            else
-              echo "Unsupported release ref: $SOURCE_REF" >&2
-              exit 1
-            fi
-            [[ -n "$tag" ]] && break
-            [[ "$attempt" == "180" ]] && { echo "No canonical release tag appeared for $SOURCE_SHA" >&2; exit 1; }
-            sleep 10
-          done
+          # The trusted verifier proved both PyPI and GitHub release jobs completed.
+          # A missing tag is an integrity error, not a reason to occupy a runner for 30 minutes.
+          git fetch --force --tags origin
+          if [[ "$SOURCE_REF" == "refs/heads/release/3.0" ]]; then
+            tag=$(git tag --points-at "$SOURCE_SHA" --list 'alpha/v3.0.1a*' | sort -V | tail -n 1)
+          elif [[ "$SOURCE_REF" == "refs/heads/main" ]]; then
+            tag=$(git tag --points-at "$SOURCE_SHA" --list 'v*' | sort -V | tail -n 1)
+          else
+            echo "Unsupported release ref: $SOURCE_REF" >&2
+            exit 1
+          fi
+          if [[ -z "$tag" ]]; then
+            echo "Completed release has no canonical tag for $SOURCE_SHA" >&2
+            exit 1
+          fi
           if [[ "$tag" == alpha/v* ]]; then
             version="${tag#alpha/v}"
           else
@@ -114,22 +114,23 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Wait for exact PyPI package and GitHub release
+        timeout-minutes: 2
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.release.outputs.tag }}
           VERSION: ${{ steps.release.outputs.version }}
         run: |
           set -euo pipefail
-          for attempt in $(seq 1 120); do
+          for attempt in $(seq 1 6); do
             pypi_ok=false
             release_ok=false
-            curl --fail --silent --show-error --proto '=https' --tlsv1.2 \
+            curl --fail --silent --show-error --connect-timeout 5 --max-time 10 --proto '=https' --tlsv1.2 \
               "https://pypi.org/pypi/hol-guard/${VERSION}/json" -o /tmp/pypi.json && \
               jq -e --arg version "$VERSION" '.info.version == $version' /tmp/pypi.json >/dev/null && pypi_ok=true
             gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 && release_ok=true
             if [[ "$pypi_ok" == true && "$release_ok" == true ]]; then exit 0; fi
-            [[ "$attempt" == "120" ]] && { echo "Release prerequisites did not become available" >&2; exit 1; }
-            sleep 10
+            [[ "$attempt" == "6" ]] && { echo "Release prerequisites did not become available" >&2; exit 1; }
+            sleep 5
           done
 
       - name: Stamp exact release into isolated bundle source
