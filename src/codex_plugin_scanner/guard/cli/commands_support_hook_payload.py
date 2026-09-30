@@ -344,9 +344,7 @@ def _emit_native_post_tool_envelope(
         # by in-process callers such as _run_guard_hook_command) takes
         # precedence over process stdout.
         stream = output_stream if output_stream is not None else sys.stdout
-        stream.write(  # codeql[py/clear-text-logging-sensitive-data]
-            _render_redacted_json_payload(restored)
-        )
+        stream.write(_render_redacted_json_payload(restored))  # codeql[py/clear-text-logging-sensitive-data]
         stream.write("\n")
         return
     from .render import emit_guard_payload

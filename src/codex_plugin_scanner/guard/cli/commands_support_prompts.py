@@ -500,9 +500,7 @@ def _append_guard_context_args(command: list[str], args: argparse.Namespace) -> 
 def _write_json_line(payload: dict[str, object], *, output_stream: TextIO | None = None) -> None:
     stream = output_stream or sys.stdout
     # stdout is the harness delivery channel; approval payloads must reach the operator.
-    stream.write(  # codeql[py/clear-text-logging-sensitive-data]
-        f"{json.dumps(payload, separators=(',', ':'))}\n"
-    )
+    stream.write(f"{json.dumps(payload, separators=(',', ':'))}\n")  # codeql[py/clear-text-logging-sensitive-data]
     stream.flush()
 
 def _emit_copilot_hook_response(

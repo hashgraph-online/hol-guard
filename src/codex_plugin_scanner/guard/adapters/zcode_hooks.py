@@ -198,9 +198,7 @@ def emit_zcode_hook_response(
     )
     stream = output_stream if output_stream is not None else sys.stdout
     # stdout is the harness delivery channel; approval payloads must reach the operator.
-    stream.write(  # codeql[py/clear-text-logging-sensitive-data]
-        json.dumps(response, separators=(",", ":")) + "\n"
-    )
+    stream.write(json.dumps(response, separators=(",", ":")) + "\n")  # codeql[py/clear-text-logging-sensitive-data]
     stream.flush()
 
 
