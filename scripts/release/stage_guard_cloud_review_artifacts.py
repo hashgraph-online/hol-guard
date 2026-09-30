@@ -22,6 +22,7 @@ _ARTIFACTS = {
     "contributions/extensions/command.skill-sunset.json": "extensions/contributions/command.skill-sunset.json",
     "contributions/extensions/command.uivoid.json": "extensions/contributions/command.uivoid.json",
     "contracts/mcp-servers/contribution.v1.schema.json": "mcp_servers/contribution.v1.schema.json",
+    "contributions/mcp-servers/mcp.clipugc.json": "mcp_servers/contributions/mcp.clipugc.json",
     "contributions/mcp-servers/mcp.filesystem.json": "mcp_servers/contributions/mcp.filesystem.json",
     "contributions/mcp-servers/mcp.instapods.json": "mcp_servers/contributions/mcp.instapods.json",
     "contributions/mcp-servers/mcp.pr-ui-compare.json": "mcp_servers/contributions/mcp.pr-ui-compare.json",

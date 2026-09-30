@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "guard.extension-listing.v1",
+  "extensionId": "mcp.clipugc",
+  "tagline": "Official ClipUGC hosted MCP coverage for credit-spending generation, permanent deletes, and publishing an AI influencer to the public cast.",
+  "category": "specialized-tools",
+  "limitations": [
+    "Coverage is limited to the reviewed ClipUGC MCP tools and the surrounding Guard policy.",
+    "Remote HTTP matching is bound to the official ClipUGC endpoint when runtime configuration evidence is available; otherwise Guard uses the configured server name only for non-allowing review or block defaults.",
+    "A publisher profile or badge is not a security certification or an endorsement by HOL."
+  ],
+  "documentationUrl": "https://clipugc.com/mcp",
+  "tags": ["mcp", "video", "ugc"],
+  "maintainerGithubIds": ["32781662"]
+}
