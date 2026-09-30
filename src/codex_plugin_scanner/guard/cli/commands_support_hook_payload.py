@@ -581,7 +581,7 @@ def _emit_native_hook_json_document(
         sys.stdout.write(rendered)  # codeql[py/clear-text-logging-sensitive-data]
         sys.stdout.write("\n")
     else:
-        output_stream.write(rendered)
+        output_stream.write(rendered)  # codeql[py/clear-text-logging-sensitive-data]
         output_stream.write("\n")
 
 

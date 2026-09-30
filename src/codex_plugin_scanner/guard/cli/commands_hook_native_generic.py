@@ -809,7 +809,7 @@ def run_native_generic_payload(
     native_edge_action: GuardAction | None = None
     if isinstance(native_edge_result, Mapping):
         edge_action_value = native_edge_result.get("policy_action") or native_edge_result.get("minimum_action")
-        if edge_action_value is not None:
+        if edge_action_value:
             # The edge result is an enforcement input: a present but
             # unrecognized action fails closed instead of skipping the floor.
             native_edge_action = normalize_guard_action(edge_action_value, unknown_action="block")

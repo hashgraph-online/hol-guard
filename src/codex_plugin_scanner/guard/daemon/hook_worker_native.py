@@ -486,11 +486,13 @@ class HookWorkerNativeMixin:
                             guard_home=guard_home,
                         )
                 return (_record_native_pre_activity(self, native_harness, payload, response, accepted_receipt), True)
-            native_result = apply_command_policy_repair(
+            repaired_result = apply_command_policy_repair(
                 self.store,
                 native_result,
                 guard_home=guard_home,
             )
+            if repaired_result:
+                native_result = repaired_result
             return (
                 _record_native_pre_activity(
                     self,
