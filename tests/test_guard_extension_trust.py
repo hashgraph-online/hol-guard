@@ -100,6 +100,7 @@ def test_trust_map_covers_every_builtin_extension() -> None:
         "command.probe",
         "command.remote.essh",
         "command.repo2nb",
+        "command.sandbin",
         "command.skill-base",
         "command.skill-sunset",
         "command.uivoid",

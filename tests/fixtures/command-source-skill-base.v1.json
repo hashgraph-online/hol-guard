@@ -10372,6 +10372,7 @@
           "command.probe",
           "command.remote.essh",
           "command.repo2nb",
+          "command.sandbin",
           "command.skill-base",
           "command.skill-sunset",
           "command.uivoid"
