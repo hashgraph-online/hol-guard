@@ -57,6 +57,7 @@ def _outbox_status(store, workspace_id: str | None) -> dict[str, object]:
         return {"state": "unavailable"}
     return {
         "depth": status.get("depth", 0),
+        "quarantined_depth": status.get("quarantined_depth", 0),
         "last_delivery_error": status.get("last_error"),
         "state": status.get("binding_state", "unknown"),
     }

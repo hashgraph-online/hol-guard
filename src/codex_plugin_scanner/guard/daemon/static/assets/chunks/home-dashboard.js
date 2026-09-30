@@ -1,6 +1,5 @@
-import { g as getHeatmapLevel, j as jsxRuntimeExports, S as SectionLabel, E as EvidenceInsightsShareButton, G as GuardStatMetric, H as HomeInsightsMetrics, a as EvidenceActivityHeatmapMini, r as reactExports, h as homeCommandActivityModel, b as HiMiniCommandLine, c as HiMiniChevronRight, d as createCommandActivityClient, f as fetchCommandActivityApi, u as useReceiptAnalytics, e as updateSettings, i as harnessDisplayName, k as useProtectionPresentationState, p as protectionHealthFor, l as unavailableProtectionHealth, m as EmptyState, A as ActionButton, W as WatchProtectionBanner, n as EvidenceInsightsShareModal, o as HiMiniCheckCircle, q as GuardHero, O as OperatorHealthCard, s as formatNumber, t as HiMiniShieldCheck, D as DeviceProofCard, v as guardActionDisposition, w as formatRelativeTime, x as guardActionActivityCopy, y as HiMiniSparkles, z as HiMiniXMark, B as HiMiniChevronUp, C as HiMiniChevronDown, F as resolveCloudIntelCopy, I as HiMiniCloud, J as HiMiniQuestionMarkCircle, K as useFocusTrap, L as approvalProofRequiresPassword, M as HiMiniExclamationTriangle, N as HiMiniBolt, P as Badge, Q as HiMiniMinusCircle } from "../guard-dashboard.js";
+import { g as getHeatmapLevel, j as jsxRuntimeExports, S as SectionLabel, E as EvidenceInsightsShareButton, G as GuardStatMetric, H as HomeInsightsMetrics, a as EvidenceActivityHeatmapMini, r as reactExports, h as homeCommandActivityModel, b as HiMiniCommandLine, c as HiMiniChevronRight, d as createCommandActivityClient, f as fetchCommandActivityApi, q as queueErrorIsUnauthorizedSession, u as useReceiptAnalytics, e as updateSettings, i as harnessDisplayName, k as isConnectableAppHarness, l as useProtectionPresentationState, p as protectionHealthFor, m as unavailableProtectionHealth, n as EmptyState, A as ActionButton, W as WatchProtectionBanner, o as EvidenceInsightsShareModal, s as HiMiniCheckCircle, t as GuardHero, O as OperatorHealthCard, v as formatNumber, w as HiMiniShieldCheck, D as DeviceProofCard, x as guardActionDisposition, y as formatRelativeTime, z as guardActionActivityCopy, B as HiMiniSparkles, C as HiMiniXMark, F as HiMiniChevronUp, I as HiMiniChevronDown, J as resolveCloudIntelCopy, K as HiMiniCloud, L as HiMiniQuestionMarkCircle, M as useFocusTrap, N as approvalProofRequiresPassword, P as HiMiniExclamationTriangle, Q as HiMiniBolt, R as Badge, T as HiMiniMinusCircle } from "../guard-dashboard.js";
 import { H as HomeProtectionModule } from "./home-protection-module.js";
-import { i as isConnectableAppHarness } from "./harness-setup-target.js";
 function HomeInsightsSkeleton() {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-2 gap-px border-t border-slate-100 bg-slate-100 sm:grid-cols-4", children: Array.from({ length: 4 }, (_, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2 bg-white px-4 py-3.5 sm:py-4", children: [
@@ -109,6 +108,26 @@ function HomeCommandActivityCard(props) {
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `mt-3 text-xs ${model.health ? "text-amber-700" : "text-slate-500"}`, children: model.health ?? "Evidence store reporting normally." })
   ] });
 }
+function buildDaemonErrorCopy() {
+  return {
+    title: "Guard is not responding",
+    body: "The local Guard service is not reachable. Retry the connection, or open Settings if you need to repair protection.",
+    primaryCta: "Retry",
+    secondaryCta: "Go to Settings"
+  };
+}
+function buildHomeRuntimeErrorCopy(message) {
+  if (queueErrorIsUnauthorizedSession(message)) {
+    return {
+      kind: "session",
+      title: "This window needs a signed session",
+      body: "Guard is still running on this device. Reconnect this window so the dashboard and local protection stay in sync.",
+      primaryCta: "Reconnect",
+      secondaryCta: "Open review queue"
+    };
+  }
+  return { kind: "daemon", ...buildDaemonErrorCopy() };
+}
 const safeLocalStorage = {
   getItem(key) {
     try {
@@ -139,16 +158,8 @@ function resolveCloudUpsellVisible(pendingCount, cloudState) {
 function buildEmptyStateCopy() {
   return {
     title: "No apps connected",
-    body: "Connect an AI app so Guard can start protecting it. Guard works with Codex, Claude Code, Cursor, Grok, Hermes, Kimi, and more.",
+    body: "Connect an AI app so Guard can start protecting it. Guard works with Codex, Claude Code, Cursor, Grok, Hermes, Kimi, Devin, and more.",
     installHint: "hol-guard apps connect <app>"
-  };
-}
-function buildDaemonErrorCopy() {
-  return {
-    title: "Guard is not responding",
-    body: "The local Guard service is not reachable. Go to Settings to repair the connection and restore protection.",
-    primaryCta: "Go to Settings",
-    secondaryCta: "Open review queue"
   };
 }
 function redactHomeArtifactLabel(value) {
@@ -289,15 +300,23 @@ function HomeWorkspace(props) {
     ] });
   }
   if (props.runtime.kind === "error") {
-    const errorCopy = buildDaemonErrorCopy();
+    const errorCopy = buildHomeRuntimeErrorCopy(props.runtime.message);
+    const handlePrimary = () => {
+      if (errorCopy.kind === "session") {
+        void props.onReconnectSession?.();
+        return;
+      }
+      void props.onRefreshRuntime?.();
+    };
+    const handleSecondary = errorCopy.kind === "session" ? props.onOpenInbox : props.onOpenSettings;
     return /* @__PURE__ */ jsxRuntimeExports.jsx(
       EmptyState,
       {
         title: errorCopy.title,
         body: errorCopy.body,
         action: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-2 sm:flex-row", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: props.onOpenSettings, children: errorCopy.primaryCta }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: props.onOpenInbox, children: errorCopy.secondaryCta })
+          /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handlePrimary, children: errorCopy.primaryCta }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: handleSecondary, children: errorCopy.secondaryCta })
         ] }),
         tone: "teach"
       }
@@ -957,6 +976,7 @@ export {
   buildDaemonErrorCopy,
   buildDailyStory,
   buildEmptyStateCopy,
+  buildHomeRuntimeErrorCopy,
   buildRecentProtectionCopy,
   computeStreak,
   deriveHomeState,

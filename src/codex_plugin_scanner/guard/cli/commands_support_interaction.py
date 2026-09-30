@@ -8,6 +8,8 @@ from __future__ import annotations
 import importlib
 from typing import TYPE_CHECKING
 
+from ..approval_hook_copy import _SIGNED_APPROVAL_LINK_UNAVAILABLE, authenticated_approval_review_url
+from ..approval_link_output import open_authenticated_approval_link
 from ..browser_opener import open_browser_url
 from ..live_process_identity import CODEX_BROWSER_WAIT_PROCESS_KEY, bound_wait_timeout_seconds, process_identity_matches
 from ..runtime.approval_context import approval_context_tokens_validation_reason
@@ -293,7 +295,7 @@ def _should_emit_copilot_hook_response(args: argparse.Namespace) -> bool:
 
 def _should_emit_native_hook_response(args: argparse.Namespace) -> bool:
     harness = _canonical_harness_name(args.harness)
-    natives = {"claude-code", "codex", "kimi", "grok", "pi", "omp", "zcode"}
+    natives = {"claude-code", "codex", "kimi", "grok", "pi", "omp", "zcode", "devin"}
     return harness == "hermes" or (harness in natives and not getattr(args, "json", False))
 
 def _should_emit_claude_native_pretooluse_notice(
@@ -316,6 +318,10 @@ def _should_emit_native_hook_json_response(
     output_stream: TextIO | None,
 ) -> bool:
     harness = _canonical_harness_name(args.harness)
+    if harness == "grok" and getattr(args, "json", False):
+        return True
+    if harness == "zcode" and getattr(args, "json", False):
+        return True
     if harness == "codex" and getattr(args, "json", False) and event_name == "UserPromptSubmit":
         return True
     return (
@@ -332,7 +338,16 @@ def _should_emit_native_hook_exit_block(args: argparse.Namespace, *, event_name:
     canonical = _canonical_harness_name(args.harness)
     compact_event = event_name.replace("_", "").replace("-", "").lower()
     blocking = compact_event in {"pretooluse", "userpromptsubmit", "pretoolcall"}
-    if canonical in {"kimi", "grok", "hermes", "pi", "omp", "zcode"} and blocking:
+    if canonical in {"kimi", "grok", "hermes", "pi", "omp", "zcode", "devin"} and blocking:
+        if canonical == "zcode":
+            from ..adapters.zcode_hooks import zcode_hook_process_exit
+
+            # ZCode turns exit code 2 into an unconditional deny and never
+            # parses the stdout JSON, so review-tier PreToolUse actions fall
+            # through to the JSON response path where
+            # ``permissionDecision: "ask"`` can reach ZCode's native
+            # permission prompt (and the process exits 0).
+            return zcode_hook_process_exit(policy_action=policy_action, event_name=event_name) == 2
         return policy_action in {"review", "require-reapproval", "sandbox-required", "block"}
     return False
 
@@ -724,24 +739,14 @@ def _preferred_approval_review_url(response_payload: Mapping[str, object], *, ha
 def _open_codex_live_approval(response_payload: Mapping[str, object], *, guard_home: Path | None = None) -> None:
     harness = _optional_string(response_payload.get("harness")) or "codex"
     review_url = _preferred_approval_review_url(response_payload, harness=harness)
-    if not review_url:
-        return
-    print(
-        f"HOL Guard is waiting for approval in your browser: {review_url}",
-        file=sys.stderr,
-        flush=True,
+    open_authenticated_approval_link(
+        review_url,
+        guard_home=guard_home,
+        authenticate=authenticated_approval_review_url,
+        unavailable_message=_SIGNED_APPROVAL_LINK_UNAVAILABLE,
+        open_browser=open_browser_url,
+        output_stream=sys.stderr,
     )
-    browser_url = review_url
-    if guard_home is not None:
-        browser_url = (
-            build_approval_browser_url(
-                review_url,
-                auth_token=load_guard_daemon_auth_token(guard_home),
-            )
-            or review_url
-        )
-    with suppress(Exception):
-        open_browser_url(browser_url)
 
 __all__ = [
     "_apps_disconnect_confirm_command", "_attach_primary_approval_link", "_bind_hook_blocked_operation_queue",

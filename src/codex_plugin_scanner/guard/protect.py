@@ -1105,10 +1105,21 @@ def _build_install_receipt(request: ProtectRequest, verdict: ProtectVerdict) -> 
     sample = ", ".join(changed_capabilities[:3])
     suffix = " ..." if len(changed_capabilities) > 3 else ""
     diff_summary = f"{len(changed_capabilities)} change(s): {sample}{suffix}" if changed_capabilities else None
+    receipt_harness = request.harness
+    if receipt_harness is None:
+        if _is_package_tool_request(request):
+            # Unsupported package subcommands (for example `bun run`) bypass
+            # the structured package projection. Keep their receipt aligned
+            # with the package path's shared runtime-origin resolver.
+            from .runtime.package_protect_projection import resolve_local_supply_chain_harness
+
+            receipt_harness = resolve_local_supply_chain_harness()
+        else:
+            receipt_harness = request.executor
     return GuardReceipt(
         receipt_id=f"guard-receipt-{uuid4()}",
         timestamp=datetime.now(timezone.utc).isoformat(),
-        harness=request.harness or request.package_manager or request.executor,
+        harness=receipt_harness,
         artifact_id=primary_target.artifact_id,
         artifact_hash=artifact_hash,
         policy_decision=verdict.action,
@@ -1119,6 +1130,14 @@ def _build_install_receipt(request: ProtectRequest, verdict: ProtectVerdict) -> 
         source_scope="install",
         diff_summary=diff_summary,
     )
+
+
+def _is_package_tool_request(request: ProtectRequest) -> bool:
+    if request.package_manager is not None:
+        return True
+    from .shims import package_shim_supported_managers
+
+    return request.executor.strip().lower() in package_shim_supported_managers()
 
 
 def _command_fingerprint(command: list[str]) -> str:

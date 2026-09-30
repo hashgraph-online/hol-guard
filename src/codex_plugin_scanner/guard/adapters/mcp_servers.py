@@ -88,6 +88,21 @@ def managed_stdio_servers(detection: HarnessDetection) -> tuple[ManagedMcpServer
     return tuple(managed)
 
 
+def observable_stdio_servers_with_proxy(detection: HarnessDetection) -> tuple[ManagedMcpServer, ...]:
+    """Include original servers recovered from Guard's managed proxy config.
+
+    Discovery only observes these connections; ``managed_stdio_servers`` must
+    continue excluding them so install never wraps a Guard proxy again.
+    """
+
+    servers: list[ManagedMcpServer] = []
+    for artifact in detection.artifacts:
+        server = _managed_stdio_server(artifact, include_guard_managed_proxy=True)
+        if server is not None:
+            servers.append(server)
+    return tuple(servers)
+
+
 def skipped_stdio_server_names(detection: HarnessDetection) -> tuple[str, ...]:
     """Return server names Guard cannot manage through the runtime proxy."""
 
@@ -198,12 +213,14 @@ def proxy_launcher_entry(
     return entry
 
 
-def _managed_stdio_server(artifact: GuardArtifact) -> ManagedMcpServer | None:
+def _managed_stdio_server(
+    artifact: GuardArtifact, *, include_guard_managed_proxy: bool = False
+) -> ManagedMcpServer | None:
     if artifact.artifact_type != "mcp_server":
         return None
     if is_verified_guard_mcp_companion(artifact.name, artifact.command, artifact.args):
         return None
-    if _bool_metadata(artifact.metadata.get("guard_managed_proxy"), default=False):
+    if not include_guard_managed_proxy and _bool_metadata(artifact.metadata.get("guard_managed_proxy"), default=False):
         return None
     if artifact.command is None or not artifact.name.strip():
         return None
@@ -307,7 +324,12 @@ def is_guard_proxy_command(command: str | None, args: tuple[str, ...]) -> bool:
     if not isinstance(command, str):
         return False
     if _hol_guard_command_name(command) is not None:
-        return "guard" in args and any(value in _GUARD_PROXY_COMMANDS for value in args)
+        # Packaged native launchers expose the proxy subcommand directly.
+        # Python CLI launchers retain the historical `guard` command group.
+        return bool(args) and (
+            args[0] in _GUARD_PROXY_COMMANDS
+            or (len(args) > 1 and args[0] == "guard" and args[1] in _GUARD_PROXY_COMMANDS)
+        )
     if "codex_plugin_scanner.cli" not in args or "guard" not in args:
         return False
     return any(value in _GUARD_PROXY_COMMANDS for value in args)
@@ -320,6 +342,7 @@ __all__ = [
     "is_guard_proxy_command",
     "is_verified_guard_mcp_companion",
     "managed_stdio_servers",
+    "observable_stdio_servers_with_proxy",
     "proxy_cli_args",
     "proxy_launcher_entry",
     "proxy_process_env",

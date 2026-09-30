@@ -220,16 +220,20 @@ version = "0.1.0"
 dependencies = [
  "guard-contracts",
  "guard-secure-fs",
+ "hex",
  "serde",
  "serde_json",
+ "sha2",
 ]
 
 [[package]]
 name = "guard-contracts"
 version = "0.1.0"
 dependencies = [
+ "hex",
  "serde",
  "serde_json",
+ "sha2",
 ]
 
 [[package]]
@@ -249,6 +253,7 @@ dependencies = [
 name = "guard-policy-snapshot"
 version = "0.1.0"
 dependencies = [
+ "guard-contracts",
  "hex",
  "serde",
  "serde_json",

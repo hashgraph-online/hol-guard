@@ -12,9 +12,13 @@ from typing import cast
 import pytest
 
 from codex_plugin_scanner.guard import store_extension_control_authority_schema as authority_schema
+from codex_plugin_scanner.guard import store_policy_integrity_backend as policy_integrity_backend_module
 from codex_plugin_scanner.guard.approval_gate import ApprovalGateInput, update_settings
 from codex_plugin_scanner.guard.config import load_guard_config, update_guard_settings
 from codex_plugin_scanner.guard.extension_control_events import extension_control_change_payload
+from codex_plugin_scanner.guard.native_command_control_authority import AUTHORITY_FILE_NAME, encode_authority
+from codex_plugin_scanner.guard.native_command_control_authority_io import write_private_state
+from codex_plugin_scanner.guard.native_command_control_authority_store import _key as native_authority_key
 from codex_plugin_scanner.guard.runtime.command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
     CommandSafetyExtensionRegistry,
@@ -264,6 +268,41 @@ def _enroll(
     )
 
 
+def test_linux_enrollment_uses_daemon_native_authority_after_keyring_session_changes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    keyring_values: dict[str, str] = {}
+    monkeypatch.setattr(policy_integrity_backend_module.sys, "platform", "linux", raising=False)
+    monkeypatch.setattr(SystemKeyringSecretStore, "_backend_is_available", classmethod(lambda cls: True))
+    monkeypatch.setattr(SystemKeyringSecretStore, "get_secret", lambda self, secret_id: keyring_values.get(secret_id))
+    monkeypatch.setattr(
+        SystemKeyringSecretStore,
+        "set_secret",
+        lambda self, secret_id, value: keyring_values.__setitem__(secret_id, value),
+    )
+    secrets = MemorySecretStore()
+    daemon_store = _store(tmp_path, secrets, enroll=False)
+    marker = {
+        "schema": "guard.native-command-control-authority.v1",
+        "epoch": 1,
+        "mutation_revision": 1,
+        "authority_key_id": "0" * 64,
+        "phase": "closed",
+        "effective_digest": None,
+        "recovery": None,
+    }
+    write_private_state(
+        tmp_path, AUTHORITY_FILE_NAME, encode_authority(marker, native_authority_key(daemon_store)), 4096
+    )
+
+    monkeypatch.setattr(SystemKeyringSecretStore, "_backend_is_available", classmethod(lambda cls: False))
+    terminal_store = GuardStore(tmp_path, prime_policy_integrity=False)
+    terminal_store._extension_control_authority_secret_store = secrets
+
+    assert _enroll(terminal_store).health is AuthorityHealth.PROTECTED
+
+
 def _disabled_layer() -> ExtensionControlLayer:
     extension = BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions[0]
     return ExtensionControlLayer(
@@ -313,6 +352,27 @@ def _rule_version_registry() -> tuple[CommandSafetyExtensionRegistry, str]:
     return CommandSafetyExtensionRegistry((versioned_extension, *extensions[1:])), extension.permissions[
         0
     ].permission_id
+
+
+def _matcher_contract_registry() -> tuple[CommandSafetyExtensionRegistry, str]:
+    extensions = BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions
+    extension = next(item for item in extensions if item.extension_id == "command.container-runtime")
+    rule_index = next(
+        index for index, rule in enumerate(extension.rules) if rule.rule_id.endswith("compose-destructive-cleanup")
+    )
+    rule = extension.rules[rule_index]
+    changed_rule = replace(rule, matcher_contract_digest="0" * 64)
+    changed_extension = replace(
+        extension,
+        rules=(*extension.rules[:rule_index], changed_rule, *extension.rules[rule_index + 1 :]),
+    )
+    permission_id = next(
+        permission.permission_id for permission in extension.permissions if permission.rule_ids == (rule.rule_id,)
+    )
+    return (
+        CommandSafetyExtensionRegistry((changed_extension, *(item for item in extensions if item is not extension))),
+        permission_id,
+    )
 
 
 def _proof(
@@ -454,8 +514,14 @@ def test_authenticated_catalog_upgrade_preserves_controls_and_records_provenance
     secrets = MemorySecretStore()
     store = _store(tmp_path, secrets)
     original_digest = BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
-    store.read_extension_control_authority(catalog_digest=original_digest)
+    store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
     _commit(store)
+    with store._connect() as connection:
+        legacy_manifest = connection.execute(
+            "select * from extension_control_catalog_manifest where catalog_digest = ?",
+            (original_digest,),
+        ).fetchone()
+    assert legacy_manifest is not None
     upgraded_registry = _upgraded_registry()
     upgraded_digest = upgraded_registry.catalog_digest
 
@@ -475,6 +541,16 @@ def test_authenticated_catalog_upgrade_preserves_controls_and_records_provenance
             "select previous_revision, catalog_digest, phase from extension_control_authority_transition "
             "where revision = 2"
         ).fetchone()
+        persisted_legacy_manifest = connection.execute(
+            "select * from extension_control_catalog_manifest where catalog_digest = ?",
+            (original_digest,),
+        ).fetchone()
+        persisted_upgraded_manifest = connection.execute(
+            "select * from extension_control_catalog_manifest where catalog_digest = ?",
+            (upgraded_digest,),
+        ).fetchone()
+    assert dict(persisted_legacy_manifest) == dict(legacy_manifest)
+    assert persisted_upgraded_manifest is not None
     assert event is not None
     assert json.loads(event["payload_json"]) == {
         "previous_revision": 1,
@@ -581,6 +657,19 @@ def test_catalog_upgrade_retires_enabled_target_when_rule_version_changes(tmp_pa
     store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
     upgraded_registry, permission_id = _rule_version_registry()
     _commit_enabled_permission(store, permission_id, key="enable-before-rule-version-change")
+
+    upgraded = store.read_extension_control_authority_for_registry(upgraded_registry)
+
+    assert upgraded.health is AuthorityHealth.PROTECTED
+    assert upgraded.layers[0].controls == ()
+
+
+def test_catalog_upgrade_retires_enabled_target_when_matcher_contract_changes(tmp_path: Path) -> None:
+    secrets = MemorySecretStore()
+    store = _store(tmp_path, secrets)
+    store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
+    upgraded_registry, permission_id = _matcher_contract_registry()
+    _commit_enabled_permission(store, permission_id, key="enable-before-matcher-contract-change")
 
     upgraded = store.read_extension_control_authority_for_registry(upgraded_registry)
 
@@ -763,9 +852,7 @@ def test_unavailable_system_keyring_uses_owner_only_vault(tmp_path: Path, monkey
     assert _enroll(store).health is AuthorityHealth.PROTECTED
 
     restarted = GuardStore(tmp_path, prime_policy_integrity=False)
-    view = restarted.read_extension_control_authority(
-        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
-    )
+    view = restarted.read_extension_control_authority(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest)
     assert view.health is AuthorityHealth.PROTECTED
     secrets_dir = tmp_path / "secrets"
     if os.name != "nt":
@@ -780,9 +867,12 @@ def test_linux_legacy_keyring_authority_migrates_then_survives_keyring_loss(
     monkeypatch.setattr(sys, "platform", "linux")
     legacy_secrets = MemorySecretStore()
     legacy_store = _store(tmp_path, legacy_secrets)
-    assert legacy_store.read_extension_control_authority(
-        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
-    ).health is AuthorityHealth.PROTECTED
+    assert (
+        legacy_store.read_extension_control_authority(
+            catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+        ).health
+        is AuthorityHealth.PROTECTED
+    )
     monkeypatch.setattr(
         SystemKeyringSecretStore,
         "get_secret",
@@ -791,9 +881,12 @@ def test_linux_legacy_keyring_authority_migrates_then_survives_keyring_loss(
     monkeypatch.setattr(SystemKeyringSecretStore, "set_secret", lambda _self, _secret_id, _value: None)
 
     migrated = GuardStore(tmp_path, prime_policy_integrity=False)
-    assert migrated.read_extension_control_authority(
-        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
-    ).health is AuthorityHealth.PROTECTED
+    assert (
+        migrated.read_extension_control_authority(
+            catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+        ).health
+        is AuthorityHealth.PROTECTED
+    )
 
     monkeypatch.setattr(
         SystemKeyringSecretStore,
@@ -801,9 +894,12 @@ def test_linux_legacy_keyring_authority_migrates_then_survives_keyring_loss(
         lambda _self, _secret_id: (_ for _ in ()).throw(RuntimeError("session keyring disappeared")),
     )
     restarted = GuardStore(tmp_path, prime_policy_integrity=False)
-    assert restarted.read_extension_control_authority(
-        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
-    ).health is AuthorityHealth.PROTECTED
+    assert (
+        restarted.read_extension_control_authority(
+            catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+        ).health
+        is AuthorityHealth.PROTECTED
+    )
 
 
 def test_macos_extension_authority_default_never_probes_keychain(
@@ -885,12 +981,11 @@ def test_explicit_macos_extension_authority_spends_one_interactive_read(
     interactive_reads: list[str] = []
     bounded_reads: list[str] = []
 
-    def tracked_interactive_read(_self: SystemKeyringSecretStore, secret_id: str) -> str | None:
+    def tracked_interactive_read(secret_id: str) -> str | None:
         interactive_reads.append(secret_id)
         return legacy_secrets.get_secret(secret_id)
 
     def tracked_bounded_read(
-        _self: SystemKeyringSecretStore,
         secret_id: str,
         *,
         timeout_seconds: float = 0.0,
@@ -899,9 +994,27 @@ def test_explicit_macos_extension_authority_spends_one_interactive_read(
         bounded_reads.append(secret_id)
         return legacy_secrets.get_secret(secret_id)
 
-    monkeypatch.setattr(SystemKeyringSecretStore, "get_secret", tracked_interactive_read)
-    monkeypatch.setattr(SystemKeyringSecretStore, "get_secret_with_timeout", tracked_bounded_read)
+    monkeypatch.setattr(
+        SystemKeyringSecretStore, "get_secret", lambda _self, secret_id: legacy_secrets.get_secret(secret_id)
+    )
+    monkeypatch.setattr(
+        SystemKeyringSecretStore,
+        "get_secret_with_timeout",
+        lambda _self, secret_id, **_kwargs: legacy_secrets.get_secret(secret_id),
+    )
     explicit_store = GuardStore(tmp_path, prime_policy_integrity=False, allow_system_keyring=True)
+    migrating = explicit_store._secret_store()
+    assert isinstance(migrating, MigratingFallbackSecretStore)
+    assert isinstance(migrating.primary, SystemKeyringSecretStore)
+    # Other shard tests can leave background stores reading their own homes.
+    # Track every read by this store without counting unrelated backend instances.
+    monkeypatch.setattr(migrating.primary, "get_secret", tracked_interactive_read)
+    monkeypatch.setattr(migrating.primary, "get_secret_with_timeout", tracked_bounded_read)
+    unrelated = SystemKeyringSecretStore(service_name="unrelated-test-store")
+    unrelated.get_secret("unrelated-key")
+    unrelated.get_secret_with_timeout("unrelated-anchor", timeout_seconds=0.5)
+    assert interactive_reads == []
+    assert bounded_reads == []
 
     assert explicit_store.migrate_legacy_extension_control_authority_secrets() is True
     assert interactive_reads == [legacy_store._key_ref()]

@@ -7,6 +7,7 @@ from typing import cast
 
 import pytest
 
+import codex_plugin_scanner.guard.runtime.containment_health as containment_health_module
 from codex_plugin_scanner.guard.runtime.containment_contract import (
     ContainmentBackend,
     ContainmentPolicy,
@@ -18,6 +19,7 @@ from codex_plugin_scanner.guard.runtime.containment_health import (
     ContainmentHealthEvidence,
     containment_health_signals,
     containment_health_uncertainties,
+    probe_containment_health,
 )
 from codex_plugin_scanner.guard.runtime.effect_contract import UncertaintyKind
 from codex_plugin_scanner.guard.runtime.protection_health_runtime import build_runtime_protection_health
@@ -91,6 +93,29 @@ def test_compatible_health_proves_only_the_containment_owned_checks() -> None:
     assert by_id["containment_compatibility"]["status"] == "pass"
     assert by_id["sandbox"]["reason_code"] == "containment_backend_enforced"
     assert payload["state"] == "degraded"
+
+
+def test_unsupported_platform_probe_returns_explicit_fail_closed_health(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    daemon_fingerprint = hashlib.sha256(b"windows-daemon").hexdigest()
+    monkeypatch.setattr(containment_health_module.sys, "platform", "win32")
+
+    evidence = probe_containment_health(daemon_fingerprint=daemon_fingerprint)
+    signals = containment_health_signals(evidence.to_dict(), now=datetime.now(timezone.utc))
+
+    assert evidence.backend is ContainmentBackend.UNSUPPORTED
+    assert evidence.backend_digest == hashlib.sha256(b"unavailable:unsupported").hexdigest()
+    assert evidence.probe_enforced is False
+    assert {signal.reason_code for signal in signals.values()} == {"unsupported_platform"}
+
+
+def test_unsupported_reason_takes_precedence_over_probe_failure() -> None:
+    evidence = _evidence(backend=ContainmentBackend.UNSUPPORTED, probe_enforced=False)
+
+    signals = containment_health_signals(evidence.to_dict(), now=_NOW)
+
+    assert {signal.reason_code for signal in signals.values()} == {"unsupported_platform"}
 
 
 @pytest.mark.parametrize(

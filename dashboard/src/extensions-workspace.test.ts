@@ -24,7 +24,8 @@ import {
   isCurrentExtensionPolicyDraft,
   nextExtensionPolicyRadioIndex,
 } from "./extension-policy-panel";
-import { quickApplyPermissionIds } from "./protection-center/components/pattern-search-console";
+import { quickApplyPermissionIds } from "./protection-center/components/quick-apply-toolbar";
+import { PatternSearchConsole } from "./protection-center/components/pattern-search-console";
 
 // Every authority action failure maps to plain language with a next step;
 // raw protocol codes never reach the operator.
@@ -43,6 +44,14 @@ assert.match(
 assert.doesNotMatch(
   authorityActionErrorMessage(new ExtensionControlApiError("authority_not_recoverable", 409, "authority_not_recoverable")),
   /authority_not_recoverable/,
+);
+assert.match(
+  authorityActionErrorMessage(
+    new ExtensionControlApiError("authority_not_recoverable", 409, "authority_not_recoverable"),
+    "& 'C:\\custom install\\hol-guard.exe' command controls recover-authority",
+    "powershell",
+  ),
+  /custom install.*command controls recover-authority.*PowerShell/,
 );
 const baseEffective: EffectiveExtensionControls = {
   schema_version: "1.0.0", health: "recovery-required", revision: 4, catalog_digest: "a".repeat(64),
@@ -85,6 +94,24 @@ assert.match(unenrolledMarkup, /Finish setting up protection/);
 assert.match(unenrolledMarkup, /command controls enroll/);
 assert.match(unenrolledMarkup, /Copy setup command/);
 assert.doesNotMatch(unenrolledMarkup, /bg-amber-50/, "setup guidance is informational, not a failure");
+const windowsUnenrolledMarkup = renderToStaticMarkup(createElement(ProtectionAuthorityNotice, {
+  effective: {
+    ...baseEffective,
+    health: "unenrolled",
+    terminal_commands: {
+      shell: "powershell",
+      enroll: "& 'C:\\custom install\\hol-guard.exe' command controls enroll",
+      recover_authority: "& 'C:\\custom install\\hol-guard.exe' command controls recover-authority",
+    },
+  },
+  approvalGate: { enabled: true, configured: true, cooldown_seconds: 0, cooldown_active: false, cooldown_expires_at: null, locked_until: null, fail_closed: true, strict_all_decisions: false, totp_enabled: false },
+  onAction: () => undefined,
+  onCheckAgain: () => undefined,
+  onOpenApprovalSettings: () => undefined,
+}));
+assert.match(windowsUnenrolledMarkup, /custom install.*command controls enroll/);
+assert.match(windowsUnenrolledMarkup, /Run this in PowerShell/);
+assert.doesNotMatch(windowsUnenrolledMarkup, /hol-guard command controls enroll/);
 
 const approvalSetupMarkup = renderToStaticMarkup(createElement(ProtectionAuthorityNotice, {
   effective: { ...baseEffective, health: "unenrolled" },
@@ -125,6 +152,49 @@ assert.match(pendingApprovalMarkup, /check again/i);
 assert.doesNotMatch(pendingApprovalMarkup, /command controls enroll/);
 assert.doesNotMatch(pendingApprovalMarkup, /Copy setup command/);
 
+const unconfiguredRepairMarkup = renderToStaticMarkup(createElement(ProtectionAuthorityNotice, {
+  effective: baseEffective,
+  approvalGate: { enabled: false, configured: false, cooldown_seconds: 0, cooldown_active: false, cooldown_expires_at: null, locked_until: null, fail_closed: true, strict_all_decisions: false, totp_enabled: false },
+  onAction: () => undefined,
+  onCheckAgain: () => undefined,
+  onOpenApprovalSettings: () => undefined,
+}));
+assert.match(unconfiguredRepairMarkup, /Protection needs repair/);
+assert.match(unconfiguredRepairMarkup, /Set up approval/);
+assert.match(unconfiguredRepairMarkup, /local approval is not ready/);
+assert.doesNotMatch(unconfiguredRepairMarkup, /Repair protection<\/button>/);
+assert.match(unconfiguredRepairMarkup, /recover-authority/, "terminal repair remains the documented fallback");
+
+const disabledGateRepairMarkup = renderToStaticMarkup(createElement(ProtectionAuthorityNotice, {
+  effective: baseEffective,
+  approvalGate: { enabled: false, configured: true, cooldown_seconds: 0, cooldown_active: false, cooldown_expires_at: null, locked_until: null, fail_closed: true, strict_all_decisions: false, totp_enabled: false },
+  onAction: () => undefined,
+  onCheckAgain: () => undefined,
+  onOpenApprovalSettings: () => undefined,
+}));
+assert.match(disabledGateRepairMarkup, /Set up approval/);
+assert.doesNotMatch(disabledGateRepairMarkup, /Repair protection<\/button>/, "a disabled gate cannot supply the repair proof");
+
+const unconfiguredAckMarkup = renderToStaticMarkup(createElement(ProtectionAuthorityNotice, {
+  effective: { ...baseEffective, health: "degraded-unacknowledged" },
+  approvalGate: { enabled: false, configured: false, cooldown_seconds: 0, cooldown_active: false, cooldown_expires_at: null, locked_until: null, fail_closed: true, strict_all_decisions: false, totp_enabled: false },
+  onAction: () => undefined,
+  onCheckAgain: () => undefined,
+  onOpenApprovalSettings: () => undefined,
+}));
+assert.match(unconfiguredAckMarkup, /Set up approval/);
+assert.doesNotMatch(unconfiguredAckMarkup, /Acknowledge limited state<\/button>/);
+
+const unconfiguredAckedMarkup = renderToStaticMarkup(createElement(ProtectionAuthorityNotice, {
+  effective: { ...baseEffective, health: "degraded-acknowledged" },
+  approvalGate: { enabled: false, configured: false, cooldown_seconds: 0, cooldown_active: false, cooldown_expires_at: null, locked_until: null, fail_closed: true, strict_all_decisions: false, totp_enabled: false },
+  onAction: () => undefined,
+  onCheckAgain: () => undefined,
+  onOpenApprovalSettings: () => undefined,
+}));
+assert.match(unconfiguredAckedMarkup, /Set up approval/);
+assert.match(unconfiguredAckedMarkup, /recover-authority/);
+
 const protectedMarkup = renderToStaticMarkup(createElement(ProtectionAuthorityNotice, {
   effective: { ...baseEffective, health: "protected" },
   approvalGate: { enabled: true, configured: true, cooldown_seconds: 0, cooldown_active: false, cooldown_expires_at: null, locked_until: null, fail_closed: true, strict_all_decisions: false, totp_enabled: false },
@@ -151,6 +221,30 @@ assert.match(totpRecoveryMarkup, /Authenticator code/);
 assert.doesNotMatch(totpRecoveryMarkup, /Approval password/);
 assert.match(totpRecoveryMarkup, /That authenticator code was not accepted/);
 assert.match(totpRecoveryMarkup, /role="alert"/);
+assert.match(totpRecoveryMarkup, /<form/);
+assert.match(totpRecoveryMarkup, /id="[^"]*-approval-proof-totp"/);
+assert.match(totpRecoveryMarkup, /for="[^"]*-approval-proof-totp"/);
+assert.match(totpRecoveryMarkup, /type="submit"/);
+assert.match(totpRecoveryMarkup, /autoComplete="one-time-code"/);
+assert.match(totpRecoveryMarkup, /enterKeyHint="done"/);
+
+const busyMarkup = renderToStaticMarkup(createElement(ApprovalProofModal, {
+  title: "Repair extension controls",
+  detail: "Authenticate this repair on your device.",
+  confirmLabel: "Repair controls",
+  busy: true,
+  busyLabel: "Repairing…",
+  approvalGate: {
+    enabled: true, configured: true, cooldown_seconds: 0, cooldown_active: false,
+    cooldown_expires_at: null, locked_until: null, fail_closed: true,
+    strict_all_decisions: false, totp_enabled: true,
+  },
+  onCancel: () => undefined,
+  onConfirm: () => undefined,
+}));
+assert.match(busyMarkup, /role="status"/);
+assert.match(busyMarkup, /tabindex="0"/);
+assert.match(busyMarkup, /Repairing…/);
 
 const resolvedTotpGate = await fetchResolvedApprovalGate(async () => ({
   settings: { approval_gate: {
@@ -255,6 +349,26 @@ assert.deepEqual(
   ["command.git.permission.hard-reset", "command.git.permission.managed-block"],
   "recommended clears only configurable local overrides",
 );
+// A non-protected state must be explained right in the search console, not
+// leave silently disabled controls.
+const lockedSearchMarkup = renderToStaticMarkup(createElement(PatternSearchConsole, {
+  catalog: [extension],
+  effective: { ...effective, health: "recovery-required", failures: [{ code: "fixture-state" }] },
+  query: "git",
+  onRefresh: () => undefined,
+  onOpenExtension: () => undefined,
+}));
+assert.match(lockedSearchMarkup, /role="alert"/);
+assert.match(lockedSearchMarkup, /Settings cannot be changed until Guard verifies local settings integrity\./);
+assert.match(lockedSearchMarkup, /aria-pressed="false"[^>]*disabled/, "locked quick-apply controls stay disabled while they explain why");
+const healthySearchMarkup = renderToStaticMarkup(createElement(PatternSearchConsole, {
+  catalog: [extension],
+  effective,
+  query: "git",
+  onRefresh: () => undefined,
+  onOpenExtension: () => undefined,
+}));
+assert.doesNotMatch(healthySearchMarkup, /Settings cannot be changed until Guard verifies local settings integrity/);
 const totpChangeMarkup = renderToStaticMarkup(createElement(ReviewModal, {
   change: { extension, enabled: true }, busy: false, error: null,
   approvalGate: { enabled: true, configured: true, cooldown_seconds: 0, cooldown_active: false, cooldown_expires_at: null, locked_until: null, fail_closed: true, strict_all_decisions: false, totp_enabled: true },
@@ -333,6 +447,8 @@ const policyPanelSource = readFileSync(new URL("./extension-policy-panel.tsx", i
 const policyDraftSource = readFileSync(new URL("./use-extension-policy-draft.ts", import.meta.url), "utf8");
 const workspaceHostSource = readFileSync(new URL("./protection-center/protection-center-workspace.tsx", import.meta.url), "utf8");
 const patternSearchSource = readFileSync(new URL("./protection-center/components/pattern-search-console.tsx", import.meta.url), "utf8");
+const quickApplyToolbarSource = readFileSync(new URL("./protection-center/components/quick-apply-toolbar.tsx", import.meta.url), "utf8");
+const policyEditingLocksSource = readFileSync(new URL("./protection-center/components/policy-editing-locks.tsx", import.meta.url), "utf8");
 const extensionNavigationSource = readFileSync(new URL("./protection-center/extension-navigation.ts", import.meta.url), "utf8");
 assert.match(workspaceHostSource, /data-testid="extensions-workspace"/);
 assert.match(workspaceHostSource, /pushExtensionHistory/);
@@ -343,12 +459,24 @@ assert.match(extensionNavigationSource, /export function replaceExtensionHistory
 assert.match(policyDetailSource, /id="extension-policy-tabpanel"[\s\S]*role="tabpanel"[\s\S]*aria-labelledby="extension-tab-policy"/);
 assert.match(policyDraftSource, /isCurrentExtensionPolicyDraft\(generation, draftGeneration\.current\)\) handleApiError/);
 assert.match(policyDraftSource, /isCurrentExtensionPolicyDraft\(generation, draftGeneration\.current\)[\s\S]*Guard could not rebase this draft/);
+assert.match(
+  policyDraftSource,
+  /props\.effective\.revision, props\.effective\.catalog_digest, props\.effective\.health, props\.effective\.global_lockdown/,
+  "the draft re-seeds on integrity-health and lockdown transitions, not only revision or digest changes",
+);
 assert.match(policyPanelSource, /ArrowLeft[\s\S]*ArrowRight[\s\S]*ArrowUp[\s\S]*ArrowDown/);
-assert.match(policyPanelSource, /Settings applied\. Editing stays locked/);
-assert.match(patternSearchSource, /Quick apply to/);
-assert.match(patternSearchSource, /Recommended/);
-assert.match(patternSearchSource, /Allow all/);
-assert.match(patternSearchSource, /Deny all/);
-assert.match(patternSearchSource, /Changes stay in draft until you review and approve them/);
+assert.match(policyPanelSource, /PolicyEditingLocks/);
+assert.match(
+  policyEditingLocksSource,
+  /Settings applied\. Editing stays locked/,
+  "the shared lock notices carry the post-apply reload copy",
+);
+assert.match(patternSearchSource, /QuickApplyToolbar/);
+assert.match(patternSearchSource, /PolicyEditingLocks/);
+assert.match(quickApplyToolbarSource, /Quick apply to/);
+assert.match(quickApplyToolbarSource, /Recommended/);
+assert.match(quickApplyToolbarSource, /Allow all/);
+assert.match(quickApplyToolbarSource, /Deny all/);
+assert.match(quickApplyToolbarSource, /Changes stay in draft until you review and approve them/);
 
 console.log("extensions-workspace.test.ts: all assertions passed");

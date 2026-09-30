@@ -39,13 +39,16 @@ from .cursor_hook_payload import (
     prepare_cursor_hook_payload,
 )
 from .cursor_hook_script_template_head import HOOK_SCRIPT_TEMPLATE_HEAD
+from .cursor_hook_script_template_reason import HOOK_SCRIPT_TEMPLATE_REASON
 from .cursor_hook_script_template_tail import HOOK_SCRIPT_TEMPLATE_TAIL
 from .cursor_native_approval import ensure_cursor_hook_attestation_secret
 from .cursor_path_cleanup import prune_empty_project_cursor_dir
 from .guard_cli_attestation import resolve_attested_guard_cli
 from .hook_python import HookPythonAttestation
 
-_HOOK_SCRIPT_TEMPLATE = HOOK_SCRIPT_TEMPLATE_HEAD + HOOK_SCRIPT_TEMPLATE_RESOLVER + HOOK_SCRIPT_TEMPLATE_TAIL
+_HOOK_SCRIPT_TEMPLATE = (
+    HOOK_SCRIPT_TEMPLATE_HEAD + HOOK_SCRIPT_TEMPLATE_REASON + HOOK_SCRIPT_TEMPLATE_RESOLVER + HOOK_SCRIPT_TEMPLATE_TAIL
+)
 _INHERIT_ENV_KEYS = (
     "PATH",
     "HOME",

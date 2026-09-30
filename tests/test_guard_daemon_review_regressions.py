@@ -393,10 +393,13 @@ def test_stop_invalidates_owned_service_begin_before_workers_start(
     start_errors: list[BaseException] = []
     stop_errors: list[BaseException] = []
 
-    def delayed_begin_owned_service(generation: int | None = None) -> None:
+    def delayed_begin_owned_service(
+        generation: int | None = None,
+        **kwargs: object,
+    ) -> None:
         begin_entered.set()
         assert release_begin.wait(timeout=5)
-        original_begin_owned_service(generation)
+        original_begin_owned_service(generation, **kwargs)
 
     def start_daemon() -> None:
         try:

@@ -129,9 +129,9 @@ const awsRow = renderToStaticMarkup(createElement(ProtectionModuleRow, {
 assert.match(awsRow, /data-extension-brand="aws"/);
 
 const cloudCluster = renderToStaticMarkup(createElement(ProtectionModuleRow, {
-  extensionId: "command.dns",
-  name: "DNS command protection",
-  description: "Reviews hosted-zone deletion.",
+  extensionId: "command.cdn",
+  name: "CDN command protection",
+  description: "Reviews distribution deletion.",
   behavior: "Ask once",
   onOpen: () => undefined,
 }));

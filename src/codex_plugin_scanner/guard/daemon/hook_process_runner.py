@@ -322,7 +322,7 @@ class HookProcessRunner(HookProcessRunnerLifecycleMixin):
         typed_response = as_string_object_dict(response)
         if typed_response is None:
             return HookProcessReview(None, "daemon_hook_process_invalid_json")
-        self._record_response_metrics(typed_response)
+        self._record_response_metrics(typed_response, envelope_reason_code=reason_code)
         self._record_route_metric(typed_result.get("route"))
         if time.monotonic() >= review_deadline:
             return HookProcessReview(None, "daemon_hook_process_deadline_exhausted")

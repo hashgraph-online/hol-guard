@@ -3,6 +3,7 @@ import type {
   ExtensionCatalogItem,
   ExtensionCatalogResponse,
   ExtensionControlLayer,
+  ExtensionControlTerminalCommands,
   ExtensionPermission,
   ExtensionRule,
   ExtensionRuleSafeVariant,
@@ -120,6 +121,16 @@ function version(value: unknown, label: string): string {
   return candidate;
 }
 
+function terminalCommands(value: unknown): ExtensionControlTerminalCommands | undefined {
+  if (value === undefined) return undefined;
+  const item = record(value, "effective.terminal_commands");
+  return {
+    ...(item.shell === undefined ? {} : { shell: enumValue(item.shell, "effective.terminal_commands.shell", ["powershell"] as const) }),
+    enroll: string(item.enroll, "effective.terminal_commands.enroll"),
+    recover_authority: string(item.recover_authority, "effective.terminal_commands.recover_authority"),
+  };
+}
+
 function stringList(value: unknown, label: string, max = EXTENSION_CLIENT_LIMITS.relationshipIds): string[] {
   return array(value, label, max).map((item, index) => string(item, `${label}[${index}]`));
 }
@@ -200,10 +211,18 @@ function permission(value: unknown, extensionId: string, label: string): Extensi
 
 function mcpLaunch(value: unknown, label: string): McpLaunch {
   const item = record(value, label);
+  const kind = enumValue(item.kind, `${label}.kind`, ["package-launcher", "remote-http"] as const);
+  if (kind === "package-launcher") {
+    return {
+      kind,
+      command: string(item.command, `${label}.command`),
+      package: string(item.package, `${label}.package`),
+    };
+  }
   return {
-    kind: enumValue(item.kind, `${label}.kind`, ["package-launcher"] as const),
-    command: string(item.command, `${label}.command`),
-    package: string(item.package, `${label}.package`),
+    kind,
+    url: string(item.url, `${label}.url`),
+    serverNames: stringList(item.serverNames, `${label}.serverNames`, 8),
   };
 }
 
@@ -211,7 +230,7 @@ function mcpTool(value: unknown, label: string): McpToolDefault {
   const item = record(value, label);
   return {
     name: string(item.name, `${label}.name`),
-    state: enumValue(item.state, `${label}.state`, ["inherit", "allow", "block"] as const),
+    state: enumValue(item.state, `${label}.state`, ["inherit", "allow", "review", "block"] as const),
   };
 }
 
@@ -419,6 +438,7 @@ export function normalizeEffectiveExtensionControls(value: unknown): EffectiveEx
     controls,
     layers,
     failures,
+    terminal_commands: terminalCommands(root.terminal_commands),
     projection: root.projection === undefined ? undefined : normalizeEffectiveExtensionControlProjection(root.projection),
     managed_controls: managedControls,
   };

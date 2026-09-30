@@ -52,6 +52,7 @@ export interface CommandActivityItem {
   persistence_latency_bucket: string;
   feedback_label: CommandFeedbackLabel | null;
   schema_version: string;
+  invocation_preview: string | null;
   matches: CommandActivityMatch[];
 }
 

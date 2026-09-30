@@ -14,6 +14,7 @@ from ..approval_scope_support import (
 )
 from ..review_contracts import (
     GuardReviewContractError,
+    remote_approval_uses_workspace_admin_mfa,
     validate_remote_approval_request_binding,
     validated_remote_approval_envelope,
 )
@@ -51,22 +52,29 @@ def apply_exact_cloud_review(
 
     current = _now(now)
     try:
-        verified_capability = _verified_capability(store, now=current.isoformat())
-    except ExactCloudReviewError as error:
-        raise _reject(store, error.code, now=current) from error
-    raw_capability = store.get_sync_payload(EXACT_CLOUD_REVIEW_CAPABILITY_STATE_KEY)
-    if not isinstance(raw_capability, dict):
-        raise _reject(store, "cloud_review_capability_missing", now=current)
-    try:
-        _ = _oauth_state(store)
-    except ExactCloudReviewError as error:
-        raise _reject(store, error.code, now=current) from error
-    try:
         # Queue job timestamps are Cloud-controlled and must never admit an expired receipt.
         envelope = validated_remote_approval_envelope(remote_approval, store=store)
         oauth = _oauth_metadata(store)
     except GuardReviewContractError as error:
         raise _reject(store, str(error), now=current) from error
+    except ExactCloudReviewError as error:
+        raise _reject(store, error.code, now=current) from error
+    delegated_admin_mfa = remote_approval_uses_workspace_admin_mfa(envelope)
+    raw_capability: dict[str, object] | None = None
+    verified_capability: dict[str, object] | None = None
+    if not delegated_admin_mfa:
+        try:
+            verified_capability = _verified_capability(store, now=current.isoformat())
+        except ExactCloudReviewError as error:
+            raise _reject(store, error.code, now=current) from error
+        loaded_capability = store.get_sync_payload(EXACT_CLOUD_REVIEW_CAPABILITY_STATE_KEY)
+        if not isinstance(loaded_capability, dict):
+            raise _reject(store, "cloud_review_capability_missing", now=current)
+        raw_capability = loaded_capability
+    try:
+        _ = _oauth_state(store)
+    except ExactCloudReviewError as error:
+        raise _reject(store, error.code, now=current) from error
     receipt_expires_at = _text(envelope.get("expiresAt"))
     envelope_expires_at = parse_utc_timestamp(receipt_expires_at)
     if receipt_expires_at is None or envelope_expires_at is None or envelope_expires_at <= current:
@@ -103,7 +111,10 @@ def apply_exact_cloud_review(
             contract_version=APPROVAL_SCOPE_CONTRACT_VERSION,
             contract_digest=contract.digest,
         ).applied_scope
-        validate_exact_authority(envelope, oauth, capability_id=_capability_digest(verified_capability))
+        if not delegated_admin_mfa:
+            if verified_capability is None:
+                raise _reject(store, "cloud_review_capability_missing", now=current)
+            validate_exact_authority(envelope, oauth, capability_id=_capability_digest(verified_capability))
         validate_remote_approval_request_binding(envelope=envelope, request_row=request, oauth=oauth, store=store)
     except IneligibleApprovalScopeError as error:
         raise _reject(store, "remote_exact_not_permitted", now=current) from error
@@ -114,8 +125,9 @@ def apply_exact_cloud_review(
         receipt_id=receipt_id,
         resolution_action=action,
         resolution_scope=scope,
-        reason="Guard Cloud signed exact review",
+        reason=("Guard Cloud signed team-admin review" if delegated_admin_mfa else "Guard Cloud signed exact review"),
         expected_capability=raw_capability,
+        skip_exact_capability=delegated_admin_mfa,
         expected_oauth_binding={
             "deviceId": oauth.device_id,
             "dpopThumbprint": oauth.dpop_thumbprint,
@@ -188,4 +200,6 @@ def _binding_error_code(code: str) -> str:
         return "remote_exact_capability_mismatch"
     if code == "remote_approval_reviewer_not_authorized":
         return "remote_exact_reviewer_not_authorized"
+    if code == "remote_approval_step_up_required":
+        return "remote_exact_step_up_required"
     return code

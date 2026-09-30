@@ -862,6 +862,35 @@ class TestBrowserRiskClassifierIntegration:
         categories = tool_call_risk_categories(artifact, arguments)
         assert "browser_sensitive_surface" in categories
 
+    def test_evaluate_script_optional_filepath_schema_is_not_filesystem_access(self) -> None:
+        server_identity = build_mcp_server_identity(
+            config_path=".mcp.json",
+            command="npx",
+            args=("-y", "chrome-devtools-mcp@latest"),
+            transport="stdio",
+        )
+        artifact = build_tool_call_artifact(
+            harness="codex",
+            server_name="chrome-devtools",
+            tool_name="evaluate_script",
+            source_scope="project",
+            config_path=".mcp.json",
+            transport="stdio",
+            server_identity=server_identity,
+            tool_schema={
+                "type": "object",
+                "properties": {
+                    "function": {"type": "string"},
+                    "filePath": {"type": "string"},
+                },
+            },
+        )
+        categories = tool_call_risk_categories(artifact, {"function": "() => document.title"})
+        assert "filesystem_access" not in categories
+        assert "browser_privileged" in categories
+        with_file = tool_call_risk_categories(artifact, {"function": "() => 1", "filePath": "out.json"})
+        assert "filesystem_access" in with_file
+
     def test_browser_shared_profile_category(self) -> None:
         """HGBM042: Shared/remote-debugging profile produces browser_shared_profile."""
         from codex_plugin_scanner.guard.runtime.mcp_protection import (

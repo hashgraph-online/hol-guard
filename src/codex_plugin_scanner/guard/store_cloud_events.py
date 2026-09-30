@@ -223,9 +223,10 @@ class StoreCloudEventsMixin:
             return sequence
 
     def set_sync_payload(self, state_key: str, payload: Mapping[str, object] | Sequence[object], now: str) -> None:
-        if state_key == _OAUTH_LOCAL_CREDENTIALS_STATE_KEY or state_key.startswith(
+        oauth_changed = state_key == _OAUTH_LOCAL_CREDENTIALS_STATE_KEY or state_key.startswith(
             _OAUTH_LOCAL_CREDENTIALS_STATE_KEY + ":"
-        ):
+        )
+        if oauth_changed:
             self._clear_oauth_secret_payload_cache()
         with self._connect() as connection:
             connection.execute(
@@ -238,6 +239,10 @@ class StoreCloudEventsMixin:
                 """,
                 (state_key, json.dumps(payload), now),
             )
+        if oauth_changed:
+            from .review_event_wake import review_event_wake_signal
+
+            review_event_wake_signal(self.path).notify()
 
     def get_sync_payload(self, state_key: str) -> dict[str, object] | list[object] | None:
         with self._connect() as connection:

@@ -8,10 +8,10 @@ import signal
 import subprocess
 import threading
 import time
+from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import suppress
-from multiprocessing.connection import Connection
 from pathlib import Path
 from typing import ClassVar, Protocol, TextIO, cast, final
 from unittest.mock import MagicMock, call
@@ -37,101 +37,25 @@ from codex_plugin_scanner.guard.daemon import hook_process_slot_review as hook_s
 from codex_plugin_scanner.guard.daemon import hook_process_spawner as hook_spawner_module
 from codex_plugin_scanner.guard.daemon import hook_process_worker as hook_worker_module
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
-from codex_plugin_scanner.guard.daemon.hook_process_protocol import (
-    as_string_object_dict,
-    capture_hook_command,
-    is_pair,
-)
+from codex_plugin_scanner.guard.daemon.hook_process_protocol import capture_hook_command
 from codex_plugin_scanner.guard.daemon.hook_process_runner import HookProcessRunner
 from codex_plugin_scanner.guard.daemon.hook_process_worker import HookProcessReview, HookWorkerSlot
 from codex_plugin_scanner.guard.daemon.runtime_hook_scheduler import RuntimeHookScheduler
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.coverage_ci import under_coverage_scale
+from tests.guard_capacity_protocol_worker import capacity_protocol_worker_main
 
 
 class _MutableUnicodeBuffer(Protocol):
     value: str
 
 
-def _capacity_protocol_worker_main(
-    connection: Connection,
-    _configured_guard_home: str | None,
-) -> None:
-    """Serve the runner/scheduler capacity contract without policy evaluation.
-
-    This test worker retains the production process isolation handshake and IPC
-    lifecycle. The real evaluator and its storage work are covered by the
-    neighboring integration tests; this fixture keeps the 48-call capacity
-    test deterministic under constrained CI runners.
-    """
-
-    windows_job = None
-    try:
-        if os.name == "nt":
-            windows_job = windows_job_module.assign_current_process_to_windows_hook_job()
-            if windows_job is None:
-                connection.send(("isolation_failed", None))
-                return
-        else:
-            try:
-                os.setsid()
-            except OSError:
-                connection.send(("isolation_failed", None))
-                return
-        connection.send(
-            (
-                "isolated",
-                {
-                    "process_group_id": os.getpid() if os.name != "nt" else None,
-                    "windows_job_contained": windows_job is not None,
-                },
-            )
-        )
-        connection.send(("ready", None))
-        while True:
-            raw_message = cast(object, connection.recv())
-            if is_pair(raw_message) and raw_message[0] == "stop":
-                return
-            if not is_pair(raw_message):
-                connection.send(
-                    (
-                        "result",
-                        {"payload": None, "reason_code": "daemon_hook_process_invalid_request"},
-                    )
-                )
-                continue
-            message_type, raw_request = raw_message
-            if message_type != "review" or as_string_object_dict(raw_request) is None:
-                connection.send(
-                    (
-                        "result",
-                        {"payload": None, "reason_code": "daemon_hook_process_invalid_request"},
-                    )
-                )
-                continue
-            connection.send(
-                (
-                    "result",
-                    {
-                        "payload": {"decision": "allow", "test_worker": "capacity"},
-                        "reason_code": None,
-                    },
-                )
-            )
-    except (BrokenPipeError, EOFError, OSError):
-        return
-    finally:
-        with suppress(Exception):
-            connection.close()
-        _ = windows_job
-
-
 def _spawn_capacity_protocol_worker(guard_home: Path | None) -> HookWorkerSlot:
     context = multiprocessing.get_context("spawn")
     parent_connection, child_connection = context.Pipe(duplex=True)
     process = context.Process(
-        target=_capacity_protocol_worker_main,
+        target=capacity_protocol_worker_main,
         args=(child_connection, str(guard_home) if guard_home is not None else None),
         name="hol-guard-capacity-test-worker",
         daemon=False,
@@ -480,7 +404,7 @@ def test_worker_request_fails_safe_on_invalid_json() -> None:
 
 
 def test_prewarmed_runner_handles_real_hook_and_closes(tmp_path: Path) -> None:
-    runner = HookProcessRunner(process_limit=1, timeout_seconds=2)
+    runner = HookProcessRunner(process_limit=1, timeout_seconds=2 * under_coverage_scale(3.0))
     try:
         runner.start()
         result = runner.review(
@@ -503,11 +427,18 @@ def test_prewarmed_runner_handles_real_hook_and_closes(tmp_path: Path) -> None:
 
 
 def test_prewarmed_runner_does_not_hide_a_second_worker_queue(tmp_path: Path) -> None:
-    runner = HookProcessRunner(guard_home=tmp_path, process_limit=4, timeout_seconds=1.8)
+    # Prime the store before fan-in so workers are not racing the first schema migration.
+    _ = GuardStore(tmp_path)
+    timing_scale = under_coverage_scale(3.0)
+    runner = HookProcessRunner(
+        guard_home=tmp_path,
+        process_limit=4,
+        timeout_seconds=1.8 * timing_scale,
+    )
     barrier = threading.Barrier(24)
 
     def review(index: int) -> HookProcessReview:
-        barrier.wait(timeout=2)
+        barrier.wait(timeout=2 * timing_scale)
         return runner.review(
             payload={
                 "hook_event_name": "PreToolUse",
@@ -524,19 +455,25 @@ def test_prewarmed_runner_does_not_hide_a_second_worker_queue(tmp_path: Path) ->
 
     try:
         runner.start()
+        assert runner.wait_for_capacity(minimum_workers=4, timeout_seconds=15 * timing_scale)
         started_at = time.monotonic()
         with ThreadPoolExecutor(max_workers=24) as executor:
             results = list(executor.map(review, range(24)))
         elapsed = time.monotonic() - started_at
+        runner_stats = runner.stats()
     finally:
         runner.close()
 
-    assert any(result.reason_code is None for result in results)
+    result_reason_codes = Counter(result.reason_code for result in results)
+    assert any(result.reason_code is None for result in results), {
+        "result_reason_codes": dict(result_reason_codes),
+        "runner_stats": runner_stats,
+    }
     assert {result.reason_code for result in results if result.reason_code is not None} <= {
         "daemon_hook_process_not_ready"
     }
     # Coverage tracing inflates the prewarmed fan-in wall clock; scale the bound in covered CI runs.
-    assert elapsed < 1.0 * under_coverage_scale(3.0)
+    assert elapsed < 1.0 * timing_scale
 
 
 def _transient_not_ready_test_runner(tmp_path: Path, responses: list[object]) -> tuple[HookProcessRunner, MagicMock]:
@@ -711,10 +648,16 @@ def test_scheduler_and_runner_complete_48_routine_reviews_without_capacity_denia
         per_harness_queued_limit=64,
         per_client_queued_limit=16,
     )
+    timing_scale = under_coverage_scale(4.0)
+    # This contract measures capacity fan-in, not the production transport SLA.
+    # Keep the test deadline bounded while allowing loaded CI hosts to schedule
+    # all 48 fake-worker IPC calls without turning scheduler coverage flaky.
+    runner_timeout_seconds = 8.0 * timing_scale
+    review_timeout_seconds = 10.0 * timing_scale
     runner = HookProcessRunner(
         guard_home=tmp_path,
         process_limit=8,
-        timeout_seconds=2.8,
+        timeout_seconds=runner_timeout_seconds,
         capacity_listener=scheduler.set_active_limit,
     )
     # Exercise the real runner/scheduler IPC and lifecycle while avoiding the
@@ -725,13 +668,13 @@ def test_scheduler_and_runner_complete_48_routine_reviews_without_capacity_denia
     barrier = threading.Barrier(48)
 
     def review(index: int) -> HookProcessReview:
-        barrier.wait(timeout=3)
+        barrier.wait(timeout=3 * timing_scale)
         admission = scheduler.acquire(
             harness="pi",
             client_key=f"client-{index % 6}",
             lane="decision",
             payload_bytes=1,
-            deadline=time.monotonic() + 10,
+            deadline=time.monotonic() + 10 * timing_scale,
         )
         assert admission.permit is not None
         with admission.permit:
@@ -742,7 +685,7 @@ def test_scheduler_and_runner_complete_48_routine_reviews_without_capacity_denia
                 guard_home=tmp_path,
                 workspace=tmp_path,
                 hook_env={},
-                deadline=time.monotonic() + 4,
+                deadline=time.monotonic() + review_timeout_seconds,
             )
 
     try:
@@ -753,7 +696,11 @@ def test_scheduler_and_runner_complete_48_routine_reviews_without_capacity_denia
         runner.close()
 
     assert len(results) == 48
-    assert all(result.reason_code is None for result in results), runner.stats()
+    result_reason_codes = Counter(result.reason_code for result in results)
+    assert all(result.reason_code is None for result in results), {
+        "runner_stats": runner.stats(),
+        "result_reason_codes": dict(result_reason_codes),
+    }
     assert all(result.payload is not None for result in results), runner.stats()
     assert all(result.payload.get("test_worker") == "capacity" for result in results if result.payload is not None)
     assert scheduler.stats()["completed"] == 48
@@ -876,7 +823,8 @@ def test_prewarmed_runner_scans_post_tool_output_in_isolated_worker(tmp_path: Pa
 
 
 def test_idempotent_review_retries_once_after_worker_death(tmp_path: Path) -> None:
-    runner = HookProcessRunner(guard_home=tmp_path, process_limit=2, timeout_seconds=2)
+    timeout_seconds = 2.0 * under_coverage_scale(3.0)
+    runner = HookProcessRunner(guard_home=tmp_path, process_limit=2, timeout_seconds=timeout_seconds)
     try:
         runner.start()
         first_slot = next(iter(runner._all_slots.values()))  # pyright: ignore[reportPrivateUsage]
@@ -904,7 +852,7 @@ def test_idempotent_review_retries_once_after_worker_death(tmp_path: Path) -> No
             guard_home=tmp_path,
             workspace=tmp_path,
             hook_env={},
-            deadline=time.monotonic() + 2,
+            deadline=time.monotonic() + timeout_seconds,
         )
     finally:
         runner.close()
@@ -1506,3 +1454,17 @@ def test_trusted_recovery_overlays_only_valid_failure_kind(
 
     assert environments[0]["HOL_GUARD_HOOK_FAILURE_KIND"] == "overload"
     assert environments[1]["HOL_GUARD_HOOK_FAILURE_KIND"] == "transport-failure"
+
+
+def test_empty_wire_payload_keeps_envelope_reason_code_metrics() -> None:
+    runner = HookProcessRunner(process_limit=1)
+    try:
+        runner._record_response_metrics(  # pyright: ignore[reportPrivateUsage]
+            {},
+            envelope_reason_code="native_hook_event_unavailable",
+        )
+        stats = runner.stats()
+        assert stats["reason_codes"]["native_hook_event_unavailable"] == 1
+        assert stats["decisions"]["unknown"] == 1
+    finally:
+        runner.close()

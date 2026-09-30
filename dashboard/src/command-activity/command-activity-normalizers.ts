@@ -108,6 +108,12 @@ function nullableString(value: unknown, kind: string, max = 256): string | null 
   return value === null ? null : stringValue(value, kind, max);
 }
 
+function nullableInvocationPreview(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string" || value.length === 0 || value.length > 4_096) invalid("command activity");
+  return value;
+}
+
 function booleanValue(value: unknown, kind: string): boolean {
   if (typeof value !== "boolean") invalid(kind);
   return value;
@@ -193,6 +199,7 @@ function normalizeActivity(value: unknown): CommandActivityItem {
         ? null
         : (enumValue(item.feedback_label, FEEDBACK_LABELS, "command activity") as CommandFeedbackLabel),
     schema_version: stringValue(item.schema_version, "command activity"),
+    invocation_preview: nullableInvocationPreview(item.invocation_preview),
     matches,
   };
 }

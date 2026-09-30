@@ -7,7 +7,8 @@ import {
 } from "react-icons/hi2";
 import type { GuardReceipt } from "../guard-types";
 import { guardActionDisposition } from "../guard-action";
-import { harnessDisplayName, isDisplayableHarness, formatRelativeTime } from "../approval-center-utils";
+import { harnessDisplayName, formatRelativeTime } from "../approval-center-utils";
+import { isConnectableAppHarness } from "../apps/harness-setup-target";
 import { detectCategory, getCategoryInfo } from "./categories";
 import { guardAwareHref } from "../guard-api";
 import { Sparkline } from "./sparkline";
@@ -87,7 +88,7 @@ function AppTabRaw({ receipts }: AppTabProps) {
   const [categoryFilter, setCategoryFilter] = useState<string>("");
 
   const appReceipts = useMemo(
-    () => receipts.filter((receipt) => isDisplayableHarness(receipt.harness)),
+    () => receipts.filter((receipt) => isConnectableAppHarness(receipt.harness)),
     [receipts]
   );
 

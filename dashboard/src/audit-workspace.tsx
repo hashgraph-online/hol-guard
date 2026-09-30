@@ -34,6 +34,7 @@ import {
   resolveManagerCoverageStatus,
 } from "./supply-chain-protection-stats";
 import { PackageWorkbenchPanel } from "./package-workbench-panel";
+import { listSupplyChainAuditWorkspaceChoices } from "./supply-chain-audit-workspace";
 import type { SupplyChainAuditSession } from "./use-supply-chain-audit-session";
 import { isBlockedGuardAction } from "./guard-action";
 
@@ -551,6 +552,11 @@ export function AuditWorkspace({ snapshot, receipts, approvalGate, auditSession 
     [baseResults, resolvedIds],
   );
 
+  const workspaceChoices = useMemo(
+    () => listSupplyChainAuditWorkspaceChoices(snapshot.managed_installs ?? []),
+    [snapshot.managed_installs],
+  );
+
   const criticalCount = useMemo(
     () =>
       baseResults.filter(
@@ -568,10 +574,17 @@ export function AuditWorkspace({ snapshot, receipts, approvalGate, auditSession 
         auditConnectGate={auditSession.auditConnectGate}
         auditError={auditSession.auditError}
         auditSnapshot={auditSession.auditSnapshot}
+        auditWorkspaceDir={auditSession.auditWorkspaceDir}
+        auditWorkspaceChoices={workspaceChoices}
+        auditWorkspaceSelectionRequired={auditSession.auditWorkspaceSelectionRequired}
+        folderPickerBusy={auditSession.folderPickerBusy}
+        folderPickerError={auditSession.folderPickerError}
         auditRunning={auditSession.auditRunning}
         auditPhase={auditSession.auditPhase}
         cloudState={snapshot.cloud_state}
         onRunAudit={auditSession.handleRunAudit}
+        onChooseAuditWorkspace={auditSession.handleChooseAuditWorkspace}
+        onAuditWorkspaceDirChange={auditSession.setAuditWorkspaceDir}
       />
 
       <div className="flex flex-wrap items-start justify-between gap-3">

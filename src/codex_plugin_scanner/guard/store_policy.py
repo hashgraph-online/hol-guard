@@ -954,6 +954,7 @@ class StorePolicyMixin:
         from .runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 
         with self._extension_control_authority_lock(), self._connect() as connection:
+            self._invalidate_native_extension_control_policy()
             connection.execute("begin immediate")
             managed_base_authority = self._read_extension_control_authority_locked(
                 BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
@@ -1179,7 +1180,8 @@ class StorePolicyMixin:
                 int(authority_row["revision"]),
                 str(authority_row["snapshot_digest"]),
             )
-        with self._connect() as connection:
+        with self._extension_control_authority_lock(), self._connect() as connection:
+            self._invalidate_native_extension_control_policy()
             connection.execute("begin immediate")
             if managed_base_snapshot_captured:
                 authority_row = connection.execute(

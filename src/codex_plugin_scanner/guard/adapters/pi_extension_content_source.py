@@ -21,7 +21,7 @@ function digestOutputText(value: unknown): OutputDigest {
   const seen = new WeakSet<object>();
   function update(text: string): void {
     hash.update(text, 'utf8');
-    chars += text.length;
+    chars += Array.from(text).length;
     if (textForExcerpt.length < GUARD_TEXT_LIMIT_CHARS) {
       const remaining = GUARD_TEXT_LIMIT_CHARS - textForExcerpt.length;
       if (text.length <= remaining) {

@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import functools
 import json
 import os
 import shlex
 import stat
+import subprocess
 import sys
 from collections.abc import Sequence
 from hashlib import sha256
@@ -28,10 +30,63 @@ _BLOCKING_MANAGED_HOOK_EVENTS = (
 _OBSERVER_MANAGED_HOOK_EVENTS = ("afterShellExecution", "afterMCPExecution")
 _MANAGED_HOOK_EVENTS = _BLOCKING_MANAGED_HOOK_EVENTS + _OBSERVER_MANAGED_HOOK_EVENTS
 _MANAGED_HOOK_TIMEOUT_SECONDS = 45
+_ISOLATED_PYTHON_PROBE = (
+    "import hmac, json, sys, urllib.request; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)"
+)
+_ISOLATED_PYTHON_PROBE_TIMEOUT_SECONDS = 1.5
 
 
 def _frozen_cursor_hook_launcher() -> str:
     return resolve_frozen_cursor_hook_launcher()
+
+
+def _isolated_python_candidates() -> tuple[str, ...]:
+    if sys.platform == "darwin" or sys.platform.startswith("linux"):
+        return ("/usr/bin/python3",)
+    return ()
+
+
+def _isolated_python_is_usable(path: Path) -> bool:
+    """Return whether *path* can run the stdlib Cursor hook client in isolation."""
+
+    try:
+        metadata = path.stat()
+    except OSError:
+        return False
+    if not stat.S_ISREG(metadata.st_mode) or not os.access(path, os.X_OK):
+        return False
+    if os.name != "nt" and stat.S_IMODE(metadata.st_mode) & 0o022:
+        return False
+    probe_env = {"PATH": "/usr/bin:/bin"}
+    system_root = os.environ.get("SYSTEMROOT")
+    if isinstance(system_root, str) and system_root:
+        probe_env["SYSTEMROOT"] = system_root
+    try:
+        completed = subprocess.run(
+            [str(path), "-I", "-c", _ISOLATED_PYTHON_PROBE],
+            check=False,
+            capture_output=True,
+            timeout=_ISOLATED_PYTHON_PROBE_TIMEOUT_SECONDS,
+            env=probe_env,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return completed.returncode == 0
+
+
+@functools.lru_cache(maxsize=1)
+def _discover_isolated_cursor_hook_python() -> str | None:
+    for candidate in _isolated_python_candidates():
+        path = Path(candidate)
+        if _isolated_python_is_usable(path):
+            return str(path)
+    return None
+
+
+def isolated_cursor_hook_python() -> str | None:
+    """Return a probed system interpreter for the stdlib Cursor hook client."""
+
+    return _discover_isolated_cursor_hook_python()
 
 
 def _managed_hook_command(
@@ -42,11 +97,12 @@ def _managed_hook_command(
 ) -> str:
     script = str(script_path.resolve())
     event_args = ["--cursor-hook-event", event_name]
-    if python_executable is not None:
-        return shlex.join([str(python_executable), script, *event_args])
+    interpreter = str(python_executable) if python_executable is not None else isolated_cursor_hook_python()
+    if interpreter:
+        return shlex.join([interpreter, "-I", script, *event_args])
     if bool(getattr(sys, "frozen", False)):
         return shlex.join([_frozen_cursor_hook_launcher(), FROZEN_CURSOR_HOOK_COMMAND, script, *event_args])
-    return shlex.join([sys.executable, script, *event_args])
+    return shlex.join([sys.executable, "-I", script, *event_args])
 
 
 def _is_managed_cursor_hook_script(path: Path) -> bool:
@@ -324,6 +380,19 @@ def _is_structured_managed_cursor_hook_command(command: str) -> bool:
     if first.startswith("python"):
         payload = _skip_leading_flags(tokens[1:])
         return bool(payload) and Path(payload[0]).name.lower() == HOOK_SCRIPT_NAME.lower()
+    return False
+
+
+def live_cursor_hooks_use_frozen_control_plane(hooks: object) -> bool:
+    """Return whether live Cursor config still boots the frozen control plane."""
+
+    for command in managed_cursor_hook_commands(hooks):
+        try:
+            tokens = shlex.split(command)
+        except ValueError:
+            continue
+        if len(tokens) >= 2 and tokens[1] == FROZEN_CURSOR_HOOK_COMMAND:
+            return True
     return False
 
 

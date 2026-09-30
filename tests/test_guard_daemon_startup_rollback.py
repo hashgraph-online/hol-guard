@@ -17,7 +17,7 @@ from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.store import GuardStore
 
 
-def test_daemon_start_preserves_deferred_hook_worker_backfill(
+def test_daemon_start_uses_full_initial_hook_worker_pool(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -35,7 +35,9 @@ def test_daemon_start_preserves_deferred_hook_worker_backfill(
     try:
         daemon.start()
         assert calls == [{}]
-        assert runner.stats()["ready"] == 1
+        stats = runner.stats()
+        assert stats["target"] > 1
+        assert runner.wait_for_capacity(minimum_workers=int(stats["target"]), timeout_seconds=15)
     finally:
         daemon.stop()
 

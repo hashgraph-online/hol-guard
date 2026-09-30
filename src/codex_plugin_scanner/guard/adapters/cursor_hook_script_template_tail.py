@@ -265,7 +265,9 @@ def _cursor_availability_response(
         compact = hook_event_name.strip().lower().replace("_", "").replace("-", "")
         if compact in {"aftershellexecution", "aftermcpexecution"}:
             return {}, 0
-        return {"permission": "allow"}, 0
+        if recording_only or compact == "beforereadfile":
+            return {"permission": "allow"}, 0
+        return {"permission": "deny"}, 2
 
 
 _LAST_HOOK_EVENT_NAME = ""

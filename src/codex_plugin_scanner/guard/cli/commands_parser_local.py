@@ -266,6 +266,7 @@ def _configure_guard_local_parsers(
         "command",
         help="Inspect commands and built-in command safety extensions without executing anything",
     )
+    _add_guard_common_args(command_parser)
     command_subparsers = command_parser.add_subparsers(dest="command_command", required=True, metavar="COMMAND")
     for command_name in ("test", "explain"):
         inspect_parser = command_subparsers.add_parser(
@@ -288,7 +289,8 @@ def _configure_guard_local_parsers(
         help="Detect command ecosystems and preview recommended protection",
     )
     setup_parser.add_argument("--detect", action="store_true", required=True)
-    setup_parser.add_argument("--workspace", default=".")
+    # Do not overwrite a value supplied to the parent command parser.
+    setup_parser.add_argument("--workspace", default=argparse.SUPPRESS)
     setup_parser.add_argument("--json", action="store_true")
     controls_parser = command_subparsers.add_parser(
         "controls",

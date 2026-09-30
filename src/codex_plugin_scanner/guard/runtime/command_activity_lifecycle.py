@@ -27,9 +27,9 @@ from .command_activity_contract import (
 )
 from .command_evaluation import CompositeCommandEvaluation, OwnedCommandRuleMatch
 from .command_risk_effects import command_risk_effects
-from .command_rules import CommandRuleMode
 from .effect_contract import UncertaintyKind
 from .extension_evidence import EvidenceSeverity, ExtensionRuleIdentity
+from .generated_command_catalog import CommandRuleMode
 
 
 @dataclass(frozen=True, slots=True)
@@ -83,6 +83,53 @@ _UNCERTAINTY_REASON: Final = MappingProxyType(
         "wrapper_normalization_limit_exceeded": UncertaintyKind.PARSER_BUDGET_EXHAUSTED,
     }
 )
+
+
+def build_policy_only_pre_hook_evidence(
+    *,
+    activity_id: str,
+    occurred_at: datetime,
+    harness: str,
+    policy_action: GuardAction,
+    request_correlation: CorrelationHandle | None,
+    receipt_id: str | None = None,
+    prompted: bool = False,
+    approval_reuse_status: ActivityApprovalReuseStatus = ActivityApprovalReuseStatus.NOT_APPLICABLE,
+    workflow_authorization_claimed: bool = False,
+) -> CommandActivityEvidence:
+    """Preserve a final hook action without inventing rule evaluation."""
+
+    activity = CommandActivity(
+        activity_id=activity_id,
+        occurred_at=occurred_at,
+        harness=harness,
+        hook_phase=CommandHookPhase.PRE,
+        execution_status=(
+            CommandExecutionStatus.PREVENTED
+            if guard_action_severity(policy_action) >= guard_action_severity("review")
+            else CommandExecutionStatus.ALLOWED_UNCONFIRMED
+        ),
+        proof_level=CommandProofLevel.PRE_HOOK,
+        policy_action=policy_action,
+        decision_reason_code=(
+            ActivityDecisionReason.CAPABILITY
+            if workflow_authorization_claimed and policy_action == "allow"
+            else ActivityDecisionReason.POLICY
+        ),
+        controlling_rule_id=None,
+        parse_confidence=None,
+        uncertainty_class=None,
+        match_count=0,
+        prompted=prompted,
+        approval_reuse_status=approval_reuse_status,
+        request_correlation=request_correlation,
+        session_correlation=None,
+        receipt_link_status=ReceiptLinkStatus.LINKED if receipt_id is not None else ReceiptLinkStatus.NOT_APPLICABLE,
+        receipt_id=receipt_id,
+        evaluation_latency_bucket=ActivityLatencyBucket.NOT_MEASURED,
+        persistence_latency_bucket=ActivityLatencyBucket.NOT_MEASURED,
+    )
+    return CommandActivityEvidence(activity=activity, matches=())
 
 
 def build_pre_hook_evidence(

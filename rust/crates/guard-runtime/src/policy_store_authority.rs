@@ -1,7 +1,7 @@
 use super::policy_store_migration::load_legacy_authority;
 use super::policy_store_persistence::{read_generation_floor, read_private_json};
 use super::*;
-use guard_policy_snapshot::{canonical_json_bytes, generation_floor_mac, SnapshotError};
+use guard_policy_snapshot::{canonical_json_bytes, SnapshotError};
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::fs::OpenOptions;
@@ -284,6 +284,7 @@ pub(super) fn load_authority(
                     policy_digest: Some(floor.policy_digest),
                     invalid_on_startup: true,
                     migrate: true,
+                    command_control_floor: None,
                 });
             }
             return Err(error);
@@ -325,6 +326,7 @@ pub(super) fn load_authority(
                     policy_digest: Some(floor.policy_digest),
                     invalid_on_startup: true,
                     migrate: true,
+                    command_control_floor: None,
                 })
             } else {
                 Err("native_policy_snapshot_state_invalid".to_owned())
@@ -358,6 +360,7 @@ pub(super) fn load_current_authority(
             policy_digest: None,
             invalid_on_startup: false,
             migrate: false,
+            command_control_floor: None,
         });
     };
     if value.get("schema").and_then(Value::as_str) != Some(AUTHORITY_RECORD_SCHEMA) {
@@ -390,8 +393,13 @@ pub(super) fn load_combined_authority(
         || !is_lower_hex(&record.policy_digest, 64)
         || !is_lower_hex(&record.floor_mac, 64)
         || !crate::constant_time_eq(
-            generation_floor_mac(record.generation_floor, &record.policy_digest, verifier_key)
-                .as_bytes(),
+            super::policy_store_command_floor::authority_floor_mac(
+                record.generation_floor,
+                &record.policy_digest,
+                record.command_control_floor.as_ref(),
+                verifier_key,
+            )?
+            .as_bytes(),
             record.floor_mac.as_bytes(),
         )
     {
@@ -403,6 +411,12 @@ pub(super) fn load_combined_authority(
     if let Some(candidate) = record.snapshot {
         if candidate.generation != record.generation_floor
             || candidate.policy_digest != record.policy_digest
+            || super::policy_store_command_floor::next_floor(
+                record.command_control_floor.as_ref(),
+                &candidate,
+            )
+            .ok()
+                != Some(record.command_control_floor.clone())
         {
             invalid_on_startup = true;
         } else if validate_v3(
@@ -427,6 +441,7 @@ pub(super) fn load_combined_authority(
         policy_digest: Some(record.policy_digest),
         invalid_on_startup,
         migrate: false,
+        command_control_floor: record.command_control_floor,
     })
 }
 

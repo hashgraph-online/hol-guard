@@ -1,6 +1,134 @@
-use super::{normalized_harness, MAX_SELECTOR_VALUE_BYTES, VALID_ACTIONS, VALID_RISK_KEYS};
+use super::{
+    normalized_harness, PreToolResultV1, MAX_SELECTOR_VALUE_BYTES, VALID_ACTIONS, VALID_RISK_KEYS,
+};
 use guard_policy_snapshot::EffectiveNativePolicyV3;
 use std::collections::BTreeMap;
+
+/// The native action lattice is intentionally typed at the enforcement
+/// boundary.  String values remain the wire representation for compatibility
+/// with existing hook contracts, but no decision is made by comparing raw
+/// strings.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[repr(u8)]
+enum ActionFloor {
+    Allow,
+    Warn,
+    Review,
+    RequireReapproval,
+    SandboxRequired,
+    Block,
+}
+
+impl ActionFloor {
+    fn parse(value: &str) -> Option<Self> {
+        Some(match value {
+            "allow" => Self::Allow,
+            "warn" => Self::Warn,
+            "review" => Self::Review,
+            "require-reapproval" => Self::RequireReapproval,
+            "sandbox-required" => Self::SandboxRequired,
+            "block" => Self::Block,
+            _ => return None,
+        })
+    }
+
+    fn is_non_overridable(self) -> bool {
+        matches!(self, Self::SandboxRequired | Self::Block)
+    }
+
+    fn decision(self) -> &'static str {
+        if matches!(self, Self::Allow | Self::Warn) {
+            "allow"
+        } else {
+            "deny"
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct ActionFloorMatrix {
+    policy: ActionFloor,
+    minimum: ActionFloor,
+}
+
+impl ActionFloorMatrix {
+    fn from_result(result: &PreToolResultV1) -> Result<Self, String> {
+        Ok(Self {
+            policy: ActionFloor::parse(&result.policy_action)
+                .ok_or_else(|| "native_policy_action_invalid".to_owned())?,
+            minimum: ActionFloor::parse(&result.minimum_action)
+                .ok_or_else(|| "native_policy_action_invalid".to_owned())?,
+        })
+    }
+
+    fn validate(self, result: &PreToolResultV1) -> Result<(), String> {
+        if self.policy < self.minimum
+            || (self.policy.is_non_overridable() && self.policy != self.minimum)
+            || result.decision != self.minimum.decision()
+            || result.explicitly_benign != (self.minimum == ActionFloor::Allow)
+        {
+            return Err("native_policy_decision_inconsistent".to_owned());
+        }
+        Ok(())
+    }
+}
+
+pub(super) fn action_rank(action: &str) -> Option<u8> {
+    ActionFloor::parse(action).map(|floor| floor as u8)
+}
+
+pub(super) fn join_action(left: &str, right: &str) -> Result<String, String> {
+    let left_rank = action_rank(left).ok_or_else(|| "native_policy_action_invalid".to_owned())?;
+    let right_rank = action_rank(right).ok_or_else(|| "native_policy_action_invalid".to_owned())?;
+    Ok(if left_rank >= right_rank {
+        left.to_owned()
+    } else {
+        right.to_owned()
+    })
+}
+
+/// Validate the typed relationship between the effective action fields.  The
+/// policy action is not a second, weaker authority: it must describe the same
+/// or stronger floor, and a terminal policy block must be reflected by the
+/// minimum floor before any approval path can inspect the result.
+pub(crate) fn validate_pre_tool_result_matrix(result: &PreToolResultV1) -> Result<(), String> {
+    ActionFloorMatrix::from_result(result)?.validate(result)
+}
+
+/// Generation-owned indexes. The signed policy is retained unchanged; only
+/// derived selector keys are canonicalized here, before snapshot publication.
+#[derive(Debug)]
+pub(crate) struct CompiledEffectivePolicy {
+    pub(super) harness_actions: BTreeMap<String, String>,
+    pub(super) harness_risk_actions: BTreeMap<String, BTreeMap<String, String>>,
+}
+
+impl CompiledEffectivePolicy {
+    pub(crate) fn new(policy: &EffectiveNativePolicyV3) -> Result<Self, String> {
+        validate_effective_policy(policy)?;
+        Ok(Self {
+            harness_actions: canonical_map(&policy.harness_actions)?,
+            harness_risk_actions: canonical_map(&policy.harness_risk_actions)?,
+        })
+    }
+}
+
+fn canonical_map<T: Clone + PartialEq>(
+    map: &BTreeMap<String, T>,
+) -> Result<BTreeMap<String, T>, String> {
+    let mut canonical = BTreeMap::new();
+    for (configured, action) in map {
+        let normalized = normalized_harness(configured);
+        if let Some(previous) = canonical.get(&normalized) {
+            if previous != action {
+                return Err("native_policy_harness_selector_conflict".to_owned());
+            }
+        } else {
+            canonical.insert(normalized, action.clone());
+        }
+    }
+    Ok(canonical)
+}
 
 pub(super) fn policy_map_action(
     map: &std::collections::BTreeMap<String, String>,
@@ -82,48 +210,4 @@ pub(super) fn validate_effective_policy(policy: &EffectiveNativePolicyV3) -> Res
         validate_action_map(actions, true, false)?;
     }
     Ok(())
-}
-
-pub(super) fn canonical_harness_action(
-    map: &std::collections::BTreeMap<String, String>,
-    harness: &str,
-) -> Result<Option<String>, String> {
-    let mut selected: Option<(&str, &str)> = None;
-    for (configured, action) in map {
-        if !VALID_ACTIONS.contains(&action.as_str()) {
-            return Err("native_policy_action_invalid".to_owned());
-        }
-        let normalized = normalized_harness(configured);
-        if normalized != harness {
-            continue;
-        }
-        if let Some((_, previous_action)) = selected {
-            if previous_action != action {
-                return Err("native_policy_harness_selector_conflict".to_owned());
-            }
-        } else {
-            selected = Some((configured.as_str(), action.as_str()));
-        }
-    }
-    Ok(selected.map(|(_, action)| action.to_owned()))
-}
-
-pub(super) fn canonical_harness_risk_actions<'a>(
-    map: &'a BTreeMap<String, BTreeMap<String, String>>,
-    harness: &str,
-) -> Result<Option<&'a BTreeMap<String, String>>, String> {
-    let mut selected: Option<&'a BTreeMap<String, String>> = None;
-    for (configured, actions) in map {
-        if normalized_harness(configured) != harness {
-            continue;
-        }
-        if let Some(previous) = selected {
-            if previous != actions {
-                return Err("native_policy_harness_selector_conflict".to_owned());
-            }
-        } else {
-            selected = Some(actions);
-        }
-    }
-    Ok(selected)
 }
