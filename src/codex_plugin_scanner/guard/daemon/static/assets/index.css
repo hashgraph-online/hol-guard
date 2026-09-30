@@ -1159,6 +1159,10 @@
     max-height: min(60vh, 32rem);
   }
 
+  .max-h-\[min\(70vh\,32rem\)\] {
+    max-height: min(70vh, 32rem);
+  }
+
   .max-h-\[min\(85vh\,40rem\)\] {
     max-height: min(85vh, 40rem);
   }
@@ -1439,6 +1443,10 @@
     max-width: var(--container-7xl);
   }
 
+  .max-w-56 {
+    max-width: calc(var(--spacing) * 56);
+  }
+
   .max-w-\[3\.25rem\] {
     max-width: 3.25rem;
   }
@@ -1626,10 +1634,6 @@
 
   .resize {
     resize: both;
-  }
-
-  .scroll-mt-28 {
-    scroll-margin-top: calc(var(--spacing) * 28);
   }
 
   .\[scrollbar-gutter\:stable\] {
@@ -1959,6 +1963,10 @@
 
   .overflow-y-auto {
     overflow-y: auto;
+  }
+
+  .overscroll-contain {
+    overscroll-behavior: contain;
   }
 
   .overscroll-y-contain {
@@ -5069,6 +5077,11 @@
     box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
   }
 
+  .shadow-\[0_12px_32px_rgba\(63\,65\,116\,0\.16\)\] {
+    --tw-shadow: 0 12px 32px var(--tw-shadow-color, #3f417429);
+    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
+  }
+
   .shadow-\[inset_0_1px_0_rgba\(255\,255\,255\,0\.35\)\] {
     --tw-shadow: inset 0 1px 0 var(--tw-shadow-color, #ffffff59);
     box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
@@ -6278,8 +6291,24 @@
   }
 
   @media (min-width: 40rem) {
+    .sm\:absolute {
+      position: absolute;
+    }
+
+    .sm\:inset-x-0 {
+      inset-inline: 0;
+    }
+
+    .sm\:top-full {
+      top: 100%;
+    }
+
     .sm\:bottom-4 {
       bottom: calc(var(--spacing) * 4);
+    }
+
+    .sm\:z-30 {
+      z-index: 30;
     }
 
     .sm\:col-span-2 {
@@ -6288,6 +6317,10 @@
 
     .sm\:mt-0 {
       margin-top: 0;
+    }
+
+    .sm\:mt-2 {
+      margin-top: calc(var(--spacing) * 2);
     }
 
     .sm\:\!flex {
@@ -6344,6 +6377,10 @@
 
     .sm\:max-w-sm {
       max-width: var(--container-sm);
+    }
+
+    .sm\:min-w-60 {
+      min-width: calc(var(--spacing) * 60);
     }
 
     .sm\:min-w-\[6\.5rem\] {

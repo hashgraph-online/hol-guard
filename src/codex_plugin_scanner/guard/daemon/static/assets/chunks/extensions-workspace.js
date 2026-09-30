@@ -6029,13 +6029,40 @@ function AreaFilterOption(props) {
     }
   );
 }
+function CatalogFilterTrigger(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "button",
+    {
+      type: "button",
+      ref: props.buttonRef,
+      "aria-expanded": props.open,
+      "aria-controls": props.panelId,
+      title: "Filters (press f)",
+      onClick: props.onToggle,
+      className: "inline-flex min-h-11 items-center gap-2 rounded-xl border border-[rgba(63,65,116,0.18)] bg-white px-3.5 text-sm font-semibold text-brand-dark shadow-sm transition-colors hover:border-brand-blue hover:text-brand-blue focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue aria-expanded:border-brand-blue aria-expanded:text-brand-blue motion-reduce:transition-none",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniAdjustmentsHorizontal, { className: "size-4", "aria-hidden": "true" }),
+        "Filters",
+        props.activeCount > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "grid min-w-5 place-items-center rounded-full bg-brand-blue px-1 text-[0.6875rem] font-semibold leading-5 text-white tabular-nums", children: props.activeCount }) : null,
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          HiMiniChevronDown,
+          {
+            className: `size-4 transition-transform duration-200 motion-reduce:transition-none ${props.open ? "rotate-180" : ""}`,
+            "aria-hidden": "true"
+          }
+        )
+      ]
+    }
+  );
+}
 function CatalogFilterBar(props) {
-  const [panelOpen, setPanelOpen] = reactExports.useState(false);
-  const panelId = reactExports.useId();
-  const triggerRef = reactExports.useRef(null);
   const areas = reactExports.useMemo(() => populatedCatalogAreaOptions(props.catalog), [props.catalog]);
   const filtering = catalogFiltersActive(props.filters);
   const activeCount = props.filters.trusts.length + props.filters.kinds.length + props.filters.areas.length;
+  const visibleCount = reactExports.useMemo(
+    () => filterCatalogExtensions(props.catalog, props.filters).length,
+    [props.catalog, props.filters]
+  );
   const handleToggleTrust = reactExports.useCallback((value) => {
     props.onChange({
       ...props.filters,
@@ -6056,38 +6083,10 @@ function CatalogFilterBar(props) {
   }, [props]);
   const handleClear = reactExports.useCallback(() => {
     props.onChange(EMPTY_CATALOG_FILTERS);
+    props.onAfterClear?.();
   }, [props]);
-  const handleKeyDown = reactExports.useCallback((event) => {
-    if (event.key !== "Escape" || !panelOpen) return;
-    event.stopPropagation();
-    setPanelOpen(false);
-    triggerRef.current?.focus();
-  }, [panelOpen]);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 scroll-mt-28", "data-testid": "catalog-filters", onKeyDown: handleKeyDown, children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs(
-        "button",
-        {
-          type: "button",
-          ref: triggerRef,
-          "aria-expanded": panelOpen,
-          "aria-controls": panelId,
-          onClick: () => setPanelOpen((open) => !open),
-          className: "inline-flex min-h-10 items-center gap-2 rounded-lg border border-[rgba(63,65,116,0.18)] bg-white px-3 text-xs font-semibold text-brand-dark shadow-sm transition-colors hover:border-brand-blue hover:text-brand-blue focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue aria-expanded:border-brand-blue aria-expanded:text-brand-blue motion-reduce:transition-none",
-          children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniAdjustmentsHorizontal, { className: "size-4", "aria-hidden": "true" }),
-            "Filters",
-            activeCount > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "grid min-w-5 place-items-center rounded-full bg-brand-blue px-1 text-[0.6875rem] font-semibold leading-5 text-white tabular-nums", children: activeCount }) : null,
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              HiMiniChevronDown,
-              {
-                className: `size-4 transition-transform duration-200 motion-reduce:transition-none ${panelOpen ? "rotate-180" : ""}`,
-                "aria-hidden": "true"
-              }
-            )
-          ]
-        }
-      ),
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+    filtering ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2 flex flex-wrap items-center gap-2", "data-testid": "catalog-filter-tokens", children: [
       props.filters.trusts.map((trust) => /* @__PURE__ */ jsxRuntimeExports.jsx(
         ActiveFilterToken,
         {
@@ -6118,50 +6117,63 @@ function CatalogFilterBar(props) {
           `area-${areaId}`
         );
       }),
-      filtering ? /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "guard-extensions-chip", onClick: handleClear, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "guard-extensions-chip", onClick: handleClear, children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "size-4", "aria-hidden": "true" }),
         "Clear filters"
-      ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "hidden text-xs text-brand-dark/70 sm:inline", children: "Narrow by trust, kind, or area." })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      ] })
+    ] }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(
       "div",
       {
-        id: panelId,
-        hidden: !panelOpen,
-        className: "mt-3 rounded-2xl border border-[rgba(63,65,116,0.12)] bg-white p-4 shadow-sm sm:p-5",
-        children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-[minmax(0,14rem)_minmax(0,12rem)_minmax(0,1fr)]", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(CatalogFilterGroup, { legend: "Trust", children: CATALOG_TRUST_FILTERS.map((trust) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-            TrustFilterOption,
-            {
-              value: trust,
-              count: catalogFilterChipCount(props.catalog, props.filters, { trusts: [trust] }),
-              pressed: props.filters.trusts.includes(trust),
-              onToggle: handleToggleTrust
-            },
-            trust
-          )) }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(CatalogFilterGroup, { legend: "Kind", children: CATALOG_KIND_FILTERS.map((kind) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-            KindFilterOption,
-            {
-              value: kind,
-              count: catalogFilterChipCount(props.catalog, props.filters, { kinds: [kind] }),
-              pressed: props.filters.kinds.includes(kind),
-              onToggle: handleToggleKind
-            },
-            kind
-          )) }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(CatalogFilterGroup, { legend: "Area", className: "sm:col-span-2 lg:col-span-1", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid gap-x-6 gap-y-1.5 sm:grid-cols-2", children: areas.map((area) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-            AreaFilterOption,
-            {
-              value: area.id,
-              label: area.label,
-              count: catalogFilterChipCount(props.catalog, props.filters, { areas: [area.id] }),
-              pressed: props.filters.areas.includes(area.id),
-              onToggle: handleToggleArea
-            },
-            area.id
-          )) }) })
-        ] })
+        id: props.panelId,
+        hidden: !props.open,
+        "data-testid": "catalog-filter-panel",
+        className: "mt-2 max-h-[min(70vh,32rem)] overflow-y-auto overscroll-contain rounded-2xl border border-[rgba(63,65,116,0.12)] bg-white p-4 shadow-[0_12px_32px_rgba(63,65,116,0.16)] sm:absolute sm:inset-x-0 sm:top-full sm:z-30 sm:mt-2 sm:p-5",
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-[minmax(0,14rem)_minmax(0,12rem)_minmax(0,1fr)]", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(CatalogFilterGroup, { legend: "Trust", children: CATALOG_TRUST_FILTERS.map((trust) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+              TrustFilterOption,
+              {
+                value: trust,
+                count: catalogFilterChipCount(props.catalog, props.filters, { trusts: [trust] }),
+                pressed: props.filters.trusts.includes(trust),
+                onToggle: handleToggleTrust
+              },
+              trust
+            )) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(CatalogFilterGroup, { legend: "Kind", children: CATALOG_KIND_FILTERS.map((kind) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+              KindFilterOption,
+              {
+                value: kind,
+                count: catalogFilterChipCount(props.catalog, props.filters, { kinds: [kind] }),
+                pressed: props.filters.kinds.includes(kind),
+                onToggle: handleToggleKind
+              },
+              kind
+            )) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(CatalogFilterGroup, { legend: "Area", className: "sm:col-span-2 lg:col-span-1", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid gap-x-6 gap-y-1.5 sm:grid-cols-2", children: areas.map((area) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+              AreaFilterOption,
+              {
+                value: area.id,
+                label: area.label,
+                count: catalogFilterChipCount(props.catalog, props.filters, { areas: [area.id] }),
+                pressed: props.filters.areas.includes(area.id),
+                onToggle: handleToggleArea
+              },
+              area.id
+            )) }) })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-[rgba(63,65,116,0.12)] pt-3", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-brand-dark/65", "data-testid": "catalog-filter-count", children: catalogFilterCountCopy(visibleCount, props.catalog.length, filtering) }),
+            filtering ? /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "guard-extensions-chip", onClick: handleClear, children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "size-4", "aria-hidden": "true" }),
+              "Clear all ",
+              activeCount,
+              " ",
+              activeCount === 1 ? "filter" : "filters"
+            ] }) : null
+          ] })
+        ]
       }
     )
   ] });
@@ -6304,37 +6316,43 @@ function PatternSearchConsole(props) {
   ).length;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-labelledby": "pattern-search-heading", className: "mt-6", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "pattern-search-heading", className: "sr-only", children: "Search command patterns" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "relative block", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Search command patterns" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniMagnifyingGlass, { className: "pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-brand-dark/55", "aria-hidden": "true" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "input",
-        {
-          ref: inputRef,
-          type: "text",
-          role: "searchbox",
-          enterKeyHint: "search",
-          value: query,
-          onFocus: () => setFocused(true),
-          onChange: (event) => setQuery(event.target.value.slice(0, 160)),
-          placeholder: 'Search any command Guard watches — "squash", "git push --force", "kubectl"…',
-          "aria-describedby": "pattern-search-hint",
-          className: "min-h-12 w-full rounded-2xl border border-[rgba(63,65,116,0.14)] bg-white/85 py-2.5 pl-9 pr-10 text-sm text-brand-dark shadow-sm focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-blue-100"
-        }
-      ),
-      showResults ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "button",
-        {
-          type: "button",
-          onClick: () => {
-            setQuery("");
-            inputRef.current?.focus();
-          },
-          "aria-label": "Clear search",
-          className: "absolute right-2 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-lg text-brand-dark/55 hover:bg-[rgba(63,65,116,0.06)] hover:text-brand-dark",
-          children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "size-4", "aria-hidden": "true" })
-        }
-      ) : null
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "relative block min-w-0 flex-1 sm:min-w-60", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Search command patterns" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniMagnifyingGlass, { className: "pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-brand-dark/55", "aria-hidden": "true" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "input",
+            {
+              ref: inputRef,
+              type: "text",
+              role: "searchbox",
+              enterKeyHint: "search",
+              value: query,
+              onFocus: () => setFocused(true),
+              onChange: (event) => setQuery(event.target.value.slice(0, 160)),
+              placeholder: 'Search any command Guard watches — "squash", "git push --force", "kubectl"…',
+              "aria-describedby": "pattern-search-hint",
+              className: "min-h-11 w-full rounded-xl border border-[rgba(63,65,116,0.14)] bg-white/85 py-2.5 pl-9 pr-10 text-sm text-brand-dark shadow-sm focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-blue-100"
+            }
+          ),
+          showResults ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              onClick: () => {
+                setQuery("");
+                inputRef.current?.focus();
+              },
+              "aria-label": "Clear search",
+              className: "absolute right-2 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-lg text-brand-dark/55 hover:bg-[rgba(63,65,116,0.06)] hover:text-brand-dark",
+              children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "size-4", "aria-hidden": "true" })
+            }
+          ) : null
+        ] }),
+        props.toolbarSlot ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex shrink-0 flex-wrap items-center gap-2", children: props.toolbarSlot }) : null
+      ] }),
+      props.subtoolbarSlot
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { id: "pattern-search-hint", className: `mt-2 text-xs text-brand-dark/60 ${focused || showResults ? "" : "sr-only"}`, children: "Matches patterns across every tool. Press / to focus search from anywhere on this page." }),
     props.actionSlot ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: props.actionSlot }) : null,
@@ -6729,6 +6747,15 @@ function CatalogExtensionRow(props) {
     }
   );
 }
+function ConnectorDiscoveryControl(props) {
+  if (props.discovering) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "px-1 text-xs text-brand-dark/60", children: "Checking host configuration for connectors…" });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+    props.error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "max-w-56 truncate text-xs text-brand-dark/60", title: props.error, children: props.error }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "guard-extensions-chip", onClick: props.onRetry, children: props.error ? "Check for connectors again" : "Check host connections" })
+  ] });
+}
 function CatalogFilterEmpty(props) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 rounded-2xl border border-[rgba(63,65,116,0.12)] bg-white px-4 py-6", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "No extensions match these filters." }),
@@ -6763,6 +6790,10 @@ function ExtensionsOverview(props) {
     };
   }, [props.active, discoveryAttempt]);
   const [filters, setFilters] = reactExports.useState(EMPTY_CATALOG_FILTERS);
+  const [filterPanelOpen, setFilterPanelOpen] = reactExports.useState(false);
+  const filterPanelId = reactExports.useId();
+  const filterTriggerRef = reactExports.useRef(null);
+  const filterToolbarRef = reactExports.useRef(null);
   reactExports.useEffect(() => {
     setFilters((current) => {
       const next = pruneCatalogFilters(current, props.catalogExtensions);
@@ -6770,6 +6801,39 @@ function ExtensionsOverview(props) {
       return next;
     });
   }, [props.catalogExtensions]);
+  reactExports.useEffect(() => {
+    if (!filterPanelOpen) return;
+    const onPointerDown = (event) => {
+      if (filterToolbarRef.current?.contains(event.target)) return;
+      setFilterPanelOpen(false);
+    };
+    const onKeyDown = (event) => {
+      if (event.key !== "Escape") return;
+      if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
+      setFilterPanelOpen(false);
+      filterTriggerRef.current?.focus();
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [filterPanelOpen]);
+  reactExports.useEffect(() => {
+    if (!props.active) return;
+    const onKeyDown = (event) => {
+      if (event.key !== "f" || event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
+      const target = event.target;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+      event.preventDefault();
+      setFilterPanelOpen(true);
+      filterTriggerRef.current?.focus();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [props.active]);
   const searching = query.trim().length > 0;
   const filtering = catalogFiltersActive(filters);
   const visibleCatalog = reactExports.useMemo(
@@ -6806,40 +6870,58 @@ function ExtensionsOverview(props) {
     props.localCliError ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(InlineError, { message: props.localCliError }) }) : null,
     props.localCliNotice ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mt-4 rounded-xl border border-brand-blue/20 bg-brand-blue/5 p-3 text-sm text-brand-dark", children: props.localCliNotice }) : null,
     /* @__PURE__ */ jsxRuntimeExports.jsx(
-      PatternSearchConsole,
+      "div",
       {
-        catalog: visibleCatalog,
-        effective: props.effective,
-        active: props.active,
-        query,
-        onQueryChange: setQuery,
-        onRefresh: props.onRefresh,
-        onOpenExtension: props.onOpenExtension,
-        actionSlot: searching ? /* @__PURE__ */ jsxRuntimeExports.jsx(AddCustomExtensionButton, { onClick: props.onAddCustom }) : null
-      }
-    ),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      CatalogFilterBar,
-      {
-        catalog: props.catalogExtensions,
-        filters,
-        onChange: setFilters
+        ref: filterToolbarRef,
+        "data-testid": "catalog-filters",
+        children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+          PatternSearchConsole,
+          {
+            catalog: visibleCatalog,
+            effective: props.effective,
+            active: props.active,
+            query,
+            onQueryChange: setQuery,
+            onRefresh: props.onRefresh,
+            onOpenExtension: props.onOpenExtension,
+            actionSlot: searching ? /* @__PURE__ */ jsxRuntimeExports.jsx(AddCustomExtensionButton, { onClick: props.onAddCustom }) : null,
+            toolbarSlot: /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                CatalogFilterTrigger,
+                {
+                  open: filterPanelOpen,
+                  activeCount: filters.trusts.length + filters.kinds.length + filters.areas.length,
+                  panelId: filterPanelId,
+                  buttonRef: filterTriggerRef,
+                  onToggle: () => setFilterPanelOpen((open) => !open)
+                }
+              ),
+              props.active ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+                ConnectorDiscoveryControl,
+                {
+                  discovering,
+                  error: discoveryError,
+                  onRetry: () => setDiscoveryAttempt((attempt) => attempt + 1)
+                }
+              ) : null
+            ] }),
+            subtoolbarSlot: /* @__PURE__ */ jsxRuntimeExports.jsx(
+              CatalogFilterBar,
+              {
+                catalog: props.catalogExtensions,
+                filters,
+                onChange: setFilters,
+                open: filterPanelOpen,
+                onOpenChange: setFilterPanelOpen,
+                panelId: filterPanelId,
+                onAfterClear: () => filterTriggerRef.current?.focus()
+              }
+            )
+          }
+        )
       }
     ),
     searching ? null : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4", role: "status", children: [
-        discovering ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/75", children: "Checking host configuration for connectors…" }) : null,
-        discoveryError ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/75", children: discoveryError }) : null,
-        !discovering ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "button",
-          {
-            type: "button",
-            onClick: () => setDiscoveryAttempt((attempt) => attempt + 1),
-            className: "mt-2 min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-brand-dark",
-            children: discoveryError ? "Check for connectors again" : "Check host connections"
-          }
-        ) : null
-      ] }),
       addedCustomCount ? /* @__PURE__ */ jsxRuntimeExports.jsx(
         CustomExtensionsSection,
         {

@@ -1,0 +1,118 @@
+name: Issue workspace review authority
+
+"on":
+  workflow_dispatch:
+    inputs:
+      authority_request:
+        description: Unsigned public workspace review authority JSON
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: workspace-review-authority-issuance
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    if: github.repository == 'hashgraph-online/hol-guard' && github.ref == 'refs/heads/main' && github.run_attempt == 1
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      request_digest: ${{ steps.request.outputs.digest }}
+    steps:
+      - name: Require custodian approval protection
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/environments/guard-approval-root" \
+            --jq '.protection_rules | any(.type == "required_reviewers" and .prevent_self_review == true and (.reviewers | any(.type == "User")))' \
+            | grep -qx true
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: '0.9.26'
+      - run: uv sync --frozen --no-dev --no-install-project
+      - name: Write bounded public request
+        env:
+          AUTHORITY_REQUEST: ${{ inputs.authority_request }}
+        run: uv run --no-sync python scripts/approval/workspace_review_authority_workflow.py write-request --output authority-request.json
+      - name: Validate authority contract
+        run: uv run --no-sync python scripts/approval/issue_workspace_review_authority.py --request authority-request.json --validate-only
+      - name: Record request for custodian review
+        id: request
+        run: uv run --no-sync python scripts/approval/workspace_review_authority_workflow.py record-request --request authority-request.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: workspace-review-authority-request
+          path: authority-request.json
+          if-no-files-found: error
+          retention-days: 90
+
+  sign:
+    needs: validate
+    if: github.repository == 'hashgraph-online/hol-guard' && github.ref == 'refs/heads/main' && github.run_attempt == 1
+    environment: guard-approval-root
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Recheck custodian approval protection
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/environments/guard-approval-root" \
+            --jq '.protection_rules | any(.type == "required_reviewers" and .prevent_self_review == true and (.reviewers | any(.type == "User")))' \
+            | grep -qx true
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: '0.9.26'
+      - run: uv sync --frozen --no-dev --no-install-project
+      - name: Verify independent custodian reviewed these bytes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_REQUEST_DIGEST: ${{ needs.validate.outputs.request_digest }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/environments/guard-approval-root" > authority-environment.json
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/approvals" > authority-reviews.json
+          uv run --no-sync python scripts/approval/workspace_review_authority_workflow.py verify-custodian-approval --environment authority-environment.json --reviews authority-reviews.json
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: workspace-review-authority-request
+      - name: Verify reviewed request digest
+        env:
+          EXPECTED_REQUEST_DIGEST: ${{ needs.validate.outputs.request_digest }}
+        run: uv run --no-sync python scripts/approval/workspace_review_authority_workflow.py verify-request-digest --request authority-request.json
+      - name: Sign approved public authority
+        env:
+          EXPECTED_REQUEST_DIGEST: ${{ needs.validate.outputs.request_digest }}
+          HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_SEED_HEX: ${{ secrets.HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_SEED_HEX }}
+          HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_HEX: ${{ vars.HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_HEX }}
+          HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_FINGERPRINT_HEX: ${{ vars.HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_FINGERPRINT_HEX }}
+        run: uv run --no-sync python scripts/approval/issue_workspace_review_authority.py --request authority-request.json --expected-request-sha256 "$EXPECTED_REQUEST_DIGEST" --output workspace-review-authority.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: workspace-review-authority
+          path: workspace-review-authority.json
+          if-no-files-found: error
+          retention-days: 90
