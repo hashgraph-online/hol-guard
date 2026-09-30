@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
 from codex_plugin_scanner.guard.runtime.shell_secret_reads import assess_shell_reads
+from tests.native_command_test_support import real_native_command_evaluation
 
 
 def test_path_qualified_executable_outside_guarded_roots_fails_closed(tmp_path: Path) -> None:
@@ -21,7 +21,9 @@ def test_path_qualified_executable_outside_guarded_roots_fails_closed(tmp_path: 
     assert assessment.script_requested
     assert assessment.incomplete
     assert assessment.requires_review
-    assert evaluate_command("../check", cwd=workspace, home_dir=home).minimum_action == "review"
+    assert (
+        real_native_command_evaluation("../check", cwd=workspace, home_dir=home).evaluation.minimum_action == "review"
+    )
 
 
 def test_failed_literal_cd_skips_the_entire_and_pipeline_branch(tmp_path: Path) -> None:
@@ -52,6 +54,16 @@ def test_failed_literal_cd_does_not_hide_or_branch_read(tmp_path: Path) -> None:
     assessment = assess_shell_reads(command, cwd=workspace, home_dir=tmp_path / "home")
     assert assessment.requires_review
     assert assessment.incomplete
+
+
+def test_failed_literal_cd_does_not_hide_pipeline_read(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / ".env").write_text("SECRET=1\n")
+    command = "cd missing | cat .env"
+
+    assessment = assess_shell_reads(command, cwd=workspace, home_dir=tmp_path / "home")
+    assert assessment.requires_review
 
 
 def test_failed_literal_cd_or_recovery_does_not_hide_later_and_read(tmp_path: Path) -> None:

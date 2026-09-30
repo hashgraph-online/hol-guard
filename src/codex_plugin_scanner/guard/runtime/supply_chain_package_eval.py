@@ -5,7 +5,9 @@ from __future__ import annotations
 import hashlib
 import importlib
 import json
+import os
 import re
+import shlex
 import sys
 import time
 import urllib.error
@@ -994,6 +996,18 @@ def _finalize_evaluation(
     }[draft.decision]
     reason_message = _optional_string(draft.reasons[0].get("message")) if draft.reasons else None
     reason_code = _optional_string(draft.reasons[0].get("code")) if draft.reasons else None
+    if reason_code == "installed_release_reinstall" and draft.decision != "allow":
+        restrictive_reason = next(
+            (
+                reason
+                for reason in draft.reasons
+                if _optional_string(reason.get("code")) != "installed_release_reinstall"
+            ),
+            None,
+        )
+        if restrictive_reason is not None:
+            reason_message = _optional_string(restrictive_reason.get("message"))
+            reason_code = _optional_string(restrictive_reason.get("code"))
     policy_action: GuardAction = (
         "review"
         if draft.decision == "ask" and reason_code == "external_tarball_source"
@@ -1006,6 +1020,10 @@ def _finalize_evaluation(
     }
     if reason_code in source_risk_summaries and reason_message is not None:
         risk_summary = f"{prefix} `{package_ref}` {source_risk_summaries[reason_code]}"
+    if reason_code == "installed_release_reinstall" and draft.decision == "allow":
+        risk_summary = (
+            f"HOL Guard allowed `{package_ref}` because it reinstalls the release already running on this device."
+        )
     fix_command = _fix_command(primary_package)
     title = {
         "block": "Critical install blocked",
@@ -3001,6 +3019,131 @@ def _package_target_result(
     return result
 
 
+_FIRST_PARTY_PYPI_PACKAGES = frozenset({"hol-guard", "plugin-scanner"})
+_ALTERNATE_PACKAGE_INDEX_FLAGS = frozenset(
+    {
+        "--index-url",
+        "--extra-index-url",
+        "--index",
+        "--default-index",
+        "--no-index",
+        "-i",
+        "--find-links",
+        "-f",
+        "--pip-args",
+    }
+)
+_PACKAGE_SOURCE_ENV_NAMES = frozenset(
+    {
+        "PIP_EXTRA_INDEX_URL",
+        "PIP_FIND_LINKS",
+        "PIP_INDEX_URL",
+        "PIP_NO_INDEX",
+        "UV_DEFAULT_INDEX",
+        "UV_EXTRA_INDEX_URL",
+        "UV_FIND_LINKS",
+        "UV_INDEX",
+        "UV_INDEX_URL",
+        "UV_NO_INDEX",
+    }
+)
+
+
+def _command_uses_alternate_package_index(artifact: GuardArtifact) -> bool:
+    flags = set(_string_tuple(artifact.metadata.get("flags")))
+    if flags & _ALTERNATE_PACKAGE_INDEX_FLAGS:
+        return True
+    redacted = _optional_string(artifact.metadata.get("redacted_command")) or ""
+    try:
+        tokens = shlex.split(redacted)
+    except ValueError:
+        return True
+    if any(token.partition("=")[0].upper() in _PACKAGE_SOURCE_ENV_NAMES for token in tokens):
+        return True
+    return any(os.environ.get(name, "").strip() for name in _PACKAGE_SOURCE_ENV_NAMES)
+
+
+def _installed_project_version(project_name: str) -> str | None:
+    """Return the public version of a distribution already running on this device."""
+
+    from importlib.metadata import PackageNotFoundError
+    from importlib.metadata import version as installed_version
+
+    try:
+        found = installed_version(project_name)
+    except PackageNotFoundError:
+        return None
+    try:
+        parsed = Version(found)
+    except InvalidVersion:
+        return None
+    if parsed.local is not None or found != str(parsed):
+        return None
+    return str(parsed)
+
+
+def _own_package_name(target: dict[str, object]) -> str | None:
+    if _optional_string(target.get("ecosystem")) != "pypi":
+        return None
+    if _optional_string(target.get("source_url")) is not None:
+        return None
+    if _optional_string(target.get("source_kind")) is not None:
+        return None
+    raw_spec = _optional_string(target.get("raw_spec")) or ""
+    if "://" in raw_spec or raw_spec.startswith(("git+", "file:", "./", "../", "/")):
+        return None
+    normalized_name = _optional_string(target.get("normalized_name"))
+    if normalized_name is None:
+        normalized_name = _normalize_package_name("pypi", str(target.get("name") or ""))
+    if normalized_name not in _FIRST_PARTY_PYPI_PACKAGES:
+        return None
+    return str(target.get("name") or normalized_name)
+
+
+def _installed_release_reinstall_result(target: dict[str, object]) -> dict[str, object] | None:
+    """Allow only a reinstall of the exact release already running here.
+
+    An unpinned or newer publish stays on review. A compromised pipeline can
+    ship a new version, and the package name alone is not reputation.
+    """
+
+    package_name = _own_package_name(target)
+    requested = _optional_string(target.get("version"))
+    if package_name is None or requested is None:
+        return None
+    normalized_name = _optional_string(target.get("normalized_name")) or _normalize_package_name(
+        "pypi",
+        package_name,
+    )
+    installed = _installed_project_version(normalized_name)
+    if installed is None:
+        return None
+    try:
+        if Version(requested) != Version(installed):
+            return None
+    except InvalidVersion:
+        return None
+    return _heuristic_package_result(
+        target=target,
+        decision="allow",
+        code="installed_release_reinstall",
+        message=(
+            f"{package_name}=={installed} matches the release already running on this device. "
+            "Reinstalling that same release does not select a newly published version."
+        ),
+        severity="low",
+    )
+
+
+def _own_package_review_message(package_name: str) -> str:
+    return (
+        f"HOL Guard cannot automatically allow this {package_name} install. "
+        "Only a reinstall of the release already running on this device, from the default package index, "
+        "skips review. A new publish or another package source stays on review so a compromised release "
+        "cannot install by itself. Approve this install once if you trust it."
+    )
+
+
 def _unknown_package_result(
     target: dict[str, object],
     *,
@@ -3015,14 +3158,16 @@ def _unknown_package_result(
     )
     requires_review = decision in {"ask", "block"}
     package_name = str(target.get("name") or "this package")
-    no_match_message = (
-        (
-            f"Local Guard does not have enough current information to automatically allow {package_name}. "
+    own_package = _own_package_name(target)
+    if requires_review and own_package is not None:
+        no_match_message = _own_package_review_message(own_package)
+    elif requires_review:
+        no_match_message = (
+            f"HOL Guard on this device does not have current package reputation for {package_name}. "
             "Review this install now. Guard Cloud is optional and can add live package reputation."
         )
-        if requires_review
-        else "Guard recorded this package request and will keep watching for new intelligence."
-    )
+    else:
+        no_match_message = "Guard recorded this package request and will keep watching for new intelligence."
     reasons: list[dict[str, object]] = [
         {
             "code": "no_cached_match",
@@ -3064,25 +3209,37 @@ def _fallback_package_results(
         return tuple(bun_fallback_packages)
     lockfile_versions = _lockfile_dependency_versions(workspace_dir, artifact, targets)
     flags = set(_string_tuple(artifact.metadata.get("flags")))
-    return tuple(
-        _unknown_package_result(
-            target,
-            fail_closed_unidentified=fail_closed_unidentified,
-            identity_resolved=(
-                (
-                    _optional_string(target.get("ecosystem")) == "npm"
-                    and "--ignore-scripts" in flags
-                    and _lockfile_target_key(target) in lockfile_versions
-                )
-                or (
-                    verify_registry_identity
-                    and (requested_range := _optional_string(target.get("range"))) is not None
-                    and _registry_resolved_target_version(target=target, requested_range=requested_range) is not None
-                )
-            ),
+    alternate_index = _command_uses_alternate_package_index(artifact)
+    results: list[dict[str, object]] = []
+    for target in targets:
+        if not alternate_index:
+            reinstall = _installed_release_reinstall_result(target)
+            if reinstall is not None:
+                results.append(reinstall)
+                continue
+        results.append(
+            _unknown_package_result(
+                target,
+                fail_closed_unidentified=fail_closed_unidentified,
+                identity_resolved=(
+                    (
+                        _optional_string(target.get("ecosystem")) == "npm"
+                        and "--ignore-scripts" in flags
+                        and _lockfile_target_key(target) in lockfile_versions
+                    )
+                    or (
+                        verify_registry_identity
+                        and (requested_range := _optional_string(target.get("range"))) is not None
+                        and _registry_resolved_target_version(
+                            target=target,
+                            requested_range=requested_range,
+                        )
+                        is not None
+                    )
+                ),
+            )
         )
-        for target in targets
-    )
+    return tuple(results)
 
 
 def _bun_lockfile_binary_fallback_packages(

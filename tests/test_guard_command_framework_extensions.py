@@ -5,8 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
-from codex_plugin_scanner.guard.runtime.command_inspection import inspect_command
 from tests.command_extension_contracts import assert_reviewed_command_cases, assert_safe_command_cases
+from tests.native_command_test_support import inspect_command_native_test as inspect_command
 
 FRAMEWORK_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
     ("php artisan db:wipe", "Laravel database wipe command", "command.framework.laravel.database-wipe"),

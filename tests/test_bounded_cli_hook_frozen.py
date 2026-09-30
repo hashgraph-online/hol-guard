@@ -92,6 +92,7 @@ def test_untrusted_native_proxy_falls_back_to_internal_frozen_bridge(
         "_trusted_desktop_hook_proxy_command",
         lambda executable, config: None,
     )
+    monkeypatch.setattr(bounded_cli_hook_bridge, "isolated_cursor_hook_python", lambda: None)
     command = bounded_cli_hook_bridge.bounded_cli_hook_command(
         python_executable="/app/hol-guard",
         package_root=tmp_path,
@@ -109,6 +110,44 @@ def test_untrusted_native_proxy_falls_back_to_internal_frozen_bridge(
     )
 
     assert command[:2] == ("/app/hol-guard", "__guard-bounded-hook")
+
+
+def test_frozen_bounded_hook_prefers_isolated_stdlib_client(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(bounded_cli_hook_bridge.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(
+        bounded_cli_hook_bridge,
+        "_trusted_desktop_hook_proxy_command",
+        lambda executable, config: None,
+    )
+    monkeypatch.setattr(bounded_cli_hook_bridge, "isolated_cursor_hook_python", lambda: "/usr/bin/python3")
+    guard_home = tmp_path / "guard-home"
+    command = bounded_cli_hook_bridge.bounded_cli_hook_command(
+        python_executable="/app/hol-guard",
+        package_root=tmp_path,
+        guard_home=guard_home,
+        cli_args=(
+            "guard",
+            "hook",
+            "--guard-home",
+            str(guard_home),
+            "--harness",
+            "grok",
+        ),
+        harness="grok",
+        timeout_seconds=25,
+    )
+
+    script = bounded_cli_hook_bridge.bounded_hook_script_path(guard_home, "grok")
+    assert script is not None
+    assert command == ("/usr/bin/python3", "-I", str(script.resolve()))
+    source = script.read_text(encoding="utf-8")
+    assert 'HARNESS = "grok"' in source
+    assert "TIMEOUT_SECONDS = 25" in source
+    assert "daemon --serve" not in source
+    assert "__guard-bounded-hook" not in source
 
 
 def test_desktop_proxy_requires_one_real_team_and_same_bundle(

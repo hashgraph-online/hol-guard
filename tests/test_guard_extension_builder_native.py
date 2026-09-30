@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import os
+import json
 import shutil
 import subprocess
 import sys
@@ -12,9 +12,10 @@ import pytest
 
 from codex_plugin_scanner.guard.extension_builder.kit import build_kit
 from codex_plugin_scanner.guard.extension_builder.models import make_discovery, make_operation
-from codex_plugin_scanner.guard.extension_builder.render_native import test_path as generated_test_path
+from codex_plugin_scanner.guard.extension_builder.native_source_compiler import run_source_compiler
 from codex_plugin_scanner.guard.extension_builder.repository_write import apply_kit
 from codex_plugin_scanner.guard.extension_builder.review import default_review
+from codex_plugin_scanner.guard.runtime.mcp_server_contribution import validate_mcp_contribution_file
 from tests.extension_builder_support import REPOSITORY, make_kit
 
 
@@ -38,46 +39,20 @@ def test_generated_contributions_load_and_run_their_native_cases(tmp_path: Path,
     mcp = make_kit(tmp_path, "mcp", reviewed=True)
     apply_kit(cli, repository, write=True)
     apply_kit(mcp, repository, write=True)
-    environment = os.environ.copy()
-    environment["PYTHONPATH"] = str(repository / "src")
-    environment["PYTHONDONTWRITEBYTECODE"] = "1"
-    environment["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] = "1"
-    for variable in list(environment):
-        if variable.startswith(("COV_CORE_", "COVERAGE_")):
-            environment.pop(variable)
-    for variable in (
-        "PYTEST_ADDOPTS",
-        "COVERAGE_PROCESS_START",
-        "GUARD_PYTEST_DURATION_OUTPUT",
-        "GUARD_PYTEST_UNDER_COVERAGE",
-    ):
-        environment.pop(variable, None)
     staging = subprocess.run(
         [sys.executable, str(repository / "scripts/release/stage_guard_cloud_review_artifacts.py")],
         cwd=repository,
-        env=environment,
         capture_output=True,
         text=True,
         timeout=30,
         check=False,
     )
     assert staging.returncode == 0, staging.stdout + staging.stderr
-    result = subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "pytest",
-            "-q",
-            generated_test_path(cli.discovery.metadata),
-            generated_test_path(mcp.discovery.metadata),
-        ],
-        cwd=repository,
-        env=environment,
-        capture_output=True,
-        text=True,
-        timeout=60,
-        check=False,
+    fixture_path = repository / "tests/fixtures" / f"command-source-{cli.discovery.metadata.slug}.v1.json"
+    native_result = run_source_compiler("test", json.loads(fixture_path.read_text(encoding="utf-8")))
+    assert native_result["ok"] is True
+    mcp_payload = validate_mcp_contribution_file(
+        repository / "contributions/mcp-servers" / f"{mcp.discovery.metadata.contribution_id}.json"
     )
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert "passed" in result.stdout
+    assert mcp_payload["id"] == mcp.discovery.metadata.contribution_id
     assert not list(repository.glob(".hol-guard-*"))

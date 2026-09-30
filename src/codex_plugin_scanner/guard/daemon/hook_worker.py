@@ -17,8 +17,11 @@ Security:
   mechanical emergency-safe action-class floor: local inspection may continue,
   while mutating, network, secret, destructive, and uncertain actions pause.
   Explicit off/shadow have no production semantic fallback. Native block
-  results stay mechanical. Native review pauses the tool and queues an
-  approval-center request; it never escapes to the Python semantic CLI path.
+  results stay mechanical. A command-policy authority block includes a local
+  repair link and does not rebuild protection from the hook. The current
+  action stays denied, and this worker never calls the CLI.
+  Native review pauses the tool and queues an approval-center request; it
+  never escapes to the Python semantic CLI path.
 """
 
 from __future__ import annotations
@@ -78,6 +81,9 @@ class CommandActivityWriter(Protocol):
 
 
 _NATIVE_POLICY_READY_TIMEOUT_SECONDS = _PUBLISH_TIMEOUT_SECONDS
+_TRANSIENT_RESIDENT_PUBLICATION_ERRORS = frozenset(
+    {"native_policy_snapshot_resident_changed", "native_resident_restart_budget_busy"}
+)
 
 
 def _post_tool_unavailable_response(
@@ -232,7 +238,16 @@ class HookWorker(HookWorkerNativeMixin):
             if native_mode() in {"auto", "force"}:
                 wait_until_ready = getattr(self.policy_snapshot_publisher, "wait_until_ready", None)
                 last_error = getattr(self.policy_snapshot_publisher, "last_error", None)
-                if callable(wait_until_ready) and not (isinstance(last_error, str) and last_error.strip()):
+                # A replacement resident can serve persisted policy before the
+                # publisher confirms its new generation. Its restart-budget
+                # lock can also be briefly held by a concurrent native client.
+                # Await the fresh ACK within the existing deadline; unrelated
+                # publication errors still fail immediately.
+                transient_publication_error = (
+                    isinstance(last_error, str) and last_error in _TRANSIENT_RESIDENT_PUBLICATION_ERRORS
+                )
+                no_publication_error = last_error is None or (isinstance(last_error, str) and not last_error.strip())
+                if callable(wait_until_ready) and (transient_publication_error or no_publication_error):
                     readiness_deadline = time.monotonic() + _NATIVE_POLICY_READY_TIMEOUT_SECONDS
                     if deadline is not None:
                         readiness_deadline = min(readiness_deadline, deadline)
@@ -431,6 +446,10 @@ class HookWorker(HookWorkerNativeMixin):
         succeeded: bool,
     ) -> None:
         if self.activity_writer is not None:
+            discovery_writer = getattr(self.activity_writer, "submit_composio_discovery", None)
+            if callable(discovery_writer):
+                with suppress(Exception):
+                    discovery_writer(harness=harness, payload=payload, succeeded=succeeded)
             _ = self.activity_writer.submit_command_activity(
                 harness=harness,
                 event="PostToolUse",

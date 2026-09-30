@@ -88,6 +88,7 @@ from codex_plugin_scanner.guard.store import (
     runtime_tool_action_exact_match_context,
 )
 from codex_plugin_scanner.guard.synced_policy import synced_policy_payload
+from tests.guard_signed_approval_fixtures import write_synthetic_daemon_auth_token
 from tests.policy_bundle_signing_helpers import (
     policy_bundle_test_keyring,
     policy_bundle_test_verification_key,
@@ -721,6 +722,7 @@ clearer UX and an implementation plan with technical references.
         assert all(artifact.artifact_type == "prompt_request" for artifact in artifacts)
         assert all("prompt_summary" in artifact.metadata for artifact in artifacts)
 
+    @pytest.mark.usefixtures("native_command_artifact_reviews")
     def test_guard_hook_uses_process_cwd_for_global_copilot_hooks(self, monkeypatch, tmp_path, capsys) -> None:
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
@@ -1114,6 +1116,7 @@ clearer UX and an implementation plan with technical references.
         assert output["policy_action"] == "warn"
         assert "approval_requests" not in output
 
+    @pytest.mark.usefixtures("native_command_artifact_reviews")
     def test_codex_pre_tool_use_blocks_fd_skill_docs_mutating_sed_exec(
         self,
         monkeypatch,
@@ -1152,6 +1155,7 @@ clearer UX and an implementation plan with technical references.
         assert output["policy_action"] == "block"
         assert "destructive shell command" in output["artifact_name"]
 
+    @pytest.mark.usefixtures("native_command_artifact_reviews")
     def test_codex_pre_tool_use_blocks_fd_skill_docs_metachar_sed_exec(
         self,
         monkeypatch,
@@ -1190,6 +1194,7 @@ clearer UX and an implementation plan with technical references.
         assert output["policy_action"] == "block"
         assert "destructive shell command" in output["artifact_name"]
 
+    @pytest.mark.usefixtures("native_command_artifact_reviews")
     def test_codex_pre_tool_use_blocks_fd_skill_docs_compact_shell_exec(
         self,
         monkeypatch,
@@ -1228,6 +1233,7 @@ clearer UX and an implementation plan with technical references.
         assert output["policy_action"] == "block"
         assert "destructive shell command" in output["artifact_name"]
 
+    @pytest.mark.usefixtures("native_command_artifact_reviews")
     def test_codex_pre_tool_use_blocks_fd_skill_docs_clustered_shell_exec(
         self,
         monkeypatch,
@@ -1266,6 +1272,7 @@ clearer UX and an implementation plan with technical references.
         assert output["policy_action"] == "block"
         assert "destructive shell command" in output["artifact_name"]
 
+    @pytest.mark.usefixtures("native_command_artifact_reviews")
     def test_codex_pre_tool_use_blocks_fd_implicit_root_sed_exec(
         self,
         monkeypatch,
@@ -1304,6 +1311,7 @@ clearer UX and an implementation plan with technical references.
         assert output["policy_action"] == "block"
         assert "destructive shell command" in output["artifact_name"]
 
+    @pytest.mark.usefixtures("native_command_artifact_reviews")
     def test_codex_pre_tool_use_blocks_fd_skill_doc_symlink_exec(
         self,
         monkeypatch,
@@ -1347,6 +1355,7 @@ clearer UX and an implementation plan with technical references.
         assert output["policy_action"] == "block"
         assert "destructive shell command" in output["artifact_name"]
 
+    @pytest.mark.usefixtures("native_command_artifact_reviews")
     def test_codex_pre_tool_use_blocks_fd_follow_symlink_descendant_exec(
         self,
         monkeypatch,
@@ -1391,6 +1400,7 @@ clearer UX and an implementation plan with technical references.
         assert output["policy_action"] == "block"
         assert output["approval_requests"] == []
 
+    @pytest.mark.usefixtures("native_command_artifact_reviews")
     def test_codex_pre_tool_use_blocks_fd_search_path_sensitive_dir_exec(
         self,
         monkeypatch,
@@ -4918,6 +4928,7 @@ clearer UX and an implementation plan with technical references.
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         _build_guard_fixture(home_dir, workspace_dir)
+        write_synthetic_daemon_auth_token(home_dir)
         event = {
             "hook_event_name": "PreToolUse",
             "artifact_id": "codex:project:dangerous-command",
@@ -4951,6 +4962,7 @@ clearer UX and an implementation plan with technical references.
         assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
         assert "Open HOL Guard to approve or keep this blocked" in reason
         assert "http://127.0.0.1:4455/requests/request-1" in reason
+        assert "guard-token=gld1." in reason
         assert "Approve it in HOL Guard, then retry." not in reason
 
     def test_guard_hook_fallback_artifact_id_uses_scope(self, tmp_path, capsys, monkeypatch):
@@ -7792,7 +7804,8 @@ def test_guard_hook_emits_copilot_native_allow_response_for_perl_sleep_wait(
     assert output == {"permissionDecision": "allow"}
 
 
-def test_guard_hook_emits_copilot_native_allow_response_for_git_commit_with_coauthored_by_trailer(
+@pytest.mark.usefixtures("native_command_artifact_reviews")
+def test_guard_hook_emits_copilot_native_deny_for_unsupported_coauthored_commit_redirect(
     tmp_path,
     capsys,
     monkeypatch,
@@ -8907,6 +8920,7 @@ def test_guard_hook_claude_ask_user_question_allow_does_not_lower_current_reappr
     assert policies[0]["source"] == "claude-ask-user-question"
 
 
+@pytest.mark.usefixtures("native_command_artifact_reviews")
 def test_guard_hook_claude_docker_saved_allow_does_not_lower_terminal_block(
     tmp_path,
     capsys,
@@ -13087,6 +13101,7 @@ def test_approval_surface_policy_disables_auto_open_when_flow_forbids_browser():
     )
 
 
+@pytest.mark.usefixtures("native_command_artifact_reviews")
 def test_hermes_pretool_does_not_queue_terminal_blocks_for_same_channel_delivery(
     tmp_path,
     capsys,
@@ -13133,7 +13148,10 @@ def test_hermes_pretool_does_not_queue_terminal_blocks_for_same_channel_delivery
                 {
                     "event": "PreToolUse",
                     "tool_name": "shell",
-                    "tool_input": {"command": "docker login ghcr.io", "docker_mode": True},
+                    "tool_input": {
+                        "command": "docker login ghcr.io && echo MALICIOUS > dangerous-marker.json",
+                        "docker_mode": True,
+                    },
                     "source_scope": "project",
                 }
             )
@@ -14782,6 +14800,7 @@ def test_runtime_hook_integrity_rejection_outranks_valid_exact_one_shot_allow(tm
     assert claimed_at is None
 
 
+@pytest.mark.usefixtures("native_command_artifact_reviews")
 def test_runtime_hook_saved_allow_invalidates_when_path_resolves_executable_elsewhere(
     tmp_path,
     capsys,
@@ -15445,6 +15464,7 @@ def test_guard_hook_saved_artifact_approval_never_lowers_current_payload_block(t
     assert third_output["approval_requests"] == []
 
 
+@pytest.mark.usefixtures("native_command_artifact_reviews")
 def test_guard_hook_codex_emits_native_deny_for_sensitive_bash_command(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
@@ -15781,6 +15801,7 @@ def test_guard_hook_codex_strict_default_still_denies_destructive_shell_command(
     assert "destructive shell command" in payload["hookSpecificOutput"]["permissionDecisionReason"]
 
 
+@pytest.mark.usefixtures("native_command_artifact_reviews")
 def test_guard_hook_codex_blocks_github_token_substitution_command(
     tmp_path,
     capsys,
@@ -16378,6 +16399,7 @@ def test_guard_hook_codex_user_prompt_submit_secret_read_includes_approval_url(
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
+    write_synthetic_daemon_auth_token(home_dir)
     _write_text(home_dir / "config.toml", "approval_wait_timeout_seconds = 0\n")
     monkeypatch.setattr(
         guard_commands_module, "schedule_guard_daemon_ensure", lambda _guard_home, **_kwargs: "http://127.0.0.1:4455"
@@ -16411,6 +16433,7 @@ def test_guard_hook_codex_user_prompt_submit_secret_read_includes_approval_url(
     assert "Open HOL Guard" in payload["systemMessage"]
     assert "approve" in payload["systemMessage"].lower()
     assert "http://127.0.0.1:4455/requests/" in payload["reason"]
+    assert "guard-token=gld1." in payload["reason"]
     pending = GuardStore(home_dir).list_approval_requests(limit=10)
     assert len(pending) == 1
     assert pending[0]["artifact_type"] == "prompt_request"
@@ -16505,6 +16528,7 @@ def test_guard_hook_codex_user_prompt_submit_queues_retryable_browser_approval(
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
+    write_synthetic_daemon_auth_token(home_dir)
     _write_text(home_dir / "config.toml", "approval_wait_timeout_seconds = 2\n")
     monkeypatch.setattr(
         guard_commands_module, "schedule_guard_daemon_ensure", lambda _guard_home, **_kwargs: "http://127.0.0.1:4455"
@@ -16534,6 +16558,7 @@ def test_guard_hook_codex_user_prompt_submit_queues_retryable_browser_approval(
     pending = store.list_approval_requests(limit=10)
     assert len(pending) == 1
     assert f"/requests/{pending[0]['request_id']}" in payload["reason"]
+    assert "guard-token=gld1." in payload["reason"]
 
 
 def test_guard_hook_codex_user_prompt_saved_artifact_allow_does_not_lower_reapproval(
@@ -18437,6 +18462,7 @@ def test_guard_hook_codex_user_prompt_submit_allows_outreach_message_context(
     assert GuardStore(home_dir).list_approval_requests(limit=10) == []
 
 
+@pytest.mark.usefixtures("native_command_artifact_reviews")
 def test_guard_hook_codex_permission_request_denies_terminal_destructive_action(
     tmp_path,
     capsys,
@@ -18504,6 +18530,7 @@ def test_guard_hook_codex_permission_request_denies_blocked_action(
     assert "interrupt" not in decision
 
 
+@pytest.mark.usefixtures("native_command_artifact_reviews")
 def test_guard_hook_codex_blocks_local_shell_script_that_posts_fake_credentials(
     tmp_path,
     capsys,
@@ -18583,6 +18610,7 @@ def test_guard_hook_codex_post_tool_use_blocks_credential_looking_output(
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
+    write_synthetic_daemon_auth_token(home_dir)
     _write_text(home_dir / "config.toml", "approval_wait_timeout_seconds = 0\n")
     event = {
         "hook_event_name": "PostToolUse",
@@ -18622,6 +18650,7 @@ def test_guard_hook_codex_post_tool_use_blocks_credential_looking_output(
     assert "HOL Guard" in payload["stopReason"]
     assert "credential-looking output" in payload["stopReason"]
     assert "http://127.0.0.1:4455/requests/" in payload["stopReason"]
+    assert "guard-token=gld1." in payload["stopReason"]
 
 
 def test_guard_hook_codex_post_tool_use_blocks_authrc_output(
@@ -18893,6 +18922,7 @@ def test_guard_hook_codex_post_tool_use_queues_retryable_browser_approval(
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
+    write_synthetic_daemon_auth_token(home_dir)
     _write_text(home_dir / "config.toml", "approval_wait_timeout_seconds = 2\n")
     event = {
         "hook_event_name": "PostToolUse",
@@ -18932,6 +18962,7 @@ def test_guard_hook_codex_post_tool_use_queues_retryable_browser_approval(
     pending = store.list_approval_requests(limit=10)
     assert len(pending) == 1
     assert f"/requests/{pending[0]['request_id']}" in payload["reason"]
+    assert "guard-token=gld1." in payload["reason"]
 
 
 def test_guard_hook_codex_direct_denial_does_not_inline_complete_browser_approval(

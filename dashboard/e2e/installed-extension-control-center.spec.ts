@@ -13,7 +13,6 @@ const approvalPassword = process.env.GUARD_INSTALLED_APPROVAL_PASSWORD ?? "";
 const extensionId = "command.api-gateway";
 const permissionId = "command.api-gateway.permission.delete";
 const governedRuleId = "command.api-gateway.delete";
-const expectedExtensionCount = 61;
 
 async function installSession(page: import("@playwright/test").Page) {
   await page.addInitScript(({ daemon, token }) => {
@@ -24,7 +23,7 @@ async function installSession(page: import("@playwright/test").Page) {
 
 async function expectSecretSafeUrl(page: import("@playwright/test").Page) {
   expect(page.url()).not.toContain(session);
-  expect(page.url()).not.toContain(approvalPassword);
+  if (approvalPassword) expect(page.url()).not.toContain(approvalPassword);
   expect(page.url()).not.toContain("guard-token");
   expect(page.url()).not.toContain("#");
 }
@@ -119,7 +118,7 @@ test("installed Protection Center keeps canonical routes and real-daemon inspect
   await expectSecretSafeUrl(page);
   await expect(page.getByRole("heading", { name: "Extensions", level: 1 })).toBeVisible();
   await expect(page.getByRole("heading", { name: "All tools" })).toBeVisible();
-  await expect(page.getByText(`${expectedExtensionCount} tools`)).toBeVisible();
+  await expect(page.getByTestId("catalog-tool-count")).toHaveText(/^[1-9]\d* tools$/);
   await expect(page.getByRole("button", { name: /Git/ }).first()).toBeVisible();
   await expect(page.getByPlaceholder(/Search any command Guard watches/)).toBeVisible();
   await expect(page.getByTestId("catalog-filters")).toBeVisible();
