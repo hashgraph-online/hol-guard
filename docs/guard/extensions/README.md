@@ -133,6 +133,7 @@ Protection model meanings:
 
 | Extension | What it protects | Rules | Protection model |
 | :--- | :--- | ---: | :--- |
+| `command.mcp-fetchsandbox` | Reviews the FetchSandbox tools that upload a workspace for remote analysis or publish evidence to a shareable receipt, and leaves catalog and run listing automatic. | 0 | External opt-in |
 | `command.mcp-filesystem` | Reviews official filesystem MCP tools. Off until you turn it on. | 0 | External opt-in |
 | `command.mcp-instapods` | Reviews sensitive InstaPods pod, billing, command execution, and file-write tools for the official hosted MCP server. | 0 | External opt-in |
 | `command.mcp-pr-ui-compare` | Reviews PR UI Compare tools that run project install and start commands, write artifacts outside the repository, and download Chromium or FFmpeg. Off until you turn it on. | 0 | External opt-in |
