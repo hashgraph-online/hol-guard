@@ -7,7 +7,7 @@ from typing import Final
 
 from .command_model import CanonicalCommand, parse_shell_command
 
-_XARGS_VALUE_OPTIONS = frozenset(
+XARGS_VALUE_OPTIONS = frozenset(
     {
         "--arg-file",
         "--delimiter",
@@ -59,7 +59,7 @@ def launcher_child_commands(executable: str, arguments: tuple[str, ...]) -> tupl
 
     children: tuple[tuple[str, ...], ...] = ()
     if executable == "xargs":
-        children = _possible_children(arguments, _XARGS_VALUE_OPTIONS)
+        children = _possible_children(arguments, XARGS_VALUE_OPTIONS)
     elif executable == "parallel":
         children = _possible_children(arguments, _PARALLEL_VALUE_OPTIONS)
     elif executable == "find":
@@ -124,4 +124,4 @@ def _find_children(arguments: tuple[str, ...]) -> tuple[tuple[str, ...], ...]:
     return tuple(children)
 
 
-__all__ = ("launcher_child_commands",)
+__all__ = ("XARGS_VALUE_OPTIONS", "launcher_child_commands")
