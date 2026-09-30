@@ -136,9 +136,9 @@ if TYPE_CHECKING:
 
 
 from ..action_lattice import (
-    coerce_guard_action,
     guard_action_severity,
     most_restrictive_guard_action,
+    normalize_guard_action,
     normalize_guard_action_result,
 )
 from ..local_cli_hook import apply_local_cli_grant, observe_unlisted_cli
@@ -808,10 +808,12 @@ def run_native_generic_payload(
         current_action_inputs.append(payload_action_normalization.action)
     native_edge_action: GuardAction | None = None
     if isinstance(native_edge_result, Mapping):
-        native_edge_action = coerce_guard_action(
-            native_edge_result.get("policy_action") or native_edge_result.get("minimum_action")
-        )
-        if native_edge_action is None and native_edge_result.get("decision") == "deny":
+        edge_action_value = native_edge_result.get("policy_action") or native_edge_result.get("minimum_action")
+        if edge_action_value is not None:
+            # The edge result is an enforcement input: a present but
+            # unrecognized action fails closed instead of skipping the floor.
+            native_edge_action = normalize_guard_action(edge_action_value, unknown_action="block")
+        elif native_edge_result.get("decision") == "deny":
             native_edge_action = "block"
         if hook_event_name == "PostToolUse" and native_edge_action in {"block", "sandbox-required"}:
             # PostToolUse cannot undo the finished action; the edge deny masks
