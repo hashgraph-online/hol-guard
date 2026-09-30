@@ -32754,7 +32754,6 @@ function App() {
         onRetry: handleRetry,
         onRepair: handleRepair,
         onGuardReconnected: handleRetry,
-        enableUpdateStatus: view !== "inbox",
         onClearEvidence: handleClearEvidence,
         fleetContent: runtime.kind === "ready" ? /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(
           FleetWorkspace,

@@ -138,7 +138,10 @@ def run_native_copilot_pretool(
             native_edge_action = "block"
         else:
             native_edge_action = None
-        if native_edge_action is not None:
+        # PreToolUse floors only on a hard native enforcement verdict; the
+        # edge's review-tier "unproven" deny is provenance here — artifact
+        # adjudication, grants, and configured policy settle reviewability.
+        if native_edge_action in {"block", "sandbox-required"}:
             # The native edge verdict is a non-bypassable floor on the
             # emitted Copilot decision.
             policy_action = most_restrictive_guard_action(policy_action, native_edge_action)

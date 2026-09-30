@@ -815,10 +815,17 @@ def run_native_generic_payload(
             native_edge_action = normalize_guard_action(edge_action_value, unknown_action="block")
         elif native_edge_result.get("decision") == "deny":
             native_edge_action = "block"
-        if hook_event_name == "PostToolUse" and native_edge_action in {"block", "sandbox-required"}:
-            # PostToolUse cannot undo the finished action; the edge deny masks
-            # the emitted output while the policy surface stays reviewable.
-            native_edge_action = "require-reapproval"
+        if hook_event_name == "PostToolUse":
+            if native_edge_action in {"block", "sandbox-required"}:
+                # PostToolUse cannot undo the finished action; the edge deny masks
+                # the emitted output while the policy surface stays reviewable.
+                native_edge_action = "require-reapproval"
+        elif native_edge_action not in {"block", "sandbox-required"}:
+            # On PreToolUse/UserPromptSubmit the edge's review-tier "unproven"
+            # verdict is provenance — local grants, explicit permissions, and
+            # configured policy settle reviewability. Only a hard native
+            # enforcement verdict floors the emitted decision.
+            native_edge_action = None
         if native_edge_action is not None:
             # The edge action is a floor on the composed action, not a final
             # verdict: local grants, saved decisions, and approval reuse are

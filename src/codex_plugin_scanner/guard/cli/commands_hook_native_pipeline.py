@@ -47,9 +47,9 @@ from .commands_support_claude_approval import (
     _is_claude_guard_approval_question,
     _persist_claude_guard_question_decision,
 )
-from .commands_support_hook_state import _load_single_claude_pending_permission
 from .commands_support_connect import _synced_policy_payload
 from .commands_support_hook_payload import _hook_action_envelope, _normalize_hook_payload
+from .commands_support_hook_state import _load_single_claude_pending_permission
 from .commands_support_interaction import _emit
 from .commands_support_permission_store import _discard_claude_pending_permissions
 from .commands_support_runtime_artifacts import _hook_event_name, _hook_runtime_artifact
