@@ -9,18 +9,9 @@ from collections.abc import Mapping
 from types import MappingProxyType
 
 from .runtime.command_extensions import CommandSafetyExtensionRegistry
-from .runtime.command_matcher_contracts import MatcherContractError, canonical_contract_value
-from .runtime.extension_control_authority import ExtensionControlAuthorityError
 
 _CACHE_LOCK = threading.Lock()
 _manifest_cache: tuple[object, object, str, Mapping[str, str]] | None = None
-
-
-def _canonical_contract_value(value: object) -> object:
-    try:
-        return canonical_contract_value(value)
-    except MatcherContractError as error:
-        raise ExtensionControlAuthorityError(str(error)) from error
 
 
 def catalog_target_manifest(registry: CommandSafetyExtensionRegistry) -> dict[str, str]:
@@ -60,9 +51,10 @@ def _build_catalog_target_manifest(registry: CommandSafetyExtensionRegistry) -> 
                 "risk_classes": rule.risk_classes,
                 "action_classes": rule.action_classes,
                 "default_mode": rule.default_mode,
-                "matcher": _canonical_contract_value(rule.matcher),
+                "matcher_kind": rule.matcher_kind,
+                "matcher_contract_digest": rule.matcher_contract_digest,
                 "safe_variants": tuple(
-                    (item.variant_id, _canonical_contract_value(item.matcher)) for item in rule.safe_variants
+                    (item.variant_id, item.matcher_kind, item.matcher_contract_digest) for item in rule.safe_variants
                 ),
                 "compatibility_fallback": rule.compatibility_fallback,
                 "family": rule.family,

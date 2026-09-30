@@ -1,0 +1,923 @@
+{
+  "extension": {
+    "action_classes": [
+      "GitHub routine pull-request merge command",
+      "GitHub workflow rerun",
+      "GitHub local configuration write",
+      "GitHub bounded maintenance command",
+      "GitHub content mutation command",
+      "GitHub merge command",
+      "GitHub administrator pull-request merge command",
+      "GitHub release publication command",
+      "GitHub workflow mutation command",
+      "GitHub force mutation command",
+      "GitHub delete command",
+      "GitHub secret mutation command",
+      "GitHub access mutation command",
+      "GitHub remote mutation command",
+      "Unverified GitHub command capability"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews distinct GitHub maintenance, content, merge, publication, workflow, and control effects.",
+    "ecosystem_ids": [],
+    "executables": [],
+    "extension_id": "command.github",
+    "homepage": null,
+    "icon": {
+      "kind": "none"
+    },
+    "license": null,
+    "name": "GitHub capability protection",
+    "permissions": [
+      {
+        "action_classes": [],
+        "baseline_floor": "allow",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Reads local github state without changing state.",
+        "example_command": "gh auth status",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "local GitHub state",
+        "permission_id": "command.github.permission.read-local",
+        "replacement_permission_id": null,
+        "risk_tier": "low",
+        "safer_guidance": [
+          "Keep the operation read-only or limited to opening a pull-request proposal."
+        ],
+        "typed_capabilities": [
+          "read_local"
+        ]
+      },
+      {
+        "action_classes": [],
+        "baseline_floor": "allow",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Reads remote github state without changing state.",
+        "example_command": "gh pr view 123",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "remote GitHub state",
+        "permission_id": "command.github.permission.read-remote",
+        "replacement_permission_id": null,
+        "risk_tier": "low",
+        "safer_guidance": [
+          "Keep the operation read-only or limited to opening a pull-request proposal."
+        ],
+        "typed_capabilities": [
+          "read_remote"
+        ]
+      },
+      {
+        "action_classes": [],
+        "baseline_floor": "allow",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Creates a pull-request proposal without merging it or changing repository controls.",
+        "example_command": "gh pr create --title \"Fix login\" --body \"Summary\"",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "pull-request proposal",
+        "permission_id": "command.github.permission.propose-remote",
+        "replacement_permission_id": null,
+        "risk_tier": "low",
+        "safer_guidance": [
+          "Keep the operation read-only or limited to opening a pull-request proposal."
+        ],
+        "typed_capabilities": [
+          "propose_remote"
+        ]
+      },
+      {
+        "action_classes": [
+          "GitHub routine pull-request merge command"
+        ],
+        "baseline_floor": "allow",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Completes a statically bounded squash pull-request merge, optionally cleaning up its merged head branch.",
+        "example_command": "gh pr merge 123 --squash",
+        "family": "gh-pr-merge",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "routine squash pull-request merge",
+        "permission_id": "command.github.permission.routine-merge-remote",
+        "replacement_permission_id": null,
+        "risk_tier": "low",
+        "safer_guidance": [
+          "Keep the operation read-only or limited to opening a pull-request proposal."
+        ],
+        "typed_capabilities": [
+          "routine_merge_remote"
+        ]
+      },
+      {
+        "action_classes": [],
+        "baseline_floor": "allow",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Resolves one statically bounded pull-request review thread.",
+        "example_command": "gh api graphql -f query=resolveReviewThread",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "routine review-thread resolution",
+        "permission_id": "command.github.permission.routine-review-thread-remote",
+        "replacement_permission_id": null,
+        "risk_tier": "low",
+        "safer_guidance": [
+          "Keep the operation read-only or limited to opening a pull-request proposal."
+        ],
+        "typed_capabilities": [
+          "routine_review_thread_remote"
+        ]
+      },
+      {
+        "action_classes": [
+          "GitHub workflow rerun"
+        ],
+        "baseline_floor": "require-reapproval",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Retries only failed jobs from one existing GitHub Actions run.",
+        "example_command": "gh run rerun 1234567890 --failed",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "routine failed-job rerun",
+        "permission_id": "command.github.permission.routine-workflow-remote",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect the exact repository, resource, and operation before confirming it."
+        ],
+        "typed_capabilities": [
+          "routine_workflow_remote"
+        ]
+      },
+      {
+        "action_classes": [
+          "GitHub local configuration write"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies GitHub CLI operations that change local repository configuration.",
+        "example_command": "gh repo set-default owner/repo",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "GitHub local configuration write",
+        "permission_id": "command.github.permission.write-local",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect the exact repository, resource, and operation before confirming it."
+        ],
+        "typed_capabilities": [
+          "write_local"
+        ]
+      },
+      {
+        "action_classes": [
+          "GitHub bounded maintenance command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies bounded github maintenance operations that change or may change GitHub-hosted state.",
+        "example_command": "gh pr ready 123",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Bounded GitHub maintenance",
+        "permission_id": "command.github.permission.maintain-remote",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect the exact repository, resource, and operation before confirming it."
+        ],
+        "typed_capabilities": [
+          "maintain_remote"
+        ]
+      },
+      {
+        "action_classes": [
+          "GitHub content mutation command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies github content mutation operations that change or may change GitHub-hosted state.",
+        "example_command": "gh issue close 123",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "GitHub content mutation",
+        "permission_id": "command.github.permission.content-remote",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect the exact repository, resource, and operation before confirming it."
+        ],
+        "typed_capabilities": [
+          "content_remote"
+        ]
+      },
+      {
+        "action_classes": [
+          "GitHub merge command"
+        ],
+        "baseline_floor": "require-reapproval",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies github pull-request merge operations that change or may change GitHub-hosted state.",
+        "example_command": "gh pr merge 123 --merge",
+        "family": "gh-pr-merge",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "GitHub pull-request merge",
+        "permission_id": "command.github.permission.merge-remote",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect the exact repository, resource, and operation before confirming it."
+        ],
+        "typed_capabilities": [
+          "merge_remote"
+        ]
+      },
+      {
+        "action_classes": [
+          "GitHub administrator pull-request merge command"
+        ],
+        "baseline_floor": "require-reapproval",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies github administrator pull-request merge operations that change or may change GitHub-hosted state.",
+        "example_command": "gh pr merge 123 --admin",
+        "family": "gh-pr-merge",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "GitHub administrator pull-request merge",
+        "permission_id": "command.github.permission.merge-admin",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect the exact repository, resource, and operation before confirming it."
+        ],
+        "typed_capabilities": [
+          "admin_merge_remote"
+        ]
+      },
+      {
+        "action_classes": [
+          "GitHub release publication command"
+        ],
+        "baseline_floor": "require-reapproval",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies github release publication operations that change or may change GitHub-hosted state.",
+        "example_command": "gh release create v1.2.3",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "GitHub release publication",
+        "permission_id": "command.github.permission.publish-remote",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect the exact repository, resource, and operation before confirming it."
+        ],
+        "typed_capabilities": [
+          "publish_remote"
+        ]
+      },
+      {
+        "action_classes": [
+          "GitHub workflow mutation command"
+        ],
+        "baseline_floor": "require-reapproval",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies github workflow mutation operations that change or may change GitHub-hosted state.",
+        "example_command": "gh workflow run deploy.yml",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "GitHub workflow mutation",
+        "permission_id": "command.github.permission.workflow-remote",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect the exact repository, resource, and operation before confirming it."
+        ],
+        "typed_capabilities": [
+          "workflow_remote"
+        ]
+      },
+      {
+        "action_classes": [
+          "GitHub force mutation command"
+        ],
+        "baseline_floor": "block",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies forced github mutation operations that change or may change GitHub-hosted state.",
+        "example_command": "gh repo sync owner/repo --force",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Forced GitHub mutation",
+        "permission_id": "command.github.permission.force-remote",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect the exact repository, resource, and operation before confirming it."
+        ],
+        "typed_capabilities": [
+          "force_remote"
+        ]
+      },
+      {
+        "action_classes": [
+          "GitHub delete command"
+        ],
+        "baseline_floor": "require-reapproval",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies github deletion operations that change or may change GitHub-hosted state.",
+        "example_command": "gh repo delete owner/repo",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "GitHub deletion",
+        "permission_id": "command.github.permission.delete-remote",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect the exact repository, resource, and operation before confirming it."
+        ],
+        "typed_capabilities": [
+          "delete_remote"
+        ]
+      },
+      {
+        "action_classes": [
+          "GitHub secret mutation command"
+        ],
+        "baseline_floor": "block",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies github secret mutation operations that change or may change GitHub-hosted state.",
+        "example_command": "gh secret set DEPLOY_TOKEN",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "GitHub secret mutation",
+        "permission_id": "command.github.permission.secret-remote",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect the exact repository, resource, and operation before confirming it."
+        ],
+        "typed_capabilities": [
+          "secret_remote"
+        ]
+      },
+      {
+        "action_classes": [
+          "GitHub access mutation command"
+        ],
+        "baseline_floor": "require-reapproval",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies github access mutation operations that change or may change GitHub-hosted state.",
+        "example_command": "gh repo edit owner/repo --visibility private",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "GitHub access mutation",
+        "permission_id": "command.github.permission.access-remote",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect the exact repository, resource, and operation before confirming it."
+        ],
+        "typed_capabilities": [
+          "access_remote"
+        ]
+      },
+      {
+        "action_classes": [
+          "GitHub remote mutation command"
+        ],
+        "baseline_floor": "require-reapproval",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies github remote mutation operations that change or may change GitHub-hosted state.",
+        "example_command": "gh api -X POST /repos/OWNER/REPO/dispatches",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "GitHub remote mutation",
+        "permission_id": "command.github.permission.mutate-remote",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect the exact repository, resource, and operation before confirming it."
+        ],
+        "typed_capabilities": [
+          "mutate_remote"
+        ]
+      },
+      {
+        "action_classes": [
+          "Unverified GitHub command capability"
+        ],
+        "baseline_floor": "require-reapproval",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies unverified github command capability operations that change or may change GitHub-hosted state.",
+        "example_command": "gh extension run custom-tool",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Unverified GitHub command capability",
+        "permission_id": "command.github.permission.unknown",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect the exact repository, resource, and operation before confirming it."
+        ],
+        "typed_capabilities": [
+          "unknown"
+        ]
+      }
+    ],
+    "project_markers": [],
+    "publisher": null,
+    "reference_urls": [
+      "https://cli.github.com/manual/"
+    ],
+    "required": false,
+    "risk_classes": [
+      "destructive_shell",
+      "network_egress"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "GitHub routine pull-request merge command"
+        ],
+        "default_mode": "disabled",
+        "description": "Completes a statically bounded squash pull-request merge, optionally cleaning up its merged head branch.",
+        "family": null,
+        "matcher": null,
+        "native_capability": "command.github.routine-merge.v1",
+        "permission_id": "command.github.permission.routine-merge-remote",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.github.routine-merge",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Keep the operation read-only or limited to opening a pull-request proposal."
+        ],
+        "severity": "low",
+        "title": "routine squash pull-request merge"
+      },
+      {
+        "action_classes": [
+          "GitHub workflow rerun"
+        ],
+        "default_mode": "review",
+        "description": "Retries only failed jobs from one existing GitHub Actions run.",
+        "family": null,
+        "matcher": null,
+        "native_capability": "command.github.workflow-mutation.v1",
+        "permission_id": "command.github.permission.routine-workflow-remote",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.github.workflow-mutation",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Inspect the exact repository, resource, and operation before confirming it."
+        ],
+        "severity": "high",
+        "title": "routine failed-job rerun"
+      },
+      {
+        "action_classes": [
+          "GitHub local configuration write"
+        ],
+        "default_mode": "review",
+        "description": "Identifies GitHub CLI operations that change local repository configuration.",
+        "family": null,
+        "matcher": null,
+        "native_capability": "command.github.local-write.v1",
+        "permission_id": "command.github.permission.write-local",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.github.local-write",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Inspect the exact repository, resource, and operation before confirming it."
+        ],
+        "severity": "high",
+        "title": "GitHub local configuration write"
+      },
+      {
+        "action_classes": [
+          "GitHub bounded maintenance command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies bounded github maintenance operations that change or may change GitHub-hosted state.",
+        "family": null,
+        "matcher": null,
+        "native_capability": "command.github.maintenance.v1",
+        "permission_id": "command.github.permission.maintain-remote",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.github.maintenance",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Inspect the exact repository, resource, and operation before confirming it."
+        ],
+        "severity": "high",
+        "title": "Bounded GitHub maintenance"
+      },
+      {
+        "action_classes": [
+          "GitHub content mutation command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies github content mutation operations that change or may change GitHub-hosted state.",
+        "family": null,
+        "matcher": null,
+        "native_capability": "command.github.content.v1",
+        "permission_id": "command.github.permission.content-remote",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.github.content",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Inspect the exact repository, resource, and operation before confirming it."
+        ],
+        "severity": "high",
+        "title": "GitHub content mutation"
+      },
+      {
+        "action_classes": [
+          "GitHub merge command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies github pull-request merge operations that change or may change GitHub-hosted state.",
+        "family": null,
+        "matcher": null,
+        "native_capability": "command.github.merge.v1",
+        "permission_id": "command.github.permission.merge-remote",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.github.merge",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Inspect the exact repository, resource, and operation before confirming it."
+        ],
+        "severity": "high",
+        "title": "GitHub pull-request merge"
+      },
+      {
+        "action_classes": [
+          "GitHub administrator pull-request merge command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies github administrator pull-request merge operations that change or may change GitHub-hosted state.",
+        "family": null,
+        "matcher": null,
+        "native_capability": "command.github.admin-merge.v1",
+        "permission_id": "command.github.permission.merge-admin",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.github.admin-merge",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Inspect the exact repository, resource, and operation before confirming it."
+        ],
+        "severity": "high",
+        "title": "GitHub administrator pull-request merge"
+      },
+      {
+        "action_classes": [
+          "GitHub release publication command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies github release publication operations that change or may change GitHub-hosted state.",
+        "family": null,
+        "matcher": null,
+        "native_capability": "command.github.publish.v1",
+        "permission_id": "command.github.permission.publish-remote",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.github.publish",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Inspect the exact repository, resource, and operation before confirming it."
+        ],
+        "severity": "high",
+        "title": "GitHub release publication"
+      },
+      {
+        "action_classes": [
+          "GitHub workflow mutation command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies github workflow mutation operations that change or may change GitHub-hosted state.",
+        "family": null,
+        "matcher": null,
+        "native_capability": "command.github.workflow.v1",
+        "permission_id": "command.github.permission.workflow-remote",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.github.workflow",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Inspect the exact repository, resource, and operation before confirming it."
+        ],
+        "severity": "high",
+        "title": "GitHub workflow mutation"
+      },
+      {
+        "action_classes": [
+          "GitHub force mutation command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies forced github mutation operations that change or may change GitHub-hosted state.",
+        "family": null,
+        "matcher": null,
+        "native_capability": "command.github.force.v1",
+        "permission_id": "command.github.permission.force-remote",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.github.force",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Inspect the exact repository, resource, and operation before confirming it."
+        ],
+        "severity": "high",
+        "title": "Forced GitHub mutation"
+      },
+      {
+        "action_classes": [
+          "GitHub delete command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies github deletion operations that change or may change GitHub-hosted state.",
+        "family": null,
+        "matcher": null,
+        "native_capability": "command.github.delete.v1",
+        "permission_id": "command.github.permission.delete-remote",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.github.delete",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Inspect the exact repository, resource, and operation before confirming it."
+        ],
+        "severity": "high",
+        "title": "GitHub deletion"
+      },
+      {
+        "action_classes": [
+          "GitHub secret mutation command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies github secret mutation operations that change or may change GitHub-hosted state.",
+        "family": null,
+        "matcher": null,
+        "native_capability": "command.github.secret.v1",
+        "permission_id": "command.github.permission.secret-remote",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.github.secret",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Inspect the exact repository, resource, and operation before confirming it."
+        ],
+        "severity": "high",
+        "title": "GitHub secret mutation"
+      },
+      {
+        "action_classes": [
+          "GitHub access mutation command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies github access mutation operations that change or may change GitHub-hosted state.",
+        "family": null,
+        "matcher": null,
+        "native_capability": "command.github.access.v1",
+        "permission_id": "command.github.permission.access-remote",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.github.access",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Inspect the exact repository, resource, and operation before confirming it."
+        ],
+        "severity": "high",
+        "title": "GitHub access mutation"
+      },
+      {
+        "action_classes": [
+          "GitHub remote mutation command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies github remote mutation operations that change or may change GitHub-hosted state.",
+        "family": null,
+        "matcher": null,
+        "native_capability": "command.github.mutation.v1",
+        "permission_id": "command.github.permission.mutate-remote",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.github.mutation",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Inspect the exact repository, resource, and operation before confirming it."
+        ],
+        "severity": "high",
+        "title": "GitHub remote mutation"
+      },
+      {
+        "action_classes": [
+          "Unverified GitHub command capability"
+        ],
+        "default_mode": "review",
+        "description": "Identifies unverified github command capability operations that change or may change GitHub-hosted state.",
+        "family": null,
+        "matcher": null,
+        "native_capability": "command.github.unknown.v1",
+        "permission_id": "command.github.permission.unknown",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.github.unknown",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Inspect the exact repository, resource, and operation before confirming it."
+        ],
+        "severity": "high",
+        "title": "Unverified GitHub command capability"
+      }
+    ],
+    "safer_alternatives": [
+      "Inspect the exact repository, resource, and operation before confirming it."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

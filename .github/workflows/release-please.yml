@@ -13,7 +13,6 @@ concurrency:
 jobs:
   release-please:
     name: Open or tag the next stable release
-    if: github.run_attempt == 1
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -24,19 +23,27 @@ jobs:
       sha: ${{ steps.release.outputs.sha }}
       version: ${{ steps.release.outputs.version }}
     steps:
+      - name: Require a token that can open pull requests
+        env:
+          RELEASE_PLEASE_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+        run: |
+          if [[ -z "$RELEASE_PLEASE_TOKEN" ]]; then
+            echo "RELEASE_PLEASE_TOKEN is not configured." >&2
+            echo "The default Actions token cannot open pull requests." >&2
+            exit 1
+          fi
+
       - id: release
         uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4.4.1
         with:
-          token: ${{ github.token }}
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
           target-branch: main
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
   dispatch-stable-publish:
     name: Dispatch stable PyPI publish
-    if: >-
-      github.run_attempt == 1 &&
-      needs.release-please.outputs.release_created == 'true'
+    if: needs.release-please.outputs.release_created == 'true'
     needs: release-please
     runs-on: ubuntu-latest
     permissions:

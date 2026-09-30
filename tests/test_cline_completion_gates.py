@@ -46,10 +46,14 @@ def _fake_guard(tmp_path: Path) -> Path:
     path.write_text(
         """from __future__ import annotations
 import json, sys
+from hashlib import sha256
 payload=json.load(sys.stdin)
 text=json.dumps(payload, sort_keys=True)
 if 'BLOCK_ME' in text or 'SECRET_OUTPUT' in text:
     print(json.dumps({'decision':'block','reason':'blocked by completion gate'}))
+elif isinstance(payload.get('tool_result', {}).get('output'), str):
+    output=payload['tool_result']['output']
+    print(json.dumps({'decision':'allow','model_output_action':'allow_original','reviewed_output_sha256':sha256(output.encode()).hexdigest()}))
 else:
     print(json.dumps({'decision':'allow'}))
 """,
@@ -192,16 +196,13 @@ def test_plugin_proofs_distinguish_allow_block_and_replacement(tmp_path: Path) -
     )
     assert json.loads(pre_path.read_text(encoding="utf-8"))["outcome"] == "blocked"
 
-    assert (
-        _run_plugin(
-            source,
-            tmp_path,
-            'plugin.hooks.afterTool({toolCall:{toolCallId:"3",toolName:"read_files"},input:{paths:["README.md"]},result:{output:"safe",isError:false}})',
-        )
-        is None
-    )
+    assert _run_plugin(
+        source,
+        tmp_path,
+        'plugin.hooks.afterTool({toolCall:{toolCallId:"3",toolName:"read_files"},input:{paths:["README.md"]},result:{output:"safe",isError:false}})',
+    ) == {"result": {"output": "safe", "isError": False}}
     post_path = context.guard_home / "managed" / "cline" / "proofs" / "plugin-posttool.json"
-    assert json.loads(post_path.read_text(encoding="utf-8"))["outcome"] == "unchanged"
+    assert json.loads(post_path.read_text(encoding="utf-8"))["outcome"] == "filtered"
 
     replaced = _run_plugin(
         source,
@@ -211,17 +212,14 @@ def test_plugin_proofs_distinguish_allow_block_and_replacement(tmp_path: Path) -
     assert isinstance(replaced, dict) and replaced["result"]["isError"] is True
     assert json.loads(post_path.read_text(encoding="utf-8"))["outcome"] == "replaced"
 
-    assert (
-        _run_plugin(
-            source,
-            tmp_path,
-            (
-                'plugin.hooks.afterTool({toolCall:{toolCallId:"4b",toolName:"read_files"},'
-                'input:{paths:["README.md"]},result:{output:"safe again",isError:false}})'
-            ),
-        )
-        is None
-    )
+    assert _run_plugin(
+        source,
+        tmp_path,
+        (
+            'plugin.hooks.afterTool({toolCall:{toolCallId:"4b",toolName:"read_files"},'
+            'input:{paths:["README.md"]},result:{output:"safe again",isError:false}})'
+        ),
+    ) == {"result": {"output": "safe again", "isError": False}}
     assert json.loads(post_path.read_text(encoding="utf-8"))["outcome"] == "replaced"
 
 

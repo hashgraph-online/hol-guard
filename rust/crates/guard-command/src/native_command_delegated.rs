@@ -12,7 +12,7 @@ fn inspection_only(arguments: &[String]) -> bool {
     matches!(arguments, [only] if matches!(only.as_str(), "--version" | "--help" | "-h"))
 }
 
-fn normalized_tool(value: &str) -> String {
+pub(crate) fn normalized_tool(value: &str) -> String {
     value.to_ascii_lowercase().replace('_', "-")
 }
 

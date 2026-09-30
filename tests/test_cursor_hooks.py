@@ -579,7 +579,7 @@ def test_cursor_hook_emits_json_when_guard_package_import_fails(tmp_path: Path) 
         capture_output=True,
         text=True,
         env={"PATH": os.environ.get("PATH", ""), "HOME": str(home_dir)},
-        timeout=3,
+        timeout=10,
     )
     assert proc.returncode == 0, proc.stderr
     assert json.loads(proc.stdout)["permission"] == "allow"

@@ -16,12 +16,12 @@ _CONTAINMENT_CHECK_IDS = (
 )
 
 
-def confirmed_containment_repair_signals(
+def containment_repair_outcome(
     load_health: Callable[[], Mapping[str, object] | None],
     *,
     attempts: int = 3,
-) -> tuple[list[str], list[str]]:
-    """Return confirmed repairable pass/fail checks after bounded retries.
+) -> tuple[list[str], list[str], dict[str, str]]:
+    """Return confirmed repairable pass/fail checks and per-check reasons.
 
     An unsupported backend is a permanent platform limitation, not a failed
     repair attempt. Keep that signal in protection health so execution remains
@@ -47,7 +47,11 @@ def confirmed_containment_repair_signals(
         ):
             break
     if latest is None:
-        return [], list(_CONTAINMENT_CHECK_IDS)
+        return (
+            [],
+            list(_CONTAINMENT_CHECK_IDS),
+            {check_id: "containment_health_unavailable" for check_id in _CONTAINMENT_CHECK_IDS},
+        )
     repaired = [
         check_id
         for check_id in _CONTAINMENT_CHECK_IDS
@@ -59,6 +63,21 @@ def confirmed_containment_repair_signals(
         if check_id not in latest
         or (getattr(latest[check_id], "reason_code", None) != "unsupported_platform" and check_id not in repaired)
     ]
+    reasons: dict[str, str] = {}
+    for check_id in failed:
+        signal = latest.get(check_id)
+        reason = getattr(signal, "reason_code", None) if signal is not None else None
+        reasons[check_id] = reason if isinstance(reason, str) else "containment_health_unavailable"
+    return repaired, failed, reasons
+
+
+def confirmed_containment_repair_signals(
+    load_health: Callable[[], Mapping[str, object] | None],
+    *,
+    attempts: int = 3,
+) -> tuple[list[str], list[str]]:
+    """Return confirmed repairable pass/fail checks after bounded retries."""
+    repaired, failed, _reasons = containment_repair_outcome(load_health, attempts=attempts)
     return repaired, failed
 
 
@@ -71,6 +90,7 @@ def incomplete_protection_repair_payload(
     has_active_hooks: bool,
     hook_failures: list[str] | tuple[str, ...],
     hook_repair_unknown: bool,
+    check_reasons: Mapping[str, str] | None = None,
 ) -> dict[str, object]:
     """Describe an all-check repair that could not finish every local layer."""
 
@@ -84,6 +104,7 @@ def incomplete_protection_repair_payload(
         "failed_check_ids": failed_check_ids,
         "failed_harnesses": list(failed_harnesses),
         "pending_check_ids": pending_check_ids,
+        "check_reasons": dict(check_reasons or {}),
         "message": (
             "Connect an AI app to start local protection. Repair cannot finish until at least one app is connected."
             if missing_connected_app

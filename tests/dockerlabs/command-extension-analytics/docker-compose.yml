@@ -7,6 +7,10 @@ services:
         HOL_GUARD_LAB_WHEEL: ${HOL_GUARD_LAB_WHEEL:?set by runner}
     environment:
       HOL_GUARD_LAB_EXPECTED_VERSION: ${HOL_GUARD_LAB_EXPECTED_VERSION:?set by runner}
+      # Force the Python policy path so native matching cannot change this workflow approval fixture.
+      HOL_GUARD_NATIVE: "off"
+      HOL_GUARD_PYTHON_ORACLE: "1"
+      HOL_GUARD_TEST_MODE: "1"
       PYTHONDONTWRITEBYTECODE: "1"
       PYTHONUNBUFFERED: "1"
     read_only: true
@@ -34,14 +38,42 @@ services:
       args:
         HOL_GUARD_LAB_WHEEL: ${HOL_GUARD_LAB_WHEEL:?set by runner}
     command: ["python", "/opt/guard-lab/tcp_relay.py"]
+    environment:
+      HOL_GUARD_LAB_RELAY_ROLE: guard
     depends_on:
       guard:
         condition: service_healthy
-    ports:
-      - "127.0.0.1:${HOL_GUARD_LAB_PORT:?set by runner}:4781"
+    network_mode: "service:guard"
     read_only: true
     tmpfs:
       - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 4782), timeout=2).close()"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  host_relay:
+    build:
+      context: ../../..
+      dockerfile: tests/dockerlabs/command-extension-analytics/Dockerfile
+      args:
+        HOL_GUARD_LAB_WHEEL: ${HOL_GUARD_LAB_WHEEL:?set by runner}
+    command: ["python", "/opt/guard-lab/tcp_relay.py"]
+    environment:
+      HOL_GUARD_LAB_RELAY_ROLE: host_relay
+    depends_on:
+      relay:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    ports:
+      - "127.0.0.1:${HOL_GUARD_LAB_PORT:?set by runner}:4783"
     networks:
       - guard-analytics
       - host-access
@@ -50,7 +82,7 @@ services:
     security_opt:
       - no-new-privileges:true
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4781/healthz', timeout=2)"]
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 4783), timeout=2).close()"]
       interval: 1s
       timeout: 3s
       retries: 30

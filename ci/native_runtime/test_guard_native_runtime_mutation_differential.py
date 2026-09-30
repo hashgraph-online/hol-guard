@@ -11,8 +11,8 @@ import pytest
 
 from codex_plugin_scanner.guard.config import load_guard_config
 from codex_plugin_scanner.guard.native_policy_test_support import native_policy_snapshot
+from codex_plugin_scanner.guard.native_resident_client import close_native_residents
 from codex_plugin_scanner.guard.native_runtime import parity_signature, review_post_tool_native
-from codex_plugin_scanner.guard.native_runtime_resident import close_resident_native_runtimes
 from codex_plugin_scanner.guard.runtime.hook_content_scanner import ContentScanner
 from codex_plugin_scanner.guard.runtime.hook_decision_cache import HookDecisionCache
 from codex_plugin_scanner.guard.runtime.hook_review_engine import HookReviewEngine
@@ -174,7 +174,7 @@ def test_mutated_inline_corpus_keeps_python_rust_security_parity(tmp_path: Path,
                             (seed, case_index, request.payload, native_response, python_response)
                         ) from None
         finally:
-            close_resident_native_runtimes()
+            close_native_residents()
 
 
 def test_mutation_corpus_is_deterministic() -> None:

@@ -1218,7 +1218,7 @@ def test_collect_aibom_snapshots_shares_cisco_timeout_budget_across_detections(
     monotonic_values = iter([0.0, 4.0, 4.0, 9.0])
 
     def fake_monotonic() -> float:
-        return next(monotonic_values)
+        return next(monotonic_values, 9.0)
 
     monkeypatch.setattr(aibom_cli, "detect_all", lambda _context: detections)
     monkeypatch.setattr(aibom_cli.time, "monotonic", fake_monotonic)

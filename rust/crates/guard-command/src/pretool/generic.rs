@@ -196,6 +196,7 @@ fn is_file_read_tool(tool: &str) -> bool {
 }
 
 fn is_command_tool(tool: &str) -> bool {
+    // tool_matches also recognizes namespaced forms such as functions.exec_command.
     tool_matches(
         tool,
         &[
@@ -206,6 +207,7 @@ fn is_command_tool(tool: &str) -> bool {
             "run_commands",
             "run_terminal_command",
             "execute_command",
+            "exec_command",
             "execute_command_line",
         ],
     )
@@ -377,17 +379,22 @@ fn evaluate_signals(
         true,
         signals.sensitive_target,
     );
-    if let Some(tool) = signals.tool_name.as_deref() {
-        if tool_matches(
-            tool,
-            &["shutdown", "reboot", "wipe", "format", "kill", "terminate"],
-        ) {
-            return generic_result(
-                action,
-                "block",
-                "native_process_service_dangerous",
-                "HOL Guard blocked a destructive process or service action before execution.",
-            );
+    let command_proves_benign = command_decision
+        .and_then(|decision| decision.as_ref().ok())
+        .is_some_and(|decision| decision.explicitly_benign);
+    if !command_proves_benign {
+        if let Some(tool) = signals.tool_name.as_deref() {
+            if tool_matches(
+                tool,
+                &["shutdown", "reboot", "wipe", "format", "kill", "terminate"],
+            ) {
+                return generic_result(
+                    action,
+                    "block",
+                    "native_process_service_dangerous",
+                    "HOL Guard blocked a destructive process or service action before execution.",
+                );
+            }
         }
     }
     if signals.sensitive_target
@@ -432,7 +439,12 @@ fn evaluate_signals(
         if action_type == PreToolActionTypeV1::Command {
             // A benign command proves only its command text. Independent
             // structured paths still describe the action the tool will take.
-            if signals.sensitive_target {
+            if signals.sensitive_target
+                && matches!(
+                    command_decision.minimum_action.as_str(),
+                    "allow" | "warn" | "review"
+                )
+            {
                 return generic_result(
                     action,
                     "review",
@@ -448,6 +460,35 @@ fn evaluate_signals(
             );
         }
     }
+    if action_type == PreToolActionTypeV1::FileRead
+        && !signals.sensitive_target
+        && signals.url_values.is_empty()
+        && signals.path_values.len() == 1
+        && bounded_workspace_read_path(&signals.path_values[0])
+    {
+        return generic_result(
+            action,
+            "allow",
+            "native_exact_safe_file_read",
+            "The Rust command authority proved this bounded file read explicitly benign.",
+        );
+    }
     let (reason_code, reason) = review_reason(action_type);
     generic_result(action, "review", reason_code, reason)
+}
+
+fn bounded_workspace_read_path(value: &str) -> bool {
+    let path = value.trim();
+    if path.is_empty() || path.len() > 4096 {
+        return false;
+    }
+    if path.contains([
+        '$', '`', '|', ';', '&', '<', '>', '\n', '\r', '\0', '*', '?', '[', ']', '{', '}',
+    ]) {
+        return false;
+    }
+    if path.split(['/', '\\']).any(|part| part == "..") {
+        return false;
+    }
+    super::safe_reads::safe_read_target(path)
 }

@@ -22,6 +22,7 @@ from codex_plugin_scanner.guard.config import update_guard_settings
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.native_command_control_authority import AUTHORITY_FILE_NAME
 from codex_plugin_scanner.guard.native_hook_edge import review_raw_hook_native
+from codex_plugin_scanner.guard.native_policy_snapshot_constants import _PUBLISH_TIMEOUT_SECONDS
 from codex_plugin_scanner.guard.native_resident_client import (
     close_native_residents,
     native_resident_client_failure_code,
@@ -45,6 +46,8 @@ from codex_plugin_scanner.guard.runtime.extension_control_proof import (
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_base import EncryptedFileSecretStore
 
+_RECEIPT_PERSISTENCE_TIMEOUT_SECONDS = 20.0
+
 _ACTION_RANK = {
     "allow": 0,
     "warn": 1,
@@ -58,6 +61,26 @@ _ACTION_RANK = {
 def require(condition: bool, code: str) -> None:
     if not condition:
         raise RuntimeError(f"installed_native_extensions_failed:{code}")
+
+
+def installed_probe_support():
+    spec = importlib.util.spec_from_file_location(
+        "installed_extension_probe_support", Path(__file__).with_name("installed_extension_probe_support.py")
+    )
+    require(spec is not None and spec.loader is not None, "support_missing")
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+_support = installed_probe_support()
+prove_installed_data_only_authoring = _support.prove_installed_data_only_authoring
+persisted_native_receipt_ids = _support.persisted_native_receipt_ids
+receipt_processed_count = _support.receipt_processed_count
+await_persisted_native_receipt = _support.await_persisted_native_receipt
+receipt_binding_diagnostic = _support.receipt_binding_diagnostic
+policy_readiness_diagnostic = _support.policy_readiness_diagnostic
 
 
 def installed_client():
@@ -125,11 +148,43 @@ def control(kind: ControlTargetKind, target: str, state: ControlState) -> Extens
     return ExtensionControl(ControlTarget(kind, target), state)
 
 
-def ready(daemon: GuardDaemonServer, workspace: Path, revision: int) -> dict[str, object]:
+def ready(
+    daemon: GuardDaemonServer,
+    workspace: Path,
+    revision: int,
+    *,
+    previous_publisher: object | None = None,
+) -> dict[str, object]:
     worker = daemon._server.hook_worker
-    binding = worker.prepare_workspace_policy(workspace, deadline=time.monotonic() + 5)
+    # This functional fixture awaits a production publication, including a
+    # cold Windows restart. Keep one bound for publication and admission, and
+    # do not expire before the publisher's own platform timeout. Installed
+    # readiness latency is enforced separately by native_slo_contract.
+    deadline = time.monotonic() + max(5.0, _PUBLISH_TIMEOUT_SECONDS)
+    publisher = worker.policy_snapshot_publisher
+    publisher.register_workspace(workspace)
+    publisher.start()
+    # Await asynchronous control publication before measuring hook admission.
+    published = publisher.wait_until_ready(deadline)
+    if not published:
+        print(
+            json.dumps(
+                {
+                    "schema": "guard.installed-native-extension-readiness-failure.v1",
+                    "stage": "publication",
+                    "publisher": policy_readiness_diagnostic(publisher),
+                    "previous_publisher": (
+                        policy_readiness_diagnostic(previous_publisher) if previous_publisher is not None else None
+                    ),
+                },
+                sort_keys=True,
+            ),
+            flush=True,
+        )
+    require(published, "policy_not_ready")
+    binding = worker.prepare_workspace_policy(workspace, deadline=deadline)
     require(binding is not None, "policy_not_ready")
-    snapshot = worker.policy_snapshot_publisher.current_snapshot()
+    snapshot = publisher.current_snapshot()
     require(snapshot is not None, "snapshot_missing")
     require(snapshot["command_extensions"]["revision"] == revision, "wrong_control_generation")
     return binding
@@ -150,6 +205,7 @@ def exercise(root: Path) -> dict[str, object]:
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0, home_dir=root, workspace_dir=workspace)
     rows: list[dict[str, object]] = []
     all_receipts: list[str] = []
+    previous_publisher: object | None = None
 
     def case(
         label: str,
@@ -162,7 +218,7 @@ def exercise(root: Path) -> dict[str, object]:
         tool_payload: dict[str, object] | None = None,
         permission_id: str | None = None,
     ) -> dict:
-        binding = ready(daemon, workspace, revision)
+        binding = ready(daemon, workspace, revision, previous_publisher=previous_publisher)
         payload = tool_payload or {
             "hook_event_name": "PreToolUse",
             "tool_name": "Bash",
@@ -182,8 +238,6 @@ def exercise(root: Path) -> dict[str, object]:
             policy_snapshot=binding,
         )
         if raw is None:
-            # Capture the existing client's fixed diagnostic code immediately.
-            # Do not retry, reset the deadline, or reinterpret a missing result.
             print(
                 json.dumps(
                     {
@@ -227,10 +281,29 @@ def exercise(root: Path) -> dict[str, object]:
                 f"{label}:floor_below_{minimum_at_least}:{actual}",
             )
         require(result["decision"] == "deny", f"{label}:unsafe_allow")
+        known_receipt_ids = persisted_native_receipt_ids(store)
+        receipt_writer = daemon._server.runtime_hook_evidence_writer
+        receipt_processed_value = receipt_processed_count(receipt_writer)
+        require(receipt_processed_value is not None, f"{label}:receipt_writer_stats")
+        receipt_processed_before = receipt_processed_value
         response = request(daemon, home, workspace, "claude-code", "PreToolUse", payload)
         require(isinstance(response, dict), f"{label}:http_missing")
-        receipt = daemon._server.hook_worker.last_native_decision_receipt
-        require(isinstance(receipt, dict) and receipt.get("authority") == "rust", f"{label}:receipt_missing")
+        # Compatibility hooks execute in the isolated hook process. Its receipt
+        # reaches the parent through the evidence writer, so the parent
+        # worker's mutable last-receipt field cannot identify this request.
+        # Wait for that asynchronous writer to report successful persistence
+        # before querying SQLite, avoiding reader/writer lock churn on Windows.
+        receipt = await_persisted_native_receipt(
+            store,
+            known_receipt_ids,
+            writer=receipt_writer,
+            receipt_processed_before=receipt_processed_before,
+            timeout_seconds=_RECEIPT_PERSISTENCE_TIMEOUT_SECONDS,
+        )
+        require(receipt.get("authority") == "rust", f"{label}:receipt_missing")
+        if receipt.get("command_extensions") != extensions["binding"]:
+            diagnostic = receipt_binding_diagnostic(response, receipt, extensions["binding"], all_receipts)
+            print(json.dumps({"case": label, "completed_cases": len(rows), **diagnostic}, sort_keys=True), flush=True)
         require(receipt.get("command_extensions") == extensions["binding"], f"{label}:receipt_generation_mismatch")
         require(receipt["decision"] == result["decision"], f"{label}:http_decision_mismatch")
         all_receipts.append(receipt["decision_id"])
@@ -277,6 +350,7 @@ def exercise(root: Path) -> dict[str, object]:
         case("external-disabled", "ollama rm example-model", revision, matched=None)
         revision = commit_controls(store, password, (enabled,))
         case("external-reenabled", "ollama push example-model", revision, matched="command.ollama.push")
+        previous_publisher = daemon._server.hook_worker.policy_snapshot_publisher
         daemon.stop()
         require(close_native_residents(home), "restart_containment")
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0, home_dir=root, workspace_dir=workspace)
@@ -404,6 +478,9 @@ def exercise(root: Path) -> dict[str, object]:
             "persisted_receipts": len(all_receipts),
             "marker_tamper_rejected": True,
             "interactive_enrollment_exercised": False,
+            "cross_version_upgrade_rollback_exercised": False,
+            "bad_generation_injection_exercised": False,
+            "stale_approval_replay_exercised": False,
             "target_commands_executed": 0,
         }
     finally:
@@ -423,8 +500,11 @@ def main() -> int:
         status.capabilities is not None and "native-command-program-v1" in status.capabilities.features,
         "native_feature_missing",
     )
+    authoring = prove_installed_data_only_authoring(package)
     with tempfile.TemporaryDirectory(prefix="hge-", dir=None if os.name == "nt" else "/tmp") as temporary:
         report = exercise(Path(temporary))
+    report["data_only_authoring"] = authoring
+    report["data_only_authoring_receipts_authenticated"] = False
     report["source_sha"] = status.capabilities.build_sha
     report["rule_digest"] = status.capabilities.rule_digest
     args.json.write_text(json.dumps(report, sort_keys=True, indent=2) + "\n", encoding="utf-8")
