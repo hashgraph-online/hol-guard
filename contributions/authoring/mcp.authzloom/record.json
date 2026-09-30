@@ -1,0 +1,14 @@
+{
+  "builderVersion": "1.0.0",
+  "contributionId": "mcp.authzloom",
+  "managedFiles": {
+    "contributions/authoring/mcp.authzloom/README.md": "178e9681bf85cbdb4095d266a48b0623802bde6b747b653f3bdca6da66a7b4db",
+    "contributions/authoring/mcp.authzloom/discovery.json": "887302598bbb1d0b366712b3066989232ce882423e6739550af024d9879e103a",
+    "contributions/authoring/mcp.authzloom/report.json": "6abe12077058bd163fdaf5b592cf10c86a435114c5597eaeea3b60e6f08b81fd",
+    "contributions/authoring/mcp.authzloom/review.json": "1c2beb528c65e1da9b434d13723b926f84f9312c31c13aff0c6fe8a276723f76",
+    "contributions/mcp-servers/mcp.authzloom.json": "b8b26918d177231ea0b673555dd911d11560ec995b422b8023a5f6ef5bcb6638",
+    "tests/test_generated_mcp_authzloom_extension.py": "74029eea84654ed12b5e252a67a34ed2952a9384b24bc46545082d29635aab93"
+  },
+  "revisionDigest": "8c5d0fb5f52fee32482602d0a9ec4420d9d4e47436aa59cc350d612ad1e5f1af",
+  "schemaVersion": "guard.extension-authoring-install.v1"
+}

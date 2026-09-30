@@ -1,0 +1,65 @@
+{
+  "discoveryDigest": "ddaa4139d7db8e63c5636decf29fb38d7cb61baf7486513a396a55ac816854f0",
+  "entries": {
+    "tool-418b066cb3a401fd": {
+      "evidenceUrl": "https://github.com/MrcVnz/authzloom/blob/641c172a8d5b795b01e8ab3e47c416bd6770eaf5/src/authzloom/mcp_server.py",
+      "rationale": "Returns a redacted evidence capsule from the local AuthzLoom store and does not send target traffic.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution",
+        "local_secret_read"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect run status first and export only the required redacted capsule.",
+      "state": "allow"
+    },
+    "tool-69c3136c5e53bbf7": {
+      "evidenceUrl": "https://github.com/MrcVnz/authzloom/blob/641c172a8d5b795b01e8ab3e47c416bd6770eaf5/src/authzloom/executor.py",
+      "rationale": "Executes the bounded authorization matrix and may send state-changing requests through the configured transport, then stores redacted evidence.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution",
+        "network_egress"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Call authzloom_plan first, review the matrix and policy limits, then approve authzloom_run only when target execution is intended.",
+      "state": "review"
+    },
+    "tool-cae76fab9f2025d7": {
+      "evidenceUrl": "https://github.com/MrcVnz/authzloom/blob/641c172a8d5b795b01e8ab3e47c416bd6770eaf5/src/authzloom/planner.py",
+      "rationale": "Validates the supplied scenario and returns its authorization matrix without executing requests or changing stored runs.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Use authzloom_plan to inspect the bounded matrix before any execution request.",
+      "state": "allow"
+    },
+    "tool-d0e02aa57b90cd76": {
+      "evidenceUrl": "https://github.com/MrcVnz/authzloom/blob/641c172a8d5b795b01e8ab3e47c416bd6770eaf5/src/authzloom/store.py",
+      "rationale": "Lists local run metadata with bounded pagination and does not send target traffic.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution",
+        "local_secret_read"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Use bounded limit and offset values when inspecting local run status.",
+      "state": "allow"
+    },
+    "tool-db3928748425fd7a": {
+      "evidenceUrl": "https://github.com/MrcVnz/authzloom/blob/641c172a8d5b795b01e8ab3e47c416bd6770eaf5/src/authzloom/captures.py",
+      "rationale": "Registers bounded capture metadata in local process memory or redacts a supplied snapshot; raw capture bytes are rejected.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution",
+        "local_secret_read"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Send only an opaque capture handle and the minimum metadata required for planning.",
+      "state": "inherit"
+    }
+  },
+  "schemaVersion": "guard.extension-review.v1"
+}
