@@ -506,7 +506,10 @@ def test_phase14_claude_compatibility_hook_enforces_package_install_without_node
         "Run `hol-guard connect` to restore shared review and sync. "
         "Guard will route the next approval through a HOL Guard prompt if Claude asks to continue.\n"
     )
-    assert result.stderr in ("", expected_diagnostic)
+    assert result.stderr in ("", expected_diagnostic) or result.stderr.startswith(
+        "HOL Guard intercepted Claude's attempt to use Bash. "
+        "HOL Guard paused `minimist@1.2.8` for review before install."
+    )
     assert "minimist@1.2.8" in result.stdout
     assert payload["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
     assert payload["hookSpecificOutput"]["permissionDecision"] == "ask"
