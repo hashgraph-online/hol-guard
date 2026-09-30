@@ -26,6 +26,7 @@ from codex_plugin_scanner.guard.runtime.extension_control_contract import (
 from codex_plugin_scanner.guard.runtime.extension_trust import trust_class_for
 from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
 from codex_plugin_scanner.guard.runtime.mcp_server_contribution import mcp_tool_state, validate_mcp_contribution
+from tests.support.extension_freshness import requires_fresh_projections
 
 _X_READER = Path(__file__).resolve().parents[1] / "contributions/mcp-servers/mcp.x-reader.json"
 _CATALOG_ID = "command.mcp-x-reader"
@@ -107,6 +108,7 @@ def test_contribution_validates() -> None:
     validate_mcp_contribution(_payload(), filename="mcp.x-reader.json")
 
 
+@requires_fresh_projections
 def test_catalog_item_is_external_opt_in_uvx_git_launch() -> None:
     extension = BUILT_IN_COMMAND_EXTENSION_REGISTRY.get(_CATALOG_ID)
     assert extension is not None
