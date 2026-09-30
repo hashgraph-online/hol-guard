@@ -93,6 +93,21 @@ def _is_path_within(path: Path, root: Path) -> bool:
         return False
 
 
+def _dedupe_findings(findings: tuple[Finding, ...]) -> tuple[Finding, ...]:
+    """Keep one finding per rule and location when ecosystems share a scan root."""
+    unique: dict[tuple[str, str, str, int | None, str], Finding] = {}
+    for finding in findings:
+        key = (
+            finding.rule_id,
+            finding.file_path or "",
+            finding.severity.value,
+            finding.line_number,
+            finding.description,
+        )
+        unique.setdefault(key, finding)
+    return tuple(unique.values())
+
+
 def _summarize_package(package: NormalizedPackage) -> PackageSummary:
     return PackageSummary(
         ecosystem=package.ecosystem.value,
@@ -230,7 +245,9 @@ def _scan_repository(repo_root: Path, options: ScanOptions) -> ScanResult:
         for target in discovery.local_plugins
     )
     categories = _build_repository_categories(repo_root, plugin_results)
-    findings = tuple(finding for category in categories for check in category.checks for finding in check.findings)
+    findings = _dedupe_findings(
+        tuple(finding for category in categories for check in category.checks for finding in check.findings)
+    )
     repo_scores = [plugin.score for plugin in plugin_results]
     repo_category_score = _score_categories(categories[:2]) if categories[:2] else 100
     if categories[:2]:
@@ -497,7 +514,9 @@ def _scan_mixed_packages(scan_root: Path, packages: list[NormalizedPackage], opt
             categories.append(CategoryResult(name=f"{prefix}Kimi Plugin", checks=kimi_checks))
             processed_packages.append(package)
 
-    findings = tuple(finding for category in categories for check in category.checks for finding in check.findings)
+    findings = _dedupe_findings(
+        tuple(finding for category in categories for check in category.checks for finding in check.findings)
+    )
     score = _score_categories(tuple(categories))
     trust_report = build_repository_trust_report(tuple(codex_trust_reports)) if codex_trust_reports else None
     reported_packages = tuple(processed_packages) if processed_packages else tuple(packages)

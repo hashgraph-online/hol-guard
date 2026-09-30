@@ -125,7 +125,10 @@ DANGEROUS_MCP_PATTERNS: list[re.Pattern[str]] = [
 ]
 
 RISKY_APPROVAL_PATTERNS: list[re.Pattern[str]] = [
-    re.compile(r"danger-full-access"),
+    # Assignment only. A bare enum value in generated API docs is not a default.
+    re.compile(
+        r"""(?:^|[\s{\[,])(?:["']?[A-Za-z_][\w.-]*["']?\s*)?[:=]\s*["']danger-full-access["']"""
+    ),
     re.compile(r'approval[_ -]?policy["\']?\s*[:=]\s*["\']never["\']', re.I),
     re.compile(r'approvalMode["\']?\s*[:=]\s*["\']bypass["\']', re.I),
 ]
@@ -230,13 +233,41 @@ _PURE_SHELL_EXPANSION_RE = re.compile(
     r"(?:(?::-|-|:=|=|:\?|\?|:\+|\+)(?:\$\{[A-Za-z_][A-Za-z0-9_]*\}|\$[A-Za-z_][A-Za-z0-9_]*)?)?"
     r"\}$"
 )
+_PURE_COMMAND_SUBSTITUTION_RE = re.compile(r"^\$\([A-Za-z_][A-Za-z0-9_]*\)$")
 _PURE_TEMPLATE_EXPANSION_RE = re.compile(r"^\{\{[^}]+\}\}$")
+_DUMMY_SECRET_MARKERS = ("fake", "dummy", "test", "example", "not-a-real")
+_LOW_ENTROPY_SECRET_RE = re.compile(r"^[a-z][a-z0-9]*(?:[-_][a-z0-9]+)*$")
+_LOW_ENTROPY_DIGIT_RE = re.compile(r"[0-9]+")
 
 
 def _looks_like_interpolated_secret(value: str) -> bool:
     """True only for complete env/template references with no literal payload."""
     normalized = _normalize_secret_candidate(value)
-    return bool(_PURE_SHELL_EXPANSION_RE.fullmatch(normalized) or _PURE_TEMPLATE_EXPANSION_RE.fullmatch(normalized))
+    return bool(
+        _PURE_SHELL_EXPANSION_RE.fullmatch(normalized)
+        or _PURE_COMMAND_SUBSTITUTION_RE.fullmatch(normalized)
+        or _PURE_TEMPLATE_EXPANSION_RE.fullmatch(normalized)
+    )
+
+
+def _is_test_or_fixture_surface(relative_path: Path) -> bool:
+    """Test and fixture paths only; documentation and skill examples stay stricter."""
+    path_parts = {part.lower() for part in relative_path.parts}
+    return bool(path_parts & {"tests", "test", "__tests__", "fixtures", "fixture"}) or bool(
+        TEST_FILE_RE.search(relative_path.name)
+    )
+
+
+def _looks_like_dummy_test_secret(value: str) -> bool:
+    """Self-describing or prose-shaped fixture values are not credential material."""
+    normalized = _normalize_secret_candidate(value)
+    lowered = normalized.lower()
+    if any(marker in lowered for marker in _DUMMY_SECRET_MARKERS):
+        return True
+    if not _LOW_ENTROPY_SECRET_RE.fullmatch(lowered):
+        return False
+    digit_runs = _LOW_ENTROPY_DIGIT_RE.findall(lowered)
+    return not digit_runs or (len(digit_runs) == 1 and len(digit_runs[0]) <= 2 and not lowered[:1].isdigit())
 
 
 BRACKETED_PLACEHOLDER_RE = re.compile(
@@ -485,13 +516,17 @@ def _should_skip_secret_match(
     if effective_kind == "generic" and _provider_payload(candidate) is not None:
         effective_kind = "provider"
     if effective_kind == "generic":
-        return _looks_like_example_generic_secret(candidate)
+        if _looks_like_example_generic_secret(candidate):
+            return True
+        return _is_test_or_fixture_surface(relative_path) and _looks_like_dummy_test_secret(candidate)
     if effective_kind == "provider":
-        if not _has_illustrative_context(relative_path, content, match.start(), lines=lines, offsets=offsets):
+        illustrative = _has_illustrative_context(relative_path, content, match.start(), lines=lines, offsets=offsets)
+        incomplete = _looks_like_incomplete_provider_candidate(candidate)
+        if _is_test_or_fixture_surface(relative_path) and incomplete:
+            return True
+        if not illustrative:
             return False
-        return _looks_like_synthetic_provider_candidate(candidate) or _looks_like_incomplete_provider_candidate(
-            candidate
-        )
+        return _looks_like_synthetic_provider_candidate(candidate) or incomplete
     return False
 
 
@@ -914,7 +949,10 @@ def check_no_approval_bypass_defaults(plugin_dir: Path, files: tuple[Path, ...] 
                     max_points=3,
                     path=relative_path.as_posix(),
                 )
-            if any(pattern.search(content) for pattern in RISKY_APPROVAL_PATTERNS):
+            risky_patterns = RISKY_APPROVAL_PATTERNS
+            if relative_path.suffix.lower() in DOCUMENTATION_EXTS:
+                risky_patterns = RISKY_APPROVAL_PATTERNS[1:]
+            if any(pattern.search(content) for pattern in risky_patterns):
                 findings.append(relative_path.as_posix())
     except ScanInputUnreadableError as exc:
         return unreadable_scan_input_failure(

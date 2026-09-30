@@ -413,6 +413,32 @@ def test_mixed_scan_rebases_findings_to_scan_root() -> None:
     assert "SECURITY.md" not in file_paths
 
 
+def test_shared_root_reports_one_finding_per_rule_and_location(tmp_path: Path) -> None:
+    real_token = "aB3xK9mQ2pL7vN4w"
+    for manifest in (
+        ".claude-plugin/plugin.json",
+        ".codex-plugin/plugin.json",
+        "gemini-extension.json",
+    ):
+        path = tmp_path / manifest
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text('{"name":"shared","version":"1.0.0"}\n', encoding="utf-8")
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "config.ts").write_text(f'const TOKEN = "{real_token}";\n', encoding="utf-8")
+    (tmp_path / "config.toml").write_text('sandbox_mode = "danger-full-access"\n', encoding="utf-8")
+
+    result = scan_plugin(tmp_path, ScanOptions(ecosystem="auto", cisco_skill_scan="off", cisco_mcp_scan="off"))
+
+    locations = [
+        (finding.rule_id, finding.file_path, finding.line_number)
+        for finding in result.findings
+        if finding.rule_id in {"HARDCODED_SECRET", "RISKY_APPROVAL_DEFAULT"}
+    ]
+    assert locations.count(("HARDCODED_SECRET", "src/config.ts", 1)) == 1
+    assert locations.count(("RISKY_APPROVAL_DEFAULT", "config.toml", None)) == 1
+    assert len(locations) == len(set(locations))
+
+
 def test_cli_lists_supported_ecosystems(capsys) -> None:
     rc = main(["--list-ecosystems"])
     captured = capsys.readouterr()

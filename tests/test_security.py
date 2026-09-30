@@ -10,6 +10,7 @@ from codex_plugin_scanner.checks.security import (
     _scan_all_files,
     check_license,
     check_mcp_transport_security,
+    check_no_approval_bypass_defaults,
     check_no_dangerous_mcp,
     check_no_hardcoded_secrets,
     check_security_md,
@@ -541,6 +542,98 @@ class TestScanAllFiles:
 
         assert result.passed is False
         assert result.findings[0].rule_id == "SCAN_RESOURCE_BUDGET_EXCEEDED"
+
+    @pytest.mark.parametrize(
+        "relative_path,content",
+        [
+            ("packages/core/tests/mcp_http_test.ts", 'const headers = { token: "swordfish" };\n'),
+            ("tests/integration/dry_run_redaction_test.ts", 'const SECRET = "fake-not-a-real-token";\n'),
+            (
+                "packages/docker/tests/login_credentials_test.ts",
+                'const TOKEN = "registry-value-that-must-not-escape";\n',
+            ),
+            ("tests/e2e/registry_e2e.ts", 'const env = { API_TOKEN: "e2e-secret-xyz" };\n'),
+            ("packages/ai/tests/ai_test.ts", 'const env = { GITHUB_TOKEN: "env-token" };\n'),
+            ("packages/core/tests/secret_test.ts", 'const env = { ZUKE_TEST_SECRET: "from-env" };\n'),
+            ("packages/gh/tests/app_token_test.ts", 'const headers = { token: "ghs_installation" };\n'),
+            ("packages/ai/tests/workflow_test.ts", 'const env = { OPENAI_API_KEY: "$(OPENAI_API_KEY)" };\n'),
+        ],
+    )
+    def test_ignores_dummy_secrets_and_command_substitutions_in_tests(self, tmp_path, relative_path, content):
+        target = tmp_path / relative_path
+        target.parent.mkdir(parents=True)
+        target.write_text(content, encoding="utf-8")
+
+        result = check_no_hardcoded_secrets(tmp_path)
+
+        assert result.passed is True
+        assert all(finding.rule_id != "HARDCODED_SECRET" for finding in result.findings)
+
+    def test_keeps_real_secrets_in_test_files_and_dummy_values_outside_tests(self, tmp_path):
+        real_token = "aB3xK9mQ2pL7vN4w"
+        test_file = tmp_path / "tests" / "credentials_test.ts"
+        source_file = tmp_path / "src" / "config.ts"
+        test_file.parent.mkdir(parents=True)
+        source_file.parent.mkdir()
+        test_file.write_text(f'const TOKEN = "{real_token}";\n', encoding="utf-8")
+        source_file.write_text('const TOKEN = "swordfish";\n', encoding="utf-8")
+
+        result = check_no_hardcoded_secrets(tmp_path)
+
+        flagged = {finding.file_path for finding in result.findings if finding.rule_id == "HARDCODED_SECRET"}
+        assert flagged == {"tests/credentials_test.ts", "src/config.ts"}
+
+    def test_ignores_pure_command_substitution_outside_tests(self, tmp_path):
+        script = tmp_path / "scripts" / "start.sh"
+        script.parent.mkdir()
+        script.write_text('OPENAI_API_KEY="$(OPENAI_API_KEY)"\n', encoding="utf-8")
+
+        result = check_no_hardcoded_secrets(tmp_path)
+
+        assert result.passed is True
+
+    def test_command_substitution_with_literal_payload_still_fires(self, tmp_path):
+        script = tmp_path / "scripts" / "start.sh"
+        script.parent.mkdir()
+        script.write_text('API_KEY="$(printf-actual-pass-937)"\n', encoding="utf-8")
+
+        result = check_no_hardcoded_secrets(tmp_path)
+
+        assert result.passed is False
+        assert result.findings[0].rule_id == "HARDCODED_SECRET"
+
+
+class TestApprovalBypassDefaults:
+    def test_ignores_danger_full_access_enum_documentation(self, tmp_path):
+        readme = tmp_path / "packages" / "codex" / "README.md"
+        readme.parent.mkdir(parents=True)
+        readme.write_text(
+            'type CodexSandboxMode = "read-only" | "workspace-write" | "danger-full-access"\n',
+            encoding="utf-8",
+        )
+
+        result = check_no_approval_bypass_defaults(tmp_path)
+
+        assert result.passed is True
+        assert all(finding.rule_id != "RISKY_APPROVAL_DEFAULT" for finding in result.findings)
+
+    @pytest.mark.parametrize(
+        "relative_path,content",
+        [
+            ("config.toml", 'sandbox_mode = "danger-full-access"\n'),
+            ("settings.json", '{"sandbox_mode": "danger-full-access"}\n'),
+            ("config.yaml", 'sandbox_mode: "danger-full-access"\n'),
+            ("README.md", 'approval_policy = "never"\n'),
+        ],
+    )
+    def test_keeps_configured_approval_and_sandbox_defaults(self, tmp_path, relative_path, content):
+        (tmp_path / relative_path).write_text(content, encoding="utf-8")
+
+        result = check_no_approval_bypass_defaults(tmp_path)
+
+        assert result.passed is False
+        assert result.findings[0].rule_id == "RISKY_APPROVAL_DEFAULT"
+        assert result.findings[0].file_path == relative_path
 
 
 class TestRunSecurityChecks:
