@@ -1,0 +1,78 @@
+{
+  "extension": {
+    "action_classes": [],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": "package-firewall",
+    "dependencies": [],
+    "description": "Routes Maven and Gradle dependency operations through Guard's package firewall.",
+    "ecosystem_ids": [
+      "maven"
+    ],
+    "executables": [
+      "mvn",
+      "mvnw",
+      "gradle",
+      "gradlew"
+    ],
+    "extension_id": "command.package.jvm",
+    "homepage": null,
+    "icon": {
+      "kind": "none"
+    },
+    "license": null,
+    "name": "JVM package protection",
+    "permissions": [
+      {
+        "action_classes": [],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Routes Maven and Gradle dependency operations through Guard's package firewall.",
+        "example_command": "mvn dependency:copy-dependencies",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "JVM package protection",
+        "permission_id": "command.package.jvm.permission.package-protection",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Use the existing project manifest and lockfile instead of an unpinned package source.",
+          "Review package provenance and advisory evidence before installation or one-shot execution."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [
+      "pom.xml",
+      "build.gradle",
+      "build.gradle.kts",
+      "settings.gradle",
+      "settings.gradle.kts",
+      "gradle.lockfile"
+    ],
+    "publisher": null,
+    "reference_urls": [
+      "https://maven.apache.org/plugins/maven-dependency-plugin/examples/managing-dependencies.html",
+      "https://docs.gradle.org/current/userguide/dependency_locking.html"
+    ],
+    "required": false,
+    "risk_classes": [
+      "supply_chain"
+    ],
+    "rules": [],
+    "safer_alternatives": [
+      "Use the existing project manifest and lockfile instead of an unpinned package source.",
+      "Review package provenance and advisory evidence before installation or one-shot execution."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

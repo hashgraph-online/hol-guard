@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-from dataclasses import replace
 from pathlib import Path
 
 from ._shell_execution_context_support import (
@@ -12,10 +11,8 @@ from ._shell_execution_context_support import (
     SHELL_CWD_UNREADABLE_DIRECTORY,
     split_shell_tokens,
 )
-from .command_model import CanonicalCommand, CommandSegment
+from .command_model import CanonicalCommand
 from .home_path_text import expand_home, normalize_path
-from .secret_sensitivity import classify_secret_path
-from .shell_execution_context import ShellExecutionSegment
 
 _SHELLS = frozenset({"sh", "bash", "dash", "ash", "zsh", "ksh", "fish", "source", "."})
 _SCRIPT_SUFFIXES = (
@@ -32,7 +29,23 @@ _SCRIPT_SUFFIXES = (
     ".rb",
     ".pl",
 )
-_OTHER_READERS = frozenset({"base64", "xxd", "od", "hexdump", "strings", "tac", "less", "more", "sort", "uniq", "wc"})
+_OTHER_READERS = frozenset(
+    {
+        "base64",
+        "xxd",
+        "od",
+        "hexdump",
+        "strings",
+        "tac",
+        "less",
+        "more",
+        "sort",
+        "uniq",
+        "wc",
+        "ag",
+        "ack",
+    }
+)
 _MAX_SCRIPTS = 16
 _MAX_DEPTH = 4
 _MAX_TOTAL_BYTES = 128 * 1024
@@ -114,6 +127,8 @@ def _command_may_need_read_assessment(
 
 def _sensitive_path(value: str, *, cwd: Path | None, home_dir: Path | None) -> str | None:
     """Classify a literal or metadata-resolved alias without opening secrets."""
+
+    from .secret_sensitivity import classify_secret_path
 
     match = classify_secret_path(value, cwd=cwd, home_dir=home_dir)
     if match is not None:
@@ -312,12 +327,26 @@ def _script_operand(executable: str, args: tuple[str, ...]) -> tuple[str, bool] 
             if arg in {"-o", "-O", "+o", "+O", "--rcfile", "--init-file"}:
                 index += 2
                 continue
+            if is_interpreter and _python_executable(name):
+                from .secret_file_request_services.constants_core import _PYTHON_INTERPRETER_OPTIONS_WITH_VALUES
+
+                if arg in _PYTHON_INTERPRETER_OPTIONS_WITH_VALUES:
+                    if index + 1 >= len(args):
+                        return None
+                    index += 2
+                    continue
+                if any(
+                    arg.startswith(option) and len(arg) > len(option)
+                    for option in _PYTHON_INTERPRETER_OPTIONS_WITH_VALUES
+                ):
+                    index += 1
+                    continue
             if not arg.startswith(("-", "+")):
                 break
             index += 1
         if index < len(args) and args[index] != "-":
             operand = args[index]
-            if is_shell or _script_like_operand(operand):
+            if is_shell or _python_executable(name) or _script_like_operand(operand):
                 return operand, is_shell
             return None
     if name == "bun" and args and args[0].endswith(_SCRIPT_SUFFIXES):
@@ -349,15 +378,26 @@ def _python_module_launch(executable: str, args: tuple[str, ...], *, cwd: Path |
         return False
     if _known_python_module_launch(executable, args, cwd=cwd):
         return False
-    for index, arg in enumerate(args):
+    from .secret_file_request_services.constants_core import _PYTHON_INTERPRETER_OPTIONS_WITH_VALUES
+
+    index = 0
+    while index < len(args):
+        arg = args[index]
         if arg == "--":
             return False
         if arg == "-m" or (arg.startswith("-m") and len(arg) > 2):
             return True
-        if arg in {"-W", "-X"} and index + 1 < len(args):
+        if arg in _PYTHON_INTERPRETER_OPTIONS_WITH_VALUES:
+            if index + 1 >= len(args):
+                return False
+            index += 2
+            continue
+        if any(arg.startswith(option) and len(arg) > len(option) for option in _PYTHON_INTERPRETER_OPTIONS_WITH_VALUES):
+            index += 1
             continue
         if not arg.startswith("-"):
             return False
+        index += 1
     return False
 
 
@@ -444,76 +484,3 @@ def _local_executable_operand(
     if not lexical.is_absolute() or not any(lexical.is_relative_to(root) for root in roots):
         return None
     return executable
-
-
-def _parse_execution_segment(
-    execution: ShellExecutionSegment,
-    *,
-    raw_model: CanonicalCommand,
-    raw_segment: CommandSegment | None,
-) -> CanonicalCommand | None:
-    """Keep source syntax and require agreement with the cwd model.
-
-    Re-quoting decoded tokens changes input redirections into ordinary argv
-    and can erase command/exec ambiguity. The raw command parser deliberately
-    skips transparent-wrapper normalization for this inspection path.
-    """
-
-    if not execution.complete or execution.effective_cwd is None or raw_segment is None:
-        return None
-    try:
-        if split_shell_tokens(raw_segment.text) != execution.tokens:
-            return None
-    except ValueError:
-        return None
-    return replace(
-        raw_model,
-        segments=(raw_segment,),
-        redirects=tuple(
-            redirect
-            for redirect in raw_model.redirects
-            if raw_segment.start <= redirect.start and redirect.end <= raw_segment.end
-        ),
-        embedded_commands=(),
-    )
-
-
-def _segment_may_touch_local_data(execution: ShellExecutionSegment) -> bool:
-    """Keep unknown file/code access closed without treating stdout as a file."""
-
-    from .secret_file_request_services.local_read_operands import _shell_segment_file_operand_tokens
-
-    if not execution.tokens:
-        return False
-    token = execution.tokens[0]
-    executable = "." if token == "." else Path(token).name.lower()
-    args = list(execution.tokens[1:])
-    has_input_redirect = any(re.match(r"^\d*<(?!<)", item) for item in execution.tokens)
-    if has_input_redirect or _shell_segment_file_operand_tokens([executable, *args]):
-        return True
-    if executable in _OTHER_READERS:
-        return any(not arg.startswith("-") for arg in args)
-    return (
-        executable in {*_SHELLS, "command", "exec", "node", "bun", "ruby", "perl"}
-        or _python_executable(executable)
-        or _path_qualified(token)
-    )
-
-
-def _flow_operator_before(execution: ShellExecutionSegment) -> str | None:
-    return next((token for token in reversed(execution.control_before) if token in _FLOW_OPERATORS), None)
-
-
-def _failed_cd_short_circuit_state(
-    execution: ShellExecutionSegment,
-    *,
-    active: bool,
-) -> tuple[bool, bool]:
-    """Return the failed-cd state and whether this segment is provably unreachable."""
-
-    operator = _flow_operator_before(execution)
-    if operator in {"||", ";", "&"}:
-        active = False
-    if execution.directory_operation is not None and execution.reason_code in _SHORT_CIRCUITING_CD_FAILURES:
-        return True, False
-    return active, bool(active and operator in {"&&", "|"})

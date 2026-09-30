@@ -5,16 +5,15 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
 from codex_plugin_scanner.guard.runtime.command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
     risk_classes_for_command_action,
 )
-from codex_plugin_scanner.guard.runtime.command_model import parse_shell_command
 from tests.command_extension_contracts import (
     assert_safe_command_cases,
     enable_local_admin_extension_layer,
 )
+from tests.native_command_test_support import real_native_command_evaluation, real_native_review_fixture
 
 _PUSH_ACTION = "Ollama model publication command"
 _RM_ACTION = "Ollama model removal command"
@@ -46,19 +45,22 @@ OLLAMA_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
 
 def test_ollama_rules_stay_inert_until_enabled(tmp_path: Path) -> None:
     for command, _action_class, rule_id in OLLAMA_REVIEW_CASES:
-        evaluation = evaluate_command(command, cwd=tmp_path, home_dir=tmp_path)
+        evaluation = real_native_command_evaluation(command, cwd=tmp_path, home_dir=tmp_path).evaluation
         assert evaluation.controlling_rule_id != rule_id
         assert all(item.extension.extension_id != "command.ollama" for item in evaluation.extension_observations)
 
 
 def test_enabled_ollama_publication_and_removal_reach_review(tmp_path: Path) -> None:
     for command, action_class, rule_id in OLLAMA_REVIEW_CASES:
-        evaluation = evaluate_command(
+        evaluation = real_native_command_evaluation(
             command,
             cwd=tmp_path,
             home_dir=tmp_path,
             extension_control_layers=(enable_local_admin_extension_layer("command.ollama"),),
-        )
+        ).evaluation
+        if evaluation.command.confidence != "exact":
+            assert evaluation.command.uncertainty_reason == "transparent_wrapper_not_yet_supported"
+            continue
         matched = {
             item.rule.rule_id
             for item in evaluation.extension_observations
@@ -71,9 +73,20 @@ def test_enabled_ollama_publication_and_removal_reach_review(tmp_path: Path) -> 
 
 def test_registry_observations_attribute_push_and_rm(tmp_path: Path) -> None:
     for command, _action_class, expected_rule in OLLAMA_REVIEW_CASES:
-        observations = BUILT_IN_COMMAND_EXTENSION_REGISTRY.observations(
-            parse_shell_command(command, cwd=tmp_path, home_dir=tmp_path)
-        )
+        if command.startswith("zsh -lc"):
+            fixture = real_native_review_fixture(
+                command,
+                controls=(("extension", "command.ollama", "enabled"),),
+            )
+            assert fixture.payload["command_extensions"]["evaluation_error"] == "native_command_evaluation_failed"
+            assert fixture.payload["command_extensions"]["observations"] == []
+            assert fixture.payload["command_model"]["uncertainty_reason"] == "transparent_wrapper_not_yet_supported"
+            continue
+        observations = real_native_command_evaluation(
+            command,
+            cwd=tmp_path,
+            controls=(("extension", "command.ollama", "enabled"),),
+        ).evaluation.extension_observations
         matched = {item.rule.rule_id for item in observations if item.extension.extension_id == "command.ollama"}
         assert expected_rule in matched, command
 
@@ -114,12 +127,12 @@ def test_enabled_ollama_help_and_read_commands_do_not_review(tmp_path: Path) -> 
         "ollama push --help",
         "ollama rm --help",
     ):
-        evaluation = evaluate_command(
+        evaluation = real_native_command_evaluation(
             command,
             cwd=tmp_path,
             home_dir=tmp_path,
             extension_control_layers=(enable_local_admin_extension_layer("command.ollama"),),
-        )
+        ).evaluation
         assert evaluation.controlling_rule_id not in {_PUSH_RULE, _RM_RULE}
         assert all(
             not item.effective_evidence
@@ -130,24 +143,24 @@ def test_enabled_ollama_help_and_read_commands_do_not_review(tmp_path: Path) -> 
 
 def test_independent_git_force_push_still_reviews_when_ollama_is_enabled(tmp_path: Path) -> None:
     command = "ollama push my-model && git push --force origin main"
-    evaluation = evaluate_command(
+    evaluation = real_native_command_evaluation(
         command,
         cwd=tmp_path,
         home_dir=tmp_path,
         extension_control_layers=(enable_local_admin_extension_layer("command.ollama"),),
-    )
+    ).evaluation
     matched = {item.rule.rule_id for item in evaluation.extension_observations}
     assert {_PUSH_RULE, "command.git.force-push"} <= matched
 
 
 def test_ollama_evidence_omits_model_names_and_raw_arguments(tmp_path: Path) -> None:
     command = "ollama push alice/my-model"
-    evaluation = evaluate_command(
+    evaluation = real_native_command_evaluation(
         command,
         cwd=tmp_path,
         home_dir=tmp_path,
         extension_control_layers=(enable_local_admin_extension_layer("command.ollama"),),
-    )
+    ).evaluation
     ollama_matches = [item.match for item in evaluation.matches if item.extension.extension_id == "command.ollama"]
     assert ollama_matches
     serialized = json.dumps(

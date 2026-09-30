@@ -8,6 +8,9 @@ execute mutable local code are not eligible for Python-side retry reuse.
 
 from __future__ import annotations
 
+import hashlib
+import json
+import logging
 import re
 import shlex
 import sqlite3
@@ -15,9 +18,10 @@ import uuid
 from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import urlparse
 
 from ..models import GuardApprovalRequest, format_local_http_origin
+from ..runtime.native_review_presentation import normalize_native_review_payload
+from .hook_native_review_binding import native_review_policy_binding
 from .hook_request_parsing import pre_tool_command
 from .hook_worker_responses import (
     harness_json_from_native_pre_tool,
@@ -25,6 +29,7 @@ from .hook_worker_responses import (
 )
 
 _DEFAULT_APPROVAL_CENTER_PORT = 4781
+_LOGGER = logging.getLogger(__name__)
 _MUTABLE_CODE_LAUNCHERS = {
     ".",
     "source",
@@ -55,6 +60,7 @@ _MUTABLE_CODE_LAUNCHERS = {
     "pipx",
 }
 _PYTHON_LAUNCHER = re.compile(r"pythonw?(?:\d+(?:\.\d+)*)?(?:\.exe)?$", re.IGNORECASE)
+_FILE_BACKED_PROGRAM_COMMANDS = {"sed", "grep", "egrep", "fgrep", "rg"}
 _DIRECT_REUSABLE_COMMANDS = {
     "cat",
     "head",
@@ -89,6 +95,18 @@ def pause_native_pre_tool_for_approval(
 ) -> dict[str, object]:
     """Pause a native review result and attach any queued approval metadata."""
 
+    try:
+        native_review_policy_binding(harness=harness, native_result=native_result, verified_receipt=native_receipt)
+    except ValueError:
+        failed = dict(native_result)
+        failed.update(
+            decision="deny",
+            minimum_action="block",
+            policy_action="block",
+            reason_code="native_review_policy_binding_invalid",
+            reason="HOL Guard could not bind this review to its native policy.",
+        )
+        return harness_json_from_native_pre_tool(harness, failed)
     launch_target = _native_review_launch_target(payload)
     tool_name = _native_review_tool_name(payload)
     identity = _native_review_binding(
@@ -153,6 +171,10 @@ def queue_native_pre_tool_review(
 ) -> dict[str, object] | None:
     """Persist one native review as an approval-center request."""
 
+    try:
+        native_review_policy_binding(harness=harness, native_result=native_result, verified_receipt=native_receipt)
+    except ValueError:
+        return None
     persist = getattr(store, "add_approval_request", None)
     lookup = getattr(store, "get_approval_request", None)
     if not callable(persist) or not callable(lookup):
@@ -166,6 +188,22 @@ def queue_native_pre_tool_review(
     approval_url = f"{approval_center_url}/requests/{request_id}"
     reason = str(native_result.get("reason") or "HOL Guard requires review before this action can execute.")
     binding = _native_review_binding(harness, payload, native_result, native_receipt, workspace)
+    try:
+        action_envelope = _native_review_action_envelope(
+            request_id=request_id,
+            harness=harness,
+            tool_name=tool_name,
+            command=command,
+            launch_target=launch_target,
+            workspace=workspace,
+            payload=payload,
+            native_action=native_result.get("action"),
+        )
+    except (OSError, RuntimeError, TypeError, ValueError, KeyError) as error:
+        # Never make an action approvable when its details could not be safely presented.
+        # Exception messages can contain private tool input; log only the error class.
+        _LOGGER.warning("Native review presentation failed for %s (%s)", request_id, type(error).__name__)
+        return None
     request = GuardApprovalRequest(
         request_id=request_id,
         harness=harness,
@@ -183,14 +221,7 @@ def queue_native_pre_tool_review(
         artifact_type="tool_call",
         launch_target=launch_target,
         risk_summary=reason,
-        action_envelope_json=_native_review_action_envelope(
-            request_id=request_id,
-            harness=harness,
-            tool_name=tool_name,
-            command=command,
-            launch_target=launch_target,
-            workspace=workspace,
-        ),
+        action_envelope_json=action_envelope,
     )
     try:
         persisted_id = persist(request, datetime.now(tz=timezone.utc).isoformat())
@@ -240,7 +271,43 @@ def _command_reuse_is_payload_bound(command: str) -> bool:
     basename = Path(executable).name.lower()
     if basename in _MUTABLE_CODE_LAUNCHERS or _PYTHON_LAUNCHER.fullmatch(basename):
         return False
+    if basename in _FILE_BACKED_PROGRAM_COMMANDS and _uses_file_backed_program(tokens[1:]):
+        return False
+    if basename == "rg" and _rg_executes_unreviewed_preprocessor(tokens[1:]):
+        return False
     return basename in _DIRECT_REUSABLE_COMMANDS
+
+
+def _rg_executes_unreviewed_preprocessor(tokens: list[str]) -> bool:
+    """Reject ripgrep launches that run a mutable preprocessor."""
+
+    return any(token == "--pre" or token.startswith("--pre=") for token in tokens)
+
+
+def _uses_file_backed_program(tokens: list[str]) -> bool:
+    """Reject programs or patterns loaded from a mutable file instead of argv."""
+
+    skip_next = False
+    for token in tokens:
+        if skip_next:
+            skip_next = False
+            continue
+        if token in {"-f", "--file", "--fi", "--fil"}:
+            return True
+        if token.startswith(("--file=", "--fi=", "--fil=")):
+            return True
+        if token in {"-e", "--expression", "--regexp"}:
+            skip_next = True
+            continue
+        if token.startswith("-") and not token.startswith("--") and token != "-":
+            cluster = token[1:]
+            for index, flag in enumerate(cluster):
+                if flag == "e":
+                    skip_next = index == len(cluster) - 1
+                    break
+                if flag == "f":
+                    return True
+    return False
 
 
 def _native_review_binding(
@@ -286,7 +353,18 @@ def _native_review_binding(
     identity_tokens = (decision, minimum_action, policy_action, reason_code)
     if any(_NATIVE_IDENTITY_TOKEN.fullmatch(value) is None for value in identity_tokens):
         return None
-    return ":".join(("native-review-v4", request_digest, *identity_tokens))
+    identity = ":".join(("native-review-v4", request_digest, *identity_tokens))
+    try:
+        policy_binding = native_review_policy_binding(
+            harness=harness, native_result=native_result, verified_receipt=native_receipt
+        )
+    except ValueError:
+        return None
+    if policy_binding is None:
+        return identity
+    encoded = json.dumps(policy_binding, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
+    domain = hashlib.sha256(b"hol-guard.native-review-extension-binding.v1\0" + encoded).hexdigest()
+    return f"{identity}:{domain}"
 
 
 def _native_review_matching_allow(
@@ -326,34 +404,20 @@ def _native_review_action_envelope(
     command: str | None,
     launch_target: str,
     workspace: Path | None,
+    payload: Mapping[str, object],
+    native_action: object = None,
 ) -> dict[str, object]:
-    host = urlparse(launch_target).hostname if "://" in launch_target else None
-    if command is not None:
-        action_type = "shell_command"
-    elif host:
-        action_type = "network_request"
-    else:
-        action_type = "mcp_tool"
-    return {
-        "schema_version": 1,
-        "action_id": request_id,
-        "harness": harness,
-        "event_name": "PreToolUse",
-        "action_type": action_type,
-        "workspace": str(workspace) if workspace is not None else None,
-        "workspace_hash": None,
-        "tool_name": tool_name,
-        "command": command,
-        "prompt_excerpt": None,
-        "prompt_text": None,
-        "target_paths": [],
-        "network_hosts": [host] if isinstance(host, str) and host else [],
-        "mcp_server": None,
-        "mcp_tool": None,
-        "package_manager": None,
-        "package_name": None,
-        "pre_execution_result": "review",
-    }
+    # Presentation only: approval identity and policy remain Rust-owned.
+    return normalize_native_review_payload(
+        harness,
+        payload,
+        request_id=request_id,
+        tool_name=tool_name,
+        command=command,
+        launch_target=launch_target,
+        workspace=workspace,
+        native_action=native_action,
+    )
 
 
 def _native_review_approval_center_url(store: object) -> str:

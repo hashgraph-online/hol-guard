@@ -1,0 +1,510 @@
+{
+  "extension": {
+    "action_classes": [
+      "Netlify destructive command",
+      "Netlify production command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews site deletion and production deployments.",
+    "ecosystem_ids": [],
+    "executables": [],
+    "extension_id": "command.platform.netlify",
+    "homepage": null,
+    "icon": {
+      "kind": "none"
+    },
+    "license": null,
+    "name": "Netlify command protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "Netlify production command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies a Netlify deployment directed to the primary site URL.",
+        "example_command": "netlify deploy --prod",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Netlify production deployment",
+        "permission_id": "command.platform.netlify.permission.production-deploy",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Create a draft deploy first and inspect it before publishing to production."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "Netlify destructive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies permanent deletion of a Netlify site.",
+        "example_command": "netlify sites:delete",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Netlify site deletion",
+        "permission_id": "command.platform.netlify.permission.site-deletion",
+        "replacement_permission_id": null,
+        "risk_tier": "critical",
+        "safer_guidance": [
+          "Inspect the linked site and its deploy history before deletion."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": null,
+    "reference_urls": [
+      "https://cli.netlify.com/commands/sites/",
+      "https://docs.netlify.com/api-and-cli-guides/cli-guides/get-started-with-cli/"
+    ],
+    "required": false,
+    "risk_classes": [
+      "destructive_shell",
+      "network_egress"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "Netlify destructive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies permanent deletion of a Netlify site.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "netlify",
+                  "netlify.cmd",
+                  "netlify.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--help",
+                  "-h"
+                ],
+                "interspersed_options_with_values": [
+                  "--auth",
+                  "--config",
+                  "--filter",
+                  "--site"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "sites:delete"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.platform.netlify.permission.site-deletion",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.platform.netlify.site-deletion",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "netlify",
+                      "netlify.cmd",
+                      "netlify.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--help",
+                      "-h"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--auth",
+                      "--config",
+                      "--filter",
+                      "--site"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "sites:delete"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "netlify",
+                      "netlify.cmd",
+                      "netlify.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--help",
+                      "-h"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--auth",
+                      "--config",
+                      "--filter",
+                      "--site"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "sites:delete"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "short-help"
+          }
+        ],
+        "safer_alternatives": [
+          "Inspect the linked site and its deploy history before deletion."
+        ],
+        "severity": "critical",
+        "title": "Netlify site deletion"
+      },
+      {
+        "action_classes": [
+          "Netlify production command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies a Netlify deployment directed to the primary site URL.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "netlify",
+                  "netlify.cmd",
+                  "netlify.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--help",
+                  "-h"
+                ],
+                "interspersed_options_with_values": [
+                  "--auth",
+                  "--config",
+                  "--filter",
+                  "--site"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [
+                  "--prod"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "deploy"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "netlify",
+                  "netlify.cmd",
+                  "netlify.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--help",
+                  "-h"
+                ],
+                "interspersed_options_with_values": [
+                  "--auth",
+                  "--config",
+                  "--filter",
+                  "--site"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [
+                  "-p"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "deploy"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.platform.netlify.permission.production-deploy",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.platform.netlify.production-deploy",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "netlify",
+                      "netlify.cmd",
+                      "netlify.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--help",
+                      "-h"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--auth",
+                      "--config",
+                      "--filter",
+                      "--site"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help",
+                      "--prod"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "deploy"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "netlify",
+                      "netlify.cmd",
+                      "netlify.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--help",
+                      "-h"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--auth",
+                      "--config",
+                      "--filter",
+                      "--site"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help",
+                      "-p"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "deploy"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "netlify",
+                      "netlify.cmd",
+                      "netlify.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--help",
+                      "-h"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--auth",
+                      "--config",
+                      "--filter",
+                      "--site"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--prod",
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "deploy"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "netlify",
+                      "netlify.cmd",
+                      "netlify.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--help",
+                      "-h"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--auth",
+                      "--config",
+                      "--filter",
+                      "--site"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-h",
+                      "-p"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "deploy"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "short-help"
+          }
+        ],
+        "safer_alternatives": [
+          "Create a draft deploy first and inspect it before publishing to production."
+        ],
+        "severity": "high",
+        "title": "Netlify production deployment"
+      }
+    ],
+    "safer_alternatives": [
+      "Inspect the linked site and create a draft deploy before production changes."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

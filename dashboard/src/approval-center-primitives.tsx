@@ -50,7 +50,8 @@ export type AppView =
   | "audit"
   | "policy"
   | "feed-health"
-  | "about";
+  | "about"
+  | "protection-repair";
 
 export function ShellHeader(props: {
   queuedCount: number;

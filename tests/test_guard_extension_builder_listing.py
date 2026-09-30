@@ -18,6 +18,8 @@ from codex_plugin_scanner.guard.extension_builder.io import canonical_json
 from codex_plugin_scanner.guard.extension_builder.kit import build_kit, load_kit, write_kit
 from codex_plugin_scanner.guard.extension_builder.listing import (
     CATEGORY_LABELS,
+    LISTING_SCHEMA_V1,
+    LISTING_SCHEMA_V2,
     MAX_TAGLINE_LENGTH,
     category_for_extension,
     listing_schema,
@@ -34,12 +36,26 @@ def listing() -> dict[str, object]:
     return json.loads(listing_template(metadata()))
 
 
-def test_listing_contract_is_packaged_byte_for_byte() -> None:
-    source = REPOSITORY / "contracts/extensions/listing.v1.schema.json"
-    packaged = REPOSITORY / "src/codex_plugin_scanner/guard/extension_builder/listing.v1.schema.json"
-    assert source.read_bytes() == packaged.read_bytes()
+def test_listing_contracts_are_packaged_byte_for_byte() -> None:
+    for version in ("v1", "v2"):
+        source = REPOSITORY / f"contracts/extensions/listing.{version}.schema.json"
+        packaged = REPOSITORY / f"src/codex_plugin_scanner/guard/extension_builder/listing.{version}.schema.json"
+        assert source.read_bytes() == packaged.read_bytes()
     Draft202012Validator(listing_schema()).validate(listing())
-    assert json.loads(source.read_text())["properties"]["tagline"]["maxLength"] == MAX_TAGLINE_LENGTH
+    source_schema = json.loads((REPOSITORY / "contracts/extensions/listing.v2.schema.json").read_text())
+    assert source_schema["properties"]["tagline"]["maxLength"] == MAX_TAGLINE_LENGTH
+
+
+def test_v1_listing_remains_readable_while_v2_is_the_new_template() -> None:
+    v1 = {
+        "schemaVersion": LISTING_SCHEMA_V1,
+        "extensionId": "command.builder-demo",
+        "tagline": "Reviewed command coverage for Builder Demo.",
+        "category": "other",
+        "limitations": ["Coverage is limited to the reviewed operations and surrounding Guard policy."],
+    }
+    assert validate_listing(v1) == v1
+    assert listing()["schemaVersion"] == LISTING_SCHEMA_V2
 
 
 @pytest.mark.parametrize("kind", ["cli", "mcp"])
@@ -56,6 +72,7 @@ def test_template_has_no_inferred_claim_or_runtime_authority(kind: Literal["cli"
     "field,value",
     [
         ("activation", "default-on"),
+        ("schemaVersion", ["guard.extension-listing.v2"]),
         ("trustClass", "first-party"),
         ("detector", "evil.py"),
         ("policy", {}),
@@ -120,6 +137,36 @@ def test_numeric_maintainers_and_exact_identity() -> None:
     assert validate_listing(row)["maintainerGithubIds"] == row["maintainerGithubIds"]
     with pytest.raises(BuilderError):
         validate_listing(row, expected_id="command.someone-else")
+
+
+def test_v2_credit_is_not_accepted_claim_authority() -> None:
+    row = listing()
+    row.update(
+        {
+            "contributors": [{"githubId": "123", "githubLogin": "example-author", "roles": ["author"]}],
+            "originalContributions": [
+                {"kind": "pull-request", "url": "https://github.com/hashgraph-online/hol-guard/pull/3020"}
+            ],
+            "upstream": {"name": "Builder Demo", "url": "https://github.com/example/builder-demo"},
+        }
+    )
+    parsed = validate_listing(row)
+    assert parsed["contributors"] == row["contributors"]
+    assert "maintainerGithubIds" not in parsed
+    row["contributors"] = [
+        {"githubId": "123", "githubLogin": "example-author", "roles": ["author"]},
+        {"githubId": "123", "githubLogin": "another-login", "roles": ["co-author"]},
+    ]
+    with pytest.raises(BuilderError):
+        validate_listing(row)
+
+
+@pytest.mark.parametrize("name", [" Builder Demo", "Builder\nDemo"])
+def test_v2_upstream_name_is_plain_text(name: str) -> None:
+    row = listing()
+    row["upstream"] = {"name": name, "url": "https://github.com/example/builder-demo"}
+    with pytest.raises(BuilderError):
+        validate_listing(row)
 
 
 def test_rejects_duplicate_keys_filename_mismatch_and_byte_limit(tmp_path: Path) -> None:

@@ -1,0 +1,215 @@
+name: Retire superseded PR checks
+
+on:
+  workflow_run:
+    workflows: [CI, Native wheel CI]
+    types: [requested, in_progress]
+
+permissions: {}
+
+# Only trusted default-branch code runs. Never consume PR code, caches or artifacts.
+concurrency:
+  group: ci-superseded-${{ github.event.workflow_run.id }}
+  cancel-in-progress: false
+
+jobs:
+  retire:
+    if: github.event.workflow_run.event == 'pull_request'
+    permissions:
+      actions: write
+      pull-requests: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Release slots held by older commits of this PR
+        shell: python
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          import json
+          import os
+          import time
+          from urllib.error import HTTPError
+          from urllib.parse import urlencode
+          from urllib.request import Request, urlopen
+
+          WORKFLOWS = {".github/workflows/ci.yml", ".github/workflows/native-wheel-ci.yml"}
+          ACTIVE = {"queued", "in_progress", "pending", "waiting", "requested"}
+          MAX_PAGES = 5
+          MAX_CANCELLATIONS = 10
+          MAX_ASSOCIATION_LOOKUPS = 64
+
+
+
+          def associated_run(run, repo, request, budget):
+              # Run metadata sometimes omits PR links even for same-repository branches.
+              # Resolve the exact commit through GitHub, never infer a PR from its name.
+              if run.get("pull_requests"):
+                  return run
+              repository = run.get("repository") or {}
+              head_repository = run.get("head_repository") or {}
+              sha = run.get("head_sha")
+              repository_id = repository.get("id")
+              if (
+                  run.get("event") != "pull_request"
+                  or run.get("path") not in WORKFLOWS
+                  or repository.get("full_name") != repo
+                  or type(repository_id) is not int or repository_id <= 0
+                  or head_repository.get("id") != repository_id
+                  or not isinstance(sha, str) or len(sha) != 40
+                  or any(character not in "0123456789abcdef" for character in sha)
+                  or budget[0] <= 0
+              ):
+                  return run
+              budget[0] -= 1
+              # Two results are sufficient to reject ambiguity; never select one of many.
+              links = request("GET", f"commits/{sha}/pulls?per_page=2")
+              if not isinstance(links, list) or len(links) != 1 or not isinstance(links[0], dict):
+                  return run
+              link = links[0]
+              head = link.get("head") or {}
+              if (
+                  type(link.get("number")) is not int or link["number"] <= 0
+                  or link.get("state") != "open"
+                  or (link.get("base", {}).get("repo") or {}).get("id") != repository_id
+                  or (head.get("repo") or {}).get("id") != repository_id
+                  or head.get("ref") != run.get("head_branch")
+              ):
+                  return run
+              return {**run, "pull_requests": [{"number": link["number"]}]}
+
+          def same_pr(run, pr, repo, number):
+              head = pr.get("head") or {}
+              head_repo = head.get("repo") or {}
+              return (
+                  run.get("event") == "pull_request"
+                  and run.get("path") in WORKFLOWS
+                  and (run.get("repository") or {}).get("full_name") == repo
+                  and bool(head_repo.get("id"))
+                  and (run.get("head_repository") or {}).get("id") == head_repo["id"]
+                  and run.get("head_branch") == head.get("ref")
+                  and {item.get("number") for item in run.get("pull_requests") or []} == {number}
+              )
+
+
+          def eligible(run, pr, replacement, repo, number):
+              return (
+                  same_pr(run, pr, repo, number)
+                  and run.get("status") in ACTIVE
+                  and type(run.get("id")) is int
+                  and 0 < run["id"] < replacement["id"]
+                  and run.get("workflow_id") == replacement["workflow_id"]
+                  and run.get("path") == replacement["path"]
+                  and bool(run.get("head_sha"))
+                  and run["head_sha"] != pr["head"]["sha"]
+              )
+
+
+          def retire(repo, number, replacement_id, request, pause=time.sleep, association_budget=None):
+              budget = [MAX_ASSOCIATION_LOOKUPS] if association_budget is None else association_budget
+              def current():
+                  replacement = associated_run(request("GET", f"actions/runs/{replacement_id}"), repo, request, budget)
+                  pr = request("GET", f"pulls/{number}")
+                  if (
+                      pr.get("state") != "open"
+                      or (pr.get("base", {}).get("repo") or {}).get("full_name") != repo
+                      or not same_pr(replacement, pr, repo, number)
+                      or replacement.get("id") != replacement_id
+                      or type(replacement.get("workflow_id")) is not int
+                      or not replacement.get("head_sha")
+                      or replacement["head_sha"] != pr["head"].get("sha")
+                      or not (
+                          replacement.get("status") in ACTIVE
+                          or (replacement.get("status") == "completed" and replacement.get("conclusion") == "success")
+                      )
+                  ):
+                      return None
+                  return pr, replacement
+
+              state = current()
+              if state is None:
+                  return
+              pr, replacement = state
+              candidates = set()
+              for page in range(1, MAX_PAGES + 1):
+                  query = urlencode({"event": "pull_request", "branch": pr["head"]["ref"], "per_page": 100, "page": page})
+                  rows = request("GET", f"actions/workflows/{replacement['workflow_id']}/runs?{query}")["workflow_runs"]
+                  for run in rows:
+                      if (run.get("status") not in ACTIVE or type(run.get("id")) is not int
+                              or not 0 < run["id"] < replacement_id
+                              or run.get("workflow_id") != replacement["workflow_id"]
+                              or run.get("head_sha") == pr["head"]["sha"]):
+                          continue
+                      linked = associated_run(run, repo, request, budget)
+                      if eligible(linked, pr, replacement, repo, number):
+                          candidates.add(run["id"])
+                  if len(rows) < 100:
+                      break
+
+              def still_obsolete(run_id):
+                  run = associated_run(request("GET", f"actions/runs/{run_id}"), repo, request, budget)
+                  state = current()  # The live PR head is the last read before either write.
+                  return state is not None and eligible(run, *state, repo, number)
+
+              cancelled = []
+              for run_id in sorted(candidates, reverse=True)[:MAX_CANCELLATIONS]:
+                  if not still_obsolete(run_id):
+                      continue
+                  try:
+                      request("POST", f"actions/runs/{run_id}/cancel")
+                  except HTTPError as error:
+                      if error.code != 409:
+                          raise
+                  cancelled.append(run_id)
+              if not cancelled:
+                  return
+              # One shared grace period, not fifteen seconds for each obsolete run.
+              pause(15)
+              for run_id in cancelled:
+                  if not still_obsolete(run_id):
+                      continue
+                  try:
+                      request("POST", f"actions/runs/{run_id}/force-cancel")
+                  except HTTPError as error:
+                      if error.code != 409:
+                          raise
+                  print(f"Retirement requested for superseded run {run_id}; replacement {replacement_id}")
+
+
+          def main():
+              repo = os.environ["GITHUB_REPOSITORY"]
+              with open(os.environ["GITHUB_EVENT_PATH"], encoding="utf-8") as stream:
+                  event = json.load(stream)
+              trigger = event["workflow_run"]
+              if trigger.get("event") != "pull_request":
+                  return
+
+              def request(method, path):
+                  req = Request(
+                      f"https://api.github.com/repos/{repo}/{path}",
+                      data=b"" if method == "POST" else None,
+                      method=method,
+                      headers={"Authorization": "Bearer " + os.environ["GH_TOKEN"],
+                               "Accept": "application/vnd.github+json",
+                               "X-GitHub-Api-Version": "2022-11-28",
+                               "User-Agent": "hol-guard-superseded-ci"},
+                  )
+                  with urlopen(req, timeout=10) as response:
+                      body = response.read()
+                  return json.loads(body) if body else None
+
+              # Missing fork links remain ineligible. Same-repository links must be
+              # uniquely associated with the exact commit, and are rechecked before writes.
+              budget = [MAX_ASSOCIATION_LOOKUPS]
+              trigger = associated_run(trigger, repo, request, budget)
+              numbers = {item.get("number") for item in trigger.get("pull_requests") or []}
+              if len(numbers) != 1:
+                  print("Skipping cleanup without one explicit PR association")
+                  return
+              number = numbers.pop()
+              if type(number) is int and number > 0:
+                  retire(repo, number, trigger["id"], request, association_budget=budget)
+
+
+          if __name__ == "__main__":
+              main()

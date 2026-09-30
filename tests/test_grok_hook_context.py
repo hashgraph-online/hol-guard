@@ -39,6 +39,10 @@ def _generated(context: HarnessContext, mode: str, monkeypatch: pytest.MonkeyPat
     monkeypatch.delenv("HOL_GUARD_DESKTOP", raising=False)
     if mode == "frozen":
         monkeypatch.setattr(sys, "frozen", True, raising=False)
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge.isolated_cursor_hook_python",
+            lambda: None,
+        )
     command = GrokHarnessAdapter._hook_command_parts(context)
     if mode != "desktop":
         return command

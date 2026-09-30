@@ -6,12 +6,14 @@ on:
       - "rust/**"
       - "ci/native_runtime/test_native_rule_contract.py"
       - ".github/workflows/rust-runtime-rule-contract.yml"
+      - ".github/actions/setup-rust/**"
   push:
     branches: [main]
     paths:
       - "rust/**"
       - "ci/native_runtime/test_native_rule_contract.py"
       - ".github/workflows/rust-runtime-rule-contract.yml"
+      - ".github/actions/setup-rust/**"
   workflow_dispatch:
 
 permissions:
@@ -37,10 +39,10 @@ jobs:
           version: "0.9.26"
           enable-cache: true
       - run: uv sync --frozen --extra dev --python 3.12
-      - name: Install pinned Rust toolchain
-        run: |
-          rustup toolchain install 1.88.0 --profile minimal --component rustfmt --component clippy
-          rustup default 1.88.0
+      - name: Install cached Rust toolchain
+        uses: ./.github/actions/setup-rust
+        with:
+          components: rustfmt clippy
       - name: Validate locked Rust workspace
         run: |
           cargo metadata --manifest-path rust/Cargo.toml --locked --format-version 1 --no-deps > /dev/null

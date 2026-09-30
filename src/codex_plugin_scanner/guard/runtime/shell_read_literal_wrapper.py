@@ -25,6 +25,8 @@ def literal_shell_read_payload(command_text: str) -> str:
         tokens = shlex.split(command_text, posix=True, comments=False)
     except ValueError:
         return command_text
-    if len(tokens) != 3 or tokens[0] not in _TRANSPARENT_SHELLS or tokens[1] not in {"-c", "-lc"}:
+    # Login shells (`-lc`) execute user-controlled startup files before the
+    # payload, so they must keep the original invocation for review.
+    if len(tokens) != 3 or tokens[0] not in _TRANSPARENT_SHELLS or tokens[1] != "-c":
         return command_text
     return tokens[2]

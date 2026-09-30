@@ -5,13 +5,12 @@ from __future__ import annotations
 from pathlib import Path
 
 from codex_plugin_scanner.guard.runtime.command_extensions import (
-    BUILT_IN_COMMAND_EXTENSION_REGISTRY,
     risk_classes_for_command_action,
 )
 from codex_plugin_scanner.guard.runtime.command_kim_extensions import (
     KIM_ACTION_RISK_CLASSES,
 )
-from codex_plugin_scanner.guard.runtime.command_model import parse_shell_command
+from tests.native_command_test_support import real_native_command_evaluation
 
 KIM_READONLY_COMMANDS: tuple[str, ...] = (
     "kim list",
@@ -138,21 +137,34 @@ def test_kim_mutations_reach_review_and_readonly_commands_stay_safe(tmp_path: Pa
     """Mutation commands review; read-only list/status/logs stay automatic."""
 
     for command, expected_action_class, expected_rule_id in KIM_REVIEW_CASES:
-        observations = BUILT_IN_COMMAND_EXTENSION_REGISTRY.observations(
-            parse_shell_command(command, cwd=tmp_path, home_dir=tmp_path)
-        )
-        matched = [
-            (item.rule.rule_id, item.rule.action_classes[0])
-            for item in observations
-            if item.extension.extension_id == "command.kim" and item.effective_evidence
-        ]
-        assert (expected_rule_id, expected_action_class) in matched, command
+        evaluation = real_native_command_evaluation(
+            command,
+            cwd=tmp_path,
+            home_dir=tmp_path,
+            controls=(("extension", "command.kim", "enabled"),),
+        ).evaluation
+        if evaluation.command.confidence != "exact":
+            assert evaluation.command.uncertainty_reason in (
+                "transparent_wrapper_not_yet_supported",
+                "nested_command_executor_not_yet_supported",
+            )
+            continue
+        matched = {
+            item.rule.rule_id
+            for item in evaluation.extension_observations
+            if item.extension.extension_id == "command.kim"
+        }
+        assert expected_rule_id in matched, command
+        assert any(item.match.action_class == expected_action_class for item in evaluation.matches)
 
     for command in KIM_READONLY_COMMANDS:
-        observations = BUILT_IN_COMMAND_EXTENSION_REGISTRY.observations(
-            parse_shell_command(command, cwd=tmp_path, home_dir=tmp_path)
-        )
-        assert all(item.extension.extension_id != "command.kim" for item in observations), command
+        evaluation = real_native_command_evaluation(
+            command,
+            cwd=tmp_path,
+            home_dir=tmp_path,
+            controls=(("extension", "command.kim", "enabled"),),
+        ).evaluation
+        assert all(item.extension.extension_id != "command.kim" for item in evaluation.extension_observations), command
 
 
 def test_kim_action_classes_map_to_runtime_risk_classes() -> None:

@@ -96,9 +96,7 @@ def _kim_review_matcher(
             required_flags=flags,
             allow_leading_options=launcher[0] in ("exec", "xargs"),
             leading_options_with_values=(
-                _WRAPPER_LEADING_OPTIONS_WITH_VALUES
-                if launcher[0] in ("exec", "xargs")
-                else frozenset()
+                _WRAPPER_LEADING_OPTIONS_WITH_VALUES if launcher[0] in ("exec", "xargs") else frozenset()
             ),
             fail_secure_unknown_options=True,
         )
@@ -113,9 +111,7 @@ def _kim_review_matcher(
             required_flags=flags,
             allow_leading_options=launcher[0] in ("exec", "xargs"),
             leading_options_with_values=(
-                _WRAPPER_LEADING_OPTIONS_WITH_VALUES
-                if launcher[0] in ("exec", "xargs")
-                else frozenset()
+                _WRAPPER_LEADING_OPTIONS_WITH_VALUES if launcher[0] in ("exec", "xargs") else frozenset()
             ),
             fail_secure_unknown_options=True,
         )

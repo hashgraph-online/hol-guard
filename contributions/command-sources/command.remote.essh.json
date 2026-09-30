@@ -1,0 +1,261 @@
+{
+  "extension": {
+    "action_classes": [
+      "essh group execution command",
+      "essh cache removal command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews essh invocations that execute commands across a host group or delete cached hosts, keys, and workspaces.",
+    "ecosystem_ids": [],
+    "executables": [],
+    "extension_id": "command.remote.essh",
+    "homepage": "https://github.com/matthart1983/essh",
+    "icon": {
+      "background": "#0F766E",
+      "kind": "react-icon",
+      "name": "HiMiniGlobeAlt"
+    },
+    "license": null,
+    "name": "essh group execution and cache removal protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "essh cache removal command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies essh remove verbs that delete cached hosts, keys, or saved workspaces.",
+        "example_command": "essh keys remove deploy-key",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "essh cached credential and host removal",
+        "permission_id": "command.remote.essh.permission.cache-removal",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "List the cached entry first with essh hosts list, essh keys list, or essh workspace list and confirm the name before removing it."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "essh group execution command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies essh run invocations that execute a command across every host in a group.",
+        "example_command": "essh run web -- sudo systemctl restart api",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "essh host group execution",
+        "permission_id": "command.remote.essh.permission.group-execution",
+        "replacement_permission_id": null,
+        "risk_tier": "critical",
+        "safer_guidance": [
+          "Inspect the group membership with essh hosts list and run the command against a single host first."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": {
+      "display_name": "Community",
+      "id": "community.matthart1983",
+      "url": "https://github.com/matthart1983/essh"
+    },
+    "reference_urls": [
+      "https://github.com/matthart1983/essh"
+    ],
+    "required": false,
+    "risk_classes": [
+      "destructive_shell",
+      "execution",
+      "network_egress"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "essh group execution command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies essh run invocations that execute a command across every host in a group.",
+        "family": null,
+        "matcher": {
+          "config": {
+            "executables": [
+              "essh",
+              "essh.cmd",
+              "essh.exe"
+            ],
+            "forbidden_flags": [],
+            "forbidden_flags_before_delimiter": [
+              "--help",
+              "--version",
+              "-V",
+              "-h"
+            ],
+            "interleaved_options_with_values": [
+              "--theme"
+            ],
+            "options_with_values": [
+              "--theme"
+            ],
+            "required_flags_anywhere": [],
+            "subcommands": [
+              "run"
+            ]
+          },
+          "op": "leading-subcommand.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.remote.essh.permission.group-execution",
+        "risk_classes": [
+          "execution",
+          "network_egress"
+        ],
+        "rule_id": "command.remote.essh.group-execution",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Inspect the group membership with essh hosts list and run the command against a single host first."
+        ],
+        "severity": "critical",
+        "title": "essh host group execution"
+      },
+      {
+        "action_classes": [
+          "essh cache removal command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies essh remove verbs that delete cached hosts, keys, or saved workspaces.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "executables": [
+                  "essh",
+                  "essh.cmd",
+                  "essh.exe"
+                ],
+                "forbidden_flags": [],
+                "forbidden_flags_before_delimiter": [
+                  "--help",
+                  "--version",
+                  "-V",
+                  "-h"
+                ],
+                "interleaved_options_with_values": [
+                  "--theme"
+                ],
+                "options_with_values": [
+                  "--theme"
+                ],
+                "required_flags_anywhere": [],
+                "subcommands": [
+                  "hosts",
+                  "remove"
+                ]
+              },
+              "op": "leading-subcommand.v1"
+            },
+            {
+              "config": {
+                "executables": [
+                  "essh",
+                  "essh.cmd",
+                  "essh.exe"
+                ],
+                "forbidden_flags": [],
+                "forbidden_flags_before_delimiter": [
+                  "--help",
+                  "--version",
+                  "-V",
+                  "-h"
+                ],
+                "interleaved_options_with_values": [
+                  "--theme"
+                ],
+                "options_with_values": [
+                  "--theme"
+                ],
+                "required_flags_anywhere": [],
+                "subcommands": [
+                  "keys",
+                  "remove"
+                ]
+              },
+              "op": "leading-subcommand.v1"
+            },
+            {
+              "config": {
+                "executables": [
+                  "essh",
+                  "essh.cmd",
+                  "essh.exe"
+                ],
+                "forbidden_flags": [],
+                "forbidden_flags_before_delimiter": [
+                  "--help",
+                  "--version",
+                  "-V",
+                  "-h"
+                ],
+                "interleaved_options_with_values": [
+                  "--theme"
+                ],
+                "options_with_values": [
+                  "--theme"
+                ],
+                "required_flags_anywhere": [],
+                "subcommands": [
+                  "workspace",
+                  "remove"
+                ]
+              },
+              "op": "leading-subcommand.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.remote.essh.permission.cache-removal",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.remote.essh.cache-removal",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "List the cached entry first with essh hosts list, essh keys list, or essh workspace list and confirm the name before removing it."
+        ],
+        "severity": "high",
+        "title": "essh cached credential and host removal"
+      }
+    ],
+    "safer_alternatives": [
+      "Inspect group membership and cached entries before running or removing anything."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}
