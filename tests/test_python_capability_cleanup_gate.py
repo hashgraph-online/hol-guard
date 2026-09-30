@@ -111,8 +111,8 @@ def test_cleanup_contract_covers_every_scoped_hook_capability() -> None:
 
     assert payload["schema"] == "hol-guard.python-capability-cleanup.v1"
     assert payload["status"] == "passed"
-    # hook_launcher_recovery.py matches the existing hook control-plane scope glob.
-    assert payload["scope_files"] == 100
+    # hook_policy_repair.py and the MCP evidence record match the existing hook scope glob.
+    assert payload["scope_files"] == 102
     assert "legacy_python_resident_transport" not in payload["capabilities"]
     assert payload["candidate_evidence"] == []
     assert payload["retired_evidence"] == [
@@ -348,7 +348,11 @@ def test_retained_python_oracle_is_loaded_only_by_explicit_test_surface(monkeypa
     assert callable(surface["hydrate_hook_payload_reference"])
 
 
-def test_retired_module_cannot_enter_a_package_artifact(tmp_path: Path) -> None:
+def test_retired_module_cannot_enter_a_package_artifact(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def unexpected_analysis(_root: Path):
+        raise AssertionError("invalid package must be rejected before source analysis")
+
+    monkeypatch.setattr(GATE, "_analyze_import_graph", unexpected_analysis)
     wheel = tmp_path / "fixture.whl"
     with ZipFile(wheel, "w") as archive:
         archive.writestr("codex_plugin_scanner/guard/native_runtime_resident.py", b"retained source")

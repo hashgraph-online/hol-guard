@@ -533,6 +533,7 @@ class TestSpawnedDaemonStartClassification:
         from codex_plugin_scanner.guard.daemon import start_classification
 
         monkeypatch.setattr(daemon_manager_module, "_reap_stale_ephemeral_guard_daemons", lambda **_: None)
+        monkeypatch.setattr(daemon_manager_module, "reap_orphaned_daemon_workers", lambda **_: None)
         monkeypatch.setattr(
             daemon_manager_module,
             "_running_guard_daemon_processes_for_guard_home",
@@ -570,7 +571,7 @@ class TestSpawnedDaemonStartClassification:
         process = _FakeSpawnedDaemonProcess()
         self._patch_ensure_deadline(monkeypatch, guard_home, process, owner_lock_held=True)
 
-        with pytest.raises(RuntimeError, match="^Guard daemon is still starting"):
+        with pytest.raises(RuntimeError, match=r"^Guard daemon is still starting"):
             daemon_manager_module.ensure_guard_daemon(guard_home, start_timeout=30.0, home_dir=tmp_path)
 
         assert process.terminated is False
@@ -596,7 +597,7 @@ class TestSpawnedDaemonStartClassification:
             ),
         )
 
-        with pytest.raises(RuntimeError, match="^Guard daemon is still starting"):
+        with pytest.raises(RuntimeError, match=r"^Guard daemon is still starting"):
             daemon_manager_module.ensure_guard_daemon(guard_home, start_timeout=30.0, home_dir=tmp_path)
 
         assert process.terminated is False
@@ -609,8 +610,8 @@ class TestSpawnedDaemonStartClassification:
         process = _FakeSpawnedDaemonProcess()
         self._patch_ensure_deadline(monkeypatch, guard_home, process, owner_lock_held=False)
 
-        with pytest.raises(RuntimeError, match="^Guard approval center did not start"):
-            daemon_manager_module.ensure_guard_daemon(guard_home, start_timeout=0.05, home_dir=tmp_path)
+        with pytest.raises(RuntimeError, match=r"^Guard approval center did not start"):
+            daemon_manager_module.ensure_guard_daemon(guard_home, start_timeout=30.0, home_dir=tmp_path)
 
         assert process.terminated is True
 
@@ -625,8 +626,9 @@ class TestSpawnedDaemonStartClassification:
         self._patch_ensure_deadline(monkeypatch, guard_home, process, owner_lock_held=True)
         monkeypatch.setattr(daemon_manager_module, "process_start_token", lambda _pid: None)
 
-        with pytest.raises(RuntimeError, match="^Guard approval center did not start"):
-            daemon_manager_module.ensure_guard_daemon(guard_home, start_timeout=0.05, home_dir=tmp_path)
+        with pytest.raises(RuntimeError, match=r"^Guard approval center did not start"):
+            # The patched readiness wait models expiry after the process spawns.
+            daemon_manager_module.ensure_guard_daemon(guard_home, start_timeout=30.0, home_dir=tmp_path)
 
         assert process.terminated is True
         assert not (guard_home / "daemon-start-progress.json").is_file()
@@ -767,7 +769,7 @@ class TestStillStartingAdoption:
             lambda _gh, **_kw: True,
         )
 
-        with pytest.raises(RuntimeError, match="^Guard daemon is still starting"):
+        with pytest.raises(RuntimeError, match=r"^Guard daemon is still starting"):
             daemon_manager_module.ensure_guard_daemon(guard_home, start_timeout=30.0, home_dir=tmp_path)
 
         daemon_spawns = [cmd for cmd in calls["popen"] if "daemon" in str(cmd)]

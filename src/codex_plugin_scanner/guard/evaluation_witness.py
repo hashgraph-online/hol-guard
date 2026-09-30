@@ -6,8 +6,11 @@ adapter or turn a synthetic action into installed-host enforcement evidence.
 
 from __future__ import annotations
 
+import os
 import socket
+import stat
 import sys
+import weakref
 from dataclasses import dataclass
 from http.client import HTTPConnection
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -16,9 +19,141 @@ from tempfile import TemporaryDirectory
 from threading import BoundedSemaphore, Lock, Thread
 from uuid import uuid4
 
-from codex_plugin_scanner.guard.evaluation_preflight import EvaluationSetup
+from codex_plugin_scanner.guard.evaluation_preflight import EvaluationSetup, _safe_temp_parent
 
 _MAX_ACTIVE_RECEIVER_CONNECTIONS = 8
+
+
+def _rmtree_at(directory_fd: int, entry: str, *, expected_identity: tuple[int, int] | None = None) -> None:
+    try:
+        details = os.stat(entry, dir_fd=directory_fd, follow_symlinks=False)
+    except FileNotFoundError:
+        return
+    identity = details.st_dev, details.st_ino
+    if expected_identity is not None and identity != expected_identity:
+        raise ValueError("Witness directory changed before cleanup")
+    if not stat.S_ISDIR(details.st_mode):
+        if expected_identity is not None:
+            raise ValueError("Witness directory changed before cleanup")
+        os.unlink(entry, dir_fd=directory_fd)
+        return
+
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    child_fd = os.open(entry, flags, dir_fd=directory_fd)
+    try:
+        opened = os.fstat(child_fd)
+        if (opened.st_dev, opened.st_ino) != identity:
+            raise ValueError("Witness directory changed before cleanup")
+        if stat.S_IMODE(opened.st_mode) & stat.S_IRWXU != stat.S_IRWXU:
+            os.fchmod(child_fd, stat.S_IMODE(opened.st_mode) | stat.S_IRWXU)
+        with os.scandir(child_fd) as entries:
+            for child in entries:
+                _rmtree_at(child_fd, child.name)
+        current = os.stat(entry, dir_fd=directory_fd, follow_symlinks=False)
+        if (current.st_dev, current.st_ino) != identity:
+            raise ValueError("Witness directory changed before cleanup")
+    finally:
+        os.close(child_fd)
+    os.rmdir(entry, dir_fd=directory_fd)
+
+
+class _PinnedWitnessDirectory:
+    """Remove a witness through the workspace descriptor used to create it."""
+
+    def __init__(self, *, workspace_fd: int, entry: str, name: str, identity: tuple[int, int]) -> None:
+        self._finalizer = weakref.finalize(self, _cleanup_pinned_witness, workspace_fd, entry, identity)
+        self.name = name
+
+    def cleanup(self) -> None:
+        self._finalizer()
+
+
+def _cleanup_pinned_witness(workspace_fd: int, entry: str, identity: tuple[int, int]) -> None:
+    try:
+        try:
+            details = os.stat(entry, dir_fd=workspace_fd, follow_symlinks=False)
+        except FileNotFoundError:
+            return
+        if not stat.S_ISDIR(details.st_mode) or (details.st_dev, details.st_ino) != identity:
+            raise ValueError("Witness directory changed before cleanup")
+        _rmtree_at(workspace_fd, entry, expected_identity=identity)
+    finally:
+        os.close(workspace_fd)
+
+
+def _owned_witness_directory(setup: EvaluationSetup) -> _PinnedWitnessDirectory:
+    root = setup.root_path
+    workspace = setup.workspace
+    token = setup.marker_token
+    if (
+        setup.report.status != "passed"
+        or root is None
+        or workspace is None
+        or workspace != root / "workspace"
+        or token is None
+        or setup.root_identity is None
+        or setup.workspace_identity is None
+        or not root.is_absolute()
+        or not root.name.startswith("hol-guard-eval-")
+        or not _safe_temp_parent(root.parent)
+        or not hasattr(os, "O_NOFOLLOW")
+        or not hasattr(os, "O_DIRECTORY")
+    ):
+        raise ValueError("Witness requires a live owned evaluation setup")
+
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    try:
+        parent_fd = os.open(root.parent, flags)
+        try:
+            root_fd = os.open(root.name, flags, dir_fd=parent_fd)
+            try:
+                workspace_fd = os.open("workspace", flags, dir_fd=root_fd)
+                try:
+                    marker_fd = os.open(".hol-guard-evaluation-owned", os.O_RDONLY | os.O_NOFOLLOW, dir_fd=root_fd)
+                    try:
+                        marker_info = os.fstat(marker_fd)
+                        token_bytes = token.encode("utf-8")
+                        marker_matches = (
+                            stat.S_ISREG(marker_info.st_mode)
+                            and os.read(marker_fd, len(token_bytes) + 1) == token_bytes
+                        )
+                    finally:
+                        os.close(marker_fd)
+                    for descriptor, expected_identity in (
+                        (root_fd, setup.root_identity),
+                        (workspace_fd, setup.workspace_identity),
+                    ):
+                        details = os.fstat(descriptor)
+                        if (
+                            not stat.S_ISDIR(details.st_mode)
+                            or stat.S_IMODE(details.st_mode) & 0o077
+                            or (details.st_dev, details.st_ino) != expected_identity
+                        ):
+                            raise ValueError("Witness requires a live owned evaluation setup")
+                        if hasattr(os, "getuid") and details.st_uid != os.getuid():
+                            raise ValueError("Witness requires a live owned evaluation setup")
+                    if not marker_matches or stat.S_IMODE(marker_info.st_mode) & 0o077:
+                        raise ValueError("Witness requires a live owned evaluation setup")
+                    if hasattr(os, "getuid") and marker_info.st_uid != os.getuid():
+                        raise ValueError("Witness requires a live owned evaluation setup")
+                    entry = f"hol-guard-evaluation-witness-{uuid4().hex}"
+                    os.mkdir(entry, mode=0o700, dir_fd=workspace_fd)
+                    witness_info = os.stat(entry, dir_fd=workspace_fd, follow_symlinks=False)
+                    return _PinnedWitnessDirectory(
+                        workspace_fd=workspace_fd,
+                        entry=entry,
+                        name=str(workspace / entry),
+                        identity=(witness_info.st_dev, witness_info.st_ino),
+                    )
+                except BaseException:
+                    os.close(workspace_fd)
+                    raise
+            finally:
+                os.close(root_fd)
+        finally:
+            os.close(parent_fd)
+    except (OSError, UnicodeError) as exc:
+        raise ValueError("Witness requires a live owned evaluation setup") from exc
 
 
 @dataclass(frozen=True)
@@ -50,9 +185,10 @@ class WitnessObservation:
 class LocalSideEffectWitness:
     """Own an isolated temporary directory and an ephemeral loopback receiver."""
 
-    def __init__(self, *, setup: EvaluationSetup | None = None) -> None:
+    def __init__(self, *, setup: EvaluationSetup | None = None, network_enabled: bool = True) -> None:
         self._setup = setup
-        self._temporary: TemporaryDirectory[str] | None = None
+        self._network_enabled = network_enabled
+        self._temporary: TemporaryDirectory[str] | _PinnedWitnessDirectory | None = None
         self._server: ThreadingHTTPServer | None = None
         self._thread: Thread | None = None
         self._lock = Lock()
@@ -66,27 +202,42 @@ class LocalSideEffectWitness:
     def __enter__(self) -> LocalSideEffectWitness:
         if self._temporary is not None:
             raise RuntimeError("Witness is already active")
-        parent_dir = None
-        if self._setup is not None:
-            root = self._setup.root_path
-            workspace = self._setup.workspace
-            token = self._setup.marker_token
-            marker = root / ".hol-guard-evaluation-owned" if root is not None else None
-            if (
-                self._setup.report.status != "passed"
-                or root is None
-                or workspace is None
-                or token is None
-                or marker is None
-                or not root.name.startswith("hol-guard-eval-")
-                or not workspace.is_dir()
-                or workspace.parent != root
-                or not marker.is_file()
-                or marker.read_text(encoding="utf-8") != token
-            ):
+        if self._setup is not None and os.name != "nt":
+            self._temporary = _owned_witness_directory(self._setup)
+        elif self._setup is not None:
+            try:
+                root = self._setup.root_path
+                workspace = self._setup.workspace
+                token = self._setup.marker_token
+                marker = root / ".hol-guard-evaluation-owned" if root is not None else None
+                owned = not (
+                    self._setup.report.status != "passed"
+                    or root is None
+                    or workspace is None
+                    or token is None
+                    or marker is None
+                    or self._setup.root_identity is None
+                    or self._setup.workspace_identity is None
+                    or not root.name.startswith("hol-guard-eval-")
+                    or not root.is_absolute()
+                    or not _safe_temp_parent(root.parent)
+                    or root.is_symlink()
+                    or (root.stat().st_dev, root.stat().st_ino) != self._setup.root_identity
+                    or not workspace.is_dir()
+                    or workspace.is_symlink()
+                    or (workspace.stat().st_dev, workspace.stat().st_ino) != self._setup.workspace_identity
+                    or workspace.parent != root
+                    or not marker.is_file()
+                    or marker.is_symlink()
+                    or marker.read_text(encoding="utf-8") != token
+                )
+            except (OSError, UnicodeError) as exc:
+                raise ValueError("Witness requires a live owned evaluation setup") from exc
+            if not owned:
                 raise ValueError("Witness requires a live owned evaluation setup")
-            parent_dir = workspace
-        self._temporary = TemporaryDirectory(prefix="hol-guard-evaluation-witness-", dir=parent_dir)
+            self._temporary = TemporaryDirectory(prefix="hol-guard-evaluation-witness-", dir=workspace)
+        else:
+            self._temporary = TemporaryDirectory(prefix="hol-guard-evaluation-witness-")
         self._file_pairs.clear()
         self._network_pairs.clear()
         self._hits.clear()
@@ -156,13 +307,14 @@ class LocalSideEffectWitness:
                 finally:
                     self._slots.release()
 
-        try:
-            self._server = BoundedReceiver()
-            self._thread = Thread(target=self._server.serve_forever, daemon=True)
-            self._thread.start()
-        except BaseException:
-            self.__exit__(None, None, None)
-            raise
+        if self._network_enabled:
+            try:
+                self._server = BoundedReceiver()
+                self._thread = Thread(target=self._server.serve_forever, daemon=True)
+                self._thread.start()
+            except BaseException:
+                self.__exit__(None, None, None)
+                raise
         return self
 
     def __exit__(self, _type: object, _value: object, _traceback: object) -> None:
@@ -194,10 +346,12 @@ class LocalSideEffectWitness:
             marker.unlink(missing_ok=True)
         return self._file_ready
 
-    def check_network_ready(self) -> bool:
+    def check_network_ready(self, *, timeout_seconds: float = 2.0) -> bool:
         if self._server is None:
             raise RuntimeError("Witness is not active")
-        connection = HTTPConnection("127.0.0.1", self._server.server_port, timeout=2)
+        if isinstance(timeout_seconds, bool) or not 0 < timeout_seconds <= 2.0:
+            raise ValueError("witness readiness timeout must be a non-boolean number in (0, 2.0] seconds")
+        connection = HTTPConnection("127.0.0.1", self._server.server_port, timeout=timeout_seconds)
         try:
             connection.request("GET", "/health")
             response = connection.getresponse()

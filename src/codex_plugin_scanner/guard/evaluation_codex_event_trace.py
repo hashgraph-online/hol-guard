@@ -13,6 +13,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import cast
 
+from .evaluation_json import reject_duplicate_keys
+
 MAX_TRACE_BYTES = 1_048_576
 MAX_TRACE_EVENTS = 256
 MAX_IDENTIFIER_CHARS = 256
@@ -68,15 +70,6 @@ def _reject_json_constant(value: str) -> object:
     raise ValueError(f"non-standard JSON constant: {value}")
 
 
-def _reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
-    result: dict[str, object] = {}
-    for key, value in pairs:
-        if key in result:
-            raise ValueError("duplicate JSON object key")
-        result[key] = value
-    return result
-
-
 def _decode_events(payload: str | bytes) -> list[dict[str, object]]:
     if isinstance(payload, bytes):
         if len(payload) > MAX_TRACE_BYTES:
@@ -111,7 +104,7 @@ def _decode_events(payload: str | bytes) -> list[dict[str, object]]:
         try:
             decoded = json.loads(
                 line,
-                object_pairs_hook=_reject_duplicate_keys,
+                object_pairs_hook=reject_duplicate_keys,
                 parse_constant=_reject_json_constant,
             )
         except (json.JSONDecodeError, RecursionError, ValueError, TypeError):

@@ -11,6 +11,7 @@ _DETECTION_ASSET = (
 _AUTHORITATIVE_SOURCE = Path(__file__).parents[1] / "dashboard/src/fleet-workspace.tsx"
 _DETECTION_SOURCE = Path(__file__).parents[1] / "dashboard/src/harness-detection.ts"
 _RECOVERY_SOURCE = Path(__file__).parents[1] / "dashboard/src/fleet-protection-recovery.tsx"
+_RECOVERY_PARTS_SOURCE = Path(__file__).parents[1] / "dashboard/src/fleet-protection-recovery-parts.tsx"
 _COPY_SOURCE = Path(__file__).parents[1] / "dashboard/src/fleet-protection-recovery-copy.ts"
 
 
@@ -21,7 +22,13 @@ def _source() -> str:
 def _authoritative_source() -> str:
     return "\n".join(
         path.read_text(encoding="utf-8")
-        for path in (_AUTHORITATIVE_SOURCE, _DETECTION_SOURCE, _RECOVERY_SOURCE, _COPY_SOURCE)
+        for path in (
+            _AUTHORITATIVE_SOURCE,
+            _DETECTION_SOURCE,
+            _RECOVERY_SOURCE,
+            _RECOVERY_PARTS_SOURCE,
+            _COPY_SOURCE,
+        )
     )
 
 

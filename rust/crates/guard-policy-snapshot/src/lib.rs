@@ -114,6 +114,10 @@ pub struct EffectiveNativePolicyV3 {
     pub artifact_actions: BTreeMap<String, String>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub mcp_tool_actions: BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub mcp_provider_actions: BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mcp_provider_catalog_hash: Option<String>,
     pub sandbox_analysis: String,
     pub receipt_redaction_level: String,
 }
@@ -401,8 +405,11 @@ fn validate_risk_action_map(map: &BTreeMap<String, String>, maximum: usize) -> b
 }
 
 mod observed_mcp;
-use observed_mcp::validate_mcp_tool_actions;
-pub use observed_mcp::{mcp_tool_namespace, observed_mcp_tool_action};
+pub use observed_mcp::{
+    mcp_provider_action_choice, mcp_provider_namespace_has_deny, mcp_tool_namespace,
+    observed_mcp_tool_action,
+};
+use observed_mcp::{validate_mcp_provider_actions, validate_mcp_tool_actions};
 
 fn validate_effective_policy(policy: &EffectiveNativePolicyV3) -> Result<(), SnapshotError> {
     for action in [
@@ -429,6 +436,11 @@ fn validate_effective_policy(policy: &EffectiveNativePolicyV3) -> Result<(), Sna
         || !validate_action_map(&policy.publisher_actions, POLICY_SNAPSHOT_MAX_MAP_ENTRIES)
         || !validate_action_map(&policy.artifact_actions, POLICY_SNAPSHOT_MAX_MAP_ENTRIES)
         || !validate_mcp_tool_actions(&policy.mcp_tool_actions)
+        || !validate_mcp_provider_actions(&policy.mcp_provider_actions)
+        || policy
+            .mcp_provider_catalog_hash
+            .as_ref()
+            .is_some_and(|digest| !valid_hex(digest, 64))
         || policy.harness_risk_actions.len() > POLICY_SNAPSHOT_MAX_HARNESS_ENTRIES
         || !policy.harness_risk_actions.iter().all(|(key, value)| {
             valid_selector_key(key)

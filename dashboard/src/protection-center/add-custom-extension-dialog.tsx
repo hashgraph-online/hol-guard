@@ -4,6 +4,7 @@ import { HiMiniArrowLeft } from "react-icons/hi2";
 
 import {
   ApprovalProofFieldInputs,
+  approvalGateProofReady,
   approvalProofRecentlySatisfied,
   buildApprovalProofCredentials,
   isApprovalProofSubmitDisabled,
@@ -50,6 +51,8 @@ import {
 import { CustomExtensionCommandList, withCommandState } from "./custom-extension-commands";
 import { useResolvedApprovalGate } from "../use-resolved-approval-gate";
 import { InlineError } from "./components/protection-primitives";
+import { McpRegistrySearch } from "./mcp-registry-search";
+import type { LocalCliDiscoveryOutcome } from "./use-local-cli-catalog";
 
 function randomToken(): string {
   return crypto.randomUUID().replaceAll("-", "");
@@ -61,6 +64,7 @@ export function AddCustomExtensionWorkspace(props: {
   discovering?: boolean;
   onBack: () => void;
   onAdded: (cliId: string) => void;
+  onConfigured: () => Promise<LocalCliDiscoveryOutcome>;
 }) {
   const { resolvedApprovalGate, resolveApprovalGate, refreshApprovalGate } = useResolvedApprovalGate(null);
   const [command, setCommand] = useState("");
@@ -75,6 +79,7 @@ export function AddCustomExtensionWorkspace(props: {
   const [error, setError] = useState<string | null>(null);
   const [reviewingScripts, setReviewingScripts] = useState(false);
   const [toolQuery, setToolQuery] = useState("");
+  const [registryOpen, setRegistryOpen] = useState(false);
   const recognizeGeneration = useRef(0);
   const autoRecognizedCommand = useRef("");
   const didAutoSelect = useRef(false);
@@ -296,6 +301,8 @@ export function AddCustomExtensionWorkspace(props: {
       resolvedApprovalGate,
       { approvalPassword: password, approvalTotpCode: totp },
       busy,
+      false,
+      true,
     ),
     busy,
   });
@@ -312,15 +319,16 @@ export function AddCustomExtensionWorkspace(props: {
   } else if (showingMcpCatalog) {
     visibleCommands = commands.filter((entry) => `${entry.name} ${entry.description}`.toLowerCase().includes(toolQuery.trim().toLowerCase()));
   }
-  let confirmTitle = allowActionLabel(recognized?.surface);
+  let confirmTitle = allowActionLabel(recognized?.surface ?? "cli");
   if (pending === "blocked") {
-    confirmTitle = blockActionLabel(recognized?.surface);
+    confirmTitle = blockActionLabel(recognized?.surface ?? "cli");
   } else if (observedMcp) {
     confirmTitle = "Save tool permissions";
   }
   const previewNames = visibleCommands.slice(0, 8).map((entry) => entry.name);
   const bulkState = bulkCommandState(enrollable);
   const recentlySatisfied = approvalProofRecentlySatisfied(resolvedApprovalGate);
+  const gateReady = resolvedApprovalGate === null ? null : approvalGateProofReady(resolvedApprovalGate);
 
   return (
     <form
@@ -346,13 +354,14 @@ export function AddCustomExtensionWorkspace(props: {
           </p>
           {summary ? <p className="mt-2 text-sm leading-6 text-brand-dark/70">{observedMcp && pending === "blocked" ? "This connector will be blocked, including tools that have not been listed yet." : summary}</p> : null}
           <p className="mt-5 text-sm leading-6 text-brand-dark/80">
-            {enrollConfirmCopy(recognized.surface, recentlySatisfied, resolvedApprovalGate?.totp_enabled === true)}
+            {enrollConfirmCopy(recognized.surface, recentlySatisfied, resolvedApprovalGate?.totp_enabled === true, gateReady)}
           </p>
           <div className="mt-5 max-w-sm">
             <ApprovalProofFieldInputs
               approvalGate={resolvedApprovalGate}
               approvalPassword={password}
               approvalTotpCode={totp}
+              requireGate={true}
               onApprovalPasswordChange={handlePassword}
               onApprovalTotpCodeChange={handleTotp}
             />
@@ -462,6 +471,7 @@ export function AddCustomExtensionWorkspace(props: {
               ) : null}
             </section>
           ) : (
+            <>
             <SuggestionPanel
               query={command}
               discovering={props.discovering === true}
@@ -471,11 +481,14 @@ export function AddCustomExtensionWorkspace(props: {
               seenSuggestions={seenSuggestions}
               onSelect={selectSuggestion}
             />
+            <McpRegistrySearch items={props.items} approvalGate={resolvedApprovalGate}
+              onOpenChange={setRegistryOpen} onConfigured={props.onConfigured} />
+            </>
           )}
         </>
       )}
       {error ? <div className="mt-4 max-w-xl"><InlineError message={error} /></div> : null}
-      <div className="sticky bottom-0 mt-auto border-t border-slate-200 bg-white py-4">
+      <div className={`${registryOpen && !recognized ? "relative" : "sticky bottom-0"} mt-auto border-t border-slate-200 bg-white py-4`}>
         <div className="flex flex-wrap items-center gap-3">
           <button type="submit" disabled={submitDisabled} className="min-h-11 rounded-xl bg-brand-blue px-5 text-sm font-semibold text-white disabled:opacity-60">
             {addDialogSubmitLabel({ recognized, busy, pending, step: recognized ? step : "pick" })}

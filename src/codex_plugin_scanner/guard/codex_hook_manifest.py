@@ -201,6 +201,7 @@ def verify_live_hook_manifest(
             for event_name in MANAGED_CODEX_HOOK_EVENTS
             if isinstance((groups := hooks.get(event_name)), list)
         )
+        interpreter_target = interpreter.get("target")
         return {
             "event_matches": event_matches,
             "foreign_hook_entries_present": foreign_count > 0,
@@ -211,6 +212,9 @@ def verify_live_hook_manifest(
             "manifest_path": str(manifest_path),
             "manifest_schema_version": HOOK_MANIFEST_SCHEMA_VERSION,
             "manifest_package_version": manifest.get("package_version"),
+            "manifest_generated_at": manifest.get("generated_at"),
+            "bridge_sha256": packaged_by_role["bridge"].get("sha256"),
+            "interpreter_sha256": interpreter_target.get("sha256") if isinstance(interpreter_target, dict) else None,
         }
     except (CodexHookIntegrityError, OSError) as exc:
         if isinstance(exc, CodexHookIntegrityError):
@@ -232,6 +236,9 @@ def verify_live_hook_manifest(
             "manifest_path": str(manifest_path),
             "manifest_schema_version": None,
             "manifest_package_version": None,
+            "manifest_generated_at": None,
+            "bridge_sha256": None,
+            "interpreter_sha256": None,
         }
 
 
