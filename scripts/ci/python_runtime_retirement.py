@@ -10,7 +10,7 @@ from __future__ import annotations
 import ast
 import hashlib
 import tarfile
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from pathlib import Path, PurePosixPath
 from zipfile import ZipFile
 
@@ -159,6 +159,46 @@ def _artifact_members(artifact: Path) -> Iterator[tuple[str, bytes | None]]:
     raise RuntimeError(f"unsupported package artifact: {artifact}")
 
 
+def _retired_content_validator(records: list[dict[str, object]]) -> Callable[[str, bytes], None]:
+    modules = {str(record["module"]) for record in records}
+    symbols = {symbol for record in records for symbol in record["forbidden_symbols"]}
+    digests = {str(record["source_sha256"]) for record in records}
+    basenames = {PurePosixPath(str(record["path"])).stem for record in records}
+
+    def check_content(name: str, data: bytes) -> None:
+        if hashlib.sha256(data).hexdigest() in digests:
+            raise RuntimeError(f"copied retired Python implementation: {name}")
+        text = data.decode("utf-8-sig")
+        if not any(token in text for token in symbols | basenames | {"import"}):
+            return
+        failures = _source_violations(text, name, modules, symbols)
+        if failures:
+            raise RuntimeError("; ".join(failures))
+
+    return check_content
+
+
+def validate_retired_artifacts(contract: Mapping[str, object], artifacts: Sequence[Path]) -> None:
+    """Check package paths and contents once, before expensive source analysis."""
+    records = _records(contract)
+    basenames = {PurePosixPath(str(record["path"])).stem for record in records}
+    if not basenames:
+        return
+    check_content = _retired_content_validator(records)
+    for artifact in artifacts:
+        for name, data in _artifact_members(artifact):
+            basename = PurePosixPath(name.replace("\\", "/")).name
+            if any(
+                basename == stem + ".py"
+                or basename == stem + ".pyc"
+                or (basename.startswith(stem + ".") and basename.endswith(".pyc"))
+                for stem in basenames
+            ):
+                raise RuntimeError(f"package artifact contains retired module: {name}")
+            if data is not None:
+                check_content(name, data)
+
+
 def validate_retired_modules(
     root: Path,
     contract: Mapping[str, object],
@@ -174,10 +214,6 @@ def validate_retired_modules(
         path = _relative_path(value, source=False)
         if (root / path).exists() or (root / path).is_symlink():
             raise RuntimeError(f"retired implementation test still exists: {path}")
-    modules = {str(record["module"]) for record in records}
-    symbols = {symbol for record in records for symbol in record["forbidden_symbols"]}
-    digests = {str(record["source_sha256"]) for record in records}
-    basenames = {PurePosixPath(str(record["path"])).stem for record in records}
     evidence: list[dict[str, object]] = []
     for record in records:
         relative = str(record["path"])
@@ -194,29 +230,10 @@ def validate_retired_modules(
     if not records:
         return evidence
 
-    def check_content(name: str, data: bytes) -> None:
-        if hashlib.sha256(data).hexdigest() in digests:
-            raise RuntimeError(f"copied retired Python implementation: {name}")
-        text = data.decode("utf-8-sig")
-        if not any(token in text for token in symbols | basenames | {"import"}):
-            return
-        failures = _source_violations(text, name, modules, symbols)
-        if failures:
-            raise RuntimeError("; ".join(failures))
+    check_content = _retired_content_validator(records)
 
     for directory in _SOURCE_ROOTS:
         for path in sorted((root / directory).rglob("*.py")):
             check_content(path.relative_to(root).as_posix(), path.read_bytes())
-    for artifact in artifacts:
-        for name, data in _artifact_members(artifact):
-            basename = PurePosixPath(name.replace("\\", "/")).name
-            if any(
-                basename == stem + ".py"
-                or basename == stem + ".pyc"
-                or (basename.startswith(stem + ".") and basename.endswith(".pyc"))
-                for stem in basenames
-            ):
-                raise RuntimeError(f"package artifact contains retired module: {name}")
-            if data is not None:
-                check_content(name, data)
+    validate_retired_artifacts(contract, artifacts)
     return evidence

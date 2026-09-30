@@ -35,7 +35,7 @@ def test_ci_rust_cache_can_only_be_written_by_main_pushes() -> None:
 def test_parallel_macos_proofs_use_this_runs_matching_platform_wheel() -> None:
     workflow = _workflow("native-wheel-ci.yml")
     build = workflow["jobs"]["macos-build"]
-    proof = workflow["jobs"]["macos"]
+    proof = workflow["jobs"]["macos-proof"]
     assert proof["needs"] == "macos-build"
     assert {item["target"] for item in build["strategy"]["matrix"]["include"]} == {
         "x86_64-apple-darwin",
@@ -61,7 +61,7 @@ def test_macos_cross_build_keeps_native_platform_proofs_and_cache_isolation() ->
     jobs = _workflow("native-wheel-ci.yml")["jobs"]
     build = jobs["macos-build"]
     build_targets = {item["target"]: item["runner"] for item in build["strategy"]["matrix"]["include"]}
-    proof_targets = {item["target"]: item["runner"] for item in jobs["macos"]["strategy"]["matrix"]["include"]}
+    proof_targets = {item["target"]: item["runner"] for item in jobs["macos-proof"]["strategy"]["matrix"]["include"]}
     assert build_targets == {"x86_64-apple-darwin": "macos-15", "aarch64-apple-darwin": "macos-15"}
     assert proof_targets == {"x86_64-apple-darwin": "macos-15-intel", "aarch64-apple-darwin": "macos-15"}
     setup = next(step for step in build["steps"] if step.get("uses") == "./.github/actions/setup-rust")
@@ -141,7 +141,7 @@ def test_bounded_stress_never_claims_full_soak_qualification() -> None:
     workflow = _workflow("native-wheel-ci.yml")
     assert workflow[True]["schedule"]
     assert "workflow_dispatch" in workflow[True]
-    steps = workflow["jobs"]["linux-x64"]["steps"]
+    steps = workflow["jobs"]["linux-proof"]["steps"]
     full = next(step for step in steps if "--enforce-soak" in step.get("run", ""))
     smoke = next(step for step in steps if "--json native-stress-smoke.json" in step.get("run", ""))
     assert full["if"] == "github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'"

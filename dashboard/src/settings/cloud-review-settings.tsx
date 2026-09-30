@@ -56,7 +56,7 @@ export function CloudReviewSettings() {
   const [includeHeld, setIncludeHeld] = useState(false);
   const [password, setPassword] = useState("");
   const [totp, setTotp] = useState("");
-  const dialog = useRef<HTMLDivElement>(null);
+  const dialog = useRef<HTMLFormElement>(null);
   const revision = useRef(0);
   useFocusTrap(action !== null, dialog);
 
@@ -208,7 +208,8 @@ export function CloudReviewSettings() {
       {action && status ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/30 p-4"
           onKeyDown={(event) => { if (event.key === "Escape") close(); }}>
-          <div ref={dialog} role="dialog" aria-modal="true" aria-labelledby="cloud-review-confirm-title"
+          <form ref={dialog} role="dialog" aria-modal="true" aria-labelledby="cloud-review-confirm-title" noValidate
+            onSubmit={(event) => { event.preventDefault(); void confirm(); }}
             className="max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-lg bg-white p-5 shadow-xl">
             <div className="flex items-start justify-between gap-3">
               <h2 id="cloud-review-confirm-title" className="text-base font-semibold text-brand-dark">
@@ -243,12 +244,12 @@ export function CloudReviewSettings() {
             {error ? <p role="alert" className="mt-3 text-sm text-red-700">{cloudReviewConfirmationError(error)}</p> : null}
             <div className="mt-5 flex flex-wrap justify-end gap-2">
               <button type="button" onClick={close} disabled={pending} className="min-h-10 rounded-md border border-slate-200 px-4 py-2 text-sm text-brand-dark">Cancel</button>
-              <button type="button" onClick={() => void confirm()} disabled={disabled}
+              <button type="submit" disabled={disabled}
                 className="min-h-10 rounded-md bg-brand-blue px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
                 {confirmLabel}
               </button>
             </div>
-          </div>
+          </form>
         </div>
       ) : null}
     </section>

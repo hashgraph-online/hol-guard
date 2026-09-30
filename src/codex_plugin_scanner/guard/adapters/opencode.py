@@ -35,6 +35,7 @@ from .opencode_artifacts import (
     runtime_config_path,
     runtime_overlay,
 )
+from .opencode_config_lock import opencode_config_lock
 from .opencode_install_snapshot import (
     OpenCodeInstallSnapshotError,
     load_opencode_install_snapshot,
@@ -179,6 +180,10 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
         )
 
     def install(self, context: HarnessContext) -> dict[str, object]:
+        with opencode_config_lock(context.home_dir):
+            return self._install_locked(context)
+
+    def _install_locked(self, context: HarnessContext) -> dict[str, object]:
         try:
             snapshot = load_opencode_install_snapshot(
                 context,
@@ -291,6 +296,10 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
         }
 
     def uninstall(self, context: HarnessContext) -> dict[str, object]:
+        with opencode_config_lock(context.home_dir):
+            return self._uninstall_locked(context)
+
+    def _uninstall_locked(self, context: HarnessContext) -> dict[str, object]:
         state_path, state_payload = self._state_entry(context)
         target_config_path = self._managed_config_path_from_state(context, state_payload)
         backup_path = self._backup_path_from_state(context, state_payload, target_config_path)

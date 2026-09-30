@@ -16,7 +16,6 @@ import re
 import secrets
 import shutil
 import stat
-import subprocess
 import tempfile
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
@@ -28,14 +27,16 @@ from .evaluation_contracts import (
     EvaluationProfile,
     validate_evaluation_profile,
 )
+from .evaluation_host_probe import check_host_version
+from .evaluation_scope import _safe_temp_parent
 
 EvaluationSetupStatus = Literal["passed", "blocked_environment", "not_run"]
 EvaluationPhase = Literal["preflight", "setup"]
+EvaluationExecutionMode = Literal["installed", "synthetic_adapter"]
 EVALUATION_SETUP_SCHEMA_VERSION = "guard.evaluation-setup.v1"
 
 _OWNED_ROOT_PREFIX = "hol-guard-eval-"
 _MARKER_NAME = ".hol-guard-evaluation-owned"
-_VERSION_TIMEOUT_SECONDS = 2.0
 
 
 def _check(
@@ -94,6 +95,8 @@ class EvaluationSetup:
     report: EvaluationPreflightReport
     root_path: Path | None = None
     marker_token: str | None = None
+    root_identity: tuple[int, int] | None = None
+    workspace_identity: tuple[int, int] | None = None
 
     @property
     def guard_home(self) -> Path | None:
@@ -198,38 +201,6 @@ def _observed_privilege() -> str:
     return "unknown"
 
 
-def _safe_temp_parent(path: Path) -> bool:
-    """Require a private owned directory below the process temporary root."""
-
-    try:
-        if "\x00" in str(path) or path.is_symlink() or not path.is_dir():
-            return False
-        candidate = os.path.realpath(os.fspath(path))
-    except (OSError, RuntimeError):
-        return False
-
-    if os.name == "nt":
-        if candidate.startswith("\\\\"):
-            return False
-        temp_root = os.path.normcase(os.path.normpath(os.path.realpath(tempfile.gettempdir())))
-        candidate_normalized = os.path.normcase(os.path.normpath(candidate))
-        try:
-            return (
-                candidate_normalized != temp_root and os.path.commonpath((candidate_normalized, temp_root)) == temp_root
-            )
-        except ValueError:
-            return False
-
-    root = os.path.realpath(tempfile.gettempdir())
-    try:
-        if os.path.commonpath((candidate, root)) != root or candidate == root:
-            return False
-        details = path.stat()
-        return details.st_uid == os.getuid() and stat.S_IMODE(details.st_mode) & 0o077 == 0
-    except (OSError, ValueError):
-        return False
-
-
 def _resolve_host_executable(value: str) -> Path | None:
     if not value or value != value.strip() or "\x00" in value:
         return None
@@ -246,79 +217,6 @@ def _resolve_host_executable(value: str) -> Path | None:
         return candidate.resolve(strict=True)
     except (OSError, RuntimeError):
         return None
-
-
-def _isolated_version_environment(probe_root: Path) -> dict[str, str]:
-    """Build a minimal environment with all user-state locations redirected."""
-
-    state_root = probe_root / "state"
-    state_root.mkdir(mode=0o700)
-    environment = {
-        "PATH": os.environ.get("PATH", os.defpath),
-        "HOME": str(state_root),
-        "USERPROFILE": str(state_root),
-        "XDG_CONFIG_HOME": str(state_root / "config"),
-        "XDG_DATA_HOME": str(state_root / "data"),
-        "XDG_STATE_HOME": str(state_root / "state"),
-        "XDG_CACHE_HOME": str(state_root / "cache"),
-        "TMPDIR": str(state_root / "tmp"),
-        "TMP": str(state_root / "tmp"),
-        "TEMP": str(state_root / "tmp"),
-        "PYTHONNOUSERSITE": "1",
-        "LC_ALL": "C",
-        "LANG": "C",
-    }
-    for directory in ("config", "data", "state", "cache", "tmp"):
-        (state_root / directory).mkdir(mode=0o700)
-    if os.name == "nt":
-        for name in ("SystemRoot", "WINDIR", "PATHEXT"):
-            value = os.environ.get(name)
-            if value:
-                environment[name] = value
-    return environment
-
-
-def _version_matches(output: str, expected_version: str) -> bool:
-    core = (
-        expected_version[1:]
-        if expected_version[:1] in {"v", "V"} and expected_version[1:2].isdigit()
-        else expected_version
-    )
-    prefix = "[vV]?" if core[0].isdigit() else ""
-    pattern = rf"(?<![A-Za-z0-9_.-]){prefix}{re.escape(core)}(?![A-Za-z0-9_.-])"
-    return re.search(pattern, output) is not None
-
-
-def _check_host_version(executable: Path, expected_version: str) -> tuple[bool, str]:
-    probe_root = Path(tempfile.mkdtemp(prefix="hol-guard-preflight-"))
-    try:
-        probe_root.chmod(0o700)
-        environment = _isolated_version_environment(probe_root)
-        try:
-            completed = subprocess.run(
-                [os.fspath(executable), "--version"],
-                cwd=probe_root,
-                env=environment,
-                stdin=subprocess.DEVNULL,
-                capture_output=True,
-                text=True,
-                timeout=_VERSION_TIMEOUT_SECONDS,
-                check=False,
-                shell=False,
-            )
-        except subprocess.TimeoutExpired:
-            return False, "host_version_timeout"
-        except (OSError, UnicodeError):
-            return False, "host_version_unavailable"
-        if completed.returncode != 0:
-            return False, "host_version_unavailable"
-        if not _version_matches(f"{completed.stdout}\n{completed.stderr}", expected_version):
-            return False, "host_version_mismatch"
-        return True, ""
-    except (OSError, RuntimeError):
-        return False, "host_version_unavailable"
-    finally:
-        shutil.rmtree(probe_root, ignore_errors=True)
 
 
 def _artifact_checks(
@@ -374,6 +272,7 @@ def preflight_evaluation(
     host_executable: str | Path | None = None,
     artifact_paths: Mapping[str, str | Path] | None = None,
     allow_host_execution: bool = False,
+    execution_mode: EvaluationExecutionMode = "installed",
 ) -> EvaluationPreflightReport:
     """Validate a profile and its declared local prerequisites.
 
@@ -383,6 +282,15 @@ def preflight_evaluation(
     inside an isolated evaluation VM; the redirected environment is not a
     filesystem or network sandbox.
     """
+
+    if execution_mode not in ("installed", "synthetic_adapter"):
+        return _report(
+            "not_run",
+            "preflight",
+            _profile_id(profile),
+            [_check("execution_mode", "not_run", reason="execution_mode_invalid")],
+            reason="execution_mode_invalid",
+        )
 
     profile_id = _profile_id(profile)
     try:
@@ -465,33 +373,45 @@ def preflight_evaluation(
         )
     )
 
-    declared_executable = host_executable
-    if declared_executable is None:
-        declared_executable = cast(str | None, host.get("executable"))
-    if declared_executable is None or not str(declared_executable):
-        checks.append(_check("host_executable", "not_run", reason="host_executable_not_declared"))
-        return _report("not_run", "preflight", profile_id, checks, reason="host_executable_not_declared")
-    executable = _resolve_host_executable(os.fspath(declared_executable))
-    if executable is None:
-        checks.append(_check("host_executable", "blocked_environment", reason="host_executable_missing"))
-        return _report("blocked_environment", "preflight", profile_id, checks, reason="host_executable_missing")
-    checks.append(_check("host_executable", "passed"))
+    if execution_mode == "synthetic_adapter":
+        checks.append(_check("host_executable", "not_run", reason="synthetic_adapter_mode"))
+        checks.append(_check("host_version", "not_run", reason="synthetic_adapter_mode"))
+    else:
+        declared_executable = host_executable
+        if declared_executable is None:
+            declared_executable = cast(str | None, host.get("executable"))
+        if declared_executable is None or not str(declared_executable):
+            checks.append(_check("host_executable", "not_run", reason="host_executable_not_declared"))
+            return _report("not_run", "preflight", profile_id, checks, reason="host_executable_not_declared")
+        executable = _resolve_host_executable(os.fspath(declared_executable))
+        if executable is None:
+            checks.append(_check("host_executable", "blocked_environment", reason="host_executable_missing"))
+            return _report("blocked_environment", "preflight", profile_id, checks, reason="host_executable_missing")
+        checks.append(_check("host_executable", "passed"))
+        if not allow_host_execution:
+            checks.append(_check("host_version", "not_run", reason="isolated_host_execution_not_enabled"))
+            return _report("not_run", "preflight", profile_id, checks, reason="isolated_host_execution_not_enabled")
 
-    if not allow_host_execution:
-        checks.append(_check("host_version", "not_run", reason="isolated_host_execution_not_enabled"))
-        return _report("not_run", "preflight", profile_id, checks, reason="isolated_host_execution_not_enabled")
+        version = str(host["version"])
+        limits = cast(Mapping[str, object], payload["resourceLimits"])
+        version_ok, version_reason = check_host_version(
+            executable,
+            version,
+            timeout_seconds=float(cast(int, limits["maxDurationSeconds"])),
+            output_limit_bytes=cast(int, limits["maxOutputBytes"]),
+        )
+        if not version_ok:
+            checks.append(_check("host_version", "blocked_environment", reason=version_reason))
+            return _report("blocked_environment", "preflight", profile_id, checks, reason=version_reason)
+        checks.append(_check("host_version", "passed"))
 
-    version = str(host["version"])
-    version_ok, version_reason = _check_host_version(executable, version)
-    if not version_ok:
-        checks.append(_check("host_version", "blocked_environment", reason=version_reason))
-        return _report("blocked_environment", "preflight", profile_id, checks, reason=version_reason)
-    checks.append(_check("host_version", "passed"))
-
-    artifact_results, artifact_status, artifact_reason = _artifact_checks(payload, artifact_paths)
-    checks.extend(artifact_results)
-    if artifact_status != "passed":
-        return _report(artifact_status, "preflight", profile_id, checks, reason=artifact_reason)
+    if execution_mode == "synthetic_adapter":
+        checks.append(_check("artifacts", "not_run", reason="synthetic_adapter_mode"))
+    else:
+        artifact_results, artifact_status, artifact_reason = _artifact_checks(payload, artifact_paths)
+        checks.extend(artifact_results)
+        if artifact_status != "passed":
+            return _report(artifact_status, "preflight", profile_id, checks, reason=artifact_reason)
     return _report("passed", "preflight", profile_id, checks)
 
 
@@ -525,6 +445,7 @@ def setup_evaluation(
     artifact_paths: Mapping[str, str | Path] | None = None,
     parent_dir: str | Path | None = None,
     allow_host_execution: bool = False,
+    execution_mode: EvaluationExecutionMode = "installed",
 ) -> EvaluationSetup:
     """Preflight and allocate a fresh private temporary evaluation setup."""
 
@@ -533,6 +454,7 @@ def setup_evaluation(
         host_executable=host_executable,
         artifact_paths=artifact_paths,
         allow_host_execution=allow_host_execution,
+        execution_mode=execution_mode,
     )
     if preflight.status != "passed":
         return EvaluationSetup(report=replace(preflight, phase="setup"))
@@ -574,6 +496,8 @@ def setup_evaluation(
         workspace = root_path / "workspace"
         guard_home.mkdir(mode=0o700)
         workspace.mkdir(mode=0o700)
+        root_info = root_path.stat(follow_symlinks=False)
+        workspace_info = workspace.stat(follow_symlinks=False)
         report = replace(
             preflight,
             phase="setup",
@@ -582,7 +506,13 @@ def setup_evaluation(
             owned_root=str(root_path),
             checks=(*preflight.checks, _check("setup", "passed")),
         )
-        return EvaluationSetup(report=report, root_path=root_path, marker_token=marker_token)
+        return EvaluationSetup(
+            report=report,
+            root_path=root_path,
+            marker_token=marker_token,
+            root_identity=(root_info.st_dev, root_info.st_ino),
+            workspace_identity=(workspace_info.st_dev, workspace_info.st_ino),
+        )
     except (OSError, RuntimeError) as exc:
         if root_path is not None and root_path.exists():
             with contextlib.suppress(EvaluationContractError):
@@ -628,6 +558,7 @@ def cleanup_interrupted_evaluation_setup(
 
 __all__ = [
     "EVALUATION_SETUP_SCHEMA_VERSION",
+    "EvaluationExecutionMode",
     "EvaluationPreflightReport",
     "EvaluationSetup",
     "cleanup_interrupted_evaluation_setup",

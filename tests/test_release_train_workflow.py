@@ -133,6 +133,9 @@ def test_stable_dispatch_computes_and_requires_the_registry_derived_version() ->
     assert "'$pypi + $testpypi + ($tags | map(select(. != $candidate))) | unique'" in compute_run
     assert '--arg candidate "$RELEASE_VERSION"' in compute_run
     assert "compute_main_release_version.py" in compute_run
+    assert "stable_release_asset_repair.py" in compute_run
+    assert "release_repair=true" in compute_run
+    assert 'git checkout --detach "$SOURCE_SHA"' in compute_run
     assert 'if [[ "$RELEASE_VERSION" != "$EXPECTED_VERSION" ]]' in compute_run
     assert 'VERSION="$RELEASE_VERSION"' in compute_run
     assert 'elif [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == "refs/heads/main" ]]' not in compute_run
@@ -600,6 +603,8 @@ def test_release_tags_are_bound_to_the_exact_published_source() -> None:
     assert '[[ "${#remote_guard_files[@]}" -gt 0 ]]' in stable_run
     assert 'gh attestation verify "$remote_file"' in stable_run
     assert '--bundle "$bundle" --source-digest "$SOURCE_SHA"' in stable_run
+    assert '--signer-workflow "$GITHUB_REPOSITORY/.github/workflows/publish.yml"' in stable_run
+    assert '--source-digest "$GITHUB_SHA"' in stable_run
     assert "--verify-tag" in stable_run and '"$existing_dir" dist "$VERSION" stable' in stable_run
 
 

@@ -111,10 +111,17 @@ def test_privileged_feed_is_main_bound_and_pins_candidate_provenance() -> None:
     assert '--source-ref "$source_ref"' in provenance
     assert 'verify_published_wheel "refs/tags/${CORE_TAG}"' in provenance
     assert 'verify_published_wheel "refs/heads/${RELEASE_BRANCH}"' in provenance
+    assert "read_publish_attestation_commit.py" in provenance
+    assert 'merge-base --is-ancestor "$SOURCE_SHA" "$attested_commit"' in provenance
+    assert '--source-digest "$attested_commit"' in provenance
+    attestation = (ROOT / "scripts/release/read_publish_attestation_commit.py").read_text(encoding="utf-8")
+    assert "provenance workflow is not the publish workflow" in attestation
     linux = linux_workflow_text()
     assert '--source-ref "$source_ref"' in linux
     assert 'verify_published_wheel "refs/tags/${CORE_TAG}"' in linux
     assert 'verify_published_wheel "refs/heads/${RELEASE_BRANCH}"' in linux
+    assert "read_publish_attestation_commit.py" in linux
+    assert '--source-digest "$attested_commit"' in linux
     assert "merge-base --is-ancestor" in linux
     assert "--deny-self-hosted-runners" in provenance
 
@@ -126,6 +133,9 @@ def test_feed_uses_apple_trust_and_no_redundant_manifest_key() -> None:
     steps = {step.get("name"): step for step in job["steps"]}
     extraction_line = (
         'codesign --display --extract-certificates "$BINARY" >/dev/null 2> "$RUNNER_TEMP/codesign-certificates.txt"'
+    )
+    onedir_extraction_line = (
+        'codesign --display --extract-certificates "$LAUNCHER" >/dev/null 2> "$RUNNER_TEMP/codesign-onedir-certs.txt"'
     )
     extraction_lines = [
         line.strip() for line in text.splitlines() if "codesign --display --extract-certificates" in line
@@ -143,7 +153,7 @@ def test_feed_uses_apple_trust_and_no_redundant_manifest_key() -> None:
     assert "apple-signing-fingerprint.txt" in text
     assert 'CERT_DIR="$RUNNER_TEMP/codesign-certs"' in text
     assert 'cd "$CERT_DIR"' in text
-    assert extraction_lines == [extraction_line]
+    assert extraction_lines == [extraction_line, onedir_extraction_line]
     assert '--extract-certificates "$CERT_DIR"' not in text
     assert '--extract-certificates "$CERT_PREFIX"' not in text
     assert 'test -s "$CERT_DIR/codesign0"' in text
@@ -161,15 +171,15 @@ def test_feed_uses_apple_trust_and_no_redundant_manifest_key() -> None:
 def test_feed_builds_core_with_multiprocessing_safe_entrypoint() -> None:
     entrypoint = FROZEN_ENTRYPOINT.read_text(encoding="utf-8")
     freeze_dispatch = entrypoint.index("freeze_support()")
+    version_probe = entrypoint.index('sys.argv[1] == "--version"')
+    bootstrap_proxy = entrypoint.index("if _try_proxy_running_desktop_bootstrap():")
     guard_import = entrypoint.index("from codex_plugin_scanner.guard.frozen_daemon_runtime")
-    assert freeze_dispatch < guard_import
+    assert freeze_dispatch < version_probe < bootstrap_proxy < guard_import
     assert "scripts/mdm/hol-guard-entry.py" in workflow_text()
 
 
 def test_macos_feed_avoids_bash4_only_builtins_and_binds_mode() -> None:
-    text = workflow_text() + (ROOT / "scripts/release/authorize_macos_core_source.sh").read_text(
-        encoding="utf-8"
-    )
+    text = workflow_text() + (ROOT / "scripts/release/authorize_macos_core_source.sh").read_text(encoding="utf-8")
     job = publish_job()
     assert "mapfile " not in text
     assert "readarray " not in text
@@ -191,9 +201,7 @@ def test_frozen_sidecar_stages_cloud_review_package_data() -> None:
 
 
 def test_frozen_sidecar_stages_attested_native_runtime() -> None:
-    text = workflow_text() + (ROOT / "scripts/release/authorize_macos_core_source.sh").read_text(
-        encoding="utf-8"
-    )
+    text = workflow_text() + (ROOT / "scripts/release/authorize_macos_core_source.sh").read_text(encoding="utf-8")
     build = next(step for step in publish_job()["steps"] if step.get("name") == "Build standalone Core executable")
     run = build["run"]
     assert isinstance(run, str)
@@ -209,6 +217,7 @@ def test_frozen_sidecar_stages_attested_native_runtime() -> None:
     ) < run.index("uv run --no-sync pyinstaller")
     assert '--add-data "$NATIVE_RUNTIME:codex_plugin_scanner/_native"' in run
     assert '--add-data "$NATIVE_MANIFEST:codex_plugin_scanner/_native"' in run
+    assert '--add-data "$SOURCE/src/codex_plugin_scanner/version.py:."' in run
     assert "--add-binary" not in run
     assert "python3 -I scripts/release/seal_pyinstaller_native_manifest.py" in run
     assert "python3 -I scripts/release/verify_pyinstaller_native_runtime.py" in run
@@ -280,7 +289,7 @@ def test_linux_feed_publishes_digest_verified_gnu_sidecar() -> None:
     assert isinstance(build_run, str)
     assert "publish-linux-x64" not in workflow()["jobs"]
     assert linux_workflow_text().count("\n") <= 500
-    assert job["runs-on"] == "ubuntu-24.04"
+    assert job["runs-on"] == "ubuntu-22.04"
     assert job["env"]["RELEASE_TARGET"] == "x86_64-unknown-linux-gnu"
     assert job["env"]["NATIVE_RUNTIME_TARGET"] == "x86_64-unknown-linux-musl"
     assert job["permissions"] == {"contents": "write", "id-token": "write", "attestations": "write"}
@@ -291,6 +300,7 @@ def test_linux_feed_publishes_digest_verified_gnu_sidecar() -> None:
     assert '--wheel "$RUNNER_TEMP/attested-linux-x64.whl"' in build_run
     assert '--expected-target "$NATIVE_RUNTIME_TARGET"' in build_run
     assert "--codesign-identity" not in build_run
+    assert '--add-data "$SOURCE/src/codex_plugin_scanner/version.py:."' in build_run
     assert "codesign " not in build_run
     assert "notarytool" not in text
     assert "APPLE_CERTIFICATE" not in text
