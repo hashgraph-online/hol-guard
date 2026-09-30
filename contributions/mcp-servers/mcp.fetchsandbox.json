@@ -18,12 +18,9 @@
   },
   "homepage": "https://fetchsandbox.com",
   "launch": {
-    "kind": "remote-http",
-    "url": "https://fetchsandbox.com/mcp/v1",
-    "serverNames": [
-      "fetchsandbox",
-      "fetchsandbox-mcp"
-    ]
+    "kind": "package-launcher",
+    "command": "npx",
+    "package": "fetchsandbox-mcp"
   },
   "riskClasses": [
     "external-source-upload",
@@ -81,7 +78,7 @@
     "https://www.npmjs.com/package/fetchsandbox-mcp"
   ],
   "saferAlternatives": [
-    "Use quickrun, run_workflow, list_scenarios and set_scenario to exercise an integration against a sandboxed API twin and inject failures; these never read the local filesystem and never publish evidence.",
+    "Use quickrun and run_workflow to exercise an integration against a sandboxed API twin without sending local project files.",
     "Use list_specs, list_workflows and list_runs to inspect the catalog and prior runs without sending anything."
   ]
 }
