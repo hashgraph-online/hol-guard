@@ -102,6 +102,8 @@ def is_grok_hook_command(command: str, context: HarnessContext | None = None) ->
         args = _arguments(command)
         if len(args) == 9:
             return _desktop_proxy(args, context)
+        if len(args) == 3 and args[1] == "-I":
+            return _isolated_stdlib_client(args, context)
         if len(args) == 3 and args[1] == "__guard-bounded-hook":
             expected = Path(prune_safe_cli_executable(sys.executable)).resolve()
             return (
@@ -130,4 +132,30 @@ def is_grok_hook_command(command: str, context: HarnessContext | None = None) ->
         )
         return args[3] == bootstrap
     except (OSError, ValueError, TypeError, RuntimeError):
+        return False
+
+
+def _isolated_stdlib_client(args: tuple[str, ...], context: HarnessContext | None) -> bool:
+    """Accept the frozen stdlib client that posts to the running daemon."""
+    from ..adapters.bounded_cli_hook_bridge import bounded_hook_script_path
+    from ..adapters.cursor_hook_config import isolated_cursor_hook_python
+
+    interpreter = isolated_cursor_hook_python()
+    if interpreter is None or not bool(getattr(sys, "frozen", False)):
+        return False
+    try:
+        script = Path(args[2]).resolve()
+        if (
+            not Path(args[0]).is_absolute()
+            or Path(args[0]).resolve() != Path(interpreter).resolve()
+            or script.name != "grok.py"
+            or "managed/bounded-hooks" not in script.as_posix()
+            or not script.is_file()
+        ):
+            return False
+        if context is None:
+            return True
+        expected_script = bounded_hook_script_path(context.guard_home, "grok")
+        return expected_script is not None and script == expected_script.resolve()
+    except OSError:
         return False

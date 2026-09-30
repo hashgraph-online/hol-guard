@@ -15,7 +15,17 @@ SLEEP_SECONDS = 5.0
 VERIFY_SCRIPT = Path(__file__).with_name("verify_native_runtime_release.py")
 
 
+# PyPI can show a release to one read and hide it from the next while the
+# upload is still propagating. Those states are incomplete, not a byte mismatch.
+_PROPAGATION_ERRORS = (
+    "Registry release is absent",
+    "Base Guard release is not present yet",
+)
+
+
 def is_retryable_incomplete_error(stderr: str) -> bool:
+    if any(message in stderr for message in _PROPAGATION_ERRORS):
+        return True
     return "missing=" in stderr and "extra=[]" in stderr and "mismatched=[]" in stderr
 
 
@@ -27,9 +37,7 @@ def wait_for_published(
     runner: Callable[[Sequence[str]], subprocess.CompletedProcess[str]] | None = None,
     sleeper: Callable[[float], None] = time.sleep,
 ) -> int:
-    run = runner or (
-        lambda command: subprocess.run(command, check=False, capture_output=True, text=True)
-    )
+    run = runner or (lambda command: subprocess.run(command, check=False, capture_output=True, text=True))
     command = [sys.executable, str(VERIFY_SCRIPT), "verify-published", *argv]
     last_error = "Published artifacts were not exact"
     for attempt in range(attempts):

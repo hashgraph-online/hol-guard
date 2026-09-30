@@ -20,6 +20,7 @@ from codex_plugin_scanner.guard.store_approvals import (
     add_approval_request,
     approval_index_statements,
     approval_schema_statement,
+    get_approval_request,
     list_approval_requests,
     list_pending_approval_summaries,
     resolve_request_with_queue_result,
@@ -382,6 +383,25 @@ def test_pending_summary_pagination_uses_stable_cursor() -> None:
     assert [item["request_id"] for item in first_page["items"]] == ["req-2", "req-1"]
     assert [item["request_id"] for item in second_page["items"]] == ["req-0"]
     assert second_page["next_cursor"] is None
+
+
+def test_watch_only_observation_is_exposed_in_list_and_detail_payloads() -> None:
+    connection = _connection()
+    request = _request("req-watch")
+    add_approval_request(connection, request, "2026-05-08T10:00:00+00:00")
+    connection.execute(
+        "update approval_requests set watch_only_observation = 1, scanner_evidence_json = '[]' where request_id = ?",
+        (request.request_id,),
+    )
+
+    listed = list_approval_requests(connection, limit=None)
+    detail = get_approval_request(connection, request.request_id)
+    summary = list_pending_approval_summaries(connection, limit=1)["items"][0]
+
+    assert listed[0]["watch_only_observation"] is True
+    assert detail is not None
+    assert detail["watch_only_observation"] is True
+    assert summary["watch_only_observation"] is True
 
 
 def test_pending_summary_preserves_bounded_command_preview_and_category() -> None:

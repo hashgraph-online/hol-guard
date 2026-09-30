@@ -21,7 +21,7 @@ import type {
 } from "./guard-types";
 
 export type NavigationGroup = "primary" | "manage" | "support";
-export type NavigationView = Exclude<AppView, "app-detail" | "audit" | "feed-health">;
+export type NavigationView = Exclude<AppView, "app-detail" | "audit" | "feed-health" | "protection-repair">;
 
 export type ShellNavigationItem = {
   href: string;
@@ -147,6 +147,7 @@ export const NAVIGATION_GROUPS: ReadonlyArray<{ id: NavigationGroup; label: stri
 export function canonicalNavigationView(view: AppView): NavigationView {
   if (view === "app-detail") return "fleet";
   if (view === "audit" || view === "feed-health") return "supply-chain";
+  if (view === "protection-repair") return "extensions";
   return view;
 }
 

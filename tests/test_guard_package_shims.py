@@ -1077,6 +1077,48 @@ _BLOCKING_SHIM_CASES = (
 )
 
 
+def test_machine_wide_package_shim_uses_current_workspace_across_dashboard_contexts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    home_dir = tmp_path / "home"
+    first_workspace = tmp_path / "first-workspace"
+    second_workspace = tmp_path / "second-workspace"
+    home_dir.mkdir()
+    first_workspace.mkdir()
+    second_workspace.mkdir()
+    frozen_exe = tmp_path / "core" / "current-hol-guard"
+    frozen_exe.parent.mkdir()
+    frozen_exe.write_text("", encoding="utf-8")
+    frozen_exe.chmod(0o755)
+    monkeypatch.setattr(guard_shims_module.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(guard_shims_module.sys, "executable", str(frozen_exe))
+    monkeypatch.setenv("SHELL", "/bin/bash")
+    monkeypatch.setenv("PATH", "/usr/local/bin:/usr/bin:/bin")
+    monkeypatch.setattr(guard_shims_module, "_is_transient_path", lambda _path: False)
+    guard_home = home_dir / ".hol-guard"
+    first_context = HarnessContext(home_dir=home_dir, guard_home=guard_home, workspace_dir=first_workspace)
+    second_context = HarnessContext(home_dir=home_dir, guard_home=guard_home, workspace_dir=second_workspace)
+
+    install_package_shims(first_context, managers=("npm",))
+    guard_shims_module.ensure_package_shim_path_in_shell_profile(first_context)
+
+    for context in (first_context, second_context):
+        status = package_shim_status(context)
+        npm = next(item for item in status["manager_details"] if item["manager"] == "npm")
+        assert npm["integrity"] == "ok"
+    shim_dir = guard_home / "package-shims" / "bin"
+    source_path = shim_dir / ".npm.py"
+    if not source_path.exists():
+        source_path = shim_dir / "npm"
+    source = source_path.read_text(encoding="utf-8")
+    assert "guard_workspace = None" in source
+    assert "guard_has_explicit_workspace = False" in source
+    assert "--workspace" not in next(line for line in source.splitlines() if line.startswith("base_command = "))
+    dashboard_status = guard_shims_module.package_shim_dashboard_status(second_context)
+    assert dashboard_status["path_status"] == "in_path"
+    assert dashboard_status["path_broken_managers"] == []
+
+
 def test_guard_package_shims_install_status_uninstall_roundtrip(tmp_path: Path, capsys) -> None:
     home_dir = tmp_path / "guard-home"
     workspace_dir = tmp_path / "workspace"

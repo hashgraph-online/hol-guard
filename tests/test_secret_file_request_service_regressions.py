@@ -137,7 +137,18 @@ def test_runtime_text_decode_failure_does_not_close_transferred_descriptor_twice
     target.write_bytes(b"\xff")
     raw_close_calls: list[int] = []
 
-    with patch.object(credential_exfiltration.os, "close", side_effect=raw_close_calls.append):
+    class RecordingOsClose:
+        def __getattr__(self, name: str):
+            return getattr(os, name)
+
+        def close(self, descriptor: int) -> None:
+            raw_close_calls.append(descriptor)
+            os.close(descriptor)
+
+    # Patch only this module's reference; other threads may legitimately close FDs.
+    with patch.object(credential_exfiltration, "os", RecordingOsClose()):
+        unrelated_descriptor = os.open(target, os.O_RDONLY)
+        os.close(unrelated_descriptor)
         assert credential_exfiltration._read_small_runtime_text_file(target, allowed_roots=(tmp_path,)) is None
     assert raw_close_calls == []
 

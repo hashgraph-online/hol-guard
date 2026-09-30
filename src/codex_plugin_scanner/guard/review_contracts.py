@@ -45,6 +45,8 @@ _REMOTE_APPROVAL_CONTRACT_VERSION = "guard.remote-approval.v1"
 _DECISION_MEMORY_BUNDLE_CONTRACT_VERSION = "guard.decision-memory-bundle.v1"
 _REMOTE_APPROVAL_ALLOWED_SCOPES = frozenset(DECISION_SCOPE_VALUES)
 _REMOTE_APPROVAL_RESOLVER_ROLES = frozenset({"owner", "workspace-owner", "admin", "operator"})
+_REMOTE_APPROVAL_ADMIN_ROLES = frozenset({"owner", "workspace-owner", "admin"})
+_REMOTE_APPROVAL_WORKSPACE_ADMIN_MFA_AUTHORITY = "workspace_admin_mfa"
 _REMOTE_APPROVAL_KEY_PURPOSE = "remote_approval"
 _REMOTE_APPROVAL_SIGNATURE_ALGORITHM = "rsa-pss-sha256"
 _DECISION_MEMORY_SIGNATURE_ALGORITHM = "rsa-pss-sha256"
@@ -366,6 +368,12 @@ def payload_hash_for_remote_approval_envelope(envelope: dict[str, object]) -> st
     return _sha256_hex(_canonical_signed_payload(envelope))
 
 
+def remote_approval_uses_workspace_admin_mfa(envelope: dict[str, object]) -> bool:
+    """Return True when Cloud signed a team-admin MFA decision for this request."""
+
+    return envelope.get("authority") == _REMOTE_APPROVAL_WORKSPACE_ADMIN_MFA_AUTHORITY
+
+
 def normalize_remote_approval_decision(value: object) -> RemoteApprovalDecision | None:
     """Normalize only the documented signed remote decision wire values."""
     if not isinstance(value, str) or not value.strip():
@@ -443,6 +451,11 @@ def validate_remote_approval_request_binding(
     reviewer_role = _non_empty_string(envelope.get("reviewerRole"))
     if reviewer_user_id is None or reviewer_role not in _REMOTE_APPROVAL_RESOLVER_ROLES:
         raise GuardReviewContractError("remote_approval_reviewer_not_authorized")
+    if remote_approval_uses_workspace_admin_mfa(envelope):
+        if reviewer_role not in _REMOTE_APPROVAL_ADMIN_ROLES:
+            raise GuardReviewContractError("remote_approval_reviewer_not_authorized")
+        if _non_empty_string(envelope.get("stepUpChallengeId")) is None:
+            raise GuardReviewContractError("remote_approval_step_up_required")
     if _non_empty_string(envelope.get("harnessId")) != _non_empty_string(request_row.get("harness")):
         raise GuardReviewContractError("remote_approval_harness_mismatch")
     if _non_empty_string(envelope.get("actionEnvelopeHash")) != _action_envelope_hash(request_row):

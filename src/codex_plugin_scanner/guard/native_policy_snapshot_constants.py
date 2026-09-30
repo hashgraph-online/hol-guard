@@ -24,6 +24,7 @@ POLICY_SNAPSHOT_PROTOCOL_VERSION = 1
 POLICY_SNAPSHOT_MAX_BYTES = 256 * 1024
 POLICY_SNAPSHOT_MAX_STRING_BYTES = 4 * 1024
 POLICY_SNAPSHOT_MAX_MAP_ENTRIES = 256
+POLICY_SNAPSHOT_MAX_MCP_TOOL_ACTIONS = 1024
 POLICY_SNAPSHOT_MAX_HARNESS_ENTRIES = 64
 POLICY_SNAPSHOT_MAX_JSON_DEPTH = 32
 POLICY_SNAPSHOT_MAX_JSON_COLLECTION_ITEMS = 4_096
@@ -63,6 +64,8 @@ _REQUIRED_PUBLISH_FEATURES = frozenset(
         "policy-snapshot-resident-generation-v1",
         "native-policy-in-memory-v1",
         "native-resident-client-v1",
+        "native-command-program-v1",
+        "native-command-control-fence-v1",
     }
 )
 _VALID_ACTIONS = frozenset({"allow", "warn", "review", "require-reapproval", "sandbox-required", "block"})
@@ -109,6 +112,7 @@ _SNAPSHOT_FIELDS = frozenset(
         "integrity",
     }
 )
+_OPTIONAL_SNAPSHOT_FIELDS = frozenset({"command_extensions"})
 _SCOPE_FIELDS = frozenset({"schema", "kind", "scope_digest", "workspace_binding"})
 _EFFECTIVE_POLICY_FIELDS = frozenset(
     {

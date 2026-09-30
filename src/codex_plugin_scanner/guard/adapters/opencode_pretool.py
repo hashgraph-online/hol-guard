@@ -15,7 +15,7 @@ from .hook_python import (
 )
 
 PLUGIN_FILENAME = "hol-guard-pretool.ts"
-_INTERCEPT_TOOLS = ("bash", "ctx_shell", "shell", "sh", "zsh", "terminal")
+_INTERCEPT_TOOLS = ("bash", "ctx_shell", "shell", "sh", "zsh", "terminal", "oc_bash")
 _HOOK_ARGV_ENV = "HOL_GUARD_HOOK_ARGV"
 _INHERIT_ENV_KEYS = (
     "PATH",
@@ -32,9 +32,8 @@ _INHERIT_ENV_KEYS = (
 )
 
 _PLUGIN_TEMPLATE = """// Managed by HOL Guard. Re-run `hol-guard install opencode` after moving Guard home.
-import { createHash } from "node:crypto";
 import { spawn as nodeSpawn } from "node:child_process";
-import { lstatSync, readFileSync, readlinkSync, realpathSync } from "node:fs";
+import { lstatSync, realpathSync } from "node:fs";
 
 const GUARD_HOME = __GUARD_HOME__;
 const GUARD_PYTHON = __GUARD_PYTHON__;
@@ -49,28 +48,11 @@ const GUARD_WINDOWS_JOB_MARKER = "HOL_GUARD_WINDOWS_JOB_CONTAINED\\n";
 let fallbackInFlight = false;
 let fallbackContainmentFailed = false;
 
-type GuardFileMetadata = {
-  device: string;
-  inode: string;
-  mode: string;
-  size: string;
-  mtimeNs: string;
-};
+const GUARD_RUNTIME_MISSING =
+  "HOL Guard's OpenCode plugin cannot find the Guard runtime that generated it. " +
+  "Run `hol-guard install opencode` in a host terminal outside OpenCode, then restart OpenCode.";
 
-function metadataMatches(
-  actual: { dev: bigint; ino: bigint; mode: bigint; size: bigint; mtimeNs: bigint },
-  expected: GuardFileMetadata,
-): boolean {
-  return (
-    actual.dev.toString() === expected.device &&
-    actual.ino.toString() === expected.inode &&
-    actual.mode.toString() === expected.mode &&
-    actual.size.toString() === expected.size &&
-    actual.mtimeNs.toString() === expected.mtimeNs
-  );
-}
-
-export function verifyGuardPythonIdentity(): void {
+export function resolveGuardPythonTarget(): string {
   try {
     const invocationStat = lstatSync(GUARD_PYTHON.invocationPath, { bigint: true });
     let invocationType = "other";
@@ -79,37 +61,39 @@ export function verifyGuardPythonIdentity(): void {
     } else if (invocationStat.isFile()) {
       invocationType = "file";
     }
-    if (
-      invocationType !== GUARD_PYTHON.invocationType ||
-      !metadataMatches(invocationStat, GUARD_PYTHON.invocationStat)
-    ) {
-      throw new Error("invocation metadata changed");
+    if (invocationType !== "file" && invocationType !== "symlink") {
+      throw new Error("invocation is not a file");
     }
-    const linkTarget = invocationStat.isSymbolicLink() ? readlinkSync(GUARD_PYTHON.invocationPath) : null;
-    if (linkTarget !== GUARD_PYTHON.invocationLinkTarget) {
-      throw new Error("invocation link changed");
+    const resolved = realpathSync(GUARD_PYTHON.invocationPath);
+    const targetStat = lstatSync(resolved, { bigint: true });
+    if (!targetStat.isFile() || realpathSync(resolved) !== resolved) {
+      throw new Error("target is not a regular file");
     }
-    if (realpathSync(GUARD_PYTHON.invocationPath) !== GUARD_PYTHON.targetPath) {
-      throw new Error("resolved target changed");
-    }
-    const targetStat = lstatSync(GUARD_PYTHON.targetPath, { bigint: true });
-    if (
-      !targetStat.isFile() ||
-      realpathSync(GUARD_PYTHON.targetPath) !== GUARD_PYTHON.targetPath ||
-      !metadataMatches(targetStat, GUARD_PYTHON.targetStat)
-    ) {
-      throw new Error("target metadata changed");
-    }
-    const digest = createHash("sha256").update(readFileSync(GUARD_PYTHON.targetPath)).digest("hex");
-    if (digest !== GUARD_PYTHON.targetSha256) {
-      throw new Error("target content changed");
-    }
+    // Guard updates replace the interpreter in place. Keep reviewing with the
+    // same launcher path instead of blocking every OpenCode shell tool.
+    return resolved;
   } catch {
-    throw new Error(
-      "HOL Guard Python changed after this OpenCode plugin was generated. " +
-        "Re-run `hol-guard install opencode` before retrying.",
-    );
+    throw new Error(GUARD_RUNTIME_MISSING);
   }
+}
+
+export function verifyGuardPythonIdentity(): void {
+  resolveGuardPythonTarget();
+}
+
+export function isGuardSelfRepairCommand(command: string): boolean {
+  const normalized = command.trim();
+  if (/[&|;`$<>()\\n]/.test(normalized)) {
+    return false;
+  }
+  const argv = normalized.split(/\\s+/);
+  const binary = argv[0] ?? "";
+  const name = binary.replace(/\\\\/g, "/").split("/").pop() ?? "";
+  if (name !== "hol-guard" && name !== "hol-guard.exe") {
+    return false;
+  }
+  const rest = argv.slice(1).join(" ");
+  return rest === "update" || rest === "doctor" || rest === "start" || rest === "install opencode";
 }
 
 function hookProcessEnv(guardArgv: string[]) {
@@ -311,15 +295,16 @@ export async function spawnGuardProcess(options: {
         reject(outcome.error);
       }
     };
+    let pythonTarget: string;
     try {
-      verifyGuardPythonIdentity();
+      pythonTarget = resolveGuardPythonTarget();
     } catch (error) {
       finish({ kind: "reject", error });
       return;
     }
     let proc: ReturnType<typeof nodeSpawn>;
     try {
-      proc = nodeSpawn(GUARD_PYTHON.targetPath, options.args, {
+      proc = nodeSpawn(pythonTarget, options.args, {
         cwd: options.cwd,
         detached: process.platform !== "win32",
         env: options.env,
@@ -527,9 +512,12 @@ export const HolGuardPretoolPlugin = async ({
         );
       } catch (error) {
         const detail = error instanceof Error ? error.message : String(error);
+        if (detail.includes(GUARD_RUNTIME_MISSING) && isGuardSelfRepairCommand(command)) {
+          return;
+        }
         throw new Error(
           `HOL Guard could not review this ${input.tool} command (${detail}). ` +
-            "Re-run `hol-guard install opencode` and ensure the Guard CLI is available.",
+            "Run `hol-guard install opencode` in a host terminal outside OpenCode, then restart OpenCode.",
         );
       }
       if (result.exitCode === 0) {

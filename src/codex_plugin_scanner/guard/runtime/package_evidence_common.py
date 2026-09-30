@@ -12,13 +12,15 @@ import stat
 from pathlib import Path, PurePosixPath
 from typing import cast
 
+from .jsonc import loads_jsonc
+
 _MAX_PACKAGE_JSON_BYTES = 16 * 1024 * 1024
 
 
 _MAX_MANIFEST_JSON_BYTES = 16 * 1024 * 1024
 
 
-def read_json_with_integrity(path: Path) -> tuple[dict[str, object] | None, str | None]:
+def read_json_with_integrity(path: Path, *, allow_jsonc: bool = False) -> tuple[dict[str, object] | None, str | None]:
     """Read a JSON manifest via a verified descriptor; return payload and sha256 digest.
 
     The descriptor is opened without following symlinks, the file must stay a
@@ -54,10 +56,24 @@ def read_json_with_integrity(path: Path) -> tuple[dict[str, object] | None, str 
         return None, None
     try:
         encoded = bytes(content)
-        payload = cast(object, json.loads(encoded.decode("utf-8")))
+        decoded = encoded.decode("utf-8")
+        payload = (
+            loads_jsonc(decoded, object_pairs_hook=_unique_json_pairs)
+            if allow_jsonc
+            else cast(object, json.loads(decoded, object_pairs_hook=_unique_json_pairs))
+        )
     except (UnicodeDecodeError, ValueError):
         return None, None
     return object_mapping(payload), f"sha256:{hashlib.sha256(encoded).hexdigest()}"
+
+
+def _unique_json_pairs(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate package identity key")
+        result[key] = value
+    return result
 
 
 def object_mapping(value: object) -> dict[str, object] | None:
