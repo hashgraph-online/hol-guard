@@ -295,6 +295,7 @@ def test_report_contains_only_privacy_safe_deterministic_evidence() -> None:
     assert not _OPAQUE_ID.search(payload)
 
 
+@requires_fresh_projections
 @pytest.mark.parametrize(
     ("hash_seed", "timezone", "locale"),
     [("1", "UTC", "C"), ("8731", "US/Pacific", "C.UTF-8")],
