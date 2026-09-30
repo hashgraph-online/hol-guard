@@ -2724,12 +2724,17 @@ function CloudReviewSettings() {
           if (event.key === "Escape") close();
         },
         children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
-          "div",
+          "form",
           {
             ref: dialog,
             role: "dialog",
             "aria-modal": "true",
             "aria-labelledby": "cloud-review-confirm-title",
+            noValidate: true,
+            onSubmit: (event) => {
+              event.preventDefault();
+              void confirm();
+            },
             className: "max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-lg bg-white p-5 shadow-xl",
             children: [
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-3", children: [
@@ -2777,8 +2782,7 @@ function CloudReviewSettings() {
                 /* @__PURE__ */ jsxRuntimeExports.jsx(
                   "button",
                   {
-                    type: "button",
-                    onClick: () => void confirm(),
+                    type: "submit",
                     disabled,
                     className: "min-h-10 rounded-md bg-brand-blue px-4 py-2 text-sm font-semibold text-white disabled:opacity-50",
                     children: confirmLabel
