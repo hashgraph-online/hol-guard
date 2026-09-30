@@ -198,6 +198,7 @@ fn is_file_read_tool(tool: &str) -> bool {
 }
 
 fn is_command_tool(tool: &str) -> bool {
+    // tool_matches also recognizes namespaced forms such as functions.exec_command.
     tool_matches(
         tool,
         &[
@@ -208,7 +209,9 @@ fn is_command_tool(tool: &str) -> bool {
             "run_commands",
             "run_terminal_command",
             "execute_command",
+            "exec_command",
             "execute_command_line",
+            "exec",
         ],
     )
 }
@@ -304,10 +307,9 @@ fn infer_action_type(
     (PreToolActionTypeV1::Unknown, PreToolOperationV1::Unknown)
 }
 
-/// Evaluate the complete raw PreToolUse payload in native code.
-///
-/// This remains separate from `evaluate_pre_tool`, the compatibility
-/// command-model operation used by older clients.
+/// Evaluate the complete raw PreToolUse payload in native code. This stays
+/// separate from `evaluate_pre_tool`, the compatibility command-model
+/// operation used by older clients.
 pub fn evaluate_pre_tool_envelope(harness: &str, event: &str, payload: &Value) -> PreToolResultV1 {
     evaluate_pre_tool_envelope_with_extensions(harness, event, payload, None, None)
 }
@@ -319,15 +321,19 @@ pub fn evaluate_pre_tool_envelope_with_extensions(
     controls: Option<&CompiledNativeCommandControls>,
     deadline: Option<Instant>,
 ) -> PreToolResultV1 {
-    evaluate_pre_tool_envelope_with_context(harness, event, payload, controls, deadline, None)
+    evaluate_pre_tool_envelope_with_context(harness, event, payload, controls, deadline, None, None)
 }
 
+/// Like [`evaluate_pre_tool_envelope_with_extensions`] but also carries the
+/// envelope's verified `home_dir`/`cwd` so `~/`-relative and absolute harness
+/// paths (Devin sends `~/...` verbatim) share the non-sensitive read floor.
 pub fn evaluate_pre_tool_envelope_with_context(
     harness: &str,
     event: &str,
     payload: &Value,
     controls: Option<&CompiledNativeCommandControls>,
     deadline: Option<Instant>,
+    home_dir: Option<&str>,
     cwd: Option<&str>,
 ) -> PreToolResultV1 {
     let signals = match extract_generic_signals(payload) {
@@ -342,7 +348,14 @@ pub fn evaluate_pre_tool_envelope_with_context(
             extraction_provenance: "pre-tool-generic".to_owned(),
         })
     });
-    let mut result = evaluate_signals(harness, event, &signals, command_decision.as_ref(), cwd);
+    let mut result = evaluate_signals(
+        harness,
+        event,
+        &signals,
+        command_decision.as_ref(),
+        home_dir,
+        cwd,
+    );
     if event == "UserPromptSubmit" {
         let mut classes = Vec::new();
         if result.action.sensitive_target && signals.content_sensitive {
@@ -393,6 +406,7 @@ fn evaluate_signals(
     event: &str,
     signals: &GenericSignals,
     command_decision: Option<&Result<PreToolDecisionV1, String>>,
+    home_dir: Option<&str>,
     cwd: Option<&str>,
 ) -> PreToolResultV1 {
     let (mut action_type, mut operation) = infer_action_type(
@@ -519,16 +533,13 @@ fn evaluate_signals(
         );
     }
     if let Some(command_decision) = command_decision {
-        let command_decision = match command_decision {
-            Ok(value) => value,
-            Err(_) => {
-                return generic_result(
-                    action,
-                    "block",
-                    "native_pre_tool_malformed_payload",
-                    "HOL Guard blocked a malformed PreToolUse command before execution.",
-                )
-            }
+        let Ok(command_decision) = command_decision else {
+            return generic_result(
+                action,
+                "block",
+                "native_pre_tool_malformed_payload",
+                "HOL Guard blocked a malformed PreToolUse command before execution.",
+            );
         };
         if command_decision.minimum_action == "block" {
             return generic_result(
@@ -566,7 +577,7 @@ fn evaluate_signals(
         && !signals.sensitive_target
         && signals.url_values.is_empty()
         && signals.path_values.len() == 1
-        && bounded_workspace_read_path(&signals.path_values[0], cwd)
+        && super::safe_reads::bounded_file_read_target(&signals.path_values[0], home_dir, cwd)
     {
         return generic_result(
             action,
@@ -577,77 +588,4 @@ fn evaluate_signals(
     }
     let (reason_code, reason) = review_reason(action_type);
     generic_result(action, "review", reason_code, reason)
-}
-
-fn bounded_workspace_read_path(value: &str, cwd: Option<&str>) -> bool {
-    let path = value.trim();
-    if path.is_empty() || path.len() > 4096 {
-        return false;
-    }
-    if path.contains([
-        '$', '`', '|', ';', '&', '<', '>', '\n', '\r', '\0', '*', '?', '[', ']', '{', '}',
-    ]) {
-        return false;
-    }
-    if path.split(['/', '\\']).any(|part| part == "..") {
-        return false;
-    }
-    let stripped;
-    let candidate = if path.starts_with('/') || path.starts_with('~') {
-        let Some(root) = cwd else {
-            return false;
-        };
-        let Some(relative) = workspace_relative_path(path, root) else {
-            return false;
-        };
-        stripped = relative;
-        stripped.as_str()
-    } else {
-        path
-    };
-    super::safe_reads::safe_read_target(candidate)
-}
-
-/// Resolve an absolute read target against the hook's declared workspace.
-/// Both sides are normalized lexically; a target that escapes the workspace
-/// root never degrades to a relative path. Platforms whose workspace aliases
-/// differ from the harness's absolute spelling (for example `/tmp` versus
-/// `/private/tmp` on macOS) are reconciled through canonicalization.
-fn workspace_relative_path(path: &str, root: &str) -> Option<String> {
-    let normalize = |value: &str| -> Option<Vec<String>> {
-        let unified = value.replace('\\', "/");
-        let mut parts = Vec::new();
-        for part in unified.split('/') {
-            if part.is_empty() || part == "." {
-                continue;
-            }
-            if part == ".." || part.starts_with('~') || part.contains(':') {
-                return None;
-            }
-            parts.push(part.to_owned());
-        }
-        if parts.is_empty() {
-            return None;
-        }
-        Some(parts)
-    };
-    let root = root.trim();
-    if !(root.starts_with('/') || root.starts_with('\\')) {
-        return None;
-    }
-    if let Some(relative) = normalize(root).and_then(|root_parts| {
-        normalize(path).and_then(|path_parts| {
-            (path_parts.len() > root_parts.len() && path_parts.starts_with(&root_parts))
-                .then(|| path_parts[root_parts.len()..].join("/"))
-        })
-    }) {
-        return Some(relative);
-    }
-    let canonical_root = std::fs::canonicalize(root).ok()?;
-    let canonical_path = std::fs::canonicalize(path).ok()?;
-    let suffix = canonical_path.strip_prefix(&canonical_root).ok()?;
-    if suffix.as_os_str().is_empty() {
-        return None;
-    }
-    normalize(&suffix.to_string_lossy()).map(|parts| parts.join("/"))
 }

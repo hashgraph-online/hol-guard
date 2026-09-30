@@ -87,8 +87,27 @@ fn snapshot(policy: EffectiveNativePolicyV3) -> PolicySnapshotV3 {
     }
 }
 
+fn post_request(payload: Value) -> NativeHookRequestV1 {
+    NativeHookRequestV1 {
+        protocol_version: NATIVE_PROTOCOL_VERSION,
+        request_id: Some("policy-test".into()),
+        harness: "claude-code".into(),
+        event_name: "PostToolUse".into(),
+        payload,
+        cwd: None,
+        home_dir: "/home/test".into(),
+        guard_home: "/home/test/.hol-guard".into(),
+        source_ref_external_allowed: false,
+        observe_mode: false,
+        deadline_budget_ms: Some(750),
+    }
+}
+
 #[path = "policy_enforcement_observed_mcp_tests.rs"]
 mod observed_mcp;
+
+#[path = "policy_enforcement_codex_budget_tests.rs"]
+mod codex_budget;
 
 fn generic_result(minimum_action: &str) -> PreToolResultV1 {
     PreToolResultV1 {

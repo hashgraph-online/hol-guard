@@ -94,6 +94,14 @@ pub(super) fn sensitive_command(value: &str) -> bool {
 }
 
 fn sensitive_path_argument(value: &str) -> bool {
+    sensitive_path_argument_with_credentials(value, false)
+}
+
+fn sensitive_read_path_argument(value: &str) -> bool {
+    sensitive_path_argument_with_credentials(value, true)
+}
+
+fn sensitive_path_argument_with_credentials(value: &str, include_credential_names: bool) -> bool {
     let normalized = normalized_haystack(value);
     let candidates = [
         normalized.as_str(),
@@ -103,6 +111,9 @@ fn sensitive_path_argument(value: &str) -> bool {
     candidates.iter().any(|candidate| {
         let relative = candidate.trim_start_matches("./");
         sensitive_path_family(Path::new(relative)).is_some()
+            || (include_credential_names
+                && (guard_secure_fs::credential_named_path(Path::new(relative))
+                    || search::glob_can_select_sensitive_path(relative)))
             || relative == ".git/config"
             || relative.ends_with("/.git/config")
     })
@@ -116,6 +127,13 @@ fn has_argument(arguments: &[String], exact: &[&str], prefixes: &[&str]) -> bool
 }
 
 fn safe_git_arguments(arguments: &[String], allow_helper_context: bool) -> bool {
+    // Git magic pathspec semantics are not proven by this classifier; retain review.
+    if arguments
+        .iter()
+        .any(|value| value.starts_with(':') || sensitive_read_path_argument(value))
+    {
+        return false;
+    }
     let Some(subcommand) = arguments.first().map(String::as_str) else {
         return false;
     };

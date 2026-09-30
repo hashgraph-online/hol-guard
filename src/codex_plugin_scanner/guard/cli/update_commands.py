@@ -30,12 +30,6 @@ from ... import version as package_version
 from ..adapters.base import HarnessContext
 from ..adapters.codex import CodexHarnessAdapter, codex_native_hook_state
 from ..adapters.cursor_hooks import cursor_native_hook_state
-from ..adapters.opencode_pretool import (
-    global_plugin_path,
-    install_pretool_plugin,
-    managed_plugin_path,
-    pretool_plugin_source,
-)
 from ..adapters.pi import OmpHarnessAdapter, PiHarnessAdapter, legacy_omp_managed_extension_is_verified
 from ..adapters.pi_extension_source import managed_extension_source
 from ..adapters.pi_support import json_payload
@@ -70,6 +64,7 @@ from .update_desktop_apply import (
 from .update_desktop_core import is_desktop_managed_runtime
 from .update_grok_repair import append_grok_repair
 from .update_install_verify import verify_installed_distribution
+from .update_opencode import _refresh_opencode_pretool_plugin
 from .update_release_candidates import newest_pypi_version
 from .update_subprocess import (
     InstalledDistribution,
@@ -2629,41 +2624,6 @@ def _repair_cursor_install(
     if not isinstance(repaired, dict):
         return None, "Could not repair Cursor protection during update: managed install was not recorded"
     return repaired, None
-
-
-def _refresh_opencode_pretool_plugin(
-    *,
-    context: HarnessContext,
-    store: GuardStore,
-) -> str | None:
-    try:
-        managed_install = store.get_managed_install("opencode")
-    except (json.JSONDecodeError, sqlite3.Error):
-        return None
-    if managed_install is None or not bool(managed_install.get("active")):
-        return None
-    try:
-        repair_context, _ = _repair_context_from_managed_install(context, managed_install)
-    except ValueError as error:
-        return f"Could not inspect OpenCode pretool plugin during update: {error}"
-    global_path = global_plugin_path(repair_context)
-    managed_path = managed_plugin_path(repair_context)
-    try:
-        expected_source = pretool_plugin_source(repair_context)
-    except (OSError, RuntimeError) as error:
-        return f"Could not inspect OpenCode pretool plugin during update: {error}"
-    try:
-        global_source = global_path.read_text(encoding="utf-8") if global_path.is_file() else ""
-        managed_source = managed_path.read_text(encoding="utf-8") if managed_path.is_file() else ""
-    except OSError as error:
-        return f"Could not inspect OpenCode pretool plugin during update: {error}"
-    if global_source == expected_source and managed_source == expected_source:
-        return None
-    try:
-        install_pretool_plugin(repair_context)
-    except (OSError, RuntimeError) as error:
-        return f"Could not refresh OpenCode pretool plugin during update: {error}"
-    return "Refreshed the OpenCode pretool plugin during update. Restart OpenCode to load it."
 
 
 def _repair_codex_install(

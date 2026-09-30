@@ -116,7 +116,12 @@ pub(crate) fn apply_pre_tool_policy(
     }
     validate_pre_tool_result_matrix(&result)?;
     let harness = normalized_harness(&result.action.harness);
-    let mut facts = payload_facts(payload, result.action.action_type, &result.reason_code)?;
+    let mut facts = payload_facts(
+        payload,
+        &harness,
+        result.action.action_type,
+        &result.reason_code,
+    )?;
     facts.sensitive_target |= result.action.sensitive_target;
     let benign_prompt = result.action.event == "UserPromptSubmit"
         && result.action.action_type == PreToolActionTypeV1::Prompt
@@ -369,11 +374,17 @@ pub(crate) fn apply_post_tool_policy(
     if action_rank(&intrinsic).is_none() {
         return Err("native_post_tool_policy_invalid_result".to_owned());
     }
-    let facts = payload_facts(&request.payload, action_type, &response.reason_code)?;
+    let harness = normalized_harness(&request.harness);
+    let facts = payload_facts(
+        &request.payload,
+        &harness,
+        action_type,
+        &response.reason_code,
+    )?;
     let floor = policy_floor(
         &snapshot.effective_policy,
         &snapshot.compiled,
-        &normalized_harness(&request.harness),
+        &harness,
         action_type,
         &FloorInput {
             facts: &facts,

@@ -67,6 +67,7 @@ pub(crate) fn tool_matches(tool: &str, terms: &[&str]) -> bool {
 }
 
 pub(crate) fn classify_tool_name(tool: &str) -> PreToolActionTypeV1 {
+    // tool_matches also recognizes namespaced forms such as functions.exec_command.
     let lowered = tool.to_ascii_lowercase();
     if lowered.starts_with("mcp__")
         || lowered.starts_with("mcp_")
@@ -134,6 +135,7 @@ pub(crate) fn classify_tool_name(tool: &str) -> PreToolActionTypeV1 {
             "terminal",
             "run_command",
             "execute_command",
+            "exec_command",
         ],
     ) {
         PreToolActionTypeV1::Command

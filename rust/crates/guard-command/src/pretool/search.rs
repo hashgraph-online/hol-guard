@@ -1,4 +1,4 @@
-use super::sensitive_path_argument;
+use super::sensitive_read_path_argument as sensitive_path_argument;
 use glob_class::glob_class_matches;
 use std::collections::{HashSet, VecDeque};
 mod glob_class;
@@ -187,7 +187,7 @@ fn expand_brace_globs(pattern: &str) -> Option<Vec<String>> {
     }
     None
 }
-fn glob_can_select_sensitive_path(value: &str) -> bool {
+pub(super) fn glob_can_select_sensitive_path(value: &str) -> bool {
     let normalized = value.to_ascii_lowercase();
     if normalized.len() > 512
         || normalized
@@ -227,6 +227,20 @@ fn glob_can_select_sensitive_path(value: &str) -> bool {
     patterns.iter().any(|pattern| {
         pattern.split('/').any(|component| {
             let bytes = component.as_bytes();
+            let code_extension = component
+                .rsplit_once('.')
+                .is_some_and(|(_, extension)| guard_secure_fs::is_source_code_extension(extension));
+            if !code_extension
+                && guard_secure_fs::credential_path_markers()
+                    .iter()
+                    .any(|marker| {
+                        glob_matches(bytes, marker.as_bytes())
+                            || glob_intersects_prefix_family(bytes, format!("{marker}.").as_bytes())
+                            || glob_intersects_contains_family(bytes, marker.as_bytes(), true)
+                    })
+            {
+                return true;
+            }
             let env_hint = hint::glob_constrained_lcs(bytes, b".env.") >= 2;
             let family_hint = [
                 b"private-key".as_slice(),

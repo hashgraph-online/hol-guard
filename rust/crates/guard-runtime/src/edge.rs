@@ -339,6 +339,7 @@ fn evaluate_validated_envelope(
                             envelope.deadline_budget_ms.unwrap_or(9_000).min(9_000),
                         ),
                 ),
+                Some(envelope.source.home_dir.as_str()),
                 envelope.source.cwd.as_deref(),
             );
             let evaluated = if let Some(snapshot) = policy_snapshot {

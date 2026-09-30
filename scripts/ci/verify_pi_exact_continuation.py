@@ -24,7 +24,8 @@ EXPECTED = {
         "sha512-EcgVLAo8V/p6xrvUFogAzHVaTDK/COBiWkD4VwZqg8QVcJX5PbwzsvV/ucA4M/dUJIP1MuO5z5YI9BRT3i25sw==",
     ),
 }
-EXPECTED_NODE = "v22.19.0"
+EXPECTED_NODE = "v22.22.2"
+EXPECTED_NPM = "12.0.0"
 EXPECTED_BUN = "1.3.14"
 MINIMUM_TESTCASES = 10
 REQUIRED_TESTS = {
@@ -107,6 +108,25 @@ def package_json(package_root: Path) -> dict[str, object]:
     return value
 
 
+def verify_installed_lock(prefix: Path, lock_path: Path) -> None:
+    """Catch shrinkwrap resolutions that differ from the reviewed root lock."""
+    lock = json.loads(lock_path.read_text(encoding="utf-8"))
+    for name, entry in lock["packages"].items():
+        if not name or not isinstance(entry, dict) or entry.get("link"):
+            continue
+        path = Path(name)
+        if path.is_absolute() or ".." in path.parts or path.parts[0] != "node_modules":
+            fail(f"invalid installed package path: {name}")
+        root = prefix / path
+        if not (root / "package.json").is_file():
+            # Platform-specific optional packages can legitimately be absent.
+            if entry.get("optional") or entry.get("devOptional"):
+                continue
+            fail(f"locked dependency is not installed: {name}")
+        if package_json(root).get("version") != entry.get("version"):
+            fail(f"installed dependency differs from package lock: {name}")
+
+
 def verify_installed_sdk(prefix: Path) -> dict[str, str]:
     node_modules = prefix / "node_modules"
     pi_root = node_modules / "@earendil-works" / "pi-coding-agent"
@@ -142,6 +162,9 @@ def verify_installed_sdk(prefix: Path) -> dict[str, str]:
     node_version = command_version("node", env)
     if node_version != EXPECTED_NODE:
         fail(f"Node version must be {EXPECTED_NODE}, got {node_version}")
+    npm_version = command_version("npm", env)
+    if npm_version != EXPECTED_NPM:
+        fail(f"npm version must be {EXPECTED_NPM}, got {npm_version}")
     bun_version = command_version("bun", env)
     if bun_version != EXPECTED_BUN:
         fail(f"Bun version must be {EXPECTED_BUN}, got {bun_version}")
@@ -198,6 +221,7 @@ def main() -> int:
     parser.add_argument("--junitxml", type=Path, required=True)
     args = parser.parse_args()
     verify_lock(args.lock)
+    verify_installed_lock(args.prefix, args.lock)
     env = verify_installed_sdk(args.prefix)
     run_continuation_tests(env, args.junitxml)
     print("Pi/OMP exact continuation verification passed with zero skipped tests")

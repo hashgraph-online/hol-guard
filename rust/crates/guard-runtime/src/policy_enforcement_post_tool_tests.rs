@@ -1,21 +1,5 @@
 use super::*;
 
-fn post_request(payload: Value) -> NativeHookRequestV1 {
-    NativeHookRequestV1 {
-        protocol_version: NATIVE_PROTOCOL_VERSION,
-        request_id: Some("policy-test".into()),
-        harness: "claude-code".into(),
-        event_name: "PostToolUse".into(),
-        payload,
-        cwd: None,
-        home_dir: "/home/test".into(),
-        guard_home: "/home/test/.hol-guard".into(),
-        source_ref_external_allowed: false,
-        observe_mode: false,
-        deadline_budget_ms: Some(750),
-    }
-}
-
 #[test]
 fn policy_allow_cannot_lower_intrinsic_review_or_block() {
     let snapshot = snapshot(policy("allow"));
