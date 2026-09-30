@@ -6,7 +6,7 @@
     "canonical_diff_digest",
     "effective"
   ],
-  "catalog_digest": "417712a82f1799d268ab0ae3fb2ad22a839fbf93cc9768ec4d63f472d738398d",
+  "catalog_digest": "0a4ed99bee36011ad77be6c74cde54fc92a3092a8af278e730ae2544fa8fa13d",
   "control_schema_version": "1.0.0",
   "daemon_api_schema": "guard.daemon.extension-controls.v1",
   "effective_shape": [
@@ -20,8 +20,9 @@
     "failures",
     "projection"
   ],
-  "extension_count": 81,
+  "extension_count": 82,
   "extension_ids": [
+    "command.agenticjobs",
     "command.api-gateway",
     "command.backup.borg",
     "command.backup.rclone",
@@ -107,8 +108,12 @@
   "extension_schema_version": 2,
   "installed_browser_config": "dashboard/playwright.installed.config.ts",
   "overview_route": "/extensions",
-  "permission_count": 280,
+  "permission_count": 284,
   "permission_examples": {
+    "command.agenticjobs.permission.decide": "agenticjobs decide 8f3c2a hired",
+    "command.agenticjobs.permission.post": "agenticjobs post job.md --org acme --publish",
+    "command.agenticjobs.permission.publish": "agenticjobs publish staff-engineer",
+    "command.agenticjobs.permission.submit": "agenticjobs submit 8f3c2a",
     "command.api-gateway.permission.delete": "aws apigateway delete-rest-api",
     "command.backup.borg.permission.mutation": "borg delete",
     "command.backup.rclone.permission.mutation": "rclone delete",
@@ -487,6 +492,10 @@
     "command.storage.minio.permission.mv": "minio"
   },
   "permission_ids": [
+    "command.agenticjobs.permission.decide",
+    "command.agenticjobs.permission.post",
+    "command.agenticjobs.permission.publish",
+    "command.agenticjobs.permission.submit",
     "command.api-gateway.permission.delete",
     "command.backup.borg.permission.mutation",
     "command.backup.rclone.permission.mutation",
@@ -778,8 +787,12 @@
     "controls",
     "semantic_preview"
   ],
-  "rule_count": 264,
+  "rule_count": 268,
   "rule_ids": [
+    "command.agenticjobs.post",
+    "command.agenticjobs.publish",
+    "command.agenticjobs.submit",
+    "command.agenticjobs.decide",
     "command.api-gateway.delete",
     "command.backup.borg.mutation",
     "command.backup.rclone.mutation",
