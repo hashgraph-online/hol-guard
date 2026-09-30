@@ -315,7 +315,7 @@ def test_guard_approvals_resume_rejects_unsafe_headless_thread_id(
     assert output["status"] == "skipped"
     assert output["reason"] == "unsafe_thread_id"
     assert output["strategy"] == "codex-app-server-thread"
-    assert "retry the same request" in output["message"]
+    assert "a new tool call may require fresh approval" in output["message"]
 
 
 def test_guard_approvals_resume_requires_app_server_when_socket_unavailable(
@@ -351,7 +351,7 @@ def test_guard_approvals_resume_requires_app_server_when_socket_unavailable(
     assert output["status"] == "failed"
     assert output["reason"] == "socket_not_available"
     assert output["strategy"] == "codex-app-server-thread"
-    assert "original chat" in output["message"]
+    assert "original Codex chat" in output["message"]
 
 
 def test_guard_approvals_resume_does_not_start_headless_codex_for_blocked_request(

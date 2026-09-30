@@ -35,7 +35,7 @@ def test_ci_rust_cache_can_only_be_written_by_main_pushes() -> None:
 def test_parallel_macos_proofs_use_this_runs_matching_platform_wheel() -> None:
     workflow = _workflow("native-wheel-ci.yml")
     build = workflow["jobs"]["macos-build"]
-    proof = workflow["jobs"]["macos"]
+    proof = workflow["jobs"]["macos-proof"]
     assert proof["needs"] == "macos-build"
     assert {item["target"] for item in build["strategy"]["matrix"]["include"]} == {
         "x86_64-apple-darwin",
@@ -61,7 +61,7 @@ def test_macos_cross_build_keeps_native_platform_proofs_and_cache_isolation() ->
     jobs = _workflow("native-wheel-ci.yml")["jobs"]
     build = jobs["macos-build"]
     build_targets = {item["target"]: item["runner"] for item in build["strategy"]["matrix"]["include"]}
-    proof_targets = {item["target"]: item["runner"] for item in jobs["macos"]["strategy"]["matrix"]["include"]}
+    proof_targets = {item["target"]: item["runner"] for item in jobs["macos-proof"]["strategy"]["matrix"]["include"]}
     assert build_targets == {"x86_64-apple-darwin": "macos-15", "aarch64-apple-darwin": "macos-15"}
     assert proof_targets == {"x86_64-apple-darwin": "macos-15-intel", "aarch64-apple-darwin": "macos-15"}
     setup = next(step for step in build["steps"] if step.get("uses") == "./.github/actions/setup-rust")
@@ -141,7 +141,7 @@ def test_bounded_stress_never_claims_full_soak_qualification() -> None:
     workflow = _workflow("native-wheel-ci.yml")
     assert workflow[True]["schedule"]
     assert "workflow_dispatch" in workflow[True]
-    steps = workflow["jobs"]["linux-x64"]["steps"]
+    steps = workflow["jobs"]["linux-proof"]["steps"]
     full = next(step for step in steps if "--enforce-soak" in step.get("run", ""))
     smoke = next(step for step in steps if "--json native-stress-smoke.json" in step.get("run", ""))
     assert full["if"] == "github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'"
@@ -206,7 +206,26 @@ def test_parallel_windows_workspace_checks_remain_required(name: str, integratio
     integration_commands = "\n".join(step.get("run", "") for step in integration["steps"])
     assert "cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime" in integration_commands
     if name == "rust-runtime-windows-resident.yml":
-        assert "test_guard_native_runtime_windows_resident.py" in integration_commands
+        assert "test_native_managed_resident.py" in integration_commands
     else:
         assert "test_native_hook_client.py" in integration_commands
         assert "test_native_hook_client_transport.py" in integration_commands
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "rust-runtime-differential.yml",
+        "rust-runtime-mutation-differential.yml",
+        "rust-runtime-recovery.yml",
+        "rust-runtime-windows-resident.yml",
+        "rust-command-shadow.yml",
+        "rust-runtime.yml",
+        "rust-runtime-performance.yml",
+    ],
+)
+@pytest.mark.parametrize("event", ["pull_request", "push"])
+def test_production_resident_stream_selects_runtime_qualification(name: str, event: str) -> None:
+    # BaseLoader preserves the YAML `on` key rather than interpreting it as a boolean.
+    workflow = yaml.load((ROOT / ".github/workflows" / name).read_text(encoding="utf-8"), Loader=yaml.BaseLoader)
+    assert "src/codex_plugin_scanner/guard/native_resident_stream.py" in workflow["on"][event]["paths"]

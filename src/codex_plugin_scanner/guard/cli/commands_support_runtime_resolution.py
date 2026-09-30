@@ -9,6 +9,7 @@ import os
 from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
+    from ..store import GuardStore
     from ._commands_shared import _now
     from .commands_support_hook_payload import _action_envelope_json, _coalesce_string
     from .commands_support_runtime_artifacts import _CODEX_PROMPT_SECRET_KEY_MARKERS
@@ -17,6 +18,7 @@ if TYPE_CHECKING:
 from ._commands_shared import *
 from .commands_parser_helpers import *
 from ..runtime.approval_context import build_runtime_launch_identity
+from ..runtime.composio_contract import composio_requires_action_review
 from ..runtime.mcp_protection import McpServerIdentity, build_mcp_server_identity
 from ..runtime.mcp_server_contribution import normalized_remote_mcp_url
 from ..synced_policy import synced_policy_payload as _synced_policy_payload
@@ -137,6 +139,7 @@ def _copilot_runtime_tool_call(
     workspace: Path | None,
     config: GuardConfig | None = None,
     preferred_workspace_config: str | None = None,
+    store: GuardStore | None = None,
 ) -> tuple[GuardArtifact, str, object] | None:
     tool_name = payload.get("tool_name")
     if not isinstance(tool_name, str) or not tool_name.strip():
@@ -196,6 +199,9 @@ def _copilot_runtime_tool_call(
         server_identity=server_identity,
         tool_schema=tool_schema,
         tool_description=tool_description,
+        provider_catalog_hash=store.read_mcp_provider_authority_hash()
+        if store is not None and composio_requires_action_review(resolution.tool_name)
+        else None,
     )
     arguments = payload.get("tool_input", payload.get("arguments"))
     artifact_hash = build_tool_call_hash(

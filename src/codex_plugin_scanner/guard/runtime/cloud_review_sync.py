@@ -22,7 +22,7 @@ from .cloud_review_event_delivery import (
     post_review_events,
 )
 from .cloud_review_event_projection import build_cloud_review_event, project_cloud_review_event
-from .cloud_review_retry_recovery import repair_retry_identity_failures
+from .cloud_review_retry_recovery import quarantine_terminal_binding_failures, repair_retry_identity_failures
 from .cloud_review_sync_auth import resolve_cloud_review_sync_auth_context as _resolve_cloud_review_sync_auth_context
 from .local_request_snapshots import (
     _cloud_scrub_text,
@@ -367,6 +367,13 @@ def sync_cloud_review_events_once(
                     store.acknowledge_review_events(acknowledged_sequences, **delivery_binding)
                     retry_sequences, retry_results = repair_retry_identity_failures(
                         store, sequences=retry_sequences, results=retry_results, binding=delivery_binding
+                    )
+                    retry_sequences, retry_results = quarantine_terminal_binding_failures(
+                        store,
+                        sequences=retry_sequences,
+                        results=retry_results,
+                        events=dict(zip(sequences, events, strict=True)),
+                        binding=delivery_binding,
                     )
                     if retry_sequences:
                         message = _retry_result_message(retry_results)

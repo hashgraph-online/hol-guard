@@ -29,6 +29,7 @@ from .local_authority_integrity import (
     sign_local_authority_payload,
     verify_local_authority_payload,
 )
+from .private_file_io import read_private_regular_text
 
 HOOK_MANIFEST_SCHEMA_VERSION = 2
 HOOK_MANIFEST_MAC_ALGORITHM = LOCAL_AUTHORITY_INTEGRITY_MAC_ALGORITHM
@@ -36,6 +37,7 @@ _HOOK_SECRET_SCHEMA_VERSION = 1
 _HOOK_KEY_BYTES = 32
 _HOOK_MANIFEST_INTEGRITY_PURPOSE = "codex-managed-hook-manifest"
 _PRIVATE_FILE_MODE = 0o600
+_MAX_HOOK_MANIFEST_BYTES = 1024 * 1024
 
 
 @dataclass(frozen=True, slots=True)
@@ -158,9 +160,15 @@ def load_authenticated_hook_manifest_path(
             "The authenticated Codex hook manifest is missing; run `hol-guard install codex` to repair it.",
         )
     _validate_private_regular_file(path, reason_prefix="codex_hook_manifest", label="Codex hook manifest")
+    raw = read_private_regular_text(path, max_bytes=_MAX_HOOK_MANIFEST_BYTES)
+    if raw is None:
+        raise CodexHookIntegrityError(
+            "codex_hook_manifest_invalid",
+            "The authenticated Codex hook manifest is unreadable; run `hol-guard install codex` to repair it.",
+        )
     try:
-        value: object = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        value: object = json.loads(raw)
+    except json.JSONDecodeError as exc:
         raise CodexHookIntegrityError(
             "codex_hook_manifest_invalid",
             "The authenticated Codex hook manifest is unreadable; run `hol-guard install codex` to repair it.",

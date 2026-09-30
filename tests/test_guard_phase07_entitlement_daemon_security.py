@@ -324,3 +324,29 @@ def test_phase07_daemon_rate_limits_package_firewall_actions(tmp_path: Path) -> 
     assert first_status == 200
     assert second_status == 429
     assert second_payload["error"] == "rate_limited"
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["/v1/supply-chain/repair", "/v1/supply-chain/package-shims/repair"],
+)
+def test_package_repair_rejects_overlap_while_first_mutation_is_running(tmp_path: Path, path: str) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_premium_entitlement(store)
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    lock = daemon._server.package_firewall_mutation_lock  # type: ignore[attr-defined]
+    try:
+        token = _dashboard_token_for(store)
+        lock.acquire()
+        try:
+            status, payload = _read_json_response(
+                _request(daemon.port, path, token=token, payload={"managers": ["npm"]})
+            )
+        finally:
+            lock.release()
+    finally:
+        daemon.stop()
+
+    assert status == 409
+    assert payload["error"] == "operation_in_progress"

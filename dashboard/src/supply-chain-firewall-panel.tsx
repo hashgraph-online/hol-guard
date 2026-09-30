@@ -32,6 +32,7 @@ import { EntitlementNotice, ConnectFlowCard } from "./supply-chain-firewall-view
 import type { CompletedOp } from "./supply-chain-firewall-views";
 import {
   isSupplyChainAuditConnectError,
+  isSupplyChainAuditWorkspaceInvalidError,
   isSupplyChainAuditWorkspaceRequiredError,
   packageAuditNeedsCloudConnect,
   resolveSupplyChainAuditConnectGate,
@@ -116,11 +117,12 @@ function LoadingSkeleton() {
 type ErrorBannerProps = {
   message: string;
   onRetry: () => void;
+  retryLabel?: string;
 };
 
-function ErrorBanner({ message, onRetry }: ErrorBannerProps) {
+function ErrorBanner({ message, onRetry, retryLabel = "Retry" }: ErrorBannerProps) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-4">
+    <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-4" role="status">
       <div className="flex items-start gap-2">
         <HiMiniExclamationTriangle
           className="mt-0.5 h-4 w-4 shrink-0 text-brand-attention"
@@ -129,7 +131,7 @@ function ErrorBanner({ message, onRetry }: ErrorBannerProps) {
         <p className="text-sm text-brand-attention">{message}</p>
       </div>
       <ActionButton variant="outline" onClick={onRetry}>
-        Retry
+        {retryLabel}
       </ActionButton>
     </div>
   );
@@ -173,7 +175,8 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
   onAuditConnectGateChange?: (state: AuditConnectGateViewState | null) => void;
   onAuditErrorChange?: (message: string | null) => void;
   onAuditWorkspaceRequired?: () => void;
-  onStateChanged?: () => Promise<void> | void;
+  onAuditWorkspaceDiscovered?: (workspaceDir: string | null) => void;
+  onStateChanged?: (requireComplete?: boolean) => Promise<void> | void;
   onAuditCompleted?: (resultDetail: Record<string, unknown>) => void;
   onAuditStarted?: () => void;
   onAuditRunningChange?: (running: boolean) => void;
@@ -189,6 +192,7 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
     onAuditConnectGateChange,
     onAuditErrorChange,
     onAuditWorkspaceRequired,
+    onAuditWorkspaceDiscovered,
     onStateChanged,
     onAuditCompleted,
     onAuditStarted,
@@ -200,6 +204,10 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
   const recoveryConnectHandledRef = useRef(false);
   const repairNeedsCloudConnectRef = useRef(false);
   const [panelLoad, setPanelLoad] = useState<PanelLoadState>({ phase: "loading" });
+  const [refreshError, setRefreshError] = useState<string | null>(null);
+  const [sharedRefreshError, setSharedRefreshError] = useState<string | null>(null);
+  const [repairAwaitingRefresh, setRepairAwaitingRefresh] = useState<string | null>(null);
+  const statusRequestId = useRef(0);
   const [pendingOp, setPendingOp] = useState<PendingOp | null>(null);
   const [lastCompleted, setLastCompleted] = useState<CompletedOp | null>(null);
   const [lastFailed, setLastFailed] = useState<FailedOp | null>(null);
@@ -243,11 +251,16 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
   }, []);
 
   const load = useCallback(async () => {
+    const requestId = ++statusRequestId.current;
+    setRefreshError(null);
     setPanelLoad({ phase: "loading" });
     try {
       const data = await fetchPackageFirewallStatus();
+      if (requestId !== statusRequestId.current) return;
       setPanelLoad({ phase: "loaded", data });
+      setRepairAwaitingRefresh(null);
     } catch (err) {
+      if (requestId !== statusRequestId.current) return;
       const message =
         err instanceof Error ? err.message : "Failed to load package firewall status.";
       setPanelLoad({ phase: "error", message });
@@ -258,16 +271,43 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
     void load();
   }, [load]);
 
+  useEffect(() => {
+    if (panelLoad.phase !== "loaded") {
+      return;
+    }
+    onAuditWorkspaceDiscovered?.(panelLoad.data.audit_workspace_dir ?? null);
+  }, [onAuditWorkspaceDiscovered, panelLoad]);
+
   const refreshAfterOp = useCallback(async () => {
+    const requestId = ++statusRequestId.current;
     try {
       const data = await fetchPackageFirewallStatus();
+      if (requestId !== statusRequestId.current) return;
       setPanelLoad({ phase: "loaded", data });
+      setRepairAwaitingRefresh(null);
+      setRefreshError(null);
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Failed to refresh package firewall status.";
-      setPanelLoad({ phase: "error", message });
+      if (requestId !== statusRequestId.current) return;
+      setRefreshError(
+        "Guard could not check the latest package status. The last known state is shown; check again before retrying a repair.",
+      );
     }
   }, []);
+
+  const refreshSharedState = useCallback(async () => {
+    if (onStateChanged === undefined) return;
+    try {
+      await onStateChanged(true);
+      setSharedRefreshError(null);
+    } catch {
+      setSharedRefreshError("Guard could not refresh the rest of the dashboard. Check again before relying on other views.");
+    }
+  }, [onStateChanged]);
+
+  const refreshInBackground = useCallback(() => {
+    void refreshAfterOp();
+    void refreshSharedState();
+  }, [refreshAfterOp, refreshSharedState]);
 
   useEffect(() => {
     if (panelLoad.phase !== "loaded") {
@@ -348,7 +388,7 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
           openAuditConnectGate(true);
           return false;
         }
-        if (isSupplyChainAuditWorkspaceRequiredError(err)) {
+        if (isSupplyChainAuditWorkspaceRequiredError(err) || isSupplyChainAuditWorkspaceInvalidError(err)) {
           onAuditWorkspaceRequired?.();
         }
         const message = supplyChainAuditUserMessage(err) ?? "Operation failed.";
@@ -520,11 +560,10 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
       setPendingOp({ op: "fix_all", manager: null });
       try {
         const result = await repairSupplyChainProtection(credentials);
-        await refreshAfterOp();
-        await onStateChanged?.();
         const nextState = supplyChainFixAllStateFromRepair(result);
         repairNeedsCloudConnectRef.current = supplyChainFixAllNeedsCloudConnect(nextState);
         onFixAllStateChange?.(nextState);
+        refreshInBackground();
       } catch (error) {
         if (credentials === undefined && isApprovalGateRequiredError(error)) {
           await resolveApprovalGate();
@@ -558,9 +597,8 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
     [
       beginFixAllConnectRecovery,
       onFixAllStateChange,
-      onStateChanged,
       panelLoad,
-      refreshAfterOp,
+      refreshInBackground,
       resolveApprovalGate,
     ],
   );
@@ -710,6 +748,7 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
       try {
         const response = await runPackageFirewallAction(op, manager, credentials);
         setLastCompleted({ op, manager, response });
+        if (op === "repair" && manager !== null) setRepairAwaitingRefresh(manager);
         if (op === "test") {
           const proof = parseInterceptProofSnapshot(response);
           if (proof !== null) {
@@ -717,8 +756,7 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
             setInterceptProof(proof);
           }
         }
-        await refreshAfterOp();
-        await onStateChanged?.();
+        refreshInBackground();
       } catch (err) {
         if (
           credentials === undefined &&
@@ -735,7 +773,7 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
         setPendingOp(null);
       }
     },
-    [onStateChanged, refreshAfterOp, resolveApprovalGate],
+    [refreshInBackground, resolveApprovalGate],
   );
 
   const handleGlobalOp = useCallback(
@@ -839,14 +877,13 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
     setActivationAssistError(null);
     try {
       await activatePackageFirewallRuntime();
-      await refreshAfterOp();
-      await onStateChanged?.();
+      refreshInBackground();
     } catch (error) {
       setActivationAssistError(error instanceof Error ? error.message : "Unable to activate package protection.");
     } finally {
       setActivatingRuntime(false);
     }
-  }, [onStateChanged, refreshAfterOp]);
+  }, [refreshInBackground]);
   const handleApprovalCancel = useCallback(() => {
     if (pendingApprovalOp?.op === "fix_all") {
       onFixAllStateChange?.({
@@ -954,6 +991,12 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
 
       {panelLoad.phase === "loaded" && (
         <>
+          {refreshError !== null && (
+            <ErrorBanner message={refreshError} onRetry={handleRetry} retryLabel="Check again" />
+          )}
+          {sharedRefreshError !== null && (
+            <ErrorBanner message={sharedRefreshError} onRetry={() => void refreshSharedState()} retryLabel="Check again" />
+          )}
           {!panelLoad.data.entitlement.allowed && (
             <div className="border-b border-slate-100">
               <EntitlementNotice
@@ -970,6 +1013,7 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
           <FirewallControlsView
             data={panelLoad.data}
             pendingOp={pendingOp}
+            repairAwaitingRefresh={repairAwaitingRefresh}
             lastCompleted={lastCompleted}
             lastFailed={lastFailed}
             confirmRemoveManager={confirmRemoveManager}
@@ -1017,6 +1061,7 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
           shim={managerDrawerShim}
           actions={panelLoad.data.actions}
           anyPending={anyPending}
+          repairAwaitingRefresh={repairAwaitingRefresh === managerDrawerTarget}
           isMine={pendingOp?.manager === managerDrawerTarget}
           actionHandlers={{
             install: handleInstall,

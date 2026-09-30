@@ -1,6 +1,6 @@
 {
   "schema": "hol-guard.python-capability-ownership.v1",
-  "slice": "NHD-091-NHD-095",
+  "slice": "RMN-009-resident-retirement",
   "decision_authority": "rust_native_runtime",
   "dynamic_import_policy": {
     "mode": "literal_or_bounded",
@@ -94,18 +94,6 @@
       ],
       "production_role": "non-blocking receipts, metrics, and enrichment only; no decision authority",
       "owner": "evidence-persistence"
-    },
-    {
-      "id": "legacy_python_resident_transport",
-      "class": "dead_duplicate",
-      "patterns": [
-        "src/codex_plugin_scanner/guard/native_runtime_resident*.py"
-      ],
-      "exclude_patterns": [],
-      "production_role": "superseded Python resident transport; source retained pending separate deletion authorization",
-      "owner": "rust-resident-runtime",
-      "package_status": "wheel-and-sdist-excluded",
-      "rollback_boundary": "restore the retained source and remove the single build exclusion in a separately reviewed rollback change"
     }
   ],
   "oracle_tests": [
@@ -130,33 +118,140 @@
     "codex_plugin_scanner.guard.runtime.hook_source_read"
   ],
   "parity_fixture": "tests/fixtures/native-hook-parity/cases.v1.json",
-  "package_excluded_candidates": [
-    "src/codex_plugin_scanner/guard/native_runtime_resident.py"
-  ],
+  "package_excluded_candidates": [],
   "deletion_candidates": [
     {
-      "path": "src/codex_plugin_scanner/guard/native_runtime_resident.py",
-      "reason": "No production src import or entrypoint reaches the Python resident transport; Rust resident runtime owns the route.",
-      "authorization": "separate deletion review required",
-      "source_retained": true
+      "path": "src/codex_plugin_scanner/guard/cli/commands_hook_claude.py",
+      "source_retained": true,
+      "reason": "Port remaining oracle behavior and close callers before the next retirement slice."
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/cli/commands_hook_compat_bootstrap.py",
+      "source_retained": true,
+      "reason": "Port remaining oracle behavior and close callers before the next retirement slice."
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/cli/commands_hook_compat_loader.py",
+      "source_retained": true,
+      "reason": "Port remaining oracle behavior and close callers before the next retirement slice."
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/cli/commands_hook_compatibility.py",
+      "source_retained": true,
+      "reason": "Port remaining oracle behavior and close callers before the next retirement slice."
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/cli/commands_hook_copilot.py",
+      "source_retained": true,
+      "reason": "Port remaining oracle behavior and close callers before the next retirement slice."
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/cli/commands_hook_generic.py",
+      "source_retained": true,
+      "reason": "Port remaining oracle behavior and close callers before the next retirement slice."
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/cli/commands_hook_runtime_eval.py",
+      "source_retained": true,
+      "reason": "Port remaining oracle behavior and close callers before the next retirement slice."
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/cli/commands_hook_runtime_finish.py",
+      "source_retained": true,
+      "reason": "Port remaining oracle behavior and close callers before the next retirement slice."
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/cli/commands_hook_runtime_review.py",
+      "source_retained": true,
+      "reason": "Port remaining oracle behavior and close callers before the next retirement slice."
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/cli/commands_hook_runtime_state.py",
+      "source_retained": true,
+      "reason": "Port remaining oracle behavior and close callers before the next retirement slice."
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/cli/commands_hook_source_ref.py",
+      "source_retained": true,
+      "reason": "Port remaining oracle behavior and close callers before the next retirement slice."
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/runtime/hook_content_scanner.py",
+      "source_retained": true,
+      "reason": "Port remaining oracle behavior and close callers before the next retirement slice."
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/runtime/hook_decision_cache.py",
+      "source_retained": true,
+      "reason": "Port remaining oracle behavior and close callers before the next retirement slice."
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/runtime/hook_output_text.py",
+      "source_retained": true,
+      "reason": "Port remaining oracle behavior and close callers before the next retirement slice."
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/runtime/hook_payload_reference.py",
+      "source_retained": true,
+      "reason": "Port remaining oracle behavior and close callers before the next retirement slice."
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/runtime/hook_review_engine.py",
+      "source_retained": true,
+      "reason": "Port remaining oracle behavior and close callers before the next retirement slice."
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/runtime/hook_source_read.py",
+      "source_retained": true,
+      "reason": "Port remaining oracle behavior and close callers before the next retirement slice."
     }
   ],
   "dependency_delta": {
     "removed_project_dependencies": [],
     "removed_entrypoints": [],
     "removed_runtime_flags": [],
-    "review": "No dependency or public entrypoint was proven dead without widening the rollback boundary; the cleanup removes only the dead resident package surface."
+    "review": "The unused Python resident supervisor and authenticated transport are physically deleted. The production Rust-managed resident remains the sole implementation. Hook-oracle migration is separately tracked and not claimed complete."
   },
   "rollback_boundary": {
-    "retained_source": true,
-    "reversible_changes": [
-      "commands_hook_compat_loader.py lazy oracle import",
-      "commands_support.py lazy facade lookup",
-      "hatch build exclusion for native_runtime_resident.py"
-    ],
-    "non_reversible_without_review": [
-      "deletion of native_runtime_resident.py",
-      "removal of legacy oracle modules"
-    ]
-  }
+    "retained_source": false,
+    "scope": "retired_modules only; named hook oracles remain pending their own cutover",
+    "mechanism": "revert the reviewed release as a unit; no packaged Python resident fallback"
+  },
+  "retirement_ledger": "docs/guard/contracts/runtime-retirement-ledger.v1.json",
+  "retired_modules": [
+    {
+      "path": "src/codex_plugin_scanner/guard/native_runtime_resident.py",
+      "module": "codex_plugin_scanner.guard.native_runtime_resident",
+      "source_sha256": "559bd6a9f67896fe38816727011817492d944d1c41b0004452c647100fb1a5c8",
+      "forbidden_symbols": [
+        "_ResidentService",
+        "resident_native_request",
+        "resident_service_starts",
+        "close_resident_native_runtimes"
+      ],
+      "native_replacements": [
+        "rust/crates/guard-runtime/src/managed_resident.rs",
+        "rust/crates/guard-runtime/src/resident_client.rs",
+        "rust/crates/guard-runtime/src/resident_transport.rs"
+      ]
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/native_runtime_resident_transport.py",
+      "module": "codex_plugin_scanner.guard.native_runtime_resident_transport",
+      "source_sha256": "d2f90a44e59a338c1ceabd498701488c63b7bb0e82c462a05cb5d622584a201a",
+      "forbidden_symbols": [
+        "retire_unusable_resident_supervisor"
+      ],
+      "native_replacements": [
+        "rust/crates/guard-runtime/src/managed_resident.rs",
+        "rust/crates/guard-runtime/src/resident_client.rs",
+        "rust/crates/guard-runtime/src/resident_transport.rs"
+      ]
+    }
+  ],
+  "retired_test_paths": [
+    "ci/native_runtime/test_guard_native_runtime_resident.py",
+    "ci/native_runtime/test_guard_native_runtime_resident_cross_process.py",
+    "ci/native_runtime/test_guard_native_runtime_windows_resident.py"
+  ]
 }
