@@ -16,6 +16,7 @@ on:
       - 'scripts/ci/verify_extension_builder_install.py'
       - 'scripts/release/stage_guard_cloud_review_artifacts.py'
       - 'pyproject.toml'
+      - 'uv.lock'
       - '.github/workflows/extension-builder-installed.yml'
   push:
     branches: [main]
@@ -33,6 +34,7 @@ on:
       - 'scripts/ci/verify_extension_builder_install.py'
       - 'scripts/release/stage_guard_cloud_review_artifacts.py'
       - 'pyproject.toml'
+      - 'uv.lock'
       - '.github/workflows/extension-builder-installed.yml'
   workflow_dispatch:
 
@@ -52,10 +54,20 @@ jobs:
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.12'
+      - name: Set up locked dependency installer
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: '0.9.26'
+          enable-cache: true
       - name: Prepare isolated verification tools
+        env:
+          UV_PROJECT_ENVIRONMENT: .builder-ci-venv
         run: |
-          python3 -m venv .builder-ci-venv
-          .builder-ci-venv/bin/python -m pip install --disable-pip-version-check -e '.[dev]'
+          uv sync --frozen --extra dev --no-default-groups --python 3.12
       - name: Build the native source compiler
         run: |
           cargo build --manifest-path rust/Cargo.toml --locked --release -p guard-command --bin guard-command-source
@@ -78,10 +90,12 @@ jobs:
           wheel=$(find builder-artifacts -maxdepth 1 -type f -name '*.whl' -print -quit)
           test -n "$wheel"
           installed_env="$RUNNER_TEMP/guard-builder-wheel"
-          python3 -m venv "$installed_env"
-          .builder-ci-venv/bin/python -m pip freeze --exclude-editable > "$RUNNER_TEMP/guard-builder-constraints.txt"
-          "$installed_env/bin/python" -m pip install --disable-pip-version-check \
-            --constraint "$RUNNER_TEMP/guard-builder-constraints.txt" "$wheel"
+          uv venv --python 3.12 "$installed_env"
+          uv export --frozen --no-default-groups --no-emit-project \
+            --format requirements-txt --output-file "$RUNNER_TEMP/guard-builder-requirements.txt"
+          uv pip install --no-config --python "$installed_env/bin/python" --require-hashes \
+            --requirement "$RUNNER_TEMP/guard-builder-requirements.txt"
+          uv pip install --no-config --python "$installed_env/bin/python" --no-deps "$wheel"
           .builder-ci-venv/bin/python scripts/ci/verify_extension_builder_install.py \
             --python "$installed_env/bin/python" \
             --wheel "$wheel" \

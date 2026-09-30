@@ -1,0 +1,123 @@
+name: Extension artifact regen
+
+# Contributors own canonical contribution sources. The generated projections
+# derived from them (command catalog, native command program, trust map,
+# baselines, digest vectors, directory render) are maintainer-owned and
+# regenerated here after merges so contribution PRs never conflict on them.
+#
+# NOTE: the main-branch ruleset requires every change to arrive through a
+# reviewed pull request, so refreshed artifacts are published as a short-lived
+# regen/* pull request with auto-merge armed — not pushed to main directly.
+# The publish step needs the GUARD_AUTOMATION_TOKEN secret (a PAT): events
+# caused by the default GITHUB_TOKEN do not trigger workflows, so a
+# GITHUB_TOKEN-created regen PR would sit without checks.
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - contributions/**
+      - contracts/extensions/**
+      - tests/fixtures/command-source-*.v1.json
+      - scripts/refresh_extension_artifacts.py
+      - .github/workflows/extension-artifact-regen.yml
+  workflow_dispatch:
+
+# Serialized so back-to-back merges batch: each run regenerates against the
+# HEAD it checks out, so a queued run absorbs intermediate merges.
+concurrency:
+  group: extension-artifact-regen-main
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  regen:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          token: ${{ secrets.GUARD_AUTOMATION_TOKEN }}
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.13"
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - name: Install the locked development environment
+        run: uv sync --frozen --extra dev
+      - name: Install the pinned Rust toolchain
+        run: rustup toolchain install 1.88.0 --profile minimal
+      - name: Regenerate and publish refreshed artifacts
+        env:
+          PUSH_TOKEN: ${{ secrets.GUARD_AUTOMATION_TOKEN }}
+          GH_TOKEN: ${{ secrets.GUARD_AUTOMATION_TOKEN }}
+          GH_REPO: hashgraph-online/hol-guard
+        run: |
+          if [ -z "${PUSH_TOKEN}" ]; then
+            echo "GUARD_AUTOMATION_TOKEN is not set; refusing to publish generated" >&2
+            echo "artifacts without a token whose events trigger workflows." >&2
+            exit 1
+          fi
+          # git smart-HTTP needs Basic x-access-token auth (Bearer is API-only).
+          git_auth=$(printf 'x-access-token:%s' "${PUSH_TOKEN}" | base64 | tr -d '\n')
+          echo "::add-mask::${git_auth}"
+          export GIT_CONFIG_COUNT=3
+          export GIT_CONFIG_KEY_0="http.https://github.com/.extraheader"
+          export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic ${git_auth}"
+          export GIT_CONFIG_KEY_1="user.name"
+          export GIT_CONFIG_VALUE_1="github-actions[bot]"
+          export GIT_CONFIG_KEY_2="user.email"
+          export GIT_CONFIG_VALUE_2="41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git reset --hard origin/main
+          uv run --no-sync python scripts/refresh_extension_artifacts.py
+          git add -A contracts/extensions contracts/managed-controls docs/guard/extensions \
+            contributions/extensions \
+            src/codex_plugin_scanner/guard/contracts/data/extensions \
+            src/codex_plugin_scanner/guard/extension_builder tests/fixtures/extension-controls \
+            tests/fixtures/command-source-*.v1.json \
+            tests/fixtures/guard-command-corpus/decision-diff-report.json \
+            tests/fixtures/guard-command-corpus/decision-diff-report.framed-sha256 \
+            tests/test_guard_extension_trust.py tests/test_policy_bundle_delivery_runtime.py
+          close_superseded() {
+            stale_prs=$(gh pr list --repo "${GH_REPO}" --state open --limit 200 \
+              --search "head:regen/artifacts-" \
+              --json number,headRefName,headRepositoryOwner \
+              --jq ".[] | select(.headRepositoryOwner.login == \"hashgraph-online\") | select(.headRefName | startswith(\"regen/artifacts-\")) | select(.headRefName != \"${1:-}\") | .number") || return 1
+            for pr in ${stale_prs}; do
+              gh pr close --repo "${GH_REPO}" --delete-branch \
+                --comment "superseded by ${1:-main reaching artifact parity}" "${pr}"
+            done
+          }
+          if git diff --cached --quiet; then
+            echo "artifacts already current"
+            close_superseded
+            exit 0
+          fi
+          git commit -m "chore(extensions): regenerate contribution artifacts"
+          regen_branch="regen/artifacts-$(git rev-parse --short HEAD)"
+          git push -f origin "HEAD:refs/heads/${regen_branch}"
+          gh pr create --repo "${GH_REPO}" --base main --head "${regen_branch}" \
+            --title "chore(extensions): regenerate contribution artifacts" \
+            --body "Maintainer-owned projections regenerated from contributions on main ($(git rev-parse --short origin/main)). Auto-merge is armed; the ruleset still requires one maintainer approval." \
+            || true
+          if ! gh pr view --repo "${GH_REPO}" "${regen_branch}" --json number >/dev/null; then
+            echo "failed to open regen PR for ${regen_branch}" >&2
+            exit 1
+          fi
+          gh pr merge --repo "${GH_REPO}" --auto --squash "${regen_branch}" \
+            || echo "::warning::could not arm auto-merge for ${regen_branch}"
+          close_superseded "${regen_branch}"

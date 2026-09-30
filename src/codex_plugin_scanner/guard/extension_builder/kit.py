@@ -99,6 +99,29 @@ def _report(discovery: Discovery, review: Review) -> dict[str, object]:
 def _readme(discovery: Discovery) -> str:
     metadata = discovery.metadata
     safe_name = re.sub(r"([\\`*_{}\[\]()#+.!|<>~-])", r"\\\1", metadata.name)
+    if metadata.kind == "cli":
+        verification = f"""The command source is `{command_source_path(metadata)}` and its portable fixture
+is `{command_fixture_path(metadata)}`. Kit validation compiles the source and
+runs these cases with Rust. CLI kits do not generate a Python detector or a
+Python test module.
+
+After integration, follow the [native validation sequence](https://github.com/hashgraph-online/hol-guard/blob/main/docs/guard/extension-builder/VALIDATION.md):
+regenerate the complete program, rebuild the native compiler and runtime, and
+run the fixture with a build envelope assembled from the destination checkout's
+canonical sources. The kit's `base: "packaged"` envelope is for a new addition;
+it cannot replace an extension already embedded in the rebuilt compiler.
+"""
+    else:
+        verification = f"""The MCP contribution is `{contribution_path(metadata)}`. Its generated Python
+tests validate contribution metadata and native registration:
+
+```sh
+python -m pytest {test_path(metadata)}
+```
+
+Follow the [native validation sequence](https://github.com/hashgraph-online/hol-guard/blob/main/docs/guard/extension-builder/VALIDATION.md)
+to regenerate and verify the complete catalog after integration.
+"""
     return f"""# {safe_name}: Guard contribution kit
 
 This is generated contributor knowledge, not a security certificate. The extension
@@ -108,7 +131,13 @@ validation never run the target or change Guard policy.
 ## Review first
 
 Read `report.json` and inspect every operation against the upstream implementation.
-Edit `review.json`, not the generated artifacts. Changed behavior needs
+Copy the review file from this kit's parent directory:
+
+```sh
+cp KIT/review.json REVIEW.json
+```
+
+Edit `REVIEW.json`. Changed behavior needs
 `reviewed: true`, rationale, and an HTTPS evidence reference. Names, descriptions,
 help flags, and MCP annotations do not establish safety. Unknown CLI invocations
 retain review; unknown MCP tools inherit existing Guard handling.
@@ -116,21 +145,29 @@ retain review; unknown MCP tools inherit existing Guard handling.
 Recompile edits into a new directory from this kit's parent directory:
 
 ```sh
-hol-guard extensions generate --from snapshot --input KIT/discovery.json --review KIT/review.json --output REVIEWED_KIT
+hol-guard extensions generate --from snapshot --input KIT/discovery.json --review REVIEW.json --output REVIEWED_KIT
 hol-guard extensions validate REVIEWED_KIT
 hol-guard extensions apply REVIEWED_KIT --repo /path/to/hol-guard
 ```
 
-Replace `KIT`, `REVIEWED_KIT`, and the checkout path with your actual paths.
-Inspect the plan, then explicitly add `--write` and optionally
-`--expected-plan PLAN_DIGEST`. Apply never commits, activates, or submits a PR.
+Replace `KIT`, `REVIEW.json`, `REVIEWED_KIT`, and the checkout path with your actual paths.
+Edit the copied review file before running snapshot generation. Inspect the plan,
+then apply with `--expected-plan PLAN_DIGEST --write` using its printed digest.
+Apply never commits, activates, or submits a PR.
 Existing manual edits are conflicts, not permission to overwrite work.
 
 ## Native verification in the destination checkout
 
+Stage the shared review resources before running contribution tests:
+
 ```sh
 python scripts/release/stage_guard_cloud_review_artifacts.py
-python -m pytest {test_path(metadata)}
+```
+
+{verification}
+Run the shared contribution checks:
+
+```sh
 python -m pytest tests/test_guard_extension_contribution.py tests/test_guard_mcp_server_contribution.py
 ```
 

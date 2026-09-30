@@ -14,6 +14,7 @@ from .decision_boundaries import (
     canonical_linked_approval_authority,
     canonical_receipt_decision,
 )
+from .models import GuardRuntimeRegistration
 from .runtime.decisions import AUTHORITATIVE_DECISION_INCONSISTENT
 
 # ruff: noqa: F403,F405
@@ -808,23 +809,55 @@ class StoreReceiptsRuntimeMixin:
         session_id: str,
         last_heartbeat_at: str,
         timeout_seconds: float,
+        registration: GuardRuntimeRegistration | None = None,
     ) -> bool:
-        """Persist a heartbeat without inheriting the store's long busy timeout."""
+        """Persist a heartbeat without inheriting the store's long busy timeout.
+
+        When the runtime row is gone (for example after the store was
+        quarantined and re-initialized during uptime), a serving daemon can
+        recreate it by passing its registration identity. The insert never
+        steals a row owned by another session.
+
+        The connection is held under the shared storage gate; while the
+        exclusive gate holds the store for quarantine recovery this returns
+        False without touching the database, and the heartbeat writer retries
+        on its own cadence rather than blocking on the lock.
+        """
 
         bounded_timeout = min(max(timeout_seconds, 0.0), 1.0)
         try:
-            with closing(sqlite3.connect(self.path, timeout=bounded_timeout)) as connection:
-                connection.execute(f"pragma busy_timeout={int(bounded_timeout * 1000)}")
-                connection.execute(
-                    """
-                    update guard_runtime_state
-                    set last_heartbeat_at = ?
-                    where state_key = 'runtime'
-                      and session_id = ?
-                    """,
-                    (last_heartbeat_at, session_id),
-                )
-                connection.commit()
+            with self._try_hold_storage_gate(exclusive=False) as gate_held:
+                if not gate_held:
+                    return False
+                with closing(sqlite3.connect(self.path, timeout=bounded_timeout)) as connection:
+                    connection.execute(f"pragma busy_timeout={int(bounded_timeout * 1000)}")
+                    cursor = connection.execute(
+                        """
+                        update guard_runtime_state
+                        set last_heartbeat_at = ?
+                        where state_key = 'runtime'
+                          and session_id = ?
+                        """,
+                        (last_heartbeat_at, session_id),
+                    )
+                    if cursor.rowcount == 0 and registration is not None:
+                        connection.execute(
+                            """
+                            insert into guard_runtime_state (
+                              state_key, session_id, daemon_host, daemon_port, started_at, last_heartbeat_at
+                            )
+                            values ('runtime', ?, ?, ?, ?, ?)
+                            on conflict(state_key) do nothing
+                            """,
+                            (
+                                session_id,
+                                registration.daemon_host,
+                                registration.daemon_port,
+                                registration.started_at,
+                                last_heartbeat_at,
+                            ),
+                        )
+                    connection.commit()
         except (OSError, sqlite3.Error):
             return False
         return True

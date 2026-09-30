@@ -1,0 +1,494 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hol.org/guard/contracts/extension-directory.v2.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "entries"],
+  "properties": {
+    "schemaVersion": {
+      "const": "guard.extension-directory.v2"
+    },
+    "entries": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 512,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id", "runtimeExtensionId", "kind", "version", "name", "description", "tagline", "category",
+          "tags", "limitations", "documentationUrl", "protectionModel", "trustClass", "claimPolicy",
+          "maintainerGithubIds", "sourcePath", "contributionDigest", "executables", "actionClasses", "ruleCount",
+          "permissionCount", "toolStates", "summary", "contributors", "originalContributions", "upstream",
+          "listing", "authoringSource"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 256,
+            "pattern": "^(command|mcp)\\.[a-z0-9]+(?:[.-][a-z0-9]+)*$"
+          },
+          "runtimeExtensionId": {
+            "type": "string",
+            "pattern": "^command\\.[a-z0-9]+(?:[.-][a-z0-9]+)*$",
+            "maxLength": 264
+          },
+          "kind": {
+            "enum": [
+              "command",
+              "mcp"
+            ]
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "tagline": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 140
+          },
+          "category": {"enum": ["core-safety", "cloud-infrastructure", "data-resilience", "delivery-remote", "managed-services", "package-supply-chain", "specialized-tools", "other"]},
+          "tags": {
+            "type": "array",
+            "maxItems": 8,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 2,
+              "maxLength": 30,
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+            }
+          },
+          "limitations": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 8,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 10,
+              "maxLength": 400
+            }
+          },
+          "documentationUrl": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 1024,
+            "pattern": "^https://",
+            "format": "uri"
+          },
+          "protectionModel": {
+            "enum": [
+              "required",
+              "built-in",
+              "package-firewall",
+              "external-opt-in"
+            ]
+          },
+          "trustClass": {
+            "enum": [
+              "first-party",
+              "trusted-library",
+              "external"
+            ]
+          },
+          "claimPolicy": {
+            "enum": [
+              "project",
+              "provenance"
+            ]
+          },
+          "maintainerGithubIds": {
+            "description": "Reviewed numeric GitHub IDs authorized to manage this extension's publisher profile. For claimPolicy provenance, only IDs in this accepted array are eligible for automatic claims or elevated transfers; an empty array means no automatic claimant. Pull-request authorship is attribution evidence only. For claimPolicy project, this array grants no third-party claim authority.",
+            "type": "array",
+            "maxItems": 8,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]{0,19}$"
+            }
+          },
+          "sourcePath": {
+            "type": "string",
+            "maxLength": 288,
+            "pattern": "^(contributions/(extensions|mcp-servers)/(command|mcp)\\.[a-z0-9.-]+\\.json|src/codex_plugin_scanner/guard/runtime/command_builtin_extension_registry\\.py)$"
+          },
+          "contributionDigest": {
+            "anyOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "pattern": "^sha256:[a-f0-9]{64}$"
+              }
+            ]
+          },
+          "executables": {
+            "type": "array",
+            "maxItems": 256,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          "actionClasses": {
+            "type": "array",
+            "maxItems": 256,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          "ruleCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000
+          },
+          "permissionCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000
+          },
+          "toolStates": {
+            "type": "array",
+            "maxItems": 256,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "name",
+                "state"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "state": {
+                  "enum": [
+                    "inherit",
+                    "allow",
+                    "review",
+                    "block"
+                  ]
+                }
+              }
+            }
+          },
+          "operations": {
+            "description": "Matcher-derived command signatures and catalog default floors for this extension. These rows document coverage; they are not workspace activation, enablement, or a safety rating.",
+            "type": "array",
+            "maxItems": 256,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "title",
+                "description",
+                "commands",
+                "example",
+                "severity",
+                "defaultMode",
+                "defaultAction",
+                "safeVariants",
+                "permissionId"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "title": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "description": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 400
+                },
+                "commands": {
+                  "type": "array",
+                  "maxItems": 24,
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  }
+                },
+                "example": {
+                  "anyOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    }
+                  ]
+                },
+                "severity": {
+                  "enum": [
+                    "critical",
+                    "high",
+                    "medium",
+                    "low"
+                  ]
+                },
+                "defaultMode": {
+                  "enum": [
+                    "required",
+                    "enforce",
+                    "review",
+                    "monitor",
+                    "disabled"
+                  ]
+                },
+                "defaultAction": {
+                  "enum": [
+                    "allow",
+                    "warn",
+                    "review",
+                    "require-reapproval",
+                    "sandbox-required",
+                    "block"
+                  ]
+                },
+                "safeVariants": {
+                  "type": "array",
+                  "maxItems": 8,
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  }
+                },
+                "permissionId": {
+                  "anyOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 288
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 20,
+            "maxLength": 2048
+          },
+          "contributors": {
+            "description": "Public credit only. These identities never grant claim authority.",
+            "type": "array",
+            "maxItems": 8,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "githubId",
+                "githubLogin",
+                "roles"
+              ],
+              "properties": {
+                "githubId": {
+                  "type": "string",
+                  "pattern": "^[1-9][0-9]{0,19}$"
+                },
+                "githubLogin": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 100,
+                  "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,98}[A-Za-z0-9])?$"
+                },
+                "roles": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 3,
+                  "uniqueItems": true,
+                  "items": {
+                    "enum": [
+                      "author",
+                      "co-author",
+                      "reviewer",
+                      "maintainer"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "originalContributions": {
+            "type": "array",
+            "maxItems": 8,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "kind",
+                "url"
+              ],
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "pull-request",
+                    "issue",
+                    "commit",
+                    "discussion"
+                  ]
+                },
+                "url": {
+                  "type": "string",
+                  "minLength": 10,
+                  "maxLength": 1024,
+                  "pattern": "^https://",
+                  "format": "uri"
+                }
+              }
+            }
+          },
+          "upstream": {
+            "anyOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "name",
+                  "url"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 160
+                  },
+                  "url": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 1024,
+                    "pattern": "^https://",
+                    "format": "uri"
+                  }
+                }
+              }
+            ]
+          },
+          "listing": {
+            "anyOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "path",
+                  "digest"
+                ],
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "maxLength": 288,
+                    "pattern": "^contributions/extension-listings/(command|mcp)\\.[a-z0-9.-]+\\.json$"
+                  },
+                  "digest": {
+                    "type": "string",
+                    "pattern": "^sha256:[a-f0-9]{64}$"
+                  }
+                }
+              }
+            ]
+          },
+          "authoringSource": {
+            "anyOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "schemaVersion",
+                  "path",
+                  "byteDigest",
+                  "nativeDigest"
+                ],
+                "properties": {
+                  "schemaVersion": {
+                    "const": "guard.command-extension-source.v1"
+                  },
+                  "path": {
+                    "type": "string",
+                    "maxLength": 288,
+                    "pattern": "^contributions/command-sources/command\\.[a-z0-9.-]+\\.json$"
+                  },
+                  "byteDigest": {
+                    "type": "string",
+                    "pattern": "^sha256:[a-f0-9]{64}$"
+                  },
+                  "nativeDigest": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "kind": {
+                  "const": "command"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "authoringSource": {
+                  "type": "object"
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "authoringSource": {
+                  "type": "null"
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

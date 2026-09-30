@@ -17,6 +17,7 @@ from codex_plugin_scanner.guard.runtime.extension_contribution import (
 )
 from codex_plugin_scanner.guard.runtime.extension_trust import ids_for_class
 from codex_plugin_scanner.guard.runtime.mcp_server_contribution import mcp_catalog_ids
+from tests.support.extension_freshness import requires_fresh_projections
 
 _NOODLE = Path(__file__).resolve().parents[1] / "contributions/extensions/command.noodle.json"
 
@@ -27,6 +28,7 @@ def _noodle_payload() -> dict[str, object]:
     return payload
 
 
+@requires_fresh_projections
 def test_in_tree_contributions_match_reviewed_trust_classes() -> None:
     payloads = load_contribution_payloads()
     ids = {str(item["id"]) for item in payloads}
@@ -71,9 +73,6 @@ def test_frozen_packaged_payloads_load_from_meipass(tmp_path: Path, monkeypatch:
         repo / "contributions" / "extensions" / "command.noodle.json", contributions / "command.noodle.json"
     )
     shutil.copyfile(
-        repo / "contributions" / "extensions" / "command.apex.json", contributions / "command.apex.json"
-    )
-    shutil.copyfile(
         repo / "contracts" / "extensions" / "contribution.v2.schema.json",
         dest / "contribution.v2.schema.json",
     )
@@ -92,7 +91,6 @@ def test_frozen_packaged_payloads_load_from_meipass(tmp_path: Path, monkeypatch:
     try:
         payloads = contribution_module._load_packaged_payloads()
         assert any(item.get("id") == "command.noodle" for item in payloads)
-        assert any(item.get("id") == "command.apex" for item in payloads)
     finally:
         contribution_module.reset_contribution_cache()
 

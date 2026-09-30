@@ -442,15 +442,15 @@ def _normalize_dispatch_result(
 
 def _manual_resume_message(action: str) -> str:
     return (
-        "Decision saved. HOL Guard could not find the original Codex chat to message. "
-        "Return to Codex and retry the same request; this approval is now saved."
+        "Decision recorded for the original request. HOL Guard could not find the original Codex chat to resume. "
+        "Return to that chat and retry; a new tool call may require fresh approval."
     )
 
 
 def _failed_resume_message(action: str) -> str:
     return (
-        "Decision saved. HOL Guard could not send Codex a continuation message in the original chat. "
-        "Return to Codex and retry the same request; this approval is now saved."
+        "Decision recorded for the original request. HOL Guard could not send a continuation to the original "
+        "Codex chat. Return to that chat and retry; a new tool call may require fresh approval."
     )
 
 

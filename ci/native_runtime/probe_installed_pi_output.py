@@ -231,7 +231,7 @@ def _cases() -> list[dict[str, Any]]:
 
 def _negative_cases() -> list[dict[str, Any]]:
     return [
-        {"id": "negative-empty", "content": [{"type": "text", "text": "safe"}]},
+        {"id": "negative-empty", "content": []},
         {"id": "negative-malformed", "content": [{"type": "text", "text": "safe"}]},
         {"id": "negative-missing-decision", "content": [{"type": "text", "text": "safe"}]},
         {"id": "negative-missing-proof", "content": [{"type": "text", "text": "safe"}]},
@@ -252,6 +252,32 @@ def _canonical_content_digest(content: list[dict[str, Any]]) -> str:
 
 
 def _write_cli_wrapper(path: Path, *, python_path: Path, log_path: Path, negative: bool) -> None:
+    if negative and sys.platform != "win32":
+        compiler = shutil.which("cc")
+        if compiler is None:
+            raise ProbeError("negative CLI fixture requires the native build compiler")
+        # Synthetic malformed replies must fit the unchanged 300 ms CLI budget,
+        # without measuring Python interpreter startup on the hosted runner.
+        _run(
+            [
+                compiler,
+                "-std=c11",
+                "-O2",
+                "-Wall",
+                "-Wextra",
+                "-Werror",
+                f"-DPROBE_LOG_PATH={json.dumps(str(log_path), ensure_ascii=False)}",
+                str(Path(__file__).with_name("pi_negative_cli_fixture.c")),
+                "-o",
+                str(path),
+            ],
+            env={key: value for key, value in os.environ.items() if key in _ENV_ALLOWLIST},
+            cwd=path.parent,
+            timeout=30,
+            label="negative CLI fixture compilation",
+        )
+        path.chmod(0o700)
+        return
     source = f"""\
 #!/usr/bin/env python3
 import base64
@@ -272,10 +298,18 @@ try:
     request = json.loads(stdin_bytes.decode("utf-8"))
 except (UnicodeDecodeError, json.JSONDecodeError):
     request = {{}}
-case_id = request.get("tool_call_id") if isinstance(request, dict) else None
+case_id = request.get("tool_call_id") or request.get("toolCallId") if isinstance(request, dict) else None
+if not isinstance(case_id, str) and isinstance(request, dict):
+    details = request.get("details")
+    case_id = details.get("probe") if isinstance(details, dict) else None
 if not isinstance(case_id, str):
     case_id = "unknown"
-if {negative!s}:
+is_recovery = sys.argv[1:3] == ["daemon", "recover"]
+if {negative!s} and is_recovery:
+    # This wrapper does not start a daemon. A successful recovery result would
+    # make the extension retry a daemon that cannot exist before CLI fallback.
+    returncode, stdout, stderr = 1, b"", b""
+elif {negative!s}:
     mismatch = "0" * 64
     responses = {{
         "negative-empty": (0, b"", b""),
@@ -310,6 +344,7 @@ else:
         returncode, stdout, stderr = 127, b"", str(exc).encode("utf-8", errors="replace")
 record({{
     "case_id": case_id,
+    "invocation_kind": "recovery" if is_recovery else "hook",
     "returncode": returncode,
     "stdin_b64": base64.b64encode(stdin_bytes).decode("ascii"),
     "stdout_b64": base64.b64encode(stdout).decode("ascii"),
@@ -696,7 +731,14 @@ def _assert_negative_results(
     for case_id, result in by_id.items():
         matching = records.get(case_id, [])
         if not matching:
-            raise ProbeError(f"negative CLI wrapper was not invoked for {case_id}")
+            recorded_cases = sorted(recorded_id for recorded_id in records if recorded_id in expected_ids)
+            raise ProbeError(
+                f"negative CLI wrapper was not invoked for {case_id}; "
+                f"recorded_cases={recorded_cases}, "
+                f"unknown_invocations={len(records.get('unknown', []))}, "
+                f"preserved={result.get('preserved') is True}, "
+                f"is_error={isinstance(result.get('result'), dict) and result['result'].get('isError') is True}"
+            )
         record = matching[-1]
         if case_id == "negative-nonzero-allow" and record.get("returncode") == 0:
             raise ProbeError("negative nonzero CLI case unexpectedly exited zero")
@@ -1274,17 +1316,30 @@ def _run_probe(*, json_path: Path | None = None) -> dict[str, Any]:
             home=negative_home,
             settings_path=root / "negative-settings.json",
         )
-        negative_cases_path = root / "negative-cases.json"
         negative_cases = _negative_cases()
-        negative_cases_path.write_text(json.dumps(negative_cases, ensure_ascii=True), encoding="utf-8")
-        negative_results, _ = _run_node_cases(
-            node=node,
-            extension=negative_extension,
-            runner=runner,
-            cases=negative_cases_path,
-            cwd=negative_workspace,
-            env=_isolated_env(home=negative_home, python_path=python_path),
-        )
+        negative_results = []
+        negative_errors = []
+        for case in negative_cases:
+            # Each malformed fallback must start with a fresh extension runtime.
+            # A timed-out child can leave containment state set for that process.
+            negative_cases_path = root / f"{case['id']}-cases.json"
+            negative_cases_path.write_text(json.dumps([case], ensure_ascii=True), encoding="utf-8")
+            try:
+                case_results, _ = _run_node_cases(
+                    node=node,
+                    extension=negative_extension,
+                    runner=runner,
+                    cases=negative_cases_path,
+                    cwd=negative_workspace,
+                    env=_isolated_env(home=negative_home, python_path=python_path),
+                )
+            except ProbeError as exc:
+                negative_errors.append((case["id"], exc))
+                continue
+            negative_results.extend(case_results)
+        if negative_errors:
+            failed_cases = ", ".join(str(case_id) for case_id, _ in negative_errors)
+            raise ProbeError(f"generated Pi extension failed negative cases: {failed_cases}") from negative_errors[0][1]
         negative_evidence = _assert_negative_results(negative_results, _read_records(negative_log))
         receipt = {
             "schema": "hol-guard.installed-pi-native-output.v1",

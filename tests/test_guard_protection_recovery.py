@@ -420,11 +420,12 @@ def test_repair_keeps_persistence_error_when_native_evaluation_is_unavailable(
     monkeypatch.setattr(daemon_server_module, "current_extension_control_snapshot", lambda: None)
     monkeypatch.setattr(daemon_server_module, "evaluate_command_native", lambda *_args, **_kwargs: None)
 
-    _repair_command_activity_persistence_health(store)
+    probe_reason = _repair_command_activity_persistence_health(store)
 
+    assert probe_reason == "native_evaluation_unavailable"
     health = store.get_command_activity_persistence_health()
     assert health.active_error_count == 1
-    assert health.last_error_code == "native_evaluation_unavailable"
+    assert health.last_error_code == "post_record_failed"
 
 
 def test_daemon_ownership_change_repairs_stale_managed_grok_hooks(

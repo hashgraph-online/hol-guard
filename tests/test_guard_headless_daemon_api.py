@@ -1636,11 +1636,11 @@ def test_supply_chain_package_firewall_paid_install_and_test_roundtrip(
     assert install_payload["result"]["activation_state"] == "restart_required"
     assert install_payload["receipt"]["operation"] == "install"
     assert status_status == 200
-    assert status_payload["package_shims"]["path_status"] == "restart_required"
+    assert status_payload["package_shims"]["path_status"] == "in_path"
     assert status_payload["package_shims"]["shell_profile_configured"] is True
-    assert status_payload["package_shims"]["restart_shell_required"] is True
+    assert status_payload["package_shims"]["restart_shell_required"] is False
     assert runtime_status == 200
-    assert runtime_payload["supply_chain"]["package_manager_protection"]["path_status"] == "restart_required"
+    assert runtime_payload["supply_chain"]["package_manager_protection"]["path_status"] == "in_path"
     assert runtime_payload["supply_chain"]["package_manager_protection"]["shell_profile_configured"] is True
     assert str(store.guard_home / "package-shims" / "bin") in (home_dir / ".zshrc").read_text(encoding="utf-8")
     assert test_status == 200

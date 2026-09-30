@@ -155,6 +155,14 @@ function managedExplicitControlState(
   return null;
 }
 
+/** Organization-managed state of one permission, or null when it is not managed. */
+export function managedPermissionState(
+  effective: EffectiveExtensionControls,
+  permissionId: string,
+): "enabled" | "disabled" | null {
+  return managedExplicitControlState(effective, "permission", permissionId);
+}
+
 export function extensionEffectiveState(
   effective: EffectiveExtensionControls,
   extension: ExtensionCatalogItem,

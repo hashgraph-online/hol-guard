@@ -36,11 +36,12 @@ from codex_plugin_scanner.guard.runtime.extension_trust import (
     mapped_ids,
     trust_class_for,
 )
+from tests.command_extension_contracts import enable_local_admin_extension_layer
 from tests.native_command_test_support import (
     extract_sensitive_tool_action_request_native_test as extract_sensitive_tool_action_request,
 )
-from tests.command_extension_contracts import enable_local_admin_extension_layer
 from tests.native_command_test_support import real_native_command_evaluation
+from tests.support.extension_freshness import requires_fresh_projections
 
 _NOODLE = "noodle request run users/get --collection ./my-api --env staging"
 _ESSH = "essh hosts remove web-1"
@@ -78,21 +79,30 @@ def _disable_layer(extension_id: str) -> ExtensionControlLayer:
     )
 
 
+@requires_fresh_projections
 def test_trust_map_covers_every_builtin_extension() -> None:
     registry_ids = {extension.extension_id for extension in BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions}
     assert mapped_ids() == registry_ids
     assert ids_for_class("external") == {
         "command.blitcp",
+        "command.cloudg",
+        "command.cogext",
+        "command.ctty",
+        "command.digline",
+        "command.genclave",
+        "command.gitsync",
         "command.mcp-filesystem",
         "command.mcp-instapods",
+        "command.mcp-pr-ui-compare",
+        "command.mcp-reaper",
         "command.noodle",
         "command.ollama",
-        "command.apex",
-
         "command.probe",
         "command.remote.essh",
         "command.repo2nb",
+        "command.skill-base",
         "command.skill-sunset",
+        "command.uivoid",
     }
     assert trust_class_for("command.git") == "first-party"
     assert trust_class_for("command.cloud.aws") == "trusted-library"
@@ -339,7 +349,6 @@ def test_frozen_trust_map_reads_meipass_package_data(tmp_path: Path, monkeypatch
     try:
         assert trust_class_for("command.noodle") == "external"
         assert trust_class_for("command.remote.essh") == "external"
-        assert trust_class_for("command.apex") == "external"
     finally:
         extension_trust_module._trust_map.cache_clear()
 
@@ -355,6 +364,6 @@ def test_frozen_trust_map_fails_closed_without_package_data(tmp_path: Path, monk
     extension_trust_module._trust_map.cache_clear()
     try:
         with pytest.raises(FileNotFoundError, match="trust-class map"):
-            trust_class_for("command.apex")
+            trust_class_for("command.noodle")
     finally:
         extension_trust_module._trust_map.cache_clear()

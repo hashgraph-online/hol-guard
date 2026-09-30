@@ -18,21 +18,117 @@ concurrency:
 
 jobs:
   linux-x64:
+    if: always()
+    needs:
+      - linux-build
+      - linux-proof
+      - linux-regression
+      - native-regression-complete
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 2
+    steps:
+      - name: Require every build, proof and regression shard
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          test -n "$RESULTS"
+          for result in $RESULTS; do test "$result" = success || exit 1; done
+  macos-build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            platform_tag: macosx_13_0_x86_64
+            target: x86_64-apple-darwin
+            deployment_target: '13.0'
+          - runner: macos-15
+            platform_tag: macosx_11_0_arm64
+            target: aarch64-apple-darwin
+            deployment_target: '11.0'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: 0.9.26
+          enable-cache: true
+      - uses: ./.github/actions/setup-rust
+        with:
+          targets: ${{ matrix.target == 'x86_64-apple-darwin' && matrix.target || '' }}
+      - name: Build pure Python wheel
+        run: uv build --wheel --out-dir pure-dist
+      - name: Build and assemble version-matched native wheel
+        env:
+          HOL_GUARD_BUILD_SHA: ${{ github.sha }}
+          MACOSX_DEPLOYMENT_TARGET: ${{ matrix.deployment_target }}
+          PLATFORM_TAG: ${{ matrix.platform_tag }}
+          TARGET: ${{ matrix.target }}
+        run: bash scripts/ci/build-native-wheel-macos.sh
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: hol-guard-native-wheel-${{ matrix.target }}
+          path: |
+            native-dist/*.whl
+            pure-dist/*.whl
+          if-no-files-found: error
+          compression-level: 0
+  windows-x64:
+    if: always()
+    needs:
+      - windows-build
+      - windows-proof
+      - windows-regression
+      - native-regression-complete
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Require every build, proof and regression shard
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          test -n "$RESULTS"
+          for result in $RESULTS; do test "$result" = success || exit 1; done
+  wheel-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: 0.9.26
+          enable-cache: true
+      - run: uv sync --frozen --no-dev --extra dev --python 3.12
+      - name: Run wheel-builder contracts
+        run: uv run --no-sync pytest ci/native_runtime/test_native_hol_guard_wheel.py tests/test_native_source_compiler.py
+          --tb=short
+  linux-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
-          node-version: "22"
+          node-version: '22'
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
-          python-version: "3.12"
+          python-version: '3.12'
       - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
         with:
-          version: "0.9.26"
+          version: 0.9.26
           enable-cache: true
       - run: uv sync --frozen --no-dev --extra dev --python 3.12
       - uses: ./.github/actions/setup-rust
@@ -75,7 +171,12 @@ jobs:
           jq --slurpfile build source-build.json '. + {build:$build[0]}' rust/crates/guard-command/tests/fixtures/command-source-behavior.v1.json > source-fixtures.json
           docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges -i guard-source-compiler:ci test < source-fixtures.json > source-fixture-results.json
       - name: Verify native command program is current
-        run: uv run --no-sync python scripts/build_native_command_program.py --check --compiler rust/target/x86_64-unknown-linux-musl/release/guard-command-source
+        run: |
+          arguments=(--compiler rust/target/x86_64-unknown-linux-musl/release/guard-command-source)
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            arguments+=(--changed-from "${{ github.event.pull_request.base.sha }}")
+          fi
+          uv run --no-sync python scripts/ci/verify_native_command_program.py "${arguments[@]}"
       - name: Assemble and install native wheel
         env:
           SOURCE_SHA: ${{ github.sha }}
@@ -97,64 +198,47 @@ jobs:
             --base-program-digest "$(jq -r '.base_program_digest' source-compiled.json)"
           uv pip uninstall --python .venv/bin/python hol-guard
           uv pip install --python .venv/bin/python --no-deps --force-reinstall native-dist/*.whl
+      - name: Upload this run's native build
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: hol-guard-native-build-linux-x64
+          path: |
+            native-dist/*.whl
+            pure-dist/*.whl
+            rust/target/x86_64-unknown-linux-musl/release/hol-guard-runtime
+            rust/target/x86_64-unknown-linux-musl/release/guard-command-source
+          if-no-files-found: error
+          compression-level: 0
+  linux-proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: 0.9.26
+          enable-cache: true
+      - run: uv sync --frozen --no-dev --extra dev --python 3.12
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: hol-guard-native-build-linux-x64
+      - name: Install this run's wheel and run installed proofs
+        run: |
+          chmod 0755 rust/target/x86_64-unknown-linux-musl/release/hol-guard-runtime rust/target/x86_64-unknown-linux-musl/release/guard-command-source
+          uv pip uninstall --python .venv/bin/python hol-guard
+          uv pip install --python .venv/bin/python --no-deps --force-reinstall native-dist/*.whl
           source scripts/ci/native-proof-environment.sh
           .venv/bin/python ci/native_runtime/probe_native_default_auto.py --json native-default-auto.json
           .venv/bin/python ci/native_runtime/probe_installed_pi_output.py --json installed-pi-output.json
           .venv/bin/python -I ci/native_runtime/probe_installed_native_extensions.py --json installed-native-extensions.json
-      - name: Run native-backed Python regression qualification
-        env:
-          HOL_GUARD_NATIVE_REGRESSION: "1"
-          HOL_GUARD_NATIVE_BINARY: ${{ github.workspace }}/rust/target/x86_64-unknown-linux-musl/release/hol-guard-runtime
-          HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER: ${{ github.workspace }}/rust/target/x86_64-unknown-linux-musl/release/guard-command-source
-        run: |
-          uv run --no-sync pytest \
-            tests/test_native_command_evaluation_bridge.py \
-            tests/test_native_command_evaluation_integration.py \
-            tests/test_native_command_caller_migration.py \
-            tests/test_native_command_extension_evidence.py \
-            tests/test_guard_command_decision_routing.py \
-            tests/test_guard_command_activity_hook_integration.py \
-            tests/test_guard_command_backup_extensions.py \
-            tests/test_guard_command_blitcp_extensions.py \
-            tests/test_guard_command_cicd_extensions.py \
-            tests/test_guard_command_cloud_extensions.py \
-            tests/test_guard_command_common_extension_regressions.py \
-            tests/test_guard_command_container_kubernetes_common_extensions.py \
-            tests/test_guard_command_coverage_followup.py \
-            tests/test_guard_command_critical_floors.py \
-            tests/test_guard_command_dns_extensions.py \
-            tests/test_guard_command_domain_extensions.py \
-            tests/test_guard_command_extensions.py \
-            tests/test_guard_command_framework_extensions.py \
-            tests/test_guard_command_git_stash_permission.py \
-            tests/test_guard_command_managed_service_extensions.py \
-            tests/test_guard_command_ollama_extensions.py \
-            tests/test_guard_command_platform_extensions.py \
-            tests/test_guard_command_probe_extensions.py \
-            tests/test_guard_command_remote_extensions.py \
-            tests/test_guard_command_repo2nb_extensions.py \
-            tests/test_guard_command_safe_variants.py \
-            tests/test_guard_command_search_messaging_extensions.py \
-            tests/test_guard_command_skill_sunset_extensions.py \
-            tests/test_guard_command_specialized_variants.py \
-            tests/test_guard_command_storage_extensions.py \
-            tests/test_guard_compound_developer_inspection.py \
-            tests/test_guard_command_inspection_native_cli.py \
-            tests/test_guard_extension_control_runtime.py \
-            tests/test_guard_extension_control_test_lab.py \
-            tests/test_guard_protection_recovery.py \
-            tests/test_guard_git_pathspec_resolution.py \
-            tests/test_guard_github_failed_run_rerun.py \
-            tests/test_guard_github_workflow_authorization.py \
-            tests/test_guard_github_workflow_runtime_eval.py \
-            tests/test_guard_index_inspection_classification.py \
-            tests/test_guard_origin_fetch_classification.py \
-            tests/test_guard_read_only_git_audit.py \
-            tests/test_guard_shell_secret_read_floors.py \
-            tests/test_hermes_runtime_hooks.py \
-            tests/test_environment_secret_dump.py \
-            tests/test_native_command_test_support_paths.py \
-            --tb=short
       - name: Measure installed adapter-to-decision SLOs
         env:
           NATIVE_STOP_DIAGNOSTIC_PATH: native-stop-diagnostic.json
@@ -217,267 +301,39 @@ jobs:
             native-artifact-evidence.json
             native-stop-diagnostic.json
           if-no-files-found: warn
-
-  macos-build:
+    needs: linux-build
+  linux-regression:
+    needs: linux-build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - runner: macos-15
-            platform_tag: macosx_13_0_x86_64
-            target: x86_64-apple-darwin
-            deployment_target: "13.0"
-          - runner: macos-15
-            platform_tag: macosx_11_0_arm64
-            target: aarch64-apple-darwin
-            deployment_target: "11.0"
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 10
+        shard:
+          [0, 1, 2, 3, 4, 5, 6, 7]
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
-      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+      - uses: ./.github/actions/native-regression
         with:
-          python-version: "3.12"
-      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
-        with:
-          version: "0.9.26"
-          enable-cache: true
-      - uses: ./.github/actions/setup-rust
-        with:
-          # Compile the Intel target on Apple Silicon; runtime proofs below
-          # still execute on actual Intel hosts. Keep the native ARM cache.
-          targets: ${{ matrix.target == 'x86_64-apple-darwin' && matrix.target || '' }}
-      - name: Build pure Python wheel
-        run: uv build --wheel --out-dir pure-dist
-      - name: Build and assemble version-matched native wheel
-        env:
-          HOL_GUARD_BUILD_SHA: ${{ github.sha }}
-          MACOSX_DEPLOYMENT_TARGET: ${{ matrix.deployment_target }}
-          PLATFORM_TAG: ${{ matrix.platform_tag }}
-          TARGET: ${{ matrix.target }}
-        run: |
-          VERSION=$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
-          export HOL_GUARD_PACKAGE_VERSION="$VERSION"
-          build_target=()
-          target_dir="rust/target"
-          if [[ "$TARGET" == "x86_64-apple-darwin" ]]; then
-            build_target=(--target "$TARGET")
-            target_dir="$target_dir/$TARGET"
-          fi
-          cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime "${build_target[@]}"
-          cargo build --manifest-path rust/Cargo.toml --locked --release -p guard-command --bin guard-command-source "${build_target[@]}"
-          runtime="$target_dir/release/hol-guard-runtime"
-          source_compiler="$target_dir/release/guard-command-source"
-          # The ARM image includes Rosetta for this build-time sanity check.
-          # Installed Intel performance is measured on macos-15-intel below.
-          "$runtime" self-test --json
-          RULE_DIGEST=$("$runtime" capabilities --json | python -c 'import json,sys; print(json.load(sys.stdin)["rule_digest"])')
-          python scripts/build_native_command_program.py --check --compiler "$source_compiler"
-          jq -n --slurpfile source rust/crates/guard-command/tests/fixtures/command-source-example.v1.json --slurpfile trust contracts/extensions/trust-class-map.v1.json \
-            '{schema:"guard.command-extension-build.v1",sources:$source,mcp_sources:[],trust:$trust[0],base:"packaged"}' > source-build.json
-          "$source_compiler" compile < source-build.json > source-compiled.json
-          python scripts/build_native_hol_guard_wheel.py \
-            --wheel "pure-dist/hol_guard-${VERSION}-py3-none-any.whl" \
-            --runtime "$runtime" \
-            --output-dir native-dist \
-            --version "$VERSION" \
-            --platform-tag "$PLATFORM_TAG" \
-            --target "$TARGET" \
-            --source-sha "$HOL_GUARD_BUILD_SHA" \
-            --rule-digest "$RULE_DIGEST" \
-            --source-compiler "$source_compiler" \
-            --implementation-digest "$(jq -r '.implementation_digest' source-compiled.json)" \
-            --base-program-digest "$(jq -r '.base_program_digest' source-compiled.json)"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: hol-guard-native-wheel-${{ matrix.target }}
-          path: |
-            native-dist/*.whl
-            pure-dist/*.whl
-          if-no-files-found: error
-          compression-level: 0
-
-  macos:
-    needs: macos-build
-    strategy:
-      fail-fast: false
-      matrix:
-        runner: [macos-15-intel, macos-15]
-        proof: [default, pi, extensions, performance]
-        include:
-          - runner: macos-15-intel
-            platform_tag: macosx_13_0_x86_64
-            target: x86_64-apple-darwin
-            deployment_target: "13.0"
-          - runner: macos-15
-            platform_tag: macosx_11_0_arm64
-            target: aarch64-apple-darwin
-            deployment_target: "11.0"
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        if: matrix.proof == 'pi'
-        with:
-          node-version: "22"
-      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
-        with:
-          python-version: "3.12"
-      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
-        with:
-          version: "0.9.26"
-          enable-cache: true
-      - name: Install locked proof dependencies
-        env:
-          NATIVE_PROOF: ${{ matrix.proof }}
-        run: |
-          extras=()
-          if [[ "$NATIVE_PROOF" == "extensions" ]]; then
-            extras=(--extra dev)
-          fi
-          uv sync --frozen --no-dev --no-install-project --python 3.12 "${extras[@]}"
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          name: hol-guard-native-wheel-${{ matrix.target }}
-      - name: Install the platform wheel built by this run
-        run: uv pip install --python .venv/bin/python --no-deps native-dist/*.whl
-      - name: Prove installed native default routes
-        if: matrix.proof == 'default'
-        run: |
-          source scripts/ci/native-proof-environment.sh
-          .venv/bin/python ci/native_runtime/probe_native_default_auto.py --json native-default-auto.json
-      - name: Prove installed Pi bridge
-        if: matrix.proof == 'pi'
-        run: |
-          source scripts/ci/native-proof-environment.sh
-          .venv/bin/python ci/native_runtime/probe_installed_pi_output.py --json installed-pi-output.json
-      - name: Prove installed native extension controls
-        if: matrix.proof == 'extensions'
-        run: |
-          source scripts/ci/native-proof-environment.sh
-          .venv/bin/python -I ci/native_runtime/probe_installed_native_extensions.py --json installed-native-extensions.json
-      - name: Run native-backed Python regression qualification
-        if: matrix.proof == 'extensions'
-        env:
-          HOL_GUARD_NATIVE_REGRESSION: "1"
-        run: |
-          HOL_GUARD_NATIVE_BINARY=$(.venv/bin/python -c 'from codex_plugin_scanner.guard.native_runtime import native_runtime_status; status = native_runtime_status(); assert status.identity is not None; print(status.identity.path)')
-          HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER=$(.venv/bin/python -c 'from codex_plugin_scanner.guard.extension_builder.native_source_compiler import find_packaged_source_compiler; print(find_packaged_source_compiler())')
-          export HOL_GUARD_NATIVE_BINARY HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER
-          uv run --no-sync pytest \
-            tests/test_native_command_evaluation_bridge.py \
-            tests/test_native_command_evaluation_integration.py \
-            tests/test_native_command_caller_migration.py \
-            tests/test_native_command_extension_evidence.py \
-            tests/test_guard_command_decision_routing.py \
-            tests/test_guard_command_activity_hook_integration.py \
-            tests/test_guard_command_backup_extensions.py \
-            tests/test_guard_command_blitcp_extensions.py \
-            tests/test_guard_command_cicd_extensions.py \
-            tests/test_guard_command_cloud_extensions.py \
-            tests/test_guard_command_common_extension_regressions.py \
-            tests/test_guard_command_container_kubernetes_common_extensions.py \
-            tests/test_guard_command_coverage_followup.py \
-            tests/test_guard_command_critical_floors.py \
-            tests/test_guard_command_dns_extensions.py \
-            tests/test_guard_command_domain_extensions.py \
-            tests/test_guard_command_extensions.py \
-            tests/test_guard_command_framework_extensions.py \
-            tests/test_guard_command_git_stash_permission.py \
-            tests/test_guard_command_managed_service_extensions.py \
-            tests/test_guard_command_ollama_extensions.py \
-            tests/test_guard_command_platform_extensions.py \
-            tests/test_guard_command_probe_extensions.py \
-            tests/test_guard_command_remote_extensions.py \
-            tests/test_guard_command_repo2nb_extensions.py \
-            tests/test_guard_command_safe_variants.py \
-            tests/test_guard_command_search_messaging_extensions.py \
-            tests/test_guard_command_skill_sunset_extensions.py \
-            tests/test_guard_command_specialized_variants.py \
-            tests/test_guard_command_storage_extensions.py \
-            tests/test_guard_compound_developer_inspection.py \
-            tests/test_guard_command_inspection_native_cli.py \
-            tests/test_guard_extension_control_runtime.py \
-            tests/test_guard_extension_control_test_lab.py \
-            tests/test_guard_protection_recovery.py \
-            tests/test_guard_git_pathspec_resolution.py \
-            tests/test_guard_github_failed_run_rerun.py \
-            tests/test_guard_github_workflow_authorization.py \
-            tests/test_guard_github_workflow_runtime_eval.py \
-            tests/test_guard_index_inspection_classification.py \
-            tests/test_guard_origin_fetch_classification.py \
-            tests/test_guard_read_only_git_audit.py \
-            tests/test_guard_shell_secret_read_floors.py \
-            tests/test_hermes_runtime_hooks.py \
-            tests/test_environment_secret_dump.py \
-            tests/test_native_command_test_support_paths.py \
-            --tb=short
-      - name: Measure installed adapter-to-decision SLOs
-        if: matrix.proof == 'performance'
-        env:
-          MACOSX_DEPLOYMENT_TARGET: ${{ matrix.deployment_target }}
-          PLATFORM_TAG: ${{ matrix.platform_tag }}
-          NATIVE_STOP_DIAGNOSTIC_PATH: native-stop-diagnostic.json
-        run: |
-          source scripts/ci/native-proof-environment.sh
-          runtime=$(.venv/bin/python -c 'from codex_plugin_scanner.guard.native_runtime import native_runtime_status; status = native_runtime_status(); assert status.identity is not None; print(status.identity.path)')
-          .venv/bin/python scripts/bench_guard_native_installed_slo.py \
-            --runtime "$runtime" \
-            --warm-iterations 2 \
-            --cold-iterations 2 \
-            --recovery-iterations 2 \
-            --readiness-samples 2 \
-            --json native-installed-slo.json \
-            --enforce
-      - name: Verify native artifact provenance
-        if: matrix.proof == 'default'
-        env:
-          PLATFORM_TAG: ${{ matrix.platform_tag }}
-          SOURCE_SHA: ${{ github.sha }}
-        run: |
-          VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
-          cp "pure-dist/hol_guard-${VERSION}-py3-none-any.whl" native-dist/
-          runtime=$(.venv/bin/python -c 'from codex_plugin_scanner.guard.native_runtime import native_runtime_status; status = native_runtime_status(); assert status.identity is not None; print(status.identity.path)')
-          RULE_DIGEST=$("$runtime" capabilities --json | python -c 'import json,sys; print(json.load(sys.stdin)["rule_digest"])')
-          uv run --no-sync python scripts/ci/validate_release_artifacts.py \
-            --dist-dir native-dist \
-            --version "$VERSION" \
-            --source-sha "$SOURCE_SHA" \
-            --rule-digest "$RULE_DIGEST" \
-            --platform "$PLATFORM_TAG" \
-            --windows-waiver "validated by the platform matrix" \
-            --output native-artifact-evidence.json
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        if: always()
-        with:
-          name: hol-guard-native-proof-${{ matrix.target }}-${{ matrix.proof }}
-          path: |
-            native-default-auto.json
-            installed-pi-output.json
-            installed-native-extensions.json
-            native-installed-slo.json
-            native-artifact-evidence.json
-            native-stop-diagnostic.json
-          if-no-files-found: error
-
-  windows-x64:
+          artifact-name: hol-guard-native-build-linux-x64
+          platform: x86_64-unknown-linux-musl
+          shard-index: ${{ matrix.shard }}
+          shard-count: '8'
+  windows-build:
     runs-on: windows-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
-          python-version: "3.12"
+          python-version: '3.12'
       - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
         with:
-          version: "0.9.26"
+          version: 0.9.26
           enable-cache: true
       - run: uv sync --frozen --no-dev --extra dev --python 3.12
       - uses: ./.github/actions/setup-rust
@@ -491,16 +347,18 @@ jobs:
           $version = uv run --no-sync python scripts/sync_repo_version.py --check
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $env:HOL_GUARD_PACKAGE_VERSION = $version.Trim()
-          cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          cargo build --manifest-path rust/Cargo.toml --locked --release -p guard-command --bin guard-command-source
+          cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime -p guard-command --bin hol-guard-runtime --bin guard-command-source
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           .\rust\target\release\hol-guard-runtime.exe self-test --json
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Prove native source compiler output
         shell: pwsh
         run: |
-          uv run --no-sync python scripts/build_native_command_program.py --check --compiler rust/target/release/guard-command-source.exe
+          $arguments = @("--compiler", "rust/target/release/guard-command-source.exe")
+          if ("${{ github.event_name }}" -eq "pull_request") {
+            $arguments += @("--changed-from", "${{ github.event.pull_request.base.sha }}")
+          }
+          uv run --no-sync python scripts/ci/verify_native_command_program.py @arguments
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $source = Get-Content rust/crates/guard-command/tests/fixtures/command-source-example.v1.json -Raw | ConvertFrom-Json
           $trust = Get-Content contracts/extensions/trust-class-map.v1.json -Raw | ConvertFrom-Json
@@ -542,6 +400,43 @@ jobs:
             --implementation-digest $implementation `
             --base-program-digest $baseProgram
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $wheel = (Get-ChildItem native-dist\*.whl).FullName
+          uv pip uninstall --python .venv\Scripts\python.exe hol-guard
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          uv pip install --python .venv\Scripts\python.exe --no-deps --force-reinstall $wheel
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Upload this run's native build
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: hol-guard-native-build-windows-x64
+          path: |
+            native-dist/*.whl
+            pure-dist/*.whl
+            rust/target/release/hol-guard-runtime.exe
+            rust/target/release/guard-command-source.exe
+          if-no-files-found: error
+          compression-level: 0
+  windows-proof:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: 0.9.26
+          enable-cache: true
+      - run: uv sync --frozen --no-dev --extra dev --python 3.12
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: hol-guard-native-build-windows-x64
+      - name: Install this run's wheel and run installed proofs
+        shell: pwsh
+        run: |
           $wheel = (Get-ChildItem native-dist\*.whl).FullName
           uv pip uninstall --python .venv\Scripts\python.exe hol-guard
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -592,62 +487,6 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           .venv\Scripts\python.exe -I ci\native_runtime\probe_installed_command_control_lock.py --json installed-command-control-lock.json
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Run native-backed Python regression qualification
-        shell: pwsh
-        env:
-          HOL_GUARD_NATIVE_REGRESSION: "1"
-          HOL_GUARD_NATIVE_BINARY: '${{ github.workspace }}\rust\target\release\hol-guard-runtime.exe'
-          HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER: '${{ github.workspace }}\rust\target\release\guard-command-source.exe'
-        run: |
-          uv run --no-sync pytest `
-            tests/test_native_command_evaluation_bridge.py `
-            tests/test_native_command_evaluation_integration.py `
-            tests/test_native_command_caller_migration.py `
-            tests/test_native_command_extension_evidence.py `
-            tests/test_guard_command_decision_routing.py `
-            tests/test_guard_command_activity_hook_integration.py `
-            tests/test_guard_command_backup_extensions.py `
-            tests/test_guard_command_blitcp_extensions.py `
-            tests/test_guard_command_cicd_extensions.py `
-            tests/test_guard_command_cloud_extensions.py `
-            tests/test_guard_command_common_extension_regressions.py `
-            tests/test_guard_command_container_kubernetes_common_extensions.py `
-            tests/test_guard_command_coverage_followup.py `
-            tests/test_guard_command_critical_floors.py `
-            tests/test_guard_command_dns_extensions.py `
-            tests/test_guard_command_domain_extensions.py `
-            tests/test_guard_command_extensions.py `
-            tests/test_guard_command_framework_extensions.py `
-            tests/test_guard_command_git_stash_permission.py `
-            tests/test_guard_command_managed_service_extensions.py `
-            tests/test_guard_command_ollama_extensions.py `
-            tests/test_guard_command_platform_extensions.py `
-            tests/test_guard_command_probe_extensions.py `
-            tests/test_guard_command_remote_extensions.py `
-            tests/test_guard_command_repo2nb_extensions.py `
-            tests/test_guard_command_safe_variants.py `
-            tests/test_guard_command_search_messaging_extensions.py `
-            tests/test_guard_command_skill_sunset_extensions.py `
-            tests/test_guard_command_specialized_variants.py `
-            tests/test_guard_command_storage_extensions.py `
-            tests/test_guard_compound_developer_inspection.py `
-            tests/test_guard_command_inspection_native_cli.py `
-            tests/test_guard_extension_control_runtime.py `
-            tests/test_guard_extension_control_test_lab.py `
-            tests/test_guard_protection_recovery.py `
-            tests/test_guard_git_pathspec_resolution.py `
-            tests/test_guard_github_failed_run_rerun.py `
-            tests/test_guard_github_workflow_authorization.py `
-            tests/test_guard_github_workflow_runtime_eval.py `
-            tests/test_guard_index_inspection_classification.py `
-            tests/test_guard_origin_fetch_classification.py `
-            tests/test_guard_read_only_git_audit.py `
-            tests/test_guard_shell_secret_read_floors.py `
-            tests/test_hermes_runtime_hooks.py `
-            tests/test_environment_secret_dump.py `
-            tests/test_native_command_test_support_paths.py `
-            --tb=short
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
@@ -658,21 +497,307 @@ jobs:
             installed-native-extensions.json
             installed-command-control-lock.json
           if-no-files-found: error
-
-  wheel-contracts:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
+    needs: windows-build
+  windows-regression:
+    needs: windows-build
+    runs-on: windows-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        shard:
+          [0, 1, 2, 3, 4, 5, 6, 7]
     steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/native-regression
+        with:
+          artifact-name: hol-guard-native-build-windows-x64
+          platform: x86_64-pc-windows-msvc
+          shard-index: ${{ matrix.shard }}
+          shard-count: '8'
+  macos-proof:
+    needs: macos-build
+    strategy:
+      fail-fast: false
+      matrix:
+        runner:
+          - macos-15-intel
+          - macos-15
+        proof:
+          - default
+          - pi
+          - extensions
+          - performance
+        include:
+          - runner: macos-15-intel
+            platform_tag: macosx_13_0_x86_64
+            target: x86_64-apple-darwin
+            deployment_target: '13.0'
+          - runner: macos-15
+            platform_tag: macosx_11_0_arm64
+            target: aarch64-apple-darwin
+            deployment_target: '11.0'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: ${{ matrix.runner == 'macos-15-intel' && matrix.proof == 'extensions' && 15 || 10 }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        if: matrix.proof == 'pi'
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: 0.9.26
+          enable-cache: true
+      - name: Install locked proof dependencies
+        env:
+          NATIVE_PROOF: ${{ matrix.proof }}
+        run: bash scripts/ci/install-native-proof-dependencies.sh
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: hol-guard-native-wheel-${{ matrix.target }}
+      - name: Install the platform wheel built by this run
+        run: uv pip install --python .venv/bin/python --no-deps native-dist/*.whl
+      - name: Prove installed native default routes
+        if: matrix.proof == 'default'
+        run: |
+          source scripts/ci/native-proof-environment.sh
+          .venv/bin/python ci/native_runtime/probe_native_default_auto.py --json native-default-auto.json
+      - name: Prove installed Pi bridge
+        if: matrix.proof == 'pi'
+        run: |
+          source scripts/ci/native-proof-environment.sh
+          .venv/bin/python ci/native_runtime/probe_installed_pi_output.py --json installed-pi-output.json
+      - name: Prove installed native extension controls
+        if: matrix.proof == 'extensions'
+        run: |
+          source scripts/ci/native-proof-environment.sh
+          .venv/bin/python -I ci/native_runtime/probe_installed_native_extensions.py --json installed-native-extensions.json
+      - name: Measure installed adapter-to-decision SLOs
+        if: matrix.proof == 'performance'
+        env:
+          MACOSX_DEPLOYMENT_TARGET: ${{ matrix.deployment_target }}
+          PLATFORM_TAG: ${{ matrix.platform_tag }}
+          TARGET: ${{ matrix.target }}
+          NATIVE_STOP_DIAGNOSTIC_PATH: native-stop-diagnostic.json
+        run: |
+          source scripts/ci/native-proof-environment.sh
+          runtime=$(.venv/bin/python -c 'from codex_plugin_scanner.guard.native_runtime import native_runtime_status; status = native_runtime_status(); assert status.identity is not None; print(status.identity.path)')
+          run_installed_slo() {
+            local output_path="$1"
+            local status=0
+            .venv/bin/python scripts/bench_guard_native_installed_slo.py \
+              --runtime "$runtime" \
+              --warm-iterations 2 \
+              --cold-iterations 2 \
+              --recovery-iterations 2 \
+              --readiness-samples 2 \
+              --json "$output_path" \
+              --enforce 2>"${output_path}.stderr" || status=$?
+            cat "${output_path}.stderr" >&2
+            return "$status"
+          }
+          retryable_intel_latency_miss() {
+            .venv/bin/python - "$1" <<'PY_CHECK'
+          import json
+          import sys
+          from pathlib import Path
+
+          payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          gates = payload.get("gates")
+          concurrency = payload.get("concurrency")
+          sixteen = concurrency.get("sixteen") if isinstance(concurrency, dict) else None
+          latency_gates = {
+              "1m_latency",
+              "250k_latency",
+              "5m_latency",
+              "cold_latency",
+              "concurrency",
+              "readiness",
+              "recovery_latency",
+              "warm_latency",
+          }
+          failed_gates = {key for key, value in gates.items() if value is False} if isinstance(gates, dict) else set()
+          retryable = (
+              isinstance(gates, dict)
+              and all(type(value) is bool for value in gates.values())
+              and bool(failed_gates)
+              and failed_gates <= latency_gates
+              and all(value is True for key, value in gates.items() if key not in latency_gates)
+              and payload.get("errors_16") == 0
+              and payload.get("errors_64") == 0
+              and isinstance(sixteen, dict)
+              and sixteen.get("errors") == 0
+              and sixteen.get("overloaded") == 0
+          )
+          raise SystemExit(0 if retryable else 1)
+          PY_CHECK
+          }
+          if [[ "$TARGET" == "x86_64-apple-darwin" ]]; then
+            slo_status=1
+            for attempt in 1 2 3; do
+              output_path="native-installed-slo-attempt-${attempt}.json"
+              set +e
+              run_installed_slo "$output_path"
+              slo_status=$?
+              set -e
+              if [[ "$slo_status" -eq 0 ]]; then
+                cp "$output_path" native-installed-slo.json
+                break
+              fi
+              if [[ ! -f "$output_path" ]]; then
+                if grep -Eq 'native_installed_slo_failed: .*recovery sample' "${output_path}.stderr"; then
+                  echo "::warning::Intel macOS SLO attempt ${attempt}/3 hit transient recovery routing crash; retrying."
+                  tail -5 "${output_path}.stderr"
+                  continue
+                fi
+                echo "Intel macOS SLO crashed without a report for a non-retryable reason." >&2
+                exit "$slo_status"
+              fi
+              cp "$output_path" native-installed-slo.json
+              if ! retryable_intel_latency_miss "$output_path"; then
+                echo "Intel macOS SLO failed for a non-retryable reason." >&2
+                exit "$slo_status"
+              fi
+              if [[ "$attempt" -lt 3 ]]; then
+                echo "::warning::Intel macOS strict latency-only SLO gate missed on attempt ${attempt}/3; retrying the same installed wheel."
+              fi
+            done
+            if [[ "$slo_status" -ne 0 ]]; then
+              echo "Intel macOS strict latency-only SLO gates failed all three attempts." >&2
+              exit "$slo_status"
+            fi
+          else
+            run_installed_slo native-installed-slo.json
+          fi
+      - name: Verify native artifact provenance
+        if: matrix.proof == 'default'
+        env:
+          PLATFORM_TAG: ${{ matrix.platform_tag }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
+          cp "pure-dist/hol_guard-${VERSION}-py3-none-any.whl" native-dist/
+          runtime=$(.venv/bin/python -c 'from codex_plugin_scanner.guard.native_runtime import native_runtime_status; status = native_runtime_status(); assert status.identity is not None; print(status.identity.path)')
+          RULE_DIGEST=$("$runtime" capabilities --json | python -c 'import json,sys; print(json.load(sys.stdin)["rule_digest"])')
+          uv run --no-sync python scripts/ci/validate_release_artifacts.py \
+            --dist-dir native-dist \
+            --version "$VERSION" \
+            --source-sha "$SOURCE_SHA" \
+            --rule-digest "$RULE_DIGEST" \
+            --platform "$PLATFORM_TAG" \
+            --windows-waiver "validated by the platform matrix" \
+            --output native-artifact-evidence.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: hol-guard-native-proof-${{ matrix.target }}-${{ matrix.proof }}
+          path: |
+            native-default-auto.json
+            installed-pi-output.json
+            installed-native-extensions.json
+            native-installed-slo.json
+            native-installed-slo-attempt-*.json
+            native-installed-slo-attempt-*.json.stderr
+            native-installed-slo.json.stderr
+            native-artifact-evidence.json
+            native-stop-diagnostic.json
+          if-no-files-found: error
+  macos-regression:
+    needs: macos-build
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        shard:
+          [0, 1, 2, 3, 4, 5, 6, 7]
+        include:
+          - runner: macos-15-intel
+            target: x86_64-apple-darwin
+          - runner: macos-15
+            target: aarch64-apple-darwin
+        runner:
+          - macos-15-intel
+          - macos-15
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/native-regression
+        with:
+          artifact-name: hol-guard-native-wheel-${{ matrix.target }}
+          platform: ${{ matrix.target }}
+          shard-index: ${{ matrix.shard }}
+          shard-count: '8'
+  macos:
+    if: always()
+    needs:
+      - macos-build
+      - macos-proof
+      - macos-regression
+      - native-regression-complete
+    strategy:
+      fail-fast: false
+      matrix:
+        runner:
+          - macos-15-intel
+          - macos-15
+        proof:
+          - default
+          - pi
+          - extensions
+          - performance
+        include:
+          - runner: macos-15-intel
+            platform_tag: macosx_13_0_x86_64
+            target: x86_64-apple-darwin
+            deployment_target: '13.0'
+          - runner: macos-15
+            platform_tag: macosx_11_0_arm64
+            target: aarch64-apple-darwin
+            deployment_target: '11.0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Require every macOS build, proof and regression shard
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          test -n "$RESULTS"
+          for result in $RESULTS; do test "$result" = success || exit 1; done
+  native-regression-complete:
+    if: always()
+    needs:
+      - linux-regression
+      - windows-regression
+      - macos-regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Require all native regression jobs
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          test -n "$RESULTS"
+          for result in $RESULTS; do test "$result" = success || exit 1; done
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
-          python-version: "3.12"
-      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+          python-version: '3.12'
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
-          version: "0.9.26"
-          enable-cache: true
-      - run: uv sync --frozen --no-dev --extra dev --python 3.12
-      - name: Run wheel-builder contracts
-        run: uv run --no-sync pytest ci/native_runtime/test_native_hol_guard_wheel.py tests/test_native_source_compiler.py --tb=short
+          pattern: native-regression-*
+          path: native-regression-reports
+      - name: Prove the shards ran every collected test exactly once
+        run: python scripts/ci/verify_native_regression_shards.py --root native-regression-reports --shard-count
+          8

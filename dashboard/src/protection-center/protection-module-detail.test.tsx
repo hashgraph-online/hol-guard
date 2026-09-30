@@ -72,6 +72,11 @@ assert.match(permissions, /git push --force/);
 assert.match(permissions, /Recommended/);
 assert.match(permissions, />Allow</);
 assert.match(permissions, />Block</);
+assert.match(permissions, /Quick apply to 2 changeable settings/, "the nested Permissions tab offers the shared quick-apply toolbar");
+assert.match(permissions, /role="group" aria-label="Quick apply to 2 changeable settings"/);
+assert.match(permissions, /aria-pressed="true" title="Use Guard defaults for every matching capability."/, "Recommended is the pressed quick-apply choice on a clean draft");
+assert.match(permissions, /Allow all</);
+assert.match(permissions, /Deny all</);
 assert.match(simple, /Required by Guard/);
 const activity = renderToStaticMarkup(createElement(ProtectionModuleDetail, {
   extension: git,

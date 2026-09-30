@@ -8,10 +8,12 @@ command or MCP tool.
 
 ## Native source and fixture checks
 
-Build the source compiler with the locked Rust toolchain and run the focused
-CLI test:
+Run these commands from the repository root after installing the locked
+development environment. The examples use Bash; add `.exe` to native binary
+paths on Windows.
 
 ```sh
+uv sync --frozen --extra dev
 cargo +1.88.0 test --locked --manifest-path rust/Cargo.toml -p guard-command --test native_command_source_cli
 ```
 
@@ -29,24 +31,70 @@ uv run --no-sync python scripts/build_native_command_program.py
 uv run --no-sync python scripts/build_native_command_program.py --check
 ```
 
-The script is file I/O and process orchestration only. Rust owns source
-validation, native matcher lowering, catalog admission, graph identities, and
-program identities. For editable/development package resources, run the
-normal build command after compilation:
+The normal build writes both contract projections and their development
+package mirrors. Python handles file I/O and process orchestration; Rust owns
+source validation, matcher lowering, catalog admission, and graph/program
+identities. By default, both commands invoke Cargo, so `--check` rebuilds the
+compiler if generation changed its embedded program. It rejects stale
+projections and stale embedded identities. When using `--compiler`, explicitly
+rebuild that binary between generation and checking.
+
+Before running the Builder CLI or native runtime tests in an editable
+checkout, build the compiler and runtime against the current generated
+artifacts:
 
 ```sh
-uv run --no-sync python scripts/build_native_command_program.py
+cargo +1.88.0 build --locked --release --manifest-path rust/Cargo.toml -p guard-command --bin guard-command-source
+cargo +1.88.0 build --locked --release --manifest-path rust/Cargo.toml -p hol-guard-runtime
+export HOL_GUARD_NATIVE_SOURCE_COMPILER="$PWD/rust/target/release/guard-command-source"
+export HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER="$PWD/rust/target/release/guard-command-source"
+export HOL_GUARD_NATIVE_BINARY="$PWD/rust/target/release/hol-guard-runtime"
+export HOL_GUARD_NATIVE_REGRESSION=1
 ```
 
-A release build embeds a platform-specific `guard-command-source` and a manifest binding its binary,
-package version, source identity, and implementation digest.
+These compiler overrides are for source checkouts without a packaged compiler
+manifest. Native wheels supply a platform compiler and a manifest binding its
+binary, package version, source identity, implementation digest, and embedded
+program. Installed Builder calls validate that manifest instead of searching
+for Cargo.
+
+## Validate an integrated command fixture
+
+Before integration, a kit's fixture adds its source to `base: "packaged"`.
+After `apply`, regeneration, and rebuilding, that extension is already part of
+the packaged baseline. Reusing the addition envelope would correctly fail
+with a duplicate extension. For an integrated source or a change to existing
+coverage, assemble a temporary fixture with the complete checkout build and
+omit `base`.
+
+After the build steps above, replace the sample fixture path below with the
+file created by your kit:
+
+```sh
+uv run --no-sync python - tests/fixtures/command-source-samplectl.v1.json > source-fixtures-current.json <<'PY'
+import json
+from pathlib import Path
+import runpy
+import sys
+
+fixture = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+fixture["build"] = runpy.run_path("scripts/build_native_command_program.py")["build_request"]()
+print(json.dumps(fixture, sort_keys=True, separators=(",", ":"), ensure_ascii=False))
+PY
+rust/target/release/guard-command-source test < source-fixtures-current.json
+```
+
+Python only assembles the envelope from checked-in JSON files. Rust validates
+the complete catalog and evaluates every case through native policy. Commit
+the canonical source and portable fixture, not `source-fixtures-current.json`.
+MCP kits generate MCP contribution tests instead of a command-source fixture;
+run their generated test file as part of the source-tree checks.
 
 ## Source-tree checks
 
-Use the repository's locked development environment:
+Use the native binaries and environment selected above:
 
 ```sh
-uv sync --frozen --extra dev
 uv run --no-sync pytest tests/test_guard_extension_builder_*.py \
   tests/test_guard_extension_contribution.py \
   tests/test_guard_mcp_server_contribution.py \
@@ -58,6 +106,23 @@ uv run --no-sync pytest tests/test_guard_command_*extensions.py \
   tests/test_guard_command_critical_floors.py
 
 uv run --no-sync python tests/guard_command_decision_diff.py --check
+```
+
+When source or semantic changes alter the decision evidence, regenerate with
+`uv run --no-sync python tests/guard_command_decision_diff.py --write`, review
+the differences, and rerun `--check`.
+
+After metadata or trust changes, refresh the packaged review artifacts and
+public directory, then verify the projections:
+
+```sh
+uv run --no-sync python scripts/release/stage_guard_cloud_review_artifacts.py
+uv run --no-sync python scripts/export_extension_directory.py
+uv run --no-sync python scripts/render_command_extension_directory.py
+uv run --no-sync python scripts/export_extension_directory.py --check
+uv run --no-sync python scripts/render_command_extension_directory.py --check
+uv run --no-sync pytest tests/test_guard_command_extension_directory.py \
+  tests/test_guard_extension_directory_contract_parity.py
 ```
 
 The Builder suites cover offline discovery adapters, source-bound reviews,
