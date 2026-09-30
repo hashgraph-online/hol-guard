@@ -96,19 +96,19 @@ def test_availability_allows_inspection_and_pauses_high_impact(tmp_path: Path) -
     assert output["permissionDecision"] == "allow"
 
 
-def test_cursor_fallback_allows_read_and_shell_when_review_cannot_finish() -> None:
+def test_cursor_fallback_denies_read_and_shell_when_review_cannot_finish() -> None:
     allow, allow_code = cursor_fallback_permission(
         {"hook_event_name": "beforeReadFile", "file_path": "src/app.ts", "tool_name": "Read"},
         hook_event_name="beforeReadFile",
     )
-    assert allow_code == 0
-    assert allow["permission"] == "allow"
+    assert allow_code == 2
+    assert allow["permission"] == "deny"
     shell, shell_code = cursor_fallback_permission(
         {"hook_event_name": "beforeShellExecution", "command": "rm -rf /"},
         hook_event_name="beforeShellExecution",
     )
-    assert shell_code == 0
-    assert shell["permission"] == "allow"
+    assert shell_code == 2
+    assert shell["permission"] == "deny"
 
 
 def test_hol_guard_status_is_emergency_safe() -> None:
@@ -304,8 +304,8 @@ def test_before_write_file_is_not_emergency_safe(tmp_path: Path) -> None:
     }
     assert hook_action_is_emergency_safe(payload, workspace=workspace) is False
     allow, code = cursor_fallback_permission(payload, hook_event_name="beforeWriteFile", workspace=workspace)
-    assert code == 0
-    assert allow["permission"] == "allow"
+    assert code == 2
+    assert allow["permission"] == "deny"
 
 
 def test_missing_workspace_rejects_absolute_paths() -> None:

@@ -475,6 +475,21 @@ def test_phase14_claude_compatibility_hook_enforces_package_install_without_node
     fallback_command = bridge_config["fallback_command"]
     assert isinstance(fallback_command, list)
     assert all(isinstance(part, str) for part in fallback_command)
+    # The parent clock/auth fixtures do not cross this real subprocess boundary.
+    # Inject the expired authorization fault rather than contacting OAuth with
+    # demo credentials and depending on a timeout versus rejection response.
+    expired_auth_fixture = (
+        "import codex_plugin_scanner.guard.runtime.supply_chain_package_eval as evaluator\n"
+        "from codex_plugin_scanner.guard.runtime.runner import GuardSyncAuthorizationExpiredError\n"
+        "def expired_auth(*args, **kwargs):\n"
+        "    raise GuardSyncAuthorizationExpiredError('Injected expired authorization')\n"
+        "evaluator._resolve_guard_sync_auth_context = expired_auth\n"
+    )
+    assert "from codex_plugin_scanner.cli import main;" in fallback_command[2]
+    fallback_command[2] = fallback_command[2].replace(
+        "from codex_plugin_scanner.cli import main;",
+        f"exec({expired_auth_fixture!r});from codex_plugin_scanner.cli import main;",
+    )
     event = {
         "hook_event_name": "PreToolUse",
         "tool_name": "Bash",
