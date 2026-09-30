@@ -1,0 +1,42 @@
+{
+  "schemaVersion": "guard.extension-contribution.v1",
+  "id": "command.errand",
+  "version": "1.0.0",
+  "name": "Errand",
+  "description": "Requires Errand 0.4.2 or later. Reviews execution and checkout apply; ps, status, and doctor remain automatic.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "community.lydakis",
+    "displayName": "George Lydakis"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniCommandLine",
+    "background": "#4338CA"
+  },
+  "license": "MIT",
+  "executables": [
+    "errand"
+  ],
+  "ecosystemIds": [
+    "errand"
+  ],
+  "riskClasses": [
+    "execution",
+    "network_egress",
+    "destructive_shell"
+  ],
+  "actionClasses": [
+    "Errand execution command",
+    "Errand checkout apply command"
+  ],
+  "saferAlternatives": [
+    "Inspect jobs with errand ps or errand status HANDLE before executing or applying changes.",
+    "Stage retained changes with errand fetch HANDLE before applying them."
+  ],
+  "detector": {
+    "kind": "python-module",
+    "module": "codex_plugin_scanner.guard.runtime.command_errand_extensions"
+  }
+}
