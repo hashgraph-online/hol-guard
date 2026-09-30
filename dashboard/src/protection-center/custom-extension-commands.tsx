@@ -5,6 +5,8 @@ import {
   extensionPolicyRadioTabStop,
   nextExtensionPolicyRadioIndex,
 } from "../extension-policy-panel";
+import { mcpToolCanReceiveDirectAllow } from "./mcp-catalog-state";
+import { McpClassificationEvidence } from "./mcp-classification-evidence";
 
 export function commandStatesPayload(
   commands: readonly LocalCliCommand[],
@@ -52,6 +54,7 @@ export function CustomExtensionCommandList(props: {
           key={command.command_id}
           command={command}
           disabled={props.disabled}
+          surface={props.surface}
           onChange={props.onChange}
         />
       ))}
@@ -72,6 +75,7 @@ function emptyCommandCopy(surface: LocalCliSurface | undefined): string {
 function CustomExtensionCommandRow(props: {
   command: LocalCliCommand;
   disabled: boolean;
+  surface?: LocalCliSurface;
   onChange: (commandId: string, state: LocalCliCommandState) => void;
 }) {
   const handleChange = useCallback((state: LocalCliCommandState) => {
@@ -92,11 +96,21 @@ function CustomExtensionCommandRow(props: {
         {props.command.description ? (
           <p className="mt-1.5 text-xs leading-5 text-brand-dark/70">{props.command.description}</p>
         ) : null}
+        <McpClassificationEvidence value={props.command.classification} />
+        {props.surface === "mcp" && !mcpToolCanReceiveDirectAllow(props.command) ? (
+          <p className="mt-1.5 text-xs leading-5 text-brand-dark/75">
+            {props.command.command_id === "other"
+              ? "New tools require review. You can deny tools outside this inventory."
+              : "Review the actions and account inside this tool. A wrapper permission cannot allow execution."}
+          </p>
+        ) : null}
       </div>
       <CommandDraftControl
         label={props.command.name}
         state={props.command.state}
         disabled={props.disabled}
+        mcpPolicy={props.surface === "mcp"}
+        allowDisabled={props.surface === "mcp" && !mcpToolCanReceiveDirectAllow(props.command)}
         onChange={handleChange}
       />
     </article>
@@ -107,12 +121,15 @@ function CommandDraftControl(props: {
   label: string;
   state: LocalCliCommandState;
   disabled: boolean;
+  mcpPolicy?: boolean;
+  allowDisabled?: boolean;
   onChange: (state: LocalCliCommandState) => void;
 }) {
-  const choices: Array<{ value: LocalCliCommandState; label: string }> = [
-    { value: "inherit", label: "Recommended" },
-    { value: "allow", label: "Allow" },
-    { value: "block", label: "Block" },
+  const choices: Array<{ value: LocalCliCommandState; label: string; disabled?: boolean }> = [
+    { value: "inherit", label: props.mcpPolicy ? "Policy" : "Recommended" },
+    { value: "allow", label: "Allow", disabled: props.allowDisabled },
+    ...(props.mcpPolicy ? [{ value: "review" as const, label: "Ask" }] : []),
+    { value: "block", label: props.mcpPolicy ? "Deny" : "Block" },
   ];
   const tabStopIndex = extensionPolicyRadioTabStop(choices, props.state, props.disabled);
   const chooseAdjacent = (event: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
@@ -123,14 +140,17 @@ function CommandDraftControl(props: {
     event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="radio"]')[next]?.focus();
   };
   return (
-    <div role="radiogroup" aria-label={`${props.label} protection setting`} className="guard-segmented">
+    <div role="radiogroup" aria-label={`${props.label} protection setting`}
+      className={props.mcpPolicy
+        ? "guard-segmented !grid grid-cols-2 sm:!flex [&_[role=radio]]:!min-h-11"
+        : "guard-segmented"}>
       {choices.map((choice, index) => (
         <CommandChoiceButton
           key={choice.value}
           choice={choice}
           checked={props.state === choice.value}
           tabIndex={!props.disabled && index === tabStopIndex ? 0 : -1}
-          disabled={props.disabled}
+          disabled={props.disabled || choice.disabled === true}
           index={index}
           onChoose={props.onChange}
           onAdjacent={chooseAdjacent}

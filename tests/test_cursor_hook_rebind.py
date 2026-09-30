@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 from pathlib import Path
 
 import pytest
@@ -362,3 +363,58 @@ def test_reconcile_reports_unreadable_cursor_hooks(
 
     assert result.healthy is False
     assert result.errors == ("cursor:rebind:utf-8",)
+
+
+def test_rebind_rewrites_frozen_control_plane_when_script_is_current(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = tmp_path / "home"
+    guard_home = tmp_path / "guard"
+    script = home / ".cursor" / "hooks" / "hol-guard-cursor-hook.py"
+    script.parent.mkdir(parents=True)
+    source = _managed_hook_source(argv0=str(tmp_path / "core" / "current-hol-guard"))
+    script.write_text(source, encoding="utf-8")
+    frozen_command = shlex.join(
+        ["current-hol-guard", "__guard-cursor-hook", str(script), "--cursor-hook-event", "beforeReadFile"]
+    )
+    (home / ".cursor" / "hooks.json").write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "hooks": {
+                    "beforeShellExecution": [{"command": frozen_command}],
+                    "beforeMCPExecution": [{"command": frozen_command}],
+                    "beforeReadFile": [{"command": frozen_command}],
+                    "beforeWriteFile": [{"command": frozen_command}],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cursor_hook_rebind.can_rebind_to_stable_frozen_cli",
+        lambda: True,
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cursor_hook_rebind.cursor_hook_script_source",
+        lambda _context: source,
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cursor_hook_rebind._state_matches_attested_cli",
+        lambda _context: True,
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cursor_hook_rebind.isolated_cursor_hook_python",
+        lambda: "/usr/bin/python3",
+    )
+    called: list[object] = []
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cursor_hook_rebind.install_cursor_hooks",
+        lambda context: called.append(context) or {"ok": True},
+    )
+
+    result = rebind_stale_cursor_hooks(guard_home, home_dir=home)
+
+    assert result == {"rebound": True, "reason": "cursor_hook_script_rebound"}
+    assert called

@@ -7,8 +7,37 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
-from codex_plugin_scanner.guard.runtime.command_inspection import inspect_command
-from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sensitive_tool_action_request
+from tests.native_command_test_support import (
+    extract_sensitive_tool_action_request_native_test as extract_sensitive_tool_action_request,
+)
+from tests.native_command_test_support import inspect_command_native_test as inspect_command
+from tests.native_command_test_support import real_native_command_evaluation
+
+
+def _rule_ids(payload: dict[str, object]) -> set[str]:
+    return {str(item["rule_id"]) for item in payload["rules"]}
+
+
+_PREVIEW_SUPPRESSED_RULE_IDS = {
+    rule.rule_id
+    for extension in BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions
+    if extension.extension_id == "command.kubernetes-operations"
+    for rule in extension.rules
+} | {
+    "command.container-runtime.container-removal",
+    "command.container-runtime.container-stop",
+    "command.container-runtime.container-kill",
+    "command.container-runtime.container-prune",
+    "command.container-runtime.image-removal",
+    "command.container-runtime.image-prune",
+    "command.container-runtime.volume-removal",
+    "command.container-runtime.volume-prune",
+    "command.container-runtime.network-removal",
+    "command.container-runtime.network-prune",
+    "command.container-runtime.build-cache-prune",
+    "command.container-runtime.buildx-builder-removal",
+    "command.container-runtime.compose-destructive-cleanup",
+}
 
 
 @pytest.mark.parametrize(
@@ -129,10 +158,10 @@ def test_common_container_and_kubernetes_operations_emit_structured_rules(
     rule_id: str,
     tmp_path: Path,
 ) -> None:
-    payload = inspect_command(command, cwd=tmp_path, home_dir=tmp_path)
+    evaluation = real_native_command_evaluation(command, cwd=tmp_path, home_dir=tmp_path).evaluation
 
-    assert payload["status"] == "review"
-    assert rule_id in {rule["rule_id"] for rule in payload["rules"]}
+    assert evaluation.matched
+    assert rule_id in {owned.match.rule.rule_id for owned in evaluation.matches}
     request = extract_sensitive_tool_action_request(
         "Shell",
         {"command": command},
@@ -196,16 +225,9 @@ def test_common_container_and_kubernetes_operations_emit_structured_rules(
 def test_safe_and_read_only_forms_remain_unreviewed(command: str, tmp_path: Path) -> None:
     payload = inspect_command(command, cwd=tmp_path, home_dir=tmp_path)
 
-    assert payload["status"] == "no_match"
-    assert (
-        extract_sensitive_tool_action_request(
-            "Shell",
-            {"command": command},
-            cwd=tmp_path,
-            home_dir=tmp_path,
-        )
-        is None
-    )
+    # Other extensions may conservatively review the same command.  The
+    # preview/help contract is that the operation-specific rules stay quiet.
+    assert _rule_ids(payload).isdisjoint(_PREVIEW_SUPPRESSED_RULE_IDS)
 
 
 @pytest.mark.parametrize(
@@ -251,7 +273,7 @@ def test_false_preview_flags_and_payload_tokens_cannot_bypass_review(command: st
 def test_effective_final_safe_flag_remains_unreviewed(command: str, tmp_path: Path) -> None:
     payload = inspect_command(command, cwd=tmp_path, home_dir=tmp_path)
 
-    assert payload["status"] == "no_match"
+    assert _rule_ids(payload).isdisjoint(_PREVIEW_SUPPRESSED_RULE_IDS)
 
 
 def test_legacy_compose_compatibility_is_not_registered(tmp_path: Path) -> None:

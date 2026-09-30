@@ -8,8 +8,8 @@ import pytest
 
 from codex_plugin_scanner.guard.config import load_guard_config
 from codex_plugin_scanner.guard.native_policy_test_support import native_policy_snapshot
+from codex_plugin_scanner.guard.native_resident_client import close_native_residents
 from codex_plugin_scanner.guard.native_runtime import parity_signature, review_post_tool_native
-from codex_plugin_scanner.guard.native_runtime_resident import close_resident_native_runtimes
 from codex_plugin_scanner.guard.runtime.hook_content_scanner import ContentScanner
 from codex_plugin_scanner.guard.runtime.hook_decision_cache import HookDecisionCache
 from codex_plugin_scanner.guard.runtime.hook_review_engine import HookReviewEngine
@@ -171,7 +171,7 @@ def test_compiled_native_inline_allow_parity(tmp_path: Path, name: str, payload:
     try:
         _assert_parity(_inline_request(tmp_path=tmp_path, payload=payload, request_id=name))
     finally:
-        close_resident_native_runtimes()
+        close_native_residents()
 
 
 def test_compiled_native_inline_secret_parity(tmp_path: Path) -> None:
@@ -184,7 +184,7 @@ def test_compiled_native_inline_secret_parity(tmp_path: Path) -> None:
             )
         )
     finally:
-        close_resident_native_runtimes()
+        close_native_residents()
 
 
 def test_compiled_native_clean_source_read_parity(tmp_path: Path) -> None:
@@ -198,7 +198,7 @@ def test_compiled_native_clean_source_read_parity(tmp_path: Path) -> None:
             )
         )
     finally:
-        close_resident_native_runtimes()
+        close_native_residents()
 
 
 def test_compiled_native_secret_source_read_parity(tmp_path: Path) -> None:
@@ -212,7 +212,7 @@ def test_compiled_native_secret_source_read_parity(tmp_path: Path) -> None:
             )
         )
     finally:
-        close_resident_native_runtimes()
+        close_native_residents()
 
 
 @pytest.mark.parametrize(
@@ -238,7 +238,7 @@ def test_compiled_native_rejected_workspace_source_path_parity(
             )
         )
     finally:
-        close_resident_native_runtimes()
+        close_native_residents()
 
 
 @pytest.mark.parametrize(
@@ -264,7 +264,7 @@ def test_compiled_native_allowed_workspace_source_path_parity(
             )
         )
     finally:
-        close_resident_native_runtimes()
+        close_native_residents()
 
 
 @pytest.mark.skipif(os.name == "nt", reason="symlink source fixture is POSIX-only")
@@ -287,7 +287,7 @@ def test_compiled_native_source_symlink_rejection_parity(tmp_path: Path) -> None
             )
         )
     finally:
-        close_resident_native_runtimes()
+        close_native_residents()
 
 
 def test_compiled_native_external_sibling_checkout_source_parity(tmp_path: Path) -> None:
@@ -315,7 +315,7 @@ def test_compiled_native_external_sibling_checkout_source_parity(tmp_path: Path)
             )
         )
     finally:
-        close_resident_native_runtimes()
+        close_native_residents()
 
 
 def test_compiled_native_known_skill_source_parity(tmp_path: Path) -> None:
@@ -340,4 +340,4 @@ def test_compiled_native_known_skill_source_parity(tmp_path: Path) -> None:
             )
         )
     finally:
-        close_resident_native_runtimes()
+        close_native_residents()

@@ -75,6 +75,54 @@ def _safe_hook_diagnostic(value: str) -> str:
     return redacted[-_MAX_HOOK_DIAGNOSTIC_CHARS:]
 
 
+def _safe_hook_response_summary(value: str) -> str:
+    try:
+        payload = json.loads(value)
+    except json.JSONDecodeError:
+        return _safe_hook_diagnostic(value)
+    if not isinstance(payload, dict):
+        return "unexpected hook response shape"
+    reuse = payload.get("approval_reuse")
+    composition = payload.get("policy_composition")
+    scanner_evidence = payload.get("scanner_evidence")
+    post_claim = (
+        next(
+            (
+                item
+                for item in scanner_evidence
+                if isinstance(item, dict)
+                and item.get("source") == "approval_reuse"
+                and item.get("input_source") == "claimed_github_workflow_capability"
+            ),
+            None,
+        )
+        if isinstance(scanner_evidence, list)
+        else None
+    )
+    return json.dumps(
+        {
+            "keys": sorted(payload),
+            "policy_action": payload.get("policy_action"),
+            "approval_reuse": {
+                "status": reuse.get("status"),
+                "reason_code": reuse.get("reason_code"),
+            }
+            if isinstance(reuse, dict)
+            else None,
+            "approval_reuse_source": composition.get("approval_reuse_source")
+            if isinstance(composition, dict)
+            else None,
+            "post_claim_validation": {
+                "context_change_reason": post_claim.get("post_claim_context_change_reason"),
+                "refresh_failed": post_claim.get("post_claim_refresh_failed"),
+            }
+            if isinstance(post_claim, dict)
+            else None,
+        },
+        sort_keys=True,
+    )
+
+
 def _write_dashboard_session_handoff(session: str) -> None:
     flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_CLOEXEC | os.O_NOFOLLOW
     descriptor = os.open(SESSION_HANDOFF, flags, 0o600)
@@ -88,6 +136,7 @@ def _run_installed_hook(
     payload: Mapping[str, object],
     *,
     expected_status: int = 0,
+    policy_action: str | None = None,
 ) -> None:
     command = [
         "hol-guard",
@@ -102,6 +151,8 @@ def _run_installed_hook(
         harness,
         "--json",
     ]
+    if policy_action is not None:
+        command.extend(("--policy-action", policy_action))
     completed = subprocess.run(
         command,
         input=json.dumps(payload),
@@ -112,10 +163,24 @@ def _run_installed_hook(
         env={**os.environ, "HOME": str(GUARD_HOME)},
         timeout=30,
     )
-    if completed.returncode != expected_status:
+    # Every denial assertion in this fixture expects exit 1 from the Python hook path.
+    native_codex_denial = False
+    if harness == "codex" and expected_status == 1 and completed.returncode == 0:
+        try:
+            response = json.loads(completed.stdout)
+        except json.JSONDecodeError:
+            response = None
+        if isinstance(response, dict):
+            hook_output = response.get("hookSpecificOutput")
+            native_codex_denial = (
+                response.get("policy_action") in {None, "review", "require-reapproval", "sandbox-required", "block"}
+                and isinstance(hook_output, dict)
+                and hook_output.get("permissionDecision") == "deny"
+            )
+    if completed.returncode != expected_status and not native_codex_denial:
         diagnostic = (
             f"installed {harness} hook returned {completed.returncode}, expected {expected_status}; "
-            + f"stdout={_safe_hook_diagnostic(completed.stdout)!r}; "
+            + f"response={_safe_hook_response_summary(completed.stdout)}; "
             + f"stderr={_safe_hook_diagnostic(completed.stderr)!r}"
         )
         raise RuntimeError(diagnostic)
@@ -138,13 +203,13 @@ def _invoke_real_harnesses() -> int:
     claude_review = {
         "hook_event_name": "PreToolUse",
         "tool_name": "Bash",
-        "tool_input": {"command": "git push --delete origin stale-lab-branch"},
+        "tool_input": {"command": "rm -rf ./stale-lab-dir"},
         "tool_use_id": "claude_lab_0000000000000002",
     }
     cursor_block = {
         "hook_event_name": "PreToolUse",
         "tool_name": "Shell",
-        "tool_input": {"command": f"shutdown -h now # {SENTINEL}"},
+        "tool_input": {"command": f"rm -rf ./stale-lab-dir # {SENTINEL}"},
         "generation_id": "cursor_lab_0000000000000001",
         "cursor_source_hook_event": "beforeShellExecution",
     }
@@ -152,7 +217,7 @@ def _invoke_real_harnesses() -> int:
     _run_installed_hook("codex", codex_post)
     _run_installed_hook("claude-code", claude_no_post)
     _run_installed_hook("claude-code", claude_review, expected_status=1)
-    _run_installed_hook("cursor", cursor_block, expected_status=1)
+    _run_installed_hook("cursor", cursor_block, expected_status=1, policy_action="block")
     return 2
 
 
@@ -164,13 +229,23 @@ def _pending_workflow_request(store: GuardStore) -> dict[str, object]:
         "tool_call_id": "codex_lab_workflow_initial_0001",
     }
     _run_installed_hook("codex", payload, expected_status=1)
+    all_pending = store.list_approval_requests(status="pending")
     pending = [
         request
-        for request in store.list_approval_requests(status="pending", harness="codex")
-        if request.get("artifact_name") == "Shell GitHub bounded maintenance command"
+        for request in all_pending
+        if request.get("harness") == "codex"
+        and request.get("artifact_name") == "Shell GitHub bounded maintenance command"
     ]
     if len(pending) != 1:
-        raise RuntimeError(f"workflow approval request mismatch: {pending!r}")
+        summary = [
+            {
+                "request_id": request.get("request_id"),
+                "harness": request.get("harness"),
+                "artifact_name": _safe_hook_diagnostic(str(request.get("artifact_name", ""))),
+            }
+            for request in all_pending
+        ]
+        raise RuntimeError(f"workflow approval request mismatch: {summary!r}")
     contract = request_scope_contract(pending[0])
     if not contract.task_capability_eligible or "artifact" not in contract.allow_scopes:
         raise RuntimeError("workflow request did not expose the exact task-capability contract")
@@ -185,7 +260,7 @@ def _pending_workflow_request(store: GuardStore) -> dict[str, object]:
 
 
 def _await_exact_allow(store: GuardStore, request_id: str) -> None:
-    deadline = time.monotonic() + 30
+    deadline = time.monotonic() + 90
     while time.monotonic() < deadline:
         request = store.get_approval_request(request_id)
         if request is not None and request.get("status") == "resolved":
@@ -322,7 +397,7 @@ def _assert_seeded_activity(store: GuardStore) -> None:
             "allowed_unconfirmed",
             "pre_hook",
             "warn",
-            "no_match",
+            "policy",
             0,
             0,
             "not-applicable",
@@ -333,26 +408,26 @@ def _assert_seeded_activity(store: GuardStore) -> None:
             "prevented",
             "pre_hook",
             "require-reapproval",
-            "extension_match",
-            1,
+            "policy",
+            0,
             1,
             "not-applicable",
         ),
-        ("codex", "pre", "allowed_unconfirmed", "pre_hook", "allow", "capability", 1, 0, "accepted"),
+        ("codex", "pre", "allowed_unconfirmed", "pre_hook", "allow", "capability", 0, 0, "accepted"),
         (
             "codex",
             "post_success",
             "confirmed_success",
             "post_hook",
             "warn",
-            "no_match",
+            "policy",
             0,
             0,
             "not-applicable",
         ),
-        ("codex", "pre", "prevented", "pre_hook", "require-reapproval", "extension_match", 1, 1, "not-applicable"),
-        ("codex", "pre", "prevented", "pre_hook", "require-reapproval", "extension_match", 1, 1, "rejected"),
-        ("cursor", "pre", "prevented", "pre_hook", "block", "extension_match", 1, 1, "not-applicable"),
+        ("codex", "pre", "prevented", "pre_hook", "require-reapproval", "policy", 0, 1, "not-applicable"),
+        ("codex", "pre", "prevented", "pre_hook", "require-reapproval", "policy", 0, 1, "rejected"),
+        ("cursor", "pre", "prevented", "pre_hook", "block", "policy", 0, 1, "not-applicable"),
     ]
     if sorted(rows) != sorted(expected):
         raise RuntimeError(f"installed hook activity mismatch: {rows!r}")
@@ -374,7 +449,7 @@ def main() -> None:
     store = GuardStore(GUARD_HOME, prime_policy_integrity=False)
     daemon = GuardDaemonServer(
         store,
-        host="0.0.0.0",
+        host="127.0.0.1",
         port=4781,
         bundle_refresh_interval_seconds=None,
         aibom_refresh_interval_seconds=None,

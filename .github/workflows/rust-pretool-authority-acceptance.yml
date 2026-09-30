@@ -5,6 +5,7 @@ on:
     branches: [fix/rust-authority-batch-1]
     paths:
       - ".github/workflows/rust-pretool-authority-acceptance.yml"
+      - ".github/actions/setup-rust/**"
       - "scripts/ci/rust_pretool_authority_integration.py"
       - "rust/**"
       - "src/codex_plugin_scanner/guard/native_command_model.py"
@@ -16,6 +17,7 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/rust-pretool-authority-acceptance.yml"
+      - ".github/actions/setup-rust/**"
       - "scripts/ci/rust_pretool_authority_integration.py"
       - "rust/**"
       - "src/codex_plugin_scanner/guard/native_command_model.py"
@@ -48,10 +50,10 @@ jobs:
           version: "0.9.26"
           enable-cache: true
       - run: uv sync --frozen --extra dev --python 3.12
-      - name: Install pinned Rust toolchain
-        run: |
-          rustup toolchain install 1.88.0 --profile minimal --component rustfmt --component clippy
-          rustup default 1.88.0
+      - name: Install cached Rust toolchain
+        uses: ./.github/actions/setup-rust
+        with:
+          components: rustfmt clippy
       - name: Enforce source authority invariants
         run: |
           ! grep -q "Python remains authoritative" src/codex_plugin_scanner/guard/native_command_model.py
@@ -89,7 +91,7 @@ jobs:
             ci/native_runtime/test_command_model_resident.py \
             ci/native_runtime/test_guard_native_runtime_binary.py \
             --tb=short
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
           name: rust-pretool-authority-evidence

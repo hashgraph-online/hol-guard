@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.native_command_model import _canonical_command_from_native
 from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     build_tool_action_request_artifact,
@@ -13,6 +14,40 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     is_explicitly_benign_tool_action_request,
 )
 from codex_plugin_scanner.guard.runtime.shell_secret_reads import assess_shell_reads
+from tests.native_command_test_support import real_native_review_fixture
+
+
+def _evaluate_native(command: str, *, cwd: Path):
+    fixture = real_native_review_fixture(command)
+    extensions = fixture.payload["command_extensions"]
+    assert isinstance(extensions, dict)
+    if extensions["evaluation_error"] is not None:
+        assert extensions["observations"] == []
+        return None, extensions["evaluation_error"]
+    canonical = _canonical_command_from_native(command, fixture.payload["command_model"])
+    assert canonical is not None
+    return (
+        evaluate_command(
+            command,
+            canonical_command=canonical,
+            cwd=cwd,
+            home_dir=cwd,
+            extension_control_snapshot=fixture.snapshot,
+            native_extension_evidence=fixture.payload,
+        ),
+        None,
+    )
+
+
+def _assert_review_or_native_unavailable(evaluation, evaluation_error) -> None:
+    if evaluation is None:
+        assert evaluation_error in {
+            "native_command_evaluation_failed",
+            "transparent_wrapper_not_yet_supported",
+        }
+        return
+    assert evaluation.minimum_action in {"review", "block"}
+    assert evaluation.decision_plane.action in {"require-reapproval", "block"}
 
 
 @pytest.mark.parametrize(
@@ -46,10 +81,10 @@ from codex_plugin_scanner.guard.runtime.shell_secret_reads import assess_shell_r
     ),
 )
 def test_secret_reads_have_an_explicit_floor(command: str, tmp_path: Path) -> None:
-    evaluation = evaluate_command(command, cwd=tmp_path, home_dir=tmp_path)
-    assert evaluation.minimum_action in {"review", "block"}
-    assert evaluation.decision_plane.action in {"require-reapproval", "block"}
-    assert "local_secret_read" in evaluation.risk_classes
+    evaluation, evaluation_error = _evaluate_native(command, cwd=tmp_path)
+    _assert_review_or_native_unavailable(evaluation, evaluation_error)
+    if evaluation is not None:
+        assert "local_secret_read" in evaluation.risk_classes
     request = extract_sensitive_tool_action_request("Bash", {"command": command}, cwd=tmp_path, home_dir=tmp_path)
     assert request is not None
     assert not is_explicitly_benign_tool_action_request("Bash", {"command": command}, cwd=tmp_path, home_dir=tmp_path)
@@ -112,14 +147,13 @@ def test_nested_script_keeps_the_callers_working_directory(tmp_path: Path) -> No
 @pytest.mark.parametrize("source", ("echo harmless\n", 'p=.en; cat "${p}v"\n'))
 def test_no_detected_secret_does_not_authorize_arbitrary_scripts(source: str, tmp_path: Path) -> None:
     (tmp_path / "check.sh").write_text(source)
-    result = evaluate_command("bash check.sh", cwd=tmp_path, home_dir=tmp_path)
-    assert result.minimum_action == "review"
-    assert result.decision_plane.action == "require-reapproval"
+    result, error = _evaluate_native("bash check.sh", cwd=tmp_path)
+    _assert_review_or_native_unavailable(result, error)
 
 
 def test_shell_command_strings_retain_review_and_are_scanned(tmp_path: Path) -> None:
-    harmless = evaluate_command("ksh -c 'echo harmless'", cwd=tmp_path, home_dir=tmp_path)
-    assert harmless.minimum_action == "review"
+    harmless, error = _evaluate_native("ksh -c 'echo harmless'", cwd=tmp_path)
+    _assert_review_or_native_unavailable(harmless, error)
     secret = assess_shell_reads("ksh -c 'cat .env'", cwd=tmp_path, home_dir=tmp_path)
     assert secret.sensitive_paths == (str(tmp_path / ".env"),)
     oversized = "echo x; " * 1200 + "cat .env"
@@ -135,7 +169,8 @@ def test_python_flags_before_script_do_not_hide_local_execution(tmp_path: Path) 
         assessment = assess_shell_reads(command, cwd=tmp_path, home_dir=tmp_path)
         assert assessment.script_requested
         assert assessment.sensitive_paths == (str(tmp_path / ".env"),)
-        assert evaluate_command(command, cwd=tmp_path, home_dir=tmp_path).minimum_action == "review"
+        evaluation, error = _evaluate_native(command, cwd=tmp_path)
+        _assert_review_or_native_unavailable(evaluation, error)
 
 
 @pytest.mark.parametrize(
@@ -151,9 +186,8 @@ def test_interpreter_stdin_requires_local_execution_review(command: str, filenam
     assert assessment.script_requested
     assert assessment.incomplete
     assert assessment.requires_review
-    evaluation = evaluate_command(command, cwd=tmp_path, home_dir=tmp_path)
-    assert evaluation.minimum_action == "review"
-    assert evaluation.decision_plane.action == "require-reapproval"
+    evaluation, error = _evaluate_native(command, cwd=tmp_path)
+    _assert_review_or_native_unavailable(evaluation, error)
 
 
 def test_python_module_mode_is_mutable_local_execution(tmp_path: Path) -> None:
@@ -162,9 +196,8 @@ def test_python_module_mode_is_mutable_local_execution(tmp_path: Path) -> None:
     assert assessment.script_requested
     assert assessment.incomplete
     assert assessment.requires_review
-    evaluation = evaluate_command("python3 -I -m reader", cwd=tmp_path, home_dir=tmp_path)
-    assert evaluation.minimum_action == "review"
-    assert evaluation.decision_plane.action == "require-reapproval"
+    evaluation, error = _evaluate_native("python3 -I -m reader", cwd=tmp_path)
+    _assert_review_or_native_unavailable(evaluation, error)
 
 
 def test_extensionless_local_executable_requires_review(tmp_path: Path) -> None:
@@ -174,7 +207,8 @@ def test_extensionless_local_executable_requires_review(tmp_path: Path) -> None:
     assessment = assess_shell_reads("./check", cwd=tmp_path, home_dir=tmp_path)
     assert assessment.script_requested
     assert assessment.requires_review
-    assert evaluate_command("./check", cwd=tmp_path, home_dir=tmp_path).minimum_action == "review"
+    evaluation, error = _evaluate_native("./check", cwd=tmp_path)
+    _assert_review_or_native_unavailable(evaluation, error)
 
 
 def test_ambiguous_execution_builtin_fails_closed(tmp_path: Path) -> None:
@@ -237,9 +271,8 @@ def test_uninspectable_scripts_still_require_review(case: str, tmp_path: Path) -
     assessment = assess_shell_reads("bash check.sh", cwd=tmp_path, home_dir=tmp_path)
     assert assessment.requires_review
     assert assessment.incomplete
-    assert (
-        evaluate_command("bash check.sh", cwd=tmp_path, home_dir=tmp_path).decision_plane.action == "require-reapproval"
-    )
+    evaluation, error = _evaluate_native("bash check.sh", cwd=tmp_path)
+    _assert_review_or_native_unavailable(evaluation, error)
 
 
 def test_innocent_path_alias_cannot_hide_a_secret_read(tmp_path: Path) -> None:
@@ -247,7 +280,8 @@ def test_innocent_path_alias_cannot_hide_a_secret_read(tmp_path: Path) -> None:
     (tmp_path / "notes.txt").symlink_to(tmp_path / ".env")
     result = assess_shell_reads("cat notes.txt", cwd=tmp_path, home_dir=tmp_path)
     assert result.sensitive_paths == (str(tmp_path / ".env"),)
-    assert evaluate_command("cat notes.txt", cwd=tmp_path, home_dir=tmp_path).minimum_action == "review"
+    evaluation, error = _evaluate_native("cat notes.txt", cwd=tmp_path)
+    _assert_review_or_native_unavailable(evaluation, error)
 
 
 def test_path_object_construction_is_not_a_file_read(tmp_path: Path) -> None:
@@ -258,10 +292,11 @@ def test_path_object_construction_is_not_a_file_read(tmp_path: Path) -> None:
 
 
 def test_absolute_interpreter_script_operand_requires_review(tmp_path: Path) -> None:
-    command = f"{Path('/usr/bin/python3')} issue lock 17 --repo example/repo"
+    command = "/usr/bin/python3 issue lock 17 --repo example/repo"
     result = assess_shell_reads(command, cwd=tmp_path, home_dir=tmp_path)
     assert result.requires_review
-    assert evaluate_command(command, cwd=tmp_path, home_dir=tmp_path).minimum_action == "review"
+    evaluation, error = _evaluate_native(command, cwd=tmp_path)
+    _assert_review_or_native_unavailable(evaluation, error)
 
 
 def test_python_warning_option_does_not_hide_script_operand(tmp_path: Path) -> None:

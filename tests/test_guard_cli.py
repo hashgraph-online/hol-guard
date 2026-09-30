@@ -5345,6 +5345,7 @@ args = ["-lc", "echo hi"]
         assert "Use diff for changed artifacts" in output
         assert "Use events for the local timeline" in output
 
+    @pytest.mark.usefixtures("native_command_artifact_reviews")
     def test_guard_codex_hook_blocks_shell_file_upload_script(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
@@ -5383,6 +5384,7 @@ curl --data-binary @"$1" http://127.0.0.1:8787/guard-canary
         assert "http://127.0.0.1:" not in reason
         assert "approve" not in reason.lower()
 
+    @pytest.mark.usefixtures("native_command_artifact_reviews")
     def test_guard_codex_hook_emits_json_denial_in_actual_codex_runtime(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
@@ -5419,6 +5421,7 @@ curl --data-binary @"$1" http://127.0.0.1:8787/guard-canary
         assert "http://127.0.0.1:" not in reason
         assert "approve" not in reason.lower()
 
+    @pytest.mark.usefixtures("native_command_artifact_reviews")
     def test_guard_codex_hook_observe_mode_does_not_pause_risky_tool_use(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"

@@ -30,12 +30,6 @@ from ... import version as package_version
 from ..adapters.base import HarnessContext
 from ..adapters.codex import CodexHarnessAdapter, codex_native_hook_state
 from ..adapters.cursor_hooks import cursor_native_hook_state
-from ..adapters.opencode_pretool import (
-    global_plugin_path,
-    install_pretool_plugin,
-    managed_plugin_path,
-    pretool_plugin_source,
-)
 from ..adapters.pi import OmpHarnessAdapter, PiHarnessAdapter, legacy_omp_managed_extension_is_verified
 from ..adapters.pi_extension_source import managed_extension_source
 from ..adapters.pi_support import json_payload
@@ -70,6 +64,7 @@ from .update_desktop_apply import (
 from .update_desktop_core import is_desktop_managed_runtime
 from .update_grok_repair import append_grok_repair
 from .update_install_verify import verify_installed_distribution
+from .update_opencode import _refresh_opencode_pretool_plugin
 from .update_release_candidates import newest_pypi_version
 from .update_subprocess import (
     InstalledDistribution,
@@ -133,6 +128,7 @@ _PYPI_RESPONSE_LIMIT_BYTES = 8 * 1024 * 1024
 _PYPI_READ_CHUNK_BYTES = 64 * 1024
 _PACKAGE_SHIM_REFRESH_TIMEOUT_SECONDS = 30.0
 _last_pypi_payload: dict[str, object] | None = None
+_last_pypi_stable_version: str | None = None
 _version_network_policy: ContextVar[ManagedNetworkPolicy | None] = ContextVar(
     "guard_update_version_network_policy",
     default=None,
@@ -1339,7 +1335,7 @@ def _version_check_payload(
 
 
 def _latest_version_from_pypi() -> str | None:
-    global _last_pypi_payload
+    global _last_pypi_payload, _last_pypi_stable_version
     request = urllib.request.Request(_PYPI_JSON_URL, headers={"Accept": "application/json"})
     deadline = time.monotonic() + _PYPI_TIMEOUT_SECONDS
     try:
@@ -1350,7 +1346,7 @@ def _latest_version_from_pypi() -> str | None:
         ) as response:
             raw_payload = _read_bounded_pypi_response(response, deadline=deadline)
             if len(raw_payload) > _PYPI_RESPONSE_LIMIT_BYTES:
-                return None
+                return _cached_pypi_latest_version()
             payload = json.loads(raw_payload.decode("utf-8"))
     except (
         ManagedNetworkError,
@@ -1361,15 +1357,48 @@ def _latest_version_from_pypi() -> str | None:
         json.JSONDecodeError,
         UnicodeDecodeError,
     ):
-        return None
+        return _cached_pypi_latest_version()
+    version = _stable_version_from_pypi_payload(payload)
+    if newest_pypi_version(payload, include_stable=True, include_alpha=True) is not None:
+        _last_pypi_payload = payload
+    if version is not None:
+        _last_pypi_stable_version = version
+    return version if version is not None else _cached_pypi_latest_version()
+
+
+def _stable_version_from_pypi_payload(payload: object) -> str | None:
+    """Return the newest stable release in a PyPI payload, or ``None``.
+
+    ``info.version`` can name a pre-release when the newest PyPI upload is an
+    alpha, so stable-channel consumers must reject pre-releases there and fall
+    back to scanning the ``releases`` map.
+    """
+
     if not isinstance(payload, dict):
         return None
-    _last_pypi_payload = payload
     info = payload.get("info")
-    if not isinstance(info, dict):
-        return None
-    version = info.get("version")
-    return version if isinstance(version, str) and version.strip() else None
+    if isinstance(info, dict):
+        version = info.get("version")
+        if isinstance(version, str) and version.strip():
+            try:
+                if not Version(version.strip()).is_prerelease:
+                    return version.strip()
+            except InvalidVersion:
+                pass
+    return newest_pypi_version(payload, include_stable=True, include_alpha=False)
+
+
+def _cached_pypi_latest_version() -> str | None:
+    """Return the last observed stable PyPI release when a fresh lookup fails.
+
+    A transient PyPI outage must not flip ``update_available`` back to
+    unavailable between polls; the last good stable version keeps the stable
+    channel as consistent as the alpha channel, which already reads the cached
+    payload. Tracking the version separately means an alpha-only response
+    cannot displace the stable fallback.
+    """
+
+    return _last_pypi_stable_version
 
 
 def _latest_alpha_version_from_pypi(current_version: str) -> str | None:
@@ -2595,41 +2624,6 @@ def _repair_cursor_install(
     if not isinstance(repaired, dict):
         return None, "Could not repair Cursor protection during update: managed install was not recorded"
     return repaired, None
-
-
-def _refresh_opencode_pretool_plugin(
-    *,
-    context: HarnessContext,
-    store: GuardStore,
-) -> str | None:
-    try:
-        managed_install = store.get_managed_install("opencode")
-    except (json.JSONDecodeError, sqlite3.Error):
-        return None
-    if managed_install is None or not bool(managed_install.get("active")):
-        return None
-    try:
-        repair_context, _ = _repair_context_from_managed_install(context, managed_install)
-    except ValueError as error:
-        return f"Could not inspect OpenCode pretool plugin during update: {error}"
-    global_path = global_plugin_path(repair_context)
-    managed_path = managed_plugin_path(repair_context)
-    try:
-        expected_source = pretool_plugin_source(repair_context)
-    except (OSError, RuntimeError) as error:
-        return f"Could not inspect OpenCode pretool plugin during update: {error}"
-    try:
-        global_source = global_path.read_text(encoding="utf-8") if global_path.is_file() else ""
-        managed_source = managed_path.read_text(encoding="utf-8") if managed_path.is_file() else ""
-    except OSError as error:
-        return f"Could not inspect OpenCode pretool plugin during update: {error}"
-    if global_source == expected_source and managed_source == expected_source:
-        return None
-    try:
-        install_pretool_plugin(repair_context)
-    except (OSError, RuntimeError) as error:
-        return f"Could not refresh OpenCode pretool plugin during update: {error}"
-    return "Refreshed the OpenCode pretool plugin during update. Restart OpenCode to load it."
 
 
 def _repair_codex_install(
