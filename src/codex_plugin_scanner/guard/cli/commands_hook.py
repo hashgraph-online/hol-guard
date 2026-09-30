@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+from functools import partial
 from typing import TYPE_CHECKING
 
 from ..daemon.hook_availability_policy import availability_harness_response
@@ -164,7 +165,7 @@ def _run_guard_hook_command(
         resolve_copilot_workspace_root=_resolve_copilot_workspace_root,
         action_envelope_for=_hook_action_envelope,
         copilot_hook_stage_for=_copilot_hook_stage,
-        copilot_runtime_tool_call_for=_copilot_runtime_tool_call,
+        copilot_runtime_tool_call_for=partial(_copilot_runtime_tool_call, store=store),
         config=config,
     )
     if cursor_result is not None:
@@ -191,6 +192,7 @@ def _run_guard_hook_command(
             workspace=runtime_workspace,
             config=fresh_config,
             preferred_workspace_config="ide" if workspace_was_explicit else "cli",
+            store=store,
         )
         if fresh_tool_call is None:
             return None
@@ -219,6 +221,7 @@ def _run_guard_hook_command(
             workspace=runtime_workspace,
             config=config,
             preferred_workspace_config="ide" if workspace_was_explicit else "cli",
+            store=store,
         )
         if args.harness == "copilot" and _is_copilot_permission_request(payload)
         else None

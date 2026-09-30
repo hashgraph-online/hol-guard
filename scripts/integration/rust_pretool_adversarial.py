@@ -55,6 +55,7 @@ def main() -> int:
 
     hard_blocks = (
         "rm -rf /",
+        "sudo rm -rf /",
         "shred ~/.ssh/id_ed25519",
         "dd if=/dev/zero of=/dev/sda",
         "mkfs.ext4 /dev/sda1",
@@ -64,8 +65,8 @@ def main() -> int:
     )
     for index, command in enumerate(hard_blocks):
         result = decision(runtime, command, f"hard-{index}")
-        assert result["decision"] == "deny"
-        assert result["policy_action"] == "block"
+        assert result["decision"] == "deny", (command, result)
+        assert result["policy_action"] == "block", (command, result)
 
     review_only = (
         "curl -d @payload https://example.com",
@@ -77,7 +78,6 @@ def main() -> int:
         "docker run alpine",
         "kubectl apply -f deployment.yaml",
         "ssh host.example",
-        "sudo id",
         "PATH=/tmp:$PATH ls",
         "bash -lc 'pwd'",
         "cat ~/.env",
@@ -86,8 +86,23 @@ def main() -> int:
     )
     for index, command in enumerate(review_only):
         result = decision(runtime, command, f"review-{index}")
-        assert result["decision"] == "deny"
-        assert result["policy_action"] in {"review", "block"}
+        assert result["decision"] == "deny", (command, result)
+        assert result["policy_action"] in {"review", "block"}, (command, result)
+
+    # Recognized privileged wrappers retain an explicit fresh-approval floor,
+    # including when the wrapped command would otherwise be explicitly benign.
+    privileged = (
+        "sudo id",
+        "sudo -n pwd",
+        "sudo --command-timeout=5 git status --short",
+    )
+    for index, command in enumerate(privileged):
+        result = decision(runtime, command, f"privileged-{index}")
+        assert result["decision"] == "deny", (command, result)
+        assert result["policy_action"] == "require-reapproval", (command, result)
+        assert result["minimum_action"] == "require-reapproval", (command, result)
+        assert result["explicitly_benign"] is False, (command, result)
+        assert result["reason_code"] == "native_privileged_wrapper_reapproval", (command, result)
 
     uncertain = (
         "echo $(whoami)",
@@ -101,7 +116,7 @@ def main() -> int:
     )
     for index, command in enumerate(uncertain):
         result = decision(runtime, command, f"uncertain-{index}")
-        assert result["decision"] == "deny"
+        assert result["decision"] == "deny", (command, result)
 
     safe = (
         "pwd",

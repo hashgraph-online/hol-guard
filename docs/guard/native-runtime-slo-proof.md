@@ -21,6 +21,15 @@ budget. c64 has no latency ceiling: every result must be either a resident
 allowed decision or an explicitly classified bounded capacity/overload
 response, with zero request errors and no hang.
 
+Each resident-recovery sample first proves a resident allow decision, then
+requires the Rust stop command to verify containment of that resident. The
+installed adapter's persistent Rust client streams remain alive, matching a
+resident restart in production: their next request re-discovers and
+authenticates the new resident generation. The complete next adapter request
+is timed against the unchanged 1,000 ms budget. Cold one-shot probes and final
+session cleanup retain full client teardown. Aggregate per-sample diagnostics
+report both adapter time and the enclosing measurement time.
+
 The c16 latency proof uses a dedicated, fully started 16-thread client executor
 so thread creation and a larger benchmark-only client pool cannot distort the
 production contention being measured. RSS is evaluated separately after c16.

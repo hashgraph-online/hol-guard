@@ -1,0 +1,70 @@
+{
+  "schema": "guard.command-extension-source.v1",
+  "extension": {
+    "extension_id": "command.example-cli",
+    "version": "1.0.0",
+    "name": "Example CLI protection",
+    "description": "Synthetic data-only extension for native compiler qualification.",
+    "action_classes": ["example destructive operation"],
+    "risk_classes": ["destructive_shell"],
+    "safer_alternatives": ["Inspect the plan with --dry-run."],
+    "reference_urls": ["https://example.com/cli"],
+    "required": false,
+    "source": "built-in",
+    "aliases": [],
+    "dependencies": [],
+    "conflicts": [],
+    "ecosystem_ids": [],
+    "executables": ["example-cli"],
+    "project_markers": [],
+    "permissions": [
+      {
+        "permission_id": "command.example-cli.permission.destroy",
+        "implementation_version": "1.0.0",
+        "label": "Destroy example resource",
+        "description": "Reviews a synthetic destructive action.",
+        "risk_tier": "high",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": ["example destructive operation"],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "deprecated": false,
+        "safer_guidance": ["Inspect the plan with --dry-run."],
+        "example_command": "example-cli destroy"
+      }
+    ],
+    "rules": [
+      {
+        "rule_id": "command.example-cli.destroy",
+        "rule_version": "1.0.0",
+        "permission_id": "command.example-cli.permission.destroy",
+        "title": "Destroy example resource",
+        "description": "Matches only the synthetic executable and argument.",
+        "severity": "high",
+        "risk_classes": ["destructive_shell"],
+        "action_classes": ["example destructive operation"],
+        "safer_alternatives": ["Inspect the plan with --dry-run."],
+        "default_mode": "review",
+        "matcher": {
+          "op": "arguments.v1",
+          "config": {"executables": ["example-cli"], "required_arguments": ["destroy"]}
+        },
+        "safe_variants": [
+          {
+            "variant_id": "dry-run",
+            "title": "Inspect the plan",
+            "matcher": {
+              "op": "arguments.v1",
+              "config": {"executables": ["example-cli"], "required_arguments": ["--dry-run"]}
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

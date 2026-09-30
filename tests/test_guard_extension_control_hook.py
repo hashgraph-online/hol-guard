@@ -49,6 +49,7 @@ from codex_plugin_scanner.guard.store import GuardStore
         ("git push --force origin feature", "command.git.permission.force-push", True),
     ),
 )
+@pytest.mark.usefixtures("native_command_artifact_reviews")
 def test_guard_hook_honors_explicit_extension_permission(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

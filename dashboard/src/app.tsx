@@ -22,6 +22,7 @@ import {
   resolveRequestWithQueueResult,
   GuardRequestResolutionError,
   retryResume,
+  ensureGuardDashboardSession,
 } from "./guard-api";
 import { ApprovalCenterLayout, type BulkGateCredentials } from "./approval-center-layout";
 import type { AppView } from "./approval-center-primitives";
@@ -32,6 +33,7 @@ import { lazyWorkspace } from "./lazy-workspace";
 import { runAutomaticProtectionRepair } from "./protection-repair-flow";
 import { selectNextAfterResolution } from "./queue-state";
 import { useRouteFocus } from "./use-route-focus";
+import { commitDashboardLocation, useDashboardPathname } from "./dashboard-location";
 
 const HomeWorkspace = lazyWorkspace("home-dashboard", () => import("./home-dashboard").then((m) => ({ default: m.HomeWorkspace })));
 const FleetWorkspace = lazyWorkspace("fleet-workspace", () => import("./fleet-workspace").then((m) => ({ default: m.FleetWorkspace })));
@@ -49,6 +51,9 @@ const PolicyWorkspacePage = lazyWorkspace("policy-workspace-page", () =>
 );
 const AboutWorkspace = lazyWorkspace("about-workspace", () =>
   import("./about/about-workspace").then((m) => ({ default: m.AboutWorkspace }))
+);
+const ProtectionRepairPage = lazyWorkspace("protection-repair-page", () =>
+  import("./protection-repair-page").then((m) => ({ default: m.ProtectionRepairPage }))
 );
 
 function LazyFallback() {
@@ -109,21 +114,8 @@ type InventoryState =
   | { kind: "error"; message: string }
   | { kind: "ready"; items: GuardInventoryItem[] };
 
-function usePathname(): string {
-  const [pathname, setPathname] = useState(window.location.pathname);
-
-  useEffect(() => {
-    const onPopState = () => setPathname(window.location.pathname);
-    window.addEventListener("popstate", onPopState);
-    return () => window.removeEventListener("popstate", onPopState);
-  }, []);
-
-  return pathname;
-}
-
 function navigate(pathname: string): void {
-  window.history.pushState({}, "", guardAwareHref(pathname));
-  window.dispatchEvent(new PopStateEvent("popstate"));
+  commitDashboardLocation(guardAwareHref(pathname));
 }
 
 function focusVisibleDashboardSearch(): boolean {
@@ -163,6 +155,7 @@ export function viewTitle(view: AppView): string {
   if (view === "feed-health") return "Feed Health";
   if (view === "about") return "About";
   if (view === "extensions") return "Extensions";
+  if (view === "protection-repair") return "Repair protection";
   return "App detail";
 }
 
@@ -187,6 +180,9 @@ export function resolveView(pathname: string): AppView {
   }
   if (pathname === "/extensions" || pathname.startsWith("/extensions/")) {
     return "extensions";
+  }
+  if (pathname === "/protection/repair") {
+    return "protection-repair";
   }
   if (pathname === "/settings") {
     return "settings";
@@ -248,7 +244,7 @@ async function loadDetail(requestId: string): Promise<Exclude<DetailState, { kin
           return { kind: "mcp-policy", requestId };
         }
       } catch {
-        // Swallow — the original 404 is the source of truth here.
+        // Swallow the MCP probe error; the original 404 is the source of truth here.
       }
       return { kind: "stale" };
     }
@@ -280,7 +276,7 @@ export function shouldFetchArtifactDiff(artifactType: string): boolean {
 }
 
 export function App() {
-  const pathname = usePathname();
+  const pathname = useDashboardPathname();
   const view = resolveView(pathname);
   useRouteFocus(view);
   const requestId = parseRequestId(pathname);
@@ -299,6 +295,8 @@ export function App() {
   const [approvalGate, setApprovalGate] = useState<GuardApprovalGatePublicConfig | null>(null);
   const [guardVersion, setGuardVersion] = useState<string | null>(null);
   const resolutionInFlight = useRef(false);
+  const refreshSequence = useRef(0);
+  const latestRefresh = useRef<Promise<{ snapshot: GuardRuntimeSnapshot | null; complete: boolean }> | null>(null);
   const bulkApproveInFlight = useRef(false);
   const queuedItems = requests.kind === "ready" ? requests.items : [];
   const activeRequestId = requestId ?? queuedItems[0]?.request_id ?? null;
@@ -573,50 +571,80 @@ export function App() {
     }
   }, []);
 
-  const refreshStateAfterAction = useCallback(async () => {
-    const [inboxResult, receiptsResult, policiesResult, inventoryResult] = await Promise.allSettled([
-      fetchInboxState(),
-      fetchReceipts(),
-      fetchPolicies(),
-      fetchInventory(),
-    ]);
-    if (inboxResult.status === "fulfilled") {
-      setRuntime({ kind: "ready", snapshot: inboxResult.value.snapshot });
-      setRequests({ kind: "ready", items: inboxResult.value.items });
-    } else {
-      const message =
-        inboxResult.reason instanceof Error ? inboxResult.reason.message : "Unable to load the local approval queue.";
-      setRuntime({ kind: "error", message });
-      setRequests({ kind: "error", message });
+  const refreshStateAfterAction = useCallback(async (requireComplete = false) => {
+    const sequence = ++refreshSequence.current;
+    const refresh = (async () => {
+      const [inboxResult, receiptsResult, policiesResult, inventoryResult] = await Promise.allSettled([
+        fetchInboxState(),
+        fetchReceipts(),
+        fetchPolicies(),
+        fetchInventory(),
+      ]);
+      if (sequence !== refreshSequence.current) {
+        return latestRefresh.current!;
+      }
+      if (inboxResult.status === "fulfilled") {
+        setRuntime({ kind: "ready", snapshot: inboxResult.value.snapshot });
+        setRequests({ kind: "ready", items: inboxResult.value.items });
+      } else if (!requireComplete) {
+        const message =
+          inboxResult.reason instanceof Error ? inboxResult.reason.message : "Unable to load the local approval queue.";
+        setRuntime({ kind: "error", message });
+        setRequests({ kind: "error", message });
+      }
+      if (receiptsResult.status === "fulfilled") {
+        setReceipts({ kind: "ready", items: receiptsResult.value });
+      } else if (!requireComplete) {
+        setReceipts({
+          kind: "error",
+          message: receiptsResult.reason instanceof Error ? receiptsResult.reason.message : "Unable to load local approval history.",
+        });
+      }
+      if (policiesResult.status === "fulfilled") {
+        setPolicies({ kind: "ready", items: policiesResult.value });
+      } else if (!requireComplete) {
+        setPolicies({
+          kind: "error",
+          message: policiesResult.reason instanceof Error ? policiesResult.reason.message : "Unable to load remembered decisions.",
+        });
+      }
+      if (inventoryResult.status === "fulfilled") {
+        setInventory({ kind: "ready", items: inventoryResult.value });
+      } else if (!requireComplete) {
+        setInventory({
+          kind: "error",
+          message: inventoryResult.reason instanceof Error ? inventoryResult.reason.message : "Unable to load watched app inventory.",
+        });
+      }
+      return {
+        snapshot: inboxResult.status === "fulfilled" ? inboxResult.value.snapshot : null,
+        complete: [inboxResult, receiptsResult, policiesResult, inventoryResult].every(
+          (result) => result.status === "fulfilled",
+        ),
+      };
+    })();
+    latestRefresh.current = refresh;
+    const outcome = await refresh;
+    if (requireComplete && !outcome.complete) {
+      throw new Error("Guard could not refresh every dashboard view.");
     }
-    if (receiptsResult.status === "fulfilled") {
-      setReceipts({ kind: "ready", items: receiptsResult.value });
-    } else {
-      setReceipts({
-        kind: "error",
-        message: receiptsResult.reason instanceof Error ? receiptsResult.reason.message : "Unable to load local approval history.",
-      });
-    }
-    if (policiesResult.status === "fulfilled") {
-      setPolicies({ kind: "ready", items: policiesResult.value });
-    } else {
-      setPolicies({
-        kind: "error",
-        message: policiesResult.reason instanceof Error ? policiesResult.reason.message : "Unable to load remembered decisions.",
-      });
-    }
-    if (inventoryResult.status === "fulfilled") {
-      setInventory({ kind: "ready", items: inventoryResult.value });
-    } else {
-      setInventory({
-        kind: "error",
-        message: inventoryResult.reason instanceof Error ? inventoryResult.reason.message : "Unable to load watched app inventory.",
-      });
-    }
-    return inboxResult.status === "fulfilled" ? inboxResult.value.snapshot : null;
+    return outcome.snapshot;
   }, [setRuntime, setRequests, setReceipts, setPolicies, setInventory]);
 
-  const refreshStateWithoutResult = useCallback(async () => {
+  const refreshStateWithoutResult = useCallback(async (requireComplete = false) => {
+    await refreshStateAfterAction(requireComplete);
+  }, [refreshStateAfterAction]);
+
+  const handleReconnectSession = useCallback(async () => {
+    setRuntime({ kind: "loading" });
+    setRequests({ kind: "loading" });
+    const reminted = await ensureGuardDashboardSession();
+    if (!reminted) {
+      const message = "unauthorized (401)";
+      setRuntime({ kind: "error", message });
+      setRequests({ kind: "error", message });
+      return;
+    }
     await refreshStateAfterAction();
   }, [refreshStateAfterAction]);
 
@@ -946,6 +974,7 @@ export function App() {
             onOpenCommands={handleOpenCommands}
             onOpenSettings={handleOpenSettings}
             onRefreshRuntime={async () => { await refreshStateAfterAction(); }}
+            onReconnectSession={handleReconnectSession}
             onOpenSupplyChain={handleOpenSupplyChain}
             onClearPolicies={handleClearPolicies}
             onOpenAppDetail={handleOpenAppDetail}
@@ -965,7 +994,6 @@ export function App() {
       onRetry={handleRetry}
       onRepair={handleRepair}
       onGuardReconnected={handleRetry}
-      enableUpdateStatus={view !== "inbox"}
       onClearEvidence={handleClearEvidence}
       fleetContent={
         runtime.kind === "ready" ? (
@@ -994,6 +1022,13 @@ export function App() {
         <ErrorBoundary onReset={handleGoHome}>
           <Suspense fallback={<LazyFallback />}>
             <ExtensionsWorkspace runtime={runtime.kind === "ready" ? runtime.snapshot : null} onRefreshRuntime={refreshStateAfterAction} onNavigate={navigate} />
+          </Suspense>
+        </ErrorBoundary>
+      }
+      protectionRepairContent={
+        <ErrorBoundary onReset={handleGoHome}>
+          <Suspense fallback={<LazyFallback />}>
+            <ProtectionRepairPage onNavigate={navigate} />
           </Suspense>
         </ErrorBoundary>
       }

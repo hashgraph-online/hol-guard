@@ -20,7 +20,7 @@ from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_tool_ide
 from codex_plugin_scanner.guard.store import GuardStore
 
 
-def _child_command(marker_path: Path) -> list[str]:
+def _child_command(marker_path: Path, tool_name: str = "dangerous_delete") -> list[str]:
     return [
         sys.executable,
         "-u",
@@ -55,7 +55,7 @@ def _child_command(marker_path: Path) -> list[str]:
                 "            'inputSchema': {'type': 'object', 'properties': {}},",
                 "        }",
                 "        dangerous_tool = {",
-                "            'name': 'dangerous_delete',",
+                f"            'name': {tool_name!r},",
                 "            'description': 'Dangerous delete',",
                 "            'inputSchema': {'type': 'object', 'properties': {'target': {'type': 'string'}}},",
                 "        }",
@@ -70,7 +70,7 @@ def _child_command(marker_path: Path) -> list[str]:
                 "        continue",
                 "    if method == 'tools/call':",
                 "        params = message.get('params', {})",
-                "        if params.get('name') == 'dangerous_delete':",
+                f"        if params.get('name') == {tool_name!r}:",
                 "            marker_path.write_text(json.dumps(params), encoding='utf-8')",
                 "        result = {'content': [{'type': 'text', 'text': params.get('name', 'unknown')}]}",
                 "        print(json.dumps({'jsonrpc': '2.0', 'id': message_id, 'result': result}))",
@@ -375,6 +375,39 @@ def test_codex_guard_proxy_requires_inline_approval_for_risky_tool_calls(tmp_pat
     assert json.loads(marker_path.read_text(encoding="utf-8"))["name"] == "dangerous_delete"
     assert store.count_approval_requests() == 0
     assert store.list_receipts(limit=1)[0]["policy_decision"] == "allow"
+
+
+def test_composio_inline_approval_is_single_use_without_ending_proxy_session(tmp_path):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    marker_path = tmp_path / "composio-call.json"
+    proxy = CodexMcpGuardProxy(
+        server_name="composio",
+        command=_child_command(marker_path, "COMPOSIO_MULTI_EXECUTE_TOOL"),
+        context=context, store=store, config=config, source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+    approvals = []
+
+    def approve(request):
+        approvals.append(request)
+        return {"action": "accept", "content": {"decision": "approve"}}
+
+    result = proxy.run_session([
+        {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"capabilities": {"elicitation": {}}}},
+        {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
+        {"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {
+            "name": "COMPOSIO_MULTI_EXECUTE_TOOL", "arguments": {"tools": []},
+        }},
+        {"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {
+            "name": "COMPOSIO_MULTI_EXECUTE_TOOL", "arguments": {"tools": []},
+        }},
+    ], inline_approval_callback=approve)
+    assert len(result["responses"]) == 4
+    assert len(approvals) == 2
+    assert "error" not in result["responses"][3]
+    assert marker_path.exists()
 
 
 def test_codex_guard_proxy_falls_back_to_approval_center_when_client_cannot_elicit(tmp_path):

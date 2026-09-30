@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { composeCommand, safeProjectName, type CommandResult } from "./lab-process";
+import { composeCommand, runCommand, safeProjectName, type CommandResult } from "./lab-process";
 import { runInstalledPlaywright } from "./installed-playwright";
 import { fetchLabGet, fetchLabIdempotent } from "./relay-fetch";
 import { readyFromLogs } from "./runner";
@@ -16,6 +16,15 @@ describe("command extension analytics Dockerlabs orchestration", () => {
     expect(safeProjectName("Guard Command Analytics 42")).toBe("guard-command-analytics-42");
     expect(() => safeProjectName("../")).toThrow("invalid Dockerlabs project name");
     expect(() => safeProjectName("x".repeat(49))).toThrow("invalid Dockerlabs project name");
+  });
+
+  test("terminates a stalled diagnostic command", async () => {
+    const started = Date.now();
+    const timedOut = await runCommand([process.execPath, "-e", "await Bun.sleep(10_000)"], { timeoutMs: 100 });
+    expect(timedOut.exitCode).not.toBe(0);
+    expect(Date.now() - started).toBeLessThan(3_000);
+    await expect(runCommand([process.execPath, "-e", ""], { timeoutMs: 0 }))
+      .rejects.toThrow("timeoutMs must be a positive integer");
   });
 
   test("uses a pinned compose file and explicit project", () => {
@@ -64,18 +73,28 @@ describe("command extension analytics Dockerlabs orchestration", () => {
     }
   });
 
-  test("keeps Guard internal and publishes only the fixed-target relay", async () => {
+  test("publishes only the loopback relay while Guard stays on the internal network", async () => {
     const compose = await Bun.file(`${import.meta.dir}/docker-compose.yml`).text();
+    const server = await Bun.file(`${import.meta.dir}/installed_server.py`).text();
+    const relay = await Bun.file(`${import.meta.dir}/tcp_relay.py`).text();
     const guardBlock = compose.slice(compose.indexOf("  guard:"), compose.indexOf("  relay:"));
     const relayStart = compose.indexOf("  relay:");
-    const relayBlock = compose.slice(relayStart, compose.indexOf("\nvolumes:", relayStart));
+    const relayBlock = compose.slice(relayStart, compose.indexOf("  host_relay:", relayStart));
+    const hostRelayBlock = compose.slice(compose.indexOf("  host_relay:"), compose.indexOf("\nvolumes:"));
     expect(guardBlock).toContain("- guard-analytics");
     expect(guardBlock).not.toContain("ports:");
     expect(relayBlock).toContain('["python", "/opt/guard-lab/tcp_relay.py"]');
-    expect(relayBlock).toContain('"127.0.0.1:${HOL_GUARD_LAB_PORT:?set by runner}:4781"');
-    expect(relayBlock).toContain("- guard-analytics\n      - host-access");
+    expect(relayBlock).toContain('network_mode: "service:guard"');
+    expect(relayBlock).not.toContain("ports:");
     expect(relayBlock).toContain("condition: service_healthy");
+    expect(hostRelayBlock).toContain('"127.0.0.1:${HOL_GUARD_LAB_PORT:?set by runner}:4783"');
+    expect(hostRelayBlock).toContain("- host-access");
+    expect(hostRelayBlock).toContain("- guard-analytics");
+    expect(hostRelayBlock).toContain("condition: service_healthy");
     expect(compose).toContain("guard-analytics:\n    internal: true");
+    expect(server).toContain('host="127.0.0.1"');
+    expect(relay).toContain('"guard": (("0.0.0.0", 4782), ("127.0.0.1", 4781))');
+    expect(relay).toContain('"host_relay": (("0.0.0.0", 4783), ("guard", 4782))');
   });
 
   test("preserves exact wheel bindings when compose reparses the lab", async () => {
@@ -131,6 +150,30 @@ describe("command extension analytics Dockerlabs orchestration", () => {
       proofScanned = true;
     })).rejects.toThrow("installed dashboard Playwright failed");
     expect(proofScanned).toBe(true);
+  });
+
+  test("reports a browser failure alongside the proof failure without exposing private values", async () => {
+    const session = "secret-session-value";
+    let invocation = 0;
+    let failure: Error | null = null;
+    try {
+      await runInstalledPlaywright("http://127.0.0.1:4781", session, 7, "proof", async () => {
+        invocation += 1;
+        return invocation === 1 ? result() : {
+          exitCode: 1,
+          stdout: `browser assertion failed: ${session} guard-private-command-sentinel`,
+          stderr: "bun wrapper failed",
+        };
+      }, async () => {
+        throw new Error(`private value retained in proof: ${session}`);
+      });
+    } catch (error) {
+      if (error instanceof Error) failure = error;
+    }
+    expect(failure?.message).toContain("browser assertion failed");
+    expect(failure?.message).toContain("private value retained in proof");
+    expect(failure?.message).not.toContain(session);
+    expect(failure?.message).not.toContain("guard-private-command-sentinel");
   });
 
   test("teardown removes volumes and orphans then proves zero resources", async () => {
@@ -193,6 +236,8 @@ describe("command extension analytics Dockerlabs orchestration", () => {
     expect(dockerignore).toContain("tcp_relay.py");
     expect(compose).not.toContain("../../src");
     expect(compose).toContain("internal: true");
+    expect(compose).toContain('HOL_GUARD_NATIVE: "off"');
+    expect(compose).toContain('HOL_GUARD_PYTHON_ORACLE: "1"');
     expect(compose).toContain("no-new-privileges:true");
     expect(compose).not.toContain("SYS_ADMIN");
     expect(compose).not.toContain("seccomp:unconfined");
@@ -209,8 +254,8 @@ describe("command extension analytics Dockerlabs orchestration", () => {
     expect(server).not.toContain('[\n        "hol-guard",\n        "guard",\n        "hook",');
     expect(server).toContain('"git status --short"');
     expect(server).toContain('"git diff --stat"');
-    expect(server).toContain('"git push --delete origin stale-lab-branch"');
-    expect(server).toContain('"shutdown -h now # {SENTINEL}"');
+    expect(server).toContain('"rm -rf ./stale-lab-dir"');
+    expect(server).toContain('"rm -rf ./stale-lab-dir # {SENTINEL}"');
     expect(server).not.toContain("execute_contained");
     expect(containmentProbe).toContain('Path("/bin/sh").resolve(strict=True)');
     expect(containmentProbe).toContain("execute_contained(request");

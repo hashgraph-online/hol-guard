@@ -3,7 +3,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { assertSimpleCopySafe, localSettingChoiceLabel, PROTECTION_TERMS, protectionCenterLoadError, simpleCopyViolations } from "./copy/protection-copy";
-import { CatalogFilterBar } from "./components/catalog-filter-bar";
+import { CatalogFilterBar, CatalogFilterTrigger } from "./components/catalog-filter-bar";
 import { ProtectionModuleRow, ProtectionStatusHero, TechnicalDetails } from "./components/protection-primitives";
 import {
   CLOUD_CONNECTED_FIXTURE,
@@ -163,21 +163,38 @@ assert.match(mcpRow, />MCP</);
 assert.match(mcpRow, />External</);
 assert.match(mcpRow, /Off until you turn it on/);
 
-const filterBar = renderToStaticMarkup(createElement(CatalogFilterBar, {
-  catalog: [
-    protectionModuleFixture({ extension_id: "command.git", name: "Git" }),
-    protectionModuleFixture({
-      extension_id: "command.mcp-filesystem",
-      name: "Filesystem MCP",
-      trust_class: "external",
-      surface: "mcp",
-      description: "Reviews official filesystem MCP tools.",
-    }),
-  ],
-  filters: EMPTY_CATALOG_FILTERS,
-  onChange: () => undefined,
-}));
+const filterCatalog = [
+  protectionModuleFixture({ extension_id: "command.git", name: "Git" }),
+  protectionModuleFixture({
+    extension_id: "command.mcp-filesystem",
+    name: "Filesystem MCP",
+    trust_class: "external",
+    surface: "mcp",
+    description: "Reviews official filesystem MCP tools.",
+  }),
+];
+const filterBar = renderToStaticMarkup(createElement("div", { "data-testid": "catalog-filters" },
+  createElement(CatalogFilterTrigger, {
+    open: false,
+    activeCount: 0,
+    panelId: "catalog-filter-panel-test",
+    buttonRef: { current: null },
+    onToggle: () => undefined,
+  }),
+  createElement(CatalogFilterBar, {
+    catalog: filterCatalog,
+    filters: EMPTY_CATALOG_FILTERS,
+    onChange: () => undefined,
+    open: false,
+    onOpenChange: () => undefined,
+    panelId: "catalog-filter-panel-test",
+  }),
+));
 assert.match(filterBar, /data-testid="catalog-filters"/);
+assert.match(filterBar, /aria-expanded="false"/);
+assert.match(filterBar, /aria-controls="catalog-filter-panel-test"/);
+assert.match(filterBar, /id="catalog-filter-panel-test"/);
+assert.match(filterBar, /hidden/);
 assert.match(filterBar, /<legend[^>]*>Trust<\/legend>/);
 assert.match(filterBar, /<legend[^>]*>Kind<\/legend>/);
 assert.match(filterBar, /<legend[^>]*>Area<\/legend>/);
@@ -188,7 +205,23 @@ assert.match(filterBar, />MCP</);
 assert.match(filterBar, />Commands</);
 assert.match(filterBar, />Source control</);
 assert.match(filterBar, /aria-pressed="false"/);
+assert.match(filterBar, /data-testid="catalog-filter-count"/);
 assert.doesNotMatch(filterBar, /Clear filters/);
+
+const filteringBar = renderToStaticMarkup(createElement(CatalogFilterBar, {
+  catalog: filterCatalog,
+  filters: { trusts: ["external"], kinds: [], areas: [] },
+  onChange: () => undefined,
+  open: true,
+  onOpenChange: () => undefined,
+  panelId: "catalog-filter-panel-open",
+}));
+assert.match(filteringBar, /data-testid="catalog-filter-tokens"/);
+assert.match(filteringBar, /Remove External trust filter/);
+assert.match(filteringBar, />Clear filters</);
+assert.match(filteringBar, />Clear all 1 filter</);
+assert.match(filteringBar, /1 of 2 tools/);
+assert.doesNotMatch(filteringBar, /<div id="catalog-filter-panel-open"[^>]*hidden/);
 
 const technical = renderToStaticMarkup(createElement(TechnicalDetails, { children: createElement("code", null, "command.git") }));
 assert.match(technical, /<details/);

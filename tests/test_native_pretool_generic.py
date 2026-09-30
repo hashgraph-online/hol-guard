@@ -102,7 +102,7 @@ def _sync_receipt(edge: dict[str, object]) -> None:
     receipt["decision_id"] = hashlib.sha256(canonical_receipt_bytes(receipt)).hexdigest()
 
 
-@pytest.mark.parametrize("harness", ("claude-code", "codex", "cline", "cursor", "copilot", "grok", "zcode"))
+@pytest.mark.parametrize("harness", ("claude-code", "codex", "cline", "cursor", "copilot", "grok", "zcode", "devin"))
 def test_generic_result_decoder_accepts_supported_harnesses(harness: str) -> None:
     edge = _edge(harness, "PreToolUse", "unknown")
     assert _decode_edge(edge) == edge
@@ -212,6 +212,25 @@ def test_generic_warning_result_is_allow_with_warning_and_renders_mechanically()
     hook_specific = rendered["hookSpecificOutput"]
     assert isinstance(hook_specific, dict)
     assert hook_specific["permissionDecision"] == "allow"
+    assert hook_specific["permissionDecisionReason"] == result["reason"]
+
+
+def test_observe_mode_policy_floor_does_not_print_a_hook_reason() -> None:
+    rendered = harness_json_from_native_pre_tool(
+        "codex",
+        {
+            "decision": "allow",
+            "policy_action": "warn",
+            "minimum_action": "warn",
+            "reason_code": "native_policy_observed",
+            "reason": "HOL Guard observed a stricter installed native policy floor.",
+            "explicitly_benign": False,
+        },
+    )
+    hook_specific = rendered["hookSpecificOutput"]
+    assert isinstance(hook_specific, dict)
+    assert hook_specific["permissionDecision"] == "allow"
+    assert "permissionDecisionReason" not in hook_specific
 
 
 @pytest.mark.parametrize(

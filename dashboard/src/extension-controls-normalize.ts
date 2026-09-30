@@ -211,10 +211,18 @@ function permission(value: unknown, extensionId: string, label: string): Extensi
 
 function mcpLaunch(value: unknown, label: string): McpLaunch {
   const item = record(value, label);
+  const kind = enumValue(item.kind, `${label}.kind`, ["package-launcher", "remote-http"] as const);
+  if (kind === "package-launcher") {
+    return {
+      kind,
+      command: string(item.command, `${label}.command`),
+      package: string(item.package, `${label}.package`),
+    };
+  }
   return {
-    kind: enumValue(item.kind, `${label}.kind`, ["package-launcher"] as const),
-    command: string(item.command, `${label}.command`),
-    package: string(item.package, `${label}.package`),
+    kind,
+    url: string(item.url, `${label}.url`),
+    serverNames: stringList(item.serverNames, `${label}.serverNames`, 8),
   };
 }
 
@@ -222,7 +230,7 @@ function mcpTool(value: unknown, label: string): McpToolDefault {
   const item = record(value, label);
   return {
     name: string(item.name, `${label}.name`),
-    state: enumValue(item.state, `${label}.state`, ["inherit", "allow", "block"] as const),
+    state: enumValue(item.state, `${label}.state`, ["inherit", "allow", "review", "block"] as const),
   };
 }
 

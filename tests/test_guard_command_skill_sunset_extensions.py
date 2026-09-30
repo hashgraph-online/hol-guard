@@ -6,12 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
 from codex_plugin_scanner.guard.runtime.command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
     risk_classes_for_command_action,
 )
-from codex_plugin_scanner.guard.runtime.command_inspection import inspect_command
+from tests.native_command_test_support import inspect_command_native_test as inspect_command
+from tests.native_command_test_support import real_native_command_evaluation
 
 _ACTION_CLASS = "Skill Sunset configuration audit command"
 _RULE_ID = "command.skill-sunset.audit"
@@ -31,7 +31,7 @@ _RULE_ID = "command.skill-sunset.audit"
     ),
 )
 def test_skill_sunset_audit_surface_stays_inert_until_enabled(command: str, tmp_path: Path) -> None:
-    evaluation = evaluate_command(command, cwd=tmp_path, home_dir=tmp_path)
+    evaluation = real_native_command_evaluation(command, cwd=tmp_path, home_dir=tmp_path).evaluation
     assert evaluation.controlling_rule_id != _RULE_ID
     assert all(item.extension.extension_id != "command.skill-sunset" for item in evaluation.extension_observations)
 
