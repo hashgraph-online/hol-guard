@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
+from .containment_backend_status import bwrap_execution_completed
 from .containment_contract import (
     ContainmentAttestation,
     ContainmentBackend,
@@ -25,6 +26,8 @@ _OUTPUT_LIMIT: Final = 64 * 1024
 _MAX_EXECUTABLE_BYTES: Final = 256 * 1024 * 1024
 _MAX_INPUT_BYTES: Final = 256 * 1024 * 1024
 _MAX_INPUT_FILES: Final = 20_000
+_LINUX_HOSTS: Final = "127.0.0.1 localhost\n::1 localhost ip6-localhost ip6-loopback\n"
+_LINUX_NSSWITCH: Final = "hosts: files\n"
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,11 +106,12 @@ def execute_contained(
                 temporary = str(root / "tmp")
             else:
                 _ = _pin_executable(request, root, backend=backend.kind)
-                argv = _linux_argv(backend.path, request, root)
+                linux_etc = _write_linux_name_service_files(root)
+                argv = _linux_argv(backend.path, request, root, linux_etc)
                 cwd = str(root)
                 home = "/guard/home"
                 temporary = "/guard/tmp"
-            exit_code, stdout, stderr, timed_out = _run_process(
+            exit_code, stdout, stderr, timed_out, execution_completed = _run_process(
                 argv,
                 cwd=cwd,
                 environment={
@@ -117,7 +121,18 @@ def execute_contained(
                 },
                 timeout_seconds=float(timeout_seconds),
                 temp_root=root,
+                backend=backend.kind,
             )
+            if not execution_completed:
+                return ContainmentExecutionResult(
+                    exit_code=None,
+                    stdout=stdout,
+                    stderr=stderr or "containment backend did not confirm execution",
+                    timed_out=timed_out,
+                    attestation=_failed_attestation(
+                        request, backend.kind, backend.digest, ContainmentFailure.APPLY_FAILED
+                    ),
+                )
             outputs = (
                 capture_declared_outputs(request, root / "workspace")
                 if exit_code == 0 and request.declared_outputs
@@ -286,7 +301,7 @@ def _copy_verified_input(source: str, destination: Path) -> tuple[int, str]:
                 _ = target.write(chunk)
     finally:
         os.close(descriptor)
-    destination.chmod(0o400)
+    destination.chmod(0o500 if metadata.st_mode & 0o111 else 0o400)
     return copied, digest.hexdigest()
 
 
@@ -297,18 +312,26 @@ def _run_process(
     environment: dict[str, str],
     timeout_seconds: float,
     temp_root: Path,
-) -> tuple[int | None, str, str, bool]:
+    backend: ContainmentBackend,
+) -> tuple[int | None, str, str, bool, bool]:
     stdout_path = temp_root / "stdout"
     stderr_path = temp_root / "stderr"
-    with stdout_path.open("xb") as stdout_file, stderr_path.open("xb") as stderr_file:
+    with (
+        stdout_path.open("xb") as stdout_file,
+        stderr_path.open("xb") as stderr_file,
+        tempfile.TemporaryFile(mode="w+b") as status_file,
+    ):
+        is_bwrap = backend is ContainmentBackend.LINUX_BWRAP
+        launch_argv = [argv[0], "--json-status-fd", str(status_file.fileno()), *argv[1:]] if is_bwrap else argv
         process = subprocess.Popen(
-            argv,
+            launch_argv,
             cwd=cwd,
             env=environment,
             stdin=subprocess.DEVNULL,
             stdout=stdout_file,
             stderr=stderr_file,
             start_new_session=True,
+            pass_fds=(status_file.fileno(),) if is_bwrap else (),
         )
         timed_out = False
         try:
@@ -320,11 +343,13 @@ def _run_process(
             exit_code = None
         else:
             _kill_process_group(process.pid)
+        execution_completed = not is_bwrap or bwrap_execution_completed(status_file, exit_code)
     return (
         exit_code,
         _read_bounded(stdout_path),
         _read_bounded(stderr_path),
         timed_out,
+        execution_completed,
     )
 
 
@@ -354,10 +379,23 @@ def _macos_argv(
     return [backend_path, "-p", "\n".join(profile), pinned_executable, *request.argv[1:]]
 
 
+def _write_linux_name_service_files(temp_root: Path) -> Path:
+    linux_etc = temp_root / "linux-etc"
+    linux_etc.mkdir(mode=0o700)
+    hosts = linux_etc / "hosts"
+    nsswitch = linux_etc / "nsswitch.conf"
+    hosts.write_text(_LINUX_HOSTS, encoding="ascii")
+    nsswitch.write_text(_LINUX_NSSWITCH, encoding="ascii")
+    hosts.chmod(0o400)
+    nsswitch.chmod(0o400)
+    return linux_etc
+
+
 def _linux_argv(
     backend_path: str,
     request: ContainmentRequest,
     temp_root: Path,
+    linux_etc: Path,
 ) -> list[str]:
     argv = [
         backend_path,
@@ -373,6 +411,14 @@ def _linux_argv(
         "--bind",
         str(temp_root),
         "/guard",
+        "--dir",
+        "/etc",
+        "--ro-bind",
+        str(linux_etc / "hosts"),
+        "/etc/hosts",
+        "--ro-bind",
+        str(linux_etc / "nsswitch.conf"),
+        "/etc/nsswitch.conf",
     ]
     for path in ("/usr", "/bin", "/lib", "/lib64", "/sbin"):
         if Path(path).exists():

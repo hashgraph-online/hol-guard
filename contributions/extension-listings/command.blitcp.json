@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "guard.extension-listing.v1",
+  "extensionId": "command.blitcp",
+  "tagline": "Reviews blitcp copies that leave the host, elevate privileges, or skip verification.",
+  "category": "other",
+  "limitations": [
+    "Coverage is limited to the reviewed operations and the surrounding Guard policy.",
+    "A maintainer profile is not a security certification or an official upstream endorsement."
+  ],
+  "maintainerGithubIds": [
+    "43109822"
+  ]
+}

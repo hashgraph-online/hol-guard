@@ -6,6 +6,7 @@ import json
 import sys
 import time
 from collections.abc import Mapping, Sequence
+from contextlib import suppress
 from pathlib import Path
 
 if __package__:
@@ -53,9 +54,13 @@ else:  # pragma: no cover - exercised by subprocess integration tests
 _HOOK_TIMEOUT_GRACE_SECONDS = 2
 _DISCOVERY_PROTOCOL_VERSION = 1
 _MAX_HOOK_INPUT_BYTES = 1_000_000
-_FAIL_CLOSED_REASON = "HOL Guard could not authenticate the local daemon. Run `hol-guard daemon repair`, then retry."
+_BRIDGE_FAILURE_SCHEMA = "hol-guard.codex-bridge-failure.v1"
+_FAIL_CLOSED_REASON = (
+    "HOL Guard could not authenticate the local daemon. Run `hol-guard daemon repair` from a terminal, then retry."
+)
 _LAUNCH_INTEGRITY_REASON = (
-    "HOL Guard could not authenticate its managed Codex hook launcher. Run `hol-guard install codex`, then retry."
+    "HOL Guard could not authenticate its managed Codex hook launcher. "
+    "Run `hol-guard install codex` from a terminal, then retry."
 )
 _OVERLOAD_REASON = (
     "HOL Guard is temporarily saturated and kept this action blocked. No approval was requested; retry the action."
@@ -101,10 +106,10 @@ def _request_timeout(event_name: str, hook_timeouts: Mapping[str, int]) -> float
 
 
 def _fail_closed(event_name: str, reason: str = _FAIL_CLOSED_REASON) -> dict[str, object]:
-    if event_name == "PermissionRequest":
+    if hook_event_is_permission_request(event_name):
         return {
             "hookSpecificOutput": {
-                "hookEventName": event_name,
+                "hookEventName": "PermissionRequest",
                 "decision": {
                     "behavior": "deny",
                     "message": reason,
@@ -130,22 +135,12 @@ def _unavailable_response(
     reason: str,
     data: str | None = None,
 ) -> dict[str, object]:
+    # A payload's command name or path is not an authenticated tool decision.
     del data
-    if hook_event_is_permission_request(event_name):
-        return {
-            "continue": True,
-            "systemMessage": reason,
-            "hookSpecificOutput": {"hookEventName": event_name},
-        }
     if event_name == "PreToolUse":
-        return {
-            "continue": True,
-            "hookSpecificOutput": {
-                "hookEventName": event_name,
-                "permissionDecision": "allow",
-                "permissionDecisionReason": reason,
-            },
-        }
+        return _fail_closed(event_name, reason)
+    if hook_event_is_permission_request(event_name):
+        return _fail_closed(event_name, reason)
     return {
         "continue": True,
         "systemMessage": reason,
@@ -168,6 +163,26 @@ def _codex_hook_response(response: Mapping[str, object], *, event_name: str) -> 
         else:
             post_tool_keys = {"hookEventName", "additionalContext", "updatedMCPToolOutput"}
             filtered["hookSpecificOutput"] = {key: value for key, value in hook_output.items() if key in post_tool_keys}
+        return filtered
+    if event_name == "PreToolUse" and "hookSpecificOutput" in filtered:
+        cleaned: dict[str, object] = {"hookEventName": event_name}
+        if isinstance(hook_output, Mapping):
+            decision = hook_output.get("permissionDecision")
+            normalized = decision.strip().lower() if isinstance(decision, str) else ""
+            reason = hook_output.get("permissionDecisionReason")
+            if normalized in {"deny", "ask"}:
+                cleaned["permissionDecision"] = normalized
+                if isinstance(reason, str) and reason:
+                    cleaned["permissionDecisionReason"] = reason
+            elif normalized == "allow":
+                if (
+                    response.get("policy_action") == "warn"
+                    and isinstance(reason, str)
+                    and reason.strip()
+                    and not filtered.get("systemMessage")
+                ):
+                    filtered["systemMessage"] = reason
+        filtered["hookSpecificOutput"] = cleaned
     return filtered
 
 
@@ -203,6 +218,7 @@ def main(
     else:
         event_name, data, timeout_seconds = hook_input
         deadline = time.monotonic() + timeout_seconds
+        failure_causes = []
         response, daemon_overloaded, launch_integrity_failed = bridge_review_response(
             state_path=state_path,
             fallback_command=fallback_command,
@@ -212,10 +228,23 @@ def main(
             deadline=deadline,
             manifest_path=manifest_path,
             config_json=config_json,
+            failure_causes=failure_causes,
         )
         if response is None:
             if launch_integrity_failed:
-                response = _fail_closed(event_name, _LAUNCH_INTEGRITY_REASON)
+                # Diagnostic delivery must not interrupt the denial response.
+                with suppress(OSError, ValueError, TypeError):
+                    sys.stderr.write(
+                        json.dumps(
+                            {
+                                "schema": _BRIDGE_FAILURE_SCHEMA,
+                                "causes": failure_causes,
+                            },
+                            separators=(",", ":"),
+                        )
+                        + "\n"
+                    )
+                response = _launcher_integrity_response(event_name, data)
             else:
                 failure_reason = _OVERLOAD_REASON if daemon_overloaded else _FAIL_CLOSED_REASON
                 response = _unavailable_response(event_name, failure_reason, data)
@@ -229,6 +258,12 @@ def main(
             )
         )
     return 0
+
+
+def _launcher_integrity_response(event_name: str, data: str) -> dict[str, object]:
+    """Deny tool actions through a bad launcher and identify a terminal repair."""
+
+    return _unavailable_response(event_name, _LAUNCH_INTEGRITY_REASON, data)
 
 
 def _bridge_output(

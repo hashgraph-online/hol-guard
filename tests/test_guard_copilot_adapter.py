@@ -8,6 +8,8 @@ import shlex
 import sys
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.guard.adapters import copilot as copilot_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.copilot import CopilotHarnessAdapter, _refresh_guard_proxy_entry
@@ -62,6 +64,39 @@ def test_copilot_recognizes_frozen_bounded_hook() -> None:
     command = shlex.join(["/Applications/HOL Guard.app/Contents/MacOS/hol-guard", "__guard-bounded-hook", config])
 
     assert copilot_module._is_managed_hook_command(command) is True
+
+
+def test_copilot_isolated_hook_requires_current_guard_paths(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = _build_context(tmp_path)
+    interpreter = tmp_path / "python3"
+    interpreter.write_text("#!/bin/sh\n", encoding="utf-8")
+    interpreter.chmod(0o755)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.adapters.cursor_hook_config.isolated_cursor_hook_python",
+        lambda: str(interpreter),
+    )
+    from codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge import bounded_hook_script_path
+
+    script = bounded_hook_script_path(context.guard_home, "copilot")
+    assert script is not None
+    script.parent.mkdir(parents=True, exist_ok=True)
+    script.write_text("# hook\n", encoding="utf-8")
+    managed = shlex.join([str(interpreter), "-I", str(script)])
+    unrelated = shlex.join(
+        [str(interpreter), "-I", str(tmp_path / "other" / "managed" / "bounded-hooks" / "copilot.py")]
+    )
+
+    assert copilot_module._is_managed_hook_command(managed, guard_home=context.guard_home) is True
+    assert copilot_module._is_managed_hook_command(unrelated, guard_home=context.guard_home) is False
+    preserved = copilot_module._merge_hook_entries(
+        [{"command": unrelated}],
+        {"bash": managed, "powershell": managed},
+        guard_home=context.guard_home,
+    )
+    assert any(entry.get("command") == unrelated for entry in preserved if isinstance(entry, dict))
 
 
 def test_copilot_detects_documented_local_surfaces_and_redacts_secrets(tmp_path):

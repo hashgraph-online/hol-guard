@@ -136,7 +136,7 @@ def test_local_request_snapshot_payload_stays_under_cloud_byte_budget(tmp_path: 
     assert isinstance(first_request, dict)
     request_payload = first_request["requestPayload"]
     assert isinstance(request_payload, dict)
-    assert request_payload["risk_summary"] == "SECRET_[redacted]"
+    assert request_payload["risk_summary"] == "SECRET_TOKEN=*****"
     assert "truncated" in str(request_payload["command_text"])
 
 

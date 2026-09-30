@@ -114,13 +114,13 @@ def public_message(offer: ContinuationOffer, result: ContinuationResult) -> str 
         )
     if result.status == "manual_retry_required":
         return (
-            "Decision saved. HOL Guard could not find the original Codex chat to message. Return to Codex and retry "
-            "the same request; this approval is now saved."
+            "Decision recorded for the original request. HOL Guard could not find the original Codex chat to resume. "
+            "Return to that chat and retry; a new tool call may require fresh approval."
         )
     if result.status == "failed":
         return (
-            "Decision saved. HOL Guard could not send Codex a continuation message in the original chat. Return to "
-            "Codex and retry the same request; this approval is now saved."
+            "Decision recorded for the original request. HOL Guard could not send a continuation to the original "
+            "Codex chat. Return to that chat and retry; a new tool call may require fresh approval."
         )
     if result.status == "blocked_not_resumed":
         return (

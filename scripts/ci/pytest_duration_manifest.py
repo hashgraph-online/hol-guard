@@ -61,6 +61,31 @@ def write_duration_manifest(path: Path, durations: Mapping[str, float], observed
 def load_duration_manifest(path: Path, *, now: datetime, max_age: timedelta) -> dict[str, float]:
     """Load a current manifest and fail explicitly once its evidence is stale."""
 
+    durations, _observed_at = _read_duration_manifest(path, now=now, max_age=max_age)
+    return durations
+
+
+def load_latest_duration_manifest(
+    paths: Iterable[Path], *, now: datetime, max_age: timedelta
+) -> tuple[dict[str, float], Path]:
+    """Choose the freshest valid evidence, tolerating an unavailable optional artifact."""
+
+    candidates: list[tuple[datetime, Path, dict[str, float]]] = []
+    errors: list[str] = []
+    for path in paths:
+        try:
+            durations, observed_at = _read_duration_manifest(path, now=now, max_age=max_age)
+        except (OSError, ValueError, EOFError) as exc:
+            errors.append(f"{path}: {exc}")
+        else:
+            candidates.append((observed_at, path, durations))
+    if not candidates:
+        raise ValueError("no current pytest duration manifest: " + "; ".join(errors))
+    _observed_at, path, durations = max(candidates, key=lambda candidate: (candidate[0], str(candidate[1])))
+    return durations, path
+
+
+def _read_duration_manifest(path: Path, *, now: datetime, max_age: timedelta) -> tuple[dict[str, float], datetime]:
     if now.tzinfo is None:
         raise ValueError("pytest duration manifest now must include a timezone")
     if max_age < timedelta(0):
@@ -76,7 +101,7 @@ def load_duration_manifest(path: Path, *, now: datetime, max_age: timedelta) -> 
         raise ValueError("pytest duration manifest is future-dated")
     if current_time - observed_at > max_age:
         raise ValueError("pytest duration manifest is stale")
-    return _load_durations(payload)
+    return _load_durations(payload), observed_at
 
 
 def _load_durations(payload: Mapping[str, object]) -> dict[str, float]:
@@ -91,12 +116,7 @@ def _validate_durations(values: Mapping[str, float] | Mapping[object, object]) -
     for node_id, value in values.items():
         if not isinstance(node_id, str) or not node_id:
             raise ValueError("pytest duration data has an invalid node id")
-        if (
-            not isinstance(value, (int, float))
-            or isinstance(value, bool)
-            or not math.isfinite(value)
-            or value < 0
-        ):
+        if not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value) or value < 0:
             raise ValueError(f"pytest duration data has an invalid duration for {node_id!r}")
         durations[node_id] = float(value)
     return durations

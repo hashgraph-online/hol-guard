@@ -299,6 +299,9 @@ class GuardSurfaceDaemonClient:
     def preview_extension_controls(self, payload: dict[str, object]) -> dict[str, object]:
         return self._post("/v1/extension-controls/preview", payload)
 
+    def inspect_command(self, payload: dict[str, object]) -> dict[str, object]:
+        return self._post("/v1/extension-controls/inspect", payload)
+
     def apply_extension_controls(self, payload: dict[str, object]) -> dict[str, object]:
         return self._post("/v1/extension-controls/apply", payload)
 

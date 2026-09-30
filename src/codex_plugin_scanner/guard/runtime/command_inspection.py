@@ -1,21 +1,83 @@
-"""Side-effect-free command inspection using Guard's runtime command parser."""
+"""Command inspection from native evidence, without executing the target."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
+from codex_plugin_scanner.guard.config import resolve_guard_home
 from codex_plugin_scanner.guard.risk import artifact_risk_signals_v2
 from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
 from codex_plugin_scanner.guard.runtime.command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
     COMMAND_EXTENSION_SCHEMA_VERSION,
 )
-from codex_plugin_scanner.guard.runtime.command_model import parse_shell_command
+from codex_plugin_scanner.guard.runtime.command_model import CanonicalCommand, parse_shell_command
+from codex_plugin_scanner.guard.runtime.extension_control_runtime import ExtensionControlRuntimeSnapshot
+from codex_plugin_scanner.guard.runtime.native_command_evaluation import review_command_native
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     build_tool_action_request_artifact,
     extract_sensitive_tool_action_request,
-    is_explicitly_benign_tool_action_request,
 )
+
+
+def unavailable_command_inspection(
+    command: str,
+    *,
+    cwd: Path | None = None,
+    home_dir: Path | None = None,
+    canonical_command: CanonicalCommand | None = None,
+    native_evaluation_failed: bool = False,
+) -> dict[str, object]:
+    """Return an explicit unavailable result without contacting a runtime."""
+
+    command_text = command.strip()
+    if not command_text:
+        raise ValueError("Command text cannot be empty")
+    if canonical_command is None:
+        preview = parse_shell_command(command_text, cwd=cwd, home_dir=home_dir)
+        normalized_command = command_text
+        wrapper_chain: list[str] = []
+    else:
+        preview = canonical_command
+        normalized_command = preview.normalized_text
+        wrapper_chain = list(preview.wrapper_chain)
+    return {
+        "schema_version": COMMAND_EXTENSION_SCHEMA_VERSION,
+        "status": "native_unavailable",
+        "command": command_text,
+        "classification": {
+            "matched": False,
+            "explicitly_benign": False,
+            "action_class": None,
+            "reason": (
+                "Native command evaluation failed. The command remains blocked."
+                if native_evaluation_failed
+                else "Native inspection is unavailable. Check native runtime and command-control status."
+            ),
+            "normalized_command": normalized_command,
+            "wrapper_chain": wrapper_chain,
+        },
+        "risk_classes": [],
+        "minimum_action": "block" if native_evaluation_failed else "review",
+        "controlling_rule_id": None,
+        "signals": [],
+        "extensions": [],
+        "rules": [],
+        "command_model": preview.to_dict(),
+        "trace": [
+            {
+                "step": "native-command-evidence",
+                "result": "failed" if native_evaluation_failed else "unavailable",
+                "detail": (
+                    "Native command evaluation failed; the bound native model and terminal block are preserved."
+                    if native_evaluation_failed
+                    else "No Python matcher fallback or target execution was performed."
+                ),
+            }
+        ],
+        "policy_evaluation": "not_run",
+        "side_effects": "none",
+    }
 
 
 def inspect_command(
@@ -23,6 +85,8 @@ def inspect_command(
     *,
     cwd: Path | None = None,
     home_dir: Path | None = None,
+    guard_home: Path | None = None,
+    extension_control_snapshot: ExtensionControlRuntimeSnapshot | None = None,
 ) -> dict[str, object]:
     """Classify one command without executing it or persisting Guard state."""
 
@@ -31,34 +95,59 @@ def inspect_command(
         raise ValueError("Command text cannot be empty")
     workspace = (cwd or Path.cwd()).resolve()
     home = (home_dir or Path.home()).resolve()
-    canonical_command = parse_shell_command(command_text, cwd=workspace, home_dir=home)
+    reviewed = review_command_native(
+        command_text,
+        guard_home=guard_home or resolve_guard_home(),
+        cwd=workspace,
+        home_dir=home,
+        extension_control_snapshot=extension_control_snapshot,
+    )
+    if reviewed is None:
+        return unavailable_command_inspection(command_text, cwd=workspace, home_dir=home)
+    evaluation = reviewed.evaluation
+    canonical_command = evaluation.command
+    native_extensions = reviewed.payload.get("command_extensions")
+    if isinstance(native_extensions, dict) and native_extensions.get("evaluation_error") is not None:
+        return unavailable_command_inspection(
+            command_text,
+            canonical_command=canonical_command,
+            native_evaluation_failed=True,
+        )
     arguments = {"command": command_text}
-    benign = is_explicitly_benign_tool_action_request("Shell", arguments, cwd=workspace, home_dir=home)
+    benign = reviewed.payload["explicitly_benign"] is True
     match = extract_sensitive_tool_action_request(
         "Shell",
         arguments,
         cwd=workspace,
         home_dir=home,
         canonical_command=canonical_command,
+        native_evaluation=evaluation,
     )
-    evaluation = evaluate_command(
-        command_text,
-        canonical_command=canonical_command,
-        compatibility_action_class=match.action_class if match is not None else None,
-        compatibility_reason=match.reason if match is not None else None,
-        cwd=workspace,
-        home_dir=home,
-    )
+    if match is not None:
+        # Preserve the classifier's more specific diagnostic label, using the
+        # same request-bound native observations and authenticated controls.
+        # Compatibility metadata cannot add native rule ownership or remove a
+        # native block; this is the projection used for the matching artifact.
+        evaluation = evaluate_command(
+            command_text,
+            canonical_command=canonical_command,
+            compatibility_action_class=match.action_class,
+            compatibility_reason=match.reason,
+            cwd=workspace,
+            home_dir=home,
+            extension_control_snapshot=reviewed.snapshot,
+            native_extension_evidence=reviewed.payload,
+        )
     trace: list[dict[str, object]] = [
         {
             "step": "canonical-parse",
             "result": canonical_command.confidence,
-            "detail": "Built Guard's side-effect-free canonical command model.",
+            "detail": "Validated the request-bound native command model.",
         },
         {
             "step": "benign-classification",
             "result": "matched" if benign else "not-matched",
-            "detail": "Checked Guard's explicit read-only and observer command classifications.",
+            "detail": "Used the native command decision's explicit benign classification.",
         },
         {
             "step": "sensitive-action-classification",
@@ -70,7 +159,7 @@ def inspect_command(
         {
             "step": "structured-rule-matching",
             "result": str(len(evaluation.matches)),
-            "detail": "Matched versioned command rules against the canonical command model.",
+            "detail": "Projected native observations onto versioned command rule metadata.",
         }
     )
     if not evaluation.matched or (evaluation.minimum_action == "allow" and match is None):
@@ -108,6 +197,9 @@ def inspect_command(
             match,
             config_path="command-inspection",
             source_scope="inspection",
+            native_extension_evidence=reviewed.payload,
+            extension_control_snapshot=reviewed.snapshot,
+            native_evaluation=evaluation,
         )
         signals = artifact_risk_signals_v2(artifact)
     extensions_by_id = {owned.extension.extension_id: owned.extension for owned in evaluation.matches}
@@ -116,7 +208,7 @@ def inspect_command(
             {
                 "step": "extension-ownership",
                 "result": ",".join(sorted(extensions_by_id)) or "unowned",
-                "detail": "Selected structured extension ownership with compatibility fallback.",
+                "detail": "Selected extension ownership from validated native observations.",
             },
             {
                 "step": "rule-ownership",

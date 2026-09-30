@@ -25,6 +25,7 @@ type SupplyChainManagerDrawerProps = {
   shim: PackageShimEntry | undefined;
   actions: PackageFirewallStatusResponse["actions"];
   anyPending: boolean;
+  repairAwaitingRefresh: boolean;
   isMine: boolean;
   actionHandlers: ManagerDrawerActions;
   onClose: () => void;
@@ -53,6 +54,7 @@ export function SupplyChainManagerDrawer({
   shim,
   actions,
   anyPending,
+  repairAwaitingRefresh,
   isMine,
   actionHandlers,
   onClose,
@@ -171,7 +173,7 @@ export function SupplyChainManagerDrawer({
                 label="Fix PATH"
                 icon={<HiMiniWrenchScrewdriver className="h-4 w-4" />}
                 onClick={() => actionHandlers.repair?.(manager)}
-                disabled={anyPending}
+                disabled={anyPending || repairAwaitingRefresh}
               />
             ) : null}
             {showTest && actionHandlers.test !== undefined ? (
