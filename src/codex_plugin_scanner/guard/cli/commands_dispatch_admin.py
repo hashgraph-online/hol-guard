@@ -36,6 +36,7 @@ from ..shims import package_shim_dashboard_status
 from ._commands_shared import *
 from .commands_dispatch_trust import build_trust_doctor_payload
 from .commands_parser_helpers import *
+from .doctor_native_runtime import doctor_native_availability
 from .doctor_readiness import doctor_runtime_readiness
 
 
@@ -363,7 +364,10 @@ def _run_guard_doctor_command(
     if getattr(args, "repair", False):
         command_queue_payload["repair"] = repair_command_queue_state(store)
     payload["command_queue"] = command_queue_payload
+    with nullcontext() if args.harness else without_command_probes():
+        availability = doctor_native_availability()
     payload["native_runtime"] = {
+        "availability": availability,
         "admission": native_resident_admission_snapshot(),
         "daemon_http": daemon_admission_snapshot(),
     }
