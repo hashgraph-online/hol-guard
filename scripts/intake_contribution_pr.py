@@ -46,7 +46,9 @@ def _run(command: list[str], *, capture: bool = True) -> str:
     if completed.returncode:
         detail = (completed.stderr or completed.stdout or "").strip()
         raise SystemExit(f"intake failed: {' '.join(command)}\n{detail[:2048]}")
-    return (completed.stdout or "").strip()
+    # Only the trailing newline is stripped: git -z path lists are consumed
+    # verbatim and must not lose leading/trailing whitespace in filenames.
+    return (completed.stdout or "").rstrip("\n")
 
 
 def _gh(*args: str) -> str:
@@ -125,6 +127,15 @@ def main() -> int:
     machine_files = (
         "tests/test_guard_extension_trust.py",
         "tests/test_policy_bundle_delivery_runtime.py",
+        # Fully rewritten refresh outputs that live under the contributor-owned
+        # tests/fixtures/ prefix: refresh_baseline rebuilds the baseline from
+        # the registry and the decision-diff report is a regenerated corpus
+        # artifact, and the framed-sha256 file is that report's digest
+        # sidecar. Contributor-owned command-source-*.v1.json fixtures are
+        # deliberately excluded — their trust field is rebound in place.
+        "tests/fixtures/extension-controls/catalog-baseline.v1.json",
+        "tests/fixtures/guard-command-corpus/decision-diff-report.json",
+        "tests/fixtures/guard-command-corpus/decision-diff-report.framed-sha256",
     )
     machine_touched: set[str] = set()
     salvaged: set[str] = set()
@@ -195,9 +206,10 @@ def main() -> int:
     def salvage_conflicts() -> bool:
         """Under --salvage, resolve conflicts on non-contributor paths to the
         incoming side — the reset below normalizes them to origin/main anyway.
-        Conflicts inside contributor-owned paths stay manual."""
+        Conflicts inside contributor-owned paths stay manual, except managed
+        refresh outputs under tests/fixtures/ which the reset also rebuilds."""
         unmerged = [p for p in _run(["git", "diff", "--name-only", "--diff-filter=U", "-z"]).split("\0") if p]
-        resolvable = [p for p in unmerged if not p.startswith(contributor_owned)]
+        resolvable = [p for p in unmerged if not p.startswith(contributor_owned) or managed(p)]
         if len(resolvable) != len(unmerged):
             return False
         checked_out = []

@@ -231,7 +231,7 @@ def _cases() -> list[dict[str, Any]]:
 
 def _negative_cases() -> list[dict[str, Any]]:
     return [
-        {"id": "negative-empty", "content": [{"type": "text", "text": "safe"}]},
+        {"id": "negative-empty", "content": []},
         {"id": "negative-malformed", "content": [{"type": "text", "text": "safe"}]},
         {"id": "negative-missing-decision", "content": [{"type": "text", "text": "safe"}]},
         {"id": "negative-missing-proof", "content": [{"type": "text", "text": "safe"}]},
