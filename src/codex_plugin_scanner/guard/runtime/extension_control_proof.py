@@ -10,6 +10,7 @@ import secrets
 import stat
 import subprocess
 import sys
+from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -29,6 +30,9 @@ EXTENSION_CONTROL_ENROLLMENT_ACTION = "enroll-authority"
 _MAX_IDENTITY_LENGTH = 256
 _ENROLLMENT_CONFIRMATION_PREFIX = "ENROLL EXTENSION CONTROL"
 _REMOTE_TERMINAL_ENVIRONMENT = ("SSH_CLIENT", "SSH_CONNECTION", "SSH_TTY", "MOSH_CONNECTION")
+_WINDOWS_SM_REMOTESESSION = 0x1000
+_WINDOWS_WTS_CLIENT_PROTOCOL_TYPE = 16
+_WINDOWS_REMOTE_SESSION_NAME_PREFIXES = ("rdp-tcp", "ica-", "pcoip-", "blast-")
 
 
 class ExtensionControlProofError(PermissionError):
@@ -147,9 +151,137 @@ def _terminal_descriptors_share_session(control_descriptor: int, input_descripto
         return False
 
 
+def _windows_console_descriptor_is_interactive(descriptor: int) -> bool:
+    """Require a descriptor backed by a Windows console, not a redirected pipe."""
+
+    try:
+        import ctypes
+        import msvcrt
+        from ctypes import wintypes
+
+        win_dll = getattr(ctypes, "WinDLL", None)
+        if win_dll is None:
+            return False
+        handle = msvcrt.get_osfhandle(descriptor)
+        if handle == -1:
+            return False
+        kernel32 = win_dll("kernel32", use_last_error=True)
+        get_console_mode = kernel32.GetConsoleMode
+        get_console_mode.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+        get_console_mode.restype = wintypes.BOOL
+        mode = wintypes.DWORD()
+        return bool(get_console_mode(wintypes.HANDLE(handle), ctypes.byref(mode)))
+    except (AttributeError, ImportError, OSError, TypeError, ValueError):
+        return False
+
+
+def _windows_session_is_local() -> bool:
+    """Require native Windows session APIs to identify a direct local session."""
+
+    if os.name != "nt":
+        return False
+    session_name = os.environ.get("SESSIONNAME", "").strip().lower()
+    if session_name.startswith(_WINDOWS_REMOTE_SESSION_NAME_PREFIXES):
+        return False
+    # RDP and several other remote-terminal providers expose CLIENTNAME even
+    # when they do not use the standard RDP-Tcp session name.
+    if os.environ.get("CLIENTNAME", "").strip():
+        return False
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        win_dll = getattr(ctypes, "WinDLL", None)
+        if win_dll is None:
+            return False
+        user32 = win_dll("user32", use_last_error=True)
+        get_system_metrics = user32.GetSystemMetrics
+        get_system_metrics.argtypes = [ctypes.c_int]
+        get_system_metrics.restype = ctypes.c_int
+        if get_system_metrics(_WINDOWS_SM_REMOTESESSION):
+            return False
+
+        kernel32 = win_dll("kernel32", use_last_error=True)
+        process_id_to_session_id = kernel32.ProcessIdToSessionId
+        process_id_to_session_id.argtypes = [wintypes.DWORD, ctypes.POINTER(wintypes.DWORD)]
+        process_id_to_session_id.restype = wintypes.BOOL
+        session_id = wintypes.DWORD()
+        if not process_id_to_session_id(wintypes.DWORD(os.getpid()), ctypes.byref(session_id)):
+            return False
+
+        wtsapi32 = win_dll("wtsapi32", use_last_error=True)
+        query_session_information = wtsapi32.WTSQuerySessionInformationW
+        query_session_information.argtypes = [
+            wintypes.HANDLE,
+            wintypes.DWORD,
+            ctypes.c_int,
+            ctypes.POINTER(ctypes.c_void_p),
+            ctypes.POINTER(wintypes.DWORD),
+        ]
+        query_session_information.restype = wintypes.BOOL
+        free_wts_memory = wtsapi32.WTSFreeMemory
+        free_wts_memory.argtypes = [ctypes.c_void_p]
+        free_wts_memory.restype = None
+
+        buffer = ctypes.c_void_p()
+        bytes_returned = wintypes.DWORD()
+        try:
+            if not query_session_information(
+                None,
+                session_id,
+                _WINDOWS_WTS_CLIENT_PROTOCOL_TYPE,
+                ctypes.byref(buffer),
+                ctypes.byref(bytes_returned),
+            ):
+                return False
+            if not buffer.value or bytes_returned.value < ctypes.sizeof(ctypes.c_ushort):
+                return False
+            protocol_type = ctypes.cast(buffer, ctypes.POINTER(ctypes.c_ushort)).contents.value
+            # WTSClientProtocolType is zero for the local console and nonzero
+            # for RDP/ICA/other remote session protocols.
+            return protocol_type == 0
+        finally:
+            if buffer.value:
+                with suppress(OSError, TypeError, ValueError):
+                    free_wts_memory(buffer)
+    except (AttributeError, ImportError, OSError, TypeError, ValueError, OverflowError):
+        return False
+
+
+def _require_windows_local_terminal_confirmation(enrollment: ExtensionControlEnrollment) -> None:
+    """Confirm through the current Windows console without accepting redirected input."""
+
+    try:
+        if not sys.stdin.isatty() or not sys.stdout.isatty():
+            raise ExtensionControlProofError("extension control enrollment requires an interactive local terminal")
+        input_descriptor = sys.stdin.fileno()
+        output_descriptor = sys.stdout.fileno()
+    except (AttributeError, OSError, ValueError) as exc:
+        raise ExtensionControlProofError("extension control enrollment requires an interactive local terminal") from exc
+    if not _windows_session_is_local():
+        raise ExtensionControlProofError("extension control enrollment requires a local terminal")
+    if not (
+        _windows_console_descriptor_is_interactive(input_descriptor)
+        and _windows_console_descriptor_is_interactive(output_descriptor)
+    ):
+        raise ExtensionControlProofError("extension control enrollment requires an interactive local terminal")
+    expected = f"{_ENROLLMENT_CONFIRMATION_PREFIX} {enrollment.actor_id}"
+    try:
+        sys.stdout.write(f'Type "{expected}" to confirm first enrollment: ')
+        sys.stdout.flush()
+        entered = sys.stdin.readline().rstrip("\r\n")
+    except (EOFError, OSError, UnicodeError, ValueError) as exc:
+        raise ExtensionControlProofError("extension control enrollment requires an interactive local terminal") from exc
+    if not hmac.compare_digest(entered, expected):
+        raise ExtensionControlProofError("extension control enrollment confirmation did not match")
+
+
 def _require_local_terminal_confirmation(enrollment: ExtensionControlEnrollment) -> None:
     if any(os.environ.get(name) for name in _REMOTE_TERMINAL_ENVIRONMENT):
         raise ExtensionControlProofError("extension control enrollment requires a local terminal")
+    if os.name == "nt":
+        _require_windows_local_terminal_confirmation(enrollment)
+        return
     try:
         descriptor = os.open("/dev/tty", os.O_RDWR | os.O_NOCTTY | getattr(os, "O_CLOEXEC", 0))
     except OSError as exc:

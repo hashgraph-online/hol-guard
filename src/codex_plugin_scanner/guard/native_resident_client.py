@@ -172,6 +172,7 @@ def _client_pool_for(executable: Path, state_dir: Path, environment: Mapping[str
             _CLIENT_POOLS[key] = pool
     if evicted is not None:
         evicted.close()
+    _track_resident(executable, normalized_state_dir, environment)
     return pool
 
 
@@ -182,31 +183,14 @@ def _state_files(state_dir: Path) -> tuple[Path, ...]:
         return ()
 
 
-def _has_client_for_state(state_dir: Path) -> bool:
-    state_key = str(state_dir)
-    with _CLIENTS_LOCK:
-        return any(key[1] == state_key for key in _CLIENT_POOLS)
-
-
 def _contain_persistent_resident(client: _PersistentNativeClient) -> None:
-    """Authenticate shutdown after stream close, then await state retirement.
+    """Close one local stream without stopping the shared resident.
 
-    A different executable may have adopted the same Guard-home resident. In
-    that case its persistent client remains the owner of the shared service,
-    so this client only closes its own stream and does not send shutdown.
+    Hook processes and the local daemon share one managed resident. A one-shot
+    client exit that sends ``resident-stop`` kills in-flight reviews in other
+    processes. Explicit shutdown stays on ``close_native_residents``.
     """
-    state_files = _state_files(client._state_dir)
-    if not state_files or _has_client_for_state(client._state_dir):
-        return
-    stop_native_resident(
-        executable=client._executable,
-        state_dir=client._state_dir,
-        environment=client._environment,
-        timeout_seconds=0.5,
-    )
-    deadline = time.monotonic() + 2.5
-    while _state_files(client._state_dir) and time.monotonic() < deadline:
-        time.sleep(0.025)
+    _ = client
 
 
 def close_native_resident_clients(guard_home: Path | None = None) -> None:
@@ -267,12 +251,23 @@ def stop_native_resident(
     )
 
 
-def close_native_residents() -> None:
-    """Stop Rust-managed residents created by this Python process."""
-    close_native_resident_clients()
+def close_native_residents(guard_home: Path | None = None) -> bool:
+    """Stop this process's residents, optionally limited to one Guard home."""
+
+    resolved_guard_home = guard_home.expanduser().resolve() if guard_home is not None else None
+    close_native_resident_clients(guard_home)
     with _RESIDENTS_LOCK:
-        residents = list(_RESIDENTS.items())
-    remaining: dict[tuple[Path, Path], Mapping[str, str]] = {}
+        residents = [
+            (key, environment)
+            for key, environment in _RESIDENTS.items()
+            if resolved_guard_home is None or key[1].parent == resolved_guard_home
+        ]
+        remaining = {
+            key: environment
+            for key, environment in _RESIDENTS.items()
+            if resolved_guard_home is not None and key[1].parent != resolved_guard_home
+        }
+    all_contained = True
     for (executable, state_dir), environment in residents:
         if _state_files(state_dir) and not stop_native_resident(
             executable=executable,
@@ -280,9 +275,12 @@ def close_native_residents() -> None:
             environment=environment,
         ):
             remaining[(executable, state_dir)] = environment
+            all_contained = False
     with _RESIDENTS_LOCK:
-        _RESIDENTS.clear()
+        for key, _environment in residents:
+            _RESIDENTS.pop(key, None)
         _RESIDENTS.update(remaining)
+    return all_contained
 
 
 def _legacy_native_resident_client_request(

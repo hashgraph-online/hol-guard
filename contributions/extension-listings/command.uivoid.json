@@ -1,0 +1,31 @@
+{
+  "schemaVersion": "guard.extension-listing.v2",
+  "extensionId": "command.uivoid",
+  "tagline": "Reviewed HOL Guard coverage for sensitive uivoid CLI operations.",
+  "summary": "Reviews uivoid CLI operations that configure a live MCP server, rotate its API credential, or write session and skill files used by later commands.",
+  "category": "specialized-tools",
+  "limitations": [
+    "Coverage is limited to the reviewed operations and the surrounding Guard policy.",
+    "A maintainer profile is not a security certification or an official upstream endorsement."
+  ],
+  "documentationUrl": "https://github.com/corrideluca/uivoid-cli",
+  "tags": ["uivoid", "cli", "mcp"],
+  "contributors": [
+    {
+      "githubId": "38625982",
+      "githubLogin": "corrideluca",
+      "roles": ["author"]
+    }
+  ],
+  "originalContributions": [
+    {
+      "kind": "pull-request",
+      "url": "https://github.com/hashgraph-online/hol-guard/pull/3001"
+    }
+  ],
+  "upstream": {
+    "name": "uivoid CLI",
+    "url": "https://github.com/corrideluca/uivoid-cli"
+  },
+  "maintainerGithubIds": ["38625982"]
+}

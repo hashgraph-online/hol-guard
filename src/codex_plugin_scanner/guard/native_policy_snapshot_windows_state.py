@@ -197,6 +197,7 @@ def _windows_private_state_binding(guard_home: Path) -> Iterator[_WindowsDirecto
             owner_sid=owner_sid,
         )
         state_binding: tuple[Any, Any] | None = None
+        binding: _WindowsDirectoryBinding | None = None
         try:
             state_path = guard_binding.path / NATIVE_RUNTIME_STATE_DIRECTORY
             _created, state_binding = _windows_bind_directory_component(
@@ -207,14 +208,21 @@ def _windows_private_state_binding(guard_home: Path) -> Iterator[_WindowsDirecto
                 owner_sid=owner_sid,
                 private=True,
             )
-            yield _WindowsDirectoryBinding(
+            binding = _WindowsDirectoryBinding(
                 state_path,
                 [*guard_binding.handles, state_binding],
             )
+            yield binding
         finally:
             try:
-                if state_binding is not None:
-                    api._windows_close_handle(*state_binding)
+                if binding is not None:
+                    # Atomic replacement may swap the live state handle in
+                    # ``binding.handles`` while this context is active. Close
+                    # the current state slot instead of the stale pre-swap
+                    # tuple retained by the setup path.
+                    state_handles = binding.handles[len(guard_binding.handles) :]
+                    for state_kernel32, state_handle in reversed(state_handles):
+                        api._windows_close_handle(state_kernel32, state_handle)
             finally:
                 _windows_close_directory_binding(guard_binding, api)
 

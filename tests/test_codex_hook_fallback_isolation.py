@@ -182,7 +182,10 @@ def test_tampered_bridge_launch_contract_fails_closed_without_executing_project_
     assert result.returncode == 0
     assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
     assert "hol-guard install codex" in result.stdout
-    assert result.stderr == ""
+    evidence = json.loads(result.stderr)
+    assert evidence["schema"] == "hol-guard.codex-bridge-failure.v1"
+    assert any(cause["stage"] == "launcher_validation" for cause in evidence["causes"])
+    assert str(marker) not in result.stderr
     assert not marker.exists()
 
 

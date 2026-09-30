@@ -107,37 +107,37 @@ def terminate_owned_process_group(process: WorkerProcess, signal_number: int) ->
 def retire_worker_slot(slot: HookWorkerSlot, *, graceful: bool = False) -> bool:
     """Contain one worker tree; callers may run this outside request deadlines."""
 
+    # Retirement is complete only after containment has been proved. Keep the
+    # proof and publication under one lock so close() cannot race the reaper and
+    # mistake a dead guardian for a successfully contained process tree.
     with slot.retire_lock:
         if slot.retired:
             return not slot.process.is_alive()
-        slot.retired = True
-    if graceful and slot.process.is_alive():
-        with slot.handshake_lock:
-            with suppress(BrokenPipeError, OSError):
-                slot.connection.send(("stop", None))
-            slot.process.join(timeout=0.2)
-    if os.name != "nt" and slot.isolation_ready:
-        tree_contained = terminate_owned_process_group(slot.process, getattr(signal, "SIGKILL", 9))
-    elif slot.pre_isolation_contained:
-        if slot.process.is_alive():
+        if graceful and slot.process.is_alive():
+            with slot.handshake_lock:
+                with suppress(BrokenPipeError, OSError):
+                    slot.connection.send(("stop", None))
+                slot.process.join(timeout=0.2)
+        if os.name != "nt" and slot.isolation_ready:
+            tree_contained = terminate_owned_process_group(slot.process, getattr(signal, "SIGKILL", 9))
+        elif slot.pre_isolation_contained:
+            if slot.process.is_alive():
+                with suppress(OSError):
+                    slot.process.kill()
+            tree_contained = True
+        elif slot.process.is_alive():
             with suppress(OSError):
                 slot.process.kill()
-        tree_contained = True
-    elif slot.process.is_alive():
-        with suppress(OSError):
-            slot.process.kill()
-        tree_contained = False
-    else:
-        # A worker that died before the parent sent it a review request never
-        # handled untrusted input. Its dead bootstrap process cannot retain
-        # request-derived descendants, so the supervisor may safely replace it.
-        tree_contained = slot.windows_job_contained or not slot.request_exposed
-    slot.process.join(timeout=_WORKER_RETIRE_JOIN_TIMEOUT_SECONDS)
-    contained = (tree_contained or slot.windows_job_contained) and not slot.process.is_alive()
-    if not contained:
-        with slot.retire_lock:
-            slot.retired = False
-    return contained
+            tree_contained = False
+        else:
+            # A worker that died before the parent sent it a review request never
+            # handled untrusted input. Its dead bootstrap process cannot retain
+            # request-derived descendants, so the supervisor may safely replace it.
+            tree_contained = slot.windows_job_contained or not slot.request_exposed
+        slot.process.join(timeout=_WORKER_RETIRE_JOIN_TIMEOUT_SECONDS)
+        contained = (tree_contained or slot.windows_job_contained) and not slot.process.is_alive()
+        slot.retired = contained
+        return contained
 
 
 def worker_retirement_thread(

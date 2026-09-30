@@ -2,29 +2,40 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import threading
 import time
 from collections import OrderedDict, deque
 from collections.abc import Mapping
 from copy import deepcopy
+from dataclasses import replace
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import TypedDict, final
+from typing import TypedDict, cast, final
 from uuid import uuid4
 
+from ..action_lattice import is_guard_action
 from ..cli.commands_support_command_activity import persist_deferred_post_hook_command_activity
+from ..models import GuardAction
 from ..native_decision_receipt import validate_native_decision_receipt
-from ..runtime.command_activity_contract import CorrelationHandle
+from ..runtime.command_activity_contract import ActivityApprovalReuseStatus, CorrelationHandle
 from ..runtime.command_activity_correlation import (
     derive_proven_request_correlation,
     load_or_create_installation_correlation_key,
 )
+from ..runtime.command_activity_display import build_invocation_preview_from_payload
+from ..runtime.command_activity_lifecycle import build_policy_only_pre_hook_evidence
 from ..runtime.command_activity_privacy import InstallationCorrelationKey
+from ..runtime.composio_discovery import composio_discovered_actions
+from ..runtime.composio_workflows import composio_workflow_proposals
+from ..runtime.observed_mcp_tools import observed_mcp_tool
 from ..sqlite_tuning import sqlite_connect_timeout_override
 from ..store import GuardStore
 from .runtime_hook_evidence_journal import (
     _CommandActivityRecord,
     _EvidenceRecord,
+    _McpDiscoveryRecord,
     _NativeDecisionReceiptRecord,
     _payload_has_command,
     append_journal,
@@ -127,11 +138,18 @@ class RuntimeHookEvidenceWriter:
         event: str,
         payload: Mapping[str, object],
         succeeded: bool,
+        policy_action: str | None = None,
+        receipt_id: str | None = None,
+        prompted: bool = False,
+        approval_reuse_status: str = "not-applicable",
     ) -> bool:
+        if event == "PreToolUse" and not is_guard_action(policy_action):
+            return False
         try:
             snapshot = deepcopy(dict(payload))
             encoded = json.dumps(snapshot, separators=(",", ":"), sort_keys=True).encode("utf-8")
             correlation = self._derive_correlation(harness=harness, event=event, payload=snapshot)
+            invocation_preview = build_invocation_preview_from_payload(snapshot)
         except Exception:
             with self._condition:
                 self._dropped += 1
@@ -144,7 +162,61 @@ class RuntimeHookEvidenceWriter:
             has_command=_payload_has_command(snapshot),
             succeeded=succeeded,
             payload_bytes=len(encoded),
+            policy_action=policy_action,
+            occurred_at=datetime.now(timezone.utc).isoformat(),
+            receipt_id=receipt_id,
+            prompted=prompted,
+            approval_reuse_status=approval_reuse_status,
+            invocation_preview=invocation_preview,
         )
+        if _CommandActivityRecord.from_json(json.loads(record.serialized())) is None:
+            return False
+        with self._condition:
+            if (
+                self._stopping
+                or len(self._records) >= self._max_records
+                or self._queued_bytes + record.payload_bytes > self._max_bytes
+            ):
+                self._dropped += 1
+                self._degraded = True
+                return False
+            self._records.append(record)
+            self._queued_bytes += record.payload_bytes
+            self._accepted += 1
+            self._condition.notify()
+        return True
+
+    def submit_composio_discovery(
+        self,
+        *,
+        harness: str,
+        payload: Mapping[str, object],
+        succeeded: bool,
+    ) -> bool:
+        """Queue only bounded provider metadata; exclude raw outputs and account/session data."""
+        tool_name = payload.get("tool_name")
+        if not succeeded or not isinstance(tool_name, str):
+            return False
+        source = observed_mcp_tool(harness, tool_name)
+        if source is None:
+            return False
+        actions = composio_discovered_actions(tool_name, payload.get("tool_response"))
+        if actions is None:
+            return False
+        proposals = composio_workflow_proposals(tool_name, payload.get("tool_response"))
+        if proposals is None:
+            # Guidance is optional and advisory. Keep valid schema evidence when
+            # a provider adds an unsupported or malformed recommendation shape.
+            proposals = ()
+        record = _McpDiscoveryRecord(
+            uuid4().hex,
+            source.harness,
+            source.qualified_name,
+            datetime.now(timezone.utc).isoformat(),
+            actions,
+            proposals,
+        )
+        record = replace(record, payload_bytes=len(record.serialized()))
         with self._condition:
             if (
                 self._stopping
@@ -291,6 +363,54 @@ class RuntimeHookEvidenceWriter:
                             )
                             if not persisted:
                                 raise RuntimeError("native receipt persistence was not acknowledged")
+                        elif isinstance(record, _McpDiscoveryRecord):
+                            source = observed_mcp_tool(record.harness, record.tool_name)
+                            if source is None:
+                                raise ValueError("provider discovery source changed")
+                            self._store.record_composio_discovery(
+                                source,
+                                record.actions,
+                                proposals=record.proposals,
+                                seen_at=record.occurred_at,
+                            )
+                        elif record.event == "PreToolUse":
+                            if (
+                                record.has_command
+                                and record.policy_action is not None
+                                and record.occurred_at is not None
+                            ):
+                                correlation = record.correlation
+                                # A prevented attempt cannot produce a post event. Keep its
+                                # evidence separate from a later approved retry of the same call.
+                                if correlation is not None and record.policy_action not in ("allow", "warn"):
+                                    digest = hashlib.sha256(
+                                        json.dumps(
+                                            [
+                                                "native-prevented-attempt-v1",
+                                                correlation.digest,
+                                                record.policy_action,
+                                                record.receipt_id,
+                                                record.prompted,
+                                                record.approval_reuse_status,
+                                            ]
+                                        ).encode("utf-8")
+                                    ).hexdigest()
+                                    correlation = replace(correlation, digest=digest)
+                                evidence = build_policy_only_pre_hook_evidence(
+                                    activity_id=record.record_id,
+                                    occurred_at=datetime.fromisoformat(record.occurred_at),
+                                    harness=record.harness,
+                                    policy_action=cast(GuardAction, record.policy_action),
+                                    request_correlation=correlation,
+                                    receipt_id=record.receipt_id,
+                                    prompted=record.prompted,
+                                    approval_reuse_status=ActivityApprovalReuseStatus(record.approval_reuse_status),
+                                )
+                                if not self._store.is_exact_command_activity_pre_replay(evidence):
+                                    _ = self._store.record_command_activity(
+                                        evidence,
+                                        invocation_preview=record.invocation_preview,
+                                    )
                         else:
                             _ = persist_deferred_post_hook_command_activity(
                                 store=self._store,
@@ -298,6 +418,7 @@ class RuntimeHookEvidenceWriter:
                                 correlation=record.correlation,
                                 has_command=record.has_command,
                                 succeeded=record.succeeded,
+                                invocation_preview=record.invocation_preview,
                             )
                 except Exception:
                     with self._condition:

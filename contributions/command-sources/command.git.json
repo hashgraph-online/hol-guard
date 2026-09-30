@@ -1,0 +1,3397 @@
+{
+  "extension": {
+    "action_classes": [
+      "git destructive command",
+      "git origin refresh",
+      "git index inspection",
+      "git workspace command",
+      "git read command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews everyday Git porcelain plus local and remote operations that can discard work, replace history, refresh a remote Guard cannot verify, or read a staged index Guard cannot bound.",
+    "ecosystem_ids": [],
+    "executables": [],
+    "extension_id": "command.git",
+    "homepage": null,
+    "icon": {
+      "kind": "none"
+    },
+    "license": null,
+    "name": "Git protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "git workspace command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies git add operations.",
+        "example_command": "git add",
+        "family": "git-workspace",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Git add",
+        "permission_id": "command.git.permission.add",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect the current branch and working tree before changing them."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "git read command"
+        ],
+        "baseline_floor": "allow",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies git blame operations.",
+        "example_command": "git blame",
+        "family": "git-read",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Git blame",
+        "permission_id": "command.git.permission.blame",
+        "replacement_permission_id": null,
+        "risk_tier": "low",
+        "safer_guidance": [
+          "Read-only Git inspection does not change repository state."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "git workspace command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies git branch operations.",
+        "example_command": "git branch",
+        "family": "git-workspace",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Git branch",
+        "permission_id": "command.git.permission.branch",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect the current branch and working tree before changing them."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "git workspace command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies git checkout operations.",
+        "example_command": "git checkout",
+        "family": "git-workspace",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Git checkout",
+        "permission_id": "command.git.permission.checkout",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect the current branch and working tree before changing them."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "git workspace command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies git cherry-pick operations.",
+        "example_command": "git cherry-pick",
+        "family": "git-history",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Git cherry-pick",
+        "permission_id": "command.git.permission.cherry-pick",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect the current history and create a backup branch before rewriting it."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "git workspace command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies git clean operations.",
+        "example_command": "git clean",
+        "family": "git-workspace",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Git clean",
+        "permission_id": "command.git.permission.clean",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect the current branch and working tree before changing them."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "git workspace command"
+        ],
+        "baseline_floor": "allow",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies git clone operations.",
+        "example_command": "git clone",
+        "family": "git-remote",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Git clone",
+        "permission_id": "command.git.permission.clone",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect the remote and local refs before updating them."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "git workspace command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies git commit operations.",
+        "example_command": "git commit",
+        "family": "git-workspace",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Git commit",
+        "permission_id": "command.git.permission.commit",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect the current branch and working tree before changing them."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "git read command"
+        ],
+        "baseline_floor": "allow",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies git describe operations.",
+        "example_command": "git describe",
+        "family": "git-read",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Git describe",
+        "permission_id": "command.git.permission.describe",
+        "replacement_permission_id": null,
+        "risk_tier": "low",
+        "safer_guidance": [
+          "Read-only Git inspection does not change repository state."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "git read command"
+        ],
+        "baseline_floor": "allow",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies git diff operations.",
+        "example_command": "git diff",
+        "family": "git-read",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Git diff",
+        "permission_id": "command.git.permission.diff",
+        "replacement_permission_id": null,
+        "risk_tier": "low",
+        "safer_guidance": [
+          "Read-only Git inspection does not change repository state."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "git workspace command"
+        ],
+        "baseline_floor": "allow",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies git fetch operations.",
+        "example_command": "git fetch",
+        "family": "git-remote",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Git fetch",
+        "permission_id": "command.git.permission.fetch",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect the remote and local refs before updating them."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "git destructive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies forced removal of untracked files from a repository.",
+        "example_command": "git clean -f",
+        "family": "git-destructive",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Forced Git clean",
+        "permission_id": "command.git.permission.force-clean",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Run `git clean -ndx` first and review every path before forced cleanup."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "git destructive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies remote history replacement through a forced push.",
+        "example_command": "git push --force",
+        "family": "git-destructive",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Forced Git push",
+        "permission_id": "command.git.permission.force-push",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Use `--force-with-lease` after fetching and reviewing the remote ref."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "git read command"
+        ],
+        "baseline_floor": "allow",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies git grep operations.",
+        "example_command": "git grep",
+        "family": "git-read",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Git grep",
+        "permission_id": "command.git.permission.grep",
+        "replacement_permission_id": null,
+        "risk_tier": "low",
+        "safer_guidance": [
+          "Read-only Git inspection does not change repository state."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "git destructive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies hard resets that discard tracked working-tree and index changes.",
+        "example_command": "git reset --hard",
+        "family": "git-destructive",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Destructive Git reset",
+        "permission_id": "command.git.permission.hard-reset",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect the diff and create a temporary branch or stash before resetting."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "git index inspection"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies staged-index Git reads that Guard cannot verify as a bounded inspection.",
+        "example_command": "git diff --cached --output=patch",
+        "family": "git-index",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Git index inspection",
+        "permission_id": "command.git.permission.index-inspection",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Run git diff --cached --check, or exclude lockfiles and scan the staged patch on stdin."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "git destructive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies forced deletion of a local branch reference.",
+        "example_command": "git branch -D stale-feature",
+        "family": "git-destructive",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Local Git branch deletion",
+        "permission_id": "command.git.permission.local-branch-delete",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect the branch commits and use `git branch -d` when it is fully merged."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "git read command"
+        ],
+        "baseline_floor": "allow",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies git log operations.",
+        "example_command": "git log",
+        "family": "git-read",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Git log",
+        "permission_id": "command.git.permission.log",
+        "replacement_permission_id": null,
+        "risk_tier": "low",
+        "safer_guidance": [
+          "Read-only Git inspection does not change repository state."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "git read command"
+        ],
+        "baseline_floor": "allow",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies git ls-files operations.",
+        "example_command": "git ls-files",
+        "family": "git-read",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Git ls-files",
+        "permission_id": "command.git.permission.ls-files",
+        "replacement_permission_id": null,
+        "risk_tier": "low",
+        "safer_guidance": [
+          "Read-only Git inspection does not change repository state."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "git workspace command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies git merge operations.",
+        "example_command": "git merge",
+        "family": "git-history",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Git merge",
+        "permission_id": "command.git.permission.merge",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect the current history and create a backup branch before rewriting it."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "git workspace command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies git move operations.",
+        "example_command": "git mv",
+        "family": "git-workspace",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Git move",
+        "permission_id": "command.git.permission.mv",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect the current branch and working tree before changing them."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "git workspace command"
+        ],
+        "baseline_floor": "allow",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies git pull operations.",
+        "example_command": "git pull",
+        "family": "git-remote",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Git pull",
+        "permission_id": "command.git.permission.pull",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect the remote and local refs before updating them."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "git workspace command"
+        ],
+        "baseline_floor": "allow",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies git push operations.",
+        "example_command": "git push",
+        "family": "git-remote",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Git push",
+        "permission_id": "command.git.permission.push",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect the remote and local refs before updating them."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "git workspace command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies git rebase operations.",
+        "example_command": "git rebase",
+        "family": "git-history",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Git rebase",
+        "permission_id": "command.git.permission.rebase",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect the current history and create a backup branch before rewriting it."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "git read command"
+        ],
+        "baseline_floor": "allow",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies git reflog operations.",
+        "example_command": "git reflog",
+        "family": "git-read",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Git reflog",
+        "permission_id": "command.git.permission.reflog",
+        "replacement_permission_id": null,
+        "risk_tier": "low",
+        "safer_guidance": [
+          "Read-only Git inspection does not change repository state."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "git workspace command"
+        ],
+        "baseline_floor": "allow",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies git remote operations.",
+        "example_command": "git remote",
+        "family": "git-remote",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Git remote",
+        "permission_id": "command.git.permission.remote",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect the remote and local refs before updating them."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "git destructive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies pushes that delete a remote branch reference.",
+        "example_command": "git push --delete",
+        "family": "git-destructive",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Remote Git branch deletion",
+        "permission_id": "command.git.permission.remote-branch-delete",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "List the exact remote branch and confirm its merge state before deletion."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "git workspace command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies git reset operations.",
+        "example_command": "git reset",
+        "family": "git-history",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Git reset",
+        "permission_id": "command.git.permission.reset",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect the current history and create a backup branch before rewriting it."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "git workspace command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies git restore operations.",
+        "example_command": "git restore",
+        "family": "git-workspace",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Git restore",
+        "permission_id": "command.git.permission.restore",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect the current branch and working tree before changing them."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "git workspace command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies git revert operations.",
+        "example_command": "git revert",
+        "family": "git-history",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Git revert",
+        "permission_id": "command.git.permission.revert",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect the current history and create a backup branch before rewriting it."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "git workspace command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies git remove operations.",
+        "example_command": "git rm",
+        "family": "git-workspace",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Git remove",
+        "permission_id": "command.git.permission.rm",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect the current branch and working tree before changing them."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "git read command"
+        ],
+        "baseline_floor": "allow",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies git show operations.",
+        "example_command": "git show",
+        "family": "git-read",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Git show",
+        "permission_id": "command.git.permission.show",
+        "replacement_permission_id": null,
+        "risk_tier": "low",
+        "safer_guidance": [
+          "Read-only Git inspection does not change repository state."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "git workspace command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies git stash operations.",
+        "example_command": "git stash",
+        "family": "git-workspace",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Git stash",
+        "permission_id": "command.git.permission.stash",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect the current branch and working tree before changing them."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "git read command"
+        ],
+        "baseline_floor": "allow",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies git status operations.",
+        "example_command": "git status",
+        "family": "git-read",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Git status",
+        "permission_id": "command.git.permission.status",
+        "replacement_permission_id": null,
+        "risk_tier": "low",
+        "safer_guidance": [
+          "Read-only Git inspection does not change repository state."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "git workspace command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies git switch operations.",
+        "example_command": "git switch",
+        "family": "git-workspace",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Git switch",
+        "permission_id": "command.git.permission.switch",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect the current branch and working tree before changing them."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "git workspace command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies git tag operations.",
+        "example_command": "git tag",
+        "family": "git-workspace",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Git tag",
+        "permission_id": "command.git.permission.tag",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect the current branch and working tree before changing them."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "git workspace command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies git helper or output write operations.",
+        "example_command": "git diff --output",
+        "family": "git-workspace",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Git helper or output write",
+        "permission_id": "command.git.permission.unsafe-read",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect the current branch and working tree before changing them."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "git origin refresh"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies named-origin Git fetch operations that Guard cannot verify as safe.",
+        "example_command": "git fetch origin",
+        "family": "git-remote",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Git origin refresh",
+        "permission_id": "command.git.permission.unverified-fetch",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Run fetch from the repository with a named origin, optional quiet flags, and named refs."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "git workspace command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies git worktree operations.",
+        "example_command": "git worktree",
+        "family": "git-workspace",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Git worktree",
+        "permission_id": "command.git.permission.worktree",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect the current branch and working tree before changing them."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": null,
+    "reference_urls": [],
+    "required": true,
+    "risk_classes": [
+      "destructive_shell",
+      "network_egress",
+      "local_secret_read"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "git origin refresh"
+        ],
+        "default_mode": "review",
+        "description": "Identifies named-origin Git fetch operations that Guard cannot verify as safe.",
+        "family": "git-remote",
+        "matcher": null,
+        "native_capability": "command.git.unverified-fetch.v1",
+        "permission_id": "command.git.permission.unverified-fetch",
+        "risk_classes": [
+          "network_egress"
+        ],
+        "rule_id": "command.git.unverified-fetch",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Run fetch from the repository with a named origin, optional quiet flags, and named refs."
+        ],
+        "severity": "high",
+        "title": "Git origin refresh"
+      },
+      {
+        "action_classes": [
+          "git index inspection"
+        ],
+        "default_mode": "review",
+        "description": "Identifies staged-index Git reads that Guard cannot verify as a bounded inspection.",
+        "family": "git-index",
+        "matcher": null,
+        "native_capability": "command.git.index-inspection.v1",
+        "permission_id": "command.git.permission.index-inspection",
+        "risk_classes": [
+          "local_secret_read"
+        ],
+        "rule_id": "command.git.index-inspection",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Run git diff --cached --check, or exclude lockfiles and scan the staged patch on stdin."
+        ],
+        "severity": "high",
+        "title": "Git index inspection"
+      },
+      {
+        "action_classes": [
+          "git destructive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies hard resets that discard tracked working-tree and index changes.",
+        "family": "git-destructive",
+        "matcher": {
+          "config": {
+            "allow_leading_options": true,
+            "executables": [
+              "git"
+            ],
+            "fail_secure_unknown_options": false,
+            "forbidden_flags": [],
+            "interspersed_flags": [],
+            "interspersed_options_with_values": [],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [
+              "--config-env",
+              "--exec-path",
+              "--git-dir",
+              "--namespace",
+              "--super-prefix",
+              "--work-tree",
+              "-c"
+            ],
+            "options_with_values": [
+              "--pathspec-from-file"
+            ],
+            "required_flags": [
+              "--hard"
+            ],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": [
+              "reset"
+            ]
+          },
+          "op": "executable.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.git.permission.hard-reset",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.git.hard-reset",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Inspect the diff and create a temporary branch or stash before resetting."
+        ],
+        "severity": "high",
+        "title": "Destructive Git reset"
+      },
+      {
+        "action_classes": [
+          "git destructive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies forced removal of untracked files from a repository.",
+        "family": "git-destructive",
+        "matcher": {
+          "config": {
+            "allow_leading_options": true,
+            "executables": [
+              "git"
+            ],
+            "fail_secure_unknown_options": false,
+            "forbidden_flags": [],
+            "interspersed_flags": [],
+            "interspersed_options_with_values": [],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [
+              "--config-env",
+              "--exec-path",
+              "--git-dir",
+              "--namespace",
+              "--super-prefix",
+              "--work-tree",
+              "-c"
+            ],
+            "options_with_values": [
+              "--exclude",
+              "-e"
+            ],
+            "required_flags": [
+              "-f"
+            ],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": [
+              "clean"
+            ]
+          },
+          "op": "executable.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.git.permission.force-clean",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.git.force-clean",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "git"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [
+                      [
+                        "-n",
+                        "--no-dry-run"
+                      ]
+                    ],
+                    "leading_options_with_values": [
+                      "--config-env",
+                      "--exec-path",
+                      "--git-dir",
+                      "--namespace",
+                      "--super-prefix",
+                      "--work-tree",
+                      "-c"
+                    ],
+                    "options_with_values": [
+                      "--exclude",
+                      "-e"
+                    ],
+                    "required_flags": [
+                      "-n"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "clean"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "git"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [
+                      [
+                        "--dry-run",
+                        "--no-dry-run"
+                      ]
+                    ],
+                    "leading_options_with_values": [
+                      "--config-env",
+                      "--exec-path",
+                      "--git-dir",
+                      "--namespace",
+                      "--super-prefix",
+                      "--work-tree",
+                      "-c"
+                    ],
+                    "options_with_values": [
+                      "--exclude",
+                      "-e"
+                    ],
+                    "required_flags": [
+                      "--dry-run"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "clean"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Git clean preview",
+            "variant_id": "dry-run"
+          }
+        ],
+        "safer_alternatives": [
+          "Run `git clean -ndx` first and review every path before forced cleanup."
+        ],
+        "severity": "high",
+        "title": "Forced Git clean"
+      },
+      {
+        "action_classes": [
+          "git destructive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies remote history replacement through a forced push.",
+        "family": "git-destructive",
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "git"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config-env",
+                  "--exec-path",
+                  "--git-dir",
+                  "--namespace",
+                  "--super-prefix",
+                  "--work-tree",
+                  "-c"
+                ],
+                "options_with_values": [
+                  "--exec",
+                  "--push-option",
+                  "--receive-pack",
+                  "--repo",
+                  "-o"
+                ],
+                "required_flags": [
+                  "--force"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "push"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "git"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config-env",
+                  "--exec-path",
+                  "--git-dir",
+                  "--namespace",
+                  "--super-prefix",
+                  "--work-tree",
+                  "-c"
+                ],
+                "options_with_values": [
+                  "--exec",
+                  "--push-option",
+                  "--receive-pack",
+                  "--repo",
+                  "-o"
+                ],
+                "required_flags": [
+                  "-f"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "push"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "executables": [
+                  "git"
+                ],
+                "leading_operands_to_skip": 1,
+                "leading_options_with_values": [
+                  "--config-env",
+                  "--exec-path",
+                  "--git-dir",
+                  "--namespace",
+                  "--super-prefix",
+                  "--work-tree",
+                  "-C",
+                  "-c"
+                ],
+                "operand_prefixes": [
+                  "+"
+                ],
+                "options_supplying_leading_operands": [
+                  "--repo"
+                ],
+                "options_with_values": [
+                  "--exec",
+                  "--push-option",
+                  "--receive-pack",
+                  "--repo",
+                  "-o"
+                ],
+                "subcommands": [
+                  "push"
+                ]
+              },
+              "op": "subcommand-operand-prefix.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.git.permission.force-push",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.git.force-push",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "git"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [
+                      [
+                        "-n",
+                        "--no-dry-run"
+                      ]
+                    ],
+                    "leading_options_with_values": [
+                      "--config-env",
+                      "--exec-path",
+                      "--git-dir",
+                      "--namespace",
+                      "--super-prefix",
+                      "--work-tree",
+                      "-c"
+                    ],
+                    "options_with_values": [
+                      "--exec",
+                      "--push-option",
+                      "--receive-pack",
+                      "--repo",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "-n"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "push"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "git"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [
+                      [
+                        "--dry-run",
+                        "--no-dry-run"
+                      ]
+                    ],
+                    "leading_options_with_values": [
+                      "--config-env",
+                      "--exec-path",
+                      "--git-dir",
+                      "--namespace",
+                      "--super-prefix",
+                      "--work-tree",
+                      "-c"
+                    ],
+                    "options_with_values": [
+                      "--exec",
+                      "--push-option",
+                      "--receive-pack",
+                      "--repo",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--dry-run"
+                    ],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "push"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Git push preview",
+            "variant_id": "dry-run"
+          }
+        ],
+        "safer_alternatives": [
+          "Use `--force-with-lease` after fetching and reviewing the remote ref."
+        ],
+        "severity": "high",
+        "title": "Forced Git push"
+      },
+      {
+        "action_classes": [
+          "git destructive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies pushes that delete a remote branch reference.",
+        "family": "git-destructive",
+        "matcher": {
+          "config": {
+            "allow_leading_options": true,
+            "executables": [
+              "git"
+            ],
+            "fail_secure_unknown_options": false,
+            "forbidden_flags": [],
+            "interspersed_flags": [],
+            "interspersed_options_with_values": [],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [
+              "--config-env",
+              "--exec-path",
+              "--git-dir",
+              "--namespace",
+              "--super-prefix",
+              "--work-tree",
+              "-c"
+            ],
+            "options_with_values": [
+              "--exec",
+              "--push-option",
+              "--receive-pack",
+              "--repo",
+              "-o"
+            ],
+            "required_flags": [
+              "--delete"
+            ],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": [
+              "push"
+            ]
+          },
+          "op": "executable.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.git.permission.remote-branch-delete",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.git.remote-branch-delete",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "List the exact remote branch and confirm its merge state before deletion."
+        ],
+        "severity": "high",
+        "title": "Remote Git branch deletion"
+      },
+      {
+        "action_classes": [
+          "git destructive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies forced deletion of a local branch reference.",
+        "family": "git-destructive",
+        "matcher": {
+          "config": {
+            "allow_leading_options": true,
+            "executables": [
+              "git"
+            ],
+            "fail_secure_unknown_options": false,
+            "forbidden_flags": [],
+            "interspersed_flags": [],
+            "interspersed_options_with_values": [],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [
+              "--config-env",
+              "--exec-path",
+              "--git-dir",
+              "--namespace",
+              "--super-prefix",
+              "--work-tree",
+              "-c"
+            ],
+            "options_with_values": [],
+            "required_flags": [
+              "-d"
+            ],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": [
+              "branch"
+            ]
+          },
+          "op": "executable.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.git.permission.local-branch-delete",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.git.local-branch-delete",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Inspect the branch commits and use `git branch -d` when it is fully merged."
+        ],
+        "severity": "high",
+        "title": "Local Git branch deletion"
+      },
+      {
+        "action_classes": [
+          "git workspace command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies git switch operations.",
+        "family": "git-workspace",
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "git"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h"
+                ],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config-env",
+                  "--exec-path",
+                  "--git-dir",
+                  "--help",
+                  "--namespace",
+                  "--super-prefix",
+                  "--version",
+                  "--work-tree",
+                  "-c",
+                  "-h"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "switch"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.git.permission.switch",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.git.switch",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Inspect the current branch and working tree before changing them."
+        ],
+        "severity": "high",
+        "title": "Git switch"
+      },
+      {
+        "action_classes": [
+          "git workspace command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies git checkout operations.",
+        "family": "git-workspace",
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "git"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h"
+                ],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config-env",
+                  "--exec-path",
+                  "--git-dir",
+                  "--help",
+                  "--namespace",
+                  "--super-prefix",
+                  "--version",
+                  "--work-tree",
+                  "-c",
+                  "-h"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "checkout"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.git.permission.checkout",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.git.checkout",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Inspect the current branch and working tree before changing them."
+        ],
+        "severity": "high",
+        "title": "Git checkout"
+      },
+      {
+        "action_classes": [
+          "git workspace command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies git restore operations.",
+        "family": "git-workspace",
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "git"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h"
+                ],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config-env",
+                  "--exec-path",
+                  "--git-dir",
+                  "--help",
+                  "--namespace",
+                  "--super-prefix",
+                  "--version",
+                  "--work-tree",
+                  "-c",
+                  "-h"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "restore"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.git.permission.restore",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.git.restore",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Inspect the current branch and working tree before changing them."
+        ],
+        "severity": "high",
+        "title": "Git restore"
+      },
+      {
+        "action_classes": [
+          "git workspace command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies git stash operations.",
+        "family": "git-workspace",
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "git"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h"
+                ],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config-env",
+                  "--exec-path",
+                  "--git-dir",
+                  "--help",
+                  "--namespace",
+                  "--super-prefix",
+                  "--version",
+                  "--work-tree",
+                  "-c",
+                  "-h"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "stash"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.git.permission.stash",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.git.stash",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Inspect the current branch and working tree before changing them."
+        ],
+        "severity": "high",
+        "title": "Git stash"
+      },
+      {
+        "action_classes": [
+          "git workspace command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies git add operations.",
+        "family": "git-workspace",
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "git"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h"
+                ],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config-env",
+                  "--exec-path",
+                  "--git-dir",
+                  "--help",
+                  "--namespace",
+                  "--super-prefix",
+                  "--version",
+                  "--work-tree",
+                  "-c",
+                  "-h"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "add"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.git.permission.add",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.git.add",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Inspect the current branch and working tree before changing them."
+        ],
+        "severity": "high",
+        "title": "Git add"
+      },
+      {
+        "action_classes": [
+          "git workspace command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies git commit operations.",
+        "family": "git-workspace",
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "git"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h"
+                ],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config-env",
+                  "--exec-path",
+                  "--git-dir",
+                  "--help",
+                  "--namespace",
+                  "--super-prefix",
+                  "--version",
+                  "--work-tree",
+                  "-c",
+                  "-h"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "commit"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.git.permission.commit",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.git.commit",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Inspect the current branch and working tree before changing them."
+        ],
+        "severity": "high",
+        "title": "Git commit"
+      },
+      {
+        "action_classes": [
+          "git workspace command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies git move operations.",
+        "family": "git-workspace",
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "git"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h"
+                ],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config-env",
+                  "--exec-path",
+                  "--git-dir",
+                  "--help",
+                  "--namespace",
+                  "--super-prefix",
+                  "--version",
+                  "--work-tree",
+                  "-c",
+                  "-h"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "mv"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.git.permission.mv",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.git.mv",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Inspect the current branch and working tree before changing them."
+        ],
+        "severity": "high",
+        "title": "Git move"
+      },
+      {
+        "action_classes": [
+          "git workspace command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies git remove operations.",
+        "family": "git-workspace",
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "git"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h"
+                ],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config-env",
+                  "--exec-path",
+                  "--git-dir",
+                  "--help",
+                  "--namespace",
+                  "--super-prefix",
+                  "--version",
+                  "--work-tree",
+                  "-c",
+                  "-h"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "rm"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.git.permission.rm",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.git.rm",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Inspect the current branch and working tree before changing them."
+        ],
+        "severity": "high",
+        "title": "Git remove"
+      },
+      {
+        "action_classes": [
+          "git workspace command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies git branch operations.",
+        "family": "git-workspace",
+        "matcher": null,
+        "native_capability": "command.git.branch.v1",
+        "permission_id": "command.git.permission.branch",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.git.branch",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Inspect the current branch and working tree before changing them."
+        ],
+        "severity": "high",
+        "title": "Git branch"
+      },
+      {
+        "action_classes": [
+          "git workspace command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies git worktree operations.",
+        "family": "git-workspace",
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "git"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h"
+                ],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config-env",
+                  "--exec-path",
+                  "--git-dir",
+                  "--help",
+                  "--namespace",
+                  "--super-prefix",
+                  "--version",
+                  "--work-tree",
+                  "-c",
+                  "-h"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "worktree"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.git.permission.worktree",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.git.worktree",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Inspect the current branch and working tree before changing them."
+        ],
+        "severity": "high",
+        "title": "Git worktree"
+      },
+      {
+        "action_classes": [
+          "git workspace command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies git tag operations.",
+        "family": "git-workspace",
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "git"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h"
+                ],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config-env",
+                  "--exec-path",
+                  "--git-dir",
+                  "--help",
+                  "--namespace",
+                  "--super-prefix",
+                  "--version",
+                  "--work-tree",
+                  "-c",
+                  "-h"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "tag"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.git.permission.tag",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.git.tag",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Inspect the current branch and working tree before changing them."
+        ],
+        "severity": "high",
+        "title": "Git tag"
+      },
+      {
+        "action_classes": [
+          "git workspace command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies git clean operations.",
+        "family": "git-workspace",
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "git"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--force",
+                  "--help",
+                  "--version",
+                  "-f",
+                  "-h"
+                ],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config-env",
+                  "--exec-path",
+                  "--git-dir",
+                  "--help",
+                  "--namespace",
+                  "--super-prefix",
+                  "--version",
+                  "--work-tree",
+                  "-c",
+                  "-h"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "clean"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.git.permission.clean",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.git.clean",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Inspect the current branch and working tree before changing them."
+        ],
+        "severity": "high",
+        "title": "Git clean"
+      },
+      {
+        "action_classes": [
+          "git workspace command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies git rebase operations.",
+        "family": "git-history",
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "git"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h"
+                ],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config-env",
+                  "--exec-path",
+                  "--git-dir",
+                  "--help",
+                  "--namespace",
+                  "--super-prefix",
+                  "--version",
+                  "--work-tree",
+                  "-c",
+                  "-h"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "rebase"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.git.permission.rebase",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.git.rebase",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Inspect the current history and create a backup branch before rewriting it."
+        ],
+        "severity": "high",
+        "title": "Git rebase"
+      },
+      {
+        "action_classes": [
+          "git workspace command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies git merge operations.",
+        "family": "git-history",
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "git"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h"
+                ],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config-env",
+                  "--exec-path",
+                  "--git-dir",
+                  "--help",
+                  "--namespace",
+                  "--super-prefix",
+                  "--version",
+                  "--work-tree",
+                  "-c",
+                  "-h"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "merge"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.git.permission.merge",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.git.merge",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Inspect the current history and create a backup branch before rewriting it."
+        ],
+        "severity": "high",
+        "title": "Git merge"
+      },
+      {
+        "action_classes": [
+          "git workspace command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies git cherry-pick operations.",
+        "family": "git-history",
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "git"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h"
+                ],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config-env",
+                  "--exec-path",
+                  "--git-dir",
+                  "--help",
+                  "--namespace",
+                  "--super-prefix",
+                  "--version",
+                  "--work-tree",
+                  "-c",
+                  "-h"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "cherry-pick"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.git.permission.cherry-pick",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.git.cherry-pick",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Inspect the current history and create a backup branch before rewriting it."
+        ],
+        "severity": "high",
+        "title": "Git cherry-pick"
+      },
+      {
+        "action_classes": [
+          "git workspace command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies git revert operations.",
+        "family": "git-history",
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "git"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h"
+                ],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config-env",
+                  "--exec-path",
+                  "--git-dir",
+                  "--help",
+                  "--namespace",
+                  "--super-prefix",
+                  "--version",
+                  "--work-tree",
+                  "-c",
+                  "-h"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "revert"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.git.permission.revert",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.git.revert",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Inspect the current history and create a backup branch before rewriting it."
+        ],
+        "severity": "high",
+        "title": "Git revert"
+      },
+      {
+        "action_classes": [
+          "git workspace command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies git reset operations.",
+        "family": "git-history",
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "git"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--hard",
+                  "--help",
+                  "--version",
+                  "-h"
+                ],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config-env",
+                  "--exec-path",
+                  "--git-dir",
+                  "--help",
+                  "--namespace",
+                  "--super-prefix",
+                  "--version",
+                  "--work-tree",
+                  "-c",
+                  "-h"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "reset"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.git.permission.reset",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.git.reset",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Inspect the current history and create a backup branch before rewriting it."
+        ],
+        "severity": "high",
+        "title": "Git reset"
+      },
+      {
+        "action_classes": [
+          "git workspace command"
+        ],
+        "default_mode": "disabled",
+        "description": "Identifies git pull operations.",
+        "family": "git-remote",
+        "matcher": null,
+        "native_capability": "command.git.pull.v1",
+        "permission_id": "command.git.permission.pull",
+        "risk_classes": [
+          "network_egress"
+        ],
+        "rule_id": "command.git.pull",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Inspect the remote and local refs before updating them."
+        ],
+        "severity": "high",
+        "title": "Git pull"
+      },
+      {
+        "action_classes": [
+          "git workspace command"
+        ],
+        "default_mode": "disabled",
+        "description": "Identifies git push operations.",
+        "family": "git-remote",
+        "matcher": null,
+        "native_capability": "command.git.push.v1",
+        "permission_id": "command.git.permission.push",
+        "risk_classes": [
+          "network_egress"
+        ],
+        "rule_id": "command.git.push",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Inspect the remote and local refs before updating them."
+        ],
+        "severity": "high",
+        "title": "Git push"
+      },
+      {
+        "action_classes": [
+          "git workspace command"
+        ],
+        "default_mode": "disabled",
+        "description": "Identifies git clone operations.",
+        "family": "git-remote",
+        "matcher": null,
+        "native_capability": "command.git.clone.v1",
+        "permission_id": "command.git.permission.clone",
+        "risk_classes": [
+          "network_egress"
+        ],
+        "rule_id": "command.git.clone",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Inspect the remote and local refs before updating them."
+        ],
+        "severity": "high",
+        "title": "Git clone"
+      },
+      {
+        "action_classes": [
+          "git workspace command"
+        ],
+        "default_mode": "disabled",
+        "description": "Identifies git fetch operations.",
+        "family": "git-remote",
+        "matcher": null,
+        "native_capability": "command.git.fetch.v1",
+        "permission_id": "command.git.permission.fetch",
+        "risk_classes": [
+          "network_egress"
+        ],
+        "rule_id": "command.git.fetch",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Inspect the remote and local refs before updating them."
+        ],
+        "severity": "high",
+        "title": "Git fetch"
+      },
+      {
+        "action_classes": [
+          "git workspace command"
+        ],
+        "default_mode": "disabled",
+        "description": "Identifies git remote operations.",
+        "family": "git-remote",
+        "matcher": null,
+        "native_capability": "command.git.remote.v1",
+        "permission_id": "command.git.permission.remote",
+        "risk_classes": [
+          "network_egress"
+        ],
+        "rule_id": "command.git.remote",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Inspect the remote and local refs before updating them."
+        ],
+        "severity": "high",
+        "title": "Git remote"
+      },
+      {
+        "action_classes": [
+          "git workspace command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies git helper or output write operations.",
+        "family": "git-workspace",
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "git"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--cached",
+                  "--help",
+                  "--staged",
+                  "--version",
+                  "-h"
+                ],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config-env",
+                  "--exec-path",
+                  "--git-dir",
+                  "--help",
+                  "--namespace",
+                  "--super-prefix",
+                  "--version",
+                  "--work-tree",
+                  "-c",
+                  "-h"
+                ],
+                "options_with_values": [
+                  "--output"
+                ],
+                "required_flags": [
+                  "--output"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "diff"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "git"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h"
+                ],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config-env",
+                  "--exec-path",
+                  "--git-dir",
+                  "--help",
+                  "--namespace",
+                  "--super-prefix",
+                  "--version",
+                  "--work-tree",
+                  "-c",
+                  "-h"
+                ],
+                "options_with_values": [],
+                "required_flags": [
+                  "--ext-diff"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "diff"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "git"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h"
+                ],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config-env",
+                  "--exec-path",
+                  "--git-dir",
+                  "--help",
+                  "--namespace",
+                  "--super-prefix",
+                  "--version",
+                  "--work-tree",
+                  "-c",
+                  "-h"
+                ],
+                "options_with_values": [],
+                "required_flags": [
+                  "--textconv"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "diff"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "git"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h"
+                ],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config-env",
+                  "--exec-path",
+                  "--git-dir",
+                  "--help",
+                  "--namespace",
+                  "--super-prefix",
+                  "--version",
+                  "--work-tree",
+                  "-c",
+                  "-h"
+                ],
+                "options_with_values": [
+                  "--output"
+                ],
+                "required_flags": [
+                  "--output"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "show"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "git"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h"
+                ],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config-env",
+                  "--exec-path",
+                  "--git-dir",
+                  "--help",
+                  "--namespace",
+                  "--super-prefix",
+                  "--version",
+                  "--work-tree",
+                  "-c",
+                  "-h"
+                ],
+                "options_with_values": [],
+                "required_flags": [
+                  "--ext-diff"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "show"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "git"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h"
+                ],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config-env",
+                  "--exec-path",
+                  "--git-dir",
+                  "--help",
+                  "--namespace",
+                  "--super-prefix",
+                  "--version",
+                  "--work-tree",
+                  "-c",
+                  "-h"
+                ],
+                "options_with_values": [],
+                "required_flags": [
+                  "--textconv"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "show"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "git"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h"
+                ],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config-env",
+                  "--exec-path",
+                  "--git-dir",
+                  "--help",
+                  "--namespace",
+                  "--super-prefix",
+                  "--version",
+                  "--work-tree",
+                  "-c",
+                  "-h"
+                ],
+                "options_with_values": [
+                  "--output"
+                ],
+                "required_flags": [
+                  "--output"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "log"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "git"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h"
+                ],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config-env",
+                  "--exec-path",
+                  "--git-dir",
+                  "--help",
+                  "--namespace",
+                  "--super-prefix",
+                  "--version",
+                  "--work-tree",
+                  "-c",
+                  "-h"
+                ],
+                "options_with_values": [],
+                "required_flags": [
+                  "--ext-diff"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "log"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "git"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h"
+                ],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config-env",
+                  "--exec-path",
+                  "--git-dir",
+                  "--help",
+                  "--namespace",
+                  "--super-prefix",
+                  "--version",
+                  "--work-tree",
+                  "-c",
+                  "-h"
+                ],
+                "options_with_values": [],
+                "required_flags": [
+                  "--textconv"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "log"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.git.permission.unsafe-read",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.git.unsafe-read",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Inspect the current branch and working tree before changing them."
+        ],
+        "severity": "high",
+        "title": "Git helper or output write"
+      },
+      {
+        "action_classes": [
+          "git read command"
+        ],
+        "default_mode": "disabled",
+        "description": "Identifies git status operations.",
+        "family": "git-read",
+        "matcher": null,
+        "native_capability": "command.git.status.v1",
+        "permission_id": "command.git.permission.status",
+        "risk_classes": [
+          "local_secret_read"
+        ],
+        "rule_id": "command.git.status",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Read-only Git inspection does not change repository state."
+        ],
+        "severity": "low",
+        "title": "Git status"
+      },
+      {
+        "action_classes": [
+          "git read command"
+        ],
+        "default_mode": "disabled",
+        "description": "Identifies git log operations.",
+        "family": "git-read",
+        "matcher": null,
+        "native_capability": "command.git.log.v1",
+        "permission_id": "command.git.permission.log",
+        "risk_classes": [
+          "local_secret_read"
+        ],
+        "rule_id": "command.git.log",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Read-only Git inspection does not change repository state."
+        ],
+        "severity": "low",
+        "title": "Git log"
+      },
+      {
+        "action_classes": [
+          "git read command"
+        ],
+        "default_mode": "disabled",
+        "description": "Identifies git diff operations.",
+        "family": "git-read",
+        "matcher": null,
+        "native_capability": "command.git.diff.v1",
+        "permission_id": "command.git.permission.diff",
+        "risk_classes": [
+          "local_secret_read"
+        ],
+        "rule_id": "command.git.diff",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Read-only Git inspection does not change repository state."
+        ],
+        "severity": "low",
+        "title": "Git diff"
+      },
+      {
+        "action_classes": [
+          "git read command"
+        ],
+        "default_mode": "disabled",
+        "description": "Identifies git show operations.",
+        "family": "git-read",
+        "matcher": null,
+        "native_capability": "command.git.show.v1",
+        "permission_id": "command.git.permission.show",
+        "risk_classes": [
+          "local_secret_read"
+        ],
+        "rule_id": "command.git.show",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Read-only Git inspection does not change repository state."
+        ],
+        "severity": "low",
+        "title": "Git show"
+      },
+      {
+        "action_classes": [
+          "git read command"
+        ],
+        "default_mode": "disabled",
+        "description": "Identifies git blame operations.",
+        "family": "git-read",
+        "matcher": null,
+        "native_capability": "command.git.blame.v1",
+        "permission_id": "command.git.permission.blame",
+        "risk_classes": [
+          "local_secret_read"
+        ],
+        "rule_id": "command.git.blame",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Read-only Git inspection does not change repository state."
+        ],
+        "severity": "low",
+        "title": "Git blame"
+      },
+      {
+        "action_classes": [
+          "git read command"
+        ],
+        "default_mode": "disabled",
+        "description": "Identifies git grep operations.",
+        "family": "git-read",
+        "matcher": null,
+        "native_capability": "command.git.grep.v1",
+        "permission_id": "command.git.permission.grep",
+        "risk_classes": [
+          "local_secret_read"
+        ],
+        "rule_id": "command.git.grep",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Read-only Git inspection does not change repository state."
+        ],
+        "severity": "low",
+        "title": "Git grep"
+      },
+      {
+        "action_classes": [
+          "git read command"
+        ],
+        "default_mode": "disabled",
+        "description": "Identifies git describe operations.",
+        "family": "git-read",
+        "matcher": null,
+        "native_capability": "command.git.describe.v1",
+        "permission_id": "command.git.permission.describe",
+        "risk_classes": [
+          "local_secret_read"
+        ],
+        "rule_id": "command.git.describe",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Read-only Git inspection does not change repository state."
+        ],
+        "severity": "low",
+        "title": "Git describe"
+      },
+      {
+        "action_classes": [
+          "git read command"
+        ],
+        "default_mode": "disabled",
+        "description": "Identifies git ls-files operations.",
+        "family": "git-read",
+        "matcher": null,
+        "native_capability": "command.git.ls-files.v1",
+        "permission_id": "command.git.permission.ls-files",
+        "risk_classes": [
+          "local_secret_read"
+        ],
+        "rule_id": "command.git.ls-files",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Read-only Git inspection does not change repository state."
+        ],
+        "severity": "low",
+        "title": "Git ls-files"
+      },
+      {
+        "action_classes": [
+          "git read command"
+        ],
+        "default_mode": "disabled",
+        "description": "Identifies git reflog operations.",
+        "family": "git-read",
+        "matcher": null,
+        "native_capability": "command.git.reflog.v1",
+        "permission_id": "command.git.permission.reflog",
+        "risk_classes": [
+          "local_secret_read"
+        ],
+        "rule_id": "command.git.reflog",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Read-only Git inspection does not change repository state."
+        ],
+        "severity": "low",
+        "title": "Git reflog"
+      }
+    ],
+    "safer_alternatives": [
+      "Preview affected files and refs before destructive repository operations.",
+      "Create a temporary branch or stash before discarding local work.",
+      "Run fetch from the repository with a named origin instead of a URL remote.",
+      "Inspect the staged index with git diff --cached --check or lockfile excludes."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

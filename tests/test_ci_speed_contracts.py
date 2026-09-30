@@ -5,6 +5,7 @@ from __future__ import annotations
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 import yaml
@@ -12,49 +13,72 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def _workflow(name: str) -> dict:
+def _workflow(name: str) -> dict[str | bool, Any]:
     return yaml.safe_load((ROOT / ".github/workflows" / name).read_text())
+
+
+def test_ci_checkouts_do_not_expose_credentials_to_project_code() -> None:
+    workflow = _workflow("ci.yml")
+    checkouts = [
+        step
+        for job in workflow["jobs"].values()
+        for step in job.get("steps", [])
+        if step.get("uses", "").startswith("actions/checkout@")
+    ]
+
+    assert checkouts
+    assert all(step.get("with", {}).get("persist-credentials") is False for step in checkouts)
 
 
 @pytest.mark.parametrize("filename", ["publish-mcpb.yml", "publish-mcp-registry.yml"])
 def test_downstream_publication_requires_successful_same_repository_release(filename: str) -> None:
+    """Privileged checkout depends on independently verified canonical run provenance."""
     workflow = _workflow(filename)
     # PyYAML's YAML 1.1 loader parses the unquoted Actions key as True.
     trigger = workflow[True]
-    assert "push" not in trigger
+    assert set(trigger) == {"workflow_run"}
     assert trigger["workflow_run"] == {
         "workflows": ["Publish to PyPI"],
         "types": ["completed"],
         "branches": ["main", "release/3.0"],
     }
+    verifier = workflow["jobs"]["verify"]
+    assert verifier["uses"] == "./.github/workflows/verify-mcp-release-source.yml"
+    assert verifier["permissions"] == {"actions": "read", "contents": "read"}
+    assert "secrets" not in verifier
     job = workflow["jobs"]["publish"]
-    for condition in (
-        "github.event.workflow_run.conclusion == 'success'",
-        'contains(fromJSON(\'["push", "workflow_dispatch"]\'), github.event.workflow_run.event)',
-        "github.event.workflow_run.run_attempt == 1",
-        "github.event.workflow_run.head_repository.full_name == github.repository",
-        "github.event.workflow_run.head_branch)",
-        "[skip release publish]",
-    ):
-        assert condition in job["if"]
-    checkout = next(step for step in job["steps"] if step.get("uses", "").startswith("actions/checkout@"))
-    assert checkout["with"]["ref"] == "${{ github.event.workflow_run.head_sha }}"
-    assert checkout["with"]["persist-credentials"] is False
-    release = next(step for step in job["steps"] if step.get("id") == "release")
-    assert release["env"]["SOURCE_SHA"] == "${{ github.event.workflow_run.head_sha }}"
-    assert release["env"]["SOURCE_REF"] == "refs/heads/${{ github.event.workflow_run.head_branch }}"
-    assert 'git tag --points-at "$SOURCE_SHA"' in release["run"]
-    if filename == "publish-mcpb.yml":
-        validation = workflow["jobs"]["validate"]
+    for gated_job in (verifier, job):
+        assert "always()" not in gated_job["if"]
         for condition in (
-            "github.event_name == 'pull_request'",
             "github.event.workflow_run.conclusion == 'success'",
             'contains(fromJSON(\'["push", "workflow_dispatch"]\'), github.event.workflow_run.event)',
             "github.event.workflow_run.run_attempt == 1",
             "github.event.workflow_run.head_repository.full_name == github.repository",
             "github.event.workflow_run.head_branch)",
+            "[skip release publish]",
         ):
-            assert condition in validation["if"]
+            assert condition in gated_job["if"]
+    assert "needs.verify.outputs.sha != ''" in job["if"]
+    assert "needs.verify.outputs.branch != ''" in job["if"]
+    assert "verify" in ([job["needs"]] if isinstance(job["needs"], str) else job["needs"])
+    checkout = next(step for step in job["steps"] if step.get("uses", "").startswith("actions/checkout@"))
+    assert checkout["with"]["ref"] == "${{ needs.verify.outputs.sha }}"
+    assert checkout["with"]["persist-credentials"] is False
+    release = next(step for step in job["steps"] if step.get("id") == "release")
+    assert release["env"]["SOURCE_SHA"] == "${{ needs.verify.outputs.sha }}"
+    assert release["env"]["SOURCE_REF"] == "refs/heads/${{ needs.verify.outputs.branch }}"
+    assert 'git tag --points-at "$SOURCE_SHA"' in release["run"]
+    if filename == "publish-mcpb.yml":
+        validation = workflow["jobs"]["validate"]
+        assert validation["needs"] == "verify"
+        assert "always()" not in validation["if"]
+        assert "pull_request" not in validation["if"]
+        assert "needs.verify.outputs.sha != ''" in validation["if"]
+        assert "needs.verify.outputs.branch != ''" in validation["if"]
+        checkout = validation["steps"][0]
+        assert checkout["with"]["ref"] == "${{ needs.verify.outputs.sha }}"
+        assert checkout["with"]["persist-credentials"] is False
+        assert "validate" in job["needs"]
 
 
 @pytest.mark.parametrize(
@@ -84,9 +108,12 @@ def test_native_wheel_build_keeps_all_platforms_and_integrity_checks() -> None:
 def test_duration_telemetry_uses_successful_push_on_target_branch() -> None:
     workflow = _workflow("ci.yml")
     assert set(workflow[True]["pull_request"]["branches"]) <= set(workflow[True]["push"]["branches"])
-    job = workflow["jobs"]["test-plan"]
-    restore = next(step for step in job["steps"] if step.get("id") == "latest-duration-telemetry")
-    assert restore["env"]["TELEMETRY_BRANCH"] == "${{ github.event.pull_request.base.ref || github.ref_name }}"
+    job = workflow["jobs"]["coverage-plan"]
+    plan = next(step for step in job["steps"] if step.get("uses") == "./.github/actions/plan-pytest")
+    assert plan["with"]["telemetry-branch"] == "${{ github.event.pull_request.base.ref || github.ref_name }}"
+    action = yaml.safe_load((ROOT / ".github/actions/plan-pytest/action.yml").read_text())
+    restore = next(step for step in action["runs"]["steps"] if step.get("id") == "latest-duration-telemetry")
+    assert restore["env"]["TELEMETRY_BRANCH"] == "${{ inputs.telemetry-branch }}"
     command = restore["run"]
     assert '-f branch="$TELEMETRY_BRANCH" -f event=push -f status=success' in command
     assert 'test "$event" = "push"' in command

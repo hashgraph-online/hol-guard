@@ -60,6 +60,7 @@ pub(super) fn generic_result(
         reason_code: reason_code.to_owned(),
         reason: reason.to_owned(),
         explicitly_benign,
+        command_extensions: None,
     }
 }
 

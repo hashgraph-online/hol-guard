@@ -230,6 +230,105 @@ class TestNoHardcodedSecrets:
             assert result.passed is False
             assert result.findings[0].file_path == "src/app.py"
 
+    def test_ignores_env_interpolations_in_scripts(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            scripts_dir = root / "scripts"
+            scripts_dir.mkdir()
+            (scripts_dir / "x.sh").write_text('API_KEY="${GEMINI_API_KEY:-}"\n', encoding="utf-8")
+
+            result = check_no_hardcoded_secrets(root)
+
+            assert result.passed is True
+            assert all(finding.rule_id != "HARDCODED_SECRET" for finding in result.findings)
+
+    def test_ignores_bracketed_placeholders_in_source_code(self):
+        """Verify that enclosed, word-like bracketed placeholders in source code are not flagged."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            src_dir = root / "src"
+            src_dir.mkdir()
+            (src_dir / "tools.ts").write_text(
+                'const nextCall = { email: "user@example.com", password: "<password>" };\n'
+                'export const REDACTED_APP_TOKEN = "[redacted - call the reveal tool for appToken]";\n',
+                encoding="utf-8",
+            )
+
+            result = check_no_hardcoded_secrets(root)
+
+            assert result.passed is True
+            assert all(finding.rule_id != "HARDCODED_SECRET" for finding in result.findings)
+
+    def test_detects_bracket_prefixed_real_secret_in_source_code(self):
+        """Verify that unclosed or non-placeholder credentials starting with brackets are still caught."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            src_dir = root / "src"
+            src_dir.mkdir()
+            (src_dir / "config.ts").write_text(
+                'const dbConfig = { password: "[Xk9!q2mZ7" };\n',
+                encoding="utf-8",
+            )
+
+            result = check_no_hardcoded_secrets(root)
+
+            assert result.passed is False
+            assert any(finding.rule_id == "HARDCODED_SECRET" for finding in result.findings)
+
+    def test_detects_closed_bracket_credential_looking_like_placeholder(self):
+        """Verify that enclosed pure-alphanumeric credentials like [Xk9q2mZ7] are still flagged."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            src_dir = root / "src"
+            src_dir.mkdir()
+            (src_dir / "config.ts").write_text(
+                'const dbConfig = { password: "[Xk9q2mZ7]" };\n',
+                encoding="utf-8",
+            )
+
+            result = check_no_hardcoded_secrets(root)
+
+            assert result.passed is False
+            assert any(finding.rule_id == "HARDCODED_SECRET" for finding in result.findings)
+
+    def test_detects_bracketed_prefix_in_multiline_literal(self):
+        """Verify that a bracketed prefix inside an unterminated or multiline literal is not skipped."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            src_dir = root / "src"
+            src_dir.mkdir()
+            (src_dir / "config.ts").write_text(
+                'const dbConfig = { password: "[REDACTED]\n' + 's3cr3tP@ssw0rd!" };\n',
+                encoding="utf-8",
+            )
+
+            result = check_no_hardcoded_secrets(root)
+
+            assert result.passed is False
+            assert any(finding.rule_id == "HARDCODED_SECRET" for finding in result.findings)
+
+    def test_bracketed_placeholder_text_boundaries(self):
+        """Credential-shaped bracket contents stay flagged; word-like placeholders pass."""
+        helper = security._is_bracketed_placeholder_text
+        for placeholder in (
+            "<password>",
+            "<your-token-here>",
+            "<path/to/file>",
+            "[redacted - call the reveal tool for appToken]",
+            "[key: value]",
+            "[sha256-of-file]",
+            "<YOUR_API_KEY>",
+        ):
+            assert helper(placeholder) is True
+        for credential in (
+            "[Xk9q2mZ7]",
+            "[hunter2hunter2]",
+            "[Xk9q-2mZ7]",
+            "<Prod_Db.Pass2024>",
+            "[unclosed",
+        ):
+            assert helper(credential) is False
+
     def test_detects_plain_provider_token_examples_without_illustrative_context(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

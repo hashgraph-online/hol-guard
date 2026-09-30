@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from .ecosystems.types import NormalizedPackage
 from .path_support import is_safe_relative_path
 
+DSH_BUNDLE_MODES = frozenset({"executable", "patch"})
 DSH_SEMVER_RE = re.compile(
     "".join(
         (
@@ -57,6 +58,7 @@ class DshValidation:
     patch_ok: bool
     runtime_ok: bool
     runtime_path: str | None
+    runtime_required: bool
 
 
 def _export_target(value: object) -> str | None:
@@ -82,6 +84,23 @@ def _export_target(value: object) -> str | None:
         if (resolved := _export_target(candidate)) is not None:
             return resolved
     return None
+
+
+def _declared_bundle_mode(bundle: dict[str, object]) -> str | None:
+    """Return the declared bundle mode, or None when the value is invalid."""
+
+    if "mode" not in bundle:
+        return "executable"
+    mode = bundle.get("mode")
+    if isinstance(mode, str) and mode in DSH_BUNDLE_MODES:
+        return mode
+    return None
+
+
+def _declares_runtime_entry(manifest: dict[str, object]) -> bool:
+    """Return whether the manifest claims a package runtime via main or exports."""
+
+    return "main" in manifest or "exports" in manifest
 
 
 def _runtime_path(manifest: dict[str, object]) -> str | None:
@@ -295,7 +314,8 @@ def validate_dsh_package(package: NormalizedPackage) -> DshValidation:
 
     dsh = manifest.get("dsh")
     bundle = dsh.get("bundle") if isinstance(dsh, dict) else None
-    bundle_ok = isinstance(bundle, dict) and bool(bundle)
+    mode = _declared_bundle_mode(bundle) if isinstance(bundle, dict) else None
+    bundle_ok = isinstance(bundle, dict) and bool(bundle) and mode is not None
     raw_patch = bundle.get("patch") if isinstance(bundle, dict) else None
     patch = raw_patch.strip() if isinstance(raw_patch, str) else None
     patch_target = package.root_path / patch if patch else None
@@ -308,9 +328,12 @@ def validate_dsh_package(package: NormalizedPackage) -> DshValidation:
         )
 
     runtime_path = _runtime_path(manifest)
+    runtime_required = mode != "patch" or _declares_runtime_entry(manifest)
     runtime_target = package.root_path / runtime_path if runtime_path is not None else None
     runtime_ok = False
-    if (
+    if not runtime_required:
+        runtime_ok = True
+    elif (
         runtime_path is not None
         and runtime_target is not None
         and is_safe_relative_path(package.root_path, runtime_path, require_exists=True)
@@ -321,4 +344,20 @@ def validate_dsh_package(package: NormalizedPackage) -> DshValidation:
             runtime_ok = _exports_apply(runtime_target.read_text(encoding="utf-8"))
         except (OSError, UnicodeError):
             runtime_ok = False
-    return DshValidation(metadata_ok, bundle_ok, patch_ok, runtime_ok, runtime_path)
+    return DshValidation(metadata_ok, bundle_ok, patch_ok, runtime_ok, runtime_path, runtime_required)
+
+
+def dsh_runtime_scan_message(validation: DshValidation) -> str:
+    if not validation.runtime_ok:
+        return "DSH runtime entry point must export apply(ctx)"
+    if validation.runtime_required:
+        return "DSH runtime exports apply(ctx)"
+    return "Patch-only DSH bundle does not require apply(ctx)"
+
+
+def dsh_runtime_verify_message(validation: DshValidation) -> str:
+    if not validation.runtime_ok:
+        return "Runtime entry point is missing a detectable apply(ctx) export"
+    if validation.runtime_required:
+        return "Runtime entry point exports apply(ctx)"
+    return "Patch-only DSH bundle does not declare an executable runtime"

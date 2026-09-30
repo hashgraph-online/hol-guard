@@ -118,9 +118,14 @@ def _invoke_guard_handler(handler: object, args: argparse.Namespace, **kwargs: o
 
 
 def _should_prime_policy_integrity(args: argparse.Namespace) -> bool:
-    """Prime local integrity state in the long-lived daemon process."""
+    """Do not prime integrity while constructing the daemon process.
 
-    return args.guard_command == "daemon" and bool(getattr(args, "serve", False))
+    Desktop waits for the approval-center URL. Secret-store priming on a large
+    Guard home can exceed that timeout before HTTP accepts.
+    """
+
+    del args
+    return False
 
 
 def _should_allow_system_keyring(args: argparse.Namespace) -> bool:
@@ -157,13 +162,17 @@ def run_guard_command(
     if isinstance(grok_executable, str) and grok_executable.strip():
         executable_overrides["grok"] = grok_executable.strip()
     context = HarnessContext(
-        home_dir=Path(home_override).resolve() if home_override else Path.home().resolve(),
+        home_dir=Path(home_override).expanduser().resolve() if home_override else Path.home().resolve(),
         workspace_dir=workspace,
         guard_home=guard_home,
         executable_overrides=executable_overrides,
         home_override_explicit=bool(home_override),
         workspace_override_explicit=bool(getattr(args, "workspace", None)),
     )
+    if args.guard_command == "doctor" and bool(getattr(args, "incident", False)):
+        from .doctor_incident import run_codex_incident_export
+
+        return run_codex_incident_export(args, context, output_stream=output_stream)
     try:
         enforce_lifecycle_gate(args, guard_home=guard_home)
     except ApprovalGateError as error:

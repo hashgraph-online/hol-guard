@@ -123,40 +123,58 @@ def check_marketplace_structure(package: NormalizedPackage) -> CheckResult:
             applicable=False,
         )
     plugins = package.raw_manifest.get("plugins")
-    strict = package.raw_manifest.get("strict")
+    findings: list[Finding] = []
+    if "strict" in package.raw_manifest:
+        findings.append(
+            _finding(
+                "CLAUDE_MARKETPLACE_STRICT_INVALID",
+                "Claude marketplace strict mode is not a root field",
+                'Claude Code defines "strict" on each plugins[] entry, not at the marketplace root.',
+                'Remove root-level "strict". Set boolean "strict" on a plugin entry, or omit it to default to true.',
+                file_path=".claude-plugin/marketplace.json",
+            )
+        )
     if not isinstance(plugins, list):
+        findings.insert(
+            0,
+            _finding(
+                "CLAUDE_MARKETPLACE_PLUGINS_MISSING",
+                "Claude marketplace plugins array missing",
+                'The Claude marketplace manifest must include a top-level "plugins" array.',
+                'Add "plugins": [] to .claude-plugin/marketplace.json.',
+                file_path=".claude-plugin/marketplace.json",
+            ),
+        )
         return CheckResult(
             name="Claude marketplace structure",
             passed=False,
             points=0,
             max_points=4,
             message='Claude marketplace must include a "plugins" array.',
-            findings=(
-                _finding(
-                    "CLAUDE_MARKETPLACE_PLUGINS_MISSING",
-                    "Claude marketplace plugins array missing",
-                    'The Claude marketplace manifest must include a top-level "plugins" array.',
-                    'Add "plugins": [] to .claude-plugin/marketplace.json.',
-                    file_path=".claude-plugin/marketplace.json",
-                ),
-            ),
+            findings=tuple(findings),
         )
-    if not isinstance(strict, bool):
+    for index, plugin in enumerate(plugins):
+        if not isinstance(plugin, dict) or "strict" not in plugin:
+            continue
+        if isinstance(plugin.get("strict"), bool):
+            continue
+        findings.append(
+            _finding(
+                "CLAUDE_MARKETPLACE_STRICT_INVALID",
+                "Claude marketplace plugin strict mode is invalid",
+                f'plugins[{index}] "strict" must be a boolean when present.',
+                'Set "strict": true or false on the plugin entry, or omit it to default to true.',
+                file_path=".claude-plugin/marketplace.json",
+            )
+        )
+    if findings:
         return CheckResult(
             name="Claude marketplace structure",
             passed=False,
             points=0,
             max_points=4,
-            message='Claude marketplace must define boolean "strict".',
-            findings=(
-                _finding(
-                    "CLAUDE_MARKETPLACE_STRICT_INVALID",
-                    "Claude marketplace strict mode missing",
-                    'The Claude marketplace manifest should declare a boolean "strict" mode.',
-                    'Set "strict": true or false in .claude-plugin/marketplace.json.',
-                    file_path=".claude-plugin/marketplace.json",
-                ),
-            ),
+            message='Claude marketplace "strict" must be a per-plugin boolean when present.',
+            findings=tuple(findings),
         )
     return CheckResult(
         name="Claude marketplace structure",

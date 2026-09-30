@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from ..mdm.user_health import run_user_health_cadence, user_health_report_due
 from ..review_event_wake import ReviewEventWake, ReviewEventWakeSignal, review_event_wake_signal
 from ..store import GuardStore
+from .cloud_review_retry_recovery import prepare_retry_identity_replay
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -46,9 +47,6 @@ def start_cloud_sync_sync_worker(
         if existing.thread.is_alive():
             raise RuntimeError("Previous Cloud Review sync worker did not stop.")
 
-    profile = store.get_cloud_sync_profile()
-    if not isinstance(profile, dict) or not profile.get("workspace_id") or not profile.get("sync_url"):
-        return None
     stop_event = threading.Event()
     wake_signal = review_event_wake_signal(store.path)
     safety_poll = poll_interval or float(
@@ -89,6 +87,18 @@ def stop_cloud_sync_sync_worker(
     return worker if worker.thread.is_alive() else None
 
 
+def refresh_cloud_review_sync_worker(
+    store: GuardStore, worker: CloudReviewSyncWorker | None, *, shutting_down: bool
+) -> tuple[CloudReviewSyncWorker | None, bool]:
+    if shutting_down:
+        return worker, False
+    worker = start_cloud_sync_sync_worker(store, worker)
+    if worker is None:
+        return None, False
+    worker.wake_signal.notify()
+    return worker, worker.thread.is_alive() and not worker.stop_event.is_set()
+
+
 def _bounded_error_wait(initial: float, maximum: float, streak: int) -> float:
     exponential = min(maximum, initial * (2 ** min(streak, 10)))
     return exponential * random.uniform(0.5, 1.0)
@@ -120,11 +130,23 @@ def _cloud_sync_sync_loop(
     from .runner import GuardSyncAuthorizationExpiredError, GuardSyncNotConfiguredError
 
     error_streak = 0
+    prepared_binding: dict[str, str] | None = None
     while not stop_event.is_set():
         observed_generation = wake_signal.generation()
         result: dict[str, object] = {}
         try:
+            profile = store.get_cloud_sync_profile()
+            if not isinstance(profile, dict) or not profile.get("workspace_id") or not profile.get("sync_url"):
+                # The account may connect after daemon startup. Keep the worker
+                # dormant, without network calls or an authentication-error loop.
+                error_streak = 0
+                wake_signal.wait(observed_generation, poll_interval)
+                continue
             auth_context = sync._resolve_cloud_review_sync_auth_context(store)
+            binding = store.get_review_event_oauth_binding()
+            if isinstance(binding, dict) and binding != prepared_binding:
+                _ = prepare_retry_identity_replay(store, binding=binding)
+                prepared_binding = binding
             result = sync.sync_cloud_review_events_once(store, auth_context)
             error_streak = 0
             with suppress(OSError, PermissionError, RuntimeError, ValueError):

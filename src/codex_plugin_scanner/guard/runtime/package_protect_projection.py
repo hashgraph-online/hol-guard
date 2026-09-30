@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from ..models import GuardAction, GuardReceipt
-from .harness_attribution import resolve_environment_harness
+from .harness_attribution import resolve_environment_harness, resolve_parent_process_harness
 from .package_intent_common import PackageIntentTarget
 
 LOCAL_SUPPLY_CHAIN_HARNESS = "guard-cli"
@@ -29,7 +29,7 @@ def resolve_local_supply_chain_harness() -> str:
     cannot influence.
     """
 
-    return resolve_environment_harness(os.environ) or LOCAL_SUPPLY_CHAIN_HARNESS
+    return resolve_environment_harness(os.environ) or resolve_parent_process_harness() or LOCAL_SUPPLY_CHAIN_HARNESS
 
 
 @dataclass(frozen=True, slots=True)

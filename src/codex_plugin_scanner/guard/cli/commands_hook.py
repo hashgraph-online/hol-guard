@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+from functools import partial
 from typing import TYPE_CHECKING
 
 from ..daemon.hook_availability_policy import availability_harness_response
@@ -52,7 +53,21 @@ from .commands_hook_compat_loader import (
 from .commands_hook_native_authority import try_native_or_source_ref_hook
 from .commands_hook_payload_preparation import prepare_compatibility_hook_state
 from .commands_parser_helpers import *
+from .commands_support_claude_approval import _persist_claude_guard_question_decision
+from .commands_support_connect import _synced_policy_payload
+from .commands_support_hook_payload import _hook_action_envelope, _load_hook_payload, _normalize_hook_payload
 from .commands_support_interaction import _emit
+from .commands_support_permission_store import _discard_claude_pending_permissions
+from .commands_support_runtime_artifacts import _hook_event_name, _hook_runtime_artifact
+from .commands_support_runtime_policy import _runtime_action_data_flow_signals
+from .commands_support_runtime_resolution import (
+    _canonical_harness_name,
+    _copilot_hook_stage,
+    _copilot_runtime_tool_call,
+    _is_copilot_permission_request,
+    _managed_install_for,
+    _resolve_copilot_workspace_root,
+)
 from .commands_support_workspace import _workspace_from_hook_payload
 
 
@@ -150,7 +165,7 @@ def _run_guard_hook_command(
         resolve_copilot_workspace_root=_resolve_copilot_workspace_root,
         action_envelope_for=_hook_action_envelope,
         copilot_hook_stage_for=_copilot_hook_stage,
-        copilot_runtime_tool_call_for=_copilot_runtime_tool_call,
+        copilot_runtime_tool_call_for=partial(_copilot_runtime_tool_call, store=store),
         config=config,
     )
     if cursor_result is not None:
@@ -177,6 +192,7 @@ def _run_guard_hook_command(
             workspace=runtime_workspace,
             config=fresh_config,
             preferred_workspace_config="ide" if workspace_was_explicit else "cli",
+            store=store,
         )
         if fresh_tool_call is None:
             return None
@@ -205,6 +221,7 @@ def _run_guard_hook_command(
             workspace=runtime_workspace,
             config=config,
             preferred_workspace_config="ide" if workspace_was_explicit else "cli",
+            store=store,
         )
         if args.harness == "copilot" and _is_copilot_permission_request(payload)
         else None

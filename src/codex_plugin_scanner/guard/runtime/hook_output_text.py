@@ -72,7 +72,7 @@ def collect_output_text(value: object) -> ExtractedOutput:
     truncated = False
     seen: set[int] = set()
 
-    def _append(text: str) -> None:
+    def _append_output_text(text: str) -> None:
         nonlocal chars, truncated
         if truncated or not text:
             return
@@ -91,12 +91,12 @@ def collect_output_text(value: object) -> ExtractedOutput:
         if truncated:
             return
         if isinstance(val, str):
-            _append(val)
+            _append_output_text(val)
             return
         if val is None or isinstance(val, (int, float, bool)):
             return
         if isinstance(val, bytes):
-            _append(val.decode("utf-8", errors="replace"))
+            _append_output_text(val.decode("utf-8", errors="replace"))
             return
         if not isinstance(val, (Mapping, list)):
             return
@@ -122,7 +122,7 @@ def collect_output_text(value: object) -> ExtractedOutput:
             record = val
             text_val = record.get("text")
             if record.get("type") == "text" and isinstance(text_val, str):
-                _append(text_val)
+                _append_output_text(text_val)
                 return
             key_count = 0
             for key in OUTPUT_TEXT_KEYS:

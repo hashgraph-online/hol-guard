@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass
 from typing import Literal, final
 
-from .command_matcher_contracts import CommandMatcher, MatcherEvidence
+from .command_matcher_contracts import CommandMatcher, MatcherEvidence, canonical_contract_digest
 from .command_model import CanonicalCommand, CommandSegment
 from .command_option_parsing import (
     argument_semantics,
@@ -346,8 +346,10 @@ class CommandSafetyRule:
             "risk_classes": list(self.risk_classes),
             "action_classes": list(self.action_classes),
             "safer_alternatives": list(self.safer_alternatives),
+            "family": self.family,
             "default_mode": self.default_mode,
             "matcher_kind": type(self.matcher).__name__ if self.matcher is not None else "compatibility",
+            "matcher_contract_digest": canonical_contract_digest(self.matcher),
             "safe_variants": [variant.to_dict() for variant in self.safe_variants],
             "compatibility_fallback": self.compatibility_fallback,
         }
@@ -367,11 +369,12 @@ class CommandSafeVariant:
         if not self.title.strip():
             raise ValueError(f"Safe variant {self.variant_id} requires a title")
 
-    def to_dict(self) -> dict[str, str]:
+    def to_dict(self) -> dict[str, object]:
         return {
             "variant_id": self.variant_id,
             "title": self.title,
             "matcher_kind": type(self.matcher).__name__,
+            "matcher_contract_digest": canonical_contract_digest(self.matcher),
         }
 
 

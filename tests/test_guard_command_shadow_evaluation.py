@@ -10,7 +10,6 @@ from datetime import datetime, timezone
 import pytest
 
 from codex_plugin_scanner.guard.models import GuardAction
-from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
 from codex_plugin_scanner.guard.runtime.command_shadow_evaluation import (
     COMMAND_SHADOW_BASELINE_PROPOSAL_VERSION,
     COMMAND_SHADOW_DISABLED_COHORTS_ENV,
@@ -25,12 +24,13 @@ from codex_plugin_scanner.guard.runtime.command_shadow_evaluation import (
     load_command_shadow_control,
 )
 from codex_plugin_scanner.guard.runtime.effect_decision import FinalDisposition
+from tests.native_command_test_support import real_native_command_evaluation
 
 _OCCURRED_AT = datetime(2026, 7, 19, 12, 0, tzinfo=timezone.utc)
 
 
 def _evaluation():
-    evaluation = evaluate_command("git push origin release/2.2 --force")
+    evaluation = real_native_command_evaluation("git push origin release/2.2 --force").evaluation
     assert evaluation.matches
     return evaluation
 

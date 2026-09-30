@@ -8,9 +8,10 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
+import codex_plugin_scanner.guard.daemon.server as daemon_server_module
+from codex_plugin_scanner.guard.adapters.base import HarnessContext, _shell_command
+from codex_plugin_scanner.guard.adapters.grok import GrokHarnessAdapter, grok_runtime_hooks_verified
 from codex_plugin_scanner.guard.approvals import _live_hook_verification
-from codex_plugin_scanner.guard.adapters.grok import grok_runtime_hooks_verified
 from codex_plugin_scanner.guard.cli.install_commands import (
     _grok_hook_command_is_guard,
     _grok_managed_config_is_active,
@@ -26,10 +27,12 @@ from codex_plugin_scanner.guard.managed_install_proof import (
     bind_managed_install_proof,
     verify_managed_install_proof,
 )
+from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
 from codex_plugin_scanner.guard.runtime_artifact_reconciliation import (
     repair_failing_managed_harness_hooks,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.test_guard_command_decision_routing import _synthetic_native_fixture
 
 _NOW = datetime(2026, 8, 17, 12, 0, tzinfo=timezone.utc)
 
@@ -40,11 +43,29 @@ def _clear_grok_home(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def _ctx(tmp_path: Path) -> HarnessContext:
+    """Match the machine-wide installs registered with workspace=None in these tests."""
     return HarnessContext(
         home_dir=tmp_path / "home",
-        workspace_dir=tmp_path / "workspace",
+        workspace_dir=None,
         guard_home=tmp_path / "guard-home",
     )
+
+
+def _bound_native_repair_evaluation():
+    registry, snapshot, command, native_payload = _synthetic_native_fixture()
+    evaluation = evaluate_command(
+        command.normalized_text,
+        canonical_command=command,
+        registry=registry,
+        extension_control_snapshot=snapshot,
+        native_extension_evidence=native_payload,
+    )
+    return snapshot, evaluation
+
+
+def _native_grok_command(context: HarnessContext) -> str:
+    """Use the real generated bridge rather than a non-executable marker command."""
+    return _shell_command(GrokHarnessAdapter._hook_command_parts(context))
 
 
 def _stale_pretool_payload() -> dict[str, object]:
@@ -66,9 +87,10 @@ def test_protection_repair_probe_avoids_force_push() -> None:
     assert "git status --porcelain=v1" in _PROTECTION_REPAIR_PROBE_COMMAND
 
 
-def _write_intercepting_grok_hooks(hooks_dir: Path) -> None:
+def _write_intercepting_grok_hooks(context: HarnessContext) -> None:
+    hooks_dir = context.home_dir / ".grok" / "hooks"
     hooks_dir.mkdir(parents=True, exist_ok=True)
-    command = "hol-guard hook grok"
+    command = _native_grok_command(context)
     (hooks_dir / "hol-guard-pretooluse.json").write_text(
         json.dumps(
             {
@@ -102,7 +124,7 @@ def test_live_grok_hooks_pass_when_managed_config_is_missing(
 ) -> None:
     ctx = _ctx(tmp_path)
     monkeypatch.setattr(Path, "home", lambda: ctx.home_dir)
-    _write_intercepting_grok_hooks(ctx.home_dir / ".grok" / "hooks")
+    _write_intercepting_grok_hooks(ctx)
     store = GuardStore(ctx.guard_home, prime_policy_integrity=False)
     store.set_managed_install("grok", True, None, {"harness": "grok", "active": True}, "2026-08-17T12:00:00+00:00")
 
@@ -117,7 +139,7 @@ def test_repair_restores_missing_grok_managed_config_when_hooks_already_intercep
 ) -> None:
     ctx = _ctx(tmp_path)
     monkeypatch.setattr(Path, "home", lambda: ctx.home_dir)
-    _write_intercepting_grok_hooks(ctx.home_dir / ".grok" / "hooks")
+    _write_intercepting_grok_hooks(ctx)
     store = GuardStore(ctx.guard_home, prime_policy_integrity=False)
     store.set_managed_install("grok", True, None, {"harness": "grok", "active": True}, "2026-08-17T12:00:00+00:00")
     managed = ctx.home_dir / ".grok" / "managed_config.toml"
@@ -151,7 +173,7 @@ def test_live_grok_hooks_reject_empty_observe_events(
                             "hooks": [
                                 {
                                     "type": "command",
-                                    "command": "hol-guard hook grok",
+                                    "command": _native_grok_command(ctx),
                                     "timeout": 30,
                                 }
                             ]
@@ -175,7 +197,8 @@ def test_live_grok_hooks_reject_empty_observe_events(
         encoding="utf-8",
     )
     (ctx.home_dir / ".grok" / "managed_config.toml").write_text(
-        '# BEGIN HOL GUARD MANAGED GROK\ndeny = ["Read(**/.grok/auth/**)"]\n# END HOL GUARD MANAGED GROK\n',
+        "# BEGIN HOL GUARD MANAGED GROK\n[permission]\n"
+        'deny = ["Read(**/.grok/auth/**)"]\n# END HOL GUARD MANAGED GROK\n',
         encoding="utf-8",
     )
     store = GuardStore(ctx.guard_home, prime_policy_integrity=False)
@@ -191,9 +214,7 @@ def test_live_grok_hooks_reject_managed_rule_outside_block(
     monkeypatch.setattr(Path, "home", lambda: ctx.home_dir)
     hooks_dir = ctx.home_dir / ".grok" / "hooks"
     hooks_dir.mkdir(parents=True)
-    command_hook = {
-        "hooks": [{"type": "command", "command": "hol-guard hook grok", "timeout": 15}]
-    }
+    command_hook = {"hooks": [{"type": "command", "command": _native_grok_command(ctx), "timeout": 15}]}
     (hooks_dir / "hol-guard-pretooluse.json").write_text(
         json.dumps(
             {
@@ -203,7 +224,7 @@ def test_live_grok_hooks_reject_managed_rule_outside_block(
                             "hooks": [
                                 {
                                     "type": "command",
-                                    "command": "hol-guard hook grok",
+                                    "command": _native_grok_command(ctx),
                                     "timeout": 30,
                                 }
                             ]
@@ -238,8 +259,9 @@ def test_live_grok_hooks_reject_managed_rule_outside_block(
     assert grok_hooks_protection_ready(ctx) is False
 
 
-def test_grok_hook_command_rejects_placeholder_invocations() -> None:
-    assert _grok_hook_command_is_guard("hol-guard hook grok") is True
+def test_grok_hook_command_rejects_placeholder_invocations(tmp_path: Path) -> None:
+    assert _grok_hook_command_is_guard(_native_grok_command(_ctx(tmp_path))) is True
+    assert _grok_hook_command_is_guard("hol-guard hook grok") is False
     assert _grok_hook_command_is_guard("echo hol-guard hook") is False
     assert _grok_hook_command_is_guard("true") is False
 
@@ -247,13 +269,15 @@ def test_grok_hook_command_rejects_placeholder_invocations() -> None:
 def test_grok_managed_config_rejects_inline_commented_rule() -> None:
     assert (
         _grok_managed_config_is_active(
-            '# BEGIN HOL GUARD MANAGED GROK\ndeny = ["Read(**/.grok/auth/**)"]\n# END HOL GUARD MANAGED GROK\n'
+            "# BEGIN HOL GUARD MANAGED GROK\n[permission]\n"
+            'deny = ["Read(**/.grok/auth/**)"]\n# END HOL GUARD MANAGED GROK\n'
         )
         is True
     )
     assert (
         _grok_managed_config_is_active(
-            "# BEGIN HOL GUARD MANAGED GROK\ndeny = [] # Read(**/.grok/auth/**)\n# END HOL GUARD MANAGED GROK\n"
+            "# BEGIN HOL GUARD MANAGED GROK\n[permission]\n"
+            "deny = [] # Read(**/.grok/auth/**)\n# END HOL GUARD MANAGED GROK\n"
         )
         is False
     )
@@ -366,6 +390,16 @@ def test_one_pass_repair_restores_stale_grok_hooks_and_command_evidence(
     assert store.get_command_activity_persistence_health().active_error_count == 3
 
     _, failed_hooks = repair_failing_managed_harness_hooks(store)
+    snapshot, evaluation = _bound_native_repair_evaluation()
+    monkeypatch.setattr(daemon_server_module, "current_extension_control_snapshot", lambda: snapshot)
+
+    def native_evaluate(command: str, **kwargs: object):
+        assert command == _PROTECTION_REPAIR_PROBE_COMMAND
+        assert kwargs["guard_home"] == store.guard_home
+        assert kwargs["extension_control_snapshot"] is snapshot
+        return evaluation
+
+    monkeypatch.setattr(daemon_server_module, "evaluate_command_native", native_evaluate)
     _repair_command_activity_persistence_health(store)
     store.maintain_command_activity(now=_NOW, detail_retain_days=30)
 
@@ -375,6 +409,23 @@ def test_one_pass_repair_restores_stale_grok_hooks_and_command_evidence(
     assert store.get_command_activity_persistence_health().active_error_count == 0
     assert (ctx.home_dir / ".grok" / "managed_config.toml").is_file()
     assert "matcher" not in json.loads(pretool.read_text(encoding="utf-8"))["hooks"]["PreToolUse"][0]
+
+
+def test_repair_keeps_persistence_error_when_native_evaluation_is_unavailable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
+    store.record_command_activity_persistence_failure(error_code="post_record_failed", occurred_at=_NOW)
+    monkeypatch.setattr(daemon_server_module, "current_extension_control_snapshot", lambda: None)
+    monkeypatch.setattr(daemon_server_module, "evaluate_command_native", lambda *_args, **_kwargs: None)
+
+    probe_reason = _repair_command_activity_persistence_health(store)
+
+    assert probe_reason == "native_evaluation_unavailable"
+    health = store.get_command_activity_persistence_health()
+    assert health.active_error_count == 1
+    assert health.last_error_code == "post_record_failed"
 
 
 def test_daemon_ownership_change_repairs_stale_managed_grok_hooks(

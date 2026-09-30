@@ -30,8 +30,8 @@ test("installed dashboard reconciles command analytics, filters, details, health
   await expect(page.getByRole("heading", { name: "Commands" })).toBeVisible();
   const summary = page.getByLabel("Command activity summary");
   await expect(summary.getByText("Commands checked").locator("..").getByText(String(expectedCount), { exact: true })).toBeVisible();
-  await expect(summary.getByText("Post-proof coverage")).toBeVisible();
-  await expect(page.getByText("This view includes correlated post-execution evidence on this page.")).toBeVisible();
+  await expect(summary.getByText("Run results recorded")).toBeVisible();
+  await expect(page.getByText("Some commands on this page have a matching result recorded after Guard's decision.")).toBeVisible();
   await expect(page.getByText("Command activity evidence is degraded. Counts may be incomplete.")).toHaveCount(0);
   await expect(page.getByLabel("Command activity records").getByRole("row")).toHaveCount(expectedCount + 1);
   await page.screenshot({ path: testInfo.outputPath("installed-command-activity-overview.png"), fullPage: true });
@@ -50,7 +50,8 @@ test("installed dashboard reconciles command analytics, filters, details, health
   await confirmedRow.getByRole("button", { name: "Details" }).click();
   const detail = page.getByRole("complementary", { name: "Command activity detail" });
   await expect(detail).toBeFocused();
-  await expect(detail.getByText("Execution proof").locator("..").getByText("Execution confirmed successful")).toBeVisible();
+  await expect(detail.getByText("Run result").locator("..").getByText("Execution confirmed successful")).toBeVisible();
+  await detail.getByText("How Guard checked it").click();
   await expect(detail.getByText("Proof source").locator("..").getByText("Post-execution proof recorded")).toBeVisible();
   await expect(detail.getByText("No review prompt recorded")).toBeVisible();
   await detail.getByRole("button", { name: "Should not have interrupted" }).click();

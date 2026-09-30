@@ -368,6 +368,7 @@ def test_activity_schema_has_no_forbidden_privacy_columns(tmp_path: Path) -> Non
         "command_activity_matches",
         "command_activity_match_effects",
         "command_activity_correlations",
+        "command_activity_invocation",
     )
     with sqlite3.connect(store.path) as connection:
         columns = {

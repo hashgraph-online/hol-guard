@@ -34,6 +34,7 @@ function activityItem() {
     persistence_latency_bucket: "le_1_ms",
     feedback_label: null,
     schema_version: "1.0.0",
+    invocation_preview: "git fetch origin main",
     matches: [
       {
         ordinal: 0,

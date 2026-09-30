@@ -26,7 +26,7 @@ from .package_shim_frozen import (
     run_frozen_package_shim,
     write_package_manager_shim_files,
 )
-from .package_shim_status import enrich_package_shim_status_payload
+from .package_shim_status import PACKAGE_SHIM_STATUS_FD_ENV_VAR, enrich_package_shim_status_payload
 from .shim_probe import (
     SHIM_PROBE_ENV_VALUE,
     SHIM_PROBE_ENV_VAR,
@@ -1067,7 +1067,7 @@ def _profile_already_references_path(content: str, shim_dir: Path) -> bool:
     )
 
 
-def _package_protect_command_args(context: HarnessContextLike, workspace_args: list[str]) -> list[str]:
+def _package_protect_command_args(context: HarnessContextLike) -> list[str]:
     home_dir = context.home_dir
     protect_args = [
         "protect",
@@ -1075,7 +1075,6 @@ def _package_protect_command_args(context: HarnessContextLike, workspace_args: l
         "--guard-home",
         str(context.guard_home),
         *(["--home", str(home_dir)] if home_dir else []),
-        *workspace_args,
     ]
     if bool(getattr(sys, "frozen", False)):
         return [package_shim_interpreter(), *protect_args]
@@ -1092,11 +1091,8 @@ def _package_protect_command_args(context: HarnessContextLike, workspace_args: l
 
 
 def _build_package_manager_python_shim(context: HarnessContext, command: str) -> str:
-    workspace_args: list[str] = []
-    if context.workspace_dir is not None:
-        workspace_args = ["--workspace", str(context.workspace_dir)]
     shim_dir = context.guard_home / "package-shims" / "bin"
-    command_args = _package_protect_command_args(context, workspace_args)
+    command_args = _package_protect_command_args(context)
     return "\n".join(
         (
             f"#!{package_shim_interpreter()}",
@@ -1111,9 +1107,9 @@ def _build_package_manager_python_shim(context: HarnessContext, command: str) ->
             f"base_command = {command_args!r}",
             f"command_name = {command!r}",
             f"guard_cli_cwd = {str(_trusted_import_root())!r}",
-            f"guard_workspace = {str(context.workspace_dir) if context.workspace_dir is not None else None!r}",
+            "guard_workspace = None",
             f"guard_home = {str(context.guard_home)!r}",
-            f"guard_has_explicit_workspace = {context.workspace_dir is not None!r}",
+            "guard_has_explicit_workspace = False",
             f"shim_dir = {str(shim_dir.resolve())!r}",
             f"local_test_runners = {tuple(sorted(_LOCAL_TEST_RUNNER_COMMANDS))!r}",
             f"shim_probe = os.environ.get({SHIM_PROBE_ENV_VAR!r}) == {SHIM_PROBE_ENV_VALUE!r}",
@@ -1233,6 +1229,7 @@ def _build_package_manager_python_shim(context: HarnessContext, command: str) ->
             "guard_env = dict(os.environ)",
             "guard_args = list(sys.argv[1:])",
             "guard_env.pop('PYTHONPATH', None)",
+            f"guard_env.pop({PACKAGE_SHIM_STATUS_FD_ENV_VAR!r}, None)",
             "guard_command = [*base_command, '--dry-run', command_name]",
             "if external_archive_binding_required:",
             "    resolved_command, guard_args, guard_env = _real_manager_launch()",
@@ -1243,6 +1240,16 @@ def _build_package_manager_python_shim(context: HarnessContext, command: str) ->
             "guard_kwargs = {'capture_output': True, 'text': True, 'env': guard_env}",
             "if guard_has_explicit_workspace:",
             "    guard_kwargs['cwd'] = guard_cli_cwd",
+            "# POSIX package shims pass this descriptor for immediate status; Windows keeps capture fallback.",
+            "package_shim_status_fd = None",
+            "if os.name != 'nt':",
+            "    try:",
+            "        package_shim_status_fd = os.dup(sys.stderr.fileno())",
+            "    except (AttributeError, OSError, ValueError):",
+            "        package_shim_status_fd = None",
+            "if package_shim_status_fd is not None:",
+            f"    guard_env[{PACKAGE_SHIM_STATUS_FD_ENV_VAR!r}] = str(package_shim_status_fd)",
+            "    guard_kwargs['pass_fds'] = (package_shim_status_fd,)",
             "def _run_guard_with_store_lock_retry(command, kwargs):",
             "    deadline = time.monotonic() + store_lock_retry_timeout_seconds",
             "    while True:",
@@ -1255,9 +1262,16 @@ def _build_package_manager_python_shim(context: HarnessContext, command: str) ->
             "            return result",
             "        time.sleep(min(store_lock_retry_delay_seconds, remaining_seconds))",
             "try:",
-            "    guard_process = _run_guard_with_store_lock_retry(",
-            "        [*guard_command, *guard_args], guard_kwargs",
-            "    )",
+            "    try:",
+            "        guard_process = _run_guard_with_store_lock_retry(",
+            "            [*guard_command, *guard_args], guard_kwargs",
+            "        )",
+            "    finally:",
+            "        if package_shim_status_fd is not None:",
+            "            try:",
+            "                os.close(package_shim_status_fd)",
+            "            except OSError:",
+            "                pass",
             "except KeyboardInterrupt:",
             "    raise SystemExit(130)",
             "if guard_process.stdout:",

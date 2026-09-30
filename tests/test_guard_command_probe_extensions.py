@@ -5,12 +5,12 @@ from __future__ import annotations
 from pathlib import Path
 
 from codex_plugin_scanner.guard.redaction import redact_sensitive_text
-from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
 from codex_plugin_scanner.guard.runtime.command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
     risk_classes_for_command_action,
 )
 from tests.command_extension_contracts import assert_safe_command_cases
+from tests.native_command_test_support import real_native_command_evaluation
 
 _RUN_ACTION = "Probe request execution command"
 _WRITE_ACTION = "Probe workspace mutation command"
@@ -86,7 +86,7 @@ PROBE_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
 
 def test_probe_commands_stay_inert_until_enabled(tmp_path: Path) -> None:
     for command, _action_class, rule_id in PROBE_REVIEW_CASES:
-        evaluation = evaluate_command(command, cwd=tmp_path, home_dir=tmp_path)
+        evaluation = real_native_command_evaluation(command, cwd=tmp_path, home_dir=tmp_path).evaluation
         assert evaluation.controlling_rule_id != rule_id
         assert all(item.extension.extension_id != "command.probe" for item in evaluation.extension_observations)
 
@@ -145,22 +145,21 @@ PROBE_CHAINED_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
 
 def test_probe_chained_commands_stay_inert_until_enabled(tmp_path: Path) -> None:
     for command, _action_class, rule_id in PROBE_CHAINED_REVIEW_CASES:
-        evaluation = evaluate_command(command, cwd=tmp_path, home_dir=tmp_path)
+        evaluation = real_native_command_evaluation(command, cwd=tmp_path, home_dir=tmp_path).evaluation
         assert evaluation.controlling_rule_id != rule_id
         assert all(item.extension.extension_id != "command.probe" for item in evaluation.extension_observations)
 
 
 def test_probe_output_adds_local_write_evidence_without_replacing_run_classification(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.runtime.command_model import parse_shell_command
 
-    command = parse_shell_command(
-        "probe request run api.yml items/0 --output response.json",
-        cwd=tmp_path,
-        home_dir=tmp_path,
-    )
+    command = "probe request run api.yml items/0 --output response.json"
     rule_ids = {
         item.rule.rule_id
-        for item in BUILT_IN_COMMAND_EXTENSION_REGISTRY.observations(command)
+        for item in real_native_command_evaluation(
+            command,
+            cwd=tmp_path,
+            controls=(("extension", "command.probe", "enabled"),),
+        ).evaluation.extension_observations
         if item.extension.extension_id == "command.probe"
     }
     assert rule_ids >= {

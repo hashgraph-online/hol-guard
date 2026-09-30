@@ -8,6 +8,7 @@ from codex_plugin_scanner.guard.runtime.command_cloud_aws_operation_matrix impor
     AWS_DESTRUCTIVE_COMMAND_PATHS,
     AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_1,
     AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_4,
+    AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_5,
     aws_destructive_command_matchers,
 )
 from tests.command_extension_contracts import (
@@ -15,6 +16,7 @@ from tests.command_extension_contracts import (
     assert_reviewed_command_cases,
     assert_safe_command_cases,
 )
+from tests.native_command_test_support import real_native_command_evaluation
 
 _ACTION = "AWS destructive command"
 _RULE = "command.cloud.aws.resource-deletion"
@@ -71,13 +73,17 @@ def test_aws_batch_4_matrix_is_exactly_one_hundred_unique_operations() -> None:
     )
 
 
-def test_aws_combined_matrix_is_exactly_two_hundred_unique_operations() -> None:
-    assert len(AWS_DESTRUCTIVE_COMMAND_PATHS) == 200
-    assert len(set(AWS_DESTRUCTIVE_COMMAND_PATHS)) == 200
+def test_aws_combined_matrix_is_exactly_three_hundred_unique_operations() -> None:
+    assert len(AWS_DESTRUCTIVE_COMMAND_PATHS) == 300
+    assert len(set(AWS_DESTRUCTIVE_COMMAND_PATHS)) == 300
     assert AWS_DESTRUCTIVE_COMMAND_PATHS == (
-        AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_1 + AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_4
+        AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_1
+        + AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_4
+        + AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_5
     )
     assert set(AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_1).isdisjoint(AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_4)
+    assert set(AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_1).isdisjoint(AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_5)
+    assert set(AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_4).isdisjoint(AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_5)
 
 
 def test_aws_batch_4_compiles_into_the_combined_path_set_matcher() -> None:
@@ -181,10 +187,17 @@ def test_aws_batch_4_quoted_examples_remain_data(tmp_path: Path) -> None:
         (
             f"printf '%s\\n' 'aws {first}'",
             f"grep 'aws {second}' scripts/cloud-audit.sh",
-            f"python -c \"print('aws {first}')\"",
         ),
         tmp_path,
     )
+    # Literal Python output has no AWS or environment capability, but syntax
+    # alone does not attest the interpreter executable or its startup code.
+    reviewed = real_native_command_evaluation(f"python -c \"print('aws {first}')\"", cwd=tmp_path)
+    assert not reviewed.evaluation.extension_observations
+    assert reviewed.native_minimum_action == "review"
+    assert reviewed.evaluation.minimum_action == "review"
+    assert reviewed.payload["explicitly_benign"] is False
+    assert not reviewed.evaluation.decision_plane.proof_routes
 
 
 def test_aws_batch_4_read_only_neighbors_remain_safe(tmp_path: Path) -> None:

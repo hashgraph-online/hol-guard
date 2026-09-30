@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..command_evaluation import evaluate_command
-from ..command_extension_interaction import classify_command_extension_interaction
+from .._shell_execution_context_support import SHELL_CWD_UNRESOLVED_PARENT_SHELL
+from ..command_evaluation import CompositeCommandEvaluation
+from ..command_extension_interaction import CommandExtensionInteraction, CommandExtensionInteractionMatch
 from ..command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from ..command_model import CanonicalCommand, parse_shell_command
 from ..direct_vitest import direct_local_typescript_execution_context, direct_local_vitest_execution_context
@@ -45,6 +46,7 @@ def _destructive_shell_tool_action_request(
     raw_command_text: str | None = None,
     execution_context: ShellExecutionContext | None = None,
     raw_execution_context: ShellExecutionContext | None = None,
+    native_evaluation: CompositeCommandEvaluation | None = None,
 ) -> ToolActionRequestMatch | None:
     if normalized_tool_name not in _SHELL_TOOL_NAMES:
         return None
@@ -77,10 +79,40 @@ def _destructive_shell_tool_action_request(
             else execution_context
         ),
     )
-    extension_interaction = classify_command_extension_interaction(
-        canonical_command,
-        BUILT_IN_COMMAND_EXTENSION_REGISTRY,
-    )
+    # Command-extension interaction is authoritative native pre-tool evidence.
+    # This legacy request classifier retains its independent shell checks only.
+    extension_interaction = CommandExtensionInteraction(None, None)
+    if native_evaluation is not None:
+        if (
+            native_evaluation.command.normalized_text != canonical_command.normalized_text
+            or native_evaluation.command.security_identity != canonical_command.security_identity
+        ):
+            raise ValueError("native command evaluation does not match the classified command")
+        native_explicitly_benign = any(
+            reason.reason_code == "native.explicit-benign" for reason in native_evaluation.decision_plane.reasons
+        )
+        native_allow_floor_only = bool(native_evaluation.matches) and all(
+            owned.match.rule.default_mode == "disabled" for owned in native_evaluation.matches
+        )
+        if native_evaluation.minimum_action == "allow" and (native_explicitly_benign or native_allow_floor_only):
+            # The resident has bound this exact command and supplied the
+            # benign proof.  The legacy shell classifier must not turn it
+            # back into a sensitive action request.
+            return None
+        if (
+            native_evaluation.matches
+            and (
+                native_evaluation.minimum_action != "allow"
+                or native_evaluation.control_resolution.explicitly_enabled_permission_ids
+            )
+            and native_evaluation.controlling_action_class is not None
+            and native_evaluation.controlling_reason is not None
+        ):
+            interaction_match = CommandExtensionInteractionMatch(
+                native_evaluation.controlling_action_class,
+                native_evaluation.controlling_reason,
+            )
+            extension_interaction = CommandExtensionInteraction(interaction_match, interaction_match)
     initial_risk_handled, initial_risk = initial_shell_risk_match(
         tool_name=tool_name,
         normalized_tool_name=normalized_tool_name,
@@ -289,6 +321,18 @@ def _destructive_shell_tool_action_request(
         bounded_source_edit = False
 
     execution_context_reason = _shell_execution_context_validation_reason(execution_context)
+    if (
+        initial_risk is not None
+        and initial_risk.action_class == "local secret read shell command"
+        and execution_context_reason == SHELL_CWD_UNRESOLVED_PARENT_SHELL
+        and execution_context.segments
+        and execution_context.segments[0].tokens
+        and execution_context.segments[0].tokens[0] in {"source", "."}
+    ):
+        # A leading source command reads its operand before sourced code can
+        # mutate the parent shell. Keep that proven credential read while
+        # allowing unrelated commands to reach their more specific policies.
+        return initial_risk
     if execution_context.directory_change_present and execution_context_reason is not None:
         return ToolActionRequestMatch(
             tool_name=tool_name,
@@ -451,40 +495,6 @@ def _destructive_shell_tool_action_request(
             canonical_command=canonical_command,
             interpreter_executable_identities=interpreter_executable_identities,
         )
-    controlled_action_class = (
-        github_capability_contract(github_assessment.capability).action_class
-        if github_assessment is not None and current_extension_control_snapshot() is not None
-        else None
-    )
-    if github_assessment is not None and controlled_action_class is not None:
-        action_class = controlled_action_class
-        controlled_evaluation = evaluate_command(
-            raw_command_text or detection_command_text,
-            compatibility_action_class=action_class,
-            compatibility_reason=github_assessment.detail,
-            cwd=cwd,
-            home_dir=home_dir,
-        )
-        if controlled_evaluation.control_resolution.blocked:
-            return ToolActionRequestMatch(
-                tool_name=tool_name,
-                normalized_tool_name=normalized_tool_name,
-                command_text=command_text,
-                action_class=action_class,
-                reason="Guard extension controls block this GitHub capability.",
-                canonical_command=canonical_command,
-                interpreter_executable_identities=interpreter_executable_identities,
-            )
-    if extension_interaction.fallback is not None:
-        return ToolActionRequestMatch(
-            tool_name=tool_name,
-            normalized_tool_name=normalized_tool_name,
-            command_text=command_text,
-            action_class=extension_interaction.fallback.action_class,
-            reason=extension_interaction.fallback.reason,
-            canonical_command=canonical_command,
-            interpreter_executable_identities=interpreter_executable_identities,
-        )
     untrusted_interpreters = tuple(
         evidence
         for evidence in interpreter_executable_identities
@@ -508,7 +518,7 @@ def _destructive_shell_tool_action_request(
             reason_code="interpreter_identity_untrusted",
             interpreter_executable_identities=interpreter_executable_identities,
         )
-    return None
+    return initial_risk
 
 
 __all__ = [

@@ -50,7 +50,9 @@
       "command.database.redis",
       "command.database.sqlite",
       "command.database.supabase",
-      "command.dns",
+      "command.dns.aws",
+      "command.dns.azure",
+      "command.dns.gcp",
       "command.email",
       "command.feature-flags",
       "command.framework.laravel",
@@ -77,13 +79,25 @@
     ],
     "external": [
       "command.blitcp",
+      "command.cloudg",
+      "command.cogext",
+      "command.ctty",
+      "command.digline",
+      "command.genclave",
+      "command.gitsync",
       "command.mcp-filesystem",
+      "command.mcp-instapods",
+      "command.mcp-pr-ui-compare",
+      "command.mcp-reaper",
       "command.mcp-tether",
       "command.noodle",
+      "command.ollama",
       "command.probe",
       "command.remote.essh",
       "command.repo2nb",
-      "command.skill-sunset"
+      "command.skill-base",
+      "command.skill-sunset",
+      "command.uivoid"
     ]
   }
 }

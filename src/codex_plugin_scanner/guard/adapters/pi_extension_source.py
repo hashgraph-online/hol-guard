@@ -54,6 +54,102 @@ def managed_extension_source(
         taskkill_path = windows_system_executable_path("taskkill.exe") if os.name == "nt" else None
     except (OSError, ValueError):
         taskkill_path = None
+    lifecycle_abort_event_source = (
+        '  pi.on("session_stop", () => { invalidateApprovalContinuations(); });\n' if harness == "omp" else ""
+    )
+    if harness == "omp":
+        tool_approval_continuation_source = (
+            "      if (!ompInteractiveContext(ctx)) {\n"
+            "        return { block: true, reason };\n"
+            "      }\n"
+            "      const continuation = await runOmpInteractiveContinuation(ctx, async (continuationSignal) => {\n"
+            "        const action = await pollApprovalResolution(\n"
+            "          requestId,\n"
+            "          approvalPollPath(response, requestId),\n"
+            "          continuationSignal,\n"
+            "          activity,\n"
+            "        );\n"
+            "        if (action !== 'allow') return { action, response };\n"
+            "        if (continuationSignal.aborted || (activity && !continuationIsActive(activity))) {\n"
+            "          return { action: 'aborted', response };\n"
+            "        }\n"
+            "        if (!toolCallStillMatches(event, ctx, GUARD_CONFIG_PATH, snapshot)) {\n"
+            "          return { action: 'changed', response };\n"
+            "        }\n"
+            "        if (continuationSignal.aborted) return { action: 'aborted', response };\n"
+            "        const revalidated = await runGuard(snapshot.payload, snapshot.cwd);\n"
+            "        if (continuationSignal.aborted || (activity && !continuationIsActive(activity))) {\n"
+            "          return { action: 'aborted', response: revalidated };\n"
+            "        }\n"
+            "        if (!toolCallStillMatches(event, ctx, GUARD_CONFIG_PATH, snapshot)) {\n"
+            "          return { action: 'changed', response: revalidated };\n"
+            "        }\n"
+            "        return {\n"
+            "          action: revalidated.decision === 'allow' ? 'allow' : 'block',\n"
+            "          response: revalidated,\n"
+            "        };\n"
+            "      });\n"
+            "      if (continuation.kind !== 'completed') {\n"
+            "        const continuationReason = continuation.kind === 'unavailable'\n"
+            "          ? reason\n"
+            "          : approvalContinuationFailureReason(\n"
+            "              response,\n"
+            "              continuation.kind === 'aborted' ? 'aborted' : 'transport',\n"
+            "            );\n"
+            '        ctx.ui.notify(continuationReason, "warning");\n'
+            "        return { block: true, reason: continuationReason };\n"
+            "      }\n"
+            "      const continuationResult = continuation.value;\n"
+            "      if (continuationResult.action === 'allow') return undefined;\n"
+            "      const continuationReason = continuationResult.action === 'changed'\n"
+            '        ? "HOL Guard blocked this tool call because its original arguments or '
+            'context changed during approval."\n'
+            "        : approvalContinuationFailureReason(continuationResult.response, continuationResult.action);\n"
+            '      ctx.ui.notify(continuationReason, "warning");\n'
+            "      return { block: true, reason: continuationReason };\n"
+        )
+    else:
+        tool_approval_continuation_source = (
+            "      const action = await pollApprovalResolution(\n"
+            "        requestId,\n"
+            "        approvalPollPath(response, requestId),\n"
+            "        signal,\n"
+            "        activity,\n"
+            "      );\n"
+            "      if (action !== 'allow') {\n"
+            "        const blockedReason = approvalContinuationFailureReason(response, action);\n"
+            '        ctx.ui.notify(blockedReason, "warning");\n'
+            "        return { block: true, reason: blockedReason };\n"
+            "      }\n"
+            "      if (!toolCallStillMatches(event, ctx, GUARD_CONFIG_PATH, snapshot)) {\n"
+            '        const changedReason = "HOL Guard blocked this tool call because its original arguments or '
+            'context changed before approval was consumed.";\n'
+            '        ctx.ui.notify(changedReason, "warning");\n'
+            "        return { block: true, reason: changedReason };\n"
+            "      }\n"
+            "      if (signal?.aborted || (activity && !continuationIsActive(activity))) {\n"
+            "        const cancelledReason = approvalContinuationFailureReason(response, 'aborted');\n"
+            '        ctx.ui.notify(cancelledReason, "warning");\n'
+            "        return { block: true, reason: cancelledReason };\n"
+            "      }\n"
+            "      const revalidated = await runGuard(snapshot.payload, snapshot.cwd);\n"
+            "      if (signal?.aborted || (activity && !continuationIsActive(activity))) {\n"
+            "        const cancelledReason = approvalContinuationFailureReason(revalidated, 'aborted');\n"
+            '        ctx.ui.notify(cancelledReason, "warning");\n'
+            "        return { block: true, reason: cancelledReason };\n"
+            "      }\n"
+            "      if (!toolCallStillMatches(event, ctx, GUARD_CONFIG_PATH, snapshot)) {\n"
+            '        const changedReason = "HOL Guard blocked this tool call because its original arguments or '
+            'context changed during approval revalidation.";\n'
+            '        ctx.ui.notify(changedReason, "warning");\n'
+            "        return { block: true, reason: changedReason };\n"
+            "      }\n"
+            '      if (revalidated.decision === "allow") return undefined;\n'
+            "      const revalidationReason = revalidated.reason ?? "
+            '"HOL Guard could not revalidate the exact approved tool call.";\n'
+            '      ctx.ui.notify(revalidationReason, "warning");\n'
+            "      return { block: true, reason: revalidationReason };\n"
+        )
     taskkill_path_json = json.dumps(taskkill_path)
     source = (
         'import { spawn } from "node:child_process";\n'
@@ -96,7 +192,7 @@ def managed_extension_source(
         "]);\n"
         "\n"
         "type GuardResponse = {\n"
-        "  decision?: string;\n"
+        '  decision: "allow" | "deny";\n'
         "  reason?: string;\n"
         "  approval_request_id?: string;\n"
         "  approval_url?: string;\n"
@@ -104,8 +200,11 @@ def managed_extension_source(
         "  resume_poll_path?: string;\n"
         '  model_output_action?: "allow_original" | "replace_with_reviewed_excerpt" | "block" | "not_applicable";\n'
         "  reviewed_output_sha256?: string;\n"
+        "  reviewed_excerpt?: string;\n"
         "  observed_policy_action?: string;\n"
+        "  observed_review_failure?: boolean;\n"
         "  observe_mode?: boolean;\n"
+        "  policy_action?: string;\n"
         '  notice?: "none" | "excerpt" | "warning";\n'
         "  reason_code?: string;\n"
         "};\n"
@@ -116,6 +215,42 @@ def managed_extension_source(
         "  response: GuardResponse | null;\n"
         "  recoveryKind: GuardDaemonRecoveryKind | null;\n"
         "};\n"
+        "\n"
+        "function normalizeGuardResponse(value: unknown): GuardResponse | null {\n"
+        '  if (!value || typeof value !== "object" || Array.isArray(value)) return null;\n'
+        "  const parsed = value as Record<string, unknown>;\n"
+        "  if (parsed.reason !== undefined && parsed.reason !== null && "
+        'typeof parsed.reason !== "string") return null;\n'
+        '  if (parsed.decision === "allow" || parsed.decision === "deny") {\n'
+        "    return parsed as GuardResponse;\n"
+        "  }\n"
+        '  if (parsed.decision === "block") {\n'
+        '    return { ...parsed, decision: "deny" } as GuardResponse;\n'
+        "  }\n"
+        "  return null;\n"
+        "}\n"
+        "\n"
+        "function fallbackGuardResponse(\n"
+        "  reasonCode: string,\n"
+        "  reason: string,\n"
+        "): GuardResponse {\n"
+        '  return { decision: "deny", reason, reason_code: reasonCode };\n'
+        "}\n"
+        "\n"
+        "function daemonResponseCanReturn(\n"
+        "  payload: Record<string, unknown>,\n"
+        "  response: GuardResponse,\n"
+        "): boolean {\n"
+        '  if (payload.hook_event_name !== "PostToolUse") return true;\n'
+        "  if (response.observe_mode === true) return true;\n"
+        '  if (response.model_output_action === "replace_with_reviewed_excerpt") return true;\n'
+        '  if (response.model_output_action === "allow_original") {\n'
+        '    return typeof response.reviewed_output_sha256 === "string" &&\n'
+        "      response.reviewed_output_sha256.length > 0;\n"
+        "  }\n"
+        '  if (response.decision === "allow" || response.decision === "deny") return true;\n'
+        "  return false;\n"
+        "}\n"
         "\n"
         "function loadGuardDaemonConnection(): GuardDaemonConnection | null {\n"
         "  let port = 0;\n"
@@ -197,12 +332,14 @@ def managed_extension_source(
         "      };\n"
         "    }\n"
         "    const raw = (await response.text()).trim();\n"
-        "    if (!raw) return { response: {}, recoveryKind: null };\n"
+        '    if (!raw) return { response: null, recoveryKind: "transport-failure" };\n'
         "    try {\n"
-        "      const parsed = JSON.parse(raw) as GuardResponse;\n"
-        "      if (parsed && typeof parsed === 'object') {\n"
-        "        return { response: parsed, recoveryKind: null };\n"
+        "      const parsed = JSON.parse(raw) as unknown;\n"
+        "      const normalized = normalizeGuardResponse(parsed);\n"
+        "      if (normalized !== null) {\n"
+        "        return { response: normalized, recoveryKind: null };\n"
         "      }\n"
+        '      return { response: null, recoveryKind: "transport-failure" };\n'
         "    } catch {}\n"
         "    return {\n"
         "      response: {\n"
@@ -279,9 +416,15 @@ def managed_extension_source(
         "  let daemonAttempt = await daemonGuardResponse(\n"
         "    serializedPayload, cwd, GUARD_DAEMON_TIMEOUT_MS, deadlineAt,\n"
         "  );\n"
-        "  if (daemonAttempt.response) {\n"
+        "  if (\n"
+        "    daemonAttempt.response &&\n"
+        "    daemonResponseCanReturn(payload, daemonAttempt.response)\n"
+        "  ) {\n"
         "    cleanupPayloadReference();\n"
         "    return daemonAttempt.response;\n"
+        "  }\n"
+        "  if (daemonAttempt.response) {\n"
+        '    daemonAttempt = { response: null, recoveryKind: "transport-failure" };\n'
         "  }\n"
         "  if (daemonAttempt.recoveryKind !== null) {\n"
         "    const recoveryTimeoutMs = Math.min(\n"
@@ -295,7 +438,10 @@ def managed_extension_source(
         "        Math.min(GUARD_DAEMON_RETRY_TIMEOUT_MS, Math.max(deadlineAt - Date.now(), 1)),\n"
         "        deadlineAt,\n"
         "      );\n"
-        "      if (daemonAttempt.response) {\n"
+        "      if (\n"
+        "        daemonAttempt.response &&\n"
+        "        daemonResponseCanReturn(payload, daemonAttempt.response)\n"
+        "      ) {\n"
         "        cleanupPayloadReference();\n"
         "        return daemonAttempt.response;\n"
         "      }\n"
@@ -362,20 +508,34 @@ def managed_extension_source(
         "  const lastLine = lines.length > 0 ? lines[lines.length - 1] : null;\n"
         "  if (lastLine) {\n"
         "    try {\n"
-        "      const parsed = JSON.parse(lastLine) as GuardResponse;\n"
-        '      if (parsed && typeof parsed === "object") return parsed;\n'
+        "      const parsed = JSON.parse(lastLine) as unknown;\n"
+        "      const normalized = normalizeGuardResponse(parsed);\n"
+        '      if (normalized !== null && (result.status === 0 || normalized.decision === "deny")) {\n'
+        "        return normalized;\n"
+        "      }\n"
         "    } catch {}\n"
         "  }\n"
-        "  if ((result.status ?? 0) !== 0) {\n"
+        "  if (result.status !== 0) {\n"
         "    return {\n"
         '      decision: "deny",\n'
         '      reason: (result.stderr ?? "").trim() || "Blocked by HOL Guard.",\n'
         "    };\n"
         "  }\n"
-        '  return { decision: "allow" };\n'
+        "  return fallbackGuardResponse(\n"
+        '    "guard_cli_invalid_response",\n'
+        '    "HOL Guard fallback did not return a valid decision. Retry the action.",\n'
+        "  );\n"
         "}\n"
         "\n"
-        "function modelVisibleBlockedReason(reason: string): string {\n"
+        "function modelVisibleBlockedReason(reason: string, reasonCode?: string): string {\n"
+        "  if (\n"
+        '    reasonCode === "guard_cli_recovery_timeout" ||\n'
+        '    reasonCode === "daemon_hook_deadline_exhausted" ||\n'
+        '    reasonCode === "daemon_hook_process_deadline_exhausted"\n'
+        "  ) {\n"
+        f'    return "HOL Guard did not finish reviewing this output before the {display_name} '
+        'deadline. Retry the action.";\n'
+        "  }\n"
         f'  const prefix = "HOL Guard blocked this tool output before {display_name} could use it.";\n'
         "  const approvalUrl = reason.match(/https?:\\/\\/\\S+/)?.[0]?.replace(/[.,;:]+$/, '');\n"
         "  const approvalHint = approvalUrl ? ` Human approval is pending in HOL Guard: ${approvalUrl}.` : '';\n"
@@ -409,22 +569,67 @@ def managed_extension_source(
         "}\n"
         "\n" + APPROVAL_RESUME_HELPERS_SOURCE + "export default function (pi: ExtensionAPI) {\n"  # pyright: ignore[reportImplicitStringConcatenation]
         "  const blockedToolResults = new Map<string, string>();\n"
-        "  const pendingApprovalResumes = new Set<string>();\n"
+        "  type InputApprovalResumeBinding = {\n"
+        "    generation: number;\n"
+        "    sessionId: string;\n"
+        "    cwd: string;\n"
+        "  };\n"
+        "  const pendingApprovalResumes = new Map<string, InputApprovalResumeBinding>();\n"
         "  const openedApprovalUrls = new Set<string>();\n"
-        "  function scheduleApprovalResume(\n"
+        "  let approvalContinuationGeneration = 0;\n"
+        "  let inputApprovalResumeGeneration = 0;\n"
+        "  const invalidateToolApprovalContinuations = () => { approvalContinuationGeneration += 1; };\n"
+        "  const invalidateInputApprovalResumes = () => { inputApprovalResumeGeneration += 1; };\n"
+        "  const invalidateApprovalContinuations = () => {\n"
+        "    invalidateToolApprovalContinuations();\n"
+        "    invalidateInputApprovalResumes();\n"
+        "  };\n"
+        "  const approvalContinuationActivity = (): ApprovalContinuationActivity => {\n"
+        "    const generation = approvalContinuationGeneration;\n"
+        "    return () => generation === approvalContinuationGeneration;\n"
+        "  };\n"
+        "  const captureInputApprovalResumeBinding = (ctx: unknown): InputApprovalResumeBinding | null => {\n"
+        "    const sessionId = contextSessionId(ctx);\n"
+        "    const cwd = contextCwd(ctx);\n"
+        "    if (!sessionId || !cwd) return null;\n"
+        "    return { generation: inputApprovalResumeGeneration, sessionId, cwd };\n"
+        "  };\n"
+        "  const inputApprovalResumeBindingIsActive = (\n"
+        "    ctx: unknown,\n"
+        "    binding: InputApprovalResumeBinding | null,\n"
+        "  ): boolean =>\n"
+        "    binding !== null &&\n"
+        "    binding.generation === inputApprovalResumeGeneration &&\n"
+        "    contextSessionId(ctx) === binding.sessionId &&\n"
+        "    contextCwd(ctx) === binding.cwd;\n"
+        '  pi.on("agent_start", () => { invalidateApprovalContinuations(); });\n'
+        '  pi.on("agent_end", () => { invalidateToolApprovalContinuations(); });\n'
+        '  pi.on("session_start", () => { invalidateApprovalContinuations(); });\n'
+        '  pi.on("session_shutdown", () => { invalidateApprovalContinuations(); });\n'
+        + lifecycle_abort_event_source
+        + "  function scheduleApprovalResume(\n"
         "    response: GuardResponse,\n"
         "    ctx: { ui: { notify(message: string, kind?: 'info' | 'warning'): void } },\n"
-        "    details: { kind: 'input' | 'tool_call'; prompt?: string; toolName?: string },\n"
+        "    details: { kind: 'input'; prompt?: string },\n"
+        "    binding: InputApprovalResumeBinding | null,\n"
         "  ): void {\n"
         "    const requestId = approvalRequestId(response);\n"
-        "    if (!requestId || pendingApprovalResumes.has(requestId)) return;\n"
-        "    pendingApprovalResumes.add(requestId);\n"
+        "    if (\n"
+        "      !requestId ||\n"
+        "      binding === null ||\n"
+        "      !inputApprovalResumeBindingIsActive(ctx, binding)\n"
+        "    ) return;\n"
+        "    const previousBinding = pendingApprovalResumes.get(requestId);\n"
+        "    if (previousBinding && inputApprovalResumeBindingIsActive(ctx, previousBinding)) return;\n"
+        "    const isActive = () => inputApprovalResumeBindingIsActive(ctx, binding);\n"
+        "    if (!isActive()) return;\n"
+        "    pendingApprovalResumes.set(requestId, binding);\n"
         "    void openApprovalUrl(response, openedApprovalUrls);\n"
         "    const pollPath = approvalPollPath(response, requestId);\n"
         "    void (async () => {\n"
         "      try {\n"
-        "        const action = await pollApprovalResolution(requestId, pollPath);\n"
-        "        if (action === 'allow') {\n"
+        "        const action = await pollApprovalResolution(requestId, pollPath, undefined, isActive);\n"
+        "        if (action === 'allow' && isActive()) {\n"
         "          pi.sendMessage(\n"
         "            {\n"
         "              customType: 'hol_guard_approval_resume',\n"
@@ -442,46 +647,69 @@ def managed_extension_source(
         "'warning');\n"
         "        }\n"
         "      } finally {\n"
-        "        pendingApprovalResumes.delete(requestId);\n"
+        "        if (pendingApprovalResumes.get(requestId) === binding) {\n"
+        "          pendingApprovalResumes.delete(requestId);\n"
+        "        }\n"
         "      }\n"
         "    })();\n"
         "  }\n"
         '  pi.on("input", async (event, ctx) => {\n'
         '    if (event.source === "extension") return { action: "continue" };\n'
+        "    invalidateInputApprovalResumes();\n"
+        "    const inputBinding = captureInputApprovalResumeBinding(ctx);\n"
         "    const response = await runGuard(\n"
         '      { hook_event_name: "UserPromptSubmit", prompt: event.text, config_path: GUARD_CONFIG_PATH },\n'
         "      ctx.cwd,\n"
         "    );\n"
         '    if (response.decision === "deny") {\n'
-        '      const reason = approvalBlockedReason(response, response.reason ?? "Blocked by HOL Guard.");\n'
-        "      scheduleApprovalResume(response, ctx, { kind: 'input', prompt: event.text });\n"
+        '      const reason = approvalBlockedReason(response, response.reason ?? "Blocked by HOL Guard.", "input");\n'
+        "      scheduleApprovalResume(response, ctx, { kind: 'input', prompt: event.text }, inputBinding);\n"
         '      ctx.ui.notify(reason, "warning");\n'
         '      return { action: "handled", handled: true };\n'
         "    }\n"
         '    return { action: "continue" };\n'
         "  });\n"
         '  pi.on("tool_call", async (event, ctx) => {\n'
-        "    const toolInput =\n"
-        "      (event as { input?: Record<string, unknown> }).input ??\n"
-        "      (event as { toolInput?: Record<string, unknown> }).toolInput ??\n"
-        "      (event as { arguments?: Record<string, unknown> }).arguments ??\n"
-        "      {};\n"
-        "    const response = await runGuard(\n"
-        "      {\n"
-        '        hook_event_name: "PreToolUse",\n'
-        "        config_path: GUARD_CONFIG_PATH,\n"
-        "        tool_call_id: event.toolCallId,\n"
-        "        tool_name: event.toolName,\n"
-        "        tool_input: toolInput,\n"
-        "      },\n"
-        "      ctx.cwd,\n"
-        "    );\n"
-        '    if (response.decision === "deny") {\n'
-        '      const reason = approvalBlockedReason(response, response.reason ?? "Blocked by HOL Guard.");\n'
-        "      scheduleApprovalResume(response, ctx, { kind: 'tool_call', toolName: event.toolName });\n"
+        "    const snapshot = snapshotToolCall(event, ctx, GUARD_CONFIG_PATH);\n"
+        "    if (!snapshot) {\n"
+        '      const reason = "HOL Guard could not capture an immutable tool-call snapshot.";\n'
         '      ctx.ui.notify(reason, "warning");\n'
         "      return { block: true, reason };\n"
         "    }\n"
+        "    const signal = handlerAbortSignal(ctx);\n"
+        "    const activity = approvalContinuationActivity();\n"
+        "    const response = await runGuard(snapshot.payload, snapshot.cwd);\n"
+        "    if (signal?.aborted || (activity && !continuationIsActive(activity))) {\n"
+        "      const cancelledReason = approvalContinuationFailureReason(response, 'aborted');\n"
+        '      ctx.ui.notify(cancelledReason, "warning");\n'
+        "      return { block: true, reason: cancelledReason };\n"
+        "    }\n"
+        "    if (!toolCallStillMatches(event, ctx, GUARD_CONFIG_PATH, snapshot)) {\n"
+        '      const reason = "HOL Guard blocked this tool call because its original arguments or '
+        'context changed while it was reviewed.";\n'
+        '      ctx.ui.notify(reason, "warning");\n'
+        "      return { block: true, reason };\n"
+        "    }\n"
+        + (
+            '    if (response.decision === "deny") {\n'
+            + (
+                "      const reason = ompInteractiveContext(ctx)\n"
+                '        ? approvalBlockedReason(response, response.reason ?? "Blocked by HOL Guard.")\n'
+                '        : approvalManualRetryReason(response, response.reason ?? "Blocked by HOL Guard.");\n'
+                if harness == "omp"
+                else (
+                    "      const reason = approvalBlockedReason(response, response.reason ?? "
+                    '"Blocked by HOL Guard.");\n'
+                )
+            )
+        )
+        + "      const requestId = approvalRequestId(response);\n"
+        "      if (!requestId) {\n"
+        '        ctx.ui.notify(reason, "warning");\n'
+        "        return { block: true, reason };\n"
+        "      }\n"
+        '      ctx.ui.notify(reason, "warning");\n'
+        "      void openApprovalUrl(response, openedApprovalUrls);\n" + tool_approval_continuation_source + "    }\n"
         "    return undefined;\n"
         "  });\n"
         '  pi.on("message_end", async (event) => {\n'
@@ -519,7 +747,7 @@ def managed_extension_source(
         "        tool_call_id: event.toolCallId,\n"
         "        tool_name: event.toolName,\n"
         "        tool_input: toolInput,\n"
-        "        stdout: toolOutput,\n"
+        "        tool_response: toolOutput,\n"
         "        is_error: event.isError === true,\n"
         "    };\n"
         "    if (sourceRef) {\n"
@@ -542,19 +770,42 @@ def managed_extension_source(
         "    );\n"
         '    if (response.decision === "deny") {\n'
         '      const reason = response.reason ?? "Blocked by HOL Guard.";\n'
-        "      const modelReason = modelVisibleBlockedReason(reason);\n"
+        "      const modelReason = modelVisibleBlockedReason(reason, response.reason_code);\n"
         "      const toolCallId = toolCallIdKey(event.toolCallId);\n"
         "      if (toolCallId) blockedToolResults.set(toolCallId, modelReason);\n"
         '      ctx.ui.notify(reason, "warning");\n'
         "      return blockedToolResult(modelReason, event.details);\n"
         "    }\n"
         "    if (response.observe_mode === true) return undefined;\n"
-        "    if (outputTruncated) {\n"
-        '      if (response.model_output_action === "allow_original" &&\n'
-        "          typeof response.reviewed_output_sha256 === 'string' &&\n"
-        "          response.reviewed_output_sha256 === digest.sha256) {\n"
-        "        return undefined;\n"
+        "    const originalOutputProof =\n"
+        '      response.decision === "allow" &&\n'
+        '      response.model_output_action === "allow_original" &&\n'
+        "      typeof response.reviewed_output_sha256 === 'string' &&\n"
+        "      response.reviewed_output_sha256 === digest.sha256;\n"
+        "    if (originalOutputProof) return undefined;\n"
+        '    if (response.model_output_action === "allow_original") {\n'
+        "      const reason = response.reason ||\n"
+        '        "HOL Guard could not prove this tool output safe to preserve.";\n'
+        '      ctx.ui.notify(reason, "warning");\n'
+        "      return blockedToolResult(modelVisibleBlockedReason(reason, response.reason_code), event.details);\n"
+        "    }\n"
+        '    if (response.model_output_action === "replace_with_reviewed_excerpt") {\n'
+        "      const excerptText = typeof response.reviewed_excerpt === 'string' ? response.reviewed_excerpt : '';\n"
+        "      if (excerptText.length === 0) {\n"
+        "        const reason = response.reason ||\n"
+        '          "HOL Guard could not prove this tool output safe to preserve.";\n'
+        '        ctx.ui.notify(reason, "warning");\n'
+        "        return blockedToolResult("
+        "modelVisibleBlockedReason(reason, response.reason_code), event.details);\n"
         "      }\n"
+        "      const notice = response.reason ||\n"
+        '        "HOL Guard returned a reviewed excerpt because this output could not be fully proven safe'
+        ' within local limits.";\n'
+        '      ctx.ui.notify(notice, "info");\n'
+        "      return reviewedToolResult([{ type: 'text', text: excerptText }], "
+        "event.details, event.isError === true);\n"
+        "    }\n"
+        "    if (outputTruncated) {\n"
         "      const notice = response.reason ||\n"
         '        "HOL Guard returned a reviewed excerpt because this output could not be fully proven safe'
         ' within local limits.";\n'
@@ -564,8 +815,280 @@ def managed_extension_source(
         "      }\n"
         "      return reviewedToolResult(reviewedContent, event.details, event.isError === true);\n"
         "    }\n"
-        "    return undefined;\n"
+        '    if (response.decision === "allow") return undefined;\n'
+        "    const reason = response.reason ||\n"
+        '      "HOL Guard could not prove this tool output safe to preserve.";\n'
+        '    ctx.ui.notify(reason, "warning");\n'
+        "    return blockedToolResult(modelVisibleBlockedReason(reason, response.reason_code), event.details);\n"
         "  });\n"
         "}\n"
     )
+    return source
+
+
+def legacy_managed_extension_source(
+    *,
+    guard_home: Path,
+    home_dir: Path,
+    settings_path: Path,
+    harness: str = "pi",
+    display_name: str = "Pi",
+) -> str:
+    """Reconstruct the exact pre-response-contract extension for migration only."""
+
+    source = managed_extension_source(
+        guard_home=guard_home,
+        home_dir=home_dir,
+        settings_path=settings_path,
+        harness=harness,
+        display_name=display_name,
+    )
+    replacements = (
+        ('  decision: "allow" | "deny";\n', "  decision?: string;\n"),
+        ("  observed_review_failure?: boolean;\n", ""),
+        ("  policy_action?: string;\n", ""),
+        ("  reviewed_excerpt?: string;\n", ""),
+        (
+            "function modelVisibleBlockedReason(reason: string, reasonCode?: string): string {\n"
+            "  if (\n"
+            '    reasonCode === "guard_cli_recovery_timeout" ||\n'
+            '    reasonCode === "daemon_hook_deadline_exhausted" ||\n'
+            '    reasonCode === "daemon_hook_process_deadline_exhausted"\n'
+            "  ) {\n"
+            f'    return "HOL Guard did not finish reviewing this output before the {display_name} '
+            'deadline. Retry the action.";\n'
+            "  }\n"
+            f'  const prefix = "HOL Guard blocked this tool output before {display_name} could use it.";\n'
+            "  const approvalUrl = reason.match(/https?:\\/\\/\\S+/)?.[0]?.replace(/[.,;:]+$/, '');\n"
+            "  const approvalHint = approvalUrl ? ` Human approval is pending in HOL Guard: ${approvalUrl}.` : '';\n"
+            "  return `${prefix}${approvalHint} Do not retry the same tool call automatically; wait for the user to "
+            "approve or change the task.`;\n"
+            "}\n",
+            "function modelVisibleBlockedReason(reason: string): string {\n"
+            f'  const prefix = "HOL Guard blocked this tool output before {display_name} could use it.";\n'
+            "  const approvalUrl = reason.match(/https?:\\/\\/\\S+/)?.[0]?.replace(/[.,;:]+$/, '');\n"
+            "  const approvalHint = approvalUrl ? ` Human approval is pending in HOL Guard: ${approvalUrl}.` : '';\n"
+            "  return `${prefix}${approvalHint} Do not retry the same tool call automatically; wait for the user to "
+            "approve or change the task.`;\n"
+            "}\n",
+        ),
+        (
+            "    chars += Array.from(text).length;\n",
+            "    chars += text.length;\n",
+        ),
+        (
+            "function normalizeGuardResponse(value: unknown): GuardResponse | null {\n"
+            '  if (!value || typeof value !== "object" || Array.isArray(value)) return null;\n'
+            "  const parsed = value as Record<string, unknown>;\n"
+            "  if (parsed.reason !== undefined && parsed.reason !== null && "
+            'typeof parsed.reason !== "string") return null;\n'
+            '  if (parsed.decision === "allow" || parsed.decision === "deny") {\n'
+            "    return parsed as GuardResponse;\n"
+            "  }\n"
+            '  if (parsed.decision === "block") {\n'
+            '    return { ...parsed, decision: "deny" } as GuardResponse;\n'
+            "  }\n"
+            "  return null;\n"
+            "}\n\n"
+            "function fallbackGuardResponse(\n"
+            "  reasonCode: string,\n"
+            "  reason: string,\n"
+            "): GuardResponse {\n"
+            '  return { decision: "deny", reason, reason_code: reasonCode };\n'
+            "}\n\n",
+            "",
+        ),
+        (
+            "function daemonResponseCanReturn(\n"
+            "  payload: Record<string, unknown>,\n"
+            "  response: GuardResponse,\n"
+            "): boolean {\n"
+            '  if (payload.hook_event_name !== "PostToolUse") return true;\n'
+            "  if (response.observe_mode === true) return true;\n"
+            '  if (response.model_output_action === "replace_with_reviewed_excerpt") return true;\n'
+            '  if (response.model_output_action === "allow_original") {\n'
+            '    return typeof response.reviewed_output_sha256 === "string" &&\n'
+            "      response.reviewed_output_sha256.length > 0;\n"
+            "  }\n"
+            '  if (response.decision === "allow" || response.decision === "deny") return true;\n'
+            "  return false;\n"
+            "}\n\n",
+            "",
+        ),
+        (
+            '    if (!raw) return { response: null, recoveryKind: "transport-failure" };\n'
+            "    try {\n"
+            "      const parsed = JSON.parse(raw) as unknown;\n"
+            "      const normalized = normalizeGuardResponse(parsed);\n"
+            "      if (normalized !== null) {\n"
+            "        return { response: normalized, recoveryKind: null };\n"
+            "      }\n"
+            '      return { response: null, recoveryKind: "transport-failure" };\n'
+            "    } catch {}\n",
+            "    if (!raw) return { response: {}, recoveryKind: null };\n"
+            "    try {\n"
+            "      const parsed = JSON.parse(raw) as GuardResponse;\n"
+            "      if (parsed && typeof parsed === 'object') {\n"
+            "        return { response: parsed, recoveryKind: null };\n"
+            "      }\n"
+            "    } catch {}\n",
+        ),
+        (
+            "      const parsed = JSON.parse(lastLine) as unknown;\n"
+            "      const normalized = normalizeGuardResponse(parsed);\n"
+            '      if (normalized !== null && (result.status === 0 || normalized.decision === "deny")) {\n'
+            "        return normalized;\n"
+            "      }\n"
+            "    } catch {}\n"
+            "  }\n"
+            "  if (result.status !== 0) {\n",
+            "      const parsed = JSON.parse(lastLine) as GuardResponse;\n"
+            '      if (parsed && typeof parsed === "object") return parsed;\n'
+            "    } catch {}\n"
+            "  }\n"
+            "  if ((result.status ?? 0) !== 0) {\n",
+        ),
+        (
+            "  return fallbackGuardResponse(\n"
+            '    "guard_cli_invalid_response",\n'
+            '    "HOL Guard fallback did not return a valid decision. Retry the action.",\n'
+            "  );\n",
+            '  return { decision: "allow" };\n',
+        ),
+        (
+            "  if (\n"
+            "    daemonAttempt.response &&\n"
+            "    daemonResponseCanReturn(payload, daemonAttempt.response)\n"
+            "  ) {\n"
+            "    cleanupPayloadReference();\n"
+            "    return daemonAttempt.response;\n"
+            "  }\n"
+            "  if (daemonAttempt.response) {\n"
+            '    daemonAttempt = { response: null, recoveryKind: "transport-failure" };\n'
+            "  }\n",
+            "  if (daemonAttempt.response) {\n"
+            "    cleanupPayloadReference();\n"
+            "    return daemonAttempt.response;\n"
+            "  }\n",
+        ),
+        (
+            "      if (\n"
+            "        daemonAttempt.response &&\n"
+            "        daemonResponseCanReturn(payload, daemonAttempt.response)\n"
+            "      ) {\n"
+            "        cleanupPayloadReference();\n"
+            "        return daemonAttempt.response;\n"
+            "      }\n",
+            "      if (daemonAttempt.response) {\n"
+            "        cleanupPayloadReference();\n"
+            "        return daemonAttempt.response;\n"
+            "      }\n",
+        ),
+        (
+            "        tool_response: toolOutput,\n",
+            "        stdout: toolOutput,\n",
+        ),
+        (
+            "    if (sourceRef) {\n"
+            "      guardPayload.guard_source_ref = sourceRef;\n"
+            "      guardPayload.tool_response_summary = {\n"
+            "        kind: 'text',\n"
+            "        text_excerpt: toolOutput,\n"
+            "        excerpt_chars: toolOutput.length,\n"
+            "        output_chars: digest.chars,\n"
+            "        output_sha256: digest.sha256,\n"
+            "        excerpt_truncated: outputTruncated,\n"
+            "      };\n"
+            "    } else {\n"
+            "      guardPayload.tool_response = event.content;\n"
+            "    }\n"
+            "    const response = await runGuard(\n",
+            "    if (sourceRef) {\n"
+            "      guardPayload.guard_source_ref = sourceRef;\n"
+            "      guardPayload.tool_response_summary = {\n"
+            "        kind: 'text',\n"
+            "        text_excerpt: toolOutput,\n"
+            "        excerpt_chars: toolOutput.length,\n"
+            "        output_chars: digest.chars,\n"
+            "        output_sha256: digest.sha256,\n"
+            "        excerpt_truncated: outputTruncated,\n"
+            "      };\n"
+            "    } else {\n"
+            "      guardPayload.tool_response = event.content;\n"
+            "    }\n"
+            "    const response = await runGuard(\n",
+        ),
+        (
+            "    if (response.observe_mode === true) return undefined;\n"
+            "    const originalOutputProof =\n"
+            '      response.decision === "allow" &&\n'
+            '      response.model_output_action === "allow_original" &&\n'
+            "      typeof response.reviewed_output_sha256 === 'string' &&\n"
+            "      response.reviewed_output_sha256 === digest.sha256;\n"
+            "    if (originalOutputProof) return undefined;\n"
+            '    if (response.model_output_action === "allow_original") {\n'
+            "      const reason = response.reason ||\n"
+            '        "HOL Guard could not prove this tool output safe to preserve.";\n'
+            '      ctx.ui.notify(reason, "warning");\n'
+            "      return blockedToolResult(modelVisibleBlockedReason(reason, response.reason_code), event.details);\n"
+            "    }\n"
+            '    if (response.model_output_action === "replace_with_reviewed_excerpt") {\n'
+            "      const excerptText = typeof response.reviewed_excerpt === 'string' "
+            "? response.reviewed_excerpt : '';\n"
+            "      if (excerptText.length === 0) {\n"
+            "        const reason = response.reason ||\n"
+            '          "HOL Guard could not prove this tool output safe to preserve.";\n'
+            '        ctx.ui.notify(reason, "warning");\n'
+            "        return blockedToolResult("
+            "modelVisibleBlockedReason(reason, response.reason_code), event.details);\n"
+            "      }\n"
+            "      const notice = response.reason ||\n"
+            '        "HOL Guard returned a reviewed excerpt because this output could not be fully proven safe'
+            ' within local limits.";\n'
+            '      ctx.ui.notify(notice, "info");\n'
+            "      return reviewedToolResult([{ type: 'text', text: excerptText }], "
+            "event.details, event.isError === true);\n"
+            "    }\n"
+            "    if (outputTruncated) {\n"
+            "      const notice = response.reason ||\n"
+            '        "HOL Guard returned a reviewed excerpt because this output could not be fully proven safe'
+            ' within local limits.";\n'
+            '      if (response.notice === "excerpt"'
+            ' || response.model_output_action === "replace_with_reviewed_excerpt") {\n'
+            '        ctx.ui.notify(notice, "info");\n'
+            "      }\n"
+            "      return reviewedToolResult(reviewedContent, event.details, event.isError === true);\n"
+            "    }\n"
+            '    if (response.decision === "allow") return undefined;\n'
+            "    const reason = response.reason ||\n"
+            '      "HOL Guard could not prove this tool output safe to preserve.";\n'
+            '    ctx.ui.notify(reason, "warning");\n'
+            "    return blockedToolResult(modelVisibleBlockedReason(reason, response.reason_code), event.details);\n",
+            "    if (response.observe_mode === true) return undefined;\n"
+            "    if (outputTruncated) {\n"
+            '      if (response.model_output_action === "allow_original" &&\n'
+            "          typeof response.reviewed_output_sha256 === 'string' &&\n"
+            "          response.reviewed_output_sha256 === digest.sha256) {\n"
+            "        return undefined;\n"
+            "      }\n"
+            "      const notice = response.reason ||\n"
+            '        "HOL Guard returned a reviewed excerpt because this output could not be fully proven safe'
+            ' within local limits.";\n'
+            '      if (response.notice === "excerpt"'
+            ' || response.model_output_action === "replace_with_reviewed_excerpt") {\n'
+            '        ctx.ui.notify(notice, "info");\n'
+            "      }\n"
+            "      return reviewedToolResult(reviewedContent, event.details, event.isError === true);\n"
+            "    }\n"
+            "    return undefined;\n",
+        ),
+        (
+            "modelVisibleBlockedReason(reason, response.reason_code)",
+            "modelVisibleBlockedReason(reason)",
+        ),
+    )
+    for current, legacy in replacements:
+        if source.count(current) != 1:
+            raise RuntimeError("managed Pi extension legacy source contract drifted")
+        source = source.replace(current, legacy, 1)
     return source

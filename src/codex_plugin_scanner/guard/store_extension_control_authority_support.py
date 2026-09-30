@@ -63,7 +63,48 @@ def preserve_migrated_extension_control(
     return control.state is ControlState.DISABLED or previous_fingerprint in {None, current_manifest[key_name]}
 
 
+def preserve_managed_extension_control(
+    control: ExtensionControl,
+    *,
+    previous_manifest: Mapping[str, str],
+    current_manifest: Mapping[str, str],
+) -> bool:
+    """Keep managed state only with an authenticated prior contract match.
+
+    Unlike local-admin migration, a missing previous manifest is intentionally
+    treated as no match so an enabled cloud allow fails closed until refreshed.
+    """
+
+    key_name = f"{control.target.kind.value}:{control.target.target_id}"
+    current_fingerprint = current_manifest.get(key_name)
+    if current_fingerprint is None:
+        # Keep unknown targets visible so the resolver emits its fail-closed error.
+        return True
+    if control.state is ControlState.DISABLED:
+        return True
+    return previous_manifest.get(key_name) == current_fingerprint
+
+
 class _ExtensionControlAuthoritySupportMixin:
+    def _invalidate_native_extension_control_policy(self, *, explicit_recovery: bool = False) -> None:
+        """Close local native readiness before a durable control mutation.
+
+        Mutation callers hold the authority lock. The asynchronous publisher
+        must acquire that lock to verify committed controls, and its epoch
+        check rejects any older publication already in flight. No ACK wait is
+        performed under store locks; failed/rolled-back mutations are safely
+        republished from their authenticated committed state.
+        """
+
+        from .native_command_control_authority_io import require_command_control_mutation_lease
+        from .native_command_control_authority_store import begin_native_command_control_mutation
+        from .native_policy_snapshot import notify_native_policy_mutation
+        from .store import GuardStore
+
+        require_command_control_mutation_lease(cast(Path, self.guard_home))
+        notify_native_policy_mutation(cast(Path, self.guard_home))
+        begin_native_command_control_mutation(cast(GuardStore, self), explicit_recovery=explicit_recovery)
+
     def _require_compatible_extension_control_schema(self) -> None:
         with self._connect() as connection:
             ensure_extension_control_authority_schema(connection)
@@ -182,13 +223,10 @@ class _ExtensionControlAuthoritySupportMixin:
         return self._authority_ref_prefix() + _ANCHOR_REF_SUFFIX
 
     @contextmanager
-    def _extension_control_authority_lock(self) -> Generator[None, None, None]:
-        with self._hold_advisory_file_lock(
-            path=cast(Path, self.guard_home) / "extension-control-authority.lock",
-            timeout_seconds=30.0,
-            poll_seconds=0.05,
-            timeout_message="Timed out waiting for the extension control authority lock.",
-        ):
+    def _extension_control_authority_lock(self, *, shared: bool = False) -> Generator[None, None, None]:
+        from .native_command_control_authority_io import hold_command_control_authority_lock
+
+        with hold_command_control_authority_lock(cast(Path, self.guard_home), shared=shared):
             yield
 
     @staticmethod

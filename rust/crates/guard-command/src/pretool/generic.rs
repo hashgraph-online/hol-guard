@@ -3,13 +3,15 @@ mod extract;
 #[path = "generic_result.rs"]
 mod result;
 
-use crate::{parse_command, CommandModelRequestV1};
+use crate::native_command_controls::CompiledNativeCommandControls;
+use crate::{CanonicalCommandV1, CommandModelRequestV1};
 use guard_contracts::{PreToolActionTypeV1, PreToolOperationV1, PreToolResultV1};
 use serde_json::Value;
 
-use super::evaluate_pre_tool;
+use super::{evaluate_pre_tool, PreToolDecisionV1};
 use extract::{extract_generic_signals, GenericSignals};
 use result::{generic_action, generic_error_result, generic_result, review_reason};
+use std::time::Instant;
 
 fn compact(value: &str) -> String {
     value
@@ -194,6 +196,7 @@ fn is_file_read_tool(tool: &str) -> bool {
 }
 
 fn is_command_tool(tool: &str) -> bool {
+    // tool_matches also recognizes namespaced forms such as functions.exec_command.
     tool_matches(
         tool,
         &[
@@ -204,20 +207,14 @@ fn is_command_tool(tool: &str) -> bool {
             "run_commands",
             "run_terminal_command",
             "execute_command",
+            "exec_command",
             "execute_command_line",
+            "exec",
         ],
     )
 }
 
-fn package_command(command: &str) -> bool {
-    let Ok(model) = parse_command(&CommandModelRequestV1 {
-        command: command.to_owned(),
-        dialect: "posix".to_owned(),
-        transport: "shell_string".to_owned(),
-        extraction_provenance: "pre-tool-generic".to_owned(),
-    }) else {
-        return false;
-    };
+fn package_command(model: &CanonicalCommandV1) -> bool {
     model
         .segments
         .iter()
@@ -308,27 +305,92 @@ fn infer_action_type(
     (PreToolActionTypeV1::Unknown, PreToolOperationV1::Unknown)
 }
 
-/// Evaluate the complete raw PreToolUse payload in native code.
-///
-/// This remains separate from `evaluate_pre_tool`, the compatibility
-/// command-model operation used by older clients.
+/// Evaluate the complete raw PreToolUse payload in native code. This stays
+/// separate from `evaluate_pre_tool`, the compatibility command-model
+/// operation used by older clients.
 pub fn evaluate_pre_tool_envelope(harness: &str, event: &str, payload: &Value) -> PreToolResultV1 {
+    evaluate_pre_tool_envelope_with_extensions(harness, event, payload, None, None)
+}
+
+pub fn evaluate_pre_tool_envelope_with_extensions(
+    harness: &str,
+    event: &str,
+    payload: &Value,
+    controls: Option<&CompiledNativeCommandControls>,
+    deadline: Option<Instant>,
+) -> PreToolResultV1 {
+    evaluate_pre_tool_envelope_with_source(harness, event, payload, controls, deadline, None, None)
+}
+
+/// Like [`evaluate_pre_tool_envelope_with_extensions`] but also carries the
+/// envelope's verified `home_dir`/`cwd` so `~/`-relative and absolute harness
+/// paths (Devin sends `~/...` verbatim) share the non-sensitive read floor.
+pub fn evaluate_pre_tool_envelope_with_source(
+    harness: &str,
+    event: &str,
+    payload: &Value,
+    controls: Option<&CompiledNativeCommandControls>,
+    deadline: Option<Instant>,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+) -> PreToolResultV1 {
     let signals = match extract_generic_signals(payload) {
         Ok(value) => value,
         Err(error) => return generic_error_result(harness, event, error),
     };
-    evaluate_signals(harness, event, signals)
+    let command_decision = signals.command.as_deref().map(|command| {
+        evaluate_pre_tool(&CommandModelRequestV1 {
+            command: command.to_owned(),
+            dialect: "posix".to_owned(),
+            transport: "shell_string".to_owned(),
+            extraction_provenance: "pre-tool-generic".to_owned(),
+        })
+    });
+    let result = evaluate_signals(
+        harness,
+        event,
+        &signals,
+        command_decision.as_ref(),
+        home_dir,
+        cwd,
+    );
+    match (controls, command_decision) {
+        (Some(controls), Some(Ok(decision))) => controls.apply_with_tool(
+            Some(&decision.command_model),
+            result,
+            signals.tool_name.as_deref(),
+            &signals.package_values,
+            deadline,
+        ),
+        (Some(controls), _) => controls.apply_with_tool(
+            None,
+            result,
+            signals.tool_name.as_deref(),
+            &signals.package_values,
+            deadline,
+        ),
+        _ => result,
+    }
 }
 
-fn evaluate_signals(harness: &str, event: &str, signals: GenericSignals) -> PreToolResultV1 {
+fn evaluate_signals(
+    harness: &str,
+    event: &str,
+    signals: &GenericSignals,
+    command_decision: Option<&Result<PreToolDecisionV1, String>>,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+) -> PreToolResultV1 {
     let (mut action_type, mut operation) = infer_action_type(
         event,
         signals.event_hint.as_deref(),
         signals.tool_name.as_deref(),
-        &signals,
+        signals,
     );
     if action_type == PreToolActionTypeV1::Command
-        && signals.command.as_deref().is_some_and(package_command)
+        && command_decision
+            .and_then(|decision| decision.as_ref().ok())
+            .is_some_and(|decision| package_command(&decision.command_model))
     {
         action_type = PreToolActionTypeV1::Package;
         operation = PreToolOperationV1::Install;
@@ -341,17 +403,22 @@ fn evaluate_signals(harness: &str, event: &str, signals: GenericSignals) -> PreT
         true,
         signals.sensitive_target,
     );
-    if let Some(tool) = signals.tool_name.as_deref() {
-        if tool_matches(
-            tool,
-            &["shutdown", "reboot", "wipe", "format", "kill", "terminate"],
-        ) {
-            return generic_result(
-                action,
-                "block",
-                "native_process_service_dangerous",
-                "HOL Guard blocked a destructive process or service action before execution.",
-            );
+    let command_proves_benign = command_decision
+        .and_then(|decision| decision.as_ref().ok())
+        .is_some_and(|decision| decision.explicitly_benign);
+    if !command_proves_benign {
+        if let Some(tool) = signals.tool_name.as_deref() {
+            if tool_matches(
+                tool,
+                &["shutdown", "reboot", "wipe", "format", "kill", "terminate"],
+            ) {
+                return generic_result(
+                    action,
+                    "block",
+                    "native_process_service_dangerous",
+                    "HOL Guard blocked a destructive process or service action before execution.",
+                );
+            }
         }
     }
     if signals.sensitive_target
@@ -373,23 +440,14 @@ fn evaluate_signals(harness: &str, event: &str, signals: GenericSignals) -> PreT
             "HOL Guard blocked a prompt that requests sensitive local data before execution.",
         );
     }
-    if let Some(command) = signals.command.as_deref() {
-        let command_request = CommandModelRequestV1 {
-            command: command.to_owned(),
-            dialect: "posix".to_owned(),
-            transport: "shell_string".to_owned(),
-            extraction_provenance: "pre-tool-generic".to_owned(),
-        };
-        let command_decision = match evaluate_pre_tool(&command_request) {
-            Ok(value) => value,
-            Err(_) => {
-                return generic_result(
-                    action,
-                    "block",
-                    "native_pre_tool_malformed_payload",
-                    "HOL Guard blocked a malformed PreToolUse command before execution.",
-                )
-            }
+    if let Some(command_decision) = command_decision {
+        let Ok(command_decision) = command_decision else {
+            return generic_result(
+                action,
+                "block",
+                "native_pre_tool_malformed_payload",
+                "HOL Guard blocked a malformed PreToolUse command before execution.",
+            );
         };
         if command_decision.minimum_action == "block" {
             return generic_result(
@@ -400,6 +458,21 @@ fn evaluate_signals(harness: &str, event: &str, signals: GenericSignals) -> PreT
             );
         }
         if action_type == PreToolActionTypeV1::Command {
+            // A benign command proves only its command text. Independent
+            // structured paths still describe the action the tool will take.
+            if signals.sensitive_target
+                && matches!(
+                    command_decision.minimum_action.as_str(),
+                    "allow" | "warn" | "review"
+                )
+            {
+                return generic_result(
+                    action,
+                    "review",
+                    "native_sensitive_access_review",
+                    "HOL Guard requires review before this action can access sensitive local data.",
+                );
+            }
             return generic_result(
                 action,
                 &command_decision.minimum_action,
@@ -407,6 +480,19 @@ fn evaluate_signals(harness: &str, event: &str, signals: GenericSignals) -> PreT
                 &command_decision.reason,
             );
         }
+    }
+    if action_type == PreToolActionTypeV1::FileRead
+        && !signals.sensitive_target
+        && signals.url_values.is_empty()
+        && signals.path_values.len() == 1
+        && super::safe_reads::bounded_file_read_target(&signals.path_values[0], home_dir, cwd)
+    {
+        return generic_result(
+            action,
+            "allow",
+            "native_exact_safe_file_read",
+            "The Rust command authority proved this bounded file read explicitly benign.",
+        );
     }
     let (reason_code, reason) = review_reason(action_type);
     generic_result(action, "review", reason_code, reason)

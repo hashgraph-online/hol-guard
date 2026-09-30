@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from codex_plugin_scanner.guard.extension_builder.listing import CATEGORY_LABELS, category_for_extension
 from codex_plugin_scanner.guard.runtime.command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
     CommandSafetyExtension,
@@ -45,35 +46,7 @@ CORE_EXTENSION_IDS = frozenset(
 
 
 def _category(extension_id: str) -> str:
-    if extension_id in CORE_EXTENSION_IDS:
-        return "Core safety"
-    if extension_id in {
-        "command.api-gateway",
-        "command.cdn",
-        "command.dns",
-        "command.infrastructure-as-code",
-        "command.kubernetes-operations",
-        "command.load-balancer",
-    } or extension_id.startswith("command.cloud."):
-        return "Cloud and infrastructure"
-    if extension_id.startswith(("command.backup.", "command.database.", "command.storage.")):
-        return "Data and resilience"
-    if extension_id == "command.github" or extension_id.startswith(
-        ("command.cicd.", "command.platform.", "command.remote.")
-    ):
-        return "Delivery and remote operations"
-    if extension_id in {
-        "command.email",
-        "command.feature-flags",
-        "command.monitoring",
-        "command.payment",
-    } or extension_id.startswith(("command.messaging.", "command.search.")):
-        return "Managed services"
-    if extension_id.startswith("command.package."):
-        return "Package supply chain"
-    if extension_id == "command.skill-sunset" or extension_id.startswith("command.mcp-"):
-        return "Specialized tools"
-    return "Other extensions"
+    return CATEGORY_LABELS[category_for_extension(extension_id)]
 
 
 def _escape_cell(value: str) -> str:

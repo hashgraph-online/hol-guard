@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 
 import {
   addedCustomExtensions,
+  connectorWorkspaceItems,
   filterExtensionSuggestions,
   applyBulkCommandState,
   bulkCommandState,
@@ -24,6 +25,19 @@ import { parseProtectionRoute, localCliHref, addCustomExtensionHref } from "./lo
 
 assert.equal(isLocalCliId("local-cli.cwv-py-abcdef12"), true);
 assert.equal(isLocalCliId("command.git"), false);
+
+{
+  const receipt = { state: "acknowledged", revision: 3, generation: 8, policy_digest: "a".repeat(64) };
+  const list = (native_publication: unknown) => normalizeLocalCliList({
+    schema_version: "guard.daemon.local-clis.v1", revision: 3, items: [], native_publication,
+  });
+  assert.deepEqual(list(receipt).native_publication, { state: "acknowledged", revision: 3, generation: 8 });
+  for (const invalid of [
+    { ...receipt, revision: 2 }, { ...receipt, generation: true },
+    { ...receipt, generation: 0 }, { ...receipt, policy_digest: "bad" },
+  ]) assert.equal(list(invalid).native_publication, undefined);
+  assert.deepEqual(list({ state: "pending", revision: 3 }).native_publication, { state: "pending", revision: 3 });
+}
 
 const item = normalizeLocalCliItem({
   cli_id: "local-cli.cwv-py-abcdef12",
@@ -133,6 +147,7 @@ assert.deepEqual(parseProtectionRoute("/extensions/local-cli/local-cli.cwv-py-ab
 assert.equal(parseProtectionRoute("/extensions/add").kind, "add-custom");
 assert.equal(addCustomExtensionHref(), "/extensions/add");
 assert.equal(parseProtectionRoute("/extensions/command.git").kind, "detail");
+assert.equal(parseProtectionRoute("/extensions/command.dns").kind, "overview");
 assert.equal(localCliHref("local-cli.cwv-py-abcdef12"), "/extensions/local-cli/local-cli.cwv-py-abcdef12");
 assert.equal(addedCustomExtensions(list.items).length, 1);
 assert.equal(suggestedCustomExtensions(list.items).length, 0);
@@ -327,3 +342,16 @@ const mixedValidity = normalizeLocalCliList({
 });
 assert.deepEqual(mixedValidity.items.map((entry) => entry.cli_id), [item.cli_id, blockedItem.cli_id]);
 assert.equal(addedCustomExtensions(mixedValidity.items).length, 2);
+
+{
+  const observed = { ...item, cli_id: "local-cli.mcp-observed", name: "Observed connector", surface: "mcp" as const,
+    source_label: "Synthetic host", state: "unset" as const, suggestable: true, last_seen_at: "2026-09-27T12:00:00Z" };
+  const hidden = { ...observed, cli_id: "local-cli.hidden", surface: "cli" as const };
+  const before = JSON.stringify([item, observed, hidden]);
+  const workspace = connectorWorkspaceItems([item, observed, hidden]);
+  assert.equal(workspace[0]?.cli_id, observed.cli_id);
+  assert.equal(workspace.some((entry) => entry.cli_id === hidden.cli_id), false);
+  assert.deepEqual(connectorWorkspaceItems(workspace, "synthetic host").map((entry) => entry.cli_id), [observed.cli_id]);
+  assert.equal(JSON.stringify([item, observed, hidden]), before);
+  assert.equal(observed.state, "unset");
+}

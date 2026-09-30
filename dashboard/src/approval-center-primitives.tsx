@@ -50,7 +50,8 @@ export type AppView =
   | "audit"
   | "policy"
   | "feed-health"
-  | "about";
+  | "about"
+  | "protection-repair";
 
 export function ShellHeader(props: {
   queuedCount: number;
@@ -848,7 +849,7 @@ export function GuardHero(props: {
             </div>
           </div>
         </div>
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-wrap items-start gap-3">
           {props.cta}
           {props.secondaryCta}
         </div>

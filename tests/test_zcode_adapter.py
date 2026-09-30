@@ -331,6 +331,18 @@ class TestZCodeInstallUninstall:
             if isinstance(handler, dict) and is_guard_managed_hook_command(handler.get("command"))
         ]
         assert managed_commands, "Guard-managed PreToolUse handlers must be present"
+        managed_handlers = [
+            handler
+            for entry in events["PreToolUse"]
+            if isinstance(entry, dict)
+            for handler in entry.get("hooks", [])
+            if isinstance(handler, dict) and is_guard_managed_hook_command(handler.get("command"))
+        ]
+        # Current ZCode renders statusMessage beside the hook in its Hooks
+        # settings UI.
+        assert {handler.get("statusMessage") for handler in managed_handlers} == {
+            "HOL Guard runtime policy enforcement"
+        }
 
     def test_install_hook_command_uses_bounded_bridge_for_interpreters(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
@@ -348,6 +360,10 @@ class TestZCodeInstallUninstall:
         ctx = _ctx(tmp_path)
         self._patch_shims(monkeypatch, ctx)
         monkeypatch.setattr("codex_plugin_scanner.guard.adapters.zcode.sys.frozen", True, raising=False)
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge.isolated_cursor_hook_python",
+            lambda: None,
+        )
         ZCodeHarnessAdapter().install(ctx)
         payload = json.loads((ctx.home_dir / ".zcode" / "cli" / "config.json").read_text(encoding="utf-8"))
         handler = payload["hooks"]["events"]["PreToolUse"][0]["hooks"][0]

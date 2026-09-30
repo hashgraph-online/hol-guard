@@ -32,6 +32,7 @@ from .hook_source_read import (
     SOURCE_READ_FULL_MODEL_BYTES_P95_TARGET,
     SOURCE_READ_MAX_SCAN_BYTES,
     evaluate_source_file_ref,
+    sha256_text,
 )
 from .skill_paths import is_safe_pi_inline_resource_uri
 
@@ -293,6 +294,7 @@ class HookReviewEngine:
                 decision="allow",
                 reason=None,
                 model_output_action="allow_original",
+                reviewed_output_sha256=sha256_text(extracted.text),
                 notice="none",
                 reason_code="output_empty_allow",
                 policy_action="allow",
@@ -364,6 +366,7 @@ class HookReviewEngine:
             decision="allow",
             reason=None,
             model_output_action="allow_original",
+            reviewed_output_sha256=sha256_text(extracted.text),
             notice="none",
             reason_code="output_scan_allow",
             policy_action="allow",

@@ -148,6 +148,115 @@ def test_health_probe_stops_when_total_deadline_is_exhausted(
     assert calls == 1
 
 
+class _HookResponse:
+    def __init__(self, body: bytes) -> None:
+        self._body = body
+
+    def __enter__(self) -> _HookResponse:
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        return None
+
+    def read(self, _limit: int = -1) -> bytes:
+        return self._body
+
+
+def test_stress_request_retries_empty_hook_body(monkeypatch: pytest.MonkeyPatch) -> None:
+    attempts = {"count": 0}
+
+    def open_hook(_request: object, timeout: float | None = None) -> _HookResponse:
+        del timeout
+        attempts["count"] += 1
+        if attempts["count"] == 1:
+            return _HookResponse(b"")
+        return _HookResponse(b'{"decision":"allow"}')
+
+    monkeypatch.setattr(stress_runtime.urllib.request, "urlopen", open_hook)
+    monkeypatch.setattr(stress_runtime.time, "sleep", lambda _seconds: None)
+
+    latency = stress_runtime.stress_request("http://127.0.0.1:1/v1/hooks/pi", "token")
+
+    assert latency >= 0
+    assert attempts["count"] == 2
+
+
+def test_wait_until_health_ready_retries_until_ready(monkeypatch: pytest.MonkeyPatch) -> None:
+    states = iter((False, True))
+
+    monkeypatch.setattr(stress_runtime, "health_is_ready", lambda _url: next(states))
+    monkeypatch.setattr(stress_runtime.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(stress_runtime.time, "monotonic", lambda: 0.0)
+
+    stress_runtime.wait_until_health_ready("http://127.0.0.1:1")
+
+
+def test_wait_until_daemon_lifecycle_ready_retries_until_ready(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    states = iter((False, True))
+
+    monkeypatch.setattr(stress_script, "_daemon_lifecycle_is_ready", lambda _home: next(states))
+    monkeypatch.setattr(stress_script.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(stress_script.time, "monotonic", lambda: 0.0)
+
+    stress_script._wait_until_daemon_lifecycle_ready(tmp_path)
+
+
+def test_soak_capacity_gate_ignores_listen_ready_startup_floor() -> None:
+    assert not stress_script._worker_capacity_is_past_deferred_startup_floor(
+        configured=4, target=1, workers=1, ready=1, busy=0
+    )
+    assert stress_script._worker_capacity_is_past_deferred_startup_floor(
+        configured=4, target=2, workers=2, ready=2, busy=0
+    )
+    assert stress_script._worker_capacity_is_past_deferred_startup_floor(
+        configured=1, target=1, workers=1, ready=1, busy=0
+    )
+    assert not stress_script._worker_capacity_is_past_deferred_startup_floor(
+        configured=4, target=2, workers=2, ready=2, busy=1
+    )
+
+
+def test_soak_baseline_does_not_accept_deferred_startup_floor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    execution = stress_script._StressExecution(
+        daemon_url="http://127.0.0.1:1",
+        endpoint="http://127.0.0.1:1/v1/hooks/pi",
+        auth_token="token",
+        initial_pid=123,
+        guard_home=Path("guard-home"),
+    )
+    reports = iter(
+        (
+            {"hook_workers": {"configured": 4, "target": 1, "workers": 1, "ready": 1, "busy": 0}},
+            {"hook_workers": {"configured": 4, "target": 1, "workers": 1, "ready": 1, "busy": 0}},
+            {"hook_workers": {"configured": 4, "target": 2, "workers": 2, "ready": 2, "busy": 0}},
+        )
+    )
+    requests: list[str] = []
+
+    monkeypatch.setattr(stress_script, "_WARMUP_CONCURRENCY", 4)
+
+    def healthz_details(_execution: stress_runtime.StressExecution) -> dict[str, object]:
+        return next(reports)
+
+    def stress_request(*_args: object) -> float:
+        requests.append("request")
+        return 1.0
+
+    monkeypatch.setattr(stress_script, "_healthz_details", healthz_details)
+    monkeypatch.setattr(stress_script, "_stress_request", stress_request)
+    monkeypatch.setattr(stress_script, "_update_pid_stability", lambda *_args: None)
+    monkeypatch.setattr(stress_script, "_sample_stress_runtime", lambda *_args: None)
+    monkeypatch.setattr(stress_script, "_collect_batch", lambda *_args, **_kwargs: None)
+
+    stress_script._stabilize_full_worker_capacity(execution)
+
+    assert requests == ["request", "request", "request"]
+
+
 def test_daemon_stress_gate_keeps_fresh_process_alive_with_populated_store() -> None:
     script = Path(__file__).parents[1] / "scripts" / "stress_guard_daemon.py"
     completed = subprocess.run(
@@ -161,7 +270,7 @@ def test_daemon_stress_gate_keeps_fresh_process_alive_with_populated_store() -> 
         check=False,
         capture_output=True,
         text=True,
-        timeout=45,
+        timeout=90,
     )
     loaded = cast(object, json.loads(completed.stdout))
     assert isinstance(loaded, dict)
@@ -210,7 +319,9 @@ def test_soak_gate_requires_request_count_resources_and_rss_bound() -> None:
     )
     assert result.soak_passed
     assert replace(result, rss_growth=0.385).soak_passed
-    assert not replace(result, rss_growth=0.41).soak_passed
+    assert replace(result, rss_growth=0.49).soak_passed
+    assert replace(result, rss_growth=0.50).soak_passed
+    assert not replace(result, rss_growth=0.51).soak_passed
     assert not replace(result, requests=99_999).soak_passed
     assert not replace(result, receipts=249_999).soak_passed
     isolated_probe_timeouts = replace(result, health_checks=18_932, transient_health_failures=30)

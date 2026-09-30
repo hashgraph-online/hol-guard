@@ -11,6 +11,7 @@ function assert(condition: boolean, message: string): void {
 }
 
 const appDetailSource = readFileSync(join(__dirname, "apps/app-detail-workspace.tsx"), "utf8");
+const appTabSource = readFileSync(join(__dirname, "evidence/app-tab.tsx"), "utf8");
 const appSource = readFileSync(join(__dirname, "app.tsx"), "utf8");
 const navSource = readFileSync(join(__dirname, "approval-center-primitives.tsx"), "utf8");
 
@@ -18,6 +19,8 @@ assert(appDetailSource.includes("EvidenceActionList"), "app activity tab uses Ev
 assert(appDetailSource.includes("EvidenceActionDetail"), "app activity tab uses EvidenceActionDetail");
 assert(appDetailSource.includes("EvidenceFilterBar"), "app activity tab uses EvidenceFilterBar");
 assert(!appDetailSource.includes("ExpandableReceiptRow"), "legacy expandable receipt rows removed");
+assert(appTabSource.includes("isConnectableAppHarness"), "Apps tab groups only registered AI harnesses");
+assert(!appTabSource.includes("isDisplayableHarness"), "Apps tab does not group operational source slugs");
 assert(appSource.includes('export const PROTECT_ROUTE = "/protect"'), "protect route constant exported");
 assert(navSource.includes('href: "/protect"'), "sidebar nav links to /protect");
 

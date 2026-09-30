@@ -27,23 +27,13 @@ from codex_plugin_scanner.guard.receipts import build_receipt
 from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
 from codex_plugin_scanner.guard.runtime.approval_context import build_approval_context_token
 from codex_plugin_scanner.guard.store import GuardStore
-from tests.guard_cli_facade_isolation import isolate_terminal_block_patches
+from tests.guard_cli_facade_isolation import isolate_terminal_block_patches, restore_cli_facade_approval_hooks
 
 
 def teardown_module() -> None:
     """Reset facade overrides propagated into lazily imported CLI modules."""
 
-    from codex_plugin_scanner.guard.approvals import queue_blocked_approvals, wait_for_approval_requests
-    from codex_plugin_scanner.guard.cli.commands_support import _sync_namespace
-    from codex_plugin_scanner.guard.daemon.manager import ensure_guard_daemon
-
-    _sync_namespace(
-        {
-            "ensure_guard_daemon": ensure_guard_daemon,
-            "queue_blocked_approvals": queue_blocked_approvals,
-            "wait_for_approval_requests": wait_for_approval_requests,
-        }
-    )
+    restore_cli_facade_approval_hooks()
 
 
 def _context_token() -> str:

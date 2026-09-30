@@ -10,172 +10,320 @@ import subprocess
 import tempfile
 import threading
 import time
-from collections.abc import Sequence
-from pathlib import Path
-from typing import TypeGuard
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, replace
+from datetime import datetime, timezone
+from typing import Literal, TypeGuard
 
-_PROTOCOL = "2024-11-05"
+from .local_mcp_probe_env import (
+    is_package_shim_executable as is_package_shim_executable,
+)
+from .local_mcp_probe_env import probe_env
+from .local_mcp_probe_env import probe_search_path as probe_search_path
+from .mcp_skills import McpSkillError, McpSkillsClient, mcp_skills_declared
+
+_PROTOCOL = "2025-11-25"
+_MODERN_PROTOCOL = "2026-07-28"
+_LEGACY_PROTOCOLS = frozenset({"2024-11-05", "2025-03-26", "2025-06-18", _PROTOCOL})
+_MODERN_ERROR_CODES = frozenset({-32020, -32021, -32022})
 MCP_PROBE_TIMEOUT_SECONDS = 6.0
 MCP_PACKAGE_PROBE_TIMEOUT_SECONDS = 20.0
 MCP_PROBE_OUTPUT_LIMIT = 1_000_000
-MAX_MCP_PROBE_TOOLS = 80
+MAX_MCP_PROBE_TOOLS = 100
+
+
+@dataclass(frozen=True, slots=True)
+class McpCatalogResult:
+    """Bounded discovery evidence; a partial inventory is never a complete one."""
+
+    tools: tuple[dict[str, object], ...] = ()
+    complete: bool = False
+    reason: str | None = None
+    pages: int = 0
+    protocol_version: str | None = None
+    server_info: dict[str, object] | None = None
+    capabilities: dict[str, object] | None = None
+    cache_ttl_ms: int = 0
+    cache_scope: Literal["private", "public"] = "private"
+    cache_received_at: str | None = None
+    skills: tuple[dict[str, object], ...] = ()
+    skills_complete: bool | None = None
+    skills_reason: str | None = None
+
+
+def run_mcp_catalog(
+    argv: Sequence[str],
+    *,
+    timeout: float = MCP_PROBE_TIMEOUT_SECONDS,
+    extra_env: Mapping[str, str] | None = None,
+    cancel: threading.Event | None = None,
+    connection_identity_hash: str | None = None,
+) -> McpCatalogResult:
+    """Discover tools while retaining bounded partial results and their cause."""
+
+    if not argv or any(not part or "\x00" in part for part in argv):
+        return McpCatalogResult(reason="invalid_launch")
+    if cancel is not None and cancel.is_set():
+        return McpCatalogResult(reason="cancelled")
+    try:
+        with tempfile.TemporaryDirectory(prefix="hol-guard-mcp-probe-") as tmp:
+            return _exchange_tools_list(
+                list(argv),
+                tmp,
+                timeout=timeout,
+                extra_env=extra_env,
+                cancel=cancel,
+                connection_identity_hash=connection_identity_hash,
+            )
+    except (OSError, ValueError, subprocess.TimeoutExpired, json.JSONDecodeError, UnicodeError):
+        return McpCatalogResult(reason="transport_failed")
 
 
 def run_mcp_tools_list(
     argv: Sequence[str],
     *,
     timeout: float = MCP_PROBE_TIMEOUT_SECONDS,
+    extra_env: Mapping[str, str] | None = None,
 ) -> list[dict[str, object]] | None:
-    """Run initialize + tools/list against argv and return tool objects."""
+    """Compatibility API: return tools only when discovery is complete."""
 
-    if not argv or any(not part or "\x00" in part for part in argv):
-        return None
-    try:
-        with tempfile.TemporaryDirectory(prefix="hol-guard-mcp-probe-") as tmp:
-            return _exchange_tools_list(list(argv), tmp, timeout=timeout)
-    except (OSError, subprocess.TimeoutExpired, json.JSONDecodeError, UnicodeError):
-        return None
+    catalog = run_mcp_catalog(argv, timeout=timeout, extra_env=extra_env)
+    return list(catalog.tools) if catalog.complete else None
 
 
-def probe_search_path() -> str:
-    """PATH for MCP probes, without Guard package-shim wrappers."""
-
-    fallback = os.environ.get("PATH", "/usr/bin:/bin:/opt/homebrew/bin:/usr/local/bin")
-    filtered = [entry for entry in fallback.split(os.pathsep) if entry and not _is_package_shim_dir(entry)]
-    for extra in ("/usr/bin", "/bin", "/opt/homebrew/bin", "/usr/local/bin"):
-        if extra not in filtered and Path(extra).is_dir():
-            filtered.append(extra)
-    return os.pathsep.join(filtered)
-
-
-def is_package_shim_executable(path: str) -> bool:
-    candidate = Path(path)
-    parent = candidate.parent
-    return parent.name == "bin" and parent.parent.name == "package-shims"
-
-
-def _is_package_shim_dir(entry: str) -> bool:
-    path = Path(entry)
-    return path.name == "bin" and path.parent.name == "package-shims"
-
-
-def probe_env(tmp: str) -> dict[str, str]:
-    env = {
-        "PATH": probe_search_path(),
-        "HOME": tmp,
-        "TMPDIR": tmp,
-        "LANG": "C",
-        "LC_ALL": "C",
-        "TERM": "dumb",
-        "NO_COLOR": "1",
-        "PYTHONUNBUFFERED": "1",
-        "PYTHONDONTWRITEBYTECODE": "1",
-        "npm_config_update_notifier": "false",
-        "npm_config_fund": "false",
-        "NPM_CONFIG_UPDATE_NOTIFIER": "false",
-        "npm_config_loglevel": "error",
-    }
-    env.update(_package_cache_env())
-    if os.name == "nt":
-        system_root = os.environ.get("SYSTEMROOT")
-        if system_root:
-            env["SYSTEMROOT"] = system_root
-    return env
-
-
-def _package_cache_env() -> dict[str, str]:
-    extra: dict[str, str] = {}
-    home = os.environ.get("HOME")
-    npm_cache = _configured_cache("NPM_CONFIG_CACHE", "npm_config_cache")
-    if not npm_cache and home:
-        candidate = Path(home) / ".npm"
-        if candidate.is_dir():
-            npm_cache = str(candidate)
-    if npm_cache:
-        extra["npm_config_cache"] = npm_cache
-        extra["NPM_CONFIG_CACHE"] = npm_cache
-    uv_cache = _configured_cache("UV_CACHE_DIR")
-    if not uv_cache and home:
-        candidate = Path(home) / ".cache" / "uv"
-        if candidate.is_dir():
-            uv_cache = str(candidate)
-    if uv_cache:
-        extra["UV_CACHE_DIR"] = uv_cache
-    bun_cache = _configured_cache("BUN_INSTALL_CACHE_DIR")
-    if not bun_cache and home:
-        candidate = Path(home) / ".bun" / "install" / "cache"
-        if candidate.is_dir():
-            bun_cache = str(candidate)
-    if bun_cache:
-        extra["BUN_INSTALL_CACHE_DIR"] = bun_cache
-    return extra
-
-
-def _configured_cache(*keys: str) -> str | None:
-    raw = _first_env(*keys)
-    if raw is None:
-        return None
-    stripped = raw.strip()
-    if not stripped:
-        return None
-    path = Path(stripped)
-    if path.is_absolute():
-        return stripped
-    return str((Path.cwd() / path).resolve())
-
-
-def _first_env(*keys: str) -> str | None:
-    for key in keys:
-        value = os.environ.get(key)
-        if value:
-            return value
-    return None
-
-
-def _exchange_tools_list(argv: list[str], tmp: str, *, timeout: float) -> list[dict[str, object]] | None:
+def _exchange_tools_list(
+    argv: list[str],
+    tmp: str,
+    *,
+    timeout: float,
+    extra_env: Mapping[str, str] | None = None,
+    cancel: threading.Event | None = None,
+    connection_identity_hash: str | None = None,
+) -> McpCatalogResult:
+    if cancel is not None and cancel.is_set():
+        return McpCatalogResult(reason="cancelled")
     process = subprocess.Popen(
         argv,
         cwd=tmp,
-        env=probe_env(tmp),
+        env=probe_env(tmp, extra_env),
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
         start_new_session=True,
     )
-    session = _RpcSession(process)
+    session = _RpcSession(process, cancel=cancel)
     deadline = time.monotonic() + max(timeout, 0.05)
     try:
-        session.write({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": _initialize_params()})
-        initialize = _await_result(session, 1, deadline)
-        if initialize is None or initialize.get("error") is not None:
-            return None
-        session.write({"jsonrpc": "2.0", "method": "notifications/initialized"})
+        catalog = _negotiate_catalog(session, deadline)
+        if cancel is not None and cancel.is_set():
+            return McpCatalogResult(reason="cancelled")
+        if catalog.reason is not None:
+            return catalog
         collected: list[dict[str, object]] = []
         cursor: str | None = None
+        seen_cursors: set[str] = set()
+        seen_names: set[str] = set()
         request_id = 2
+        pages = 0
+        cache_deadline = time.monotonic()
+        cache_scope: Literal["private", "public"] = "private"
+        page_scope: str | None = None
+        catalog_generation = session.catalog_generation
+
+        def partial(reason: str) -> McpCatalogResult:
+            return replace(catalog, tools=tuple(collected), reason=reason, pages=pages)
+
         for _ in range(8):
             params: dict[str, object] = {} if cursor is None else {"cursor": cursor}
+            if catalog.protocol_version == _MODERN_PROTOCOL:
+                params["_meta"] = _modern_request_meta()
             session.write({"jsonrpc": "2.0", "id": request_id, "method": "tools/list", "params": params})
             listed = _await_result(session, request_id, deadline)
+            if cancel is not None and cancel.is_set():
+                return partial("cancelled")
+            if session.catalog_generation != catalog_generation:
+                return partial("catalog_changed")
             if listed is None or listed.get("error") is not None:
-                return None
+                return partial("list_failed")
             result = listed.get("result")
             if not isinstance(result, dict):
-                return None
+                return partial("invalid_page")
+            if catalog.protocol_version == _MODERN_PROTOCOL and result.get("resultType") != "complete":
+                return partial("invalid_page")
+            ttl = result.get("ttlMs", 0)
+            scope = result.get("cacheScope", "private")
+            if type(ttl) is not int or scope not in ("private", "public"):
+                return partial("invalid_cache_hints")
+            # Hints never expand authority or share this private local cache.
+            # Bound a claimed long TTL, and retain the earliest page deadline.
+            page_deadline = time.monotonic() + min(max(ttl, 0), 86_400_000) / 1000
+            if page_scope is not None and scope != page_scope:
+                return partial("inconsistent_cache_scope")
+            page_scope = scope
+            cache_scope = "public" if scope == "public" else "private"
+            cache_deadline = page_deadline if pages == 0 else min(cache_deadline, page_deadline)
             tools = result.get("tools")
             if not isinstance(tools, list):
-                return None
-            collected.extend(item for item in tools if isinstance(item, dict))
-            if len(collected) >= MAX_MCP_PROBE_TOOLS:
-                return collected[:MAX_MCP_PROBE_TOOLS]
+                return partial("invalid_page")
+            pages += 1
+            page: list[dict[str, object]] = []
+            page_names: set[str] = set()
+            for item in tools:
+                if not isinstance(item, dict):
+                    return partial("invalid_tool")
+                name = item.get("name")
+                if not isinstance(name, str) or not name or name != name.strip():
+                    return partial("invalid_tool")
+                if name in seen_names or name in page_names:
+                    return partial("duplicate_tool")
+                page_names.add(name)
+                page.append(item)
+            remaining = MAX_MCP_PROBE_TOOLS - len(collected)
+            collected.extend(page[:remaining])
+            seen_names.update(page_names)
             next_cursor = result.get("nextCursor")
-            if not isinstance(next_cursor, str) or not next_cursor.strip():
-                return collected
-            cursor = next_cursor.strip()
+            if next_cursor is not None and not isinstance(next_cursor, str):
+                return partial("invalid_cursor")
+            if len(page) > remaining:
+                return partial("tool_limit")
+            if next_cursor is None:
+                complete_catalog = replace(
+                    catalog,
+                    tools=tuple(collected),
+                    complete=True,
+                    pages=pages,
+                    cache_ttl_ms=max(0, int((cache_deadline - time.monotonic()) * 1000)),
+                    cache_scope=cache_scope,
+                    cache_received_at=datetime.now(timezone.utc).isoformat(),
+                )
+                return _append_skill_metadata(
+                    complete_catalog,
+                    session,
+                    deadline,
+                    connection_identity_hash=connection_identity_hash,
+                )
+            if len(collected) == MAX_MCP_PROBE_TOOLS:
+                return partial("tool_limit")
+            if next_cursor in seen_cursors:
+                return partial("repeated_cursor")
+            seen_cursors.add(next_cursor)
+            cursor = next_cursor
             request_id += 1
-        return collected
+        return partial("page_limit")
     finally:
         _stop(process, session)
+
+
+def _append_skill_metadata(
+    catalog: McpCatalogResult,
+    session: _RpcSession,
+    deadline: float,
+    *,
+    connection_identity_hash: str | None,
+) -> McpCatalogResult:
+    if not mcp_skills_declared(catalog.capabilities, protocol_version=catalog.protocol_version or ""):
+        return catalog
+    if connection_identity_hash is None:
+        return replace(catalog, skills_complete=False, skills_reason="skill_origin_not_bound")
+    request_id = 100
+    generation = session.catalog_generation
+
+    def request(method: str, params: dict[str, object]) -> dict[str, object]:
+        nonlocal request_id
+        request_id += 1
+        session.write({"jsonrpc": "2.0", "id": request_id, "method": method, "params": params})
+        response = _await_result(session, request_id, deadline)
+        if response is None or response.get("error") is not None:
+            raise McpSkillError("skill_discovery_failed")
+        result = response.get("result")
+        if not isinstance(result, dict):
+            raise McpSkillError("invalid_skills_result")
+        return result
+
+    try:
+        client = McpSkillsClient(
+            origin=connection_identity_hash,
+            capabilities=catalog.capabilities,
+            protocol_version=catalog.protocol_version or "",
+            request=request,
+        )
+        entries, complete, reason = client.list_metadata()
+    except McpSkillError as error:
+        return replace(catalog, skills_complete=False, skills_reason=str(error))
+    public: list[dict[str, object]] = []
+    size = 0
+    for entry in entries:
+        metadata = entry.public_metadata()
+        size += len(json.dumps(metadata, ensure_ascii=True).encode())
+        if size > 512_000:
+            complete, reason = False, "skill_metadata_limit"
+            break
+        public.append(metadata)
+    result = replace(catalog, skills=tuple(public), skills_complete=complete, skills_reason=reason)
+    if session.catalog_generation != generation:
+        result = replace(result, complete=False, reason="catalog_changed")
+    return result
+
+
+def _modern_request_meta() -> dict[str, object]:
+    return {
+        "io.modelcontextprotocol/protocolVersion": _MODERN_PROTOCOL,
+        "io.modelcontextprotocol/clientInfo": {"name": "hol-guard", "version": "3.0"},
+        "io.modelcontextprotocol/clientCapabilities": {},
+    }
+
+
+def _negotiate_catalog(session: _RpcSession, deadline: float) -> McpCatalogResult:
+    """Probe modern stdio, falling back only when it is not recognized."""
+
+    session.write({"jsonrpc": "2.0", "id": 0, "method": "server/discover", "params": {"_meta": _modern_request_meta()}})
+    remaining = max(0.0, deadline - time.monotonic())
+    discovered = _await_result(session, 0, min(deadline, time.monotonic() + min(1.0, remaining / 4)))
+    if discovered is not None:
+        error = discovered.get("error")
+        code = error.get("code") if isinstance(error, dict) else None
+        if isinstance(code, int) and code in _MODERN_ERROR_CODES:
+            reason = "unsupported_protocol" if code == -32022 else "discovery_rejected"
+            return McpCatalogResult(reason=reason)
+        if error is None:
+            result = discovered.get("result")
+            if not isinstance(result, dict) or result.get("resultType") != "complete":
+                return McpCatalogResult(reason="invalid_discovery")
+            versions = result.get("supportedVersions")
+            capabilities = result.get("capabilities")
+            if not isinstance(versions, list) or not all(isinstance(version, str) for version in versions):
+                return McpCatalogResult(reason="invalid_discovery")
+            if _MODERN_PROTOCOL not in versions:
+                return McpCatalogResult(reason="unsupported_protocol")
+            if not isinstance(capabilities, dict):
+                return McpCatalogResult(reason="invalid_discovery")
+            meta = result.get("_meta")
+            server_info = meta.get("io.modelcontextprotocol/serverInfo") if isinstance(meta, dict) else None
+            return McpCatalogResult(
+                protocol_version=_MODERN_PROTOCOL,
+                server_info=server_info if isinstance(server_info, dict) else None,
+                capabilities=capabilities,
+            )
+    session.write({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": _initialize_params()})
+    initialize = _await_result(session, 1, deadline)
+    if initialize is None or initialize.get("error") is not None:
+        return McpCatalogResult(reason="initialize_failed")
+    result = initialize.get("result")
+    if not isinstance(result, dict):
+        return McpCatalogResult(reason="invalid_initialize")
+    version = result.get("protocolVersion")
+    if not isinstance(version, str) or version not in _LEGACY_PROTOCOLS:
+        return McpCatalogResult(reason="unsupported_protocol")
+    capabilities = result.get("capabilities")
+    if not isinstance(capabilities, dict):
+        return McpCatalogResult(reason="invalid_initialize")
+    server_info = result.get("serverInfo")
+    session.write({"jsonrpc": "2.0", "method": "notifications/initialized"})
+    return McpCatalogResult(
+        protocol_version=version,
+        server_info=server_info if isinstance(server_info, dict) else None,
+        capabilities=capabilities,
+    )
 
 
 def _initialize_params() -> dict[str, object]:
@@ -196,6 +344,8 @@ def _await_result(session: _RpcSession, request_id: int, deadline: float) -> dic
             return None
         if message.get("id") == request_id:
             return message
+        if message.get("method") in {"notifications/tools/list_changed", "tools/list_changed"}:
+            session.catalog_generation += 1
         _reply_server_request(session, message)
 
 
@@ -214,9 +364,12 @@ def _reply_server_request(session: _RpcSession, message: dict[str, object]) -> N
 
 
 class _RpcSession:
-    def __init__(self, process: subprocess.Popen[bytes]) -> None:
+    def __init__(self, process: subprocess.Popen[bytes], *, cancel: threading.Event | None = None) -> None:
         self._process = process
+        self._cancel = cancel
+        self.catalog_generation = 0
         self._buffer = b""
+        self._output_bytes = 0
         self._messages: list[dict[str, object]] = []
         self._lock = threading.Lock()
         self._closed = threading.Event()
@@ -235,6 +388,8 @@ class _RpcSession:
     def read(self, *, timeout: float) -> dict[str, object] | None:
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
+            if self._cancel is not None and self._cancel.is_set():
+                return None
             with self._lock:
                 if self._messages:
                     return self._messages.pop(0)
@@ -271,6 +426,9 @@ class _RpcSession:
             if chunk == b"":
                 return
             with self._lock:
+                self._output_bytes += len(chunk)
+                if self._output_bytes > MCP_PROBE_OUTPUT_LIMIT:
+                    return
                 self._buffer += chunk
                 while True:
                     parsed = _pop_json_message(self._buffer)
@@ -279,6 +437,8 @@ class _RpcSession:
                     message, rest = parsed
                     self._buffer = rest
                     if _is_rpc_message(message):
+                        if len(self._messages) >= 256:
+                            return
                         self._messages.append(message)
                 if len(self._buffer) > MCP_PROBE_OUTPUT_LIMIT:
                     self._buffer = b""
@@ -290,7 +450,13 @@ def _is_rpc_message(message: dict[str, object] | None) -> TypeGuard[dict[str, ob
         return False
     if "result" in message or "error" in message:
         return True
-    return "method" in message and "id" in message
+    return "method" in message and (
+        "id" in message
+        or (
+            message.get("jsonrpc") == "2.0"
+            and message.get("method") in ("notifications/tools/list_changed", "tools/list_changed")
+        )
+    )
 
 
 def _pop_json_message(buffer: bytes) -> tuple[dict[str, object] | None, bytes] | None:
@@ -309,8 +475,8 @@ def _pop_json_message(buffer: bytes) -> tuple[dict[str, object] | None, bytes] |
         if len(rest) < length:
             return None
         try:
-            payload = json.loads(rest[:length].decode("utf-8"))
-        except (json.JSONDecodeError, UnicodeDecodeError):
+            payload = _strict_rpc_json(rest[:length])
+        except (ValueError, UnicodeDecodeError, RecursionError):
             return (None, rest[length:])
         return (payload if isinstance(payload, dict) else None, rest[length:])
     line, sep, rest = buffer.partition(b"\n")
@@ -318,28 +484,41 @@ def _pop_json_message(buffer: bytes) -> tuple[dict[str, object] | None, bytes] |
         return None
     stripped = line.strip()
     if not stripped:
-        return _pop_json_message(rest) if rest else None
+        return (None, rest)
     try:
-        payload = json.loads(stripped.decode("utf-8"))
-    except (json.JSONDecodeError, UnicodeDecodeError):
+        payload = _strict_rpc_json(stripped)
+    except (ValueError, UnicodeDecodeError, RecursionError):
         return (None, rest)
     return (payload if isinstance(payload, dict) else None, rest)
 
 
+def _strict_rpc_json(raw: bytes) -> object:
+    def pairs(items: list[tuple[str, object]]) -> dict[str, object]:
+        result: dict[str, object] = {}
+        for key, value in items:
+            if key in result:
+                raise ValueError("duplicate JSON key")
+            result[key] = value
+        return result
+
+    def constant(_value: str) -> object:
+        raise ValueError("nonfinite JSON value")
+
+    return json.loads(raw.decode("utf-8"), object_pairs_hook=pairs, parse_constant=constant)
+
+
 def _stop(process: subprocess.Popen[bytes], session: _RpcSession | None = None) -> None:
-    if session is not None:
-        session.close()
-    if process.poll() is not None:
-        return
     try:
         if os.name != "nt" and process.pid:
+            # The launched parent can exit while its descendants keep stdout
+            # open. Its private process group still belongs to this probe.
             os.killpg(process.pid, signal.SIGKILL)
         else:
             process.kill()
     except (ProcessLookupError, PermissionError, OSError):
-        try:
+        with contextlib.suppress(ProcessLookupError, PermissionError, OSError):
             process.kill()
-        except (ProcessLookupError, PermissionError, OSError):
-            return
     with contextlib.suppress(subprocess.TimeoutExpired):
         _ = process.wait(timeout=1)
+    if session is not None:
+        session.close()

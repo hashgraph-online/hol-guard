@@ -58,14 +58,39 @@
     "homepage": { "type": "string", "minLength": 1, "maxLength": 512 },
     "license": { "type": "string", "minLength": 1, "maxLength": 64 },
     "launch": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["kind", "command", "package"],
-      "properties": {
-        "kind": { "const": "package-launcher" },
-        "command": { "enum": ["npx", "uvx", "bunx", "pnpm", "npm", "yarn", "pipx"] },
-        "package": { "type": "string", "minLength": 1, "maxLength": 256 }
-      }
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "command", "package"],
+          "properties": {
+            "kind": { "const": "package-launcher" },
+            "command": { "enum": ["npx", "uvx", "bunx", "pnpm", "npm", "yarn", "pipx"] },
+            "package": { "type": "string", "minLength": 1, "maxLength": 256 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "url", "serverNames"],
+          "properties": {
+            "kind": { "const": "remote-http" },
+            "url": {
+              "type": "string",
+              "pattern": "^https://(?![^/?#]*@)(?:(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)+[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.?|\\[[0-9A-Fa-f:.]+\\])(?::443)?(?:/(?:[A-Za-z0-9._~!$&'()*+,;=:@/-]|%[0-9A-Fa-f]{2})*)?(?:\\?(?:[A-Za-z0-9._~!$&'()*+,;=:@/?-]|%[0-9A-Fa-f]{2})*)?$",
+              "minLength": 9,
+              "maxLength": 260
+            },
+            "serverNames": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 8,
+              "uniqueItems": true,
+              "items": { "type": "string", "minLength": 1, "maxLength": 128 }
+            }
+          }
+        }
+      ]
     },
     "riskClasses": {
       "type": "array",
@@ -84,7 +109,7 @@
         "required": ["name", "state"],
         "properties": {
           "name": { "type": "string", "minLength": 1, "maxLength": 128 },
-          "state": { "enum": ["inherit", "allow", "block"] }
+          "state": { "enum": ["inherit", "allow", "review", "block"] }
         }
       }
     },

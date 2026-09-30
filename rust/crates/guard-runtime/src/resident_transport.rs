@@ -286,15 +286,42 @@ where
     }
 }
 
+pub(crate) struct ResidentAdmission {
+    primary: SyncSender<BoxedResidentStream>,
+    overflow: SyncSender<BoxedResidentStream>,
+}
+
+fn retry_overflow_admissions(
+    primary: SyncSender<BoxedResidentStream>,
+    overflow: Receiver<BoxedResidentStream>,
+) {
+    while let Ok(mut stream) = overflow.recv() {
+        let deadline = Instant::now() + crate::AUTH_TIMEOUT;
+        loop {
+            match primary.try_send(stream) {
+                Ok(()) => break,
+                Err(TrySendError::Disconnected(_)) => return,
+                Err(TrySendError::Full(returned)) => {
+                    stream = returned;
+                    if Instant::now() >= deadline {
+                        break;
+                    }
+                    thread::sleep(Duration::from_millis(1));
+                }
+            }
+        }
+    }
+}
+
 pub(crate) fn start_resident_workers(
     token: Arc<[u8; crate::AUTH_TOKEN_BYTES]>,
     policy_store: Option<Arc<crate::policy_store::PolicySnapshotStore>>,
-) -> SyncSender<BoxedResidentStream> {
+) -> ResidentAdmission {
     let (evaluation_sender, evaluation_receiver) =
-        sync_channel::<PendingRequest>(crate::EVALUATION_QUEUE_CAPACITY);
+        sync_channel::<PendingRequest>(crate::evaluation_queue_capacity());
     let evaluation_policy_store = policy_store.clone();
     spawn_workers(
-        crate::EVALUATION_WORKERS,
+        crate::evaluation_workers(),
         evaluation_receiver,
         move |pending| {
             handle_pending_request(pending, evaluation_policy_store.as_deref());
@@ -302,9 +329,9 @@ pub(crate) fn start_resident_workers(
     );
 
     let (authentication_sender, authentication_receiver) =
-        sync_channel::<BoxedResidentStream>(crate::AUTH_QUEUE_CAPACITY);
+        sync_channel::<BoxedResidentStream>(crate::auth_queue_capacity());
     spawn_workers(
-        crate::AUTH_WORKERS,
+        crate::auth_workers(),
         authentication_receiver,
         move |mut stream| {
             if authenticate_resident_stream(&mut *stream, &token).is_err() {
@@ -339,18 +366,128 @@ pub(crate) fn start_resident_workers(
             }
         },
     );
-    authentication_sender
+    let overflow_primary = authentication_sender.clone();
+    let (overflow_sender, overflow_receiver) = sync_channel(crate::auth_queue_capacity());
+    thread::spawn(move || retry_overflow_admissions(overflow_primary, overflow_receiver));
+    ResidentAdmission {
+        primary: authentication_sender,
+        overflow: overflow_sender,
+    }
 }
 
 pub(crate) fn admit_connection(
-    sender: &SyncSender<BoxedResidentStream>,
+    admission: &ResidentAdmission,
     stream: BoxedResidentStream,
 ) -> Result<(), String> {
-    match sender.try_send(stream) {
+    match admission.primary.try_send(stream) {
         Ok(()) => Ok(()),
-        Err(TrySendError::Full(_stream)) => Ok(()),
         Err(TrySendError::Disconnected(_stream)) => {
             Err("native_resident_worker_pool_stopped".to_owned())
         }
+        Err(TrySendError::Full(stream)) => match admission.overflow.try_send(stream) {
+            Ok(()) => Ok(()),
+            Err(TrySendError::Disconnected(_stream)) => {
+                Err("native_resident_worker_pool_stopped".to_owned())
+            }
+            Err(TrySendError::Full(_stream)) => Ok(()),
+        },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::mpsc::sync_channel;
+    use std::time::Duration;
+
+    struct NullStream;
+
+    impl Read for NullStream {
+        fn read(&mut self, _buf: &mut [u8]) -> io::Result<usize> {
+            Ok(0)
+        }
+    }
+
+    impl Write for NullStream {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl ResidentStream for NullStream {
+        fn set_resident_read_timeout(&self, _timeout: Option<Duration>) -> io::Result<()> {
+            Ok(())
+        }
+
+        fn set_resident_write_timeout(&self, _timeout: Option<Duration>) -> io::Result<()> {
+            Ok(())
+        }
+
+        fn set_resident_nonblocking(&self, _nonblocking: bool) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn admit_connection_does_not_block_accept_on_full_auth_queue() {
+        let (primary, primary_rx) = sync_channel(1);
+        primary
+            .try_send(Box::new(NullStream) as BoxedResidentStream)
+            .expect("seed occupancy");
+        let overflow_primary = primary.clone();
+        let (overflow, overflow_rx) = sync_channel(1);
+        thread::spawn(move || retry_overflow_admissions(overflow_primary, overflow_rx));
+        let admission = ResidentAdmission { primary, overflow };
+        let started = Instant::now();
+        admit_connection(&admission, Box::new(NullStream)).expect("overflow handoff");
+        assert!(
+            started.elapsed() < Duration::from_millis(20),
+            "accept must keep moving when auth workers are busy"
+        );
+        let worker = thread::spawn(move || {
+            thread::sleep(Duration::from_millis(30));
+            let occupied = primary_rx.recv().expect("drain occupancy");
+            let admitted = primary_rx.recv().expect("overflow retry");
+            (occupied, admitted)
+        });
+        drop(worker.join().expect("overflow delivered"));
+        drop(admission);
+    }
+
+    #[test]
+    fn spawn_workers_run_queued_jobs_in_parallel() {
+        let started = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let (sender, receiver) = sync_channel(4);
+        spawn_workers(4, receiver, {
+            let started = Arc::clone(&started);
+            move |_item: u8| {
+                started.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                while started.load(std::sync::atomic::Ordering::SeqCst) < 4 {
+                    thread::sleep(Duration::from_millis(1));
+                }
+                thread::sleep(Duration::from_millis(40));
+            }
+        });
+        let started_at = Instant::now();
+        for _ in 0..4 {
+            sender.send(1).expect("enqueue parallel job");
+        }
+        drop(sender);
+        let deadline = Instant::now() + Duration::from_millis(400);
+        while started.load(std::sync::atomic::Ordering::SeqCst) < 4 && Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(1));
+        }
+        assert_eq!(started.load(std::sync::atomic::Ordering::SeqCst), 4);
+        while started_at.elapsed() < Duration::from_millis(40) {
+            thread::sleep(Duration::from_millis(1));
+        }
+        assert!(
+            started_at.elapsed() < Duration::from_millis(160),
+            "queued auth/eval work must overlap instead of running one job at a time"
+        );
     }
 }
