@@ -1,26 +1,28 @@
 """Guard CLI Copilot hook helpers."""
 
-# ruff: noqa: E402, F403, F405
+# ruff: noqa: F403, F405
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from collections.abc import Sequence
+from typing import TYPE_CHECKING, Any
 
-from .commands_hook_compat_bootstrap import bootstrap_compatibility_module
-
-bootstrap_compatibility_module(globals())
+from .commands_support import *
 
 if TYPE_CHECKING:
     from ..mcp_tool_calls import ToolCallDecision
     from ._commands_shared import _hook_command_text, _now
-    from .commands_support_hook_payload import _action_envelope_json, _approval_surface_policy_for_flow
+    from .commands_support_hook_payload import (
+        _action_envelope_json,
+        _approval_surface_policy_for_flow,
+        _copilot_hook_permission_decision,
+        _write_json_line,
+    )
     from .commands_support_interaction import (
         _bind_hook_blocked_operation_queue,
         _codex_browser_wait_metadata,
-        _emit,
         _preferred_approval_review_url,
         _record_harness_usage_for_hook,
-        _should_emit_copilot_hook_response,
     )
     from .commands_support_prompts import (
         _copilot_hook_reason,
@@ -32,6 +34,7 @@ if TYPE_CHECKING:
     from .commands_support_runtime_resolution import _canonical_harness_name, _runtime_detection
 
 
+from ..action_lattice import most_restrictive_guard_action, normalize_guard_action
 from ..mcp_tool_calls import resolve_tool_call_policy_action
 from ..models import GuardAction
 from ..runtime.command_activity_contract import ActivityApprovalReuseStatus
@@ -91,7 +94,7 @@ def _copilot_approval_reuse_evidence(
     }
 
 
-def _run_hook_copilot_pretool(
+def run_native_copilot_pretool(
     args: argparse.Namespace,
     *,
     action_envelope: GuardActionEnvelope | None,
@@ -106,6 +109,7 @@ def _run_hook_copilot_pretool(
     fresh_tool_call_authority_provider: (
         Callable[[], tuple[GuardConfig, GuardArtifact, str, object] | None] | None
     ) = None,
+    native_edge_result: Mapping[str, object] | None = None,
 ) -> int | None:
     if copilot_runtime_tool_call is None or copilot_hook_stage != "pretooluse":
         return None
@@ -124,6 +128,23 @@ def _run_hook_copilot_pretool(
         runtime_artifact_hash = decision.post_claim_authority.artifact_hash
         runtime_arguments = decision.post_claim_authority.arguments
     policy_action = resolve_tool_call_policy_action(decision)
+    if isinstance(native_edge_result, Mapping):
+        edge_action_value = native_edge_result.get("policy_action") or native_edge_result.get("minimum_action")
+        if edge_action_value:
+            # The edge result is an enforcement input: a present but
+            # unrecognized action fails closed instead of skipping the floor.
+            native_edge_action = normalize_guard_action(edge_action_value, unknown_action="block")
+        elif native_edge_result.get("decision") == "deny":
+            native_edge_action = "block"
+        else:
+            native_edge_action = None
+        # PreToolUse floors only on a hard native enforcement verdict; the
+        # edge's review-tier "unproven" deny is provenance here — artifact
+        # adjudication, grants, and configured policy settle reviewability.
+        if native_edge_action in {"block", "sandbox-required"}:
+            # The native edge verdict is a non-bypassable floor on the
+            # emitted Copilot decision.
+            policy_action = most_restrictive_guard_action(policy_action, native_edge_action)
     approval_reuse = _copilot_approval_reuse_evidence(decision)
     decision_scanner_evidence = _copilot_tool_decision_scanner_evidence(decision)
     saved_policy_blocks = decision.saved_action == "block"
@@ -167,7 +188,7 @@ def _run_hook_copilot_pretool(
             additional_scanner_evidence=decision_scanner_evidence,
             policy_action=policy_action,
         )
-        if _should_emit_copilot_hook_response(args):
+        if args.harness == "copilot":
             _record_copilot_pre_activity(
                 store=store,
                 context=context,
@@ -184,7 +205,8 @@ def _run_hook_copilot_pretool(
                 payload=payload,
                 policy_action=policy_action,
             )
-            _emit_copilot_hook_response(
+            _emit_copilot_pretool_response(
+                args,
                 policy_action=policy_action,
                 reason="",
                 approval_reuse=approval_reuse,
@@ -206,7 +228,7 @@ def _run_hook_copilot_pretool(
                 additional_scanner_evidence=decision_scanner_evidence,
                 policy_action=policy_action,
             )
-            if _should_emit_copilot_hook_response(args):
+            if args.harness == "copilot":
                 _record_copilot_pre_activity(
                     store=store,
                     context=context,
@@ -217,14 +239,15 @@ def _run_hook_copilot_pretool(
                     decision=decision,
                     runtime_workspace=runtime_workspace,
                 )
-        if _should_emit_copilot_hook_response(args):
+        if args.harness == "copilot":
             _record_harness_usage_for_hook(
                 store=store,
                 action_envelope=action_envelope,
                 payload=payload,
                 policy_action=policy_action,
             )
-            _emit_copilot_hook_response(
+            _emit_copilot_pretool_response(
+                args,
                 policy_action=policy_action,
                 reason=(
                     f"HOL Guard blocked {runtime_artifact.name}. {decision.summary}"
@@ -238,7 +261,44 @@ def _run_hook_copilot_pretool(
             return 0
 
 
-def _run_hook_copilot_permission_request(
+def _emit_copilot_pretool_response(
+    args: argparse.Namespace,
+    *,
+    policy_action: str,
+    reason: str,
+    approval_reuse: dict[str, object] | None,
+    scanner_evidence: Sequence[dict[str, object]],
+    output_stream: Any | None,
+) -> None:
+    if not getattr(args, "json", False):
+        _emit_copilot_hook_response(
+            policy_action=policy_action,
+            reason=reason,
+            approval_reuse=approval_reuse,
+            scanner_evidence=tuple(scanner_evidence),
+            output_stream=output_stream,
+        )
+        return
+    decision = _copilot_hook_permission_decision(policy_action)
+    if decision == "allow":
+        _write_json_line({"permissionDecision": "allow"}, output_stream=output_stream)
+        return
+    doc: dict[str, object] = {
+        "continue": True,
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": decision,
+            "permissionDecisionReason": reason,
+        },
+    }
+    if approval_reuse is not None:
+        doc["approval_reuse"] = approval_reuse
+    if scanner_evidence:
+        doc["scanner_evidence"] = list(scanner_evidence)
+    _write_json_line(doc, output_stream=output_stream)
+
+
+def run_native_copilot_permission_request(
     args: argparse.Namespace,
     *,
     action_envelope: GuardActionEnvelope | None,
@@ -368,27 +428,18 @@ def _run_hook_copilot_permission_request(
             decision=decision,
             runtime_workspace=runtime_workspace,
         )
-        if _should_emit_copilot_hook_response(args):
-            _record_harness_usage_for_hook(
-                store=store,
-                action_envelope=action_envelope,
-                payload=payload,
-                policy_action=policy_action,
-            )
-            _emit_copilot_permission_request_response(
-                behavior="allow",
-                approval_reuse=approval_reuse,
-                scanner_evidence=decision_scanner_evidence,
-                output_stream=output_stream,
-            )
-            return 0
         _record_harness_usage_for_hook(
             store=store,
             action_envelope=action_envelope,
             payload=payload,
             policy_action=policy_action,
         )
-        _emit("hook", response_payload, getattr(args, "json", False))
+        _emit_copilot_permission_request_response(
+            behavior="allow",
+            approval_reuse=approval_reuse,
+            scanner_evidence=decision_scanner_evidence,
+            output_stream=output_stream,
+        )
         return 0
     receipt = block_tool_call(
         store=store,
@@ -422,18 +473,15 @@ def _run_hook_copilot_permission_request(
             payload=payload,
             policy_action=policy_action,
         )
-        if _should_emit_copilot_hook_response(args):
-            _emit_copilot_permission_request_response(
-                behavior="deny",
-                message=f"HOL Guard blocked {artifact_name}. {decision.summary}",
-                interrupt=True,
-                approval_reuse=approval_reuse,
-                scanner_evidence=decision_scanner_evidence,
-                output_stream=output_stream,
-            )
-            return 0
-        _emit("hook", response_payload, getattr(args, "json", False))
-        return 1
+        _emit_copilot_permission_request_response(
+            behavior="deny",
+            message=f"HOL Guard blocked {artifact_name}. {decision.summary}",
+            interrupt=True,
+            approval_reuse=approval_reuse,
+            scanner_evidence=decision_scanner_evidence,
+            output_stream=output_stream,
+        )
+        return 0
     approval_center_url = schedule_guard_daemon_ensure(
         guard_home,
         home_dir=context.home_dir,
@@ -519,25 +567,22 @@ def _run_hook_copilot_permission_request(
         payload=payload,
         policy_action=policy_action,
     )
-    if _should_emit_copilot_hook_response(args):
-        review_context = _native_approval_center_context(response_payload, harness=args.harness)
-        _emit_copilot_permission_request_response(
-            behavior="deny",
-            message=_copilot_hook_reason(
-                f"HOL Guard blocked {artifact_name}. {decision.summary}",
-                review_context,
-            ),
-            interrupt=True,
-            approval_reuse=approval_reuse,
-            scanner_evidence=decision_scanner_evidence,
-            output_stream=output_stream,
-        )
-        return 0
-    _emit("hook", response_payload, getattr(args, "json", False))
-    return 1
+    review_context = _native_approval_center_context(response_payload, harness=args.harness)
+    _emit_copilot_permission_request_response(
+        behavior="deny",
+        message=_copilot_hook_reason(
+            f"HOL Guard blocked {artifact_name}. {decision.summary}",
+            review_context,
+        ),
+        interrupt=True,
+        approval_reuse=approval_reuse,
+        scanner_evidence=decision_scanner_evidence,
+        output_stream=output_stream,
+    )
+    return 0
 
 
 __all__ = [
-    "_run_hook_copilot_permission_request",
-    "_run_hook_copilot_pretool",
+    "run_native_copilot_permission_request",
+    "run_native_copilot_pretool",
 ]

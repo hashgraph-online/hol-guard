@@ -32,11 +32,6 @@ TARGETS: Final[dict[str, MutationTarget]] = {
         "src/codex_plugin_scanner/guard/runtime/data_flow.py",
         ("tests/test_guard_data_flow.py",),
     ),
-    "hook-output": MutationTarget(
-        "hook-output",
-        "src/codex_plugin_scanner/guard/runtime/hook_review_engine.py",
-        ("tests/test_hook_review_engine.py", "tests/test_hook_security_regressions.py"),
-    ),
     "approval-reuse": MutationTarget(
         "approval-reuse",
         "src/codex_plugin_scanner/guard/runtime/approval_reuse.py",

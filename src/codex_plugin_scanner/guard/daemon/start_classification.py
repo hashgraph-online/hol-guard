@@ -155,8 +155,10 @@ def _pid_in_process_tree(pid: int, root_pid: int) -> bool:
     if pid == root_pid:
         return True
     if os.name == "nt":
-        root_cmd = _manager.windows_processes.windows_process_command_line(root_pid)
-        pid_cmd = _manager.windows_processes.windows_process_command_line(pid)
+        from .. import windows_processes
+
+        root_cmd = windows_processes.windows_process_command_line(root_pid)
+        pid_cmd = windows_processes.windows_process_command_line(pid)
         return root_cmd is not None and pid_cmd is not None and _manager._same_daemon_invocation(root_cmd, pid_cmd)
     current = pid
     for _ in range(_PPID_WALK_LIMIT):

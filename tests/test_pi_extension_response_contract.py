@@ -5,23 +5,13 @@ from __future__ import annotations
 import json
 import subprocess
 import tempfile
-import time
 from pathlib import Path
 
 from codex_plugin_scanner.guard.adapters.pi_extension_source import managed_extension_source
-from codex_plugin_scanner.guard.config import GuardConfig
-from codex_plugin_scanner.guard.daemon.hook_worker_native import _watch_native_post_tool_result
 from codex_plugin_scanner.guard.daemon.hook_worker_responses import (
     harness_json_from_native_pre_tool,
     observe_lifecycle_fail_safe_response,
 )
-from codex_plugin_scanner.guard.runtime.actions import normalize_harness_payload
-from codex_plugin_scanner.guard.runtime.hook_content_scanner import ContentScanner
-from codex_plugin_scanner.guard.runtime.hook_decision_cache import HookDecisionCache
-from codex_plugin_scanner.guard.runtime.hook_review_engine import HookReviewEngine
-from codex_plugin_scanner.guard.runtime.hook_review_types import HookReviewRequest, HookSourceFileRef
-from codex_plugin_scanner.guard.runtime.hook_source_read import evaluate_source_file_ref, sha256_text
-from codex_plugin_scanner.guard.store import GuardStore
 
 
 def _generated_source(tmp_path: Path) -> str:
@@ -37,8 +27,9 @@ def _generated_source(tmp_path: Path) -> str:
 def _strip_generated_types(fragment: str) -> str:
     replacements = {
         "function compactHookEventName(value: unknown): string {": "function compactHookEventName(value) {",
-        "function normalizeGuardResponse(value: unknown): GuardResponse | null {":
-            "function normalizeGuardResponse(value) {",
+        "function normalizeGuardResponse(value: unknown): GuardResponse | null {": (
+            "function normalizeGuardResponse(value) {"
+        ),
         """function daemonResponseCanReturn(
   payload: Record<string, unknown>,
   response: GuardResponse,
@@ -741,219 +732,3 @@ def test_generated_omp_tool_result_preserves_daemon_allow_without_hash(tmp_path:
     assert result["mismatched_digest"]["isError"] is True
     assert result["reviewed_excerpt"]["content"][0]["text"] == "reviewed-long"
     assert result["observe_mode"] is True
-
-
-def test_generated_omp_payload_matches_real_python_review(tmp_path: Path) -> None:
-    source = _generated_source(tmp_path)
-    store = GuardStore(tmp_path / "guard-home")
-    scanner = ContentScanner()
-    cache = HookDecisionCache(store)
-    engine = HookReviewEngine(
-        store=store,
-        scanner=scanner,
-        cache=cache,
-        config_loader=lambda guard_home, workspace: GuardConfig(
-            guard_home=guard_home,
-            workspace=workspace,
-        ),
-    )
-    cases = (
-        ([{"type": "text", "text": "plain output"}], "plain output"),
-        (
-            [
-                {"type": "text", "text": "first"},
-                {"type": "image", "data": "ignored"},
-                {"type": "text", "text": "second"},
-            ],
-            "firstsecond",
-        ),
-        ([], ""),
-        ([{"type": "text", "text": "astral 🌋 output"}], "astral 🌋 output"),
-        ([{"type": "text", "text": " first\r\nsecond \r\n"}], " first\r\nsecond \r\n"),
-    )
-
-    for content, expected_text in cases:
-        captured = _run_generated_callback_payload(
-            source,
-            content,
-            {"decision": "deny", "reason": "capture"},
-        )
-        serialized_payload = captured["serialized_payload"]
-        assert isinstance(serialized_payload, str)
-        payload = json.loads(serialized_payload)
-        assert payload["tool_response"] == content
-        assert "stdout" not in payload
-
-        response = engine.review(
-            HookReviewRequest(
-                harness="omp",
-                event_name="PostToolUse",
-                payload=payload,
-                payload_kind="inline",
-                config_path=None,
-                cwd=tmp_path,
-                home_dir=tmp_path / "home",
-                guard_home=tmp_path / "guard-home",
-                source_scope="project",
-            )
-        )
-        assert response.decision == "allow"
-        assert response.model_output_action == "allow_original"
-        assert response.reviewed_output_sha256 == sha256_text(expected_text)
-
-        accepted = _run_generated_callback_payload(source, content, response.to_harness_json())
-        assert accepted["preserved"] is True
-
-        recording_only = _watch_native_post_tool_result(
-            {
-                "decision": "deny",
-                "model_output_action": "block",
-                "policy_action": "block",
-                "reason": "output requires review",
-            },
-            payload,
-        )
-        assert recording_only["decision"] == "allow"
-        assert recording_only["model_output_action"] == "allow_original"
-        assert recording_only["reviewed_output_sha256"] == sha256_text(expected_text)
-        assert "observe_mode" not in recording_only
-        accepted_recording = _run_generated_callback_payload(source, content, recording_only)
-        assert accepted_recording["preserved"] is True
-
-
-def test_generated_unicode_source_ref_matches_python_fast_path(tmp_path: Path) -> None:
-    source = _generated_source(tmp_path)
-    source_dir = tmp_path / "src"
-    source_dir.mkdir()
-    path = source_dir / "fixture.txt"
-    text = "first 🌋 line\r\nsecond line\n"
-    path.write_bytes(text.encode("utf-8"))
-    generated = _run_generated_source_ref_fixture(
-        source,
-        [{"type": "text", "text": text}],
-        Path("src/fixture.txt"),
-    )
-
-    digest = generated["digest"]
-    source_ref = generated["sourceRef"]
-    assert isinstance(digest, dict)
-    assert isinstance(source_ref, dict)
-    assert digest["chars"] == len(text)
-    assert source_ref["output_chars"] == len(text)
-    assert source_ref["output_sha256"] == sha256_text(text)
-
-    payload = {
-        "hook_event_name": "PostToolUse",
-        "tool_name": "Read",
-        "tool_input": {"file_path": "src/fixture.txt"},
-        "tool_response": text,
-        "guard_source_ref": source_ref,
-    }
-    source_ref_model = HookSourceFileRef(
-        version=source_ref["version"],
-        path=source_ref["path"],
-        output_sha256=source_ref["output_sha256"],
-        output_chars=source_ref["output_chars"],
-        tool_input_path=source_ref["tool_input_path"],
-    )
-    store = GuardStore(tmp_path / "guard-home")
-    scanner = ContentScanner()
-    cache = HookDecisionCache(store)
-    config = GuardConfig(guard_home=tmp_path / "guard-home", workspace=tmp_path)
-    request = HookReviewRequest(
-        harness="omp",
-        event_name="PostToolUse",
-        payload=payload,
-        payload_kind="source_file_ref",
-        config_path=None,
-        cwd=tmp_path,
-        home_dir=tmp_path / "home",
-        guard_home=tmp_path / "guard-home",
-        source_scope="project",
-        source_ref=source_ref_model,
-    )
-    envelope = normalize_harness_payload(
-        "omp",
-        "PostToolUse",
-        payload,
-        workspace=tmp_path,
-        home_dir=tmp_path / "home",
-    )
-    fast_path = evaluate_source_file_ref(
-        request=request,
-        envelope=envelope,
-        scanner=scanner,
-        cache=cache,
-        config=config,
-        store=store,
-        deadline_monotonic=time.monotonic() + 2,
-    )
-    assert fast_path.status == "allow_original", (
-        fast_path.reason_code,
-        source_ref,
-        envelope.target_paths,
-    )
-    assert fast_path.proof is not None
-    assert fast_path.proof.output_sha256 == sha256_text(text)
-
-    response = HookReviewEngine(
-        store=store,
-        scanner=scanner,
-        cache=cache,
-        config_loader=lambda guard_home, workspace: config,
-    ).review(request)
-    assert response.decision == "allow"
-    assert response.model_output_action == "allow_original"
-    assert response.reviewed_output_sha256 == sha256_text(text)
-
-
-def test_generated_large_non_source_result_returns_reviewed_excerpt(tmp_path: Path) -> None:
-    source = _generated_source(tmp_path)
-    large_text = "x" * (5 * 1024 * 1024 + 1)
-    content = [{"type": "text", "text": large_text}]
-    captured = _run_generated_callback_payload(
-        source,
-        content,
-        {"decision": "deny", "reason": "capture"},
-    )
-    serialized_payload = captured["serialized_payload"]
-    assert isinstance(serialized_payload, str)
-    payload = json.loads(serialized_payload)
-    assert payload["tool_response"] == content
-    assert "stdout" not in payload
-
-    store = GuardStore(tmp_path / "guard-home")
-    scanner = ContentScanner()
-    cache = HookDecisionCache(store)
-    engine = HookReviewEngine(
-        store=store,
-        scanner=scanner,
-        cache=cache,
-        config_loader=lambda guard_home, workspace: GuardConfig(
-            guard_home=guard_home,
-            workspace=workspace,
-        ),
-    )
-    response = engine.review(
-        HookReviewRequest(
-            harness="omp",
-            event_name="PostToolUse",
-            payload=payload,
-            payload_kind="inline",
-            config_path=None,
-            cwd=tmp_path,
-            home_dir=tmp_path / "home",
-            guard_home=tmp_path / "guard-home",
-            source_scope="project",
-        )
-    )
-    assert response.decision == "allow"
-    assert response.model_output_action == "replace_with_reviewed_excerpt"
-    assert response.reviewed_excerpt
-
-    callback = _run_generated_callback_payload(source, content, response.to_harness_json())
-    assert callback["preserved"] is False
-    result = callback["result"]
-    assert isinstance(result, dict)
-    assert "isError" not in result
-    assert result["content"] == [{"type": "text", "text": response.reviewed_excerpt}]

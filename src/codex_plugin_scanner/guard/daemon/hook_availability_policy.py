@@ -21,13 +21,12 @@ _CURSOR_UNAVAILABLE_DENY: dict[str, object] = {
     "agent_message": _CURSOR_UNAVAILABLE_MESSAGE,
 }
 
-# Native review covers PreToolUse and PostToolUse. Lifecycle events are inventory
-# only: fail-closing them freezes the conversation without adding an enforcement
-# boundary. When native review cannot complete, PreToolUse and PostToolUse continue
-# so the session stays moving. Completed policy and secret blocks still protect.
+# Native review covers tool events and supported prompt callbacks. Other
+# lifecycle events remain inventory-only: failing them closed freezes a turn
+# without adding enforcement. Unreviewable prompts pause protected hosts;
+# Watch and monitor-only prompt callbacks still continue without enforcement.
 LIFECYCLE_OBSERVE_EVENTS = frozenset(
     {
-        "UserPromptSubmit",
         "SessionStart",
         "SessionEnd",
         "SubagentStart",
@@ -48,19 +47,23 @@ def _compact_hook_event_name(event_name: str) -> str:
 
 _LIFECYCLE_CANONICAL_BY_COMPACT = {
     **{_compact_hook_event_name(name): name for name in LIFECYCLE_OBSERVE_EVENTS},
+    "userpromptsubmit": "UserPromptSubmit",
     "userpromptsubmitted": "UserPromptSubmit",
     "subagentend": "SubagentStop",
 }
 
 
 def lifecycle_event_is_observe_only(event_name: str) -> bool:
-    return _compact_hook_event_name(event_name) in _LIFECYCLE_CANONICAL_BY_COMPACT
+    compact = _compact_hook_event_name(event_name)
+    return compact in _LIFECYCLE_CANONICAL_BY_COMPACT and compact not in {"userpromptsubmit", "userpromptsubmitted"}
 
 
 def hook_event_pauses_when_unavailable(event_name: str) -> bool:
     """True when native miss must pause the harness instead of continuing the turn."""
 
     compact = _compact_hook_event_name(event_name)
+    if compact in {"userpromptsubmit", "userpromptsubmitted"}:
+        return True
     if compact in _LIFECYCLE_CANONICAL_BY_COMPACT:
         return False
     if compact in {"posttooluse", "posttool"} or compact.startswith("after"):
@@ -188,10 +191,20 @@ def availability_harness_response(
     """Render a schema-valid harness result when native review is unavailable."""
 
     from .hook_launcher_recovery import hook_action_is_launcher_recovery_safe
-    from .hook_worker_responses import observe_lifecycle_fail_safe_response
+    from .hook_worker_responses import harness_json_from_native_prompt, observe_lifecycle_fail_safe_response
 
-    del guard_home, recording_only
+    del guard_home
     canonical_lifecycle = _LIFECYCLE_CANONICAL_BY_COMPACT.get(_compact_hook_event_name(event_name))
+    if canonical_lifecycle == "UserPromptSubmit" and not recording_only:
+        return harness_json_from_native_prompt(
+            harness,
+            {
+                "decision": "deny",
+                "minimum_action": "block",
+                "reason_code": "native_prompt_unavailable",
+                "reason": "HOL Guard could not complete native prompt review safely.",
+            },
+        )
     if canonical_lifecycle is not None:
         return observe_lifecycle_fail_safe_response(
             harness,

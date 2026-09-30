@@ -1,20 +1,22 @@
 """Guard CLI runtime artifact hook final response flow."""
 
 # fmt: off
-# ruff: noqa: E402, F403, F405, I001
+# ruff: noqa: F403, F405, I001
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from .commands_hook_compat_bootstrap import bootstrap_compatibility_module
 
-bootstrap_compatibility_module(globals())
+from .commands_support import *
 
 if TYPE_CHECKING:
     from .commands_support_claude_approval import _claude_native_pretooluse_terminal_notice
     from .commands_support_hook_payload import (
         _emit_native_hook_block_stderr,
+        _emit_native_hook_json_document,
+        _emit_native_post_tool_envelope,
+        _native_hook_json_document,
         _emit_native_hook_notification_stderr,
         _emit_native_hook_response,
     )
@@ -43,19 +45,22 @@ if TYPE_CHECKING:
 
 
 from ._commands_shared import *
+from .commands_support_runtime_artifact_policy import (
+    _runtime_artifact_fail_closed_floor,
+)
 from .commands_parser_helpers import *
 
-from .commands_hook_runtime_state import (
-    RuntimeArtifactHookState,
-    record_runtime_artifact_hook_receipt,
-    set_runtime_artifact_hook_final_action,
+from .commands_hook_native_state import (
+    NativeArtifactHookState,
+    record_native_artifact_hook_receipt,
+    set_native_artifact_hook_final_action,
 )
 
 
 _GUIDED_POLICY_ACTIONS = frozenset({"block", "review", "require-reapproval", "sandbox-required"})
 
 
-def _embedded_script_remediation(state: RuntimeArtifactHookState) -> str | None:
+def _embedded_script_remediation(state: NativeArtifactHookState) -> str | None:
     """Guidance when a blocked/reviewed command carries an inline script body."""
 
     if state.policy_action not in _GUIDED_POLICY_ACTIONS:
@@ -75,7 +80,7 @@ def _embedded_script_remediation(state: RuntimeArtifactHookState) -> str | None:
 
 
 def _browser_approval_decision(
-    state: RuntimeArtifactHookState,
+    state: NativeArtifactHookState,
     args: argparse.Namespace,
     *,
     config: GuardConfig,
@@ -96,15 +101,15 @@ def _browser_approval_decision(
     )
 
 
-def _finalize_runtime_artifact_hook(
-    state: RuntimeArtifactHookState,
+def finalize_native_artifact_hook(
+    state: NativeArtifactHookState,
     args: argparse.Namespace,
     *,
     config: GuardConfig,
     output_stream: TextIO | None = None,
     payload: Mapping[str, object],
     store: GuardStore,
-    post_wait_revalidator: Callable[[], RuntimeArtifactHookState | None] | None = None,
+    post_wait_revalidator: Callable[[], NativeArtifactHookState | None] | None = None,
 ) -> int:
     action_envelope = state.action_envelope
     event_name = state.event_name
@@ -112,7 +117,7 @@ def _finalize_runtime_artifact_hook(
     response_payload = state.response_payload
     runtime_artifact = state.runtime_artifact
     if _should_emit_copilot_hook_response(args):
-        record_runtime_artifact_hook_receipt(state, store)
+        record_native_artifact_hook_receipt(state, store)
         _record_harness_usage_for_hook(
             store=store,
             action_envelope=action_envelope,
@@ -129,7 +134,7 @@ def _finalize_runtime_artifact_hook(
             output_stream=output_stream,
         )
         return 0
-    fresh_state: RuntimeArtifactHookState | None = None
+    fresh_state: NativeArtifactHookState | None = None
 
     def fresh_browser_context() -> Mapping[str, object] | None:
         nonlocal fresh_state
@@ -196,7 +201,7 @@ def _finalize_runtime_artifact_hook(
     if codex_browser_decision == "allow":
         adopt_fresh_browser_state()
         approval_request_id = response_payload.get("browser_resolution_request_id")
-        set_runtime_artifact_hook_final_action(
+        set_native_artifact_hook_final_action(
             state,
             "allow",
             approval_request_id=(
@@ -215,7 +220,7 @@ def _finalize_runtime_artifact_hook(
                 reason="",
                 output_stream=output_stream,
             )
-        record_runtime_artifact_hook_receipt(state, store)
+        record_native_artifact_hook_receipt(state, store)
         _record_harness_usage_for_hook(
             store=store,
             action_envelope=action_envelope,
@@ -232,7 +237,7 @@ def _finalize_runtime_artifact_hook(
                 first_request = approval_requests[0]
                 if isinstance(first_request, dict) and isinstance(first_request.get("request_id"), str):
                     approval_request_id = first_request["request_id"]
-        set_runtime_artifact_hook_final_action(
+        set_native_artifact_hook_final_action(
             state,
             codex_browser_decision,
             approval_request_id=(
@@ -243,7 +248,7 @@ def _finalize_runtime_artifact_hook(
         action_envelope = state.action_envelope
         policy_action = state.policy_action
         response_payload = state.response_payload
-    record_runtime_artifact_hook_receipt(state, store)
+    record_native_artifact_hook_receipt(state, store)
     approval_context = live_hook_approval_context(response_payload, harness=args.harness, guard_home=store.guard_home)
     raw_runtime_reason = _runtime_artifact_native_reason(runtime_artifact, response_payload)
     if _should_emit_native_hook_exit_block(args, event_name=event_name, policy_action=policy_action):
@@ -339,25 +344,68 @@ def _finalize_runtime_artifact_hook(
         _emit_native_hook_notification_stderr(
             _claude_native_pretooluse_terminal_notice(payload=dict(payload), reason=runtime_reason)
         )
+    canonical_harness = _canonical_harness_name(args.harness)
+    system_message = None
+    if canonical_harness == "claude-code":
+        system_message = _claude_prompt_system_message(
+            event_name=event_name,
+            policy_action=policy_action,
+            artifact=runtime_artifact,
+            native_reason=runtime_reason,
+        )
+    elif canonical_harness == "codex" and event_name == "UserPromptSubmit":
+        system_message = _codex_prompt_block_system_message(
+            policy_action=policy_action,
+            native_reason=runtime_reason,
+        )
+    if getattr(args, "json", False) and output_stream is None:
+        emit_reason = runtime_reason
+        if canonical_harness == "copilot":
+            emit_reason = _copilot_hook_reason(
+                response_payload.get("why_now"),
+                response_payload.get("review_hint"),
+                response_payload.get("risk_headline"),
+            )
+        json_result = _native_hook_json_document(
+            args,
+            event_name=event_name,
+            policy_action=policy_action,
+            reason=emit_reason,
+            envelope=response_payload,
+            system_message=system_message,
+            native_protocol_payload="hook_event_name" in payload or "event" not in payload,
+            command_surface=action_envelope is not None and action_envelope.action_type == "shell_command",
+            replayed_decision=isinstance(payload.get("policy_action"), str)
+            and any(
+                isinstance(payload.get(key), str) and payload.get(key)
+                for key in ("artifact_id", "artifact_name", "tool_call_id")
+            ),
+            envelope_keyed="hook_event_name" in payload or "event" in payload,
+            fail_closed_native_floor=(
+                runtime_artifact is not None
+                and _runtime_artifact_fail_closed_floor(runtime_artifact)
+            ),
+        )
+        if json_result is not None:
+            json_doc, json_rc = json_result
+            if json_doc:
+                _emit_native_hook_json_document(
+                    json_doc,
+                    compact=canonical_harness == "copilot",
+                    output_stream=output_stream,
+                )
+            _record_harness_usage_for_hook(
+                store=store,
+                action_envelope=action_envelope,
+                payload=payload,
+                policy_action=policy_action,
+            )
+            return json_rc
     if _should_emit_native_hook_response(args) or _should_emit_native_hook_json_response(
         args,
         event_name=event_name,
         output_stream=output_stream,
     ):
-        system_message = None
-        canonical_harness = _canonical_harness_name(args.harness)
-        if canonical_harness == "claude-code":
-            system_message = _claude_prompt_system_message(
-                event_name=event_name,
-                policy_action=policy_action,
-                artifact=runtime_artifact,
-                native_reason=runtime_reason,
-            )
-        elif canonical_harness == "codex" and event_name == "UserPromptSubmit":
-            system_message = _codex_prompt_block_system_message(
-                policy_action=policy_action,
-                native_reason=runtime_reason,
-            )
         if canonical_harness == "grok":
             from ..adapters.grok_hooks import emit_grok_hook_response, grok_hook_process_exit
 
@@ -438,6 +486,32 @@ def _finalize_runtime_artifact_hook(
             policy_action=policy_action,
         )
         return 0
+    if event_name == "PostToolUse":
+        # PostToolUse can never pause the tool (it already ran): the emitted
+        # surface always continues the session. Codex reads the native block
+        # envelope for hard stops; everything else keeps the machine envelope.
+        _emit_native_post_tool_envelope(
+            args.harness,
+            policy_action=policy_action,
+            reason=runtime_reason,
+            response_payload=response_payload,
+            output_stream=output_stream,
+            as_json=getattr(args, "json", False),
+        )
+        _record_harness_usage_for_hook(
+            store=store,
+            action_envelope=action_envelope,
+            payload=payload,
+            policy_action=policy_action,
+        )
+        # A flagged outcome still exits nonzero: the machine envelope carries
+        # the pending re-approval or masked-output evidence consumers expect
+        # a failing rc for.
+        return 1 if policy_action in {"review", "require-reapproval", "sandbox-required", "block"} else 0
+    response_payload["continue"] = True
+    response_payload["decision"] = (
+        "block" if policy_action in {"review", "require-reapproval", "sandbox-required", "block"} else "allow"
+    )
     _emit("hook", response_payload, getattr(args, "json", False))
     _record_harness_usage_for_hook(
         store=store,
@@ -445,8 +519,12 @@ def _finalize_runtime_artifact_hook(
         payload=payload,
         policy_action=policy_action,
     )
+    if isinstance(payload.get("artifact_id"), str) and isinstance(payload.get("policy_action"), str):
+        # The caller replayed a decision that was already recorded upstream;
+        # the envelope acknowledges it without re-blocking the harness.
+        return 0
     return 1 if policy_action in {"review", "require-reapproval", "sandbox-required", "block"} else 0
 
 __all__ = [
-    "_finalize_runtime_artifact_hook",
+    "finalize_native_artifact_hook",
 ]

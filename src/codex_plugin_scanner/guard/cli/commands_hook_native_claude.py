@@ -1,14 +1,12 @@
 """Guard CLI Claude hook helpers."""
 
-# ruff: noqa: E402, F403, F405
+# ruff: noqa: F403, F405
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from .commands_hook_compat_bootstrap import bootstrap_compatibility_module
-
-bootstrap_compatibility_module(globals())
+from .commands_support import *
 
 if TYPE_CHECKING:
     from ._commands_shared import _now
@@ -40,7 +38,7 @@ from ._commands_shared import *
 from .commands_parser_helpers import *
 
 
-def _run_hook_claude_permission_request(
+def run_native_claude_permission_request(
     args: argparse.Namespace,
     *,
     config: GuardConfig,
@@ -89,13 +87,12 @@ def _run_hook_claude_permission_request(
         return 0
     if native_reason is None or not native_reason.strip():
         native_reason = "HOL Guard is reviewing this Claude approval prompt."
-    if not getattr(args, "json", False):
-        _emit_native_hook_notification_stderr(
-            _claude_permission_request_terminal_notice(
-                payload=payload_map,
-                native_reason=native_reason,
-            )
+    _emit_native_hook_notification_stderr(
+        _claude_permission_request_terminal_notice(
+            payload=payload_map,
+            native_reason=native_reason,
         )
+    )
     if policy_action in {"block", "sandbox-required"}:
         _emit_native_hook_response(
             harness=args.harness,
@@ -125,7 +122,7 @@ def _run_hook_claude_permission_request(
     return 0
 
 
-def _run_hook_claude_permission_prompt_notification(
+def run_native_claude_permission_prompt_notification(
     args: argparse.Namespace,
     *,
     output_stream: TextIO | None = None,
@@ -149,10 +146,7 @@ def _run_hook_claude_permission_prompt_notification(
     )
     system_message = _claude_permission_prompt_system_message(payload=payload_map, notice=notice)
     additional_context = _claude_permission_prompt_additional_context(notice)
-    if not getattr(args, "json", False):
-        _emit_native_hook_notification_stderr(
-            _claude_permission_prompt_terminal_notice(payload=payload_map, notice=notice)
-        )
+    _emit_native_hook_notification_stderr(_claude_permission_prompt_terminal_notice(payload=payload_map, notice=notice))
     _emit_native_hook_response(
         harness=args.harness,
         policy_action="allow",
@@ -166,6 +160,6 @@ def _run_hook_claude_permission_prompt_notification(
 
 
 __all__ = [
-    "_run_hook_claude_permission_prompt_notification",
-    "_run_hook_claude_permission_request",
+    "run_native_claude_permission_prompt_notification",
+    "run_native_claude_permission_request",
 ]

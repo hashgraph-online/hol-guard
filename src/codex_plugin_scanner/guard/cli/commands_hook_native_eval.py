@@ -1,6 +1,6 @@
 """Guard CLI runtime artifact hook evaluation."""
 
-# ruff: noqa: E402, F403, F405
+# ruff: noqa: F403, F405
 
 from __future__ import annotations
 
@@ -10,12 +10,11 @@ from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
-from .commands_hook_compat_bootstrap import bootstrap_compatibility_module
-
-bootstrap_compatibility_module(globals())
+from .commands_support import *
 
 if TYPE_CHECKING:
     from ._commands_shared import _now
+    from .commands_support_hook_payload import _apply_native_edge_envelope_fields
     from .commands_support_permission_store import (
         _persist_claude_native_permission_for_runtime_artifact,
         _record_cursor_pending_shell_permission,
@@ -59,6 +58,7 @@ from ..runtime.approval_reuse import (
     ApprovalReuseDecision,
     ApprovalReuseValidationFailure,
     evaluate_approval_reuse,
+    with_saved_artifact_hash_provenance,
 )
 from ..runtime.github_workflow_runtime import resolved_github_workflow_capability_preflight
 from ..runtime.signals import GuardRiskSignalV3
@@ -80,9 +80,10 @@ from .commands_hook_native_floor import (
     attach_native_pre_tool_floor,
     runtime_hook_scanner_setup,
 )
-from .commands_hook_runtime_state import RuntimeArtifactHookState
+from .commands_hook_native_state import NativeArtifactHookState
 from .commands_parser_helpers import *
 from .commands_support_hook_state import _load_cursor_native_shell_allowance
+from .commands_support_runtime_artifact_policy import _runtime_artifact_has_explicit_permission_allow
 from .commands_support_runtime_artifacts import _hook_event_name, _optional_string
 from .commands_support_runtime_policy import (
     _remembered_rule_rejection_reason,
@@ -95,6 +96,40 @@ from .commands_support_runtime_policy import (
 
 def _resolved_guard_action(value: object, fallback: GuardAction) -> GuardAction:
     return coerce_guard_action(value) or fallback
+
+
+def _native_edge_floor_action(
+    native_edge_result: Mapping[str, object] | None,
+    event_name: str,
+    *,
+    artifact_default_action: object | None = None,
+) -> GuardAction | None:
+    """Project the typed native edge result onto the composition floor."""
+
+    if not isinstance(native_edge_result, Mapping):
+        return None
+    action = coerce_guard_action(native_edge_result.get("policy_action") or native_edge_result.get("minimum_action"))
+    if event_name != "PostToolUse":
+        # PreToolUse/UserPromptSubmit composition floors come from the
+        # command-level native review (``native_pre_tool_floor``) and the
+        # artifact's own request classes; the envelope edge result is carried
+        # as provenance, not as a second policy floor.
+        return None
+    if action is None and native_edge_result.get("decision") == "deny":
+        action = "block"
+    if action not in {"block", "sandbox-required"}:
+        return action
+    if artifact_default_action == "warn":
+        # Standalone credential-looking output is warn-tier evidence the
+        # artifact classifier already priced (cleared environments, remote
+        # samples, read-only dumps). The edge deny still masks the emitted
+        # output surface; it does not turn the run into a pause.
+        return None
+    # PostToolUse can never undo the finished action; the edge deny is an
+    # output-mask directive carried by the emitted decision surface. The
+    # policy floor flags the run for re-approval so it stays reviewable
+    # instead of terminal.
+    return "require-reapproval"
 
 
 def _requested_policy_action_normalization(
@@ -254,7 +289,7 @@ def _runtime_cisco_scanner_evidence(
     return tuple(evidence)
 
 
-def _evaluate_runtime_artifact_hook(
+def evaluate_native_artifact_hook(
     args: argparse.Namespace,
     *,
     action_envelope: GuardActionEnvelope | None,
@@ -268,7 +303,7 @@ def _evaluate_runtime_artifact_hook(
     store: GuardStore,
     trusted_request_override_hash: str | None = None,
     post_claim_revalidator: (
-        Callable[[str, bool, str | None, bool], int | RuntimeArtifactHookState | None] | None
+        Callable[[str, bool, str | None, bool], int | NativeArtifactHookState | None] | None
     ) = None,
     _claimed_saved_allow_hash: str | None = None,
     _claimed_trusted_request_override: bool = False,
@@ -276,7 +311,10 @@ def _evaluate_runtime_artifact_hook(
     _claimed_approval_request_id: str | None = None,
     _claim_saved_approval: bool = True,
     _post_claim_refresh_failed: bool = False,
-) -> int | RuntimeArtifactHookState:
+    native_edge_result: Mapping[str, object] | None = None,
+    native_edge_receipt: Mapping[str, object] | None = None,
+    native_recording_only: bool = False,
+) -> int | NativeArtifactHookState:
     payload_map = dict(payload)
     workflow_state = prepare_github_workflow_hook_state(
         runtime_artifact,
@@ -302,7 +340,7 @@ def _evaluate_runtime_artifact_hook(
         trusted_request_override: bool,
         package_approval_consumed: bool = False,
         approval_request_id: str | None = None,
-    ) -> int | RuntimeArtifactHookState:
+    ) -> int | NativeArtifactHookState:
         refresh_failed = False
         if post_claim_revalidator is not None:
             try:
@@ -317,7 +355,7 @@ def _evaluate_runtime_artifact_hook(
             if refreshed_result is not None:
                 return refreshed_result
             refresh_failed = True
-        return _evaluate_runtime_artifact_hook(
+        return evaluate_native_artifact_hook(
             args,
             action_envelope=action_envelope,
             config=config,
@@ -446,15 +484,41 @@ def _evaluate_runtime_artifact_hook(
         # Hook payloads are untrusted hints.  They may make a decision stricter,
         # but can never lower current local policy or suppress later scanners.
         current_action_inputs.append(payload_action_normalization.action)
-    native_pre_tool_floor = attach_native_pre_tool_floor(
-        event_name,
-        payload_map,
-        action_envelope,
-        current_action_inputs,
-        guard_home=context.guard_home,
-        cwd=runtime_workspace,
-        home_dir=context.home_dir,
+    # ``package_request`` artifacts are decided by the package evaluator, not
+    # the generic command floor: the evaluator is the fail-closed semantic
+    # authority for installs, and an unproven-command ``review`` floor would
+    # force every install to pause regardless of its supply-chain verdict.
+    # The same holds for a verified explicit-permission allow: the artifact's
+    # own native-evidence-bound evaluation already adjudicated this exact
+    # command against the published control layer, so a control-blind floor
+    # re-review can only re-raise the cataloged risk the grant accepted.
+    native_pre_tool_floor = (
+        None
+        if runtime_artifact.artifact_type == "package_request"
+        or _runtime_artifact_has_explicit_permission_allow(runtime_artifact)
+        else attach_native_pre_tool_floor(
+            event_name,
+            payload_map,
+            action_envelope,
+            current_action_inputs,
+            guard_home=context.guard_home,
+            cwd=runtime_workspace,
+            home_dir=context.home_dir,
+            store=store,
+        )
     )
+    native_edge_action = _native_edge_floor_action(
+        native_edge_result,
+        event_name,
+        artifact_default_action=runtime_artifact.metadata.get("guard_default_action"),
+    )
+    if native_edge_action is not None:
+        current_action_inputs.append(native_edge_action)
+        native_pre_tool_floor = (
+            native_edge_action
+            if native_pre_tool_floor is None
+            else most_restrictive_guard_action(native_pre_tool_floor, native_edge_action)
+        )
     policy_action = most_restrictive_guard_action(*current_action_inputs)
     approval_context_policy_action = most_restrictive_guard_action(
         approval_context_config_action,
@@ -879,10 +943,13 @@ def _evaluate_runtime_artifact_hook(
             else current_policy_action
         )
         if stored_policy_action == "block":
-            approval_reuse = evaluate_approval_reuse(
-                current_policy_action,
-                "block",
-                saved_decision_present=True,
+            approval_reuse = with_saved_artifact_hash_provenance(
+                evaluate_approval_reuse(
+                    current_policy_action,
+                    "block",
+                    saved_decision_present=True,
+                ),
+                stored_policy_decision.get("artifact_hash") if stored_policy_decision is not None else None,
             )
             policy_action = most_restrictive_guard_action(policy_action, approval_reuse.action)
             approval_reuse_source = approval_reuse_source or "saved_policy_decision"
@@ -900,6 +967,7 @@ def _evaluate_runtime_artifact_hook(
     else:
         saved_action: object | None = stored_policy_action
         saved_present = stored_policy_decision is not None
+        diagnosed_stored_hash: str | None = None
         validation_reason: ApprovalReuseValidationFailure | None = None
         if policy_lookup.get("ignored_local_integrity") is not None:
             # A matching integrity-invalid local rule is security-relevant even
@@ -925,7 +993,7 @@ def _evaluate_runtime_artifact_hook(
             if cursor_validation_reason is not None:
                 validation_reason = cast(ApprovalReuseValidationFailure, cursor_validation_reason)
         elif not saved_present and validation_reason is None:
-            diagnosed_reason = store.approval_reuse_validation_reason(
+            diagnosed_reason, diagnosed_stored_hash = store.approval_reuse_diagnostic(
                 policy_harness,
                 artifact_id,
                 runtime_artifact_hash,
@@ -945,11 +1013,18 @@ def _evaluate_runtime_artifact_hook(
                 if validation_reason == "approval_reuse_integrity_failure"
                 else "invalidated_saved_policy"
             )
-        approval_reuse = evaluate_approval_reuse(
-            current_policy_action,
-            saved_action,
-            saved_decision_present=saved_present,
-            validation_reason=validation_reason,
+        approval_reuse = with_saved_artifact_hash_provenance(
+            evaluate_approval_reuse(
+                current_policy_action,
+                saved_action,
+                saved_decision_present=saved_present,
+                validation_reason=validation_reason,
+            ),
+            (
+                stored_policy_decision.get("artifact_hash")
+                if stored_policy_decision is not None
+                else diagnosed_stored_hash
+            ),
         )
         workflow_request_id = (
             claimed_approval_request_id(stored_policy_decision) if stored_policy_decision is not None else None
@@ -970,11 +1045,14 @@ def _evaluate_runtime_artifact_hook(
             and _claim_saved_approval
         ):
             if not store.claim_approval_reuse_decision(stored_policy_decision, now=_now()):
-                approval_reuse = evaluate_approval_reuse(
-                    current_policy_action,
-                    saved_action,
-                    saved_decision_present=True,
-                    validation_reason=APPROVAL_REUSE_CLAIM_FAILED,
+                approval_reuse = with_saved_artifact_hash_provenance(
+                    evaluate_approval_reuse(
+                        current_policy_action,
+                        saved_action,
+                        saved_decision_present=True,
+                        validation_reason=APPROVAL_REUSE_CLAIM_FAILED,
+                    ),
+                    stored_policy_decision.get("artifact_hash"),
                 )
             else:
                 return revalidate_claimed_allow(
@@ -1086,12 +1164,15 @@ def _evaluate_runtime_artifact_hook(
             # only after its one-shot row has been claimed and the complete
             # runtime authority has been rebuilt.
             post_claim_current_action = "review"
-        approval_reuse = evaluate_approval_reuse(
-            post_claim_current_action,
-            "allow",
-            saved_decision_present=True,
-            validation_reason=claimed_validation_reason,
-            fresh_local_approval=(_claimed_package_approval_consumed or _claimed_trusted_request_override),
+        approval_reuse = with_saved_artifact_hash_provenance(
+            evaluate_approval_reuse(
+                post_claim_current_action,
+                "allow",
+                saved_decision_present=True,
+                validation_reason=claimed_validation_reason,
+                fresh_local_approval=(_claimed_package_approval_consumed or _claimed_trusted_request_override),
+            ),
+            _claimed_saved_allow_hash,
         )
         policy_action = approval_reuse.action
         approval_reuse_source = (
@@ -1278,6 +1359,14 @@ def _evaluate_runtime_artifact_hook(
             response_payload["risk_headline"] = remembered_rule_reason
     if package_evaluation is not None:
         response_payload["supply_chain_evaluation"] = package_evaluation.to_dict()
+    if event_name == "PostToolUse":
+        _apply_native_edge_envelope_fields(response_payload, native_edge_result)
+    elif event_name == "UserPromptSubmit":
+        _apply_native_edge_envelope_fields(
+            response_payload,
+            native_edge_result,
+            project_decision=False,
+        )
     if (
         _canonical_harness_name(args.harness) == "cursor"
         and config.mode != "observe"
@@ -1299,7 +1388,7 @@ def _evaluate_runtime_artifact_hook(
                 artifact=runtime_artifact,
                 artifact_hash=runtime_artifact_hash,
             )
-    return RuntimeArtifactHookState(
+    return NativeArtifactHookState(
         action_envelope=action_envelope,
         artifact_id=artifact_id,
         artifact_name=artifact_name,
@@ -1322,10 +1411,13 @@ def _evaluate_runtime_artifact_hook(
         scanner_evidence_payload=scanner_evidence_payload,
         stored_policy_action=stored_policy_action,
         workflow_authorization_claimed=workflow_state.authorization_claimed,
+        native_edge_result=native_edge_result,
+        native_edge_receipt=native_edge_receipt,
+        native_recording_only=native_recording_only,
     )
 
 
 __all__ = [
-    "_evaluate_runtime_artifact_hook",
     "_requested_policy_action_normalization",
+    "evaluate_native_artifact_hook",
 ]

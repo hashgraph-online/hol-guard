@@ -196,51 +196,61 @@ class TestGrokHookResponses:
         emit_grok_hook_response(policy_action="allow", reason="", output_stream=stream)
         assert json.loads(stream.getvalue()) == {"decision": "allow"}
 
-    def test_observe_prompt_hook_allows_even_when_policy_blocks(self, tmp_path: Path) -> None:
-        from codex_plugin_scanner.guard.cli.commands_hook_generic import _run_hook_generic_payload
+    def test_observe_prompt_hook_allows_even_when_policy_blocks(self, tmp_path: Path, native_hook_force: Path) -> None:
+        import json as _json
+
+        from codex_plugin_scanner.guard.cli import commands_hook
         from codex_plugin_scanner.guard.config import GuardConfig
         from codex_plugin_scanner.guard.store import GuardStore
 
         guard_home = tmp_path / ".hol-guard"
         store = GuardStore(guard_home)
         config = GuardConfig(guard_home=guard_home, workspace=tmp_path)
+        context = HarnessContext(tmp_path / "home", tmp_path / "workspace", guard_home)
         args = argparse.Namespace(
             harness="grok",
             json=False,
             policy_action="block",
             artifact_id=None,
             artifact_name=None,
+            runtime_harness=None,
+            event_file=None,
         )
         stdout_capture = io.StringIO()
         stderr_capture = io.StringIO()
         with redirect_stderr(stderr_capture):
-            rc = _run_hook_generic_payload(
+            rc = commands_hook._run_guard_hook_command(
                 args,
-                action_envelope=None,
-                config=config,
-                output_stream=stdout_capture,
-                payload=_fixture("user_prompt_submit.json"),
-                home_dir=tmp_path,
-                runtime_workspace=tmp_path,
+                guard_home=guard_home,
+                workspace=tmp_path,
+                context=context,
                 store=store,
+                config=config,
+                input_text=_json.dumps(_fixture("user_prompt_submit.json")),
+                output_stream=stdout_capture,
             )
         assert rc == 0
-        assert json.loads(stdout_capture.getvalue()) == {}
+        assert json.loads(stdout_capture.getvalue() or "{}") == {}
 
-    def test_grok_block_emits_deny_json_and_stderr(self, tmp_path: Path) -> None:
-        from codex_plugin_scanner.guard.cli.commands_hook_generic import _run_hook_generic_payload
+    def test_grok_block_emits_deny_json_and_stderr(self, tmp_path: Path, native_hook_force: Path) -> None:
+        import json as _json
+
+        from codex_plugin_scanner.guard.cli import commands_hook
         from codex_plugin_scanner.guard.config import GuardConfig
         from codex_plugin_scanner.guard.store import GuardStore
 
         guard_home = tmp_path / ".hol-guard"
         store = GuardStore(guard_home)
         config = GuardConfig(guard_home=guard_home, workspace=tmp_path)
+        context = HarnessContext(tmp_path / "home", tmp_path / "workspace", guard_home)
         args = argparse.Namespace(
             harness="grok",
             json=False,
             policy_action="block",
             artifact_id=None,
             artifact_name=None,
+            runtime_harness=None,
+            event_file=None,
         )
         payload = {
             "hookEventName": "pre_tool_use",
@@ -250,15 +260,15 @@ class TestGrokHookResponses:
         stderr_capture = io.StringIO()
         stdout_capture = io.StringIO()
         with redirect_stderr(stderr_capture):
-            rc = _run_hook_generic_payload(
+            rc = commands_hook._run_guard_hook_command(
                 args,
-                action_envelope=None,
-                config=config,
-                output_stream=stdout_capture,
-                payload=payload,
-                home_dir=tmp_path,
-                runtime_workspace=tmp_path,
+                guard_home=guard_home,
+                workspace=tmp_path,
+                context=context,
                 store=store,
+                config=config,
+                input_text=_json.dumps(payload),
+                output_stream=stdout_capture,
             )
         assert rc == 2
         assert '"decision":"deny"' in stdout_capture.getvalue()

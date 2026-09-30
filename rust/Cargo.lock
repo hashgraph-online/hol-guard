@@ -221,6 +221,7 @@ dependencies = [
  "guard-contracts",
  "guard-secure-fs",
  "hex",
+ "regex",
  "serde",
  "serde_json",
  "sha2",

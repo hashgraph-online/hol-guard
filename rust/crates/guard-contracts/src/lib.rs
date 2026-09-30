@@ -118,6 +118,18 @@ pub enum PreToolOperationV1 {
     Unknown,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "snake_case")]
+pub enum NativePromptRiskClassV1 {
+    LocalEnvRead,
+    SensitiveMaterial,
+    ExfilIntent,
+    DestructiveIntent,
+    SubprocessIntent,
+    GuardBypassIntent,
+    PromptInjectionIntent,
+}
+
 /// Versioned generic PreToolUse result. Keep this contract independent of
 /// harness JSON so adapters can only render the native minimum floor.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -135,6 +147,8 @@ pub struct PreToolResultV1 {
     pub explicitly_benign: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub command_extensions: Option<NativeCommandObservationsV1>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub prompt_risk_classes: Vec<NativePromptRiskClassV1>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

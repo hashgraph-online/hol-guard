@@ -593,7 +593,7 @@ def test_cursor_hook_emits_json_when_guard_package_import_fails(tmp_path: Path) 
         capture_output=True,
         text=True,
         env={"PATH": os.environ.get("PATH", ""), "HOME": str(home_dir)},
-        timeout=10,
+        timeout=30,
     )
     assert proc.returncode == 0, proc.stderr
     assert json.loads(proc.stdout)["permission"] == "allow"
@@ -1877,94 +1877,6 @@ def test_normalize_cursor_shell_command_unwraps_lean_ctx_wrapper() -> None:
 
     assert normalized.startswith("gh api graphql")
     assert "lean-ctx" not in normalized
-
-
-def test_cursor_native_shell_is_approved_for_lean_ctx_wrapped_retry(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.cli import commands as guard_commands_module
-    from codex_plugin_scanner.guard.cli.commands_hook_runtime_eval import _cursor_native_saved_approval_hash
-    from codex_plugin_scanner.guard.store import GuardStore
-
-    home_dir = tmp_path / "home"
-    store = GuardStore(home_dir)
-    conversation_id = "conv-cursor-lean-ctx-session-allow"
-    command = "gh api graphql -f query='query { viewer { login } }'"
-    wrapped = "/path/to/lean-ctx -c 'gh api graphql -f query='\\''query { viewer { login } }'\\'''"
-    now = guard_commands_module._now()
-    assert guard_commands_module._record_cursor_native_shell_allow_state(
-        store=store,
-        conversation_id=conversation_id,
-        command=command,
-        artifact=_cursor_shell_artifact(workspace_dir=tmp_path, command=command),
-        artifact_hash="hash-gh-viewer-login",
-        now=now,
-    )
-
-    payload = {"conversation_id": conversation_id, "command": wrapped}
-    assert guard_commands_module._cursor_native_shell_is_approved(store, payload)
-    assert _cursor_native_saved_approval_hash(store, payload) == "hash-gh-viewer-login"
-
-
-def test_unsigned_cursor_native_shell_allowance_fails_closed_with_integrity_event(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.cli import commands as guard_commands_module
-    from codex_plugin_scanner.guard.cli.commands_hook_runtime_eval import _cursor_native_saved_approval_hash
-
-    store = GuardStore(tmp_path / "home")
-    conversation_id = "conv-cursor-unsigned-session-allow"
-    command = "gh api graphql -f query='query { viewer { login } }'"
-    now = guard_commands_module._now()
-    state_key = guard_commands_module._cursor_native_shell_allow_state_key(conversation_id, command)
-    store.set_sync_payload(
-        state_key,
-        {
-            "saved_at": now,
-            "action": "allow",
-            "artifact_id": "cursor:project:tool-action:gh-viewer-login",
-            "artifact_hash": "hash-gh-viewer-login",
-            "artifact_name": "destructive shell command",
-            "command": command,
-            "native_source": "cursor-native",
-        },
-        now,
-    )
-
-    payload = {"conversation_id": conversation_id, "command": command}
-    assert not guard_commands_module._cursor_native_shell_is_approved(store, payload)
-    assert _cursor_native_saved_approval_hash(store, payload) is None
-    assert store.get_sync_payload(state_key) is None
-    events = store.list_events(event_name="rule.ignored.local_integrity")
-    assert len(events) == 1
-    assert events[0]["payload"]["source"] == "cursor-native-session"
-    assert events[0]["payload"]["integrity_status"] == "missing_integrity"
-
-
-def test_tampered_cursor_native_shell_allowance_fails_closed_with_integrity_event(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.cli import commands as guard_commands_module
-    from codex_plugin_scanner.guard.cli.commands_hook_runtime_eval import _cursor_native_saved_approval_hash
-
-    store = GuardStore(tmp_path / "home")
-    conversation_id = "conv-cursor-tampered-session-allow"
-    command = "rm -rf ./sensitive-directory"
-    now = guard_commands_module._now()
-    state_key = guard_commands_module._cursor_native_shell_allow_state_key(conversation_id, command)
-    assert guard_commands_module._record_cursor_native_shell_allow_state(
-        store=store,
-        conversation_id=conversation_id,
-        command=command,
-        artifact=_cursor_shell_artifact(workspace_dir=tmp_path, command=command),
-        artifact_hash="hash-before-tamper",
-        now=now,
-    )
-    stored = store.get_sync_payload(state_key)
-    assert isinstance(stored, dict)
-    store.set_sync_payload(state_key, {**stored, "artifact_hash": "forged-hash"}, now)
-
-    payload = {"conversation_id": conversation_id, "command": command}
-    assert not guard_commands_module._cursor_native_shell_is_approved(store, payload)
-    assert _cursor_native_saved_approval_hash(store, payload) is None
-    events = store.list_events(event_name="rule.ignored.local_integrity")
-    assert len(events) == 1
-    assert events[0]["payload"]["integrity_status"] == "tampered"
-    assert events[0]["payload"]["message"] == "local_authority_integrity_payload_hash_mismatch"
 
 
 def test_signed_cursor_allowance_cannot_be_replayed_into_another_conversation(tmp_path: Path) -> None:

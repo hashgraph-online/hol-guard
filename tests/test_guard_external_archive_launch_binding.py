@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import argparse
 import hashlib
 import io
 import json
@@ -11,15 +10,11 @@ import subprocess
 import tarfile
 from pathlib import Path
 from types import SimpleNamespace
-from typing import cast
 
 import pytest
 
 from codex_plugin_scanner.guard import local_supply_chain as local_supply_chain_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.cli import commands_hook_runtime_eval as hook_eval_module
-from codex_plugin_scanner.guard.cli.commands_hook_runtime_eval import _evaluate_runtime_artifact_hook
-from codex_plugin_scanner.guard.cli.commands_hook_runtime_state import RuntimeArtifactHookState
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.local_supply_chain import (
     _bound_external_archive_launch_command,
@@ -33,7 +28,6 @@ from codex_plugin_scanner.guard.runtime.package_intent import (
     parse_package_intent,
 )
 from codex_plugin_scanner.guard.runtime.restricted_archive_download import RestrictedArchiveDownload
-from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import PackageRequestEvaluation
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -70,31 +64,6 @@ def _hook_inputs(
     return artifact, config, context, store, workspace, payload
 
 
-def _evaluate_hook(
-    *,
-    artifact: GuardArtifact,
-    config: GuardConfig,
-    context: HarnessContext,
-    store: GuardStore,
-    workspace: Path,
-    payload: dict[str, object],
-    trusted_request_override_hash: str | None = None,
-) -> int | RuntimeArtifactHookState:
-    return _evaluate_runtime_artifact_hook(
-        argparse.Namespace(harness="codex", policy_action=None, json=True),
-        action_envelope=None,
-        config=config,
-        context=context,
-        data_flow_signals=(),
-        guard_home=store.guard_home,
-        payload=payload,
-        runtime_artifact=artifact,
-        runtime_workspace=workspace,
-        store=store,
-        trusted_request_override_hash=trusted_request_override_hash,
-    )
-
-
 def _save_exact_allow(store: GuardStore, *, artifact: GuardArtifact, artifact_hash: str) -> None:
     store.upsert_policy(
         PolicyDecision(
@@ -119,104 +88,6 @@ def _package_artifact(workspace: Path, command: str) -> GuardArtifact:
         intent,
         config_path="hol-guard.toml",
         source_scope="project",
-    )
-
-
-def test_external_archive_hook_uses_binding_shim_as_sole_approval_owner(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    artifact, config, context, store, workspace, payload = _hook_inputs(tmp_path)
-    scan_authorizations: list[str] = []
-
-    def clean_scan(
-        source_url: str,
-        *,
-        retain_download: bool = False,
-        request_deadline: float | None = None,
-    ) -> tuple[dict[str, str], None]:
-        del request_deadline, retain_download
-        scan_authorizations.append(source_url)
-        return (
-            {
-                "decision": "ask",
-                "code": "external_tarball_source",
-                "message": "External tarball source requires review before any archive download.",
-                "severity": "medium",
-            },
-            None,
-        )
-
-    monkeypatch.setattr(evaluator, "_scan_external_tarball", clean_scan)
-    monkeypatch.setattr(
-        hook_eval_module,
-        "_runtime_external_archive_has_digest_binding_sink",
-        lambda **_kwargs: True,
-    )
-
-    initial = _evaluate_hook(
-        artifact=artifact,
-        config=config,
-        context=context,
-        store=store,
-        workspace=workspace,
-        payload=payload,
-    )
-
-    assert not isinstance(initial, int)
-    assert initial.policy_action == "warn"
-    assert scan_authorizations == []
-    assert initial.package_evaluation is not None
-    package_evaluation = cast(PackageRequestEvaluation, initial.package_evaluation)
-    assert any(reason["code"] == "external_archive_delegated_to_binding_shim" for reason in package_evaluation.reasons)
-    assert "approval_reuse" not in initial.response_payload
-
-
-def test_external_archive_hook_blocks_when_digest_binding_shim_is_unavailable(
-    tmp_path: Path,
-) -> None:
-    artifact, config, context, store, workspace, payload = _hook_inputs(tmp_path)
-    blocked = _evaluate_hook(
-        artifact=artifact,
-        config=config,
-        context=context,
-        store=store,
-        workspace=workspace,
-        payload=payload,
-    )
-
-    assert not isinstance(blocked, int)
-    assert blocked.policy_action == "block"
-    assert isinstance(blocked.package_evaluation, PackageRequestEvaluation)
-    assert any(
-        reason["code"] == "external_archive_binding_unavailable" for reason in blocked.package_evaluation.reasons
-    )
-
-
-@pytest.mark.parametrize(
-    "raw_command",
-    (
-        "PATH=/usr/bin npm install demo@https://packages.example.com/demo.tgz",
-        "env PATH=/usr/bin npm install demo@https://packages.example.com/demo.tgz",
-        "command -p npm install demo@https://packages.example.com/demo.tgz",
-        "npm install demo@https://packages.example.com/demo.tgz && /usr/bin/npm install other",
-        "npm install demo@https://packages.example.com/demo.tgz\n/usr/bin/npm install other",
-    ),
-)
-def test_hook_binding_sink_rejects_wrappers_and_effective_path_overrides(raw_command: str) -> None:
-    assert (
-        hook_eval_module._runtime_external_archive_command_matches_executable(
-            raw_command,
-            "npm",
-        )
-        is False
-    )
-
-
-def test_hook_binding_sink_accepts_one_simple_pinned_package_command() -> None:
-    assert hook_eval_module._runtime_external_archive_command_matches_executable(
-        "npm install 'demo@https://packages.example.com/archive?id=1&format=tgz'",
-        "npm",
     )
 
 

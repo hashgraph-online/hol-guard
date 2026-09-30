@@ -47,6 +47,38 @@ def _same_resident_paths(left, right) -> bool:
     return {path for path, _mtime, _size in left} == {path for path, _mtime, _size in right}
 
 
+def provision_native_verifier_key_for_store(store: GuardStore) -> None:
+    """Provision the resident verifier key for a store's Guard home.
+
+    The Rust resident refuses to serve until this owner-private derived key
+    exists.  Publishers provision it at ``start()``; standalone native
+    decision callers must establish the same prerequisite or every request
+    fails closed on ``native_resident_start_timeout``.
+    """
+
+    material_getter = getattr(store, "_policy_integrity_secret_material", None)
+    if not callable(material_getter):
+        raise NativePolicySnapshotError("native_policy_snapshot_integrity_key_unavailable")
+    material: object = None
+    master_key: bytes | None = None
+    try:
+        material = material_getter(create=True)
+        if (
+            not isinstance(material, tuple)
+            or len(material) != 2
+            or not isinstance(material[0], bytes)
+            or not isinstance(material[1], str)
+        ):
+            raise NativePolicySnapshotError("native_policy_snapshot_integrity_key_unavailable")
+        master_key = material[0]
+        provision_native_policy_verifier_key(Path(store.guard_home), master_key)
+    finally:
+        # Keep the master key only for the derivation call.  The derived
+        # verifier is the only value written to native runtime state.
+        master_key = None
+        material = None
+
+
 class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
     """Asynchronously publish an authenticated snapshot and expose its barrier."""
 
@@ -233,27 +265,7 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
         return True
 
     def _provision_verifier_key(self) -> None:
-        material_getter = getattr(self.store, "_policy_integrity_secret_material", None)
-        if not callable(material_getter):
-            raise NativePolicySnapshotError("native_policy_snapshot_integrity_key_unavailable")
-        material: object = None
-        master_key: bytes | None = None
-        try:
-            material = material_getter(create=True)
-            if (
-                not isinstance(material, tuple)
-                or len(material) != 2
-                or not isinstance(material[0], bytes)
-                or not isinstance(material[1], str)
-            ):
-                raise NativePolicySnapshotError("native_policy_snapshot_integrity_key_unavailable")
-            master_key = material[0]
-            provision_native_policy_verifier_key(self.guard_home, master_key)
-        finally:
-            # Keep the master key only for the derivation call.  The derived
-            # verifier is the only value written to native runtime state.
-            master_key = None
-            material = None
+        provision_native_verifier_key_for_store(self.store)
 
     def _mark_expired_locked(self) -> None:
         snapshot = self._snapshot

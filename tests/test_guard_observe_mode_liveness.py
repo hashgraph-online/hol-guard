@@ -20,6 +20,10 @@ def _failed_review(**_kwargs: object) -> HookProcessReview:
     return HookProcessReview(None, _DEADLINE_REASON)
 
 
+def _deadline_exceeded_native_review(**_kwargs: object) -> None:
+    raise TimeoutError("native review deadline exceeded")
+
+
 def _review_request(
     daemon: GuardDaemonServer,
     *,
@@ -160,6 +164,7 @@ def test_observe_mode_uses_native_nonblocking_claude_responses(
 
 
 @pytest.mark.parametrize("endpoint", ("pi", "claude-code"))
+@pytest.mark.usefixtures("native_hook_force")
 def test_prompt_mode_still_blocks_failed_local_review(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -171,9 +176,9 @@ def test_prompt_mode_still_blocks_failed_local_review(
     daemon = GuardDaemonServer(GuardStore(guard_home), host="127.0.0.1", port=0)
     daemon.start()
     monkeypatch.setattr(
-        daemon._server.hook_process_runner,  # pyright: ignore[reportPrivateUsage]
-        "review",
-        _failed_review,
+        daemon._server.hook_worker,  # pyright: ignore[reportPrivateUsage]
+        "_review_native_edge_with_snapshot",
+        _deadline_exceeded_native_review,
     )
 
     try:
@@ -193,10 +198,11 @@ def test_prompt_mode_still_blocks_failed_local_review(
         hook_output = payload["hookSpecificOutput"]
         assert isinstance(hook_output, dict)
         assert hook_output["permissionDecision"] == "allow"
-    assert payload["reason_code"] == _DEADLINE_REASON
+    assert payload["reason_code"] == "native_review_deadline_exceeded"
 
 
 @pytest.mark.parametrize("endpoint", ("pi", "claude-code"))
+@pytest.mark.usefixtures("native_hook_force")
 def test_prompt_mode_continues_emergency_safe_inspection_when_review_cannot_complete(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -208,9 +214,9 @@ def test_prompt_mode_continues_emergency_safe_inspection_when_review_cannot_comp
     daemon = GuardDaemonServer(GuardStore(guard_home), host="127.0.0.1", port=0)
     daemon.start()
     monkeypatch.setattr(
-        daemon._server.hook_process_runner,  # pyright: ignore[reportPrivateUsage]
-        "review",
-        _failed_review,
+        daemon._server.hook_worker,  # pyright: ignore[reportPrivateUsage]
+        "_review_native_edge_with_snapshot",
+        _deadline_exceeded_native_review,
     )
 
     try:
@@ -229,7 +235,7 @@ def test_prompt_mode_continues_emergency_safe_inspection_when_review_cannot_comp
         hook_output = payload["hookSpecificOutput"]
         assert isinstance(hook_output, dict)
         assert hook_output["permissionDecision"] == "allow"
-    assert payload["reason_code"] == _DEADLINE_REASON
+    assert payload["reason_code"] == "native_review_deadline_exceeded"
 
 
 def test_hook_overload_continues_emergency_safe_workspace_read(

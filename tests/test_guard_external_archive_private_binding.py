@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import argparse
 import hashlib
 import json
 import shlex
@@ -12,8 +11,6 @@ from types import SimpleNamespace
 import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.cli.commands_hook_runtime_eval import _evaluate_runtime_artifact_hook
-from codex_plugin_scanner.guard.cli.commands_hook_runtime_state import RuntimeArtifactHookState
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.local_supply_chain import (
     _bound_external_archive_launch_command,
@@ -59,31 +56,6 @@ def _hook_inputs(
         "source_scope": "project",
     }
     return artifact, config, context, store, workspace, payload
-
-
-def _evaluate_hook(
-    *,
-    artifact: GuardArtifact,
-    config: GuardConfig,
-    context: HarnessContext,
-    store: GuardStore,
-    workspace: Path,
-    payload: dict[str, object],
-    trusted_request_override_hash: str | None = None,
-) -> int | RuntimeArtifactHookState:
-    return _evaluate_runtime_artifact_hook(
-        argparse.Namespace(harness="codex", policy_action=None, json=True),
-        action_envelope=None,
-        config=config,
-        context=context,
-        data_flow_signals=(),
-        guard_home=store.guard_home,
-        payload=payload,
-        runtime_artifact=artifact,
-        runtime_workspace=workspace,
-        store=store,
-        trusted_request_override_hash=trusted_request_override_hash,
-    )
 
 
 def _save_exact_allow(store: GuardStore, *, artifact: GuardArtifact, artifact_hash: str) -> None:

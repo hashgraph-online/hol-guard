@@ -206,6 +206,21 @@ def test_generated_client_unavailable_payload_matches_harness(
         assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
+@pytest.mark.parametrize("harness", ("claude-code", "codex", "copilot", "grok"))
+def test_generated_client_prompt_unavailability_matches_host_contract(tmp_path: Path, harness: str) -> None:
+    module = _load_script(tmp_path, harness=harness)
+    payload, code = module._failure_payload("UserPromptSubmit", "Native prompt review unavailable.")
+    assert code == 0
+    if harness == "grok":
+        assert payload == {}
+    elif harness == "copilot":
+        assert payload["behavior"] == "deny"
+    else:
+        assert payload["decision"] == "block"
+        if harness == "codex":
+            assert payload["continue"] is False
+
+
 def test_generated_client_watch_mode_continues(tmp_path: Path) -> None:
     module = _load_script(tmp_path, harness="grok")
     config = Path(module.GUARD_HOME) / "config.toml"

@@ -13,7 +13,7 @@ import pytest
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import commands_hook
 from codex_plugin_scanner.guard.config import GuardConfig
-from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker, HookWorkerUnsupported
+from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
 from codex_plugin_scanner.guard.native_route_receipt import (
     native_hook_route,
     record_native_hook_route,
@@ -285,7 +285,7 @@ def test_hook_worker_falls_back_when_native_mode_is_off(
         lambda: "off",
     )
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.review_pre_tool_native",
+        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
         lambda *_args, **_kwargs: None,
     )
     monkeypatch.setattr(
@@ -293,15 +293,15 @@ def test_hook_worker_falls_back_when_native_mode_is_off(
         lambda: NativeRuntimeStatus(mode="off", available=True, compatible=True, reason="off"),
     )
     worker = HookWorker(store=GuardStore(tmp_path / "guard-home"))
-    with pytest.raises(HookWorkerUnsupported, match="native PreToolUse runtime is off"):
-        worker.review_http_payload(
-            payload={"hook_event_name": "PreToolUse", "tool_input": {"command": "pwd"}},
-            params={},
-            default_harness="pi",
-            home_dir=tmp_path / "home",
-            guard_home=tmp_path / "guard-home",
-            workspace=tmp_path / "workspace",
-        )
+    result = worker.review_http_payload(
+        payload={"hook_event_name": "PreToolUse", "tool_input": {"command": "pwd"}},
+        params={},
+        default_harness="pi",
+        home_dir=tmp_path / "home",
+        guard_home=tmp_path / "guard-home",
+        workspace=tmp_path / "workspace",
+    )
+    assert result["reason_code"] == "native_hook_disabled"
 
 
 def test_hook_worker_uses_emergency_safe_floor_for_non_command_pretool_without_native_result(

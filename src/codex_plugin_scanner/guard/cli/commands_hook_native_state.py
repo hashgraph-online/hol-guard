@@ -1,13 +1,12 @@
 """Guard CLI runtime artifact hook state."""
 
 # fmt: off
-# ruff: noqa: E402, F403, F405, I001
+# ruff: noqa: F403, F405, I001
 
 from __future__ import annotations
 
-from .commands_hook_compat_bootstrap import bootstrap_compatibility_module
 
-bootstrap_compatibility_module(globals())
+from .commands_support import *
 
 from ._commands_shared import *
 
@@ -29,7 +28,7 @@ from .commands_support_command_activity import (
 
 
 @dataclass
-class RuntimeArtifactHookState:
+class NativeArtifactHookState:
     action_envelope: GuardActionEnvelope | None
     artifact_id: str
     artifact_name: str
@@ -52,12 +51,15 @@ class RuntimeArtifactHookState:
     browser_approval_wait_bound: bool | None = None
     guard_home: Path | None = None
     hook_payload: dict[str, object] = field(default_factory=dict)
+    native_edge_result: Mapping[str, object] | None = None
+    native_edge_receipt: Mapping[str, object] | None = None
+    native_recording_only: bool = False
     receipt_recorded: bool = False
     workflow_authorization_claimed: bool = False
 
 
-def set_runtime_artifact_hook_final_action(
-    state: RuntimeArtifactHookState,
+def set_native_artifact_hook_final_action(
+    state: NativeArtifactHookState,
     policy_action: str,
     *,
     approval_request_id: str | None = None,
@@ -202,8 +204,8 @@ def set_runtime_artifact_hook_final_action(
     )
 
 
-def record_runtime_artifact_hook_receipt(
-    state: RuntimeArtifactHookState,
+def record_native_artifact_hook_receipt(
+    state: NativeArtifactHookState,
     store: GuardStore,
 ) -> None:
     """Persist the final hook receipt once, after any browser resolution."""
@@ -217,7 +219,7 @@ def record_runtime_artifact_hook_receipt(
     _record_runtime_command_activity(state, store)
 
 
-def _record_runtime_command_activity(state: RuntimeArtifactHookState, store: GuardStore) -> None:
+def _record_runtime_command_activity(state: NativeArtifactHookState, store: GuardStore) -> None:
     if state.guard_home is None:
         return
     if hook_is_post_event(state.event_name):
@@ -255,7 +257,7 @@ def _record_runtime_command_activity(state: RuntimeArtifactHookState, store: Gua
     )
 
 __all__ = [
-    "RuntimeArtifactHookState",
-    "record_runtime_artifact_hook_receipt",
-    "set_runtime_artifact_hook_final_action",
+    "NativeArtifactHookState",
+    "record_native_artifact_hook_receipt",
+    "set_native_artifact_hook_final_action",
 ]
