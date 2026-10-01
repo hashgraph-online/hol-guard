@@ -273,7 +273,7 @@ def _exercise_mode_invariants(
             mode_invariants[mode] = {
                 "decision": response.get("decision"),
                 "reason_code": response.get("reason_code"),
-                "python_oracle": daemon._server.hook_worker.test_oracle is not None,
+                "python_oracle": getattr(daemon._server.hook_worker, "test_oracle", None) is not None,
             }
             _require(mode_invariants[mode]["python_oracle"] is False, mode_invariants[mode])
     finally:

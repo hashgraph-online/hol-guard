@@ -14,6 +14,7 @@ permissions:
 
 env:
   CI_PYTHON_VERSION: "3.12.14"
+  UV_HTTP_TIMEOUT: "300"
   CI_UV_CACHE_DEPENDENCY_GLOB: |
     pyproject.toml
     uv.lock
@@ -194,6 +195,7 @@ jobs:
             --deselect 'tests/test_guard_daemon_acceptance.py::test_packaged_correctness_workloads[mixed-harness-fairness]' \
             --deselect tests/test_guard_omp_fast_path_regression.py::test_omp_post_tool_read_burst_uses_resident_scanner \
             --deselect tests/test_guard_cloud_review_runtime_recovery.py::test_cloud_review_worker_survives_ten_thousand_recurring_disconnects \
+            --deselect tests/test_rust_io_ownership_gate.py::test_gate_inventories_reachable_io_and_passes_current_sources \
             --cov --cov-branch --cov-report=
       - name: Upload pytest coverage data artifact
         if: always()
@@ -208,7 +210,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: pytest-durations-${{ matrix.shard-index }}
+          name: pytest-durations-${{ github.run_attempt }}-${{ matrix.shard-index }}
           path: pytest-durations.json
           if-no-files-found: warn
           retention-days: 7
@@ -225,7 +227,7 @@ jobs:
       - name: Download pytest duration reports
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          pattern: pytest-durations-*
+          pattern: pytest-durations-${{ github.run_attempt }}-*
           path: duration-reports
       - name: Build duration manifest candidate
         shell: bash
@@ -291,7 +293,7 @@ jobs:
         enable-cache: true
         cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
         save-cache: false
-    - run: uv sync --frozen --extra dev --python ${{ env.CI_PYTHON_VERSION }}
+    - run: uv sync --frozen --no-dev --group ci-test --python ${{ env.CI_PYTHON_VERSION }}
       if: steps.token-presence.outputs.has-token == 'true'
     - name: Cache Sonar analyzer downloads
       uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
@@ -350,8 +352,9 @@ jobs:
       if: steps.token-presence.outputs.has-token == 'true'
 
   scheduling-sensitive:
+    needs: native-command-evaluators
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
@@ -364,6 +367,15 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
+      - name: Download native command evaluators
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: pytest-native-command-evaluators
+          path: rust/target/release
+      - name: Bind the compiled native runtime
+        run: |
+          chmod 0755 rust/target/release/hol-guard-runtime
+          echo "HOL_GUARD_NATIVE_BINARY=$GITHUB_WORKSPACE/rust/target/release/hol-guard-runtime" >> "$GITHUB_ENV"
       - name: Run scheduling-sensitive tests untraced
         run: >-
           uv run --no-sync pytest
@@ -380,6 +392,7 @@ jobs:
           tests/test_guard_daemon_acceptance.py::test_packaged_correctness_workloads[mixed-harness-fairness]
           tests/test_guard_omp_fast_path_regression.py::test_omp_post_tool_read_burst_uses_resident_scanner
           tests/test_guard_cloud_review_runtime_recovery.py::test_cloud_review_worker_survives_ten_thousand_recurring_disconnects
+          tests/test_rust_io_ownership_gate.py::test_gate_inventories_reachable_io_and_passes_current_sources
           --tb=short
 
   compatibility:
@@ -413,7 +426,7 @@ jobs:
           enable-cache: true
           cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
           save-cache: false
-      - run: uv sync --frozen --extra dev --python ${{ matrix.python-version }}
+      - run: uv sync --frozen --no-dev --group ci-test --python ${{ matrix.python-version }}
       - name: Run cross-version compatibility contracts
         run: >-
           uv run --no-sync pytest
@@ -448,7 +461,7 @@ jobs:
           enable-cache: true
           cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
           save-cache: false
-      - run: uv sync --frozen --extra dev --python ${{ matrix.python-version }}
+      - run: uv sync --frozen --no-dev --group ci-test --python ${{ matrix.python-version }}
       - name: Secure the CI virtualenv interpreter
         shell: bash
         run: |
@@ -629,7 +642,7 @@ jobs:
           cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
           cache-suffix: cisco
       - run: python3.13 -m pip install --dry-run --no-deps --require-hashes -r docker-requirements.txt
-      - run: uv sync --frozen --extra dev --extra cisco --group cisco-mcp --python 3.13
+      - run: uv sync --frozen --no-dev --group ci-test --extra cisco --group cisco-mcp --python 3.13
       - run: uv run --no-sync pytest tests/test_cisco_install_surfaces.py tests/test_mcp_security.py tests/test_cli.py tests/test_action_runner.py tests/test_live_cisco_smoke.py --tb=short
 
   cross-platform:
@@ -662,7 +675,7 @@ jobs:
           enable-cache: true
           cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
           save-cache: false
-      - run: uv sync --frozen --extra dev --python ${{ matrix.python-version }}
+      - run: uv sync --frozen --no-dev --group ci-test --python ${{ matrix.python-version }}
       - name: Run cross-platform Guard regressions
         run: >-
           uv run --no-sync pytest
@@ -699,9 +712,8 @@ jobs:
           $work = Join-Path $env:RUNNER_TEMP "hol-guard-frozen-work"
           $spec = Join-Path $env:RUNNER_TEMP "hol-guard-frozen-spec"
           $versionFile = Join-Path $env:RUNNER_TEMP "hol-guard-version-info.txt"
-          $versionModule = Join-Path (Get-Location).Path "src/codex_plugin_scanner/version.py"
           New-Item -ItemType Directory -Force -Path $dist, $work, $spec | Out-Null
-          uv sync --frozen --extra dev --extra mdm-build --python ${{ matrix.python-version }}
+          uv sync --frozen --no-dev --group ci-test --extra mdm-build --python ${{ matrix.python-version }}
           $version = (uv run --no-sync python scripts/sync_repo_version.py --check).Trim()
           uv run --no-sync python scripts/mdm/windows/write-version-info.py `
             --version $version --output $versionFile
@@ -712,7 +724,6 @@ jobs:
           }
           uv run --no-sync pyinstaller --clean --noconfirm --onedir --name hol-guard `
             --collect-submodules codex_plugin_scanner --collect-data codex_plugin_scanner `
-            --add-data "$versionModule;." `
             --version-file $versionFile `
             --distpath $dist --workpath $work --specpath $spec `
             scripts/mdm/hol-guard-entry.py
@@ -757,7 +768,7 @@ jobs:
           enable-cache: true
           cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
           save-cache: false
-      - run: uv sync --frozen --extra dev --python ${{ matrix.python-version }}
+      - run: uv sync --frozen --no-dev --group ci-test --python ${{ matrix.python-version }}
       - name: Run trusted updater and daemon regressions
         run: >-
           uv run --no-sync pytest

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import importlib
-import json
 import multiprocessing
 import os
 import signal
@@ -14,20 +13,15 @@ from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn, cast
 
 from ..codex_hook_windows_job import assign_current_process_to_windows_hook_job
-from ..native_mode import native_mode_requires_rust as _native_mode_requires_rust
-from ..native_mode import python_oracle_surface_enabled
 from ..native_route_receipt import native_hook_route, record_native_hook_route, reset_native_hook_route
 from ..sqlite_profile import sqlite_error_is_busy_locked
 from .hook_process_protocol import (
-    applied_hook_environment,
     as_string_object_dict,
-    capture_hook_command,
     is_pair,
 )
 from .hook_process_request import (
     ResidentHookRequest,
     coerce_resident_hook_request,
-    compatibility_hook_args,
     resident_hook_store_and_context,
 )
 
@@ -259,10 +253,7 @@ def _run_resident_hook_request(
     hook_workers: dict[str, HookWorker],
     configured_guard_home: str | None,
 ) -> dict[str, object]:
-    from ..cli.commands_hook import _run_guard_hook_command
-    from ..cli.commands_support_connect import _synced_policy_payload
-    from ..config import load_guard_config, overlay_synced_guard_policy
-    from .hook_worker import HookWorker, HookWorkerUnsupported, runtime_hook_event_name
+    from .hook_worker import HookWorker, runtime_hook_event_name
 
     parsed = coerce_resident_hook_request(request)
     if parsed is None:
@@ -271,81 +262,43 @@ def _run_resident_hook_request(
     if configured_guard_home is not None and parsed.guard_home != Path(configured_guard_home):
         return {"payload": None, "reason_code": "daemon_hook_process_guard_home_mismatch"}
     store_key = str(parsed.guard_home)
-    store, context = resident_hook_store_and_context(parsed, stores)
+    store, _context = resident_hook_store_and_context(parsed, stores)
     event_name = runtime_hook_event_name(parsed.payload)
-    if (
-        _native_mode_requires_rust()
-        or event_name in {"PreToolUse", "PostToolUse"}
-        or not python_oracle_surface_enabled()
-    ):
-        worker = hook_workers.get(store_key)
-        if worker is None:
-            worker = HookWorker(store=store, wait_for_native_policy=False)
-            hook_workers[store_key] = worker
-        try:
-            worker_payload = worker.review_http_payload(
-                payload=parsed.payload,
-                params={"runtime-harness": [parsed.harness]},
-                default_harness=parsed.harness,
-                home_dir=parsed.home_dir,
-                guard_home=parsed.guard_home,
-                workspace=parsed.workspace,
-                deadline=parsed.deadline,
-            )
-        except HookWorkerUnsupported:
-            if _native_mode_requires_rust() or not python_oracle_surface_enabled():
-                return _native_worker_fail_safe_result(
-                    parsed,
-                    event_name=event_name,
-                    reason_code="native_hook_worker_unsupported",
-                )
-        except Exception:
-            if _native_mode_requires_rust() or not python_oracle_surface_enabled():
-                return _native_worker_fail_safe_result(
-                    parsed,
-                    event_name=event_name,
-                    reason_code="native_hook_worker_exception",
-                )
-            raise
-        else:
-            response: dict[str, object] = {
-                "payload": worker_payload,
-                "reason_code": None,
-                "route": _current_decision_route(),
-            }
-            receipt = getattr(worker, "last_native_decision_receipt", None)
-            if isinstance(receipt, dict):
-                response["receipt"] = receipt
-            return response
-    with applied_hook_environment(request):
-        config = overlay_synced_guard_policy(
-            load_guard_config(parsed.guard_home, workspace=parsed.workspace),
-            _synced_policy_payload(store),
+    worker = hook_workers.get(store_key)
+    if worker is None:
+        worker = HookWorker(store=store, wait_for_native_policy=False)
+        hook_workers[store_key] = worker
+    try:
+        worker_payload = worker.review_http_payload(
+            payload=parsed.payload,
+            params={"runtime-harness": [parsed.harness]},
+            default_harness=parsed.harness,
+            home_dir=parsed.home_dir,
+            guard_home=parsed.guard_home,
+            workspace=parsed.workspace,
+            deadline=parsed.deadline,
+            claim_saved_approval=parsed.claim_saved_approval,
+            claimed_saved_allow_hash=parsed.claimed_saved_allow_hash,
+            claimed_approval_request_id=parsed.claimed_approval_request_id,
         )
-        args = compatibility_hook_args(parsed)
-        response = capture_hook_command(
-            lambda output: _run_guard_hook_command(
-                args,
-                guard_home=parsed.guard_home,
-                workspace=parsed.workspace,
-                context=context,
-                store=store,
-                config=config,
-                input_text=json.dumps(parsed.payload, separators=(",", ":")),
-                output_stream=output,
-                _claim_saved_approval=parsed.claim_saved_approval,
-                _claimed_saved_allow_hash=parsed.claimed_saved_allow_hash,
-                _claimed_trusted_request_override=parsed.claimed_trusted_request_override,
-                _claimed_approval_request_id=parsed.claimed_approval_request_id,
-            )
+    except Exception:
+        return _native_worker_fail_safe_result(
+            parsed,
+            event_name=event_name,
+            reason_code="native_hook_worker_exception",
         )
-        response["route"] = _current_decision_route()
-        return response
+    response: dict[str, object] = {
+        "payload": worker_payload,
+        "reason_code": None,
+        "route": _current_decision_route(),
+    }
+    receipt = getattr(worker, "last_native_decision_receipt", None)
+    if isinstance(receipt, dict):
+        response["receipt"] = receipt
+    return response
 
 
 def _current_decision_route() -> str:
-    if python_oracle_surface_enabled() and not _native_mode_requires_rust():
-        return "python_semantic"
     return native_hook_route() or "native_fail_safe"
 
 

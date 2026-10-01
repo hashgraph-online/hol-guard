@@ -424,6 +424,7 @@ def test_claude_daemon_hook_command_falls_back_without_blocking_prompt_on_daemon
     )
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_claude_daemon_hook_command_falls_back_to_native_ask_on_daemon_miss(tmp_path):
     context = _build_context(tmp_path)
     adapter = ClaudeCodeHarnessAdapter()

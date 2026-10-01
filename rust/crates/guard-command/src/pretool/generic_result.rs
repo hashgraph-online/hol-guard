@@ -61,6 +61,7 @@ pub(super) fn generic_result(
         reason: reason.to_owned(),
         explicitly_benign,
         command_extensions: None,
+        prompt_risk_classes: Vec::new(),
     }
 }
 

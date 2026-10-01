@@ -57,7 +57,8 @@ def emit_pi_hook_response(
         approval_payload=approval_payload,
     )
     stream = output_stream if output_stream is not None else sys.stdout
-    stream.write(json.dumps(payload, separators=(",", ":")) + "\n")
+    # stdout is the harness delivery channel; approval payloads must reach the operator.
+    stream.write(json.dumps(payload, separators=(",", ":")) + "\n")  # codeql[py/clear-text-logging-sensitive-data]
     stream.flush()
 
 

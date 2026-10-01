@@ -4,9 +4,11 @@ import importlib.util
 import json
 import sys
 from datetime import datetime, timedelta, timezone
+from fnmatch import fnmatchcase
 from pathlib import Path
 
 import pytest
+import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_PATH = ROOT / "scripts" / "ci" / "pytest_duration_manifest.py"
@@ -36,6 +38,37 @@ def test_manifest_merges_reports_deterministically_and_rejects_duplicate_nodes(t
 
     with pytest.raises(ValueError, match="duplicate"):
         duration_manifest.merge_duration_reports([first, second])
+
+
+def test_ci_duration_artifacts_cannot_mix_rerun_attempts(tmp_path: Path) -> None:
+    workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
+    upload = next(
+        step
+        for step in workflow["jobs"]["coverage"]["steps"]
+        if step.get("with", {}).get("path") == "pytest-durations.json"
+    )["with"]["name"]
+    candidate = workflow["jobs"]["duration-manifest-candidate"]["steps"]
+    pattern = next(step for step in candidate if "pattern" in step.get("with", {}))["with"]["pattern"]
+    selected_pattern = pattern.replace("${{ github.run_attempt }}", "3")
+    reports = []
+    for attempt in (1, 3):
+        for shard in range(128):
+            name = upload.replace("${{ github.run_attempt }}", str(attempt)).replace(
+                "${{ matrix.shard-index }}", str(shard)
+            )
+            path = tmp_path / name
+            # A rerun may use a different shard plan; old reports must not fill its gaps.
+            node = (shard + attempt) % 128
+            _write_report(path, {f"tests/test_fixture.py::test_{node}": float(attempt)})
+            if fnmatchcase(name, selected_pattern):
+                reports.append(path)
+    assert len(reports) == 128
+    merged = duration_manifest.merge_duration_reports(reports)
+    assert len(merged) == 128
+    assert set(merged.values()) == {3.0}
+    assert 'test "${#reports[@]}" -eq 128' in next(
+        step["run"] for step in candidate if step.get("name") == "Build duration manifest candidate"
+    )
 
 
 def test_manifest_round_trip_and_age_validation(tmp_path: Path) -> None:
