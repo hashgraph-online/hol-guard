@@ -225,9 +225,7 @@ def native_context_digest(
     # Canonicalize (including symlinks) so the same home spelled differently
     # cannot duplicate entries.
     try:
-        normalized_home = os.path.normpath(
-            os.fspath(Path(guard_home).expanduser().resolve())
-        )
+        normalized_home = os.path.normpath(os.fspath(Path(guard_home).expanduser().resolve()))
     except (OSError, RuntimeError):
         normalized_home = os.path.normpath(os.fspath(guard_home))
     cache_key = (content_sha256, normalized_home)
