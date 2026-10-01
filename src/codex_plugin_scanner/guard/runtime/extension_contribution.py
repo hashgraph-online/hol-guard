@@ -116,11 +116,9 @@ def reset_contribution_cache() -> None:
     _trust_classes.cache_clear()
 
 
-def _validated_payload_or_skip(payload: object, filename: str) -> dict[str, object] | None:
+def _validated_payload(payload: object, filename: str) -> dict[str, object]:
     if not isinstance(payload, dict):
         raise ValueError(f"{filename} must contain an object")
-    if payload.get("schemaVersion") == "guard.extension-contribution.v1":
-        return None
     validate_contribution(payload, filename=filename)
     return cast(dict[str, object], payload)
 
@@ -128,12 +126,7 @@ def _validated_payload_or_skip(payload: object, filename: str) -> dict[str, obje
 def _load_from_directory(directory: Path) -> tuple[dict[str, object], ...]:
     if not directory.is_dir():
         return ()
-    payloads: list[dict[str, object]] = []
-    for path in sorted(directory.glob("command.*.json")):
-        payload = _validated_payload_or_skip(json.loads(path.read_text(encoding="utf-8")), path.name)
-        if payload is not None:
-            payloads.append(payload)
-    return tuple(payloads)
+    return tuple(validate_contribution_file(path) for path in sorted(directory.glob("command.*.json")))
 
 
 def _frozen_runtime() -> bool:
@@ -157,9 +150,7 @@ def _load_packaged_payloads() -> tuple[dict[str, object], ...]:
         return ()
     payloads: list[dict[str, object]] = []
     for item in sorted(names, key=lambda entry: entry.name):
-        payload = _validated_payload_or_skip(json.loads(item.read_text(encoding="utf-8")), item.name)
-        if payload is not None:
-            payloads.append(payload)
+        payloads.append(_validated_payload(json.loads(item.read_text(encoding="utf-8")), item.name))
     return tuple(payloads)
 
 
