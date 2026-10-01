@@ -24,6 +24,11 @@ SQLiteFileIdentity = tuple[int, int, int, int, int]
 SQLiteStoreIdentity = tuple[SQLiteFileIdentity | None, SQLiteFileIdentity | None, SQLiteFileIdentity | None]
 
 
+def sqlite_error_is_io(error: BaseException) -> bool:
+    code = getattr(error, "sqlite_errorcode", None)
+    return (isinstance(code, int) and code & 0xFF == 10) or SQLITE_IO_ERROR_MARKER in str(error).lower()
+
+
 def _sqlite_readonly_uri(path: Path) -> str:
     return f"{path.resolve().as_uri()}?mode=ro"
 

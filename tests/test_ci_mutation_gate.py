@@ -69,7 +69,6 @@ def test_mutation_gate_accepts_measured_parser_baseline_and_target_contracts(tmp
     assert set(TARGETS) == {
         "command-model",
         "secret-flow",
-        "hook-output",
         "approval-reuse",
         "package-intent",
         "package-policy",

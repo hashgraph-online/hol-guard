@@ -298,6 +298,11 @@ def exercise(root: Path) -> dict[str, object]:
             known_receipt_ids,
             writer=receipt_writer,
             receipt_processed_before=receipt_processed_before,
+            diagnostic_context={
+                "case": label,
+                "http_reason_code": response.get("reason_code"),
+                "http_decision": response.get("decision"),
+            },
             timeout_seconds=_RECEIPT_PERSISTENCE_TIMEOUT_SECONDS,
         )
         require(receipt.get("authority") == "rust", f"{label}:receipt_missing")

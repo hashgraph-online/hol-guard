@@ -51,6 +51,7 @@ from ..codex_hook_manifest import (
 from ..codex_hook_manifest import (
     manifest_bindings as _manifest_bindings,
 )
+from ..codex_hook_owner_preflight import require_codex_inventory_owners
 from ..codex_hook_registration import (
     exact_legacy_hook_bindings,
     finalize_codex_doctor_setup_status,
@@ -1201,6 +1202,7 @@ class CodexHarnessAdapter(HarnessAdapter):
             )
             _require_complete_preactivation_inventory(config_inventory)
             _require_complete_preactivation_inventory(json_inventory)
+            require_codex_inventory_owners((config_inventory, json_inventory))
         _require_hook_inventory_sources_unchanged(
             config_payloads=inventory_config_payloads,
             hook_payloads=inventory_hook_payloads,

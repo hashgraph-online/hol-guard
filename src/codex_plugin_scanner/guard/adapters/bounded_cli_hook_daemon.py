@@ -11,7 +11,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from ..action_lattice import is_guard_action
-from ..daemon.hook_availability_policy import hook_reason_continues_session
+from ..daemon.hook_availability_policy import hook_event_pauses_when_unavailable, hook_reason_continues_session
 from ..private_file_io import read_private_regular_text
 from .bounded_cli_hook_bridge import _event_name, _json_object
 from .zcode_hooks import zcode_authority_block_reason, zcode_hook_process_exit
@@ -106,13 +106,13 @@ def _zcode_envelope_decision(policy_action: str) -> str | None:
     return decision
 
 
-def _policy_action_from_daemon(daemon_response: Mapping[str, object]) -> str:
-    reason_code = str(daemon_response.get("reason_code") or "")
-    if hook_reason_continues_session(reason_code):
-        return "warn"
+def _policy_action_from_daemon(daemon_response: Mapping[str, object], *, event_name: str) -> str:
     raw_policy_action = daemon_response.get("policy_action")
     if isinstance(raw_policy_action, str) and is_guard_action(raw_policy_action.strip()):
         return raw_policy_action.strip()
+    reason_code = str(daemon_response.get("reason_code") or "")
+    if not hook_event_pauses_when_unavailable(event_name) and hook_reason_continues_session(reason_code):
+        return "warn"
     return "block"
 
 
@@ -264,7 +264,7 @@ def _daemon_response_to_native(
         stdout = json.dumps(native_response, ensure_ascii=True, separators=(",", ":"))
         return stdout, stderr, exit_code
 
-    policy_action = _policy_action_from_daemon(daemon_response)
+    policy_action = _policy_action_from_daemon(daemon_response, event_name=event_name)
     reason = str(daemon_response.get("reason") or daemon_response.get("permission_decision_reason") or "")
     payload: dict[str, object] = {}
     if event_name == "UserPromptSubmit":

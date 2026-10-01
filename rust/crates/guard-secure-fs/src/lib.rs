@@ -42,6 +42,19 @@ pub struct SecureRead {
     pub sha256: String,
 }
 
+/// An open read-only descriptor bound to a verified immutable leaf file.
+///
+/// The descriptor was opened through the canonical component walk in
+/// `secure_open`, so the bytes read from it are the bytes whose identity was
+/// admitted: a regular file with exactly one link and no write permission
+/// bits. Ancestor symlinks in the caller-supplied path are resolved before
+/// the walk; a symlink leaf is rejected before open.
+#[derive(Debug)]
+pub struct SecureBlob {
+    pub file: std::fs::File,
+    pub identity: FileIdentity,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SourcePathDecision {
     pub allowed: bool,
@@ -77,6 +90,10 @@ pub enum SecureReadError {
     NotRegularFile,
     #[error("hard_linked_file")]
     HardLinkedFile,
+    /// The leaf file still has owner/group/other write bits set: callers that
+    /// require an immutable artifact reject it before any bytes are read.
+    #[error("mutable_leaf")]
+    MutableLeaf,
     #[error("permission_denied")]
     PermissionDenied,
     #[error("source_file_too_large")]
@@ -183,6 +200,65 @@ fn map_secure_open_error(error: SecureOpenError) -> SecureReadError {
         #[cfg(unix)]
         SecureOpenError::Io(_) => SecureReadError::ReadFailed,
     }
+}
+
+/// Open a caller-supplied path as a digest-bound immutable blob.
+///
+/// Equivalent admission rules to `read_bounded` for the leaf — regular file,
+/// single link, no write bits, identity revalidated against the opened
+/// descriptor — but returns the descriptor so callers can stream and rehash
+/// without holding the whole blob in memory. Ancestor components may be
+/// symlinks; they are resolved by canonicalization before the descriptor
+/// walk, matching the behavior of `resolve(strict=True)` callers.
+pub fn open_immutable_blob(path: &Path) -> Result<SecureBlob, SecureReadError> {
+    let leaf = fs::symlink_metadata(path).map_err(|_| SecureReadError::ReadFailed)?;
+    if leaf.file_type().is_symlink() {
+        return Err(SecureReadError::SymlinkInPath);
+    }
+    if !leaf.is_file() {
+        return Err(SecureReadError::NotRegularFile);
+    }
+    #[cfg(unix)]
+    {
+        if leaf.nlink() != 1 {
+            return Err(SecureReadError::HardLinkedFile);
+        }
+        if leaf.mode() & 0o222 != 0 {
+            return Err(SecureReadError::MutableLeaf);
+        }
+    }
+    let canonical = fs::canonicalize(path).map_err(|_| SecureReadError::ReadFailed)?;
+    let file = secure_open(path, &canonical).map_err(map_secure_open_error)?;
+    let live = file.metadata().map_err(|_| SecureReadError::ReadFailed)?;
+    if !live.is_file() {
+        return Err(SecureReadError::NotRegularFile);
+    }
+    #[cfg(unix)]
+    {
+        if live.dev() != leaf.dev()
+            || live.ino() != leaf.ino()
+            || live.nlink() != 1
+            || live.mode() & 0o222 != 0
+        {
+            return Err(SecureReadError::Changed);
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        if live.len() != leaf.len()
+            || live
+                .modified()
+                .ok()
+                .zip(leaf.modified().ok())
+                .is_none_or(|(a, b)| a != b)
+        {
+            return Err(SecureReadError::Changed);
+        }
+    }
+    Ok(SecureBlob {
+        file,
+        identity: identity(&live),
+    })
 }
 
 pub fn read_bounded(path: &Path, max_bytes: usize) -> Result<SecureRead, SecureReadError> {

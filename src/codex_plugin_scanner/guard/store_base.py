@@ -968,7 +968,8 @@ class EncryptedFileSecretStore:
         return self.base_dir / f"{normalized}.enc"
 
     def _load_fernet_key(self) -> bytes:
-        existing = self.key_path.read_bytes().strip()
+        with self.key_path.open("rb") as handle:
+            existing = handle.read(4096).strip()
         if not existing:
             raise RuntimeError("encrypted Guard secret key is empty")
         try:
