@@ -37,12 +37,39 @@ def catalog_ids() -> set[str]:
     return {entry["extension_id"] for entry in catalog["catalog"]}
 
 
-def _contributions_changed(base_sha: str) -> list[str]:
+# Paths whose content feeds generated projections.  Contributions are the
+# canonical extension sources; ``rust/`` feeds the compiler implementation
+# digest (build.rs hashes every crate source, so any Rust change alters
+# ``authoring_semantics_digest``); guard runtime/CLI sources, command corpus
+# and decision-diff tests, and bound docs feed the decision-diff report's
+# ``sources_sha256`` bindings; ``contracts/`` covers authored inputs such as
+# the trust map.  A change under any of these legitimately leaves checked-in
+# artifacts one maintainer regen behind.
+_REGEN_INPUT_PREFIXES = (
+    "contributions/",
+    "rust/",
+    "src/codex_plugin_scanner/guard/",
+    "tests/",
+    "docs/guard/",
+    "contracts/",
+)
+_REGEN_INPUT_FILES = (
+    "scripts/refresh_extension_artifacts.py",
+    "scripts/build_native_command_program.py",
+    "scripts/render_command_extension_directory.py",
+)
+
+
+def _regen_inputs_changed(base_sha: str) -> list[str]:
     import subprocess
 
     def _diff() -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            ["git", "diff", "--name-only", base_sha, "HEAD", "--", "contributions/"],
+            # Two-dot diff is deliberate: shallow checkouts can fetch the base
+            # commit itself but cannot compute a merge base, and over-flagging
+            # (treating an input as changed) stands freshness gates down in the
+            # safe direction rather than failing them.
+            ["git", "diff", "--name-only", base_sha, "HEAD", "--", *_REGEN_INPUT_PREFIXES, *_REGEN_INPUT_FILES],
             cwd=ROOT,
             capture_output=True,
             text=True,
@@ -70,7 +97,7 @@ def main() -> int:
     changed: list[str] = []
     if "--changed-from" in sys.argv:
         base = sys.argv[sys.argv.index("--changed-from") + 1]
-        changed = _contributions_changed(base)
+        changed = _regen_inputs_changed(base)
     pending = bool(pending_ids) or bool(changed)
     if "--flag" in sys.argv:
         print("true" if pending else "false")

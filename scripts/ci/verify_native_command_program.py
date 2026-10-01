@@ -1,11 +1,12 @@
 """Verify the generated native command program, tolerating pending contributions.
 
-Generated projections are maintainer-owned. A contribution PR that adds or
-edits canonical sources legitimately leaves the checked-in program stale, so a
-plain ``--check`` would reject an otherwise-valid contribution. This wrapper:
+Generated projections are maintainer-owned. A PR that changes projection
+inputs — contribution sources, the Rust compiler, trust map, or generator
+scripts — legitimately leaves the checked-in program stale, so a plain
+``--check`` would reject an otherwise-valid change. This wrapper:
 
 - fresh tree: runs ``build_native_command_program.py --check`` as before
-- pending tree (new/edited contribution source): runs the generator without
+- pending tree (new/edited projection input): runs the generator without
   ``--check`` to validate that the sources compile, then restores generated
   paths so later steps see the checked-in state
 """
@@ -40,13 +41,13 @@ def main() -> int:
 
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     from detect_pending_extension_regen import (
-        _contributions_changed,
+        _regen_inputs_changed,
         catalog_ids,
         contribution_ids,
     )
 
     pending = sorted(contribution_ids() - catalog_ids())
-    changed = _contributions_changed(args.changed_from) if args.changed_from else []
+    changed = _regen_inputs_changed(args.changed_from) if args.changed_from else []
     command = [
         sys.executable,
         "scripts/build_native_command_program.py",
@@ -55,8 +56,8 @@ def main() -> int:
     ]
     if args.changed_from and (pending or changed):
         print(
-            f"pending contribution regeneration (ids={pending}, changed={changed}); "
-            "validating sources by generating instead of checking freshness",
+            f"pending projection regeneration (ids={pending}, changed={changed}); "
+            "validating inputs by generating instead of checking freshness",
             file=sys.stderr,
         )
         _run(command)

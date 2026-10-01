@@ -19,10 +19,20 @@ on:
   push:
     branches: [main]
     paths:
+      # Mirror the projection-input set in
+      # scripts/ci/detect_pending_extension_regen.py so merges that change any
+      # regen input (contributions, Rust compiler sources, bound guard sources,
+      # corpus/decision-diff tests, bound docs, authored contracts, generator
+      # scripts) refresh the maintainer-owned artifacts they made stale.
       - contributions/**
-      - contracts/extensions/**
-      - tests/fixtures/command-source-*.v1.json
+      - contracts/**
+      - rust/**
+      - src/codex_plugin_scanner/guard/**
+      - tests/**
+      - docs/guard/**
       - scripts/refresh_extension_artifacts.py
+      - scripts/build_native_command_program.py
+      - scripts/render_command_extension_directory.py
       - .github/workflows/extension-artifact-regen.yml
   workflow_dispatch:
 
