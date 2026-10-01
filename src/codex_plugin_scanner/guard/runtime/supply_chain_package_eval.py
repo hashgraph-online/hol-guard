@@ -30,6 +30,7 @@ from packaging.version import InvalidVersion, Version
 from ..action_lattice import normalize_guard_action_result
 from ..config import load_guard_config, resolve_risk_action
 from ..models import GuardAction, GuardArtifact
+from ..native_archive_inspection import inspect_archive_native
 from ..package_firewall_entitlement import resolve_package_firewall_entitlement
 from ..stable_digest import stable_digest_hex
 from ..store import GuardStore
@@ -56,7 +57,6 @@ from .npm_policy_range import (
     target_for_resolved_npm_policy_match,
 )
 from .npm_source_spec import NpmSourceSpec, parse_npm_source_spec
-from .offline_archive_inspection import inspect_archive_offline
 from .package_intent_common import split_python_extras
 from .package_manifest_diff import (
     _DeadlineExceededError,
@@ -1974,6 +1974,7 @@ def _heuristic_result(
                     network_authorized=external_archive_network_authorized,
                     retain_download=retain_external_archive_blob,
                     request_deadline=external_archive_request_deadline,
+                    guard_home=store.guard_home,
                 )
             except BaseException:
                 for retained_archive in external_archive_downloads:
@@ -3699,6 +3700,7 @@ def _external_tarball_dependency_result(
     network_authorized: bool,
     retain_download: bool,
     request_deadline: float | None = None,
+    guard_home: Path,
 ) -> tuple[dict[str, object], RestrictedArchiveDownload | None]:
     source_url = _optional_string(target.get("source_url"))
     if source_url is None:
@@ -3749,6 +3751,7 @@ def _external_tarball_dependency_result(
         source_url,
         retain_download=retain_download,
         request_deadline=request_deadline,
+        guard_home=guard_home,
     )
     if scan is None:
         return (
@@ -3778,6 +3781,7 @@ def _scan_external_tarball(
     *,
     retain_download: bool = False,
     request_deadline: float | None = None,
+    guard_home: Path,
 ) -> tuple[dict[str, str] | None, RestrictedArchiveDownload | None]:
     download_timeout = _TARBALL_SCAN_TIMEOUT_SECONDS
     if request_deadline is not None:
@@ -3808,9 +3812,10 @@ def _scan_external_tarball(
             if remaining <= 0:
                 return _external_archive_request_timeout_result(), None
             inspection_timeout = min(inspection_timeout, remaining)
-        inspection = inspect_archive_offline(
+        inspection = inspect_archive_native(
             downloaded.path,
             expected_sha256=downloaded.sha256,
+            state_dir=guard_home,
             timeout_seconds=inspection_timeout,
             max_archive_bytes=_TARBALL_SCAN_MAX_BYTES,
             max_files=_TARBALL_SCAN_MAX_FILES,

@@ -110,8 +110,9 @@ def test_manifest_warning_does_not_suppress_approved_external_archive_inspection
         *,
         retain_download: bool = False,
         request_deadline: float | None = None,
+        guard_home: Path | None = None,
     ) -> tuple[dict[str, str], None]:
-        del request_deadline, retain_download
+        del request_deadline, retain_download, guard_home
         scans.append(scanned_url)
         return (
             {

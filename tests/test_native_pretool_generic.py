@@ -532,10 +532,10 @@ def test_supported_cli_pretool_worker_exception_is_fail_safe(
     )
     assert response is not None
     assert response["reason_code"] == "native_hook_worker_exception"
-    assert response["policy_action"] == "warn"
+    assert response["policy_action"] == "block"
     output = response["hookSpecificOutput"]
     assert isinstance(output, dict)
-    assert output["permissionDecision"] == "allow"
+    assert output["permissionDecision"] == "deny"
 
 
 def test_cli_frames_raw_payload_before_harness_normalization(

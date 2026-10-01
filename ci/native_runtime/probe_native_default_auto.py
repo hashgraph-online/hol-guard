@@ -58,6 +58,7 @@ if _HOOK_CLIENT_SPEC is None or _HOOK_CLIENT_SPEC.loader is None:
 _HOOK_CLIENT_MODULE = importlib.util.module_from_spec(_HOOK_CLIENT_SPEC)
 _HOOK_CLIENT_SPEC.loader.exec_module(_HOOK_CLIENT_MODULE)
 _installed_hook_request = _HOOK_CLIENT_MODULE.installed_hook_request
+hook_failure_detail = _HOOK_CLIENT_MODULE.hook_failure_detail
 
 
 def _request(root: Path, text: str, request_id: str) -> HookReviewRequest:
@@ -228,12 +229,7 @@ def _exercise_installed_routes(
                 raise RuntimeError(f"empty response for {harness} {event}")
             _require(
                 is_allowed(event, response_payload),
-                {
-                    "harness": harness,
-                    "event": event,
-                    "decision": response_payload.get("decision"),
-                    "permission_decision": _permission_decision(response_payload),
-                },
+                hook_failure_detail(harness, event, response_payload),
             )
             reason = response_payload.get("reason_code")
             if isinstance(reason, str):

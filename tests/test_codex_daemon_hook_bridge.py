@@ -1132,8 +1132,4 @@ def test_bridge_real_daemon_ignores_workdir_for_opaque_tool(
         daemon.stop()
 
     assert exit_code == 0
-    assert json.loads(capsys.readouterr().out) == {
-        "continue": True,
-        "hookSpecificOutput": {"hookEventName": "PreToolUse"},
-        "systemMessage": "HOL Guard native hook review is explicitly disabled; the action continues without native review.",  # noqa: E501
-    }
+    _assert_bridge_denied(json.loads(capsys.readouterr().out))

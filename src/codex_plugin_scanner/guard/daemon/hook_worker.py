@@ -10,11 +10,11 @@ Security:
   request that supplied only ``guard_source_ref`` without full output.
 - Never calls ``run_guard_command()``.
 - Native PostToolUse is decided by Rust for ``auto``/``force``. When review
-  cannot complete, PostToolUse continues; PreToolUse uses the emergency-safe
-  floor. Explicit ``off`` is a fail-safe disablement.
-- Supported generic PreToolUse is decided by Rust. Native failure uses the
-  mechanical emergency-safe action-class floor: local inspection may continue,
-  while mutating, network, secret, destructive, and uncertain actions pause.
+  cannot complete, PostToolUse continues; protected PreToolUse pauses unless
+  acknowledged recording-only mode applies. Explicit ``off`` is a fail-safe
+  disablement with no Python semantic fallback.
+- Supported generic PreToolUse is decided by Rust. Native failure denies
+  protected actions without acknowledged recording-only mode authority.
   Explicit off/shadow have no production semantic fallback. Native block
   results stay mechanical. A command-policy authority block includes a local
   repair link and does not rebuild protection from the hook. The current
@@ -257,10 +257,10 @@ class HookWorker(HookWorkerNativeMixin):
         """Review a hook HTTP payload and return harness JSON.
 
         ``auto`` and ``force`` require the native runtime. When native is
-        unavailable or returns no result, high-impact PreToolUse pauses.
-        PostToolUse continues so the turn does not freeze. Emergency-safe
-        local inspection continues with an explicit degraded reason code.
-        ``off`` and ``shadow`` return fail-safe responses.
+        unavailable or returns no result, protected PreToolUse requests deny.
+        Acknowledged Watch and PostToolUse continue without claiming evaluated
+        protection. Local inspection needs the same trusted decision boundary.
+        ``off`` and ``shadow`` remain fail-safe without Python semantics.
         """
         self._last_native_decision_receipt = None
         harness = self._runtime_harness(params) or default_harness

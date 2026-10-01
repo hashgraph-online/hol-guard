@@ -19,6 +19,7 @@ from .native_policy_snapshot_constants import (
     _RENEWAL_JITTER_MAX_SECONDS,
     _RENEWAL_LEAD_SECONDS,
     _REQUIRED_PUBLISH_FEATURES,
+    POLICY_SNAPSHOT_UNAVAILABLE_ERRORS,
     NativePolicySnapshotError,
 )
 from .native_policy_snapshot_publisher_inputs import NativePolicySnapshotPublisherInputs
@@ -386,6 +387,10 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
                 self._mark_expired_locked()
                 if self._acked and self._snapshot is not None:
                     return True
+                # Known unavailable authority wakes the caller promptly. Keep
+                # bounded retries for lost ACKs and resident recovery.
+                if self._last_error in POLICY_SNAPSHOT_UNAVAILABLE_ERRORS:
+                    return False
                 remaining = deadline - self._monotonic_clock()
                 if remaining <= 0:
                     break

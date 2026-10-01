@@ -112,8 +112,9 @@ def test_external_archive_private_source_is_preserved_for_authorized_scan(
         *,
         retain_download: bool = False,
         request_deadline: float | None = None,
+        guard_home: Path | None = None,
     ) -> tuple[dict[str, str], None]:
-        del request_deadline, retain_download
+        del request_deadline, retain_download, guard_home
         scanned_sources.append(scanned_url)
         return (
             {
@@ -195,8 +196,9 @@ def test_direct_pip_signed_url_preserves_exact_private_download_and_binding_sour
         *,
         retain_download: bool = False,
         request_deadline: float | None = None,
+        guard_home: Path | None = None,
     ) -> tuple[dict[str, str], None]:
-        del request_deadline, retain_download
+        del request_deadline, retain_download, guard_home
         scanned_sources.append(scanned_url)
         return (
             {

@@ -233,6 +233,7 @@ def test_external_archive_request_caps_aggregate_retained_bytes_and_cleans_blobs
         *,
         retain_download: bool = False,
         request_deadline: float | None = None,
+        guard_home: Path | None = None,
     ) -> tuple[dict[str, str], RestrictedArchiveDownload]:
         assert retain_download is True
         assert request_deadline is not None
@@ -273,7 +274,10 @@ def test_external_archive_request_caps_aggregate_retained_bytes_and_cleans_blobs
     assert paths and all(path.exists() is False for path in paths)
 
 
-def test_external_archive_request_deadline_fails_before_next_download(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_external_archive_request_deadline_fails_before_next_download(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(
         evaluator,
         "_download_external_tarball",
@@ -283,6 +287,7 @@ def test_external_archive_request_deadline_fails_before_next_download(monkeypatc
     result, retained = evaluator._scan_external_tarball(
         "https://packages.example.com/demo.tgz",
         request_deadline=evaluator.time.monotonic() - 1,
+        guard_home=tmp_path / "guard-home",
     )
 
     assert result is not None
@@ -314,8 +319,9 @@ def test_external_archive_cannot_be_shadowed_or_bypass_restricted_inspection(
         *,
         retain_download: bool = False,
         request_deadline: float | None = None,
+        guard_home: Path | None = None,
     ) -> tuple[dict[str, str], None]:
-        del request_deadline, retain_download
+        del request_deadline, retain_download, guard_home
         scans.append(scanned_url)
         return (
             {

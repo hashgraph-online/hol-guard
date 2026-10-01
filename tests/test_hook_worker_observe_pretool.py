@@ -138,6 +138,7 @@ def test_hook_worker_watch_native_unavailable_continues_without_cli_escape(
         ),
     )
     worker = HookWorker(store=GuardStore(guard_home))
+    monkeypatch.setattr(worker, "_native_policy_snapshot", lambda _workspace, **_kwargs: {"mode": "observe"})
     result = worker.review_http_payload(
         payload={"hook_event_name": "PreToolUse", "tool_input": {"command": "pwd"}},
         params={},
@@ -168,6 +169,7 @@ def test_hook_worker_watch_native_unavailable_allows_network(
         lambda *_args, **_kwargs: None,
     )
     worker = HookWorker(store=GuardStore(guard_home))
+    monkeypatch.setattr(worker, "_native_policy_snapshot", lambda _workspace, **_kwargs: {"mode": "observe"})
     result = worker.review_http_payload(
         payload={"hook_event_name": "PreToolUse", "tool_input": {"command": "curl https://example.test"}},
         params={},
@@ -208,8 +210,8 @@ def test_hook_worker_enforce_native_unavailable_still_pauses_network(
         guard_home=guard_home,
         workspace=tmp_path / "workspace",
     )
-    assert result["decision"] == "allow"
-    assert result["policy_action"] == "warn"
+    assert result["decision"] == "deny"
+    assert result["policy_action"] == "block"
     assert result["reason_code"] == "native_pre_tool_unavailable"
 
 
@@ -277,7 +279,7 @@ def test_hook_worker_watch_posttool_native_unavailable_continues(
     assert result["reason_code"] == "native_post_tool_unavailable"
 
 
-def test_hook_worker_watch_native_off_pretool_continues(
+def test_hook_worker_watch_edit_without_snapshot_cannot_allow_native_off_pretool(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -296,7 +298,7 @@ def test_hook_worker_watch_native_off_pretool_continues(
         guard_home=guard_home,
         workspace=tmp_path / "workspace",
     )
-    assert result["continue"] is True
+    assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
     assert result["reason_code"] == "native_hook_disabled"
 
-    assert result.get("continue") is True
+    assert result.get("continue") is not False

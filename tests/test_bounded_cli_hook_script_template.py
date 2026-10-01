@@ -221,14 +221,14 @@ def test_generated_client_prompt_unavailability_matches_host_contract(tmp_path: 
             assert payload["continue"] is False
 
 
-def test_generated_client_watch_mode_continues(tmp_path: Path) -> None:
+def test_generated_client_unacknowledged_watch_cannot_allow_pretool(tmp_path: Path) -> None:
     module = _load_script(tmp_path, harness="grok")
     config = Path(module.GUARD_HOME) / "config.toml"
     config.write_text('protection_posture = "watch"\nmode = "observe"\n', encoding="utf-8")
     config.chmod(0o600)
     payload, code = module._failure_payload("PreToolUse", "down")
     assert code == 0
-    assert payload == {"decision": "allow"}
+    assert payload == {"decision": "deny", "reason": "down"}
 
 
 def test_generated_client_rejects_symlinked_daemon_token(tmp_path: Path) -> None:

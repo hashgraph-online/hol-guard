@@ -81,7 +81,7 @@ def test_auto_rejects_version_mismatched_runtime(tmp_path: Path, monkeypatch: py
     monkeypatch.setenv("HOL_GUARD_NATIVE", "auto")
     monkeypatch.setattr(native_runtime, "_runtime_candidates", lambda: (runtime,))
     monkeypatch.setattr(native_runtime, "_python_package_version", lambda: "test")
-    native_runtime._capabilities_for_identity.cache_clear()
+    native_runtime._clear_capabilities_probe_state()
     status = native_runtime_status()
     assert status.available is True
     assert status.compatible is False

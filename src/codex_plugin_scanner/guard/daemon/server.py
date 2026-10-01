@@ -6206,6 +6206,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     "hookSpecificOutput": {"hookEventName": event, "permissionDecision": "allow"},
                 }
             return {"continue": True, "reason_code": reason_code, "observed_review_failure": True}
+        from ..native_policy_snapshot_acked import recording_only_from_acked_snapshot
         from .hook_availability_policy import availability_harness_response
 
         payload_dict = dict(payload) if isinstance(payload, Mapping) else {}
@@ -6218,7 +6219,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             workspace=workspace_path,
             home_dir=home_path,
             guard_home=guard_home,
-            recording_only=observe_mode,
+            recording_only=(
+                recording_only_from_acked_snapshot(getattr(daemon_server, "store", None))
+                if native_authoritative
+                else observe_mode
+            ),
         )
 
     def _validated_fail_safe_hook_paths(

@@ -94,6 +94,7 @@ def _package_artifact(workspace: Path, command: str) -> GuardArtifact:
 def test_package_firewall_reuses_one_review_to_inspect_then_launch(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    native_hook_force: Path,
 ) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()

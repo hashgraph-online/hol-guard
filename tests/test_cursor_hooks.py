@@ -595,8 +595,11 @@ def test_cursor_hook_emits_json_when_guard_package_import_fails(tmp_path: Path) 
         env={"PATH": os.environ.get("PATH", ""), "HOME": str(home_dir)},
         timeout=30,
     )
-    assert proc.returncode == 0, proc.stderr
-    assert json.loads(proc.stdout)["permission"] == "allow"
+    assert proc.returncode == 2, proc.stderr
+    assert json.loads(proc.stdout) == {
+        "permission": "deny",
+        "user_message": "HOL Guard could not complete the native hook decision safely.",
+    }
 
 
 @pytest.mark.skipif(os.name != "posix", reason="process-group descendant assertion requires POSIX")
@@ -751,8 +754,10 @@ def test_cursor_hook_script_uses_daemon_fast_path(tmp_path: Path, monkeypatch: p
     finally:
         daemon.stop()
 
-    assert proc.returncode == 0
-    assert json.loads(proc.stdout) == {"permission": "allow"}
+    assert proc.returncode == 2
+    response = json.loads(proc.stdout)
+    assert response["permission"] == "deny"
+    assert "explicitly disabled" in response["user_message"]
 
 
 @pytest.mark.parametrize(

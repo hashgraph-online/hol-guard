@@ -95,7 +95,7 @@ def test_generated_cursor_watch_after_shell_exception_prints_empty(
     assert capsys.readouterr().out.strip() == "{}"
 
 
-def test_empty_stdin_before_read_allows_when_event_is_baked(
+def test_empty_stdin_before_read_denies_without_mode_authority(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -117,8 +117,10 @@ def test_empty_stdin_before_read_allows_when_event_is_baked(
     monkeypatch.setattr(sys, "stdin", io.StringIO(""))
     main = script_globals["main"]
     assert callable(main)
-    assert main() == 0
-    assert json.loads(capsys.readouterr().out) == {"permission": "allow"}
+    assert main() == 2
+    response = json.loads(capsys.readouterr().out)
+    assert response["permission"] == "deny"
+    assert "repair Guard from a terminal" in response["user_message"]
 
 
 def test_empty_stdin_before_shell_pauses_when_event_is_baked(

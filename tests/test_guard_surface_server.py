@@ -1698,7 +1698,7 @@ class TestGuardSurfaceServer:
             daemon.stop()
 
         assert response.status == 200
-        assert payload["decision"] == "allow"
+        assert payload["decision"] == "deny"
         assert payload["reason_code"] == "daemon_hook_deadline_exhausted"
 
     def test_guard_daemon_pi_hook_endpoint_rejects_missing_temporary_workspace(self, tmp_path, monkeypatch) -> None:
@@ -2178,14 +2178,14 @@ class TestGuardSurfaceServer:
     @pytest.mark.parametrize(
         ("harness", "event", "expected"),
         [
-            ("pi", "PreToolUse", {"decision": "allow", "reason_code": "daemon_hook_queue_capacity"}),
+            ("pi", "PreToolUse", {"decision": "deny", "reason_code": "daemon_hook_queue_capacity"}),
             (
                 "claude-code",
                 "PreToolUse",
                 {
                     "hookSpecificOutput": {
                         "hookEventName": "PreToolUse",
-                        "permissionDecision": "allow",
+                        "permissionDecision": "deny",
                     }
                 },
             ),

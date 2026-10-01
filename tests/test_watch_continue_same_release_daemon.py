@@ -265,7 +265,7 @@ def test_load_guard_daemon_url_accepts_same_release_peer_fingerprint(
     assert daemon_manager_module.load_guard_daemon_url(guard_home) == "http://127.0.0.1:5530"
 
 
-def test_availability_watch_config_allows_git_and_network(tmp_path: Path) -> None:
+def test_availability_without_acknowledged_watch_denies_git_and_network(tmp_path: Path) -> None:
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir()
     (guard_home / "config.toml").write_text(
@@ -282,7 +282,7 @@ def test_availability_watch_config_allows_git_and_network(tmp_path: Path) -> Non
         workspace=tmp_path,
         home_dir=tmp_path / "home",
     )
-    assert git_cmd["decision"] == "allow"
+    assert git_cmd["decision"] == "deny"
     gh_cmd = availability_harness_response(
         {"hook_event_name": "PreToolUse", "tool_input": {"command": "gh pr view 1"}},
         harness="grok",
@@ -291,7 +291,7 @@ def test_availability_watch_config_allows_git_and_network(tmp_path: Path) -> Non
         reason="native unavailable",
         guard_home=guard_home,
     )
-    assert gh_cmd["decision"] == "allow"
+    assert gh_cmd["decision"] == "deny"
 
 
 def test_cursor_fallback_without_mode_authority_denies_shell() -> None:
@@ -324,6 +324,7 @@ def test_watch_unavailable_pretool_records_command_activity(
     )
     writer = MagicMock()
     worker = HookWorker(store=GuardStore(guard_home), activity_writer=writer)
+    monkeypatch.setattr(worker, "_native_policy_snapshot", lambda _workspace, **_kwargs: {"mode": "observe"})
     result = worker.review_http_payload(
         payload={"hook_event_name": "PreToolUse", "tool_input": {"command": "git status"}},
         params={},
@@ -337,4 +338,3 @@ def test_watch_unavailable_pretool_records_command_activity(
     recorded = writer.submit_command_activity.call_args.kwargs
     assert recorded["event"] == "PreToolUse"
     assert recorded["succeeded"] is True
-

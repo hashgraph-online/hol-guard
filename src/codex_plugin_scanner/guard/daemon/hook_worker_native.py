@@ -223,7 +223,7 @@ class HookWorkerNativeMixin:
         if reason_code is None:
             return None
         reason = {
-            "off": "HOL Guard native hook review is explicitly disabled; the action continues without native review.",
+            "off": "HOL Guard native hook review is explicitly disabled; no trusted native decision is available.",
             "shadow": "HOL Guard shadow comparison is unavailable outside its diagnostic surface.",
         }[mode]
         return availability_harness_response(
@@ -276,8 +276,8 @@ class HookWorkerNativeMixin:
         policy_snapshot = self._native_policy_snapshot(workspace, deadline=deadline)
         # Native evaluation and Python delivery use the same acknowledged
         # posture. A local Watch edit cannot weaken an enforcing snapshot
-        # before its replacement is accepted. A missing binding already takes
-        # the existing unavailable route, whose response is posture-independent.
+        # before its replacement is accepted. A missing binding takes the
+        # unavailable route and cannot establish recording-only authority.
         recording_only = policy_snapshot is not None and policy_snapshot.get("mode") == "observe"
         fenced: bool | None = None
         try:

@@ -238,7 +238,7 @@ def test_hook_worker_fails_closed_when_forced_native_is_missing(
         guard_home=tmp_path / "guard-home",
         workspace=tmp_path / "workspace",
     )
-    assert result["decision"] == "allow"
+    assert result["decision"] == "deny"
     assert result["reason_code"] == "native_pre_tool_unavailable"
 
 
@@ -272,7 +272,7 @@ def test_hook_worker_fails_closed_when_auto_pretool_native_is_unavailable(
         guard_home=tmp_path / "guard-home",
         workspace=tmp_path / "workspace",
     )
-    assert result["decision"] == "allow"
+    assert result["decision"] == "deny"
     assert result["reason_code"] == "native_pre_tool_unavailable"
 
 
@@ -304,7 +304,7 @@ def test_hook_worker_falls_back_when_native_mode_is_off(
     assert result["reason_code"] == "native_hook_disabled"
 
 
-def test_hook_worker_uses_emergency_safe_floor_for_non_command_pretool_without_native_result(
+def test_hook_worker_denies_unreviewed_non_command_pretool_without_native_result(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -325,7 +325,7 @@ def test_hook_worker_uses_emergency_safe_floor_for_non_command_pretool_without_n
         guard_home=tmp_path / "guard-home",
         workspace=tmp_path / "workspace",
     )
-    assert result["decision"] == "allow"
+    assert result["decision"] == "deny"
     assert result["reason_code"] == "native_pre_tool_unavailable"
 
 
@@ -350,7 +350,7 @@ def test_hook_worker_pauses_secret_read_without_native_result(
         guard_home=tmp_path / "guard-home",
         workspace=tmp_path / "workspace",
     )
-    assert result["decision"] == "allow"
+    assert result["decision"] == "deny"
     assert result["reason_code"] == "native_pre_tool_unavailable"
 
 
