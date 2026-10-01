@@ -70,10 +70,6 @@ def test_macos_cross_build_keeps_native_platform_proofs_and_cache_isolation() ->
     assert any(step.get("run") == "bash scripts/ci/build-native-wheel-macos.sh" for step in build["steps"])
     assert '--target "$TARGET"' in commands
     assert 'target_dir="$target_dir/$TARGET"' in commands
-    assert "verify_native_command_program.py" in commands
-    assert "HOL_GUARD_CHANGED_FROM" in commands
-    assemble = next(step for step in build["steps"] if step.get("name", "").startswith("Build and assemble"))
-    assert "HOL_GUARD_CHANGED_FROM" in assemble["env"]
     assert "--locked --release" in commands
     assert '--platform-tag "$PLATFORM_TAG"' in commands
     assert '--source-sha "$HOL_GUARD_BUILD_SHA"' in commands

@@ -70,7 +70,7 @@ jobs:
       - name: Build and assemble version-matched native wheel
         env:
           HOL_GUARD_BUILD_SHA: ${{ github.sha }}
-          HOL_GUARD_CHANGED_FROM: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
+          NATIVE_PR_BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
           MACOSX_DEPLOYMENT_TARGET: ${{ matrix.deployment_target }}
           PLATFORM_TAG: ${{ matrix.platform_tag }}
           TARGET: ${{ matrix.target }}
@@ -560,6 +560,12 @@ jobs:
         with:
           version: 0.9.26
           enable-cache: true
+          save-cache: false
+          cache-suffix: native-ci-v1
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+          prune-cache: false
       - name: Install locked proof dependencies
         env:
           NATIVE_PROOF: ${{ matrix.proof }}
