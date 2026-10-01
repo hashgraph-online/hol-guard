@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -38,7 +39,7 @@ def test_known_base_is_compared_without_fetch(monkeypatch: pytest.MonkeyPatch, s
     """Case-insensitive SHA inputs retain exact contribution detection."""
     calls = _git_results(monkeypatch, [(0, "contributions/command-sources/command.fixture.json\n")])
     assert detector._contributions_changed(sha) == ["contributions/command-sources/command.fixture.json"]
-    assert calls == [["git", "diff", "--name-only", BASE, "HEAD", "--", "contributions/"]]
+    assert calls == [["git", "diff", "--name-only", BASE, "HEAD", "--", "contributions/", "rust/"]]
 
 
 def test_successful_empty_diff_is_the_only_unchanged_result(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -127,7 +128,10 @@ def test_real_shallow_checkout_distinguishes_changed_and_unavailable_bases(
 
     def git(*arguments: str, cwd: Path = source) -> str:
         """Run a bounded command against this test's disposable repository."""
-        result = subprocess.run(["git", *arguments], cwd=cwd, capture_output=True, text=True, check=True, timeout=10)
+        result = subprocess.run(
+            ["git", *arguments], cwd=cwd, capture_output=True, text=True, check=True, timeout=10,
+            env={**os.environ, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"},
+        )
         return result.stdout.strip()
 
     git("init", "--initial-branch=main")

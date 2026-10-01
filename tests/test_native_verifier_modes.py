@@ -24,10 +24,10 @@ def test_shared_verifier_compiles_pending_pr_sources_and_keeps_other_runs_strict
     detector._contributions_changed = (
         lambda _sha: ["contributions/command-sources/command.fixture.json"] if changed else []
     )
-    detector._regen_inputs_changed = detector._contributions_changed
     monkeypatch.setitem(sys.modules, "detect_pending_extension_regen", detector)
     monkeypatch.setattr(sys, "path", list(sys.path))
-    arguments = ["verify", "--compiler", "fixture-compiler"]
+    compiler = "rust/target/release/guard-command-source"
+    arguments = ["verify", "--compiler", compiler]
     if base_sha:
         arguments += ["--changed-from", base_sha]
     monkeypatch.setattr(sys, "argv", arguments)
@@ -36,12 +36,12 @@ def test_shared_verifier_compiles_pending_pr_sources_and_keeps_other_runs_strict
 
     assert verifier.main() == 0
 
-    generate = [sys.executable, "scripts/build_native_command_program.py", "--compiler", "fixture-compiler"]
+    generate = [sys.executable, "scripts/build_native_command_program.py", "--compiler", compiler]
     if base_sha and (pending or changed):
         assert calls == [
             generate,
-            ["git", "checkout", "--", *verifier.GENERATED_PATHS],
-            ["git", "clean", "-fdq", "--", *verifier.GENERATED_PATHS],
+            verifier._rebuild_command(compiler),
+            [*generate, "--check"],
         ]
     else:
         assert calls == [[*generate, "--check"]]
@@ -54,10 +54,10 @@ def test_invalid_pending_source_stays_a_failure(monkeypatch: pytest.MonkeyPatch)
     detector.contribution_ids = lambda: {"command.fixture"}
     detector.catalog_ids = set
     detector._contributions_changed = lambda _sha: []
-    detector._regen_inputs_changed = lambda _sha: []
     monkeypatch.setitem(sys.modules, "detect_pending_extension_regen", detector)
     monkeypatch.setattr(sys, "path", list(sys.path))
-    monkeypatch.setattr(sys, "argv", ["verify", "--compiler", "fixture-compiler", "--changed-from", "a" * 40])
+    compiler = "rust/target/release/guard-command-source"
+    monkeypatch.setattr(sys, "argv", ["verify", "--compiler", compiler, "--changed-from", "a" * 40])
     calls: list[list[str]] = []
 
     def invalid_source(command: list[str]) -> None:
@@ -69,7 +69,7 @@ def test_invalid_pending_source_stays_a_failure(monkeypatch: pytest.MonkeyPatch)
     with pytest.raises(SystemExit) as failure:
         verifier.main()
     assert failure.value.code == 37
-    assert calls == [[sys.executable, "scripts/build_native_command_program.py", "--compiler", "fixture-compiler"]]
+    assert calls == [[sys.executable, "scripts/build_native_command_program.py", "--compiler", compiler]]
 
 
 @pytest.mark.parametrize("pending", [False, True])
@@ -87,7 +87,6 @@ def test_unavailable_base_stops_before_generation_or_freshness_checks(
         raise real_detector.ContributionDiffError("Cannot compare contribution sources: fetching the PR base failed")
 
     detector._contributions_changed = unavailable
-    detector._regen_inputs_changed = unavailable
     monkeypatch.setitem(sys.modules, "detect_pending_extension_regen", detector)
     monkeypatch.setattr(sys, "path", list(sys.path))
     monkeypatch.setattr(sys, "argv", ["verify", "--compiler", "fixture", "--changed-from", "a" * 40])

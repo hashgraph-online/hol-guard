@@ -20,13 +20,14 @@ on:
     branches: [main]
     paths:
       # Mirror the projection-input set in
-      # scripts/ci/detect_pending_extension_regen.py so merges that change any
-      # regen input (contributions, Rust compiler sources, bound guard sources,
+      # scripts/ci/detect_pending_extension_regen.py plus the decision-diff
+      # report's bound sources, so merges that change any regen input
+      # (contributions, Rust compiler sources, bound guard sources,
       # corpus/decision-diff tests, bound docs, authored contracts, generator
       # scripts) refresh the maintainer-owned artifacts they made stale.
       - contributions/**
-      - contracts/**
       - rust/**
+      - contracts/extensions/**
       - src/codex_plugin_scanner/guard/**
       - tests/**
       - docs/guard/**

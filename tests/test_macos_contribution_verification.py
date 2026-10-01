@@ -50,6 +50,7 @@ def _build(
     (bins / "python").symlink_to(sys.executable)
     (tmp_path / "pyproject.toml").write_text('[project]\nversion = "1.2.3"\n', encoding="utf-8")
     _executable(bins / "cargo", "#!/bin/sh\nexit 0\n")
+    _executable(bins / "uv", "#!/bin/sh\nexit 0\n")
     _executable(bins / "jq", "#!/bin/sh\nprintf '%s\\n' '{}'\n")
     target_dir = "rust/target/x86_64-apple-darwin" if target == TARGETS[0] else "rust/target"
     _executable(
