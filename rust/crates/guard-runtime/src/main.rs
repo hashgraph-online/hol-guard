@@ -2,6 +2,7 @@
 
 mod approval;
 mod archive_inspect;
+mod archive_inspect_containment;
 mod edge;
 mod hardening;
 mod managed_resident;

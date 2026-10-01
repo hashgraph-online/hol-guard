@@ -88,7 +88,7 @@ def _emit_native_unavailable(
             home_dir=context.home_dir,
             guard_home=context.guard_home,
         ),
-        getattr(args, "json", False),
+        True,
     )
     return 0
 

@@ -6,7 +6,6 @@ to ``hol-guard-runtime``; it never downloads a binary or sends hook material.
 
 from __future__ import annotations
 
-import functools
 import hashlib
 import importlib.metadata
 import json
@@ -14,6 +13,7 @@ import math
 import os
 import stat
 import sys
+import threading
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -406,31 +406,72 @@ def _decode_capabilities(payload: object) -> NativeRuntimeCapabilities | None:
     )
 
 
-@functools.lru_cache(maxsize=16)
+# Successful probes are cached per binary identity. Failures are not cached:
+# they carry a short retry window so a transient cold-start miss cannot poison
+# every later native check in the process, and a caller-supplied deadline caps
+# how long the probe may run so a one-shot request never overspends its budget.
+_capabilities_probe_lock = threading.Lock()
+_capabilities_cache: dict[tuple[str, int, int, str], NativeRuntimeCapabilities] = {}
+_capabilities_retry_after: dict[tuple[str, int, int, str], float] = {}
+_CAPABILITIES_PROBE_TIMEOUT_SECONDS = 5.0
+_CAPABILITIES_RETRY_BACKOFF_SECONDS = 0.25
+_CAPABILITIES_CACHE_MAX = 16
+
+
+def _clear_capabilities_probe_state() -> None:
+    """Reset the probe cache and retry windows; tests call this between
+    distinct fake binaries so a prior probe cannot leak into the next case."""
+    with _capabilities_probe_lock:
+        _capabilities_cache.clear()
+        _capabilities_retry_after.clear()
+
+
 def _capabilities_for_identity(
     path: str,
     size: int,
     mtime_ns: int,
     sha256: str,
+    *,
+    deadline_monotonic: float | None = None,
 ) -> NativeRuntimeCapabilities | None:
-    del size, mtime_ns, sha256
+    key = (path, size, mtime_ns, sha256)
+    now = time.monotonic()
+    with _capabilities_probe_lock:
+        cached = _capabilities_cache.get(key)
+        retry_after = _capabilities_retry_after.get(key)
+    if cached is not None:
+        return cached
+    if retry_after is not None and now < retry_after:
+        return None
+    timeout_seconds = _CAPABILITIES_PROBE_TIMEOUT_SECONDS
+    if deadline_monotonic is not None:
+        remaining = deadline_monotonic - now
+        if remaining <= 0:
+            # The caller's budget is already spent; starting a fresh probe
+            # would overshoot the request deadline.
+            return None
+        timeout_seconds = min(timeout_seconds, remaining)
     output = _run_native_process(
         Path(path),
         ("capabilities", "--json"),
         input_text="",
-        # Cold-start allowance: the probe runs once per binary identity per
-        # process and the result is cached, including failure. A page-cold
-        # 25MB hash plus spawn can exceed a 1s budget on a loaded host, which
-        # would poison every later native check in the process.
-        timeout_seconds=5.0,
+        timeout_seconds=timeout_seconds,
     )
-    if output is None:
-        return None
-    try:
-        payload = json.loads(output)
-    except json.JSONDecodeError:
-        return None
-    return _decode_capabilities(payload)
+    capabilities = None
+    if output is not None:
+        try:
+            capabilities = _decode_capabilities(json.loads(output))
+        except json.JSONDecodeError:
+            capabilities = None
+    with _capabilities_probe_lock:
+        if capabilities is not None:
+            if len(_capabilities_cache) >= _CAPABILITIES_CACHE_MAX:
+                _capabilities_cache.pop(next(iter(_capabilities_cache)))
+            _capabilities_cache[key] = capabilities
+            _capabilities_retry_after.pop(key, None)
+        else:
+            _capabilities_retry_after[key] = time.monotonic() + _CAPABILITIES_RETRY_BACKOFF_SECONDS
+    return capabilities
 
 
 def _python_package_version() -> str | None:
@@ -440,7 +481,7 @@ def _python_package_version() -> str | None:
         return None
 
 
-def native_runtime_status() -> NativeRuntimeStatus:
+def native_runtime_status(*, deadline_monotonic: float | None = None) -> NativeRuntimeStatus:
     mode = native_mode()
     if mode == "off":
         return NativeRuntimeStatus(
@@ -450,6 +491,8 @@ def native_runtime_status() -> NativeRuntimeStatus:
             reason="native_disabled",
         )
     for candidate in _runtime_candidates():
+        if deadline_monotonic is not None and time.monotonic() >= deadline_monotonic:
+            break
         _restore_bundled_runtime_execute_bit(candidate)
         identity = _validate_binary(candidate)
         if identity is None:
@@ -470,6 +513,7 @@ def native_runtime_status() -> NativeRuntimeStatus:
             identity.size,
             identity.mtime_ns,
             identity.sha256,
+            deadline_monotonic=deadline_monotonic,
         )
         if capabilities is None:
             continue

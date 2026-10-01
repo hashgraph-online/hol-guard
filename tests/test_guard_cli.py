@@ -4311,7 +4311,7 @@ args = ["workspace-skill.js", "--changed"]
         assert captured_wheels == ["dist"]
         assert output["status"] == "planned"
 
-    def test_guard_update_repairs_stale_codex_native_hooks(self, tmp_path, monkeypatch, capsys):
+    def test_guard_update_preserves_unowned_altered_codex_hooks(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"
         context = HarnessContext(
             home_dir=home_dir,
@@ -4377,6 +4377,7 @@ args = ["workspace-skill.js", "--changed"]
         )
         monkeypatch.setattr(guard_update_commands_module, "_latest_version_from_pypi", lambda: "2.0.39")
 
+        original_config = config_path.read_bytes()
         rc = main(["guard", "update", "--home", str(home_dir), "--json"])
         output = json.loads(capsys.readouterr().out)
         config_text = config_path.read_text(encoding="utf-8")
@@ -4385,16 +4386,15 @@ args = ["workspace-skill.js", "--changed"]
 
         assert rc == 0
         assert output["status"] == "current"
-        assert output["managed_install"]["harness"] == "codex"
-        assert output["managed_install"]["active"] is True
+        assert "managed_installs" not in output
+        assert any("codex_hook_owner_conflict" in note for note in output["notes"])
+        assert config_path.read_bytes() == original_config
         assert "hooks = true" in config_text
         assert "codex_hooks" not in config_text
         assert hooks_payload["PreToolUse"]
-        assert repaired_state["shell_protection_active"] is True
+        assert repaired_state["shell_protection_active"] is False
 
-    def test_guard_update_repairs_authenticated_codex_hook_tampering_despite_shape_match(
-        self, tmp_path, monkeypatch, capsys
-    ):
+    def test_guard_update_preserves_tampered_codex_hooks_despite_shape_match(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"
         install_rc = main(["guard", "install", "codex", "--home", str(home_dir), "--json"])
         json.loads(capsys.readouterr().out)
@@ -4428,14 +4428,17 @@ args = ["workspace-skill.js", "--changed"]
         )
         monkeypatch.setattr(guard_update_commands_module, "_latest_version_from_pypi", lambda: "2.0.39")
 
+        original_config = config_path.read_bytes()
         update_rc = main(["guard", "update", "--home", str(home_dir), "--json"])
         output = json.loads(capsys.readouterr().out)
         repaired = codex_adapter_module.codex_native_hook_state(context)
 
         assert update_rc == 0
-        assert output["managed_install"]["active"] is True
-        assert repaired["protection_active"] is True
-        assert repaired["integrity_status"] == "valid"
+        assert "managed_installs" not in output
+        assert any("codex_hook_owner_conflict" in note for note in output["notes"])
+        assert config_path.read_bytes() == original_config
+        assert repaired["protection_active"] is False
+        assert repaired["integrity_reason"] == "codex_hook_registration_mismatch"
 
     def test_guard_update_refuses_to_replace_altered_codex_identity_record(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"
@@ -4582,8 +4585,7 @@ args = ["workspace-skill.js", "--changed"]
 
         assert rc == 0
         assert output["status"] == "current"
-        assert output["managed_install"]["harness"] == "codex"
-        assert output["managed_install"]["active"] is True
+        assert any(item["harness"] == "codex" and item["active"] is True for item in output["managed_installs"])
         assert "hooks = true" in config_text
         assert "codex_hooks" not in config_text
         assert hooks_payload["PreToolUse"]

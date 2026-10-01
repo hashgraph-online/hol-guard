@@ -16,17 +16,25 @@ def fixture_store(tmp_path: Path) -> GuardStore:
     return store
 
 
-def test_scope_reuses_connection_only_within_one_operation(tmp_path: Path, monkeypatch) -> None:
+@pytest.mark.parametrize("unrelated_connections", [0, 4])
+def test_scope_reuses_connection_only_within_one_operation(
+    tmp_path: Path, monkeypatch, unrelated_connections: int
+) -> None:
     store = fixture_store(tmp_path)
     opened = []
     original_connect = sqlite3.connect
 
-    def connect(*args, **kwargs):
-        connection = original_connect(*args, **kwargs)
-        opened.append(connection)
+    def connect(database, *args, **kwargs):
+        connection = original_connect(database, *args, **kwargs)
+        if database in (store.path, str(store.path)):
+            opened.append(connection)
         return connection
 
     monkeypatch.setattr(sqlite3, "connect", connect)
+    for _ in range(unrelated_connections):
+        with sqlite3.connect(tmp_path / "unrelated.db") as unrelated:
+            unrelated.execute("select 1").fetchone()
+        unrelated.close()
     for _ in range(2):
         with store.connection_scope():
             with store._connect() as first:
