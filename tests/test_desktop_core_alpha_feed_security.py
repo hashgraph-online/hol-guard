@@ -49,7 +49,7 @@ def linux_publish_job() -> dict[str, object]:
     return publish_job("publish-linux-x64", linux=True)
 
 
-def test_feed_follows_the_newest_stable_release_and_wakes_after_main_publisher() -> None:
+def test_feed_preserves_trusted_push_without_publication_completion_overlap() -> None:
     text = workflow_text()
     trusted_push = """push:
     branches: [main]
@@ -58,8 +58,10 @@ def test_feed_follows_the_newest_stable_release_and_wakes_after_main_publisher()
       - scripts/release/desktop_core_alpha_feed.py"""
     assert trusted_push in text
     assert "branches: [main]" in text
-    assert 'workflows: ["Publish to PyPI"]' in text
-    assert "workflow_run.conclusion == 'success'" in text
+    config = workflow()
+    triggers = config.get("on", config.get(True))
+    assert isinstance(triggers, dict)
+    assert "workflow_run" not in triggers
 
 
 def test_release_discovery_selects_the_newest_stable_release(tmp_path: Path, capsys) -> None:

@@ -11,8 +11,8 @@ use search::safe_search_arguments;
 pub mod generic;
 
 pub use generic::evaluate_pre_tool_envelope;
+pub use generic::evaluate_pre_tool_envelope_with_context;
 pub use generic::evaluate_pre_tool_envelope_with_extensions;
-pub use generic::evaluate_pre_tool_envelope_with_source;
 
 fn executable_basename(executable: &str) -> &str {
     executable.rsplit(['/', '\\']).next().unwrap_or(executable)
@@ -72,6 +72,8 @@ pub(super) fn sensitive_command(value: &str) -> bool {
         "~/.pypirc",
         "/.netrc",
         "~/.netrc",
+        ".authrc",
+        ".envrc",
         "/.env",
         "~/.env",
         "id_rsa",
@@ -275,7 +277,10 @@ fn exact_safe_command(model: &CanonicalCommandV1, allow_git_helper_context: bool
             "date" => safe_reads::safe_date_arguments(&segment.arguments),
             "ls" => safe_reads::safe_listing_arguments(&segment.arguments),
             "cat" => safe_reads::safe_plain_file_arguments(&segment.arguments),
-            "head" | "tail" => safe_reads::safe_head_tail_arguments(&segment.arguments),
+            // Admit stdin only when every producer in the pipeline is also proven safe.
+            "head" | "tail" => {
+                safe_reads::safe_head_tail_arguments(&segment.arguments, segment.pipeline_index > 0)
+            }
             "git" => safe_git_arguments(&segment.arguments, allow_git_helper_context),
             "gh" => safe_gh_arguments(&segment.arguments),
             "rg" | "grep" => safe_search_arguments(basename, &segment.arguments),

@@ -171,6 +171,17 @@ def test_database_matcher_does_not_treat_attached_option_values_as_flags(tmp_pat
     assert matcher.match(command) == ()
 
 
+def test_database_matcher_rejects_combined_exit_flag_before_execution(tmp_path: Path) -> None:
+    matcher = LeadingSubcommandMatcher(
+        executables=frozenset({"db-admin"}),
+        subcommands=("run",),
+        forbidden_flags_before_delimiter=frozenset({"-h"}),
+    )
+    command = parse_shell_command("db-admin -vh run", cwd=tmp_path, home_dir=tmp_path)
+
+    assert matcher.match(command) == ()
+
+
 @pytest.mark.parametrize(
     ("executables", "command", "minimum_abbreviation_length", "minimum_position", "message"),
     (

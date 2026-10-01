@@ -379,6 +379,7 @@ def test_resolve_default_install_workspace_ignores_cursor_dir_without_git(
     assert resolved is None
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_install_cursor_hook_script_allows_benign_shell_command(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

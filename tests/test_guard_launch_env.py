@@ -19,13 +19,13 @@ except ModuleNotFoundError:  # pragma: no cover - Python 3.10
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
-from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.cli import commands_support_hook_payload as guard_hook_payload_module
 from codex_plugin_scanner.guard.codex_config import read_toml_payload
 from codex_plugin_scanner.guard.consumer.service import diff_artifact
 from codex_plugin_scanner.guard.policy_integrity import PolicyIntegrityVerificationResult
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.conftest import guard_commands_module
 
 
 def _write_text(path: Path, text: str) -> None:
@@ -1136,6 +1136,7 @@ def test_guard_prompt_artifact_terminal_sandbox_block_is_not_queued(monkeypatch,
     assert output.get("review_hint") is None
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_claude_prompt_hook_shows_hol_guard_branding(tmp_path, capsys):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
@@ -1173,6 +1174,7 @@ def test_claude_prompt_hook_shows_hol_guard_branding(tmp_path, capsys):
     assert "branded approval question" in context
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_opencode_prompt_hook_queues_prompt_approval(monkeypatch, tmp_path, capsys):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
