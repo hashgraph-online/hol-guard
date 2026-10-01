@@ -73,10 +73,9 @@ def main() -> int:
         args.compiler,
     ]
     diff = pr_diff_paths()
-    if args.changed_from and diff is None:
-        # Diff unresolvable in PR context: the generated-artifacts guard forbids
-        # carried artifacts, so deferring cannot mask drift; post-merge regen
-        # verification on main still enforces freshness.
+    if args.changed_from and diff is None and not (pending or changed):
+        # Diff unresolvable and no contribution sources to validate: defer
+        # freshness to post-merge regen verification on main.
         return 0
     if diff is not None and args.changed_from:
         carries = not regen_artifacts_absent_from_diff(diff)
