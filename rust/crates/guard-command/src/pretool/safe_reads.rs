@@ -285,7 +285,7 @@ pub(super) fn safe_plain_file_arguments(arguments: &[String]) -> bool {
     saw_target
 }
 
-pub(super) fn safe_head_tail_arguments(arguments: &[String]) -> bool {
+pub(super) fn safe_head_tail_arguments(arguments: &[String], piped_input: bool) -> bool {
     let mut saw_target = false;
     let mut expect_count = false;
     let mut after_options = false;
@@ -345,5 +345,5 @@ pub(super) fn safe_head_tail_arguments(arguments: &[String]) -> bool {
         }
         saw_target = true;
     }
-    saw_target && !expect_count
+    (saw_target || piped_input) && !expect_count
 }

@@ -24,6 +24,44 @@ fn client_deadline_is_bounded() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn startup_wait_honors_remaining_caller_budget() {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let root = std::env::temp_dir().join(format!(
+        "hol-guard-startup-budget-{}-{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    fs::create_dir(&root).unwrap();
+    fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();
+    let lock = acquire_startup_lock(&root).unwrap().unwrap();
+    let caller_budget = Duration::from_secs(2);
+    let scheduling_allowance = Duration::from_millis(500);
+    let started = Instant::now();
+    let result = client_request(&root, b"{}", caller_budget);
+    let elapsed = started.elapsed();
+    drop(lock);
+    fs::remove_dir_all(&root).unwrap();
+
+    assert!(matches!(
+        result.unwrap_err().as_str(),
+        "native_resident_start_in_progress" | "native_client_deadline_exceeded"
+    ));
+    assert!(
+        elapsed >= Duration::from_millis(1_500),
+        "premature startup failure: {elapsed:?}"
+    );
+    assert!(
+        elapsed < caller_budget + scheduling_allowance,
+        "startup exceeded the caller deadline: {elapsed:?}"
+    );
+}
+
 #[test]
 fn client_stream_eof_is_clean_and_partial_headers_fail_closed() {
     use std::io::Cursor;

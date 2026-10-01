@@ -254,7 +254,8 @@ def emit_grok_hook_response(
     )
     _last_grok_policy_action = "allow" if payload.get("decision") not in {"deny", "block"} else live_action
     stream = output_stream if output_stream is not None else sys.stdout
-    stream.write(json.dumps(payload, separators=(",", ":")) + "\n")
+    # stdout is the harness delivery channel; approval payloads must reach the operator.
+    stream.write(json.dumps(payload, separators=(",", ":")) + "\n")  # codeql[py/clear-text-logging-sensitive-data]
     stream.flush()
 
 
