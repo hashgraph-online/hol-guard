@@ -359,8 +359,8 @@
     "src/codex_plugin_scanner/guard/native_approval_v4_portal.py",
     "src/codex_plugin_scanner/guard/native_approval_v4_protocol.py"
    ],
-   "current": "mechanical bounded guard-hook-envelope.v2 serialization, package-bound native invocation, typed result decoding, and harness response projection",
-   "target": "minimal launcher, serialization, and response projection only"
+   "current": "mechanical bounded guard-hook-envelope.v2 and guard-archive-inspection.v1 serialization, package-bound native invocation, typed result decoding, advisory archive-inspection lease admission, and harness response projection",
+   "target": "minimal launcher, archive-inspection lease admission, serialization, and response projection only"
   },
   {
    "id": "python_reference_oracle",
