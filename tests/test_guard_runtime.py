@@ -22481,7 +22481,7 @@ def test_policy_bundle_exact_artifact_rules_apply_with_workspace_scope(tmp_path)
                     "harnesses": ["codex"],
                     "locations": [workspace_a],
                 },
-                "expiresAt": "2026-10-01T00:00:00+00:00",
+                "expiresAt": "2027-10-01T00:00:00+00:00",
                 "sourceDecisionId": "decision-block",
                 "sourceSuggestionId": "suggestion-block",
             },
@@ -22513,7 +22513,7 @@ def test_policy_bundle_exact_artifact_rules_apply_with_workspace_scope(tmp_path)
     assert {item["artifact_id"] for item in exact_decisions} == {allow_artifact, block_artifact}
     assert {item["expires_at"] for item in exact_decisions} == {
         "2026-12-01T00:00:00.000000+00:00",
-        "2026-10-01T00:00:00.000000+00:00",
+        "2027-10-01T00:00:00.000000+00:00",
     }
 
 
