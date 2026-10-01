@@ -58,6 +58,13 @@ _REGEN_INPUT_FILES = (
     "scripts/build_native_command_program.py",
     "scripts/render_command_extension_directory.py",
 )
+_GENERATED_OUTPUTS = frozenset(
+    {
+        "contracts/extensions/native-command-program.v1.json",
+        "tests/fixtures/guard-command-corpus/decision-diff-report.json",
+        "tests/fixtures/guard-command-corpus/decision-diff-report.framed-sha256",
+    }
+)
 
 
 def _regen_inputs_changed(base_sha: str) -> list[str]:
@@ -89,7 +96,8 @@ def _regen_inputs_changed(base_sha: str) -> list[str]:
         completed = _diff()
     if completed.returncode:
         return []
-    return [line for line in completed.stdout.splitlines() if line.strip()]
+    names = [line for line in completed.stdout.splitlines() if line.strip()]
+    return [path for path in names if path not in _GENERATED_OUTPUTS]
 
 
 def main() -> int:

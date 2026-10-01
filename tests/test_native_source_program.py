@@ -86,11 +86,6 @@ def example(compiler: Path, build: dict) -> dict:
 @requires_fresh_projections
 def test_checked_in_program_matches_native_authoring(compiler: Path, compiled: dict) -> None:
     checked_in = json.loads((ROOT / "contracts/extensions/native-command-program.v1.json").read_bytes())
-    if checked_in != compiled["program"]:
-        # The checked-in projection predates this tree's compiler inputs
-        # (implementation digest covers every crate source); maintainer regen
-        # refreshes it post-merge, so freshness is asserted then.
-        pytest.skip("checked-in program is one regen behind the branch's native sources")
     assert checked_in == compiled["program"]
     result = subprocess.run(
         [str(compiler), "evaluate-batch"],
