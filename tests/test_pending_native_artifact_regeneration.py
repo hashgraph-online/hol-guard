@@ -35,6 +35,7 @@ def test_source_only_native_changes_report_pending(detector, monkeypatch, capsys
     monkeypatch.setattr(subprocess, "run", diff)
     monkeypatch.setattr(detector, "contribution_ids", lambda: {"command.example"})
     monkeypatch.setattr(detector, "catalog_ids", lambda: {"command.example"})
+    monkeypatch.setattr(detector, "regen_artifacts_absent_from_diff", lambda: False)
     monkeypatch.setattr(sys, "argv", ["detector", "--changed-from", "a" * 40, "--flag"])
     assert detector.main() == 0
     assert capsys.readouterr().out == "true\n"
@@ -83,10 +84,13 @@ def test_preparation_retains_generated_outputs_and_checks_after_rebuild(
     import types
 
     detector = types.SimpleNamespace(
+        REGEN_INPUT_PREFIXES=("rust/",),
         ContributionDiffError=RuntimeError,
         _contributions_changed=lambda base: ["rust/Cargo.lock"] if pending else [],
         catalog_ids=lambda: {"command.example"},
         contribution_ids=lambda: {"command.example"},
+        pr_diff_paths=lambda: None,
+        regen_artifacts_absent_from_diff=lambda diff=None: False,
     )
     monkeypatch.setitem(sys.modules, "detect_pending_extension_regen", detector)
     monkeypatch.setattr(sys, "argv", ["verify", "--compiler",

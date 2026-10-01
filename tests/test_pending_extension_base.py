@@ -39,7 +39,19 @@ def test_known_base_is_compared_without_fetch(monkeypatch: pytest.MonkeyPatch, s
     """Case-insensitive SHA inputs retain exact contribution detection."""
     calls = _git_results(monkeypatch, [(0, "contributions/command-sources/command.fixture.json\n")])
     assert detector._contributions_changed(sha) == ["contributions/command-sources/command.fixture.json"]
-    assert calls == [["git", "diff", "--name-only", BASE, "HEAD", "--", "contributions/", "rust/"]]
+    assert calls == [[
+        "git", "diff", "--name-only", BASE, "HEAD", "--",
+        "contributions/",
+        "rust/",
+        "scripts/build_native_command_program.py",
+        "src/codex_plugin_scanner/guard/",
+        "contracts/extensions/",
+        "contracts/managed-controls/",
+        "docs/guard/",
+        "tests/fixtures/",
+        "tests/guard_command_",
+        "tests/test_guard_",
+    ]]
 
 
 def test_successful_empty_diff_is_the_only_unchanged_result(monkeypatch: pytest.MonkeyPatch) -> None:
