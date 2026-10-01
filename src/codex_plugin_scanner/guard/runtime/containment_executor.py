@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
+from .contained_execution_common import _MAX_EXECUTABLE_BYTES, file_sha256
 from .containment_backend_status import bwrap_execution_completed
 from .containment_contract import (
     ContainmentAttestation,
@@ -23,7 +24,6 @@ from .containment_contract import (
 from .containment_outputs import ContainmentCapturedOutput, OutputBoundaryError, capture_declared_outputs
 
 _OUTPUT_LIMIT: Final = 64 * 1024
-_MAX_EXECUTABLE_BYTES: Final = 256 * 1024 * 1024
 _MAX_INPUT_BYTES: Final = 256 * 1024 * 1024
 _MAX_INPUT_FILES: Final = 20_000
 _LINUX_HOSTS: Final = "127.0.0.1 localhost\n::1 localhost ip6-localhost ip6-loopback\n"
@@ -49,23 +49,6 @@ class _BackendIdentity:
     kind: ContainmentBackend
     path: str
     digest: str
-
-
-def file_sha256(path: str) -> str:
-    """Hash one non-symlinked regular file without following a replacement link."""
-
-    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
-    descriptor = os.open(path, flags)
-    try:
-        metadata = os.fstat(descriptor)
-        if not stat.S_ISREG(metadata.st_mode) or metadata.st_size > _MAX_EXECUTABLE_BYTES:
-            raise ValueError("executable must be a bounded regular file")
-        digest = hashlib.sha256()
-        while chunk := os.read(descriptor, 1024 * 1024):
-            digest.update(chunk)
-        return digest.hexdigest()
-    finally:
-        os.close(descriptor)
 
 
 def execute_contained(

@@ -640,6 +640,76 @@ def test_tool_call_rebuilds_current_authority_after_atomic_claim(
     )
 
 
+@pytest.mark.parametrize("fresh_action", ("allow", "block", None))
+def test_tool_call_refresh_releases_storage_gate_after_durable_claim(
+    tmp_path: Path,
+    fresh_action: str | None,
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    artifact = _dangerous_tool_artifact()
+    arguments = {"command": "rm relative-target"}
+    actions: dict[str, GuardAction] = {}
+    config = GuardConfig(
+        guard_home=tmp_path / "guard-home", workspace=workspace, mode="prompt", artifact_actions=actions
+    )
+    digest = build_tool_call_hash(artifact, arguments, workspace=workspace, config=config)
+    store = GuardStore(tmp_path / "guard-home")
+    assert (
+        store.record_local_once_approval(
+            request_id="tool-call-refresh-storage-gate",
+            harness=artifact.harness,
+            artifact_id=artifact.artifact_id,
+            artifact_hash=digest,
+            workspace=str(workspace),
+            publisher=artifact.publisher,
+            action="allow",
+            created_at="2026-07-17T00:00:00+00:00",
+            expires_at="2099-07-17T00:00:00+00:00",
+        )
+        is not None
+    )
+    refreshed = []
+
+    def refresh():
+        # An in-scope refresh would attempt a forbidden read-to-write upgrade.
+        with store._hold_storage_gate(exclusive=True):
+            refreshed.append(True)
+        assert (
+            store.resolve_policy_decision(
+                artifact.harness, artifact.artifact_id, digest, str(workspace), consume_one_shot=False
+            )
+            is None
+        )
+        if fresh_action is None:
+            return None
+        if fresh_action == "block":
+            actions[artifact.artifact_id] = "block"
+        return (
+            config,
+            artifact,
+            build_tool_call_hash(artifact, arguments, workspace=workspace, config=config),
+            arguments,
+        )
+
+    decision = evaluate_tool_call(
+        store=store,
+        config=config,
+        artifact=artifact,
+        artifact_hash=digest,
+        arguments=arguments,
+        fresh_authority_provider=refresh,
+    )
+    assert refreshed == [True]
+    assert decision.action == (fresh_action or "require-reapproval")
+    assert (
+        store.resolve_policy_decision(
+            artifact.harness, artifact.artifact_id, digest, str(workspace), consume_one_shot=False
+        )
+        is None
+    )
+
+
 def test_tool_call_missing_post_claim_authority_fails_closed(tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()

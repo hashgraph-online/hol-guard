@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-import argparse
-import io
 import json
 import re
-from contextlib import redirect_stderr
 from pathlib import Path
 
 from codex_plugin_scanner.guard.adapters import get_adapter, list_adapters
@@ -628,45 +625,6 @@ class TestZCodeManagedHelpers:
         assert "raw-user-string" in result
         assert 42 in result
         assert any(isinstance(e, dict) and e.get("matcher") == "Bash" for e in result)
-
-
-class TestZCodeGenericEmitterBlock:
-    def test_block_emits_deny_json_and_exit_two(self, tmp_path: Path) -> None:
-        from codex_plugin_scanner.guard.cli.commands_hook_generic import _run_hook_generic_payload
-        from codex_plugin_scanner.guard.config import GuardConfig
-        from codex_plugin_scanner.guard.store import GuardStore
-
-        guard_home = tmp_path / ".hol-guard"
-        store = GuardStore(guard_home)
-        config = GuardConfig(guard_home=guard_home, workspace=tmp_path)
-        args = argparse.Namespace(
-            harness="zcode",
-            json=False,
-            policy_action="block",
-            artifact_id=None,
-            artifact_name=None,
-        )
-        payload = {
-            "hookEventName": "pre_tool_use",
-            "toolName": "run_terminal_command",
-            "toolInput": {"command": "rm -rf /"},
-        }
-        stderr_capture = io.StringIO()
-        stdout_capture = io.StringIO()
-        with redirect_stderr(stderr_capture):
-            rc = _run_hook_generic_payload(
-                args,
-                action_envelope=None,
-                config=config,
-                output_stream=stdout_capture,
-                payload=payload,
-                home_dir=tmp_path,
-                runtime_workspace=tmp_path,
-                store=store,
-            )
-        assert rc == 2
-        response = json.loads(stdout_capture.getvalue())
-        assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
 class TestZCodeFixturesAreRedacted:

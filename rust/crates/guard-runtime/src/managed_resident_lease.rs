@@ -5,8 +5,6 @@ use std::fs::OpenOptions;
 use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime};
 #[cfg(test)]
@@ -58,30 +56,10 @@ fn notify_lock_retry_deadline_for_test() {
     });
 }
 
-pub(super) struct ClientLease {
-    directory: PathBuf,
-    path: PathBuf,
-    private_root: PathBuf,
-    identity: LeaseIdentity,
-    stopped: Arc<AtomicBool>,
-    heartbeat: Option<thread::JoinHandle<()>>,
-}
-
-impl Drop for ClientLease {
-    fn drop(&mut self) {
-        self.stopped.store(true, Ordering::Release);
-        if let Some(heartbeat) = self.heartbeat.take() {
-            let _ = heartbeat.join();
-        }
-        if let Ok(_lock) = acquire_directory_lock_with_retry(
-            &self.directory,
-            &self.private_root,
-            LEASE_CLEANUP_RETRY_BUDGET,
-        ) {
-            let _ = self.identity.remove_if_same(&self.path);
-        }
-    }
-}
+#[path = "managed_resident_lease_owner.rs"]
+mod owner;
+use owner::deadline_for_timeout;
+pub(super) use owner::ClientLease;
 
 struct LeaseDirectoryLock {
     file: File,
@@ -125,10 +103,29 @@ fn acquire_directory_lock_with_retry(
     retry_budget: Duration,
 ) -> Result<LeaseDirectoryLock, String> {
     let deadline = Instant::now() + retry_budget;
+    acquire_directory_lock_until(directory, private_root, deadline)
+}
+
+fn acquire_directory_lock_until(
+    directory: &Path,
+    private_root: &Path,
+    deadline: Instant,
+) -> Result<LeaseDirectoryLock, String> {
     let mut delay = LEASE_ACQUIRE_RETRY_INITIAL_DELAY;
     loop {
+        if Instant::now() >= deadline {
+            #[cfg(test)]
+            notify_lock_retry_deadline_for_test();
+            return Err("native_resident_lease_busy".to_owned());
+        }
         if let Some(lock) = acquire_directory_lock(directory, private_root)? {
-            return Ok(lock);
+            if Instant::now() < deadline {
+                return Ok(lock);
+            }
+            drop(lock);
+            #[cfg(test)]
+            notify_lock_retry_deadline_for_test();
+            return Err("native_resident_lease_busy".to_owned());
         }
         let remaining = deadline.saturating_duration_since(Instant::now());
         if remaining.is_zero() {
@@ -142,6 +139,42 @@ fn acquire_directory_lock_with_retry(
 }
 
 pub(super) fn acquire(state_base: &Path) -> Result<ClientLease, String> {
+    acquire_with_lock(state_base, |directory, private_root| {
+        acquire_directory_lock_with_retry(directory, private_root, LEASE_ACQUIRE_RETRY_BUDGET)
+    })
+}
+
+pub(super) fn acquire_until(state_base: &Path, deadline: Instant) -> Result<ClientLease, String> {
+    acquire_with_lock(state_base, |directory, private_root| {
+        acquire_directory_lock_until(directory, private_root, deadline)
+    })
+    .map(|lease| lease.with_deadline(deadline))
+}
+
+pub(crate) fn client_request(
+    state_base: &Path,
+    payload: &[u8],
+    timeout: Duration,
+) -> Result<Vec<u8>, String> {
+    let overall_deadline = deadline_for_timeout(timeout)?;
+    let client_lease = acquire_until(state_base, overall_deadline)?;
+    super::client_request_with_deadline(state_base, payload, overall_deadline, &client_lease)
+}
+
+pub(super) fn client_request_with_lease(
+    state_base: &Path,
+    payload: &[u8],
+    timeout: Duration,
+    client_lease: &ClientLease,
+) -> Result<Vec<u8>, String> {
+    let overall_deadline = deadline_for_timeout(timeout)?;
+    super::client_request_with_deadline(state_base, payload, overall_deadline, client_lease)
+}
+
+fn acquire_with_lock<F>(state_base: &Path, acquire_lock: F) -> Result<ClientLease, String>
+where
+    F: FnOnce(&Path, &Path) -> Result<LeaseDirectoryLock, String>,
+{
     let private_root = private_root_for_state_base(state_base)?;
     let directory = lease_directory(state_base)?;
     let process_id = std::process::id();
@@ -152,8 +185,7 @@ pub(super) fn acquire(state_base: &Path) -> Result<ClientLease, String> {
     let nonce = crate::resident_state_encoding::hex_bytes(&nonce);
     let path = directory.join(format!("{LEASE_PREFIX}{process_id}-{nonce}{LEASE_SUFFIX}"));
     let contents = format!("{process_id}\n{start_marker}\n{digest}\n");
-    let directory_lock =
-        acquire_directory_lock_with_retry(&directory, &private_root, LEASE_ACQUIRE_RETRY_BUDGET)?;
+    let directory_lock = acquire_lock(&directory, &private_root)?;
     let mut file = crate::resident_state::private_file(&path, true, &private_root)?;
     let identity = match LeaseIdentity::from_file(&file) {
         Ok(identity) => identity,
@@ -175,48 +207,13 @@ pub(super) fn acquire(state_base: &Path) -> Result<ClientLease, String> {
         let _ = identity.remove_if_same(&path);
         return Err("native_resident_lease_write_failed".to_owned());
     }
-    let stopped = Arc::new(AtomicBool::new(false));
-    let heartbeat_stopped = Arc::clone(&stopped);
-    let heartbeat_directory = directory.clone();
-    let heartbeat_path = path.clone();
-    let heartbeat_private_root = private_root.clone();
-    let heartbeat_contents = contents.clone();
-    let heartbeat = thread::spawn(move || {
-        while !heartbeat_stopped.load(Ordering::Acquire) {
-            thread::sleep(LEASE_HEARTBEAT);
-            if heartbeat_stopped.load(Ordering::Acquire) {
-                break;
-            }
-            if let Ok(Some(directory_lock)) =
-                acquire_directory_lock(&heartbeat_directory, &heartbeat_private_root)
-            {
-                let Ok(mut file) = crate::resident_state::private_file(
-                    &heartbeat_path,
-                    false,
-                    &heartbeat_private_root,
-                ) else {
-                    break;
-                };
-                // Hold the lock through the write. Cleanup also holds it
-                // while deciding a lease is expired, so it cannot unlink a
-                // renewal that has already started. Durability stays outside
-                // the lock.
-                let wrote = file.write_all(heartbeat_contents.as_bytes());
-                drop(directory_lock);
-                if wrote.and_then(|()| file.sync_all()).is_err() {
-                    break;
-                }
-            }
-        }
-    });
-    Ok(ClientLease {
+    Ok(ClientLease::new(
         directory,
         path,
         private_root,
         identity,
-        stopped,
-        heartbeat: Some(heartbeat),
-    })
+        contents,
+    ))
 }
 
 struct LeaseFile {

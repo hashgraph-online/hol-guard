@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from ..approval_link_output import native_review_reason
+from ..native_decision_receipt import valid_prompt_risk_classes
 from .hook_availability_policy import hook_action_is_emergency_safe
 
 
@@ -125,6 +126,7 @@ def _canonical_hook_harness(harness: str) -> str:
 
 
 _GROK_DECISION_HARNESSES = frozenset({"grok", "openclaw"})
+
 _SILENT_WARNING_CODES = frozenset({"native_policy_observed"})
 
 
@@ -295,6 +297,67 @@ def _native_review_permission_decision(harness: str) -> str:
     if canonical in {"codex", "kimi", "grok", "hermes", "devin"}:
         return "deny"
     return "ask"
+
+
+_NATIVE_PROMPT_RISK_LABELS = {
+    "local_env_read": "Prompt requests a local .env file.",
+    "sensitive_material": "Prompt requests potentially sensitive local material.",
+    "exfil_intent": "Prompt includes exfiltration-oriented transfer intent.",
+    "destructive_intent": "Prompt includes a destructive local action.",
+    "subprocess_intent": "Prompt requests subprocess execution.",
+    "guard_bypass_intent": "Prompt includes Guard bypass intent.",
+    "prompt_injection_intent": "Prompt asks to override trusted instructions.",
+}
+
+
+def harness_json_from_native_prompt(harness: str, response: Mapping[str, object]) -> dict[str, object]:
+    canonical = _canonical_hook_harness(harness)
+    if canonical == "grok":
+        return {}
+    action = response.get("minimum_action")
+    reason_code = str(response.get("reason_code") or "native_prompt_unavailable")
+    classes = response.get("prompt_risk_classes")
+    risk_signals = (
+        [_NATIVE_PROMPT_RISK_LABELS[code] for code in cast(list[str], classes)]
+        if valid_prompt_risk_classes(classes)
+        else []
+    )
+    if response.get("decision") == "allow" and action in {"allow", "warn"}:
+        if canonical == "codex":
+            return {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit"}}
+        output = {
+            "policy_action": action,
+            "reason_code": reason_code,
+            "hookSpecificOutput": {"hookEventName": "UserPromptSubmit"},
+        }
+        if risk_signals and canonical != "copilot":
+            output["risk_signals"] = risk_signals
+        return output
+    reason = str(response.get("reason") or "HOL Guard could not complete native prompt review safely.")
+    policy_action = action if action in {"review", "require-reapproval", "sandbox-required", "block"} else "block"
+    if canonical == "copilot":
+        return {
+            "behavior": "deny",
+            "message": reason,
+            "interrupt": False,
+            "policy_action": policy_action,
+            "reason_code": reason_code,
+        }
+    output: dict[str, object] = {
+        "decision": "block",
+        "reason": reason,
+        "systemMessage": reason,
+        "policy_action": policy_action,
+        "reason_code": reason_code,
+        "hookSpecificOutput": {"hookEventName": "UserPromptSubmit"},
+    }
+    if risk_signals:
+        output["risk_signals"] = risk_signals
+    if canonical == "codex":
+        output["continue"] = False
+        output["stopReason"] = reason
+        output["hookSpecificOutput"] = {"hookEventName": "UserPromptSubmit", "additionalContext": reason}
+    return output
 
 
 def harness_json_from_native_post_tool(
@@ -508,6 +571,7 @@ __all__ = [
     "harness_json_from_native_post_tool",
     "harness_json_from_native_pre_tool",
     "harness_json_from_native_pre_tool_review",
+    "harness_json_from_native_prompt",
     "harness_json_from_review_response",
     "integrity_fail_closed_pre_tool_response",
     "observe_lifecycle_fail_safe_response",
