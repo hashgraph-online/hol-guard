@@ -122,7 +122,7 @@ def test_orphan_or_authoritative_listing_is_rejected(tmp_path: Path) -> None:
     root = copy_sources(tmp_path)
     path = root / "contributions/extension-listings/command.orphan.json"
     path.write_text("{}")
-    with pytest.raises(ValueError, match="existing external"):
+    with pytest.raises(ValueError, match="legacy contribution v1"):
         exporter.export_directory(root)
     path.unlink()
     path = root / "contributions/extension-listings/command.blitcp.json"
