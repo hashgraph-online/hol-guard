@@ -235,5 +235,3 @@ def test_v4_result_is_phase_and_context_bounded() -> None:
     assert isinstance(receipt, dict)
     receipt["authenticator_sign_count"] = -1
     assert decode_native_approval_v4_result(result, phase="consumed") is None
-
-

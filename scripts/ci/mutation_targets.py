@@ -64,7 +64,7 @@ def render_mutmut_config(target: MutationTarget) -> str:
             "[tool.mutmut]",
             'source_paths = ["src"]',
             f'only_mutate = ["{target.source_path}"]',
-            'also_copy = ["src/codex_plugin_scanner"]',
+            'also_copy = ["src/codex_plugin_scanner", "docs/guard/contracts/guard-cloud-review.md"]',
             f"pytest_add_cli_args_test_selection = [{test_selection}]",
             "timeout_multiplier = 30.0",
             "timeout_constant = 5.0",

@@ -95,6 +95,7 @@ from ..cloud_exception_requests import (
     fetch_cloud_exception_requests,
     submit_cloud_exception_request,
 )
+from ..codex_binding_capture_writer import start_codex_binding_capture_writer
 from ..codex_live_decision import complete_codex_live_decision, resolve_codex_live_allow_authority
 from ..codex_live_decision_revalidation import revalidate_codex_live_allow
 from ..codex_resume import get_request_resume_status, retry_request_resume
@@ -601,6 +602,9 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         writer = getattr(self, "runtime_hook_evidence_writer", None)
         if writer is not None:
             _ = writer.stop(timeout_seconds=1.0)
+        capture_writer = getattr(self, "codex_binding_capture_writer", None)
+        if capture_writer is not None:
+            capture_writer.stop_capture()
         super().server_close()
 
     def __init__(
@@ -699,6 +703,7 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         )
         self.store.set_policy_integrity_state_listener(self.publish_trust_state)
         self.runtime_hook_evidence_writer = RuntimeHookEvidenceWriter(store=store)
+        self.codex_binding_capture_writer = start_codex_binding_capture_writer()
         self._initialize_request_services()
         self.request_executors_stopped = False
         super().__init__(server_address, handler_class)
@@ -707,7 +712,11 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         from .hook_worker import HookWorker
 
         try:
-            self.hook_worker = HookWorker(store=self.store, activity_writer=self.runtime_hook_evidence_writer)
+            self.hook_worker = HookWorker(
+                store=self.store,
+                activity_writer=self.runtime_hook_evidence_writer,
+                capture_writer=self.codex_binding_capture_writer,
+            )
             self.extension_control_runtime = ExtensionControlRuntime(
                 self.store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
             )
@@ -742,6 +751,8 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
                 if executor is not None:
                     _ = executor.shutdown(timeout_seconds=1.0)
             _ = self.runtime_hook_evidence_writer.stop(timeout_seconds=1.0)
+            if self.codex_binding_capture_writer is not None:
+                self.codex_binding_capture_writer.stop_capture()
             _ = self.hook_process_runner.close_contained()
             raise
 
