@@ -7,6 +7,7 @@ from collections.abc import Mapping
 from ..models import GuardAction, GuardArtifact
 from .extension_control_contract import ExtensionControlLayer
 from .extension_trust import extension_is_active
+from .mcp_protection import package_launcher_name
 from .mcp_server_contribution import (
     catalog_id_for_mcp_id,
     load_mcp_contribution_payloads,
@@ -57,13 +58,35 @@ def apply_contributed_mcp_decision(
         )
     if current_action not in _REVIEW_ACTIONS:
         return None
-    if state == "allow" and not lockdown:
+    if state == "allow" and not lockdown and _exact_package_launch(artifact, payload):
         return (
             "allow",
             "catalog-mcp-extension",
             "This MCP tool is allowed by a catalog MCP server on this device.",
         )
     return None
+
+
+def _exact_package_launch(artifact: GuardArtifact, payload: Mapping[str, object]) -> bool:
+    """Allow defaults weaken policy, so they need the declared launch, not just the name.
+
+    Package matching uses the package name alone, which is right for review and
+    block defaults (they can only strengthen policy). An allow default also
+    requires the configured launcher to be the one the contribution declares and
+    the package to come from the launcher's default registry, so a same-named
+    package from another launcher or a custom registry keeps its existing
+    decision.
+    """
+    launch = payload.get("launch")
+    if not isinstance(launch, Mapping) or launch.get("kind") != "package-launcher":
+        return False
+    declared = launch.get("command")
+    command = _mcp_identity_command(artifact)
+    if not isinstance(declared, str) or not isinstance(command, str):
+        return False
+    if package_launcher_name(command) != declared.strip().lower():
+        return False
+    return _mcp_identity_field(artifact, "package_source") == "default"
 
 
 def matching_mcp_contribution(artifact: GuardArtifact) -> dict[str, object] | None:
@@ -134,13 +157,17 @@ def _package_name(artifact: GuardArtifact) -> str | None:
 
 
 def _mcp_identity_command(artifact: GuardArtifact) -> object:
+    return _mcp_identity_field(artifact, "command")
+
+
+def _mcp_identity_field(artifact: GuardArtifact, field: str) -> object:
     metadata = artifact.metadata
     if not isinstance(metadata, Mapping):
         return None
     identity = metadata.get("mcp_server_identity")
     if not isinstance(identity, Mapping):
         return None
-    return identity.get("command")
+    return identity.get(field)
 
 
 def _mcp_transport(artifact: GuardArtifact) -> str | None:

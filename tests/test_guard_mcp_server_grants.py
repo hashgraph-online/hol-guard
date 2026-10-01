@@ -167,6 +167,64 @@ def test_allow_does_not_override_block_floor() -> None:
     assert apply_contributed_mcp_decision(enabled, artifact, "block") is None
 
 
+def _authyouragent(command: str, args: tuple[str, ...], tool_name: str):
+    identity = build_mcp_server_identity(config_path="", command=command, args=args, transport="stdio")
+    return build_tool_call_artifact(
+        harness="codex",
+        server_name="authyouragent",
+        tool_name=tool_name,
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+        server_identity=identity,
+    )
+
+
+_AUTHYOURAGENT_ON = _AuthorityStore(
+    (_layer(ControlLayerKind.LOCAL_ADMIN, "command.mcp-authyouragent", ControlState.ENABLED),)
+)
+
+
+@pytest.mark.parametrize(
+    "args",
+    [("-y", "authyouragent-mcp"), ("authyouragent-mcp@0.3.1",), ("--yes", "authyouragent-mcp")],
+)
+def test_allow_default_applies_to_declared_launch(args: tuple[str, ...]) -> None:
+    artifact = _authyouragent("npx", args, "read_page")
+    decision = apply_contributed_mcp_decision(_AUTHYOURAGENT_ON, artifact, "review")
+    assert decision is not None
+    assert decision[0] == "allow"
+
+
+@pytest.mark.parametrize(
+    ("command", "args"),
+    [
+        ("pnpm", ("dlx", "authyouragent-mcp")),
+        ("bunx", ("authyouragent-mcp",)),
+        ("npx", ("--registry=https://registry.example.test", "authyouragent-mcp")),
+        ("npx", ("--registry", "https://registry.example.test", "-y", "authyouragent-mcp")),
+    ],
+)
+def test_allow_default_needs_declared_launcher_and_default_registry(command: str, args: tuple[str, ...]) -> None:
+    artifact = _authyouragent(command, args, "read_page")
+    assert apply_contributed_mcp_decision(_AUTHYOURAGENT_ON, artifact, "review") is None
+
+
+@pytest.mark.parametrize(
+    ("command", "args"),
+    [
+        ("npx", ("-y", "authyouragent-mcp")),
+        ("pnpm", ("dlx", "authyouragent-mcp")),
+        ("npx", ("--registry=https://registry.example.test", "authyouragent-mcp")),
+    ],
+)
+def test_review_default_still_matches_by_package_name(command: str, args: tuple[str, ...]) -> None:
+    artifact = _authyouragent(command, args, "fill_secret")
+    decision = apply_contributed_mcp_decision(_AUTHYOURAGENT_ON, artifact, "allow")
+    assert decision is not None
+    assert decision[0] == "review"
+
+
 def test_custom_mcp_grant_overrides_contribution(tmp_path: Path) -> None:
     identity = _identity()
     store = GuardStore(tmp_path / "guard-home")
