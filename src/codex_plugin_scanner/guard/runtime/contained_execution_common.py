@@ -8,19 +8,10 @@ import os
 import stat
 from pathlib import Path
 
+from ..file_identity import content_stat_identity
+
 _ALLOWED_ENVIRONMENT_KEYS = ("LANG", "LC_ALL", "LC_CTYPE", "NO_COLOR", "TERM")
 _MAX_EXECUTABLE_BYTES = 256 * 1024 * 1024
-
-
-def _file_identity(metadata: os.stat_result) -> tuple[int, int, int, int, int, int]:
-    return (
-        metadata.st_dev,
-        metadata.st_ino,
-        metadata.st_size,
-        metadata.st_mode,
-        metadata.st_mtime_ns,
-        metadata.st_ctime_ns,
-    )
 
 
 def file_sha256(path: str) -> str:
@@ -39,8 +30,8 @@ def file_sha256(path: str) -> str:
         before = os.fstat(descriptor)
         if not stat.S_ISREG(before.st_mode) or before.st_size > _MAX_EXECUTABLE_BYTES:
             raise ValueError("executable must be a bounded regular file")
-        before_identity = _file_identity(before)
-        if leaf_metadata is not None and _file_identity(leaf_metadata) != before_identity:
+        before_identity = content_stat_identity(before)
+        if leaf_metadata is not None and content_stat_identity(leaf_metadata) != before_identity:
             raise ValueError("executable identity changed before hashing")
 
         digest = hashlib.sha256()
@@ -54,10 +45,10 @@ def file_sha256(path: str) -> str:
         if read_bytes != before.st_size:
             raise ValueError("executable identity changed while hashing")
         after = os.fstat(descriptor)
-        if _file_identity(after) != before_identity:
+        if content_stat_identity(after) != before_identity:
             raise ValueError("executable identity changed while hashing")
         final_path = os.lstat(path)
-        if not stat.S_ISREG(final_path.st_mode) or _file_identity(final_path) != _file_identity(after):
+        if not stat.S_ISREG(final_path.st_mode) or content_stat_identity(final_path) != content_stat_identity(after):
             raise ValueError("executable identity changed while hashing")
         return digest.hexdigest()
     finally:
