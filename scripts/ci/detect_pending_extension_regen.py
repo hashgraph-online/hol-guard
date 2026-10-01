@@ -130,9 +130,12 @@ def _contributions_changed(base_sha: str) -> list[str]:
 
 
 def _git(*arguments: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        ["git", *arguments], cwd=ROOT, check=False, capture_output=True, text=True, timeout=30
-    )
+    try:
+        return subprocess.run(
+            ["git", *arguments], cwd=ROOT, check=False, capture_output=True, text=True, timeout=30
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return subprocess.CompletedProcess(["git", *arguments], 1, "", "")
 
 
 def pr_diff_paths() -> list[str] | None:
