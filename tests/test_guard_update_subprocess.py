@@ -83,9 +83,22 @@ def _build_manager_context(
     guard_home: Path | None = None,
     source_url: str | None = None,
 ) -> tuple[TrustedUpdateContext, Path]:
+    trusted_python_import_paths = update_subprocess_module._trusted_python_import_paths()
     prefix, manager_bin = _manager_layout(tmp_path, installer_kind)
-    manager_path = manager or _write_executable(manager_bin / installer_kind)
+    if os.name == "nt":
+        profile = tmp_path / "windows-profile"
+        manager_bin = profile / ".local" / "bin"
+        manager_bin.mkdir(parents=True)
+        monkeypatch.setattr(update_subprocess_module, "trusted_windows_user_profile", lambda: profile)
+        manager_path = manager or Path(shutil.copy2(sys.executable, manager_bin / f"{installer_kind}.exe"))
+    else:
+        manager_path = manager or _write_executable(manager_bin / installer_kind)
     monkeypatch.setattr(update_subprocess_module.sys, "prefix", str(prefix))
+    monkeypatch.setattr(
+        update_subprocess_module,
+        "_trusted_python_import_paths",
+        lambda: trusted_python_import_paths,
+    )
     entries = path_entries or (manager_path.parent, Path(sys.executable).resolve().parent)
     monkeypatch.setenv("PATH", _path_value(*entries))
     context = build_trusted_update_context(
