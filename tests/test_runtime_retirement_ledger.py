@@ -92,6 +92,31 @@ def test_ledger_rejects_empty_or_duplicate_replacements(ledger_repository, value
         _check(ledger_repository)
 
 
+def test_ledger_rejects_obsolete_assertion_without_rationale(ledger_repository) -> None:
+    _, _, ledger = ledger_repository
+    ledger["retired_tests"][0]["status"] = "obsolete_implementation_assertion"
+    ledger["retired_tests"][0]["replacement_nodes"] = []
+    with pytest.raises(RuntimeError, match="obsolete retired test requires a rationale"):
+        _check(ledger_repository)
+
+
+def test_ledger_accepts_obsolete_assertion_with_rationale_and_replacements(ledger_repository) -> None:
+    _, _, ledger = ledger_repository
+    ledger["retired_tests"][0]["status"] = "obsolete_implementation_assertion"
+    ledger["retired_tests"][0]["rationale"] = "the Python oracle assertion has no native equivalent"
+    assert _check(ledger_repository)["mapped_old_tests"] == 2
+
+
+def test_ledger_accepts_obsolete_assertion_with_empty_replacements(ledger_repository) -> None:
+    _, _, ledger = ledger_repository
+    ledger["retired_tests"][0]["status"] = "obsolete_implementation_assertion"
+    ledger["retired_tests"][0]["rationale"] = "the Python oracle assertion has no native equivalent"
+    ledger["retired_tests"][0]["replacement_nodes"] = []
+    result = _check(ledger_repository)
+    assert result["mapped_old_tests"] == 2
+    assert result["replacement_tests"] == 1
+
+
 @pytest.mark.parametrize(
     "source",
     [

@@ -12,6 +12,9 @@ on:
 permissions:
   contents: read
 
+env:
+  UV_HTTP_TIMEOUT: "120"
+
 concurrency:
   group: native-wheel-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -109,7 +112,7 @@ jobs:
         with:
           version: 0.9.26
           enable-cache: true
-      - run: uv sync --frozen --no-dev --extra dev --python 3.12
+      - run: uv sync --frozen --no-dev --group ci-test --python 3.12
       - name: Run wheel-builder contracts
         run: uv run --no-sync pytest ci/native_runtime/test_native_hol_guard_wheel.py tests/test_native_source_compiler.py
           --tb=short
@@ -130,7 +133,7 @@ jobs:
         with:
           version: 0.9.26
           enable-cache: true
-      - run: uv sync --frozen --no-dev --extra dev --python 3.12
+      - run: uv sync --frozen --no-dev --group ci-test --python 3.12
       - uses: ./.github/actions/setup-rust
         with:
           targets: x86_64-unknown-linux-musl
@@ -226,7 +229,7 @@ jobs:
         with:
           version: 0.9.26
           enable-cache: true
-      - run: uv sync --frozen --no-dev --extra dev --python 3.12
+      - run: uv sync --frozen --no-dev --group ci-test --python 3.12
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: hol-guard-native-build-linux-x64
@@ -335,7 +338,7 @@ jobs:
         with:
           version: 0.9.26
           enable-cache: true
-      - run: uv sync --frozen --no-dev --extra dev --python 3.12
+      - run: uv sync --frozen --no-dev --group ci-test --python 3.12
       - uses: ./.github/actions/setup-rust
       - name: Build pure Python wheel
         run: uv build --wheel --out-dir pure-dist
@@ -430,7 +433,7 @@ jobs:
         with:
           version: 0.9.26
           enable-cache: true
-      - run: uv sync --frozen --no-dev --extra dev --python 3.12
+      - run: uv sync --frozen --no-dev --group ci-test --python 3.12
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: hol-guard-native-build-windows-x64

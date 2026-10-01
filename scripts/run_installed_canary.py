@@ -18,7 +18,12 @@ from importlib.metadata import distribution
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
-from scripts.installed_canary_proof import InstalledCanaryError, load_subject, verify_install
+from scripts.installed_canary_proof import (
+    InstalledCanaryError,
+    add_installed_canary_arguments,
+    load_subject,
+    verify_install,
+)
 
 if TYPE_CHECKING:
     from tests.guard_command_corpus_oracle_types import OracleRecord
@@ -224,6 +229,16 @@ def _no_post_execution_proof_smoke() -> dict[str, object]:
             raise InstalledCanaryError(
                 f"Installed no-post-proof hook returned {completed.returncode}, expected prompt-free continuation"
             )
+        response = json.loads(completed.stdout)
+        hook_output = response.get("hookSpecificOutput") if isinstance(response, dict) else None
+        if (
+            not isinstance(response, dict)
+            or response.get("reason_code") != "native_pre_tool_unavailable"
+            or response.get("policy_action") != "block"
+            or not isinstance(hook_output, dict)
+            or hook_output.get("permissionDecision") != "deny"
+        ):
+            raise InstalledCanaryError("Fresh no-post-proof home did not deny its unavailable native decision")
         store = GuardStore(guard_home, prime_policy_integrity=False)
         with closing(sqlite3.connect(store.path)) as connection:
             row = cast(
@@ -236,7 +251,7 @@ def _no_post_execution_proof_smoke() -> dict[str, object]:
                     """
                 ).fetchone(),
             )
-        expected = (harness, "pre", "allowed_unconfirmed", "pre_hook", "warn", "policy", 0)
+        expected = (harness, "pre", "prevented", "pre_hook", "block", "policy", 0)
         if row is None or tuple(row) != expected:
             raise InstalledCanaryError(
                 f"Installed no-post-proof hook persisted unexpected activity evidence: {tuple(row) if row else None!r}"
@@ -302,11 +317,7 @@ def _dashboard_smoke() -> dict[str, object]:
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    _ = parser.add_argument("--subject", type=Path, required=True)
-    _ = parser.add_argument("--version", required=True)
-    _ = parser.add_argument("--source-sha", required=True)
-    _ = parser.add_argument("--repo-root", type=Path, required=True)
-    _ = parser.add_argument("--output", type=Path, required=True)
+    add_installed_canary_arguments(parser)
     return parser
 
 

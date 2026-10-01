@@ -183,6 +183,43 @@ def test_persisted_receipt_correlation_does_not_read_before_writer_progress(
         )
 
 
+def test_receipt_timeout_preserves_failure_and_emits_only_bounded_counters(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    store = _ReceiptStore(tmp_path / "receipts.sqlite3", ("prior",))
+    writer = SimpleNamespace(
+        stats=lambda: {
+            "receipt_accepted": 3,
+            "receipt_processed": 2,
+            "receipt_failures": 1,
+            "receipt_dropped": True,
+            "receipt_deduped": -1,
+            "receipt_durable_pending": 2**31,
+            "private_exception": "sensitive-value",
+        }
+    )
+    with pytest.raises(RuntimeError, match="receipt_persistence_missing"):
+        probe.await_persisted_native_receipt(
+            store, {"prior"}, writer=writer, receipt_processed_before=2, timeout_seconds=0
+        )
+    assert json.loads(capsys.readouterr().out) == {
+        "schema": "guard.installed-native-receipt-persistence-failure.v1",
+        "processed_before": 2,
+        "writer_counters": {"receipt_accepted": 3, "receipt_processed": 2, "receipt_failures": 1},
+    }
+
+
+def test_receipt_timeout_diagnostic_survives_unavailable_writer() -> None:
+    def failed_stats() -> dict[str, object]:
+        raise RuntimeError("sensitive-value")
+
+    assert probe._support.receipt_persistence_diagnostic(SimpleNamespace(stats=failed_stats), True) == {
+        "schema": "guard.installed-native-receipt-persistence-failure.v1",
+        "processed_before": None,
+        "writer_counters": {},
+    }
+
+
 def test_persisted_receipt_correlation_recovers_when_writer_counter_stalls(tmp_path: Path) -> None:
     store = _ReceiptStore(tmp_path / "receipts.sqlite3", ("prior", "current"))
     writer = SimpleNamespace(stats=lambda: {"receipt_processed": 0})

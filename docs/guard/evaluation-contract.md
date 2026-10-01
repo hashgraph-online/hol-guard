@@ -13,20 +13,6 @@ For a network case, start a standalone witness first, call `new_network_pair()`,
 
 `evaluation_preflight.py` checks local scope and artifact bytes. Setup accepts only a private, owned directory beneath the process's configured temporary root on POSIX and allocates an owned child there. A matching digest does not establish how the artifact was installed or which Guard process the host loaded. The network check validates a declaration, not traffic isolation. Host `--version` execution is disabled by default and requires `allow_host_execution=True` inside a separate isolated VM. Redirected environment variables do not constrain file or network access. Preflight and synthetic witnesses alone cannot establish a production capability verdict.
 
-The version probe reuses the bounded interpreter-probe collector. It limits
-combined stdout/stderr to the smaller of the declared output budget and
-64 KiB, and execution to the smaller of the declared duration and two seconds.
-Overflow reports `host_version_output_limit`; deadline expiry reports
-`host_version_timeout`. On POSIX, timed-out or overflowing probes terminate
-their private process group and use a bounded reap interval. This does not
-contain a child that deliberately creates another session or establish a whole-host memory limit;
-the disposable VM remains the outer isolation boundary. An incomplete capture
-cannot pass version validation. Raw probe output is excluded from the report.
-The Windows path reuses the suspended Job Object launcher and refuses to run
-when job assignment fails. Job cleanup failures invalidate the capture. A
-bounded reader-cleanup grace interval cannot make a late capture complete.
-The Linux/macOS package matrix does not establish native Windows verification.
-
 For an interrupted run, the caller may retain `EvaluationSetup.root_path` and its opaque `marker_token` outside the owned child before running host cases, then call `cleanup_interrupted_evaluation_setup(profile, owned_root=..., marker_token=...)`. Recovery checks the validated profile's exact private temporary parent and the ownership marker before removing that one child. It does not scan for orphan directories or reconstruct a lost token. The token must remain local and must not be included in a report or shared evidence package. Recovery is cleanup only; it does not certify the interrupted run or resume a host action.
 
 `evaluation_evidence_package.py` builds a deterministic ZIP from only the validated profile and result records. It does not collect raw host logs or the ownership token; the caller must still review record fields before sharing. The manifest hashes both records and labels them `caller_supplied_unverified`; the archive digest must be pinned through an independent channel before its integrity can be trusted. Verification checks shape, hashes, and canonical bytes without requiring the verifier to share the creator's temporary root, but cannot authenticate a host run or upgrade its evidence level. On POSIX, the optional writer creates a new mode-0600 archive only under the profile's private temporary root and refuses to overwrite an existing file; it fails closed when directory-descriptor writes are unavailable.

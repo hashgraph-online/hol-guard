@@ -16,8 +16,6 @@ import statistics
 from collections.abc import Mapping, MutableMapping, Sequence
 from typing import Final
 
-from codex_plugin_scanner.guard.runtime.hook_review_engine import HOOK_ENGINE_NORMAL_BUDGET_MS
-
 SLO_SCHEMA: Final = "hol-guard.native-installed-slo.v1"
 MIN_RESIDENT_SHARE: Final = 0.99
 MAX_SAFE_FAIL_RATE: Final = 0.0
@@ -26,9 +24,10 @@ MAX_250K_P95_MS: Final = 50.0
 MAX_1M_P95_MS: Final = 120.0
 MAX_5M_P95_MS: Final = 350.0
 # The installed proof measures the complete Python adapter/HTTP/daemon path.
-# Keep its ordinary request budget tied to the existing production hook-engine
-# target instead of applying the direct Rust-runtime latency ceilings here.
-MAX_INSTALLED_ADAPTER_P95_MS: Final = float(HOOK_ENGINE_NORMAL_BUDGET_MS)
+# The retired Python hook engine's normal-request budget is preserved as the
+# installed adapter ceiling instead of the direct Rust-runtime latency
+# ceilings.
+MAX_INSTALLED_ADAPTER_P95_MS: Final = 1000.0
 MAX_INSTALLED_ADAPTER_P99_MS: Final = MAX_INSTALLED_ADAPTER_P95_MS
 MAX_COLD_P95_MS: Final = 150.0
 MAX_READINESS_P95_MS: Final = 400.0

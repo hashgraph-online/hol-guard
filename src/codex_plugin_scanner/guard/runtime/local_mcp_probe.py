@@ -30,6 +30,22 @@ from .mcp_protection import McpServerIdentity, build_mcp_server_identity
 McpProbeStatus = Literal["ok", "empty", "failed"]
 McpToolsRunner = Callable[[Sequence[str]], list[dict[str, object]] | None]
 
+
+class McpProbeError(RuntimeError):
+    """Finite diagnostic for an explicitly configured MCP connection."""
+
+    def __init__(self, reason: str | None) -> None:
+        self.code = {
+            "invalid_launch": "mcp_launch_failed",
+            "transport_failed": "mcp_transport_failed",
+            "initialize_failed": "mcp_initialize_failed",
+            "invalid_initialize": "mcp_initialize_failed",
+            "invalid_discovery": "mcp_initialize_failed",
+            "unsupported_protocol": "mcp_protocol_unsupported",
+        }.get(reason or "", "discovery_failed")
+        super().__init__(self.code)
+
+
 _PACKAGE_LAUNCHERS = frozenset({"bunx", "npx", "npm", "pnpm", "uvx", "yarn", "pipx"})
 _STRICT_PACKAGE_LAUNCHERS = frozenset({"bunx", "npx", "pipx", "uvx"})
 
@@ -106,6 +122,7 @@ def probe_stdio_mcp_server(
     extra_env: Mapping[str, str] | None = None,
     cancel: threading.Event | None = None,
     connection_identity_hash: str | None = None,
+    report_failure: bool = False,
 ) -> McpProbeResult | None:
     """Launch a stdio MCP server and list tools, or return None when it is not MCP."""
 
@@ -119,7 +136,9 @@ def probe_stdio_mcp_server(
         transport="stdio",
     )
     argv = _resolve_launch_argv(tokens, cwd=cwd)
-    if argv is None:
+    if argv is None or (report_failure and not Path(argv[0]).is_file()):
+        if report_failure:
+            raise McpProbeError("invalid_launch")
         return None
     resolved_timeout = _timeout_for(tokens, timeout)
     if runner is not None:
@@ -136,6 +155,8 @@ def probe_stdio_mcp_server(
             connection_identity_hash=connection_identity_hash or server_identity.identity_hash,
         )
         if catalog.protocol_version is None:
+            if report_failure:
+                raise McpProbeError(catalog.reason)
             return None
         raw_tools = list(catalog.tools)
     tools = _tools_from_payload(raw_tools, server_name=_display_name(server_identity, tokens))

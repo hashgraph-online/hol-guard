@@ -144,7 +144,7 @@ def test_regression_action_installs_only_the_same_run_wheel() -> None:
     download = next(step for step in steps if step.get("uses", "").startswith("actions/download-artifact@"))
     assert download["with"] == {"name": "${{ inputs.artifact-name }}"}
     commands = "\n".join(step.get("run", "") for step in steps)
-    assert "--frozen --no-dev --extra dev --no-install-project" in commands
+    assert "--frozen --no-dev --group ci-test --no-install-project" in commands
     assert "native-dist/*.whl" in commands
     assert "native_regression_shard.py" in commands
     tolerated = [step for step in steps if step.get("continue-on-error")]
