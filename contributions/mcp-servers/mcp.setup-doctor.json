@@ -19,7 +19,7 @@
     "command": "npx",
     "package": "setup-doctor"
   },
-  "riskClasses": ["local-filesystem-read"],
+  "riskClasses": ["external-filesystem-read"],
   "tools": [
     { "name": "doctor", "state": "inherit" },
     { "name": "wrapped", "state": "inherit" },
