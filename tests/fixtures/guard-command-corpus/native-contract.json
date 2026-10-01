@@ -1329,9 +1329,9 @@
         "baseline_git_blob": "4cc8d7ccdaa97ad49cb7a4e0bdae6dee04930431",
         "baseline_sha256": "12d74f5afa697c20ecb2af2b9539b1de2a38a812efba6ee13a37446579889255",
         "byte_identical": false,
-        "candidate_git_blob": "8088a4ad724c1235e9ee9313be5eae630aa39d5e",
-        "candidate_sha256": "365286ea9e10ea7d025e553e83c51b35dd097c3c753101bccf9f3491e6900c62",
-        "reviewed_change": "Extract compatibility_model_supported so hook-pipeline callers reuse the same compatibility predicate; decision semantics unchanged."
+        "candidate_git_blob": "dac8e6a9afcc9891db11c4b1ac3eb60550a1765b",
+        "candidate_sha256": "2ff3abbad79d1c8e9dc71db0f3c93e89fc7f6af0de5cc0bc0285b94344127c52",
+        "reviewed_change": "Accept bounded timeout wrapper evidence for inner-command attribution; apply every catalog rule and preserve wrapper review."
       },
       "rust/crates/guard-command/src/command_compatibility/domains.rs": {
         "baseline_git_blob": "9b3e5b7dfa3c418ac4710fdfc143adf6a54f23d8",
@@ -1392,9 +1392,9 @@
       },
       "rust/crates/guard-command/src/parser_wrappers.rs": {
         "byte_identical": false,
-        "candidate_git_blob": "0cf34d2c73b704d00f51d159bf370dac8a06ed79",
-        "candidate_sha256": "2a2e194250f179601774d7620b4bf9d35b899ad0d40218e20a495344726f1cc4",
-        "reviewed_change": "Bound sudo options and encoded stdin shell forms preserve raw source and wrapper evidence; unknown execution modes remain uncertain."
+        "candidate_git_blob": "4cc84046b5252b23adddfbe2ecb5b8f6b43910da",
+        "candidate_sha256": "2ffe9d2f322995d621bfea2b4b61ceb8a742c6b61000487de0acfe1b90761a48",
+        "reviewed_change": "Bound sudo and integer-duration timeout extraction; retain raw source and wrapper evidence, reject unsupported options, nesting and execution modes."
       }
     }
   },
