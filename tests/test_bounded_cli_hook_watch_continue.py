@@ -55,7 +55,7 @@ def _config(tmp_path: Path, *, harness: str) -> dict[str, object]:
     }
 
 
-def test_timeout_allows_grok_when_watch(
+def test_timeout_denies_grok_without_acknowledged_watch(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -85,7 +85,7 @@ def test_timeout_allows_grok_when_watch(
 
     payload = _json_object(output.getvalue())
     assert returncode == 0
-    assert payload == {"decision": "allow"}
+    assert payload["decision"] == "deny"
 
 
 def test_pretty_printed_hook_json_is_accepted(
@@ -110,7 +110,7 @@ def test_pretty_printed_hook_json_is_accepted(
     assert payload == {"decision": "allow", "policy_action": "warn"}
 
 
-def test_timeout_allows_grok_when_watch_has_expired(
+def test_timeout_denies_grok_with_expired_local_watch(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -143,10 +143,10 @@ def test_timeout_allows_grok_when_watch_has_expired(
 
     payload = _json_object(output.getvalue())
     assert returncode == 0
-    assert payload["decision"] == "allow"
+    assert payload["decision"] == "deny"
 
 
-def test_oversized_input_allows_grok_when_watch(
+def test_oversized_input_denies_grok_without_acknowledged_watch(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -163,7 +163,7 @@ def test_oversized_input_allows_grok_when_watch(
 
     payload = _json_object(output.getvalue())
     assert returncode == 0
-    assert payload == {"decision": "allow"}
+    assert payload["decision"] == "deny"
 
 
 def test_oversized_input_preserves_kimi_event_when_watch(
@@ -190,7 +190,7 @@ def test_oversized_input_preserves_kimi_event_when_watch(
     hook_output = payload["hookSpecificOutput"]
     assert isinstance(hook_output, dict)
     assert hook_output["hookEventName"] == "UserPromptSubmit"
-    assert hook_output["permissionDecision"] == "allow"
+    assert "permissionDecision" not in hook_output
 
 
 def test_timeout_continues_post_tool_for_grok(
