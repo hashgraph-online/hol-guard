@@ -223,8 +223,9 @@ def main() -> int:
             print(str(error), file=sys.stderr)
             return 1
     pending = bool(pending_ids) or bool(changed)
+    defer_freshness = regen_artifacts_absent_from_diff() and not pending
     if "--defer-freshness" in sys.argv:
-        print("true" if regen_artifacts_absent_from_diff() else "false")
+        print("true" if defer_freshness else "false")
     elif "--flag" in sys.argv:
         print("true" if pending else "false")
     else:
@@ -234,7 +235,7 @@ def main() -> int:
                     "pending": pending,
                     "pending_ids": pending_ids,
                     "changed_sources": changed,
-                    "defer_freshness": regen_artifacts_absent_from_diff(),
+                    "defer_freshness": defer_freshness,
                 },
                 sort_keys=True,
             )
