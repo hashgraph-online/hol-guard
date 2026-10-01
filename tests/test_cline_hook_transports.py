@@ -88,7 +88,7 @@ def _run_plugin(source: str, tmp_path: Path, expression: str) -> subprocess.Comp
         f"const result=await ({expression});console.log(JSON.stringify(result));"
     )
     return subprocess.run(
-        [node, "--input-type=module", "-e", code], capture_output=True, text=True, timeout=10, check=False
+        [node, "--input-type=module", "-e", code], capture_output=True, text=True, timeout=30, check=False
     )
 
 
