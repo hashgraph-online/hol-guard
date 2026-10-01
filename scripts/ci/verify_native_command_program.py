@@ -73,6 +73,10 @@ def main() -> int:
         args.compiler,
     ]
     diff = pr_diff_paths()
+    if args.changed_from and diff is None:
+        # A failed diff cannot establish that checked-in artifacts are inherited.
+        _run([*command, "--check"])
+        return 0
     if diff is not None and args.changed_from:
         carries = not regen_artifacts_absent_from_diff(diff)
         inputs = any(path.startswith(REGEN_INPUT_PREFIXES) for path in diff)
