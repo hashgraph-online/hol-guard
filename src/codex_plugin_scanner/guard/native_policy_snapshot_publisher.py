@@ -399,6 +399,11 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
             return self._acked and self._snapshot is not None and not self._closed
 
     def _run(self) -> None:
+        # ContextVar bindings from the starting thread do not propagate here;
+        # rebind so observed-identity digests resolve this store's resident.
+        from .native_context import bind_context_digest_home
+
+        bind_context_digest_home(self.guard_home)
         while True:
             with self._condition:
                 if self._closed:

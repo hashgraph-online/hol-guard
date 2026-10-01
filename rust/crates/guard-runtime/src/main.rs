@@ -4,6 +4,7 @@ mod approval;
 mod archive_inspect;
 mod archive_inspect_containment;
 mod context_digest;
+mod context_digest_json;
 mod edge;
 mod hardening;
 mod managed_resident;

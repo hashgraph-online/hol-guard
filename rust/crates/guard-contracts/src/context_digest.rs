@@ -72,11 +72,17 @@ pub enum ContextDigestKindV1 {
         components: ContextDigestComponentsV1,
     },
     /// Domain-separated digest over a configured environment subset.
+    ///
+    /// `values` carries caller-ordered `["key", value]` pairs because distinct
+    /// raw keys can collide after whitespace stripping and the legacy caller
+    /// resolves the collision by last entry in iteration order, which a plain
+    /// JSON object cannot transport.
     ConfiguredEnvironmentHash {
         values: Option<Value>,
         configured_keys: Option<Vec<String>>,
     },
-    /// Domain-separated digest over a configured header subset.
+    /// Domain-separated digest over a configured header subset; same ordered
+    /// pair transport as `ConfiguredEnvironmentHash`.
     ConfiguredHeadersHash {
         values: Option<Value>,
         configured_keys: Option<Vec<String>>,

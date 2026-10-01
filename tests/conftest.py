@@ -134,6 +134,33 @@ def _native_context_home(tmp_path_factory: pytest.TempPathFactory) -> Iterator[P
     # The managed resident refuses to serve until the policy verifier key the
     # publisher would normally provision exists; seed a test key once.
     provision_native_policy_verifier_key(guard_home, b"\x07" * 32)
+    # Pre-warm the capabilities cache and the persistent resident client pool
+    # at session scope.  Tests that patch subprocess.Popen globally would
+    # otherwise intercept the first probe/pool spawn mid-test and break the
+    # digest path (the pool spawns once and is then reused).
+    binary = _context_digest_runtime_binary()
+    if binary is not None:
+        from codex_plugin_scanner.guard import native_context
+
+        previous_native = os.environ.get("HOL_GUARD_NATIVE")
+        previous_binary = os.environ.get("HOL_GUARD_NATIVE_BINARY")
+        os.environ["HOL_GUARD_NATIVE"] = "force"
+        os.environ["HOL_GUARD_NATIVE_BINARY"] = str(binary)
+        try:
+            native_context.native_context_digest(
+                "launch_argv_digest",
+                {"argv": ["guard-context-warmup"]},
+                guard_home=guard_home,
+            )
+        finally:
+            if previous_native is None:
+                os.environ.pop("HOL_GUARD_NATIVE", None)
+            else:
+                os.environ["HOL_GUARD_NATIVE"] = previous_native
+            if previous_binary is None:
+                os.environ.pop("HOL_GUARD_NATIVE_BINARY", None)
+            else:
+                os.environ["HOL_GUARD_NATIVE_BINARY"] = previous_binary
     yield guard_home
     close_native_residents(guard_home)
 

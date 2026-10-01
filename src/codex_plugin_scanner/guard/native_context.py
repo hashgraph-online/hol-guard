@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import threading
 import time
 import uuid
 from collections.abc import Iterator
@@ -47,11 +48,35 @@ _TIMEOUT_SECONDS = 0.5
 # under the default home.  Unbound calls fall back to the default resolution.
 _BOUND_GUARD_HOME: ContextVar[Path | None] = ContextVar("guard_context_digest_home", default=None)
 
+# ContextVars do not propagate to worker threads (the policy publisher, for
+# example, builds observed MCP identities on its own thread).  Remember the
+# most recently bound enforcement home at process level so those threads —
+# and genuinely unbound callers — reuse the deployment's resident rather than
+# resolving the default home.  Digest output is home-independent, so the worst
+# case is a second resident spawn, never a different answer.
+_LAST_BOUND_LOCK = threading.Lock()
+_LAST_BOUND_HOME: Path | None = None
+
+# Digest results are pure functions of (kind, canonical request, guard home):
+# identical requests always map to identical tokens/digests.  Enforcement paths
+# re-hash the configured environment on every authority rebuild, so cache
+# successful results keyed by the request digest and avoid a resident round
+# trip per rebuild.  `request_sha256` cannot collide across differing inputs
+# without a SHA-256 break, so correctness does not depend on eviction order.
+_RESULT_CACHE_LOCK = threading.Lock()
+_RESULT_CACHE: dict[tuple[str, str, str], dict[str, Any]] = {}
+_RESULT_CACHE_MAX = 256
+
 
 def bind_context_digest_home(guard_home: Path | None) -> Any:
     """Bind the enforcement path's guard home for ambient digest calls."""
 
-    return _BOUND_GUARD_HOME.set(guard_home)
+    token = _BOUND_GUARD_HOME.set(guard_home)
+    if guard_home is not None:
+        global _LAST_BOUND_HOME
+        with _LAST_BOUND_LOCK:
+            _LAST_BOUND_HOME = guard_home
+    return token
 
 
 def reset_context_digest_home(token: Any) -> None:
@@ -59,7 +84,11 @@ def reset_context_digest_home(token: Any) -> None:
 
 
 def context_digest_guard_home() -> Path | None:
-    return _BOUND_GUARD_HOME.get()
+    bound = _BOUND_GUARD_HOME.get()
+    if bound is not None:
+        return bound
+    with _LAST_BOUND_LOCK:
+        return _LAST_BOUND_HOME
 
 
 @contextmanager
@@ -93,7 +122,23 @@ def _canonical_request_sha256(request: dict[str, Any]) -> str:
     return hashlib.sha256(canonical).hexdigest()
 
 
-def _decode_result(payload: object, *, request_id: str, request_sha256: str) -> dict[str, Any] | None:
+# Successful results must carry the output the kind's callers index; an `ok`
+# response missing it is an incomplete (and therefore invalid) result.
+_OK_OUTPUT_FIELD: dict[str, str] = {
+    "build_approval_context_token": "token",
+    "configured_environment_hash": "digest",
+    "configured_headers_hash": "digest",
+    "launch_argv_digest": "digest",
+}
+
+
+def _decode_result(
+    payload: object,
+    *,
+    request_id: str,
+    request_sha256: str,
+    kind: str,
+) -> dict[str, Any] | None:
     if not isinstance(payload, dict):
         return None
     keys = set(payload)
@@ -113,6 +158,9 @@ def _decode_result(payload: object, *, request_id: str, request_sha256: str) -> 
         value = payload.get(field)
         if value is not None and not isinstance(value, str):
             return None
+    required_output = _OK_OUTPUT_FIELD.get(kind)
+    if required_output is not None and payload.get("status") == "ok" and not payload.get(required_output):
+        return None
     return payload
 
 
@@ -154,11 +202,19 @@ def native_context_digest(
     }
     try:
         request_sha256 = _canonical_request_sha256(request)
+        # Cache on the request *content* — `request_id` is random per call, so
+        # it is excluded from the canonical material.
+        content_sha256 = _canonical_request_sha256({"kind": kind, **kind_fields})
     except (TypeError, ValueError):
         # Components the canonical encoder cannot express (non-JSON values,
         # non-finite floats) would fail inside the worker anyway; surface the
         # same failure boundary without shipping the request.
         return None
+    cache_key = (content_sha256, str(guard_home))
+    with _RESULT_CACHE_LOCK:
+        cached = _RESULT_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
     try:
         envelope = json.dumps(
             {"operation": "context_digest", "deadline_budget_ms": deadline_budget_ms, "request": request},
@@ -167,7 +223,19 @@ def native_context_digest(
             allow_nan=False,
         ).encode("utf-8")
     except (UnicodeEncodeError, ValueError, TypeError):
-        return None
+        # Components carrying lone surrogates (surrogateescape paths/argv on
+        # POSIX) cannot cross a strict JSON transport; the legacy ASCII-escaped
+        # encoder hashed them.  Report a locally synthesized typed rejection —
+        # bound to this request — rather than an availability failure, so
+        # callers see the legacy input boundary instead of a crash or a retry
+        # storm against a resident that could never accept the payload.
+        return {
+            "schema": _RESULT_SCHEMA,
+            "request_id": request_id,
+            "request_sha256": request_sha256,
+            "status": "error",
+            "code": "native_context_component_invalid",
+        }
     if len(envelope) > _MAX_REQUEST_BYTES:
         return None
     output = native_resident_client_request(
@@ -191,7 +259,7 @@ def native_context_digest(
     if _native_error(payload) == "native_overloaded":
         native_record_overload(status.identity.sha256, guard_home)
         return None
-    decoded = _decode_result(payload, request_id=request_id, request_sha256=request_sha256)
+    decoded = _decode_result(payload, request_id=request_id, request_sha256=request_sha256, kind=kind)
     if decoded is None:
         native_record_resident_failure(
             status.identity.sha256,
@@ -200,6 +268,11 @@ def native_context_digest(
         )
         return None
     native_record_resident_success(status.identity.sha256, guard_home)
+    if decoded.get("status") == "ok":
+        with _RESULT_CACHE_LOCK:
+            if len(_RESULT_CACHE) >= _RESULT_CACHE_MAX:
+                _RESULT_CACHE.pop(next(iter(_RESULT_CACHE)))
+            _RESULT_CACHE[cache_key] = decoded
     return decoded
 
 

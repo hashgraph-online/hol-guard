@@ -1,6 +1,8 @@
 //! Parity and unit coverage for the native approval-context digest op.
 
 use super::*;
+use crate::context_digest_json::python_float_repr;
+use guard_contracts::CONTEXT_COMPONENT_MAX_BYTES;
 use serde_json::{json, Map, Value};
 
 const PARITY_FIXTURE: &str = include_str!(concat!(
@@ -59,10 +61,31 @@ fn component_cases_match_python_tokens() {
     }
 }
 
+/// Project a corpus `values` input the way the Python transport shim does:
+/// mappings become caller-ordered `["key", value]` pairs; everything else
+/// passes through unchanged for the typed rejection boundary.
+fn wire_values(values: &Value) -> Value {
+    match values {
+        Value::Object(entries) => Value::Array(
+            entries
+                .iter()
+                .map(|(key, value)| Value::Array(vec![Value::String(key.clone()), value.clone()]))
+                .collect(),
+        ),
+        other => other.clone(),
+    }
+}
+
 #[test]
 fn value_cases_match_python_digests() {
     for case in corpus()["value_cases"].as_array().unwrap() {
-        let values = case.get("values").cloned();
+        // Order-sensitive cases carry an explicit wire projection; the Python
+        // adapter derives the same pairs from the `values` mapping in
+        // insertion order, which this fallback mirrors for unordered cases.
+        let values = case
+            .get("wire_values")
+            .cloned()
+            .or_else(|| case.get("values").map(wire_values));
         let configured_keys = case
             .get("configured_keys")
             .and_then(Value::as_array)
@@ -238,6 +261,15 @@ fn token_parse_rejects_malformed_variants() {
     assert!(parse_context_token(&json!(42)).is_none());
     let prefix_only = APPROVAL_CONTEXT_TOKEN_PREFIX.to_string();
     assert!(parse_context_token(&json!(prefix_only)).is_none());
+}
+
+#[test]
+fn token_parse_accepts_bool_version_for_python_parity() {
+    // Python compares `payload.get("version") != 1` numerically, so a stored
+    // token whose payload carries `"version": true` satisfies `True == 1`.
+    // Pin that quirk: accepting it preserves legacy validation behavior.
+    let bool_version_token = "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIiwiY29udGVudCI6IjAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAiLCJpZGVudGl0eSI6IjAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAiLCJwb2xpY3kiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIiwic2FuZGJveCI6IjAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAiLCJ2ZXJzaW9uIjp0cnVlfQ";
+    assert!(parse_context_token(&json!(bool_version_token)).is_some());
 }
 
 #[test]

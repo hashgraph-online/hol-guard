@@ -620,6 +620,74 @@
           "obj": 1
         }
       }
+    },
+    {
+      "configured_keys": null,
+      "digest": "f3ff66f9f3f5a248b991fd154c15efe1030a3e8c1389cf2972e8d4d33e59f0a7",
+      "domain": "environment",
+      "id": "env-collision-late-padded",
+      "note": "stripped-key collision: caller order decides; ' A' is last",
+      "values": {
+        " A": "second",
+        "A ": "first"
+      },
+      "wire_values": [
+        [
+          "A ",
+          "first"
+        ],
+        [
+          " A",
+          "second"
+        ]
+      ]
+    },
+    {
+      "configured_keys": null,
+      "digest": "c9287372ce0ec15485ecff1417294e029407ec5e593e7ef94412fd34bdf8521f",
+      "domain": "environment",
+      "id": "env-collision-early-padded",
+      "note": "same keys, reversed order: 'A ' is last",
+      "values": {
+        " A": "second",
+        "A ": "first"
+      },
+      "wire_values": [
+        [
+          " A",
+          "second"
+        ],
+        [
+          "A ",
+          "first"
+        ]
+      ]
+    },
+    {
+      "configured_keys": null,
+      "digest": "11f94c9d72f58a351eb7c13141bda48ec5009d91417fba6a6539f4f1ff6ae748",
+      "domain": "headers",
+      "id": "headers-collision-tab",
+      "note": "tab-stripped collision over header domain",
+      "values": {
+        " A": "lead",
+        "A": "base",
+        "A\t": "tab"
+      },
+      "wire_values": [
+        [
+          "A",
+          "base"
+        ],
+        [
+          " A",
+          "lead"
+        ],
+        [
+          "A\t",
+          "tab"
+        ]
+      ]
     }
   ],
   "version": 1

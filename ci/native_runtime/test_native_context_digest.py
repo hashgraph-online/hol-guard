@@ -90,12 +90,19 @@ def test_resident_context_digest_value_cases(managed_runtime: tuple[Path, Path])
     assert isinstance(cases, list) and cases
     for case in cases:
         kind = "configured_environment_hash" if case["domain"] == "environment" else "configured_headers_hash"
+        # The wire carries caller-ordered ["key", value] pairs; order-sensitive
+        # cases pin an explicit projection, otherwise mirror the Python
+        # adapter's mapping-to-pairs conversion.
+        values = case.get("wire_values")
+        if values is None:
+            raw = case["values"]
+            values = [[key, value] for key, value in raw.items()] if isinstance(raw, dict) else raw
         result = _op(
             runtime,
             guard_home,
             {
                 "kind": kind,
-                "values": case["values"],
+                "values": values,
                 "configured_keys": case["configured_keys"],
             },
         )

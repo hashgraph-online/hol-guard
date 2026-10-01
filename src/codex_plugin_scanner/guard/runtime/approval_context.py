@@ -223,20 +223,26 @@ def approval_context_validation_reason(
         _require_json_component(name, value)
     if not _json_serializable(saved_token):
         return "approval_reuse_content_changed"
-    result = _context_digest_result(
-        "validate_approval_context",
-        {
-            "saved_token": saved_token,
-            "components": {
-                "identity": identity,
-                "content": content,
-                "capabilities": capabilities,
-                "policy": policy,
-                "sandbox": sandbox,
-                "extension_control_digest": current_extension_control_binding_digest(),
+    try:
+        result = _context_digest_result(
+            "validate_approval_context",
+            {
+                "saved_token": saved_token,
+                "components": {
+                    "identity": identity,
+                    "content": content,
+                    "capabilities": capabilities,
+                    "policy": policy,
+                    "sandbox": sandbox,
+                    "extension_control_digest": current_extension_control_binding_digest(),
+                },
             },
-        },
-    )
+        )
+    except (NativeContextDigestUnavailableError, TypeError):
+        # The resident being unreachable — or a component it cannot express —
+        # can never prove context is unchanged.  Deny reuse instead of
+        # crashing the enforcement caller.
+        return "approval_reuse_content_changed"
     return cast(ApprovalContextValidationFailure | None, result.get("validation_reason"))
 
 
@@ -252,10 +258,13 @@ def approval_context_tokens_validation_reason(
 
     if not (_json_serializable(saved_token) and _json_serializable(current_token)):
         return "approval_reuse_content_changed"
-    result = _context_digest_result(
-        "validate_approval_context_tokens",
-        {"saved_token": saved_token, "current_token": current_token},
-    )
+    try:
+        result = _context_digest_result(
+            "validate_approval_context_tokens",
+            {"saved_token": saved_token, "current_token": current_token},
+        )
+    except (NativeContextDigestUnavailableError, TypeError):
+        return "approval_reuse_content_changed"
     return cast(ApprovalContextValidationFailure | None, result.get("validation_reason"))
 
 
@@ -771,8 +780,19 @@ def _configured_values_payload(
     inputs pass through so the worker reproduces the legacy failure boundary.
     """
 
+    # Mappings travel as caller-ordered ["key", value] pairs: distinct raw
+    # keys can collide after the worker strips whitespace, and the legacy dict
+    # comprehension resolved the collision by the last entry in caller order —
+    # an ordering a plain JSON object cannot carry across transport.
+    if not values:
+        pairs: object = []
+    elif isinstance(values, Mapping):
+        pairs = [[str(key), value] for key, value in values.items()]
+    else:
+        # Same boundary the legacy `.items()` AttributeError produced.
+        raise TypeError("configured values must be a mapping or None")
     return {
-        "values": ({str(key): value for key, value in values.items()} if isinstance(values, Mapping) else values),
+        "values": pairs,
         "configured_keys": ([str(key) for key in configured_keys] if configured_keys is not None else None),
     }
 

@@ -2340,9 +2340,32 @@ class StorePolicyMixin:
         current context-token contract from stale pre-token (legacy) evidence.
         """
 
-        from .native_context import bind_context_digest_home
+        from .native_context import bind_context_digest_home, reset_context_digest_home
 
-        bind_context_digest_home(self.guard_home)
+        # This is a read-only diagnostic: the binding must not leak into the
+        # caller's context after return.
+        binding_token = bind_context_digest_home(self.guard_home)
+        try:
+            return self._approval_reuse_diagnostic_inner(
+                harness,
+                artifact_id,
+                artifact_hash,
+                workspace,
+                publisher,
+                now=now,
+            )
+        finally:
+            reset_context_digest_home(binding_token)
+
+    def _approval_reuse_diagnostic_inner(
+        self,
+        harness: str,
+        artifact_id: str | None,
+        artifact_hash: str | None,
+        workspace: str | None,
+        publisher: str | None,
+        now: str | None = None,
+    ) -> tuple[str | None, str | None]:
         if artifact_id is None:
             return None, None
         current_time = _canonical_utc_timestamp(now or _now())

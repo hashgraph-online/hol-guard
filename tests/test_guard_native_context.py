@@ -186,6 +186,49 @@ def test_native_context_digest_overload_returns_none(tmp_path: Path, monkeypatch
     assert native_context.native_context_digest("launch_argv_digest", {"argv": ["x"]}, guard_home=tmp_path) is None
 
 
+def test_native_context_digest_surrogate_component_returns_typed_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # POSIX surrogateescape bytes decode to lone surrogates; they pass the
+    # JSON-compatibility pre-check (ensure_ascii=True escapes them) but cannot
+    # cross the strict wire format.  The adapter must report the typed input
+    # boundary — never raise UnicodeEncodeError or report availability loss.
+    calls: list[bytes] = []
+    _prime(monkeypatch, response=b"{}")
+    monkeypatch.setattr(native_context, "native_resident_client_request", lambda **kwargs: calls.append(kwargs["payload"]) or b"{}")
+    result = native_context.native_context_digest(
+        "launch_argv_digest",
+        {"argv": ["/tmp/\udcff-dir"]},
+        guard_home=tmp_path,
+    )
+    assert result is not None
+    assert result["status"] == "error"
+    assert result["code"] == "native_context_component_invalid"
+    assert calls == []
+
+
+def test_native_context_digest_ok_result_requires_output_field(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # An `ok` result without the kind's output field is an incomplete result —
+    # reject it instead of letting callers index a missing key.
+    _prime(monkeypatch)
+    def _client(*_args: object, **kwargs: object) -> bytes:
+        request = json.loads(kwargs["payload"])["request"]
+        return json.dumps(
+            {
+                "schema": "guard-context-digest-result.v1",
+                "request_id": request["request_id"],
+                "request_sha256": _request_sha256(request),
+                "status": "ok",
+                "code": "ok",
+            }
+        ).encode("utf-8")
+
+    monkeypatch.setattr(native_context, "native_resident_client_request", _client)
+    assert native_context.native_context_digest("launch_argv_digest", {"argv": ["x"]}, guard_home=tmp_path) is None
+
+
 def test_native_context_digest_propagates_worker_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     def _client(*_args: object, **kwargs: object) -> bytes:
         envelope = json.loads(kwargs["payload"])
