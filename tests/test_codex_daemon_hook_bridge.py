@@ -841,8 +841,9 @@ def test_bridge_real_daemon_denies_unproven_github_content_reads(
         daemon.stop()
 
     assert exit_code == 0
-    _assert_bridge_denied(json.loads(capsys.readouterr().out))
-    assert len(store.list_approval_requests(limit=None)) == pending_approvals
+    response = json.loads(capsys.readouterr().out)
+    _assert_bridge_denied(response)
+    assert len(store.list_approval_requests(limit=None)) == pending_approvals, response
 
 
 @pytest.mark.parametrize(
