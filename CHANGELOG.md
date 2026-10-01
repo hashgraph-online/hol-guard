@@ -5,8 +5,40 @@ All notable changes to HOL Guard will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [3.15.5](https://github.com/hashgraph-online/hol-guard/compare/v3.15.4...v3.15.5) (2026-10-01)
+## [3.16.1](https://github.com/hashgraph-online/hol-guard/compare/v3.16.0...v3.16.1) (2026-10-01)
 
+
+### Bug Fixes
+
+* **codex:** bound optional hook diagnostics ([fde51df](https://github.com/hashgraph-online/hol-guard/commit/fde51df1df40413397a033476e0fce75da84a3b6))
+* **codex:** preserve ownership conflicts for aliased Python imports ([f94860c](https://github.com/hashgraph-online/hol-guard/commit/f94860cb3efcd93bdec752fed0ddaee8fa7eae7e))
+* **native:** bound managed client cleanup by the caller deadline ([14f4f8d](https://github.com/hashgraph-online/hol-guard/commit/14f4f8ded6de5a6477702538c525765c8cf2e576))
+
+
+### Performance Improvements
+
+* **ci:** give Sonar dedicated CPU and heap budgets ([#3350](https://github.com/hashgraph-online/hol-guard/issues/3350)) ([e22c395](https://github.com/hashgraph-online/hol-guard/commit/e22c395f7f0d2ae08b784a71a1e5cbb4e4dad61c))
+
+## [3.16.0](https://github.com/hashgraph-online/hol-guard/compare/v3.15.6...v3.16.0) (2026-10-01)
+
+### Features
+
+* **mcp:** show app summaries from existing Codex hosts ([7c1e9b6](https://github.com/hashgraph-online/hol-guard/commit/7c1e9b60b44d82fbfd770b8cbd19fb7cbcf90a4e))
+
+## [3.15.6](https://github.com/hashgraph-online/hol-guard/compare/v3.15.5...v3.15.6) (2026-10-01)
+
+### Bug Fixes
+
+* **approvals:** consume native reviews bound to policy domains ([7b3cf82](https://github.com/hashgraph-online/hol-guard/commit/7b3cf82c8ab08728d8d2c07ae60caa62175f4756))
+* **claude:** deny tool actions when native review is unavailable ([9a97d62](https://github.com/hashgraph-online/hol-guard/commit/9a97d620a66654b4a24896efdc88dfcf74c7736e))
+* **codex:** reject conflicting unowned Guard hooks ([cb47a1a](https://github.com/hashgraph-online/hol-guard/commit/cb47a1adcde5552a11517133a8308c807d20d473))
+* **command:** recognize benign head and tail pipeline input ([e5aada7](https://github.com/hashgraph-online/hol-guard/commit/e5aada7c1132c43b521b9e21783711cc204b919f))
+* **containment:** reject executable identity races ([#3331](https://github.com/hashgraph-online/hol-guard/issues/3331)) ([4faebae](https://github.com/hashgraph-online/hol-guard/commit/4faebae7f59707c74445dbd4e7ea0f21af715a70))
+* **guard:** move archive inspection lease and containment into the Rust worker ([#3330](https://github.com/hashgraph-online/hol-guard/issues/3330)) ([d79f0c4](https://github.com/hashgraph-online/hol-guard/commit/d79f0c47d7d01ebbcf6487890bd77d9419a3ae6a))
+* **hooks:** emit native failure responses as JSON ([6bdbc54](https://github.com/hashgraph-online/hol-guard/commit/6bdbc542d912ce338b838e8af927334f187819ad))
+* **native:** honor the caller budget during resident startup ([399f7cb](https://github.com/hashgraph-online/hol-guard/commit/399f7cbcc1322ef43f4240c17c9c18f0ef6a69ce))
+
+## [3.15.5](https://github.com/hashgraph-online/hol-guard/compare/v3.15.4...v3.15.5) (2026-10-01)
 
 ### Bug Fixes
 
@@ -14,13 +46,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [3.15.4](https://github.com/hashgraph-online/hol-guard/compare/v3.15.3...v3.15.4) (2026-10-01)
 
-
 ### Bug Fixes
 
 * **mcp:** explain discovery capability rejections ([b2bc18f](https://github.com/hashgraph-online/hol-guard/commit/b2bc18fb3abcc64e60d6f5829307d9204c3fc56c))
 
 ## [3.15.3](https://github.com/hashgraph-online/hol-guard/compare/v3.15.2...v3.15.3) (2026-10-01)
-
 
 ### Bug Fixes
 
@@ -30,13 +60,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [3.15.2](https://github.com/hashgraph-online/hol-guard/compare/v3.15.1...v3.15.2) (2026-10-01)
 
-
 ### Performance Improvements
 
 * **mcp:** reduce decision connection overhead and page connectors ([ad915da](https://github.com/hashgraph-online/hol-guard/commit/ad915da0488d4665ef8b83999d2705d919520d9d))
 
 ## [3.15.1](https://github.com/hashgraph-online/hol-guard/compare/v3.15.0...v3.15.1) (2026-10-01)
-
 
 ### Bug Fixes
 
@@ -46,14 +74,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [3.15.0](https://github.com/hashgraph-online/hol-guard/compare/v3.14.1...v3.15.0) (2026-10-01)
 
-
 ### Features
 
 * **guard:** move offline archive inspection into the Rust runtime ([#3300](https://github.com/hashgraph-online/hol-guard/issues/3300)) ([61ef105](https://github.com/hashgraph-online/hol-guard/commit/61ef105eb7aae0aa8a8c9c4e46ec3a83a976efd0))
 * **mcp:** add reviewed Undo for Codex setup ([#3289](https://github.com/hashgraph-online/hol-guard/issues/3289)) ([9e6ccb1](https://github.com/hashgraph-online/hol-guard/commit/9e6ccb1cd5ab93a0c9b2c7e0ce69bb6d1f6f1ef4))
 
 ## [3.14.1](https://github.com/hashgraph-online/hol-guard/compare/v3.14.0...v3.14.1) (2026-09-30)
-
 
 ### Bug Fixes
 
@@ -62,11 +88,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [3.14.0](https://github.com/hashgraph-online/hol-guard/compare/v3.13.1...v3.14.0) (2026-09-30)
 
-
 ### Features
 
 * **hook:** native hook pipeline with context-token approval provenance ([#3154](https://github.com/hashgraph-online/hol-guard/issues/3154)) ([599617c](https://github.com/hashgraph-online/hol-guard/commit/599617c34e56a5840bdc79b4e3029a1b08aa8939))
-
 
 ### Bug Fixes
 
@@ -79,7 +103,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [3.13.1](https://github.com/hashgraph-online/hol-guard/compare/v3.13.0...v3.13.1) (2026-09-30)
 
-
 ### Bug Fixes
 
 * **dashboard:** restore custom connector detail rendering ([1f9d2b2](https://github.com/hashgraph-online/hol-guard/commit/1f9d2b2134cf8838b2d481c7325160ddd707f884))
@@ -87,11 +110,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [3.13.0](https://github.com/hashgraph-online/hol-guard/compare/v3.12.3...v3.13.0) (2026-09-30)
 
-
 ### Features
 
 * **approval:** add reviewed workspace authority issuer ([#3220](https://github.com/hashgraph-online/hol-guard/issues/3220)) ([d0bf908](https://github.com/hashgraph-online/hol-guard/commit/d0bf9081635d2b091723dcb016d10299ea24d68b))
-
 
 ### Bug Fixes
 
@@ -103,20 +124,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [3.12.3](https://github.com/hashgraph-online/hol-guard/compare/v3.12.2...v3.12.3) (2026-09-30)
 
-
 ### Bug Fixes
 
 * **guard:** recognize Codex command output budgets ([9e70f1f](https://github.com/hashgraph-online/hol-guard/commit/9e70f1f189c7750f5f2f4214cd87dc21dbecdbad))
 
 ## [3.12.2](https://github.com/hashgraph-online/hol-guard/compare/v3.12.1...v3.12.2) (2026-09-29)
 
-
 ### Bug Fixes
 
 * **doctor:** identify Desktop-managed bundled installations ([b0d2df7](https://github.com/hashgraph-online/hol-guard/commit/b0d2df77033e5fb0cdb94094f0e489bc1b10454f))
 
 ## [3.12.1](https://github.com/hashgraph-online/hol-guard/compare/v3.12.0...v3.12.1) (2026-09-29)
-
 
 ### Bug Fixes
 
@@ -127,18 +145,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * **pi:** continue approved tool calls unchanged ([22aa017](https://github.com/hashgraph-online/hol-guard/commit/22aa01760cb8511fa40c6306c94a59f6fd5b3efb))
 * **review:** quarantine terminal continuation binding mismatches ([65def12](https://github.com/hashgraph-online/hol-guard/commit/65def1215616da6d0e229d26f17988bde54895b0))
 
-
 ### Performance Improvements
 
 * **ci:** parallelize native qualification and remove serial CI bottlenecks ([#3216](https://github.com/hashgraph-online/hol-guard/issues/3216)) ([a2581df](https://github.com/hashgraph-online/hol-guard/commit/a2581dfdf6f13a7ba613a1ceaeda099b45c76394))
 
 ## [3.12.0](https://github.com/hashgraph-online/hol-guard/compare/v3.11.1...v3.12.0) (2026-09-29)
 
-
 ### Features
 
 * **guard:** classify declared sensitive fields with bounded local scan ([#3213](https://github.com/hashgraph-online/hol-guard/issues/3213)) ([f72566a](https://github.com/hashgraph-online/hol-guard/commit/f72566ae79a18fbb416c082dfd7afe68d902490c))
-
 
 ### Bug Fixes
 
@@ -149,7 +164,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [3.11.1](https://github.com/hashgraph-online/hol-guard/compare/v3.11.0...v3.11.1) (2026-09-29)
 
-
 ### Bug Fixes
 
 * **daemon:** re-register the runtime after store recovery and report repair reasons ([#3214](https://github.com/hashgraph-online/hol-guard/issues/3214)) ([3b5d5ff](https://github.com/hashgraph-online/hol-guard/commit/3b5d5ff1ba785d36ac762014141db726d370da95))
@@ -158,11 +172,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [3.11.0](https://github.com/hashgraph-online/hol-guard/compare/v3.10.0...v3.11.0) (2026-09-29)
 
-
 ### Features
 
 * **desktop-core:** publish a sealed onedir Core sidecar with a v2 manifest ([#3212](https://github.com/hashgraph-online/hol-guard/issues/3212)) ([e51ae5c](https://github.com/hashgraph-online/hol-guard/commit/e51ae5ce29f36a1fbbf00c9270afdbe6bd7f81b4))
-
 
 ### Bug Fixes
 
@@ -171,7 +183,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [3.10.0](https://github.com/hashgraph-online/hol-guard/compare/v3.9.0...v3.10.0) (2026-09-29)
 
-
 ### Features
 
 * **evaluation:** add bounded synthetic scenario runner ([#3200](https://github.com/hashgraph-online/hol-guard/issues/3200)) ([40808be](https://github.com/hashgraph-online/hol-guard/commit/40808be6878e05c5965e1a0f9108a1d483dbb2c4))
@@ -179,7 +190,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * **extensions:** add digline command extension ([#3098](https://github.com/hashgraph-online/hol-guard/issues/3098)) ([24dde71](https://github.com/hashgraph-online/hol-guard/commit/24dde71512610844f1d0128af0f2b92c7d43d75a))
 * **extensions:** add gitsync command source ([#3186](https://github.com/hashgraph-online/hol-guard/issues/3186)) ([a972c3e](https://github.com/hashgraph-online/hol-guard/commit/a972c3e706f87bdd469f9445d649e0d62ea22280))
 * **mcp:** discover connectors and review granular permissions ([bf0313c](https://github.com/hashgraph-online/hol-guard/commit/bf0313c44675d7a42948a7d97b53f92bd860bbe9))
-
 
 ### Bug Fixes
 
@@ -193,20 +203,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * **extensions:** publish regenerated artifacts via pull request ([#3204](https://github.com/hashgraph-online/hol-guard/issues/3204)) ([6a19c30](https://github.com/hashgraph-online/hol-guard/commit/6a19c302a7745952d482296035c9b68a2a6806c8))
 * **security:** ignore bracketed placeholder secrets outside docs paths ([#3091](https://github.com/hashgraph-online/hol-guard/issues/3091)) ([#3109](https://github.com/hashgraph-online/hol-guard/issues/3109)) ([d952623](https://github.com/hashgraph-online/hol-guard/commit/d9526234cbb5070de1fec1a4928df22cb5abbd57))
 
-
 ### Documentation
 
 * **readme:** add Ask DeepWiki badge ([#3201](https://github.com/hashgraph-online/hol-guard/issues/3201)) ([337b654](https://github.com/hashgraph-online/hol-guard/commit/337b654148da605397902944a3ae80c7d9c11a44))
 
 ## [3.9.0](https://github.com/hashgraph-online/hol-guard/compare/v3.8.0...v3.9.0) (2026-09-28)
 
-
 ### Features
 
 * add COGEXT command source ([#3146](https://github.com/hashgraph-online/hol-guard/issues/3146)) ([c906867](https://github.com/hashgraph-online/hol-guard/commit/c906867172e16b3d3b226132d8c25aaa0df0fe68))
 * **command:** add gEnclave CLI protection extension (command.genclave) ([#3151](https://github.com/hashgraph-online/hol-guard/issues/3151)) ([52db423](https://github.com/hashgraph-online/hol-guard/commit/52db42310051f9fd426c2b5e3c727f4ee6c08290))
 * **extensions:** add PR UI Compare MCP server contribution ([#3118](https://github.com/hashgraph-online/hol-guard/issues/3118)) ([9809915](https://github.com/hashgraph-online/hol-guard/commit/98099157cf541dd250c6e222babef3d18155b7bd))
-
 
 ### Bug Fixes
 
@@ -215,14 +222,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * **desktop:** answer bootstrap from the running daemon ([#3191](https://github.com/hashgraph-online/hol-guard/issues/3191)) ([ddcb04b](https://github.com/hashgraph-online/hol-guard/commit/ddcb04b7e4716fd3e228b60a2dc80836edf5a048))
 * **zcode:** map review tier to ZCode native ask prompt ([#3184](https://github.com/hashgraph-online/hol-guard/issues/3184)) ([dad342b](https://github.com/hashgraph-online/hol-guard/commit/dad342b92fb7d8dc2c027224efbda79ab429fe37))
 
-
 ### Documentation
 
 * add Vercel OSS Program badge ([#3189](https://github.com/hashgraph-online/hol-guard/issues/3189)) ([083169c](https://github.com/hashgraph-online/hol-guard/commit/083169ce30bc6c4b948bca1a69470c6bb96df67c))
 * **guard:** add Agent Skills frontmatter ([#2998](https://github.com/hashgraph-online/hol-guard/issues/2998)) ([d61ff00](https://github.com/hashgraph-online/hol-guard/commit/d61ff00bd98594aa2b5dc37b45570753c3fdd7a4))
 
 ## [3.8.0](https://github.com/hashgraph-online/hol-guard/compare/v3.7.6...v3.8.0) (2026-09-28)
-
 
 ### Features
 
@@ -231,14 +236,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [3.7.6](https://github.com/hashgraph-online/hol-guard/compare/v3.7.5...v3.7.6) (2026-09-28)
 
-
 ### Bug Fixes
 
 * **diagnostics:** explain native extension evaluation failures ([#3155](https://github.com/hashgraph-online/hol-guard/issues/3155)) ([3ec32b1](https://github.com/hashgraph-online/hol-guard/commit/3ec32b1762f5b67dfef6086f0e5b457f3818ac02))
 * **release:** retry temporary PyPI metadata errors ([#3170](https://github.com/hashgraph-online/hol-guard/issues/3170)) ([5bfec94](https://github.com/hashgraph-online/hol-guard/commit/5bfec94bb65cb66c7cd00b04cdfaa5b545933dee))
 
 ## [3.7.5](https://github.com/hashgraph-online/hol-guard/compare/v3.7.2...v3.7.5) (2026-09-27)
-
 
 ### Bug Fixes
 
@@ -254,7 +257,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [3.7.2](https://github.com/hashgraph-online/hol-guard/compare/v3.7.1...v3.7.2) (2026-09-27)
 
-
 ### Bug Fixes
 
 * **codex:** authenticate managed fallback after worker failure ([#3133](https://github.com/hashgraph-online/hol-guard/issues/3133)) ([bf00b65](https://github.com/hashgraph-online/hol-guard/commit/bf00b65ff8e29842692835363845911fabc22954))
@@ -262,20 +264,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [3.7.1](https://github.com/hashgraph-online/hol-guard/compare/v3.7.0...v3.7.1) (2026-09-27)
 
-
 ### Bug Fixes
 
 * **dashboard:** keep historical native reviews approvable ([#3130](https://github.com/hashgraph-online/hol-guard/issues/3130)) ([7851c8d](https://github.com/hashgraph-online/hol-guard/commit/7851c8d8525a6672ffb3ba0429324ca75fe8b944))
 
 ## [3.7.0](https://github.com/hashgraph-online/hol-guard/compare/v3.6.4...v3.7.0) (2026-09-27)
 
-
 ### Features
 
 * **mcp:** detect connectors and manage per-tool permissions ([#3125](https://github.com/hashgraph-online/hol-guard/issues/3125)) ([a539279](https://github.com/hashgraph-online/hol-guard/commit/a5392792063cb3e061e0a8dfb2a122fee7d13f05))
 
 ## [3.6.4](https://github.com/hashgraph-online/hol-guard/compare/v3.6.3...v3.6.4) (2026-09-26)
-
 
 ### Bug Fixes
 
@@ -284,20 +283,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [3.6.3](https://github.com/hashgraph-online/hol-guard/compare/v3.6.2...v3.6.3) (2026-09-26)
 
-
 ### Bug Fixes
 
 * **runtime:** drain stale resident leases past the directory cap ([#3124](https://github.com/hashgraph-online/hol-guard/issues/3124)) ([277707b](https://github.com/hashgraph-online/hol-guard/commit/277707b3a44d7237b1470b5d88c5460ace5def3e))
 
 ## [3.6.2](https://github.com/hashgraph-online/hol-guard/compare/v3.6.1...v3.6.2) (2026-09-26)
 
-
 ### Bug Fixes
 
 * **command:** hide observe-mode warnings for proven local lookups ([#3122](https://github.com/hashgraph-online/hol-guard/issues/3122)) ([3292474](https://github.com/hashgraph-online/hol-guard/commit/3292474fa2373da9a17471360fcd890dc099f237))
 
 ## [3.6.1](https://github.com/hashgraph-online/hol-guard/compare/v3.6.0...v3.6.1) (2026-09-25)
-
 
 ### Bug Fixes
 
@@ -306,18 +302,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [3.6.0](https://github.com/hashgraph-online/hol-guard/compare/v3.5.1...v3.6.0) (2026-09-25)
 
-
 ### Features
 
 * **guard:** add staged evaluation CLI ([#3110](https://github.com/hashgraph-online/hol-guard/issues/3110)) ([54ab9a9](https://github.com/hashgraph-online/hol-guard/commit/54ab9a9f309c191800273e477c6606358cadb2c2))
-
 
 ### Bug Fixes
 
 * **command:** prove bounded clock, listing, and file reads benign ([#3113](https://github.com/hashgraph-online/hol-guard/issues/3113)) ([7b9b5c1](https://github.com/hashgraph-online/hol-guard/commit/7b9b5c18ab3c37f2701b2cc3fd9c9df1f0995d19))
 
 ## [3.5.1](https://github.com/hashgraph-online/hol-guard/compare/v3.5.0...v3.5.1) (2026-09-25)
-
 
 ### Bug Fixes
 
@@ -327,12 +320,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [3.5.0](https://github.com/hashgraph-online/hol-guard/compare/v3.4.5...v3.5.0) (2026-09-24)
 
-
 ### Features
 
 * **devin:** add Devin CLI harness adapter with managed native hooks ([#3099](https://github.com/hashgraph-online/hol-guard/issues/3099)) ([b992f68](https://github.com/hashgraph-online/hol-guard/commit/b992f680a263c264f5936b09bc91190351c72378))
 * **guard:** add bounded command event parser ([#3097](https://github.com/hashgraph-online/hol-guard/issues/3097)) ([6a46a6e](https://github.com/hashgraph-online/hol-guard/commit/6a46a6ec3802524aa882f0d3582788f6959ac9fe))
-
 
 ### Bug Fixes
 
@@ -341,13 +332,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [3.4.5](https://github.com/hashgraph-online/hol-guard/compare/v3.4.4...v3.4.5) (2026-09-24)
 
-
 ### Bug Fixes
 
 * **dashboard:** clarify command activity run results ([#3090](https://github.com/hashgraph-online/hol-guard/issues/3090)) ([6d802ab](https://github.com/hashgraph-online/hol-guard/commit/6d802ab5f2c2edd7aa8e6dd3a5e645b8d91ba3ce))
 
 ## [3.4.4](https://github.com/hashgraph-online/hol-guard/compare/v3.4.3...v3.4.4) (2026-09-24)
-
 
 ### Bug Fixes
 
@@ -371,7 +360,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [3.4.2](https://github.com/hashgraph-online/hol-guard/compare/v3.4.1...v3.4.2) (2026-09-23)
 
-
 ### Bug Fixes
 
 * bind uivoid portable fixtures to canonical build sources ([77adeca](https://github.com/hashgraph-online/hol-guard/commit/77adeca00df50e6df670ae285cf8aa0cf3a19fea))
@@ -381,7 +369,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * refresh decision report bindings after native matcher update ([e81eba1](https://github.com/hashgraph-online/hol-guard/commit/e81eba13ce9f9932d56213004c127d72cc12ea7d))
 * **release-notes:** dedupe identities, credit nonconventional squashes, verify published predecessors ([830eef5](https://github.com/hashgraph-online/hol-guard/commit/830eef55a6f2b1d2c82dea8fb92fd1459ad934a6))
 
-
 ### Documentation
 
 * **readme:** link the annotated release archive and contributor wall ([0655c56](https://github.com/hashgraph-online/hol-guard/commit/0655c5608f959f1e81d1ed7d6dfb6b18f5cec506))
@@ -389,19 +376,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [3.4.1](https://github.com/hashgraph-online/hol-guard/compare/v3.4.0...v3.4.1) (2026-09-22)
 
-
 ### Bug Fixes
 
 * **supply-chain:** keep local repair responsive across workspaces ([#3063](https://github.com/hashgraph-online/hol-guard/issues/3063)) ([e9139a7](https://github.com/hashgraph-online/hol-guard/commit/e9139a7407430947b6e9e573a2f0d2d238cfbc27))
 
 ## [3.4.0](https://github.com/hashgraph-online/hol-guard/compare/v3.3.0...v3.4.0) (2026-09-22)
 
-
 ### Features
 
 * **contributors:** support Gitar notice backfills ([#3053](https://github.com/hashgraph-online/hol-guard/issues/3053)) ([7a3932a](https://github.com/hashgraph-online/hol-guard/commit/7a3932ad277fb5f9bf12aff29ddb8e187e512cc5))
 * **extensions:** streamline contributor handoffs ([#3048](https://github.com/hashgraph-online/hol-guard/issues/3048)) ([f3d829c](https://github.com/hashgraph-online/hol-guard/commit/f3d829ce117a161c9ab6418f9b450177b799edb8))
-
 
 ### Bug Fixes
 
@@ -414,12 +398,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [3.3.0](https://github.com/hashgraph-online/hol-guard/compare/v3.2.0...v3.3.0) (2026-09-21)
 
-
 ### Features
 
 * **extensions:** simplify declarative contribution preparation ([b3371c6](https://github.com/hashgraph-online/hol-guard/commit/b3371c6557f6ab23ccf14861d62408fa8aaaace6))
 * **extensions:** simplify declarative contribution preparation ([ca4e5c2](https://github.com/hashgraph-online/hol-guard/commit/ca4e5c2b45688e398ffea54de587ecbefc883971))
-
 
 ### Bug Fixes
 
@@ -430,7 +412,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * **extensions:** stabilize source digests on Windows ([e147312](https://github.com/hashgraph-online/hol-guard/commit/e147312119f01c56155bb762bb6926e083397b32))
 * **extensions:** validate listing schema types ([1db22ed](https://github.com/hashgraph-online/hol-guard/commit/1db22edf3215cf5e99a964b5f2b46dfd90f78bf9))
 * **security:** resolve Scorecard dependency findings ([#3017](https://github.com/hashgraph-online/hol-guard/issues/3017)) ([ccd22e0](https://github.com/hashgraph-online/hol-guard/commit/ccd22e0386309e5dc5b64b9b0d378128dcf974bb))
-
 
 ### Dependencies
 
@@ -445,18 +426,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * **docker:** bump astral-sh/uv ([#3025](https://github.com/hashgraph-online/hol-guard/issues/3025)) ([ca33e5d](https://github.com/hashgraph-online/hol-guard/commit/ca33e5d4bb734985a0254401abea18d8ab902d82))
 * **pip:** bump the codex-lab-patch-minor group across 1 directory with 3 updates ([#3022](https://github.com/hashgraph-online/hol-guard/issues/3022)) ([8be6b27](https://github.com/hashgraph-online/hol-guard/commit/8be6b27c5d42894e4e79adf8f2317047e5b7e8b2))
 
-
 ### Documentation
 
 * update Rust extension contribution workflow ([#3019](https://github.com/hashgraph-online/hol-guard/issues/3019)) ([5e6a619](https://github.com/hashgraph-online/hol-guard/commit/5e6a619ba026f512a09e87c0fbf254a6c464fbf5))
 
 ## [3.2.0](https://github.com/hashgraph-online/hol-guard/compare/v3.1.0...v3.2.0) (2026-09-21)
 
-
 ### Features
 
 * **extensions:** migrate authoring to native declarative sources ([01d73fd](https://github.com/hashgraph-online/hol-guard/commit/01d73fd3461741eb47a62c33d259f6c0c6e3bb7d))
-
 
 ### Bug Fixes
 
@@ -471,18 +449,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [3.1.0](https://github.com/hashgraph-online/hol-guard/compare/v3.0.193...v3.1.0) (2026-09-20)
 
-
 ### Features
 
 * **extensions:** add Errand command-safety extension ([e42e8a4](https://github.com/hashgraph-online/hol-guard/commit/e42e8a4f746e66882d62c34a944392fae91380fe))
-
 
 ### Bug Fixes
 
 * **ci:** open Release Please pull requests with a repo token ([#3011](https://github.com/hashgraph-online/hol-guard/issues/3011)) ([f674f69](https://github.com/hashgraph-online/hol-guard/commit/f674f69665cfbcb79ab9e82d671e99f7674905ae))
 * **codex:** omit PreToolUse permissionDecision allow ([#3013](https://github.com/hashgraph-online/hol-guard/issues/3013)) ([1653932](https://github.com/hashgraph-online/hol-guard/commit/1653932ab8625198b38f44bfca0485287e2f7ead))
 * **hooks:** fan frozen bounded hooks into the daemon worker pool ([#3009](https://github.com/hashgraph-online/hol-guard/issues/3009)) ([79afae8](https://github.com/hashgraph-online/hol-guard/commit/79afae8c2c5fc02acffb4ed13b34d0c7375364e4))
-
 
 ### Performance Improvements
 

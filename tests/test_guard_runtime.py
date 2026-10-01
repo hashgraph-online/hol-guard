@@ -824,6 +824,7 @@ clearer UX and an implementation plan with technical references.
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         _build_guard_fixture(home_dir, workspace_dir)
+        write_synthetic_daemon_auth_token(home_dir)
         _write_text(workspace_dir / ".authrc", "fake_credential=canary\n")
         event = {
             "event": "UserPromptSubmit",

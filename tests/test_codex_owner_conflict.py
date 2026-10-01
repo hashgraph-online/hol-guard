@@ -166,11 +166,95 @@ def test_inline_cli_import_alias_with_trailing_arguments_requires_ownership():
         "runpy.run_module('codex_plugin_scanner.cli',run_name='__main__')",
         "import importlib; importlib.import_module('codex_plugin_scanner.cli').main(['hook','--harness','codex'])",
         "__import__('codex_plugin_scanner.cli',fromlist=['main']).main(['hook','--harness','codex'])",
+        "import runpy,sys; sys.argv[1:]=['hook','--harness','codex']; "
+        "runpy.run_module(mod_name='codex_plugin_scanner.cli',run_name='__main__')",
+        "import importlib; importlib.import_module(name='codex_plugin_scanner.cli').main(['hook','--harness','codex'])",
+        "__import__(name='codex_plugin_scanner.cli',fromlist=['main']).main(['hook','--harness','codex'])",
+        "import runpy,sys; sys.argv[1:]=['hook','--harness','codex']; "
+        "runpy.run_module(*(), mod_name='codex_plugin_scanner.cli',run_name='__main__')",
+        "import importlib; importlib.import_module(*(), name='codex_plugin_scanner.cli')"
+        ".main(['hook','--harness','codex'])",
+        "__import__(*(), name='codex_plugin_scanner.cli',fromlist=['main']).main(['hook','--harness','codex'])",
     ),
 )
 def test_dynamic_cli_import_with_static_module_requires_ownership(script):
     with pytest.raises(RuntimeError, match="codex_hook_owner_conflict"):
         require_codex_hook_owner("python -c " + shlex.quote(script), ownership="unmanaged")
+
+
+@pytest.mark.parametrize(
+    "name,keyword", (("import_module", "name"), ("run_module", "mod_name"), ("__import__", "name"))
+)
+def test_unrelated_same_named_function_is_not_a_guard_import(name, keyword):
+    script = f"def {name}(**kwargs): return None\n{name}({keyword}='codex_plugin_scanner.cli')"
+    require_codex_hook_owner("python -c " + shlex.quote(script) + " hook --harness codex", ownership="unmanaged")
+
+
+def test_exception_variable_shadowing_import_api_is_not_a_guard_import():
+    script = "try: pass\nexcept Exception as __import__: __import__(name='codex_plugin_scanner.cli')"
+    require_codex_hook_owner("python -c " + shlex.quote(script) + " hook --harness codex", ownership="unmanaged")
+
+
+@pytest.mark.parametrize(
+    "script",
+    (
+        "import runpy\ndef unrelated(): runpy = None\n"
+        "runpy.run_module(mod_name='codex_plugin_scanner.cli',run_name='__main__')",
+        "def unrelated(): __import__ = None\n__import__(name='codex_plugin_scanner.cli')",
+        "try: pass\nexcept Exception as __import__: pass\n__import__(name='codex_plugin_scanner.cli')",
+        "import runpy\nunused = [runpy for runpy in []]\nrunpy.run_module(mod_name='codex_plugin_scanner.cli')",
+        "import runpy\nunused = lambda: (runpy := None)\nrunpy.run_module(mod_name='codex_plugin_scanner.cli')",
+        "import runpy\nfor runpy in []: pass\nrunpy.run_module(mod_name='codex_plugin_scanner.cli')",
+        "import runpy\nif flag: runpy = None\nrunpy.run_module(mod_name='codex_plugin_scanner.cli')",
+        "__import__: object\n__import__(name='codex_plugin_scanner.cli')",
+        "__import__ = None\ndel __import__\n__import__(name='codex_plugin_scanner.cli')",
+        "__import__('importlib').import_module(name='codex_plugin_scanner.cli')",
+        "from builtins import __import__ as load\nload('runpy').run_module(mod_name='codex_plugin_scanner.cli')",
+        "import runpy\nclass Unrelated:\n runpy = None\n def invoke(self): "
+        "runpy.run_module(mod_name='codex_plugin_scanner.cli')\nUnrelated().invoke()",
+        "def run(): runpy.run_module('codex_plugin_scanner.cli',run_name='__main__')\nimport runpy\nrun()",
+        "def load():\n global runpy\n import runpy\nload()\nrunpy.run_module(mod_name='codex_plugin_scanner.cli')",
+        "run = lambda: runpy.run_module(mod_name='codex_plugin_scanner.cli')\nimport runpy\nrun()",
+        "import runpy\ndef load():\n global launch\n launch = runpy.run_module\nload()\n"
+        "launch(mod_name='codex_plugin_scanner.cli')",
+        "def run(): runpy.run_module('codex_plugin_scanner.cli')\n"
+        "def load():\n global runpy\n import runpy\nload()\nrun()",
+        "import runpy; left,right=runpy,runpy; left.run_module(mod_name='codex_plugin_scanner.cli')",
+        "import runpy; runpy,launch=None,runpy; launch.run_module(mod_name='codex_plugin_scanner.cli')",
+        "import runpy; (unused,(launch,))=(None,(runpy,)); launch.run_module(mod_name='codex_plugin_scanner.cli')",
+        "import runpy; [launch]=[runpy]; launch.run_module(mod_name='codex_plugin_scanner.cli')",
+        "import runpy; launch,*rest=(runpy,None); launch.run_module(mod_name='codex_plugin_scanner.cli')",
+        "import runpy; *rest,launch=(None,runpy); launch.run_module(mod_name='codex_plugin_scanner.cli')",
+        "import runpy; launch,=(*[runpy],); launch.run_module(mod_name='codex_plugin_scanner.cli')",
+        "import runpy; first,*rest=(None,runpy); rest[0].run_module(mod_name='codex_plugin_scanner.cli')",
+        "import runpy; modules=[runpy]; modules[-1].run_module(mod_name='codex_plugin_scanner.cli')",
+        "import runpy\nif flag: modules=[runpy]\nelse: modules=[None,None]\n"
+        "modules[-1].run_module(mod_name='codex_plugin_scanner.cli')",
+        "import runpy; [launch := runpy for _ in [0]]; launch.run_module('codex_plugin_scanner.cli')",
+        "import runpy\ndef run():\n [launch := runpy for _ in [0]]\n"
+        " launch.run_module('codex_plugin_scanner.cli')\nrun()",
+        "import runpy; [[launch := runpy for _ in [0]] for _ in [0]]; launch.run_module('codex_plugin_scanner.cli')",
+    ),
+)
+def test_unrelated_local_bindings_do_not_hide_module_imports(script):
+    with pytest.raises(RuntimeError, match="codex_hook_owner_conflict"):
+        require_codex_hook_owner("python -c " + shlex.quote(script) + " hook --harness codex", ownership="unmanaged")
+
+
+def test_imported_foreign_helper_is_not_the_builtin_import_api():
+    script = "from third_party import __import__; __import__(name='codex_plugin_scanner.cli')"
+    require_codex_hook_owner("python -c " + shlex.quote(script) + " hook --harness codex", ownership="unmanaged")
+
+
+def test_starred_collection_is_not_itself_an_import_module():
+    script = "import runpy; first,*rest=(None,runpy); rest.run_module(mod_name='codex_plugin_scanner.cli')"
+    require_codex_hook_owner("python -c " + shlex.quote(script) + " hook --harness codex", ownership="unmanaged")
+
+
+def test_deep_python_structure_preserves_the_owner_conflict_error():
+    script = "1+" * 600 + "1\nimport runpy\nrunpy.run_module('codex_plugin_scanner.cli')"
+    with pytest.raises(RuntimeError, match="codex_hook_owner_conflict"):
+        require_codex_hook_owner("python -c " + shlex.quote(script) + " hook --harness codex", ownership="unmanaged")
 
 
 @pytest.mark.parametrize("binding_kind", ("same_home_bridge", "foreign_home_guard_cli"))

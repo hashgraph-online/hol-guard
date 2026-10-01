@@ -799,7 +799,7 @@ def test_default_worker_budget_stays_below_pi_hook_deadline() -> None:
 
 @pytest.mark.usefixtures("native_hook_force")
 def test_prewarmed_runner_scans_post_tool_output_in_isolated_worker(tmp_path: Path) -> None:
-    runner = HookProcessRunner(guard_home=tmp_path, process_limit=1, timeout_seconds=2)
+    runner = HookProcessRunner(guard_home=tmp_path, process_limit=1, timeout_seconds=2 * under_coverage_scale(3.0))
     runner.start()
     try:
         result = runner.review(

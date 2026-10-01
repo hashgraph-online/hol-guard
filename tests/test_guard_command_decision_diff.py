@@ -28,7 +28,7 @@ from tests.guard_command_decision_diff import (
     report_framed_sha256,
     source_binding_id,
 )
-from tests.support.extension_freshness import requires_fresh_projections
+from tests.support.extension_freshness import requires_fresh_decision_diff
 
 _OPAQUE_ID = re.compile(r"c-[0-9a-f]{24}")
 _REPORT_FRAMED_DIGEST_PATH = REPORT_PATH.with_name("decision-diff-report.framed-sha256")
@@ -48,7 +48,9 @@ def _golden_report_framed_digest() -> str:
 
 def test_report_cli_writes_and_checks_framed_digest(tmp_path: Path, monkeypatch) -> None:
     from tests import guard_command_decision_diff as module
+    from tests.support import extension_freshness
 
+    monkeypatch.setattr(extension_freshness, "pending_decision_diff_regen", lambda: False)
     report = {"schema": "synthetic-report"}
     path = tmp_path / "decision-diff-report.json"
     digest_path = path.with_name("decision-diff-report.framed-sha256")
@@ -153,7 +155,7 @@ def test_decision_diff_import_restores_preloaded_package_bindings() -> None:
         assert completed.returncode == 0, completed.stderr
 
 
-@requires_fresh_projections
+@requires_fresh_decision_diff
 def test_report_is_exactly_reproducible_and_source_bound() -> None:
     report = generate_decision_diff_report()
     assert REPORT_PATH.read_bytes() == canonical_json_bytes(report)
@@ -300,6 +302,7 @@ def test_report_contains_only_privacy_safe_deterministic_evidence() -> None:
     [("1", "UTC", "C"), ("8731", "US/Pacific", "C.UTF-8")],
     ids=["utc", "pacific"],
 )
+@requires_fresh_decision_diff
 def test_fresh_process_report_is_environment_independent_and_bounded(
     hash_seed: str, timezone: str, locale: str
 ) -> None:
