@@ -159,16 +159,15 @@ def native_context_digest(
         # non-finite floats) would fail inside the worker anyway; surface the
         # same failure boundary without shipping the request.
         return None
-    envelope = json.dumps(
-        {
-            "operation": "context_digest",
-            "deadline_budget_ms": deadline_budget_ms,
-            "request": request,
-        },
-        separators=(",", ":"),
-        ensure_ascii=False,
-        allow_nan=False,
-    ).encode("utf-8")
+    try:
+        envelope = json.dumps(
+            {"operation": "context_digest", "deadline_budget_ms": deadline_budget_ms, "request": request},
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        ).encode("utf-8")
+    except (UnicodeEncodeError, ValueError, TypeError):
+        return None
     if len(envelope) > _MAX_REQUEST_BYTES:
         return None
     output = native_resident_client_request(
