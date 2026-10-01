@@ -95,7 +95,7 @@ def _contributions_changed(base_sha: str) -> list[str]:
         # Ordinary PRs cannot commit regenerated projections, including Rust
         # identity updates; generated-artifacts-guard enforces that ownership.
         return subprocess.run(
-            ["git", "diff", "--name-only", normalized_sha, "HEAD", "--", "contributions/", "rust/"],
+            ["git", "diff", "--name-only", normalized_sha, "HEAD", "--", *REGEN_INPUT_PREFIXES],
             cwd=ROOT,
             capture_output=True,
             text=True,
