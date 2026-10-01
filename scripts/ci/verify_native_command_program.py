@@ -73,9 +73,13 @@ def main() -> int:
         args.compiler,
     ]
     diff = pr_diff_paths()
-    if args.changed_from and diff is None and not (pending or changed):
-        # Diff unresolvable and no contribution sources to validate: defer
-        # freshness to post-merge regen verification on main.
+    if args.changed_from and diff is None:
+        if not (pending or changed):
+            return 0
+        rebuild = _rebuild_command(args.compiler)
+        _run(command)
+        _run(rebuild)
+        _run([*command, "--check"])
         return 0
     if diff is not None and args.changed_from:
         carries = not regen_artifacts_absent_from_diff(diff)

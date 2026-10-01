@@ -162,8 +162,8 @@ def pr_diff_paths() -> list[str] | None:
         if line.startswith("parent ")
     ]
     if len(parents) >= 2:
-        # Merge checkout: the second parent is the base commit the build merged.
-        fetched = _git("fetch", "-q", "--depth=1", "origin", parents[1])
+        # Merge checkout: the first parent is the base commit the build merged.
+        fetched = _git("fetch", "-q", "--depth=1", "origin", parents[0])
         if fetched.returncode == 0:
             result = _git("diff", "--name-only", "FETCH_HEAD", "HEAD")
             if result.returncode == 0:

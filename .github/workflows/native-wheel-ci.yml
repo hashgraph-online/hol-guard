@@ -453,8 +453,11 @@ jobs:
       - name: Detect pending artifact regeneration
         shell: pwsh
         run: |
-          if ($env:GITHUB_BASE_REF -and (python scripts/ci/detect_pending_extension_regen.py --defer-freshness 2>$null) -eq "true" -or $LASTEXITCODE -ne 0) {
-            "HOL_DEFER_ARTIFACT_FRESHNESS=1" | Out-File -FilePath $env:GITHUB_ENV -Append
+          if ($env:GITHUB_BASE_REF) {
+            $defer = python scripts/ci/detect_pending_extension_regen.py --defer-freshness 2>$null
+            if ($LASTEXITCODE -ne 0 -or $defer -eq "true") {
+              "HOL_DEFER_ARTIFACT_FRESHNESS=1" | Out-File -FilePath $env:GITHUB_ENV -Append
+            }
           }
       - name: Install this run's wheel and run installed proofs
         shell: pwsh
