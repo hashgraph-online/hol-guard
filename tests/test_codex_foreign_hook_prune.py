@@ -1,9 +1,12 @@
-"""Codex install must drop Guard hooks bound to a different Guard home."""
+"""A different Guard home does not authenticate ownership of existing hooks."""
 
 from __future__ import annotations
 
 import shlex
+from copy import deepcopy
 from pathlib import Path
+
+import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
@@ -64,7 +67,7 @@ def test_quoted_same_home_path_with_spaces_is_not_foreign(tmp_path: Path) -> Non
     assert is_foreign_guard_codex_hook_group(group, current_guard_home=current) is False
 
 
-def test_mixed_home_group_keeps_current_handler_only(tmp_path: Path) -> None:
+def test_mixed_home_group_preserves_unproven_handlers(tmp_path: Path) -> None:
     current = tmp_path / "guard-home"
     current.mkdir()
     foreign = tmp_path / "pytest-of-user" / "guard-home"
@@ -87,16 +90,17 @@ def test_mixed_home_group_keeps_current_handler_only(tmp_path: Path) -> None:
     assert isinstance(remaining, dict)
     handlers = remaining.get("hooks")
     assert isinstance(handlers, list)
-    assert len(handlers) == 1
+    assert len(handlers) == 2
     handler = handlers[0]
     assert isinstance(handler, dict)
     command = handler.get("command")
     assert isinstance(command, str)
     assert str(current) in command
-    assert "pytest-of-user" not in command
+    assert remaining == mixed
+    assert remaining is not mixed
 
 
-def test_install_config_hooks_drops_foreign_home_and_keeps_other_hooks(tmp_path: Path) -> None:
+def test_install_config_hooks_rejects_foreign_owner_without_mutation(tmp_path: Path) -> None:
     current = tmp_path / "guard-home"
     current.mkdir()
     foreign = tmp_path / "pytest-of-user" / "guard-home"
@@ -113,7 +117,10 @@ def test_install_config_hooks_drops_foreign_home_and_keeps_other_hooks(tmp_path:
             ]
         }
     }
-    CodexHarnessAdapter._install_config_hooks(payload, context)
+    before = deepcopy(payload)
+    with pytest.raises(RuntimeError, match="codex_hook_owner_conflict"):
+        CodexHarnessAdapter._install_config_hooks(payload, context)
+    assert payload == before
     hooks = payload["hooks"]
     assert isinstance(hooks, dict)
     groups = hooks["PreToolUse"]
@@ -125,6 +132,6 @@ def test_install_config_hooks_drops_foreign_home_and_keeps_other_hooks(tmp_path:
         for hook in group.get("hooks", [])
         if isinstance(hook, dict) and isinstance(hook.get("command"), str)
     ]
-    assert all("pytest-of-user" not in command for command in commands)
+    assert any("pytest-of-user" in command for command in commands)
     assert any("lean-ctx hook observe" in command for command in commands)
-    assert any("codex_daemon_hook_bridge.py" in command for command in commands)
+    assert not any("codex_daemon_hook_bridge.py" in command for command in commands)

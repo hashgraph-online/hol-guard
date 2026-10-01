@@ -568,7 +568,7 @@ jobs:
         with:
           name: hol-guard-native-wheel-${{ matrix.target }}
       - name: Install the platform wheel built by this run
-        run: uv pip install --python .venv/bin/python --no-deps native-dist/*.whl
+        run: uv pip install --python .venv/bin/python --no-deps --force-reinstall native-dist/*.whl
       - name: Prove installed native default routes
         if: matrix.proof == 'default'
         run: |
