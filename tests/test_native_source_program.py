@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.support.extension_freshness import requires_fresh_projections
+from tests.support.extension_freshness import requires_fresh_decision_diff, requires_fresh_projections
 
 ROOT = Path(__file__).resolve().parents[1]
 PROGRAM_DOMAIN = b"hol-guard.native-command-program.v1\0"
@@ -84,6 +84,7 @@ def example(compiler: Path, build: dict) -> dict:
 
 
 @requires_fresh_projections
+@requires_fresh_decision_diff
 def test_checked_in_program_matches_native_authoring(compiler: Path, compiled: dict) -> None:
     checked_in = json.loads((ROOT / "contracts/extensions/native-command-program.v1.json").read_bytes())
     assert checked_in == compiled["program"]
