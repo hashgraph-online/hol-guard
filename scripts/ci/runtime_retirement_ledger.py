@@ -74,17 +74,139 @@ def _rust_code(source: str) -> str:
     return "".join(result)
 
 
-def _test_nodes(path: Path) -> set[str]:
+# A bracketed reference is only collectible when pytest generated that suffix.
+# Values the static reader cannot decode keep the base node's parametrization
+# check but forgo exact suffix matching.
+_OPAQUE_PARAMS = object()
+
+
+def _is_pytest_call(node: ast.expr, attribute: str) -> bool:
+    """Match ``@pytest.mark.<attribute>(...)`` and ``pytest.<attribute>(...)``."""
+    if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+        return False
+    if node.func.attr != attribute:
+        return False
+    target = node.func.value
+    if isinstance(target, ast.Name):
+        return target.id in {"pytest", "mark", "param"}
+    if isinstance(target, ast.Attribute):
+        if target.attr == "mark" and isinstance(target.value, ast.Name) and target.value.id == "pytest":
+            return True
+        return target.attr in {"param"}
+    return False
+
+
+def _param_value_id(value: ast.expr) -> str | None:
+    """Decode one parametrize argvalue the way pytest renders it, or return
+    None when the expression is not statically decodable."""
+    if isinstance(value, ast.Call) and _is_pytest_call(value, "param"):
+        explicit = next((keyword.value for keyword in value.keywords if keyword.arg == "id"), None)
+        if explicit is not None:
+            if isinstance(explicit, ast.Constant) and isinstance(explicit.value, str):
+                return explicit.value
+            return None
+        if len(value.args) != 1:
+            return None
+        return _param_value_id(value.args[0])
+    if isinstance(value, ast.Constant):
+        literal = value.value
+        if isinstance(literal, str):
+            return literal
+        if isinstance(literal, bytes):
+            try:
+                return literal.decode("utf-8")
+            except UnicodeDecodeError:
+                return None
+        if isinstance(literal, bool):
+            return str(literal)
+        if isinstance(literal, (int, float, complex)) or literal is None:
+            return str(literal)
+        return None
+    return None
+
+
+def _parametrize_suffixes(node: ast.FunctionDef | ast.AsyncFunctionDef) -> set[str] | None | object:
+    """Collect the valid ``[param]`` suffixes for a test function.
+
+    Returns ``None`` when the node carries no parametrize mark, a set of
+    suffixes when every layer decodes, or ``_OPAQUE_PARAMS`` when a layer is
+    parametrized but its values cannot be statically resolved (e.g. imported
+    constants): the base is still proven parametrized, but the exact suffix
+    stays unverified.
+    """
+    layers: list[list[str] | None] = []
+    for decorator in node.decorator_list:
+        if not _is_pytest_call(decorator, "parametrize"):
+            continue
+        call = decorator
+        argnames_node = call.args[0] if call.args else None
+        if not isinstance(argnames_node, ast.Constant) or not isinstance(argnames_node.value, str):
+            layers.append(None)
+            continue
+        argnames = [name.strip() for name in argnames_node.value.split(",")]
+        ids_node = next((keyword.value for keyword in call.keywords if keyword.arg == "ids"), None)
+        if ids_node is not None:
+            if (
+                isinstance(ids_node, (ast.List, ast.Tuple))
+                and all(isinstance(item, ast.Constant) and isinstance(item.value, str) for item in ids_node.elts)
+            ):
+                layers.append([item.value for item in ids_node.elts])
+            else:
+                layers.append(None)
+            continue
+        values_node = call.args[1] if len(call.args) > 1 else None
+        if not isinstance(values_node, (ast.List, ast.Tuple)):
+            layers.append(None)
+            continue
+        layer: list[str] = []
+        for element in values_node.elts:
+            if isinstance(element, ast.Call) and _is_pytest_call(element, "param"):
+                explicit = next((kw.value for kw in element.keywords if kw.arg == "id"), None)
+                if explicit is not None:
+                    if isinstance(explicit, ast.Constant) and isinstance(explicit.value, str):
+                        layer.append(explicit.value)
+                        continue
+                    layers.append(None)
+                    layer = []
+                    break
+                parts = [_param_value_id(part) for part in element.args]
+            elif len(argnames) > 1:
+                if isinstance(element, (ast.Tuple, ast.List)) and len(element.elts) == len(argnames):
+                    parts = [_param_value_id(part) for part in element.elts]
+                else:
+                    parts = [None]
+            else:
+                parts = [_param_value_id(element)]
+            if any(part is None for part in parts):
+                layers.append(None)
+                layer = []
+                break
+            layer.append("-".join(cast(list[str], parts)))
+        else:
+            layers.append(layer)
+    if not layers:
+        return None
+    if any(layer is None for layer in layers):
+        return _OPAQUE_PARAMS
+    # Stacked parametrize decorators produce suffixes bottom-up: the innermost
+    # (last) decorator contributes the leftmost id part.
+    suffixes = cast(list[list[str]], layers)[-1]
+    for layer in reversed(cast(list[list[str]], layers)[:-1]):
+        suffixes = [inner + "-" + outer for outer in layer for inner in suffixes]
+    return set(suffixes)
+
+
+def _test_nodes(path: Path) -> dict[str, object]:
     source = path.read_text(encoding="utf-8")
     if path.suffix == ".rs":
         names = _RUST_TEST.findall(_rust_code(source))
         if len(names) != len(set(names)):
             raise RuntimeError(f"retirement ledger has ambiguous Rust test nodes: {path.name}")
-        return set(names)
+        return dict.fromkeys(names, None)
     if path.suffix != ".py":
         raise RuntimeError(f"retirement ledger has unsupported test file: {path.name}")
     tree = ast.parse(source, filename=str(path))
-    nodes: set[str] = set()
+    nodes: dict[str, object] = {}
 
     def collect(body: list[ast.stmt], prefix: str = "") -> None:
         for node in body:
@@ -92,7 +214,7 @@ def _test_nodes(path: Path) -> set[str]:
                 name = prefix + node.name
                 if name in nodes:
                     raise RuntimeError(f"retirement ledger has duplicate Python test node: {path.name}::{name}")
-                nodes.add(name)
+                nodes[name] = _parametrize_suffixes(node)
             elif isinstance(node, ast.ClassDef) and node.name.startswith("Test"):
                 # Pytest does not collect test classes with custom constructors.
                 if not any(
@@ -121,25 +243,39 @@ def validate_retirement_ledger(root: Path, contract: dict[str, object]) -> dict[
     expected_sources = {record["path"] for record in records}
     if set(_strings(ledger.get("retired_source_paths"), "retired_source_paths")) != expected_sources:
         raise RuntimeError("retirement ledger source paths do not match ownership contract")
-    inventory: dict[str, set[str]] = {}
+    inventory: dict[str, dict[str, object]] = {}
 
     def node_exists(reference: object) -> bool:
         if not isinstance(reference, str) or "::" not in reference:
             raise RuntimeError("retirement ledger requires a file::test node reference")
         filename, node = reference.split("::", 1)
         path = _path(root, filename)
+        base, separator, params = node.partition("[")
+        valid_node = bool(base) and all(part.isidentifier() for part in base.split("::"))
+        if separator:
+            valid_node = valid_node and len(params) > 1 and node.endswith("]")
         if (
-            not node
-            or not all(part.isidentifier() for part in node.split("::"))
+            not valid_node
             or path.suffix not in {".py", ".rs"}
-            or (path.suffix == ".rs" and "::" in node)
+            or (path.suffix == ".rs" and ("::" in node or "[" in node))
         ):
-            raise RuntimeError(f"retirement ledger requires a non-parametrized test node: {reference}")
+            raise RuntimeError(f"retirement ledger has a malformed test node: {reference}")
         if not path.is_file():
             return False
         if filename not in inventory:
             inventory[filename] = _test_nodes(path)
-        return node in inventory[filename]
+        if base not in inventory[filename]:
+            return False
+        if not separator:
+            return True
+        suffixes = inventory[filename][base]
+        if suffixes is _OPAQUE_PARAMS:
+            # Parametrized, but the values are not statically decodable, so the
+            # exact suffix cannot be verified here.
+            return True
+        # A bracketed reference to a non-parametrized test, or a parameter id
+        # pytest never generated, is not a collectible node.
+        return suffixes is not None and params[:-1] in suffixes
 
     old_nodes: set[str] = set()
     replacements_checked: set[str] = set()

@@ -559,6 +559,12 @@ jobs:
         with:
           version: 0.9.26
           enable-cache: true
+          save-cache: false
+          cache-suffix: native-ci-v1
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+          prune-cache: false
       - name: Install locked proof dependencies
         env:
           NATIVE_PROOF: ${{ matrix.proof }}
@@ -567,7 +573,7 @@ jobs:
         with:
           name: hol-guard-native-wheel-${{ matrix.target }}
       - name: Install the platform wheel built by this run
-        run: uv pip install --python .venv/bin/python --no-deps native-dist/*.whl
+        run: uv pip install --python .venv/bin/python --no-deps --force-reinstall native-dist/*.whl
       - name: Prove installed native default routes
         if: matrix.proof == 'default'
         run: |

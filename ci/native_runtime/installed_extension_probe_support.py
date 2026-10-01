@@ -219,9 +219,12 @@ def receipt_processed_count(writer: _ReceiptProgressWriter) -> int | None:
 
 
 def receipt_persistence_diagnostic(
-    writer: _ReceiptProgressWriter | None, processed_before: int | None
+    writer: _ReceiptProgressWriter | None,
+    processed_before: int | None,
+    *,
+    diagnostic_context: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
-    """Retain bounded writer progress without receipt, policy, or exception data."""
+    """Retain bounded writer progress and safe request context."""
 
     counters: dict[str, int] = {}
     try:
@@ -240,13 +243,27 @@ def receipt_persistence_diagnostic(
                     counters[key] = value
     except Exception:
         counters = {}
-    return {
-        "schema": "guard.installed-native-receipt-persistence-failure.v1",
+    diagnostic: dict[str, object] = {
+        "schema": "guard.installed-native-receipt-persistence-failure.v2",
         "processed_before": processed_before
         if type(processed_before) is int and 0 <= processed_before <= 2**31 - 1
         else None,
         "writer_counters": counters,
     }
+    if diagnostic_context is not None:
+        bounded_context: dict[str, str] = {}
+        for key in ("case", "http_reason_code", "http_decision"):
+            value = diagnostic_context.get(key)
+            if (
+                isinstance(value, str)
+                and value
+                and len(value) <= 96
+                and all(character.isalnum() or character in "_-" for character in value)
+            ):
+                bounded_context[key] = value
+        if bounded_context:
+            diagnostic["context"] = bounded_context
+    return diagnostic
 
 
 def await_persisted_native_receipt(
@@ -255,6 +272,7 @@ def await_persisted_native_receipt(
     *,
     writer: _ReceiptProgressWriter | None = None,
     receipt_processed_before: int | None = None,
+    diagnostic_context: Mapping[str, object] | None = None,
     timeout_seconds: float = 10.0,
 ) -> dict[str, object]:
     """Wait for one new durable receipt without starving the async SQLite writer.
@@ -298,7 +316,17 @@ def await_persisted_native_receipt(
                 if receipt is not None:
                     return receipt
         time.sleep(0.02)
-    print(json.dumps(receipt_persistence_diagnostic(writer, receipt_processed_before), sort_keys=True), flush=True)
+    print(
+        json.dumps(
+            receipt_persistence_diagnostic(
+                writer,
+                receipt_processed_before,
+                diagnostic_context=diagnostic_context,
+            ),
+            sort_keys=True,
+        ),
+        flush=True,
+    )
     raise RuntimeError("installed_native_extensions_failed:receipt_persistence_missing")
 
 

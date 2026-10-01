@@ -1911,6 +1911,16 @@
     border-bottom-width: calc(1px * calc(1 - var(--tw-divide-y-reverse)));
   }
 
+  :where(.divide-brand-dark\/10 > :not(:last-child)) {
+    border-color: var(--brand-dark);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    :where(.divide-brand-dark\/10 > :not(:last-child)) {
+      border-color: color-mix(in oklab, var(--brand-dark) 10%, transparent);
+    }
+  }
+
   :where(.divide-slate-100 > :not(:last-child)) {
     border-color: var(--color-slate-100);
   }
@@ -2331,6 +2341,16 @@
     }
   }
 
+  .border-brand-dark\/10 {
+    border-color: var(--brand-dark);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .border-brand-dark\/10 {
+      border-color: color-mix(in oklab, var(--brand-dark) 10%, transparent);
+    }
+  }
+
   .border-brand-dark\/15 {
     border-color: var(--brand-dark);
   }
@@ -2338,6 +2358,16 @@
   @supports (color: color-mix(in lab, red, red)) {
     .border-brand-dark\/15 {
       border-color: color-mix(in oklab, var(--brand-dark) 15%, transparent);
+    }
+  }
+
+  .border-brand-dark\/20 {
+    border-color: var(--brand-dark);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .border-brand-dark\/20 {
+      border-color: color-mix(in oklab, var(--brand-dark) 20%, transparent);
     }
   }
 

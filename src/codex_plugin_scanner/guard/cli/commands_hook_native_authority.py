@@ -127,7 +127,7 @@ def route_native_hook(
                 home_dir=context.home_dir,
                 guard_home=context.guard_home,
             ),
-            getattr(args, "json", False),
+            True,
         )
         return 0
     from .commands_hook_native_pipeline import run_native_hook_pipeline
@@ -172,7 +172,9 @@ def route_native_hook(
                 guard_home=context.guard_home,
                 recording_only=recording_only_from_acked_snapshot(store),
             )
-        _emit("hook", native_result, getattr(args, "json", False))
+        # Availability responses are already harness wire documents. A hook
+        # caller need not pass --json to receive a parseable deny response.
+        _emit("hook", native_result, True)
         return 0
     except Exception:
         _emit(
@@ -188,6 +190,6 @@ def route_native_hook(
                 guard_home=context.guard_home,
                 recording_only=recording_only_from_acked_snapshot(store),
             ),
-            getattr(args, "json", False),
+            True,
         )
         return 0

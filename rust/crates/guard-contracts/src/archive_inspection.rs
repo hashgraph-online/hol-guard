@@ -50,6 +50,12 @@ pub struct ArchiveInspectionRequestV1 {
     /// Caller-side path to the downloaded blob. The runtime canonicalizes and
     /// revalidates it; the file must be regular, single-linked, and read-only.
     pub archive_path: String,
+    /// Canonical Guard-home directory the caller is inspecting under. The
+    /// worker itself takes `archive-inspect.lock` inside it so admission is
+    /// owned natively: any client — adapter or direct — contends on the same
+    /// kernel lease and a saturated slot is a bounded `overloaded` result,
+    /// never a queue.
+    pub state_dir: String,
     /// Lowercase hex SHA-256 the caller bound to the blob at download time.
     pub expected_sha256: String,
     pub timeout_ms: u64,
@@ -79,5 +85,10 @@ pub struct ArchiveInspectionResultV1 {
     pub severity: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sha256: Option<String>,
+    /// SHA-256 of the runtime binary that produced this result. The caller
+    /// already resolved the binary identity before spawning; echoing it binds
+    /// the typed result to that attested binary instead of whatever wrote to
+    /// the pipe.
+    pub runtime_sha256: String,
     pub counters: ArchiveInspectionCountersV1,
 }

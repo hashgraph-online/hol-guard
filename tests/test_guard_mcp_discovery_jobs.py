@@ -110,7 +110,14 @@ def test_cancel_before_start_launches_nothing(tmp_path: Path):
 
 
 @pytest.mark.parametrize(
-    "code", ["mcp_launch_failed", "mcp_transport_failed", "mcp_initialize_failed", "mcp_protocol_unsupported"]
+    "code",
+    [
+        "mcp_launch_failed",
+        "mcp_transport_failed",
+        "mcp_initialize_failed",
+        "mcp_protocol_unsupported",
+        "mcp_capability_rejected",
+    ],
 )
 def test_refresh_job_preserves_safe_probe_failure_codes(tmp_path, monkeypatch, code):
     store = GuardStore(tmp_path / "home")

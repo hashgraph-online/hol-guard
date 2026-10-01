@@ -150,6 +150,8 @@ def _exchange_tools_list(
                 return partial("invalid_page")
             if catalog.protocol_version == _MODERN_PROTOCOL and result.get("resultType") != "complete":
                 return partial("invalid_page")
+            if catalog.protocol_version == _MODERN_PROTOCOL and not {"ttlMs", "cacheScope"}.issubset(result):
+                return partial("invalid_cache_hints")
             ttl = result.get("ttlMs", 0)
             scope = result.get("cacheScope", "private")
             if type(ttl) is not int or scope not in ("private", "public"):

@@ -131,5 +131,8 @@ pub fn inspect_path(
 // checks); the retired Python path also refused non-POSIX platforms, so the
 // behavioral suite only runs there.
 #[cfg(all(test, unix))]
+#[path = "lib_tests_admission.rs"]
+mod admission_tests;
+#[cfg(all(test, unix))]
 #[path = "lib_tests.rs"]
 mod tests;
