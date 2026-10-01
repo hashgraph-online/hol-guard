@@ -105,17 +105,6 @@ def main() -> int:
         _run(rebuild)
         _run([*command, "--check"])
         return 0
-    if args.changed_from and (pending or changed):
-        print(
-            f"pending contribution regeneration (ids={pending}, changed={changed}); "
-            "validating sources by generating instead of checking freshness",
-            file=sys.stderr,
-        )
-        rebuild = _rebuild_command(args.compiler)
-        _run(command)
-        _run(rebuild)
-        _run([*command, "--check"])
-        return 0
     _run([*command, "--check"])
     return 0
 
