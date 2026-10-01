@@ -67,8 +67,8 @@ jobs:
           targets: ${{ matrix.target == 'x86_64-apple-darwin' && matrix.target || '' }}
       - name: Build and assemble version-matched native wheel
         env:
-          PR_BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
           HOL_GUARD_BUILD_SHA: ${{ github.sha }}
+          NATIVE_PR_BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
           MACOSX_DEPLOYMENT_TARGET: ${{ matrix.deployment_target }}
           PLATFORM_TAG: ${{ matrix.platform_tag }}
           TARGET: ${{ matrix.target }}

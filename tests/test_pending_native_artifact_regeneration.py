@@ -83,6 +83,7 @@ def test_preparation_retains_generated_outputs_and_checks_after_rebuild(
     import types
 
     detector = types.SimpleNamespace(
+        ContributionDiffError=RuntimeError,
         _contributions_changed=lambda base: ["rust/Cargo.lock"] if pending else [],
         catalog_ids=lambda: {"command.example"},
         contribution_ids=lambda: {"command.example"},
