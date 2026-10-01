@@ -65,6 +65,17 @@ jobs:
       - uses: ./.github/actions/setup-rust
         with:
           targets: ${{ matrix.target == 'x86_64-apple-darwin' && matrix.target || '' }}
+      # Keep packaged extension projections consistent with the rebuilt
+      # compiler when post-merge regeneration is pending for this branch.
+      - name: Refresh generated extension artifacts when pending
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          NATIVE_PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          pending=$(python scripts/ci/detect_pending_extension_regen.py --flag --changed-from "$NATIVE_PR_BASE_SHA")
+          if [[ "$pending" == "true" ]]; then
+            python scripts/build_native_command_program.py
+          fi
       - name: Build pure Python wheel
         run: uv build --wheel --out-dir pure-dist
       - name: Build and assemble version-matched native wheel
@@ -142,6 +153,17 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends musl-tools
+      # Keep packaged extension projections consistent with the rebuilt
+      # compiler when post-merge regeneration is pending for this branch.
+      - name: Refresh generated extension artifacts when pending
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          NATIVE_PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          pending=$(uv run --no-sync python scripts/ci/detect_pending_extension_regen.py --flag --changed-from "$NATIVE_PR_BASE_SHA")
+          if [[ "$pending" == "true" ]]; then
+            uv run --no-sync python scripts/build_native_command_program.py
+          fi
       - name: Build pure Python wheel
         run: uv build --wheel --out-dir pure-dist
       - name: Build static native runtime
@@ -341,6 +363,20 @@ jobs:
           enable-cache: true
       - run: uv sync --frozen --no-dev --group ci-test --python 3.12
       - uses: ./.github/actions/setup-rust
+      # Keep packaged extension projections consistent with the rebuilt
+      # compiler when post-merge regeneration is pending for this branch.
+      - name: Refresh generated extension artifacts when pending
+        if: ${{ github.event_name == 'pull_request' }}
+        shell: pwsh
+        env:
+          NATIVE_PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          $pending = uv run --no-sync python scripts/ci/detect_pending_extension_regen.py --flag --changed-from "$env:NATIVE_PR_BASE_SHA"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($pending -eq "true") {
+            uv run --no-sync python scripts/build_native_command_program.py
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
       - name: Build pure Python wheel
         run: uv build --wheel --out-dir pure-dist
       - name: Build native runtime
