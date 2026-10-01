@@ -1,0 +1,53 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.authyouragent",
+  "version": "1.0.0",
+  "name": "Auth Your Agent",
+  "description": "Reviews the tools that drive a signed-in browser vault: navigate, click, type_text, fill_secret (types a saved password or TOTP code the agent never sees) and request_approval. Reads, status checks, take over and sign-out stay unattended. The server also holds committing clicks for phone approval. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.kjames2001",
+    "displayName": "kjames2001",
+    "url": "https://github.com/kjames2001/authyouragent"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniGlobeAlt", "background": "#0D9488" },
+  "homepage": "https://authyouragent.com",
+  "license": "MIT",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "npx",
+    "package": "authyouragent-mcp"
+  },
+  "riskClasses": [
+    "external-signed-in-browser-actions",
+    "external-saved-credential-fill",
+    "external-server-enforces-phone-approval"
+  ],
+  "tools": [
+    { "name": "navigate", "state": "review" },
+    { "name": "click", "state": "review" },
+    { "name": "type_text", "state": "review" },
+    { "name": "fill_secret", "state": "review" },
+    { "name": "request_approval", "state": "review" },
+    { "name": "read_page", "state": "allow" },
+    { "name": "check_login_wall", "state": "allow" },
+    { "name": "list_secrets", "state": "allow" },
+    { "name": "request_takeover", "state": "allow" },
+    { "name": "wait_for_takeover", "state": "allow" },
+    { "name": "check_agent_status", "state": "allow" },
+    { "name": "end_session", "state": "allow" },
+    { "name": "report_site", "state": "inherit" },
+    { "name": "other", "state": "inherit" }
+  ],
+  "referenceUrls": [
+    "https://github.com/kjames2001/authyouragent",
+    "https://github.com/kjames2001/authyouragent/blob/main/sdk/authyouragent/mcp_server.py",
+    "https://authyouragent.com/docs/developers/takeover"
+  ],
+  "saferAlternatives": [
+    "Keep fill_secret on Review: it types a stored password or authenticator code into the page, even though the agent never sees the value.",
+    "The vault already holds every committing click, Enter and scripted write for phone approval; Review on click adds a second prompt for routine clicks.",
+    "end_session stays on Allow because it signs out and wipes the browser profile; pausing it would leave the owner signed in after the agent stops."
+  ]
+}
