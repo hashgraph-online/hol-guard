@@ -1,5 +1,6 @@
 {
   "build": {
+    "mcp_sources": [],
     "schema": "guard.command-extension-build.v1",
     "sources": [
       {
@@ -10091,30 +10092,33 @@
       {
         "extension": {
           "action_classes": [
-            "CloudG asset collection command",
-            "CloudG pipeline execution command",
-            "CloudG scanner execution command"
+            "AgenticJobs job posting command",
+            "AgenticJobs listing publish command",
+            "AgenticJobs application submit command",
+            "AgenticJobs application decision command"
           ],
           "aliases": [],
           "conflicts": [],
           "delegated_protection": null,
           "dependencies": [],
-          "description": "Reviews cloud credential use, security scanner execution, and Terraform file generation through the CloudG CLI.",
+          "description": "Reviews AgenticJobs CLI commands that change a job board's state: posting or publishing a listing, submitting an application, and deciding on an applicant. Searching, reading drafts and listing applications stay automatic.",
           "ecosystem_ids": [],
-          "executables": [],
-          "extension_id": "command.cloudg",
-          "homepage": "https://github.com/morpheuslord/cloudg",
+          "executables": [
+            "agenticjobs"
+          ],
+          "extension_id": "command.agenticjobs",
+          "homepage": "https://github.com/profullstack/agenticjobs",
           "icon": {
-            "background": "#0E7490",
+            "background": "#0F766E",
             "kind": "react-icon",
-            "name": "HiMiniCloud"
+            "name": "HiMiniCommandLine"
           },
           "license": "MIT",
-          "name": "CloudG command protection",
+          "name": "AgenticJobs command protection",
           "permissions": [
             {
               "action_classes": [
-                "CloudG asset collection command"
+                "AgenticJobs job posting command"
               ],
               "baseline_floor": "review",
               "configurable": true,
@@ -10122,25 +10126,26 @@
               "default_enabled": true,
               "dependencies": [],
               "deprecated": false,
-              "description": "Identifies asset collection runs that resolve cloud credentials and enumerate resources through provider APIs.",
-              "example_command": "cloudg collect -p aws --profile prod --region us-east-1",
+              "description": "Identifies `agenticjobs post`, which creates a job listing under an employer from a Markdown file. The listing stays a draft unless `--publish` takes it live in the same call, and a retry without `--idempotency-key` can create a second listing.",
+              "example_command": "agenticjobs post job.md --org acme --publish",
               "family": null,
               "fixed_reason": null,
               "implementation_version": "1.0.0",
               "implied_permissions": [],
-              "introduced_version": "3.9.0",
-              "label": "CloudG asset collection",
-              "permission_id": "command.cloudg.permission.collect",
+              "introduced_version": "3.3.0",
+              "label": "Post a job listing",
+              "permission_id": "command.agenticjobs.permission.post",
               "replacement_permission_id": null,
               "risk_tier": "high",
               "safer_guidance": [
-                "Confirm the provider, profile, and region flags point at the account you intend to inventory."
+                "Post without --publish first, read the draft back with `agenticjobs show <slug>`, then publish it as a separate reviewed step.",
+                "Pass --idempotency-key <k> so a retried post returns the listing it already made instead of a second one."
               ],
               "typed_capabilities": []
             },
             {
               "action_classes": [
-                "CloudG pipeline execution command"
+                "AgenticJobs listing publish command"
               ],
               "baseline_floor": "review",
               "configurable": true,
@@ -10148,26 +10153,25 @@
               "default_enabled": true,
               "dependencies": [],
               "deprecated": false,
-              "description": "Identifies full pipeline runs that resolve cloud credentials, enumerate assets across accounts and regions, execute security scanners, and write Terraform recreation files when --terraform is set.",
-              "example_command": "cloudg run -p aws --profile prod --terraform",
+              "description": "Identifies `agenticjobs publish <slug>`, which takes a draft job listing live on the board where candidates and other agents can find and apply to it.",
+              "example_command": "agenticjobs publish staff-engineer",
               "family": null,
               "fixed_reason": null,
               "implementation_version": "1.0.0",
               "implied_permissions": [],
-              "introduced_version": "3.9.0",
-              "label": "CloudG full pipeline",
-              "permission_id": "command.cloudg.permission.run",
+              "introduced_version": "3.3.0",
+              "label": "Publish a draft listing",
+              "permission_id": "command.agenticjobs.permission.publish",
               "replacement_permission_id": null,
               "risk_tier": "high",
               "safer_guidance": [
-                "Check the selected providers, credential flags, regions, and scanner list before running.",
-                "Leave --terraform off unless you want .tf.json recreation files written to the output directory."
+                "Read the draft back with `agenticjobs show <slug>` and confirm it says what it pays before publishing."
               ],
               "typed_capabilities": []
             },
             {
               "action_classes": [
-                "CloudG scanner execution command"
+                "AgenticJobs application submit command"
               ],
               "baseline_floor": "review",
               "configurable": true,
@@ -10175,31 +10179,58 @@
               "default_enabled": true,
               "dependencies": [],
               "deprecated": false,
-              "description": "Identifies scanner runs that execute external security tools such as Prowler, ScoutSuite, Checkov, and Trivy against cloud accounts, IaC directories, and container images.",
-              "example_command": "cloudg scan -p aws --scanners prowler,checkov",
+              "description": "Identifies `agenticjobs submit <id>`, which sends a prepared application to the employer on the account holder's behalf. Preparing one with `agenticjobs apply --draft` and listing them with `agenticjobs drafts` stay automatic.",
+              "example_command": "agenticjobs submit 8f3c2a",
               "family": null,
               "fixed_reason": null,
               "implementation_version": "1.0.0",
               "implied_permissions": [],
-              "introduced_version": "3.9.0",
-              "label": "CloudG scanner execution",
-              "permission_id": "command.cloudg.permission.scan",
+              "introduced_version": "3.3.0",
+              "label": "Submit a prepared application",
+              "permission_id": "command.agenticjobs.permission.submit",
               "replacement_permission_id": null,
               "risk_tier": "high",
               "safer_guidance": [
-                "Review the scanner list, IaC directory, and image list before running; scanners inherit the resolved cloud credentials."
+                "Read the draft with `agenticjobs drafts` and confirm the resume, answers and disclosed agent before sending it."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "AgenticJobs application decision command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies `agenticjobs decide <id> <status>`, which sets an applicant's status to reviewing, rejected or hired and is visible to the candidate. Listing applications with `agenticjobs applications <slug>` stays automatic.",
+              "example_command": "agenticjobs decide 8f3c2a hired",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "3.3.0",
+              "label": "Decide on an applicant",
+              "permission_id": "command.agenticjobs.permission.decide",
+              "replacement_permission_id": null,
+              "risk_tier": "high",
+              "safer_guidance": [
+                "Read the application with `agenticjobs applications <slug>` before recording a decision."
               ],
               "typed_capabilities": []
             }
           ],
           "project_markers": [],
           "publisher": {
-            "display_name": "Community",
-            "id": "community.morpheuslord",
-            "url": "https://github.com/morpheuslord/cloudg"
+            "display_name": "Profullstack",
+            "id": "community.profullstack",
+            "url": "https://github.com/profullstack/agenticjobs"
           },
           "reference_urls": [
-            "https://github.com/morpheuslord/cloudg"
+            "https://github.com/profullstack/agenticjobs",
+            "https://agenticjobs.work"
           ],
           "required": false,
           "risk_classes": [
@@ -10209,399 +10240,2669 @@
           "rules": [
             {
               "action_classes": [
-                "CloudG asset collection command"
+                "AgenticJobs job posting command"
               ],
               "default_mode": "review",
-              "description": "Identifies asset collection runs that resolve cloud credentials and enumerate resources through provider APIs.",
+              "description": "Identifies `agenticjobs post`, which creates a job listing under an employer from a Markdown file. The listing stays a draft unless `--publish` takes it live in the same call, and a retry without `--idempotency-key` can create a second listing.",
               "family": null,
               "matcher": {
-                "config": {
-                  "allow_leading_options": true,
-                  "executables": [
-                    "cloudg",
-                    "cloudg.cmd",
-                    "cloudg.exe"
-                  ],
-                  "fail_secure_unknown_options": true,
-                  "forbidden_flags": [],
-                  "interspersed_flags": [
-                    "--verbose",
-                    "-v"
-                  ],
-                  "interspersed_options_with_values": [
-                    "--config",
-                    "--log-file",
-                    "--output",
-                    "--profile",
-                    "--project-id",
-                    "--provider",
-                    "--region",
-                    "--subscription-id",
-                    "-c",
-                    "-o",
-                    "-p"
-                  ],
-                  "inverse_flag_pairs": [],
-                  "leading_options_with_values": [
-                    "--config",
-                    "--log-file",
-                    "-c"
-                  ],
-                  "options_with_values": [],
-                  "required_flags": [],
-                  "required_flags_in_all_arguments": false,
-                  "required_option_values": [],
-                  "subcommands": [
-                    "collect"
-                  ]
-                },
-                "op": "executable.v1"
-              },
-              "native_capability": null,
-              "permission_id": "command.cloudg.permission.collect",
-              "risk_classes": [
-                "network_egress"
-              ],
-              "rule_id": "command.cloudg.collect",
-              "rule_version": "1.0.0",
-              "safe_variants": [
-                {
-                  "matcher": {
+                "config": {},
+                "matchers": [
+                  {
                     "config": {
                       "allow_leading_options": true,
                       "executables": [
-                        "cloudg",
-                        "cloudg.cmd",
-                        "cloudg.exe"
+                        "agenticjobs",
+                        "agenticjobs.cmd",
+                        "agenticjobs.exe"
                       ],
                       "fail_secure_unknown_options": true,
                       "forbidden_flags": [],
                       "interspersed_flags": [
-                        "--verbose",
-                        "-v"
+                        "--json"
                       ],
                       "interspersed_options_with_values": [
-                        "--config",
-                        "--log-file",
-                        "--output",
-                        "--profile",
-                        "--project-id",
-                        "--provider",
-                        "--region",
-                        "--subscription-id",
-                        "-c",
-                        "-o",
-                        "-p"
+                        "--server",
+                        "-s"
                       ],
                       "inverse_flag_pairs": [],
                       "leading_options_with_values": [
-                        "--config",
-                        "--log-file",
-                        "-c"
+                        "--server",
+                        "-s"
                       ],
-                      "options_with_values": [],
-                      "required_flags": [
-                        "--help"
+                      "options_with_values": [
+                        "--agentPolicy",
+                        "--employmentType",
+                        "--idempotency-key",
+                        "--key",
+                        "--location",
+                        "--org",
+                        "--paid-in",
+                        "--pay",
+                        "--pay-method",
+                        "--payEquity",
+                        "--payMethod",
+                        "--salaryCurrency",
+                        "--salaryMax",
+                        "--salaryMin",
+                        "--salaryPeriod",
+                        "--seniority",
+                        "--server",
+                        "--stack",
+                        "--tags",
+                        "--title",
+                        "--workplace",
+                        "-s"
                       ],
-                      "required_flags_in_all_arguments": true,
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
                       "required_option_values": [],
                       "subcommands": [
-                        "collect"
+                        "post"
                       ]
                     },
                     "op": "executable.v1"
                   },
-                  "title": "Command help",
-                  "variant_id": "help"
-                }
-              ],
-              "safer_alternatives": [
-                "Confirm the provider, profile, and region flags point at the account you intend to inventory."
-              ],
-              "severity": "high",
-              "title": "CloudG asset collection"
-            },
-            {
-              "action_classes": [
-                "CloudG pipeline execution command"
-              ],
-              "default_mode": "review",
-              "description": "Identifies full pipeline runs that resolve cloud credentials, enumerate assets, execute security scanners, and write Terraform recreation files when --terraform is set.",
-              "family": null,
-              "matcher": {
-                "config": {
-                  "allow_leading_options": true,
-                  "executables": [
-                    "cloudg",
-                    "cloudg.cmd",
-                    "cloudg.exe"
-                  ],
-                  "fail_secure_unknown_options": true,
-                  "forbidden_flags": [],
-                  "interspersed_flags": [
-                    "--azure-managed-identity",
-                    "--no-ontology",
-                    "--no-rag-export",
-                    "--no-terraform",
-                    "--ontology",
-                    "--rag-export",
-                    "--terraform",
-                    "--verbose",
-                    "-v"
-                  ],
-                  "interspersed_options_with_values": [
-                    "--aws-external-id",
-                    "--aws-key",
-                    "--aws-role-arn",
-                    "--aws-secret",
-                    "--aws-session-token",
-                    "--aws-web-identity-token-file",
-                    "--azure-cert-path",
-                    "--azure-client-id",
-                    "--azure-client-secret",
-                    "--azure-federated-token-file",
-                    "--azure-tenant-id",
-                    "--config",
-                    "--gcp-credentials-file",
-                    "--gcp-impersonate-sa",
-                    "--iac-dir",
-                    "--images",
-                    "--log-file",
-                    "--output",
-                    "--profile",
-                    "--project-id",
-                    "--provider",
-                    "--region",
-                    "--regions",
-                    "--scanners",
-                    "--subscription-id",
-                    "-c",
-                    "-o",
-                    "-p"
-                  ],
-                  "inverse_flag_pairs": [],
-                  "leading_options_with_values": [
-                    "--config",
-                    "--log-file",
-                    "-c"
-                  ],
-                  "options_with_values": [],
-                  "required_flags": [],
-                  "required_flags_in_all_arguments": false,
-                  "required_option_values": [],
-                  "subcommands": [
-                    "run"
-                  ]
-                },
-                "op": "executable.v1"
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "npx",
+                        "npx.cmd",
+                        "npx.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--json",
+                        "--no-install",
+                        "--quiet",
+                        "--yes",
+                        "-q",
+                        "-y"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "options_with_values": [
+                        "--agentPolicy",
+                        "--employmentType",
+                        "--idempotency-key",
+                        "--key",
+                        "--location",
+                        "--org",
+                        "--paid-in",
+                        "--pay",
+                        "--pay-method",
+                        "--payEquity",
+                        "--payMethod",
+                        "--salaryCurrency",
+                        "--salaryMax",
+                        "--salaryMin",
+                        "--salaryPeriod",
+                        "--seniority",
+                        "--server",
+                        "--stack",
+                        "--tags",
+                        "--title",
+                        "--workplace",
+                        "-s"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "agenticjobs",
+                        "post"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "npx",
+                        "npx.cmd",
+                        "npx.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--json",
+                        "--no-install",
+                        "--quiet",
+                        "--yes",
+                        "-q",
+                        "-y"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "options_with_values": [
+                        "--agentPolicy",
+                        "--employmentType",
+                        "--idempotency-key",
+                        "--key",
+                        "--location",
+                        "--org",
+                        "--paid-in",
+                        "--pay",
+                        "--pay-method",
+                        "--payEquity",
+                        "--payMethod",
+                        "--salaryCurrency",
+                        "--salaryMax",
+                        "--salaryMin",
+                        "--salaryPeriod",
+                        "--seniority",
+                        "--server",
+                        "--stack",
+                        "--tags",
+                        "--title",
+                        "--workplace",
+                        "-s"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "@profullstack/agenticjobs",
+                        "post"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "pnpx",
+                        "pnpx.cmd",
+                        "pnpx.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--json",
+                        "--no-install",
+                        "--quiet",
+                        "--yes",
+                        "-q",
+                        "-y"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "options_with_values": [
+                        "--agentPolicy",
+                        "--employmentType",
+                        "--idempotency-key",
+                        "--key",
+                        "--location",
+                        "--org",
+                        "--paid-in",
+                        "--pay",
+                        "--pay-method",
+                        "--payEquity",
+                        "--payMethod",
+                        "--salaryCurrency",
+                        "--salaryMax",
+                        "--salaryMin",
+                        "--salaryPeriod",
+                        "--seniority",
+                        "--server",
+                        "--stack",
+                        "--tags",
+                        "--title",
+                        "--workplace",
+                        "-s"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "agenticjobs",
+                        "post"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "pnpx",
+                        "pnpx.cmd",
+                        "pnpx.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--json",
+                        "--no-install",
+                        "--quiet",
+                        "--yes",
+                        "-q",
+                        "-y"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "options_with_values": [
+                        "--agentPolicy",
+                        "--employmentType",
+                        "--idempotency-key",
+                        "--key",
+                        "--location",
+                        "--org",
+                        "--paid-in",
+                        "--pay",
+                        "--pay-method",
+                        "--payEquity",
+                        "--payMethod",
+                        "--salaryCurrency",
+                        "--salaryMax",
+                        "--salaryMin",
+                        "--salaryPeriod",
+                        "--seniority",
+                        "--server",
+                        "--stack",
+                        "--tags",
+                        "--title",
+                        "--workplace",
+                        "-s"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "@profullstack/agenticjobs",
+                        "post"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "bunx",
+                        "bunx.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--json",
+                        "--no-install",
+                        "--quiet",
+                        "--yes",
+                        "-q",
+                        "-y"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "options_with_values": [
+                        "--agentPolicy",
+                        "--employmentType",
+                        "--idempotency-key",
+                        "--key",
+                        "--location",
+                        "--org",
+                        "--paid-in",
+                        "--pay",
+                        "--pay-method",
+                        "--payEquity",
+                        "--payMethod",
+                        "--salaryCurrency",
+                        "--salaryMax",
+                        "--salaryMin",
+                        "--salaryPeriod",
+                        "--seniority",
+                        "--server",
+                        "--stack",
+                        "--tags",
+                        "--title",
+                        "--workplace",
+                        "-s"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "agenticjobs",
+                        "post"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "bunx",
+                        "bunx.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--json",
+                        "--no-install",
+                        "--quiet",
+                        "--yes",
+                        "-q",
+                        "-y"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "options_with_values": [
+                        "--agentPolicy",
+                        "--employmentType",
+                        "--idempotency-key",
+                        "--key",
+                        "--location",
+                        "--org",
+                        "--paid-in",
+                        "--pay",
+                        "--pay-method",
+                        "--payEquity",
+                        "--payMethod",
+                        "--salaryCurrency",
+                        "--salaryMax",
+                        "--salaryMin",
+                        "--salaryPeriod",
+                        "--seniority",
+                        "--server",
+                        "--stack",
+                        "--tags",
+                        "--title",
+                        "--workplace",
+                        "-s"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "@profullstack/agenticjobs",
+                        "post"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "pnpm",
+                        "pnpm.cmd",
+                        "pnpm.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--json",
+                        "--no-install",
+                        "--quiet",
+                        "--yes",
+                        "-q",
+                        "-y"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "options_with_values": [
+                        "--agentPolicy",
+                        "--employmentType",
+                        "--idempotency-key",
+                        "--key",
+                        "--location",
+                        "--org",
+                        "--paid-in",
+                        "--pay",
+                        "--pay-method",
+                        "--payEquity",
+                        "--payMethod",
+                        "--salaryCurrency",
+                        "--salaryMax",
+                        "--salaryMin",
+                        "--salaryPeriod",
+                        "--seniority",
+                        "--server",
+                        "--stack",
+                        "--tags",
+                        "--title",
+                        "--workplace",
+                        "-s"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "dlx",
+                        "agenticjobs",
+                        "post"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "pnpm",
+                        "pnpm.cmd",
+                        "pnpm.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--json",
+                        "--no-install",
+                        "--quiet",
+                        "--yes",
+                        "-q",
+                        "-y"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "options_with_values": [
+                        "--agentPolicy",
+                        "--employmentType",
+                        "--idempotency-key",
+                        "--key",
+                        "--location",
+                        "--org",
+                        "--paid-in",
+                        "--pay",
+                        "--pay-method",
+                        "--payEquity",
+                        "--payMethod",
+                        "--salaryCurrency",
+                        "--salaryMax",
+                        "--salaryMin",
+                        "--salaryPeriod",
+                        "--seniority",
+                        "--server",
+                        "--stack",
+                        "--tags",
+                        "--title",
+                        "--workplace",
+                        "-s"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "dlx",
+                        "@profullstack/agenticjobs",
+                        "post"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "npm",
+                        "npm.cmd",
+                        "npm.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--json",
+                        "--no-install",
+                        "--quiet",
+                        "--yes",
+                        "-q",
+                        "-y"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "options_with_values": [
+                        "--agentPolicy",
+                        "--employmentType",
+                        "--idempotency-key",
+                        "--key",
+                        "--location",
+                        "--org",
+                        "--paid-in",
+                        "--pay",
+                        "--pay-method",
+                        "--payEquity",
+                        "--payMethod",
+                        "--salaryCurrency",
+                        "--salaryMax",
+                        "--salaryMin",
+                        "--salaryPeriod",
+                        "--seniority",
+                        "--server",
+                        "--stack",
+                        "--tags",
+                        "--title",
+                        "--workplace",
+                        "-s"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "exec",
+                        "agenticjobs",
+                        "post"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "npm",
+                        "npm.cmd",
+                        "npm.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--json",
+                        "--no-install",
+                        "--quiet",
+                        "--yes",
+                        "-q",
+                        "-y"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "options_with_values": [
+                        "--agentPolicy",
+                        "--employmentType",
+                        "--idempotency-key",
+                        "--key",
+                        "--location",
+                        "--org",
+                        "--paid-in",
+                        "--pay",
+                        "--pay-method",
+                        "--payEquity",
+                        "--payMethod",
+                        "--salaryCurrency",
+                        "--salaryMax",
+                        "--salaryMin",
+                        "--salaryPeriod",
+                        "--seniority",
+                        "--server",
+                        "--stack",
+                        "--tags",
+                        "--title",
+                        "--workplace",
+                        "-s"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "exec",
+                        "@profullstack/agenticjobs",
+                        "post"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  }
+                ],
+                "op": "any.v1"
               },
               "native_capability": null,
-              "permission_id": "command.cloudg.permission.run",
+              "permission_id": "command.agenticjobs.permission.post",
               "risk_classes": [
                 "execution",
                 "network_egress"
               ],
-              "rule_id": "command.cloudg.run",
+              "rule_id": "command.agenticjobs.post",
               "rule_version": "1.0.0",
               "safe_variants": [
                 {
                   "matcher": {
-                    "config": {
-                      "allow_leading_options": true,
-                      "executables": [
-                        "cloudg",
-                        "cloudg.cmd",
-                        "cloudg.exe"
-                      ],
-                      "fail_secure_unknown_options": true,
-                      "forbidden_flags": [],
-                      "interspersed_flags": [
-                        "--azure-managed-identity",
-                        "--no-ontology",
-                        "--no-rag-export",
-                        "--no-terraform",
-                        "--ontology",
-                        "--rag-export",
-                        "--terraform",
-                        "--verbose",
-                        "-v"
-                      ],
-                      "interspersed_options_with_values": [
-                        "--aws-external-id",
-                        "--aws-key",
-                        "--aws-role-arn",
-                        "--aws-secret",
-                        "--aws-session-token",
-                        "--aws-web-identity-token-file",
-                        "--azure-cert-path",
-                        "--azure-client-id",
-                        "--azure-client-secret",
-                        "--azure-federated-token-file",
-                        "--azure-tenant-id",
-                        "--config",
-                        "--gcp-credentials-file",
-                        "--gcp-impersonate-sa",
-                        "--iac-dir",
-                        "--images",
-                        "--log-file",
-                        "--output",
-                        "--profile",
-                        "--project-id",
-                        "--provider",
-                        "--region",
-                        "--regions",
-                        "--scanners",
-                        "--subscription-id",
-                        "-c",
-                        "-o",
-                        "-p"
-                      ],
-                      "inverse_flag_pairs": [],
-                      "leading_options_with_values": [
-                        "--config",
-                        "--log-file",
-                        "-c"
-                      ],
-                      "options_with_values": [],
-                      "required_flags": [
-                        "--help"
-                      ],
-                      "required_flags_in_all_arguments": true,
-                      "required_option_values": [],
-                      "subcommands": [
-                        "run"
-                      ]
-                    },
-                    "op": "executable.v1"
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "agenticjobs",
+                            "agenticjobs.cmd",
+                            "agenticjobs.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--json"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--server",
+                            "-s"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "--server",
+                            "-s"
+                          ],
+                          "options_with_values": [
+                            "--agentPolicy",
+                            "--employmentType",
+                            "--idempotency-key",
+                            "--key",
+                            "--location",
+                            "--org",
+                            "--paid-in",
+                            "--pay",
+                            "--pay-method",
+                            "--payEquity",
+                            "--payMethod",
+                            "--salaryCurrency",
+                            "--salaryMax",
+                            "--salaryMin",
+                            "--salaryPeriod",
+                            "--seniority",
+                            "--server",
+                            "--stack",
+                            "--tags",
+                            "--title",
+                            "--workplace",
+                            "-s"
+                          ],
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "post"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "agenticjobs",
+                            "agenticjobs.cmd",
+                            "agenticjobs.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--json"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--server",
+                            "-s"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "--server",
+                            "-s"
+                          ],
+                          "options_with_values": [
+                            "--agentPolicy",
+                            "--employmentType",
+                            "--idempotency-key",
+                            "--key",
+                            "--location",
+                            "--org",
+                            "--paid-in",
+                            "--pay",
+                            "--pay-method",
+                            "--payEquity",
+                            "--payMethod",
+                            "--salaryCurrency",
+                            "--salaryMax",
+                            "--salaryMin",
+                            "--salaryPeriod",
+                            "--seniority",
+                            "--server",
+                            "--stack",
+                            "--tags",
+                            "--title",
+                            "--workplace",
+                            "-s"
+                          ],
+                          "required_flags": [
+                            "-h"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "post"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      }
+                    ],
+                    "op": "any.v1"
                   },
                   "title": "Command help",
                   "variant_id": "help"
                 }
               ],
               "safer_alternatives": [
-                "Check the selected providers, credential flags, regions, and scanner list before running."
+                "Post without --publish first, read the draft back with `agenticjobs show <slug>`, then publish it as a separate reviewed step.",
+                "Pass --idempotency-key <k> so a retried post returns the listing it already made instead of a second one."
               ],
               "severity": "high",
-              "title": "CloudG full pipeline"
+              "title": "Post a job listing"
             },
             {
               "action_classes": [
-                "CloudG scanner execution command"
+                "AgenticJobs listing publish command"
               ],
               "default_mode": "review",
-              "description": "Identifies scanner runs that execute external security tools such as Prowler, ScoutSuite, Checkov, and Trivy.",
+              "description": "Identifies `agenticjobs publish <slug>`, which takes a draft job listing live on the board where candidates and other agents can find and apply to it.",
               "family": null,
               "matcher": {
-                "config": {
-                  "allow_leading_options": true,
-                  "executables": [
-                    "cloudg",
-                    "cloudg.cmd",
-                    "cloudg.exe"
-                  ],
-                  "fail_secure_unknown_options": true,
-                  "forbidden_flags": [],
-                  "interspersed_flags": [
-                    "--verbose",
-                    "-v"
-                  ],
-                  "interspersed_options_with_values": [
-                    "--config",
-                    "--iac-dir",
-                    "--images",
-                    "--log-file",
-                    "--output",
-                    "--profile",
-                    "--provider",
-                    "--scanners",
-                    "-c",
-                    "-o",
-                    "-p"
-                  ],
-                  "inverse_flag_pairs": [],
-                  "leading_options_with_values": [
-                    "--config",
-                    "--log-file",
-                    "-c"
-                  ],
-                  "options_with_values": [],
-                  "required_flags": [],
-                  "required_flags_in_all_arguments": false,
-                  "required_option_values": [],
-                  "subcommands": [
-                    "scan"
-                  ]
-                },
-                "op": "executable.v1"
+                "config": {},
+                "matchers": [
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "agenticjobs",
+                        "agenticjobs.cmd",
+                        "agenticjobs.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--json"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--server",
+                        "-s"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--server",
+                        "-s"
+                      ],
+                      "options_with_values": [
+                        "--server",
+                        "-s"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "publish"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "npx",
+                        "npx.cmd",
+                        "npx.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--json",
+                        "--no-install",
+                        "--quiet",
+                        "--yes",
+                        "-q",
+                        "-y"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "options_with_values": [
+                        "--server",
+                        "-s"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "agenticjobs",
+                        "publish"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "npx",
+                        "npx.cmd",
+                        "npx.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--json",
+                        "--no-install",
+                        "--quiet",
+                        "--yes",
+                        "-q",
+                        "-y"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "options_with_values": [
+                        "--server",
+                        "-s"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "@profullstack/agenticjobs",
+                        "publish"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "pnpx",
+                        "pnpx.cmd",
+                        "pnpx.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--json",
+                        "--no-install",
+                        "--quiet",
+                        "--yes",
+                        "-q",
+                        "-y"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "options_with_values": [
+                        "--server",
+                        "-s"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "agenticjobs",
+                        "publish"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "pnpx",
+                        "pnpx.cmd",
+                        "pnpx.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--json",
+                        "--no-install",
+                        "--quiet",
+                        "--yes",
+                        "-q",
+                        "-y"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "options_with_values": [
+                        "--server",
+                        "-s"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "@profullstack/agenticjobs",
+                        "publish"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "bunx",
+                        "bunx.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--json",
+                        "--no-install",
+                        "--quiet",
+                        "--yes",
+                        "-q",
+                        "-y"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "options_with_values": [
+                        "--server",
+                        "-s"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "agenticjobs",
+                        "publish"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "bunx",
+                        "bunx.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--json",
+                        "--no-install",
+                        "--quiet",
+                        "--yes",
+                        "-q",
+                        "-y"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "options_with_values": [
+                        "--server",
+                        "-s"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "@profullstack/agenticjobs",
+                        "publish"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "pnpm",
+                        "pnpm.cmd",
+                        "pnpm.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--json",
+                        "--no-install",
+                        "--quiet",
+                        "--yes",
+                        "-q",
+                        "-y"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "options_with_values": [
+                        "--server",
+                        "-s"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "dlx",
+                        "agenticjobs",
+                        "publish"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "pnpm",
+                        "pnpm.cmd",
+                        "pnpm.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--json",
+                        "--no-install",
+                        "--quiet",
+                        "--yes",
+                        "-q",
+                        "-y"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "options_with_values": [
+                        "--server",
+                        "-s"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "dlx",
+                        "@profullstack/agenticjobs",
+                        "publish"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "npm",
+                        "npm.cmd",
+                        "npm.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--json",
+                        "--no-install",
+                        "--quiet",
+                        "--yes",
+                        "-q",
+                        "-y"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "options_with_values": [
+                        "--server",
+                        "-s"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "exec",
+                        "agenticjobs",
+                        "publish"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "npm",
+                        "npm.cmd",
+                        "npm.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--json",
+                        "--no-install",
+                        "--quiet",
+                        "--yes",
+                        "-q",
+                        "-y"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "options_with_values": [
+                        "--server",
+                        "-s"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "exec",
+                        "@profullstack/agenticjobs",
+                        "publish"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  }
+                ],
+                "op": "any.v1"
               },
               "native_capability": null,
-              "permission_id": "command.cloudg.permission.scan",
+              "permission_id": "command.agenticjobs.permission.publish",
               "risk_classes": [
                 "execution",
                 "network_egress"
               ],
-              "rule_id": "command.cloudg.scan",
+              "rule_id": "command.agenticjobs.publish",
               "rule_version": "1.0.0",
               "safe_variants": [
                 {
                   "matcher": {
-                    "config": {
-                      "allow_leading_options": true,
-                      "executables": [
-                        "cloudg",
-                        "cloudg.cmd",
-                        "cloudg.exe"
-                      ],
-                      "fail_secure_unknown_options": true,
-                      "forbidden_flags": [],
-                      "interspersed_flags": [
-                        "--verbose",
-                        "-v"
-                      ],
-                      "interspersed_options_with_values": [
-                        "--config",
-                        "--iac-dir",
-                        "--images",
-                        "--log-file",
-                        "--output",
-                        "--profile",
-                        "--provider",
-                        "--scanners",
-                        "-c",
-                        "-o",
-                        "-p"
-                      ],
-                      "inverse_flag_pairs": [],
-                      "leading_options_with_values": [
-                        "--config",
-                        "--log-file",
-                        "-c"
-                      ],
-                      "options_with_values": [],
-                      "required_flags": [
-                        "--help"
-                      ],
-                      "required_flags_in_all_arguments": true,
-                      "required_option_values": [],
-                      "subcommands": [
-                        "scan"
-                      ]
-                    },
-                    "op": "executable.v1"
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "agenticjobs",
+                            "agenticjobs.cmd",
+                            "agenticjobs.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--json"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--server",
+                            "-s"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "--server",
+                            "-s"
+                          ],
+                          "options_with_values": [
+                            "--server",
+                            "-s"
+                          ],
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "publish"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "agenticjobs",
+                            "agenticjobs.cmd",
+                            "agenticjobs.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--json"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--server",
+                            "-s"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "--server",
+                            "-s"
+                          ],
+                          "options_with_values": [
+                            "--server",
+                            "-s"
+                          ],
+                          "required_flags": [
+                            "-h"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "publish"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      }
+                    ],
+                    "op": "any.v1"
                   },
                   "title": "Command help",
                   "variant_id": "help"
                 }
               ],
               "safer_alternatives": [
-                "Review the scanner list, IaC directory, and image list before running; scanners inherit the resolved cloud credentials."
+                "Read the draft back with `agenticjobs show <slug>` and confirm it says what it pays before publishing."
               ],
               "severity": "high",
-              "title": "CloudG scanner execution"
+              "title": "Publish a draft listing"
+            },
+            {
+              "action_classes": [
+                "AgenticJobs application submit command"
+              ],
+              "default_mode": "review",
+              "description": "Identifies `agenticjobs submit <id>`, which sends a prepared application to the employer on the account holder's behalf. Preparing one with `agenticjobs apply --draft` and listing them with `agenticjobs drafts` stay automatic.",
+              "family": null,
+              "matcher": {
+                "config": {},
+                "matchers": [
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "agenticjobs",
+                        "agenticjobs.cmd",
+                        "agenticjobs.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--json"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--server",
+                        "-s"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--server",
+                        "-s"
+                      ],
+                      "options_with_values": [
+                        "--server",
+                        "-s"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "submit"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "npx",
+                        "npx.cmd",
+                        "npx.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--json",
+                        "--no-install",
+                        "--quiet",
+                        "--yes",
+                        "-q",
+                        "-y"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "options_with_values": [
+                        "--server",
+                        "-s"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "agenticjobs",
+                        "submit"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "npx",
+                        "npx.cmd",
+                        "npx.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--json",
+                        "--no-install",
+                        "--quiet",
+                        "--yes",
+                        "-q",
+                        "-y"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "options_with_values": [
+                        "--server",
+                        "-s"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "@profullstack/agenticjobs",
+                        "submit"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "pnpx",
+                        "pnpx.cmd",
+                        "pnpx.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--json",
+                        "--no-install",
+                        "--quiet",
+                        "--yes",
+                        "-q",
+                        "-y"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "options_with_values": [
+                        "--server",
+                        "-s"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "agenticjobs",
+                        "submit"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "pnpx",
+                        "pnpx.cmd",
+                        "pnpx.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--json",
+                        "--no-install",
+                        "--quiet",
+                        "--yes",
+                        "-q",
+                        "-y"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "options_with_values": [
+                        "--server",
+                        "-s"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "@profullstack/agenticjobs",
+                        "submit"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "bunx",
+                        "bunx.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--json",
+                        "--no-install",
+                        "--quiet",
+                        "--yes",
+                        "-q",
+                        "-y"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "options_with_values": [
+                        "--server",
+                        "-s"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "agenticjobs",
+                        "submit"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "bunx",
+                        "bunx.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--json",
+                        "--no-install",
+                        "--quiet",
+                        "--yes",
+                        "-q",
+                        "-y"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "options_with_values": [
+                        "--server",
+                        "-s"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "@profullstack/agenticjobs",
+                        "submit"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "pnpm",
+                        "pnpm.cmd",
+                        "pnpm.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--json",
+                        "--no-install",
+                        "--quiet",
+                        "--yes",
+                        "-q",
+                        "-y"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "options_with_values": [
+                        "--server",
+                        "-s"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "dlx",
+                        "agenticjobs",
+                        "submit"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "pnpm",
+                        "pnpm.cmd",
+                        "pnpm.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--json",
+                        "--no-install",
+                        "--quiet",
+                        "--yes",
+                        "-q",
+                        "-y"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "options_with_values": [
+                        "--server",
+                        "-s"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "dlx",
+                        "@profullstack/agenticjobs",
+                        "submit"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "npm",
+                        "npm.cmd",
+                        "npm.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--json",
+                        "--no-install",
+                        "--quiet",
+                        "--yes",
+                        "-q",
+                        "-y"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "options_with_values": [
+                        "--server",
+                        "-s"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "exec",
+                        "agenticjobs",
+                        "submit"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "npm",
+                        "npm.cmd",
+                        "npm.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--json",
+                        "--no-install",
+                        "--quiet",
+                        "--yes",
+                        "-q",
+                        "-y"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "options_with_values": [
+                        "--server",
+                        "-s"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "exec",
+                        "@profullstack/agenticjobs",
+                        "submit"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  }
+                ],
+                "op": "any.v1"
+              },
+              "native_capability": null,
+              "permission_id": "command.agenticjobs.permission.submit",
+              "risk_classes": [
+                "execution",
+                "network_egress"
+              ],
+              "rule_id": "command.agenticjobs.submit",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "agenticjobs",
+                            "agenticjobs.cmd",
+                            "agenticjobs.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--json"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--server",
+                            "-s"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "--server",
+                            "-s"
+                          ],
+                          "options_with_values": [
+                            "--server",
+                            "-s"
+                          ],
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "submit"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "agenticjobs",
+                            "agenticjobs.cmd",
+                            "agenticjobs.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--json"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--server",
+                            "-s"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "--server",
+                            "-s"
+                          ],
+                          "options_with_values": [
+                            "--server",
+                            "-s"
+                          ],
+                          "required_flags": [
+                            "-h"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "submit"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      }
+                    ],
+                    "op": "any.v1"
+                  },
+                  "title": "Command help",
+                  "variant_id": "help"
+                }
+              ],
+              "safer_alternatives": [
+                "Read the draft with `agenticjobs drafts` and confirm the resume, answers and disclosed agent before sending it."
+              ],
+              "severity": "high",
+              "title": "Submit a prepared application"
+            },
+            {
+              "action_classes": [
+                "AgenticJobs application decision command"
+              ],
+              "default_mode": "review",
+              "description": "Identifies `agenticjobs decide <id> <status>`, which sets an applicant's status to reviewing, rejected or hired and is visible to the candidate. Listing applications with `agenticjobs applications <slug>` stays automatic.",
+              "family": null,
+              "matcher": {
+                "config": {},
+                "matchers": [
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "agenticjobs",
+                        "agenticjobs.cmd",
+                        "agenticjobs.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--json"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--server",
+                        "-s"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--server",
+                        "-s"
+                      ],
+                      "options_with_values": [
+                        "--server",
+                        "-s"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "decide"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "npx",
+                        "npx.cmd",
+                        "npx.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--json",
+                        "--no-install",
+                        "--quiet",
+                        "--yes",
+                        "-q",
+                        "-y"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "options_with_values": [
+                        "--server",
+                        "-s"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "agenticjobs",
+                        "decide"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "npx",
+                        "npx.cmd",
+                        "npx.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--json",
+                        "--no-install",
+                        "--quiet",
+                        "--yes",
+                        "-q",
+                        "-y"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "options_with_values": [
+                        "--server",
+                        "-s"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "@profullstack/agenticjobs",
+                        "decide"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "pnpx",
+                        "pnpx.cmd",
+                        "pnpx.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--json",
+                        "--no-install",
+                        "--quiet",
+                        "--yes",
+                        "-q",
+                        "-y"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "options_with_values": [
+                        "--server",
+                        "-s"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "agenticjobs",
+                        "decide"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "pnpx",
+                        "pnpx.cmd",
+                        "pnpx.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--json",
+                        "--no-install",
+                        "--quiet",
+                        "--yes",
+                        "-q",
+                        "-y"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "options_with_values": [
+                        "--server",
+                        "-s"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "@profullstack/agenticjobs",
+                        "decide"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "bunx",
+                        "bunx.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--json",
+                        "--no-install",
+                        "--quiet",
+                        "--yes",
+                        "-q",
+                        "-y"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "options_with_values": [
+                        "--server",
+                        "-s"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "agenticjobs",
+                        "decide"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "bunx",
+                        "bunx.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--json",
+                        "--no-install",
+                        "--quiet",
+                        "--yes",
+                        "-q",
+                        "-y"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "options_with_values": [
+                        "--server",
+                        "-s"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "@profullstack/agenticjobs",
+                        "decide"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "pnpm",
+                        "pnpm.cmd",
+                        "pnpm.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--json",
+                        "--no-install",
+                        "--quiet",
+                        "--yes",
+                        "-q",
+                        "-y"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "options_with_values": [
+                        "--server",
+                        "-s"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "dlx",
+                        "agenticjobs",
+                        "decide"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "pnpm",
+                        "pnpm.cmd",
+                        "pnpm.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--json",
+                        "--no-install",
+                        "--quiet",
+                        "--yes",
+                        "-q",
+                        "-y"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "options_with_values": [
+                        "--server",
+                        "-s"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "dlx",
+                        "@profullstack/agenticjobs",
+                        "decide"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "npm",
+                        "npm.cmd",
+                        "npm.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--json",
+                        "--no-install",
+                        "--quiet",
+                        "--yes",
+                        "-q",
+                        "-y"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "options_with_values": [
+                        "--server",
+                        "-s"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "exec",
+                        "agenticjobs",
+                        "decide"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "npm",
+                        "npm.cmd",
+                        "npm.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--json",
+                        "--no-install",
+                        "--quiet",
+                        "--yes",
+                        "-q",
+                        "-y"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--package",
+                        "--server",
+                        "-p",
+                        "-s"
+                      ],
+                      "options_with_values": [
+                        "--server",
+                        "-s"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "exec",
+                        "@profullstack/agenticjobs",
+                        "decide"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  }
+                ],
+                "op": "any.v1"
+              },
+              "native_capability": null,
+              "permission_id": "command.agenticjobs.permission.decide",
+              "risk_classes": [
+                "execution",
+                "network_egress"
+              ],
+              "rule_id": "command.agenticjobs.decide",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "agenticjobs",
+                            "agenticjobs.cmd",
+                            "agenticjobs.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--json"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--server",
+                            "-s"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "--server",
+                            "-s"
+                          ],
+                          "options_with_values": [
+                            "--server",
+                            "-s"
+                          ],
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "decide"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "agenticjobs",
+                            "agenticjobs.cmd",
+                            "agenticjobs.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--json"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--server",
+                            "-s"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "--server",
+                            "-s"
+                          ],
+                          "options_with_values": [
+                            "--server",
+                            "-s"
+                          ],
+                          "required_flags": [
+                            "-h"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "decide"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      }
+                    ],
+                    "op": "any.v1"
+                  },
+                  "title": "Command help",
+                  "variant_id": "help"
+                }
+              ],
+              "safer_alternatives": [
+                "Read the application with `agenticjobs applications <slug>` before recording a decision."
+              ],
+              "severity": "high",
+              "title": "Decide on an applicant"
             }
           ],
           "safer_alternatives": [
-            "Generate reports from existing scan data with `cloudg report -i findings.json`, which reads a local file and does not touch cloud credentials or scanners."
+            "Post a listing as a draft, read it back, and publish it as a separate reviewed step.",
+            "Read a prepared application or an applicant's record before submitting or deciding on it."
           ],
           "source": "built-in",
           "version": "1.0.0"
@@ -10715,232 +13016,335 @@
   },
   "cases": [
     {
-      "command": "cloudg collect -p aws --profile prod --region us-east-1",
+      "command": "agenticjobs post job.md --org acme",
+      "disabled_permissions": [],
+      "enabled_extensions": [],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "inactive-post",
+      "rule_id": "command.agenticjobs.post"
+    },
+    {
+      "command": "agenticjobs post job.md --org acme",
       "disabled_permissions": [],
       "enabled_extensions": [
-        "command.cloudg"
+        "command.agenticjobs"
       ],
       "expected_action": "review",
       "expected_effective_segments": [
         0
       ],
-      "id": "collect-aws",
-      "rule_id": "command.cloudg.collect"
+      "id": "post",
+      "rule_id": "command.agenticjobs.post"
     },
     {
-      "command": "cloudg collect -p azure --subscription-id 00000000-0000-0000-0000-000000000000",
+      "command": "agenticjobs post job.md --org acme --publish --pay '$0.25 per task'",
       "disabled_permissions": [],
       "enabled_extensions": [
-        "command.cloudg"
+        "command.agenticjobs"
       ],
       "expected_action": "review",
       "expected_effective_segments": [
         0
       ],
-      "id": "collect-azure",
-      "rule_id": "command.cloudg.collect"
+      "id": "post-publish",
+      "rule_id": "command.agenticjobs.post"
     },
     {
-      "command": "cloudg collect -p gcp --project-id my-project",
+      "command": "agenticjobs --server https://board.example --json post job.md --org acme",
       "disabled_permissions": [],
       "enabled_extensions": [
-        "command.cloudg"
+        "command.agenticjobs"
       ],
       "expected_action": "review",
       "expected_effective_segments": [
         0
       ],
-      "id": "collect-gcp",
-      "rule_id": "command.cloudg.collect"
+      "id": "post-leading-global-option",
+      "rule_id": "command.agenticjobs.post"
     },
     {
-      "command": "cloudg collect -p aws -o ./reports",
+      "command": "agenticjobs post job.md --org acme --idempotency-key 0c1d2e",
       "disabled_permissions": [],
       "enabled_extensions": [
-        "command.cloudg"
+        "command.agenticjobs"
       ],
       "expected_action": "review",
       "expected_effective_segments": [
         0
       ],
-      "id": "collect-output-dir",
-      "rule_id": "command.cloudg.collect"
+      "id": "post-idempotency-key",
+      "rule_id": "command.agenticjobs.post"
     },
     {
-      "command": "cloudg run -p aws --profile prod",
+      "command": "npx agenticjobs post job.md --org acme",
       "disabled_permissions": [],
       "enabled_extensions": [
-        "command.cloudg"
+        "command.agenticjobs"
       ],
       "expected_action": "review",
       "expected_effective_segments": [
         0
       ],
-      "id": "run-basic",
-      "rule_id": "command.cloudg.run"
+      "id": "post-npx",
+      "rule_id": "command.agenticjobs.post"
     },
     {
-      "command": "cloudg run -p aws --profile prod --terraform",
+      "command": "npx -y @profullstack/agenticjobs post job.md --org acme --publish",
       "disabled_permissions": [],
       "enabled_extensions": [
-        "command.cloudg"
+        "command.agenticjobs"
       ],
       "expected_action": "review",
       "expected_effective_segments": [
         0
       ],
-      "id": "run-terraform",
-      "rule_id": "command.cloudg.run"
+      "id": "post-npx-package",
+      "rule_id": "command.agenticjobs.post"
     },
     {
-      "command": "cloudg run -p aws -p azure --subscription-id 00000000-0000-0000-0000-000000000000",
+      "command": "pnpm dlx @profullstack/agenticjobs post job.md --org acme",
       "disabled_permissions": [],
       "enabled_extensions": [
-        "command.cloudg"
+        "command.agenticjobs"
       ],
       "expected_action": "review",
       "expected_effective_segments": [
         0
       ],
-      "id": "run-multi-provider",
-      "rule_id": "command.cloudg.run"
+      "id": "post-pnpm-dlx",
+      "rule_id": "command.agenticjobs.post"
     },
     {
-      "command": "cloudg run -p aws --aws-role-arn arn:aws:iam::123456789012:role/scan-readonly",
+      "command": "bunx agenticjobs post job.md --org acme",
       "disabled_permissions": [],
       "enabled_extensions": [
-        "command.cloudg"
+        "command.agenticjobs"
       ],
       "expected_action": "review",
       "expected_effective_segments": [
         0
       ],
-      "id": "run-role-arn",
-      "rule_id": "command.cloudg.run"
+      "id": "post-bunx",
+      "rule_id": "command.agenticjobs.post"
     },
     {
-      "command": "cloudg run -p aws --regions all",
+      "command": "agenticjobs post --help",
       "disabled_permissions": [],
       "enabled_extensions": [
-        "command.cloudg"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "run-all-regions",
-      "rule_id": "command.cloudg.run"
-    },
-    {
-      "command": "cloudg -v run -p gcp --project-id my-project",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.cloudg"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "run-leading-verbose",
-      "rule_id": "command.cloudg.run"
-    },
-    {
-      "command": "cloudg -c ./config.yaml run -p aws",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.cloudg"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "run-leading-config",
-      "rule_id": "command.cloudg.run"
-    },
-    {
-      "command": "cloudg scan",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.cloudg"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "scan-default",
-      "rule_id": "command.cloudg.scan"
-    },
-    {
-      "command": "cloudg scan -p aws --scanners prowler,checkov",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.cloudg"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "scan-scanner-list",
-      "rule_id": "command.cloudg.scan"
-    },
-    {
-      "command": "cloudg scan --scanners checkov --iac-dir ./infra",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.cloudg"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "scan-iac-dir",
-      "rule_id": "command.cloudg.scan"
-    },
-    {
-      "command": "cloudg scan --scanners trivy --images nginx:latest,alpine:3.20",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.cloudg"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "scan-images",
-      "rule_id": "command.cloudg.scan"
-    },
-    {
-      "command": "cloudg collect --help",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.cloudg"
+        "command.agenticjobs"
       ],
       "expected_action": "review",
       "expected_effective_segments": [],
-      "id": "collect-help",
-      "rule_id": "command.cloudg.collect"
+      "id": "post-help",
+      "rule_id": "command.agenticjobs.post"
     },
     {
-      "command": "cloudg run --help",
+      "command": "agenticjobs post job.md --org acme",
+      "disabled_permissions": [
+        "command.agenticjobs.permission.post"
+      ],
+      "enabled_extensions": [
+        "command.agenticjobs"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "post-disabled",
+      "rule_id": "command.agenticjobs.post"
+    },
+    {
+      "command": "agenticjobs publish staff-engineer",
       "disabled_permissions": [],
       "enabled_extensions": [
-        "command.cloudg"
+        "command.agenticjobs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "publish",
+      "rule_id": "command.agenticjobs.publish"
+    },
+    {
+      "command": "agenticjobs publish -h",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agenticjobs"
       ],
       "expected_action": "review",
       "expected_effective_segments": [],
-      "id": "run-help",
-      "rule_id": "command.cloudg.run"
+      "id": "publish-help",
+      "rule_id": "command.agenticjobs.publish"
     },
     {
-      "command": "cloudg scan --help",
+      "command": "agenticjobs submit 8f3c2a",
       "disabled_permissions": [],
       "enabled_extensions": [
-        "command.cloudg"
+        "command.agenticjobs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "submit",
+      "rule_id": "command.agenticjobs.submit"
+    },
+    {
+      "command": "agenticjobs submit 8f3c2a",
+      "disabled_permissions": [
+        "command.agenticjobs.permission.submit"
+      ],
+      "enabled_extensions": [
+        "command.agenticjobs"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "submit-disabled",
+      "rule_id": "command.agenticjobs.submit"
+    },
+    {
+      "command": "agenticjobs decide 8f3c2a hired",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agenticjobs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "decide",
+      "rule_id": "command.agenticjobs.decide"
+    },
+    {
+      "command": "npx agenticjobs decide 8f3c2a rejected",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agenticjobs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "decide-npx",
+      "rule_id": "command.agenticjobs.decide"
+    },
+    {
+      "command": "agenticjobs search 'staff engineer' --remote --agents",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agenticjobs"
       ],
       "expected_action": "review",
       "expected_effective_segments": [],
-      "id": "scan-help",
-      "rule_id": "command.cloudg.scan"
+      "id": "search-not-claimed",
+      "rule_id": "command.agenticjobs.post"
+    },
+    {
+      "command": "agenticjobs drafts",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agenticjobs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "drafts-not-claimed",
+      "rule_id": "command.agenticjobs.submit"
+    },
+    {
+      "command": "agenticjobs applications staff-engineer",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agenticjobs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "applications-not-claimed",
+      "rule_id": "command.agenticjobs.decide"
+    },
+    {
+      "command": "agenticjobs apply staff-engineer --draft --resume resume.md",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agenticjobs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "apply-draft-not-claimed",
+      "rule_id": "command.agenticjobs.submit"
+    },
+    {
+      "command": "agenticjobs show staff-engineer",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agenticjobs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "show-not-claimed",
+      "rule_id": "command.agenticjobs.post"
+    },
+    {
+      "command": "agenticjobs news post 'we are hiring'",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agenticjobs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "news-post-not-claimed",
+      "rule_id": "command.agenticjobs.post"
+    },
+    {
+      "command": "agenticjobs search rust; agenticjobs publish staff-engineer",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agenticjobs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        1
+      ],
+      "id": "compound",
+      "rule_id": "command.agenticjobs.publish"
+    },
+    {
+      "command": "agenticjobs drafts && agenticjobs submit 8f3c2a",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agenticjobs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        1
+      ],
+      "id": "compound-drafts-then-submit",
+      "rule_id": "command.agenticjobs.submit"
+    },
+    {
+      "command": "pwd",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agenticjobs"
+      ],
+      "expected_action": "allow",
+      "expected_effective_segments": [],
+      "id": "unrelated-safe",
+      "rule_id": "command.agenticjobs.post"
+    },
+    {
+      "command": "another-unknown-cli inspect",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agenticjobs"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "unknown",
+      "rule_id": "command.agenticjobs.post"
     }
   ],
   "schema": "guard.command-extension-fixtures.v1"

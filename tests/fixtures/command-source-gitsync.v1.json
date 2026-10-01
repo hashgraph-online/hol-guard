@@ -10489,6 +10489,7 @@
     "trust": {
       "classes": {
         "external": [
+          "command.agenticjobs",
           "command.blitcp",
           "command.cloudg",
           "command.cogext",
