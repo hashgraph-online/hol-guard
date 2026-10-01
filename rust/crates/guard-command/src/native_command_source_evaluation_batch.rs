@@ -266,11 +266,12 @@ mod tests {
             .iter()
             .any(|row| { row["rule_id"] == "command.git.hard-reset" }));
         let uncertain = &output["cases"][3]["payload"]["command_extensions"];
+        assert!(uncertain["evaluation_error"].is_null());
+        assert_eq!(output["cases"][3]["payload"]["minimum_action"], "review");
         assert_eq!(
-            uncertain["evaluation_error"],
-            "native_command_evaluation_failed"
+            output["cases"][3]["payload"]["command_model"]["confidence"],
+            "uncertain"
         );
-        assert_eq!(output["cases"][3]["payload"]["minimum_action"], "block");
         assert_eq!(
             output["cases"][4]["payload"]["command_model"]["uncertainty_reason"],
             "command_byte_limit_exceeded"

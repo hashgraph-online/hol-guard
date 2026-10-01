@@ -201,8 +201,20 @@ impl CompiledNativeCommandControls {
                 .observe(command, &self.active_extensions, deadline),
             None => Ok(NativeCommandObservationBatchV1::default()),
         };
+        // Unsupported shell syntax is a classification gap, not a failed
+        // evaluator. It can only remain reviewable when no hard control could
+        // be hidden inside the unclassified invocation.
+        let unsupported_model = matches!(
+            observed,
+            Err("native_command_compatibility_model_unsupported")
+        ) && command.is_some_and(|model| {
+            model.uncertainty_reason.as_deref() == Some("transparent_wrapper_not_yet_supported")
+        });
         let mut batch = match observed {
             Ok(batch) => batch,
+            Err("native_command_compatibility_model_unsupported") if unsupported_model => {
+                NativeCommandObservationBatchV1::default()
+            }
             Err(_) => NativeCommandObservationBatchV1 {
                 evaluation_error: Some("native_command_evaluation_failed".to_owned()),
                 ..Default::default()
@@ -224,13 +236,24 @@ impl CompiledNativeCommandControls {
         };
         let mut floor = if self.global_block {
             "block"
+        } else if unsupported_model {
+            if self.blocked_extensions.is_empty() && self.blocked_permissions.is_empty() {
+                "review"
+            } else {
+                "block"
+            }
         } else {
             delegated_floor
         };
+        if rank(delegated_floor) > rank(floor) {
+            floor = delegated_floor;
+        }
         let mut reason = if self.global_block {
             "native_command_control_authority_block"
         } else if batch.evaluation_error.is_some() {
             "native_command_extension_evaluation_failed"
+        } else if unsupported_model {
+            "native_command_extension_model_unsupported"
         } else if delegated_floor == "block" {
             "native_command_permission_disabled"
         } else {
@@ -384,6 +407,9 @@ fn strengthen(result: &mut PreToolResultV1, action: &str, reason: &str) {
             "native_command_extension_evaluation_failed" => {
                 "HOL Guard could not evaluate the extension controls for this command. Check Guard diagnostics before retrying."
             }
+            "native_command_extension_model_unsupported" => {
+                "HOL Guard cannot fully classify this shell syntax. Review this exact action; configured hard blocks remain enforced."
+            }
             _ => "HOL Guard requires the native command extension policy before this action can execute.",
         }
         .to_owned();
@@ -393,6 +419,82 @@ fn strengthen(result: &mut PreToolResultV1, action: &str, reason: &str) {
 #[cfg(test)]
 mod review_regressions {
     use super::*;
+
+    #[test]
+    fn diagnostic_shell_commands_preserve_an_approvable_review() {
+        let program = packaged_command_program().unwrap();
+        let mut binding: NativeCommandControlBindingV1 =
+            serde_json::from_value(serde_json::json!({
+                "schema": "guard.native-command-control-binding.v1",
+                "program_digest": program.program_digest,
+                "catalog_digest": program.catalog_digest,
+                "trust_digest": program.trust_digest,
+                "health": "protected", "revision": 1, "managed_revision": 0,
+                "effective_digest": "", "layers": []
+            }))
+            .unwrap();
+        binding.effective_digest = binding.compute_effective_digest().unwrap();
+        let controls = CompiledNativeCommandControls::new(&binding).unwrap();
+        for command in [
+            "ss -ltn | grep ':5486'; curl -sS -m 10 -o /dev/null -w '%{http_code}' http://127.0.0.1:5486/; hol-guard doctor 2>&1 | grep -E 'Mode|Runtime|Approval' | head -12",
+            "timeout 120 ~/.local/bin/hol-guard doctor 2>&1 | tail -45",
+            "timeout 120 /home/example/.local/bin/hol-guard doctor 2>&1 | tail -45",
+        ] {
+            let payload = serde_json::json!({"tool_name": "Bash", "tool_input": {"command": command}});
+            let result = crate::pretool::evaluate_pre_tool_envelope_with_extensions(
+                "claude-code", "PreToolUse", &payload, Some(&controls),
+                Some(Instant::now() + std::time::Duration::from_secs(9)),
+            );
+            assert_eq!(result.minimum_action, "review", "{command}: {}", result.reason_code);
+            assert!(result.command_extensions.as_ref().unwrap().evaluation_error.is_none());
+            assert!(!result.explicitly_benign);
+        }
+        let payload = serde_json::json!({"tool_name": "Bash", "tool_input": {
+            "command": "timeout 120 ~/.local/bin/hol-guard doctor 2>&1 | tail -45"
+        }});
+        for health in ["degraded-unacknowledged", "tampered", "recovery-required"] {
+            let mut degraded = binding.clone();
+            degraded.health = health.into();
+            degraded.effective_digest = degraded.compute_effective_digest().unwrap();
+            let controls = CompiledNativeCommandControls::new(&degraded).unwrap();
+            let result = crate::pretool::evaluate_pre_tool_envelope_with_extensions(
+                "claude-code",
+                "PreToolUse",
+                &payload,
+                Some(&controls),
+                None,
+            );
+            assert_eq!(result.minimum_action, "block", "{health}");
+        }
+        for target_kind in ["extension", "permission"] {
+            let extension = program
+                .extensions
+                .iter()
+                .find(|item| !item.permissions.is_empty())
+                .unwrap();
+            let target_id = if target_kind == "extension" {
+                &extension.extension_id
+            } else {
+                &extension.permissions[0].permission_id
+            };
+            let mut blocked = binding.clone();
+            blocked.layers = serde_json::from_value(serde_json::json!([{
+                "schema_version": "1.0.0", "kind": "local-admin",
+                "catalog_digest": program.catalog_digest, "global_lockdown": false,
+                "controls": [{"target_kind": target_kind, "target_id": target_id, "state": "disabled"}]
+            }])).unwrap();
+            blocked.effective_digest = blocked.compute_effective_digest().unwrap();
+            let controls = CompiledNativeCommandControls::new(&blocked).unwrap();
+            let result = crate::pretool::evaluate_pre_tool_envelope_with_extensions(
+                "claude-code",
+                "PreToolUse",
+                &payload,
+                Some(&controls),
+                None,
+            );
+            assert_eq!(result.minimum_action, "block", "disabled {target_kind}");
+        }
+    }
 
     #[test]
     fn delegated_deadline_failure_is_not_an_administrator_disable() {
