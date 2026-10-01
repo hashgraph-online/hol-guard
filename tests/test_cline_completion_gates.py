@@ -275,6 +275,7 @@ def test_plugin_ready_requires_block_and_replacement_proofs(tmp_path: Path) -> N
     assert state["ready"] is True
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_real_guard_policy_requires_review_for_cline_env_read(tmp_path: Path) -> None:
     context = _context(tmp_path)
     secret_path = context.workspace_dir / ".env"
@@ -323,6 +324,7 @@ def test_real_guard_policy_requires_review_for_cline_env_read(tmp_path: Path) ->
     assert response["policy_composition"]["current_config_action"] == "require-reapproval"
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_real_guard_policy_withholds_cline_credential_output(tmp_path: Path) -> None:
     context = _context(tmp_path)
     source_path = context.workspace_dir / "public.txt"
