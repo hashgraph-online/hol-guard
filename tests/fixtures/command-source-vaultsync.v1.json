@@ -10091,29 +10091,29 @@
       {
         "extension": {
           "action_classes": [
-            "Skill Base publication"
+            "vaultsync snapshot prune command",
+            "vaultsync restore command",
+            "vaultsync project removal command",
+            "vaultsync project path update command"
           ],
           "aliases": [],
           "conflicts": [],
+          "delegated_protection": null,
           "dependencies": [],
-          "description": "Reviews authenticated Skill Base CLI publications before local Skill files are uploaded as a new version.",
+          "description": "Reviews VaultSync commands that prune snapshot history, restore backup data, unregister projects, or repoint project roots while keeping inspection-oriented commands outside the extension review boundary.",
           "ecosystem_ids": [],
           "executables": [
-            "skb",
-            "skb.cmd",
-            "skb.exe"
+            "vaultsync"
           ],
-          "extension_id": "command.skill-base",
-          "homepage": "https://github.com/ginuim/skill-base",
-          "icon": {
-            "kind": "none"
-          },
+          "extension_id": "command.vaultsync",
+          "homepage": "https://fglabs.dev/vaultsync",
+          "icon": null,
           "license": "MIT",
-          "name": "Skill Base CLI",
+          "name": "VaultSync command protection",
           "permissions": [
             {
               "action_classes": [
-                "Skill Base publication"
+                "vaultsync snapshot prune command"
               ],
               "baseline_floor": "review",
               "configurable": true,
@@ -10121,231 +10121,637 @@
               "default_enabled": true,
               "dependencies": [],
               "deprecated": false,
-              "description": "Reviews upload of a local Skill directory to Skill Base, where it creates a public Skill or publishes a new version.",
-              "example_command": "skb publish ./my-skill --changelog 'Initial release'",
+              "description": "Reviews VaultSync prune operations that can permanently remove eligible local snapshot history.",
+              "example_command": "vaultsync prune Demo --keep-last 5",
+              "family": null,
+              "fixed_reason": null,
               "implementation_version": "1.0.0",
               "implied_permissions": [],
-              "introduced_version": "1.0.0",
-              "label": "Publish a Skill version",
-              "permission_id": "command.skill-base.permission.publish",
+              "introduced_version": "3.2.0",
+              "label": "VaultSync snapshot prune command",
+              "permission_id": "command.vaultsync.permission.prune",
+              "replacement_permission_id": null,
               "risk_tier": "high",
               "safer_guidance": [
-                "Run `skb publish --dry-run` and confirm the directory, Skill ID, and included files.",
-                "Check the name, description, and changelog flags; new Skills are public by default."
+                "Run vaultsync prune with --dry-run first and inspect the planned deletions.",
+                "Use vaultsync history to inspect the project before pruning."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "vaultsync restore command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Reviews VaultSync restore operations that can write or delete files in the selected destination.",
+              "example_command": "vaultsync restore Demo ./Recovered",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "3.2.0",
+              "label": "VaultSync restore command",
+              "permission_id": "command.vaultsync.permission.restore",
+              "replacement_permission_id": null,
+              "risk_tier": "critical",
+              "safer_guidance": [
+                "Run vaultsync restore with --dry-run first and review the planned changes.",
+                "Inspect history, diff, and verify results before restoring."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "vaultsync project removal command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Reviews removal of a VaultSync project registration and its local indexed history. Source files and stored backup files are not deleted by this command.",
+              "example_command": "vaultsync remove-project Demo",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "3.2.0",
+              "label": "VaultSync project removal command",
+              "permission_id": "command.vaultsync.permission.remove-project",
+              "replacement_permission_id": null,
+              "risk_tier": "medium",
+              "safer_guidance": [
+                "Run vaultsync list-projects first and confirm the exact project registration.",
+                "Do not treat --yes or --quiet as a safe variant."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "vaultsync project path update command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Reviews VaultSync set-path and update-path operations that repoint a registered project to a different root directory.",
+              "example_command": "vaultsync set-path Demo /srv/projects/Demo",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "3.2.0",
+              "label": "VaultSync project path update command",
+              "permission_id": "command.vaultsync.permission.set-path",
+              "replacement_permission_id": null,
+              "risk_tier": "medium",
+              "safer_guidance": [
+                "Run vaultsync list-projects first and confirm the project's current path.",
+                "Confirm the replacement root directory before approving the change."
               ],
               "typed_capabilities": []
             }
           ],
           "project_markers": [],
           "publisher": {
-            "display_name": "Skill Base",
-            "id": "ginuim",
-            "url": "https://github.com/ginuim/skill-base"
+            "display_name": "FG Labs",
+            "id": "community.vaultsync",
+            "url": "https://fglabs.dev/vaultsync"
           },
           "reference_urls": [
-            "https://github.com/ginuim/skill-base/blob/main/cli/lib/commands/publish.js",
-            "https://github.com/ginuim/skill-base/blob/main/docs/zh/cli.md"
+            "https://github.com/ATAC-Helicopter/VaultSync",
+            "https://fglabs.dev/vaultsync"
           ],
           "required": false,
           "risk_classes": [
-            "data_flow_exfiltration",
-            "execution",
-            "network_egress"
+            "destructive_shell"
           ],
           "rules": [
             {
               "action_classes": [
-                "Skill Base publication"
+                "vaultsync snapshot prune command"
               ],
               "default_mode": "review",
-              "description": "Identifies `skb publish`, which packages the selected local directory and uploads it with the saved Skill Base credential to create a Skill or publish a new version.",
+              "description": "Identifies VaultSync prune operations. Dry-run and help are safe variants; quiet and JSON output do not change the review requirement for a real prune.",
+              "family": null,
               "matcher": {
                 "config": {
-                  "allow_leading_options": true,
+                  "allow_leading_options": false,
                   "executables": [
-                    "skb",
-                    "skb.cmd",
-                    "skb.exe"
+                    "vaultsync",
+                    "vaultsync.cmd",
+                    "vaultsync.exe"
                   ],
                   "fail_secure_unknown_options": true,
                   "forbidden_flags": [],
                   "interspersed_flags": [
                     "--dry-run",
-                    "--help",
-                    "--no-gitignore",
-                    "-h"
+                    "--quiet",
+                    "--json"
                   ],
                   "interspersed_options_with_values": [
-                    "--changelog",
-                    "--description",
-                    "--ignore",
-                    "--name"
+                    "--keep-last",
+                    "--before",
+                    "--db"
                   ],
                   "inverse_flag_pairs": [],
-                  "leading_options_with_values": [
-                    "--changelog",
-                    "--description",
-                    "--ignore",
-                    "--name"
-                  ],
+                  "leading_options_with_values": [],
+                  "options_with_values": [],
                   "required_flags": [],
                   "required_flags_in_all_arguments": false,
                   "required_option_values": [],
                   "subcommands": [
-                    "publish"
+                    "prune"
                   ]
                 },
                 "op": "executable.v1"
               },
-              "permission_id": "command.skill-base.permission.publish",
+              "native_capability": null,
+              "permission_id": "command.vaultsync.permission.prune",
               "risk_classes": [
-                "data_flow_exfiltration",
-                "execution",
-                "network_egress"
+                "destructive_shell"
               ],
-              "rule_id": "command.skill-base.publish",
+              "rule_id": "command.vaultsync.prune",
               "rule_version": "1.0.0",
               "safe_variants": [
                 {
                   "matcher": {
                     "config": {
-                      "allow_leading_options": true,
+                      "allow_leading_options": false,
                       "executables": [
-                        "skb",
-                        "skb.cmd",
-                        "skb.exe"
+                        "vaultsync",
+                        "vaultsync.cmd",
+                        "vaultsync.exe"
                       ],
                       "fail_secure_unknown_options": true,
                       "forbidden_flags": [],
                       "interspersed_flags": [
-                        "--dry-run",
-                        "--no-gitignore"
+                        "--quiet",
+                        "--json",
+                        "--dry-run"
                       ],
                       "interspersed_options_with_values": [
-                        "--changelog",
-                        "--description",
-                        "--ignore",
-                        "--name"
+                        "--keep-last",
+                        "--before",
+                        "--db"
                       ],
                       "inverse_flag_pairs": [],
-                      "leading_options_with_values": [
-                        "--changelog",
-                        "--description",
-                        "--ignore",
-                        "--name"
-                      ],
+                      "leading_options_with_values": [],
+                      "options_with_values": [],
                       "required_flags": [
                         "--dry-run"
                       ],
                       "required_flags_in_all_arguments": true,
                       "required_option_values": [],
                       "subcommands": [
-                        "publish"
+                        "prune"
                       ]
                     },
                     "op": "executable.v1"
                   },
-                  "title": "List the files without uploading",
+                  "title": "VaultSync prune dry run",
                   "variant_id": "dry-run"
                 },
                 {
                   "matcher": {
                     "config": {
-                      "allow_leading_options": true,
+                      "allow_leading_options": false,
                       "executables": [
-                        "skb",
-                        "skb.cmd",
-                        "skb.exe"
+                        "vaultsync",
+                        "vaultsync.cmd",
+                        "vaultsync.exe"
                       ],
                       "fail_secure_unknown_options": true,
                       "forbidden_flags": [],
                       "interspersed_flags": [
                         "--dry-run",
-                        "--help",
-                        "--no-gitignore",
-                        "-h"
+                        "--quiet",
+                        "--json",
+                        "--help"
                       ],
                       "interspersed_options_with_values": [
-                        "--changelog",
-                        "--description",
-                        "--ignore",
-                        "--name"
+                        "--keep-last",
+                        "--before",
+                        "--db"
                       ],
                       "inverse_flag_pairs": [],
-                      "leading_options_with_values": [
-                        "--changelog",
-                        "--description",
-                        "--ignore",
-                        "--name"
-                      ],
+                      "leading_options_with_values": [],
+                      "options_with_values": [],
                       "required_flags": [
                         "--help"
                       ],
                       "required_flags_in_all_arguments": true,
                       "required_option_values": [],
                       "subcommands": [
-                        "publish"
+                        "prune"
                       ]
                     },
                     "op": "executable.v1"
                   },
-                  "title": "Publish command help (--help)",
+                  "title": "VaultSync prune help",
                   "variant_id": "help"
+                }
+              ],
+              "safer_alternatives": [
+                "Run vaultsync prune with --dry-run first and inspect the planned deletions.",
+                "Use vaultsync history before deleting snapshot history."
+              ],
+              "severity": "high",
+              "title": "VaultSync snapshot prune"
+            },
+            {
+              "action_classes": [
+                "vaultsync restore command"
+              ],
+              "default_mode": "review",
+              "description": "Identifies VaultSync restore operations that can write or delete files at the destination. Dry-run and help are safe variants.",
+              "family": null,
+              "matcher": {
+                "config": {
+                  "allow_leading_options": false,
+                  "executables": [
+                    "vaultsync",
+                    "vaultsync.cmd",
+                    "vaultsync.exe"
+                  ],
+                  "fail_secure_unknown_options": true,
+                  "forbidden_flags": [],
+                  "interspersed_flags": [
+                    "--dry-run",
+                    "--clean",
+                    "--keep-empty-dirs",
+                    "--quiet",
+                    "--json"
+                  ],
+                  "interspersed_options_with_values": [
+                    "--snapshot",
+                    "--db"
+                  ],
+                  "inverse_flag_pairs": [],
+                  "leading_options_with_values": [],
+                  "options_with_values": [],
+                  "required_flags": [],
+                  "required_flags_in_all_arguments": false,
+                  "required_option_values": [],
+                  "subcommands": [
+                    "restore"
+                  ]
+                },
+                "op": "executable.v1"
+              },
+              "native_capability": null,
+              "permission_id": "command.vaultsync.permission.restore",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "rule_id": "command.vaultsync.restore",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "vaultsync",
+                        "vaultsync.cmd",
+                        "vaultsync.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--clean",
+                        "--keep-empty-dirs",
+                        "--quiet",
+                        "--json",
+                        "--dry-run"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--snapshot",
+                        "--db"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [],
+                      "required_flags": [
+                        "--dry-run"
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "restore"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  "title": "VaultSync restore dry run",
+                  "variant_id": "dry-run"
                 },
                 {
                   "matcher": {
                     "config": {
-                      "allow_leading_options": true,
+                      "allow_leading_options": false,
                       "executables": [
-                        "skb",
-                        "skb.cmd",
-                        "skb.exe"
+                        "vaultsync",
+                        "vaultsync.cmd",
+                        "vaultsync.exe"
                       ],
                       "fail_secure_unknown_options": true,
                       "forbidden_flags": [],
                       "interspersed_flags": [
                         "--dry-run",
-                        "--help",
-                        "--no-gitignore",
-                        "-h"
+                        "--clean",
+                        "--keep-empty-dirs",
+                        "--quiet",
+                        "--json",
+                        "--help"
                       ],
                       "interspersed_options_with_values": [
-                        "--changelog",
-                        "--description",
-                        "--ignore",
-                        "--name"
+                        "--snapshot",
+                        "--db"
                       ],
                       "inverse_flag_pairs": [],
-                      "leading_options_with_values": [
-                        "--changelog",
-                        "--description",
-                        "--ignore",
-                        "--name"
-                      ],
+                      "leading_options_with_values": [],
+                      "options_with_values": [],
                       "required_flags": [
-                        "-h"
+                        "--help"
                       ],
                       "required_flags_in_all_arguments": true,
                       "required_option_values": [],
                       "subcommands": [
-                        "publish"
+                        "restore"
                       ]
                     },
                     "op": "executable.v1"
                   },
-                  "title": "Publish command help (-h)",
-                  "variant_id": "short-help"
+                  "title": "VaultSync restore help",
+                  "variant_id": "help"
                 }
               ],
               "safer_alternatives": [
-                "Run `skb publish --dry-run` for the same directory and ignore rules, then review the included files before publishing."
+                "Run vaultsync restore with --dry-run first and review the planned writes and deletions.",
+                "Confirm the recovery point and destination before approving the restore."
               ],
-              "severity": "high",
-              "title": "Skill Base publication"
+              "severity": "critical",
+              "title": "VaultSync restore"
+            },
+            {
+              "action_classes": [
+                "vaultsync project removal command"
+              ],
+              "default_mode": "review",
+              "description": "Identifies VaultSync remove-project operations. The command removes project registration and local history index state; --yes and --quiet remain reviewed.",
+              "family": null,
+              "matcher": {
+                "config": {
+                  "allow_leading_options": false,
+                  "executables": [
+                    "vaultsync",
+                    "vaultsync.cmd",
+                    "vaultsync.exe"
+                  ],
+                  "fail_secure_unknown_options": true,
+                  "forbidden_flags": [],
+                  "interspersed_flags": [
+                    "--yes",
+                    "--quiet"
+                  ],
+                  "interspersed_options_with_values": [
+                    "--db"
+                  ],
+                  "inverse_flag_pairs": [],
+                  "leading_options_with_values": [],
+                  "options_with_values": [],
+                  "required_flags": [],
+                  "required_flags_in_all_arguments": false,
+                  "required_option_values": [],
+                  "subcommands": [
+                    "remove-project"
+                  ]
+                },
+                "op": "executable.v1"
+              },
+              "native_capability": null,
+              "permission_id": "command.vaultsync.permission.remove-project",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "rule_id": "command.vaultsync.remove-project",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "vaultsync",
+                        "vaultsync.cmd",
+                        "vaultsync.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--yes",
+                        "--quiet",
+                        "--help"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--db"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [],
+                      "required_flags": [
+                        "--help"
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "remove-project"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  "title": "VaultSync remove-project help",
+                  "variant_id": "help"
+                }
+              ],
+              "safer_alternatives": [
+                "Run vaultsync list-projects first and confirm the project to unregister.",
+                "Review removal even when --yes or --quiet is supplied."
+              ],
+              "severity": "medium",
+              "title": "VaultSync project removal"
+            },
+            {
+              "action_classes": [
+                "vaultsync project path update command"
+              ],
+              "default_mode": "review",
+              "description": "Identifies VaultSync set-path and update-path operations. update-path is a CLI alias of set-path and is covered by the same rule.",
+              "family": null,
+              "matcher": {
+                "config": {},
+                "matchers": [
+                  {
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "vaultsync",
+                        "vaultsync.cmd",
+                        "vaultsync.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--quiet"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--db"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "set-path"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "vaultsync",
+                        "vaultsync.cmd",
+                        "vaultsync.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--quiet"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--db"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "update-path"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  }
+                ],
+                "op": "any.v1"
+              },
+              "native_capability": null,
+              "permission_id": "command.vaultsync.permission.set-path",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "rule_id": "command.vaultsync.set-path",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "vaultsync",
+                            "vaultsync.cmd",
+                            "vaultsync.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--quiet",
+                            "--help"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--db"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "set-path"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "vaultsync",
+                            "vaultsync.cmd",
+                            "vaultsync.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--quiet",
+                            "--help"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--db"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "update-path"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      }
+                    ],
+                    "op": "any.v1"
+                  },
+                  "title": "VaultSync path-update help",
+                  "variant_id": "help"
+                }
+              ],
+              "safer_alternatives": [
+                "Run vaultsync list-projects first and confirm the current project root.",
+                "Confirm the new path before approving the change."
+              ],
+              "severity": "medium",
+              "title": "VaultSync project path update"
             }
           ],
           "safer_alternatives": [
-            "Run `skb publish --dry-run` for the same directory and ignore rules, then review the included files before publishing."
+            "Use list-projects, history, diff, and verify to inspect backup state before making changes.",
+            "Use prune --dry-run before approving snapshot deletion.",
+            "Use restore --dry-run before approving restore writes or cleanup."
           ],
           "source": "built-in",
           "version": "1.0.0"
@@ -10459,179 +10865,307 @@
   },
   "cases": [
     {
-      "command": "skb publish ./my-skill --dry-run --ignore '.cursor/'",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.skill-base"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [],
-      "id": "publish-dry-run-safe",
-      "rule_id": "command.skill-base.publish"
-    },
-    {
-      "command": "skb publish ./my-skill --ignore '.cursor/' --no-gitignore",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.skill-base"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "publish-with-ignore-still-reviewable",
-      "rule_id": "command.skill-base.publish"
-    },
-    {
-      "command": "skb publish",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.skill-base"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "publish-current-directory",
-      "rule_id": "command.skill-base.publish"
-    },
-    {
-      "command": "skb publish ./my-skill --name \"My Skill\" --description \"A useful skill\" --changelog \"Initial release\"",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.skill-base"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "publish-relative-directory-with-metadata",
-      "rule_id": "command.skill-base.publish"
-    },
-    {
-      "command": "skb --name \"My Skill\" --changelog \"Release\" publish /tmp/my-skill",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.skill-base"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "publish-global-options-before-subcommand",
-      "rule_id": "command.skill-base.publish"
-    },
-    {
-      "command": "skb publish --help",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.skill-base"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [],
-      "id": "publish-help-long-safe",
-      "rule_id": "command.skill-base.publish"
-    },
-    {
-      "command": "skb publish -h",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.skill-base"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [],
-      "id": "publish-help-short-safe",
-      "rule_id": "command.skill-base.publish"
-    },
-    {
-      "command": "skb publish --name \"My Skill\" --help",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.skill-base"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [],
-      "id": "publish-with-extra-flag-and-help-safe",
-      "rule_id": "command.skill-base.publish"
-    },
-    {
-      "command": "skb publish ./my-skill",
+      "command": "vaultsync prune Demo --keep-last 5",
       "disabled_permissions": [],
       "enabled_extensions": [],
       "expected_action": "review",
       "expected_effective_segments": [],
-      "id": "extension-inactive",
-      "rule_id": "command.skill-base.publish"
+      "id": "inactive-prune",
+      "rule_id": "command.vaultsync.prune"
     },
     {
-      "command": "skb publish ./my-skill",
+      "command": "vaultsync prune Demo --keep-last 5",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.vaultsync"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "prune-review",
+      "rule_id": "command.vaultsync.prune"
+    },
+    {
+      "command": "vaultsync prune Demo --before 2026-09-01 --json",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.vaultsync"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "prune-before-review",
+      "rule_id": "command.vaultsync.prune"
+    },
+    {
+      "command": "vaultsync prune Demo --keep-last 5 --dry-run",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.vaultsync"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "prune-dry-run-safe",
+      "rule_id": "command.vaultsync.prune"
+    },
+    {
+      "command": "vaultsync prune --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.vaultsync"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "prune-help-safe",
+      "rule_id": "command.vaultsync.prune"
+    },
+    {
+      "command": "vaultsync restore Demo ./Recovered",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.vaultsync"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "restore-review",
+      "rule_id": "command.vaultsync.restore"
+    },
+    {
+      "command": "vaultsync restore Demo ./Recovered --clean --json",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.vaultsync"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "restore-clean-review",
+      "rule_id": "command.vaultsync.restore"
+    },
+    {
+      "command": "vaultsync restore Demo ./Recovered --snapshot 42 --dry-run",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.vaultsync"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "restore-dry-run-safe",
+      "rule_id": "command.vaultsync.restore"
+    },
+    {
+      "command": "vaultsync restore --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.vaultsync"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "restore-help-safe",
+      "rule_id": "command.vaultsync.restore"
+    },
+    {
+      "command": "vaultsync remove-project Demo",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.vaultsync"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "remove-project-review",
+      "rule_id": "command.vaultsync.remove-project"
+    },
+    {
+      "command": "vaultsync remove-project Demo --yes",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.vaultsync"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "remove-project-yes-still-review",
+      "rule_id": "command.vaultsync.remove-project"
+    },
+    {
+      "command": "vaultsync remove-project Demo --quiet",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.vaultsync"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "remove-project-quiet-still-review",
+      "rule_id": "command.vaultsync.remove-project"
+    },
+    {
+      "command": "vaultsync remove-project --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.vaultsync"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "remove-project-help-safe",
+      "rule_id": "command.vaultsync.remove-project"
+    },
+    {
+      "command": "vaultsync set-path Demo \"/srv/projects/Demo Project\"",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.vaultsync"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "set-path-review",
+      "rule_id": "command.vaultsync.set-path"
+    },
+    {
+      "command": "vaultsync update-path Demo /srv/projects/Demo",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.vaultsync"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "update-path-alias-review",
+      "rule_id": "command.vaultsync.set-path"
+    },
+    {
+      "command": "vaultsync set-path --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.vaultsync"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "set-path-help-safe",
+      "rule_id": "command.vaultsync.set-path"
+    },
+    {
+      "command": "vaultsync list-projects --json",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.vaultsync"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "list-projects-safe-case",
+      "rule_id": "command.vaultsync.prune"
+    },
+    {
+      "command": "vaultsync history Demo --json",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.vaultsync"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "history-safe-case",
+      "rule_id": "command.vaultsync.prune"
+    },
+    {
+      "command": "vaultsync diff Demo 10 9 --json",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.vaultsync"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "diff-safe-case",
+      "rule_id": "command.vaultsync.prune"
+    },
+    {
+      "command": "vaultsync verify Demo ./Backup --full --json",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.vaultsync"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "verify-safe-case",
+      "rule_id": "command.vaultsync.prune"
+    },
+    {
+      "command": "vaultsync list-projects; vaultsync prune Demo --keep-last 5",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.vaultsync"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        1
+      ],
+      "id": "compound-safe-then-destructive",
+      "rule_id": "command.vaultsync.prune"
+    },
+    {
+      "command": "vaultsync prune Demo --keep-last 5 --dry-run; vaultsync restore Demo ./Recovered",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.vaultsync"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        1
+      ],
+      "id": "compound-dry-run-then-restore",
+      "rule_id": "command.vaultsync.restore"
+    },
+    {
+      "command": "vaultsync prune Demo --keep-last 5",
       "disabled_permissions": [
-        "command.skill-base.permission.publish"
+        "command.vaultsync.permission.prune"
       ],
       "enabled_extensions": [
-        "command.skill-base"
+        "command.vaultsync"
       ],
       "expected_action": "block",
       "expected_effective_segments": [
         0
       ],
-      "id": "permission-disabled",
-      "rule_id": "command.skill-base.publish"
+      "id": "disabled-prune-permission",
+      "rule_id": "command.vaultsync.prune"
     },
     {
-      "command": "skb install team-rules",
+      "command": "vaultsync.exe remove-project Demo --yes",
       "disabled_permissions": [],
       "enabled_extensions": [
-        "command.skill-base"
+        "command.vaultsync"
       ],
       "expected_action": "review",
-      "expected_effective_segments": [],
-      "id": "skb-install-is-outside-publish-rule",
-      "rule_id": "command.skill-base.publish"
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "exe-launcher-review",
+      "rule_id": "command.vaultsync.remove-project"
     },
     {
-      "command": "skb search vue",
+      "command": "vaultsync.cmd set-path Demo C:\\\\Projects\\\\Demo",
       "disabled_permissions": [],
       "enabled_extensions": [
-        "command.skill-base"
+        "command.vaultsync"
       ],
       "expected_action": "review",
-      "expected_effective_segments": [],
-      "id": "skb-search-is-outside-publish-rule",
-      "rule_id": "command.skill-base.publish"
-    },
-    {
-      "command": "skb import-github owner/repo",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.skill-base"
+      "expected_effective_segments": [
+        0
       ],
-      "expected_action": "review",
-      "expected_effective_segments": [],
-      "id": "skb-import-github-is-outside-publish-rule",
-      "rule_id": "command.skill-base.publish"
-    },
-    {
-      "command": "skb publishx ./my-skill",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.skill-base"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [],
-      "id": "similar-subcommand-does-not-match",
-      "rule_id": "command.skill-base.publish"
-    },
-    {
-      "command": "skb --help",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.skill-base"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [],
-      "id": "root-help-is-outside-publish-rule",
-      "rule_id": "command.skill-base.publish"
+      "id": "cmd-launcher-review",
+      "rule_id": "command.vaultsync.set-path"
     }
   ],
   "schema": "guard.command-extension-fixtures.v1"
