@@ -37,13 +37,6 @@ HARNESS_ROUTE_STATUSES: Final = frozenset(
 DECISION_IO_SCHEMA: Final = "hol-guard.decision-critical-io.v1"
 PRIVACY_IO_SCHEMA: Final = "hol-guard.native-hook-io-privacy.v1"
 DECISION_RECEIPT_SCHEMA: Final = "guard-native-hook-decision-receipt.v1"
-PROOF_ENVIRONMENT_FRESHNESS_BLOCK: Final = (
-    'if [ "${GITHUB_BASE_REF:-}" != "" ]; then',
-    '  if [ "$(python3 scripts/ci/detect_pending_extension_regen.py --defer-freshness 2>/dev/null || echo false)" = "true" ]; then',
-    "    export HOL_DEFER_ARTIFACT_FRESHNESS=1",
-    "  fi",
-    "fi",
-)
 NATIVE_PROOF_OVERRIDES: Final = frozenset(
     [
         "HOL_GUARD_NATIVE",
@@ -99,20 +92,8 @@ def _read(path: Path) -> str:
 def validate_installed_proof_environment(source: str) -> None:
     """Require the established exclusions in each installed proof's own shell."""
     helper = "scripts/ci/native-proof-environment.sh"
-    helper_lines = _read(Path(helper)).splitlines()
-    block_size = len(PROOF_ENVIRONMENT_FRESHNESS_BLOCK)
-    block_starts = [
-        index
-        for index in range(len(helper_lines) - block_size + 1)
-        if tuple(helper_lines[index : index + block_size]) == PROOF_ENVIRONMENT_FRESHNESS_BLOCK
-    ]
-    if len(block_starts) != 1:
-        raise RuntimeError("installed proof environment helper contains an unsupported command")
-    block_start = block_starts[0]
-    helper_lines = helper_lines[:block_start] + helper_lines[block_start + block_size :]
-
     cleared: set[str] = set()
-    for line in helper_lines:
+    for line in _read(Path(helper)).splitlines():
         command = line.strip()
         if not command or command.startswith("#"):
             continue

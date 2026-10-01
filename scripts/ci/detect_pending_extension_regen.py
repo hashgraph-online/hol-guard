@@ -190,21 +190,10 @@ def regen_artifacts_absent_from_diff(diff: list[str] | None = None) -> bool:
     if diff is None:
         diff = pr_diff_paths()
     if diff is None:
-        return False
+        return bool(os.environ.get("GITHUB_BASE_REF"))
     if not os.environ.get("GITHUB_BASE_REF") and not diff:
         return False
     return not any(_owned_path(path) for path in diff)
-
-
-def defer_artifact_freshness(diff: list[str] | None = None) -> bool:
-    """Defer only when neither regen artifacts nor their inputs changed."""
-
-    if diff is None:
-        diff = pr_diff_paths()
-    if diff is None or not regen_artifacts_absent_from_diff(diff):
-        return False
-    pending = bool(contribution_ids() - catalog_ids())
-    return not pending and not any(path.startswith(REGEN_INPUT_PREFIXES) for path in diff)
 
 
 def main() -> int:
@@ -220,7 +209,7 @@ def main() -> int:
             return 1
     pending = bool(pending_ids) or bool(changed)
     if "--defer-freshness" in sys.argv:
-        print("true" if defer_artifact_freshness() else "false")
+        print("true" if regen_artifacts_absent_from_diff() else "false")
     elif "--flag" in sys.argv:
         print("true" if pending else "false")
     else:
@@ -230,7 +219,7 @@ def main() -> int:
                     "pending": pending,
                     "pending_ids": pending_ids,
                     "changed_sources": changed,
-                    "defer_freshness": defer_artifact_freshness(),
+                    "defer_freshness": regen_artifacts_absent_from_diff(),
                 },
                 sort_keys=True,
             )

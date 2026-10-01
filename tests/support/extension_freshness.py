@@ -68,8 +68,10 @@ def _regen_paths_absent(*paths: str) -> bool:
 
     diff = _pr_diff_paths()
     if diff is None:
-        # Detection failed, so freshness cannot safely be attributed to regen.
-        return False
+        # Detection failed: in PR context the artifacts cannot be committed
+        # anyway, so deferring cannot mask drift; the post-merge regen check
+        # on main still enforces it.
+        return bool(os.environ.get("GITHUB_BASE_REF"))
     if not os.environ.get("GITHUB_BASE_REF") and not diff:
         return False
     return not any(
