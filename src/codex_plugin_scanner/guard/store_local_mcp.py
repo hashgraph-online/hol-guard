@@ -10,7 +10,7 @@ from hashlib import sha256
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
-from .runtime.approval_context import build_configured_environment_hash
+from .runtime.approval_context import build_configured_environment_hash, is_unbound_context_digest
 from .runtime.composio_contract import composio_tool_role
 from .runtime.composio_discovery import ComposioActionSchema
 from .runtime.composio_workflows import ComposioWorkflowProposal
@@ -488,7 +488,8 @@ def _equivalent_package_launcher_observation(
         return None
     # Launcher aliases may be compatible, but they cannot substitute for a
     # configured account/environment binding. Exact hashes handle those cases.
-    if env_values_hash != build_configured_environment_hash(None):
+    expected = build_configured_environment_hash(None)
+    if is_unbound_context_digest(env_values_hash) or env_values_hash != expected:
         return None
     runtime_version = _normalized_package_version(package_version)
     if not isinstance(package_source, str) or not package_source.strip():

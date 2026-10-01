@@ -65,6 +65,13 @@ class NativeContextDigestUnavailableError(RuntimeError):
     """The native context-digest authority is required but unreachable."""
 
 
+_UNBOUND_PREFIX = "guard-context-unbound:"
+
+
+def is_unbound_context_digest(value: object) -> bool:
+    return isinstance(value, str) and value.startswith(_UNBOUND_PREFIX)
+
+
 def _unbound_context_digest() -> str:
     """Return a fresh nonce that can never satisfy a saved context binding.
 
@@ -75,7 +82,7 @@ def _unbound_context_digest() -> str:
     closed instead of trusting unverifiable context.
     """
 
-    return f"guard-context-unbound:{secrets.token_hex(32)}"
+    return f"{_UNBOUND_PREFIX}{secrets.token_hex(32)}"
 
 
 @lru_cache(maxsize=4)
@@ -826,9 +833,9 @@ def build_configured_environment_hash(
             _configured_values_payload(environment, configured_keys),
         )
     except NativeContextDigestUnavailableError:
-        # Deterministic so artifact content hashes don't churn; never a
-        # valid sha256 digest, so exact-binding comparisons still fail closed.
-        return "guard-context-unbound:configured-environment"
+        # Deterministic so artifact content hashes don't churn; callers must
+        # reject this sentinel rather than treat it as an exact binding.
+        return f"{_UNBOUND_PREFIX}configured-environment"
     return cast(str, result["digest"])
 
 
@@ -845,9 +852,9 @@ def build_configured_header_values_hash(
             _configured_values_payload(headers, configured_keys),
         )
     except NativeContextDigestUnavailableError:
-        # Deterministic so artifact content hashes don't churn; never a
-        # valid sha256 digest, so exact-binding comparisons still fail closed.
-        return "guard-context-unbound:configured-headers"
+        # Deterministic so artifact content hashes don't churn; callers must
+        # reject this sentinel rather than treat it as an exact binding.
+        return f"{_UNBOUND_PREFIX}configured-headers"
     return cast(str, result["digest"])
 
 
