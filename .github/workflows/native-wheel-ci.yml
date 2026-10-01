@@ -559,6 +559,12 @@ jobs:
         with:
           version: 0.9.26
           enable-cache: true
+          save-cache: false
+          cache-suffix: native-ci-v1
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+          prune-cache: false
       - name: Install locked proof dependencies
         env:
           NATIVE_PROOF: ${{ matrix.proof }}
