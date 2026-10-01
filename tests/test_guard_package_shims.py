@@ -545,7 +545,12 @@ def test_guard_protect_does_not_prime_policy_integrity_or_hold_sqlite_writer(tmp
     _run_guard_protect_command(str(home_dir), str(workspace_dir), result_queue=fast_results)
     fast_result = fast_results.get(timeout=1)
 
-    slow_process.join(timeout=20)
+    slow_process.join(timeout=60)
+    if slow_process.exitcode is None:
+        # A wedged non-daemon child keeps the pytest process alive past the job
+        # timeout and reports "cancelled" instead of the real assertion.
+        slow_process.terminate()
+        slow_process.join(timeout=5)
     assert slow_process.exitcode == 0
     slow_result = slow_results.get(timeout=1)
 
