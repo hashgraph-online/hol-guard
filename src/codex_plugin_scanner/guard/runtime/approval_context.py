@@ -72,17 +72,19 @@ def is_unbound_context_digest(value: object) -> bool:
     return isinstance(value, str) and value.startswith(_UNBOUND_PREFIX)
 
 
-def _unbound_context_digest() -> str:
+def _unbound_context_digest(label: str = "context") -> str:
     """Return a fresh nonce that can never satisfy a saved context binding.
 
     Builders degrade to this when the native digest authority is unreachable
     (``HOL_GUARD_NATIVE=off``, missing runtime, unprovisioned home): the
     evaluation still completes, but no stored token or digest can equal a
     per-call nonce, so approval reuse and unchanged-context claims fail
-    closed instead of trusting unverifiable context.
+    closed instead of trusting unverifiable context.  Unlike the deterministic
+    configured-environment/header sentinels, the nonce must stay unique per
+    call — it stands in for values where *any* equality would be wrong.
     """
 
-    return f"{_UNBOUND_PREFIX}{secrets.token_hex(32)}"
+    return f"{_UNBOUND_PREFIX}{label}:{secrets.token_hex(32)}"
 
 
 @lru_cache(maxsize=4)
@@ -175,7 +177,7 @@ def build_approval_context_token(
             {"components": components},
         )
     except NativeContextDigestUnavailableError:
-        return _unbound_context_digest()
+        return _unbound_context_digest("approval-context-token")
     return cast(str, result["token"])
 
 

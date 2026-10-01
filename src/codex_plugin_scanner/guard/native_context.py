@@ -15,6 +15,7 @@ import os
 import threading
 import time
 import uuid
+from collections import OrderedDict
 from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -65,7 +66,7 @@ _last_bound_home: Path | None = None
 # trip per rebuild.  `request_sha256` cannot collide across differing inputs
 # without a SHA-256 break, so correctness does not depend on eviction order.
 _RESULT_CACHE_LOCK = threading.Lock()
-_RESULT_CACHE: dict[tuple[str, str], dict[str, Any]] = {}
+_RESULT_CACHE: OrderedDict[tuple[str, str], dict[str, Any]] = OrderedDict()
 _RESULT_CACHE_MAX = 256
 
 
@@ -221,15 +222,25 @@ def native_context_digest(
         # non-finite floats) would fail inside the worker anyway; surface the
         # same failure boundary without shipping the request.
         return None
-    # Normalize so the same home spelled differently cannot duplicate entries.
-    cache_key = (content_sha256, os.path.normpath(os.fspath(guard_home)))
+    # Canonicalize (including symlinks) so the same home spelled differently
+    # cannot duplicate entries.
+    try:
+        normalized_home = os.path.normpath(
+            os.fspath(Path(guard_home).expanduser().resolve())
+        )
+    except (OSError, RuntimeError):
+        normalized_home = os.path.normpath(os.fspath(guard_home))
+    cache_key = (content_sha256, normalized_home)
     with _RESULT_CACHE_LOCK:
         cached = _RESULT_CACHE.get(cache_key)
         if cached is not None:
             # Refresh recency so eviction tracks least-recently-used order.
-            _RESULT_CACHE[cache_key] = _RESULT_CACHE.pop(cache_key)
+            _RESULT_CACHE.move_to_end(cache_key)
     if cached is not None:
-        return cached
+        # Payload outputs are pure functions of the request content, but the
+        # result envelope must be bound to this caller's request — rebind the
+        # identity fields rather than returning the original request's.
+        return {**cached, "request_id": request_id, "request_sha256": request_sha256}
     try:
         envelope = json.dumps(
             {"operation": "context_digest", "deadline_budget_ms": deadline_budget_ms, "request": request},
@@ -286,7 +297,7 @@ def native_context_digest(
     if decoded.get("status") == "ok":
         with _RESULT_CACHE_LOCK:
             if len(_RESULT_CACHE) >= _RESULT_CACHE_MAX:
-                _RESULT_CACHE.pop(next(iter(_RESULT_CACHE)))
+                _RESULT_CACHE.popitem(last=False)
             _RESULT_CACHE[cache_key] = decoded
     return decoded
 

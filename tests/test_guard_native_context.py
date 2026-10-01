@@ -134,6 +134,50 @@ def test_native_context_digest_happy_path_binds_request(tmp_path: Path, monkeypa
     assert captured[0]["argv"] == ["hol-guard"]
 
 
+def test_native_context_digest_cache_hit_rebinds_request_identity(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured = _prime(monkeypatch)
+    first = native_context.native_context_digest(
+        "launch_argv_digest", {"argv": ["hol-guard"]}, guard_home=tmp_path
+    )
+    second = native_context.native_context_digest(
+        "launch_argv_digest", {"argv": ["hol-guard"]}, guard_home=tmp_path
+    )
+    assert first is not None and second is not None
+    # The second call must hit the cache — no second resident round trip.
+    assert len(captured) == 1
+    # Cached payloads stay identical, but the returned envelope is rebound to
+    # the caller's request rather than echoing the first request's identity.
+    assert second["digest"] == first["digest"] == "00" * 32
+    assert second["request_id"] != first["request_id"]
+    rebound_request = {
+        "schema": "guard-context-digest-request.v1",
+        "request_id": second["request_id"],
+        "kind": "launch_argv_digest",
+        "argv": ["hol-guard"],
+    }
+    assert second["request_sha256"] == _request_sha256(rebound_request)
+
+
+def test_native_context_digest_symlinked_home_shares_cache_entry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured = _prime(monkeypatch)
+    real_home = tmp_path / "real-home"
+    real_home.mkdir()
+    linked_home = tmp_path / "linked-home"
+    linked_home.symlink_to(real_home, target_is_directory=True)
+    first = native_context.native_context_digest(
+        "launch_argv_digest", {"argv": ["hol-guard"]}, guard_home=real_home
+    )
+    second = native_context.native_context_digest(
+        "launch_argv_digest", {"argv": ["hol-guard"]}, guard_home=linked_home
+    )
+    assert first is not None and second is not None
+    assert len(captured) == 1
+
+
 def test_native_context_digest_transport_failure_returns_none(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _prime(monkeypatch, response=None)
     monkeypatch.setattr(native_context, "native_resident_client_request", lambda **_kwargs: None)
@@ -195,7 +239,14 @@ def test_native_context_digest_surrogate_component_returns_typed_error(
     # boundary — never raise UnicodeEncodeError or report availability loss.
     calls: list[bytes] = []
     _prime(monkeypatch, response=b"{}")
-    monkeypatch.setattr(native_context, "native_resident_client_request", lambda **kwargs: calls.append(kwargs["payload"]) or b"{}")
+
+    def _capture(**kwargs: object) -> bytes:
+        payload = kwargs["payload"]
+        assert isinstance(payload, bytes)
+        calls.append(payload)
+        return b"{}"
+
+    monkeypatch.setattr(native_context, "native_resident_client_request", _capture)
     result = native_context.native_context_digest(
         "launch_argv_digest",
         {"argv": ["/tmp/\udcff-dir"]},
