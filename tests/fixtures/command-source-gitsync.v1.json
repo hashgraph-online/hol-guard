@@ -10496,6 +10496,7 @@
           "command.digline",
           "command.genclave",
           "command.gitsync",
+          "command.hashdup",
           "command.mcp-filesystem",
           "command.mcp-instapods",
           "command.mcp-pr-ui-compare",
