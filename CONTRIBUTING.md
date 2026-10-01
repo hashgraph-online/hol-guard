@@ -170,6 +170,19 @@ checks authoring outside the checkout. Include the relevant CI results in the PR
    `generated-artifacts-guard` check rejects them, and `extension-artifact-regen` reproduces them
    on `main` after merge. (`trust-class-map.v1.json` stays authored — contributions add their
    `external` entry there; regen only appends unmapped ids.)
+
+   **Freshness semantics — what to do when a check says "artifacts are stale":** every
+   generated-artifact freshness gate follows the same rule, evaluated against the PR's diff:
+
+   | PR diff contains | Gate behavior |
+   |---|---|
+   | regen-owned artifact paths | strict verification — carried artifacts must be exactly right |
+   | artifact inputs only (`contributions/`, `rust/`, generator sources) | additive validation — sources must compile; artifacts regenerate on `main` |
+   | neither | deferred — any checked-in drift is inherited and regen-owned |
+
+   The only legitimate responses to a freshness failure are: (a) your diff is wrong — remove the
+   generated paths or fix the source, or (b) your branch predates the deferral — merge `main` and
+   push. Never regenerate artifacts into an ordinary PR to chase a freshness gate.
 4. Run the relevant validation and inspect the complete diff.
 5. For a command extension, run `hol-guard extensions handoff` and use the **Command extension**
    PR template. Describe the problem, resulting behavior, exact validation commands, and any

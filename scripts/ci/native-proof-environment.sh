@@ -13,3 +13,12 @@ unset GUARD_HOOK_FAST_PATH GUARD_HOOK_FAST_PATH_SHADOW GUARD_HOOK_SOURCE_REF GUA
 unset GUARD_FAST_PATH GUARD_BINARY GUARD_ORACLE GUARD_DIAGNOSTIC GUARD_TEST_MODE
 unset GUARD_TEST_KEYRING_FILE GUARD_TEST_SYNC_AUTH_CONTEXT_JSON GUARD_PYTEST_DURATION_OUTPUT
 unset PYTEST_CURRENT_TEST PYTEST_ADDOPTS PYTEST_PLUGINS PYTHONPATH
+
+# When the PR diff carries no regen-owned generated artifacts, manifest-vs-source
+# freshness bindings stand down: the artifacts are refreshed on main by the
+# regen workflow, and the PR cannot update them (generated-artifacts-guard).
+if [ "${GITHUB_BASE_REF:-}" != "" ]; then
+  if [ "$(python3 scripts/ci/detect_pending_extension_regen.py --defer-freshness 2>/dev/null || echo false)" = "true" ]; then
+    export HOL_DEFER_ARTIFACT_FRESHNESS=1
+  fi
+fi

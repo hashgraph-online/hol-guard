@@ -492,6 +492,9 @@ jobs:
           Remove-Item Env:PYTEST_PLUGINS -ErrorAction SilentlyContinue
           Remove-Item Env:PYTHONPATH -ErrorAction SilentlyContinue
           Remove-Item Env:HOL_GUARD_PYTHON_ORACLE -ErrorAction SilentlyContinue
+          if ($env:GITHUB_BASE_REF -and (python scripts/ci/detect_pending_extension_regen.py --defer-freshness) -eq "true") {
+            $env:HOL_DEFER_ARTIFACT_FRESHNESS = "1"
+          }
           uv run --no-sync python ci/native_runtime/probe_native_default_auto.py --json native-default-auto.json
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           .venv\Scripts\python.exe -I ci\native_runtime\probe_installed_native_extensions.py --json installed-native-extensions.json

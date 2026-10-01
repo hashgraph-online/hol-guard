@@ -25,6 +25,40 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 CATALOG = ROOT / "contracts/extensions/command-catalog.v1.json"
 
+# Maintainer-owned generated projections (extension-artifact-regen.yml). The
+# generated-artifacts-guard workflow mirrors this list; keep both in sync.
+REGEN_OWNED_PATHS: tuple[str, ...] = (
+    "contracts/extensions/native-command-program.v1.json",
+    "contracts/extensions/command-catalog.v1.json",
+    "contracts/extensions/native-command-control-authority.v1.fixtures.json",
+    "contracts/managed-controls/v1/extension-projection-digest-vector.json",
+    "contracts/managed-controls/v1/policy-bundle-v2-extension-signature-vector.json",
+    "docs/guard/extensions/README.md",
+    "docs/guard/extensions/catalog.v1.json",
+    "docs/guard/extensions/catalog.v2.json",
+    "src/codex_plugin_scanner/guard/contracts/data/extensions",
+    "src/codex_plugin_scanner/guard/contracts/data/mcp_servers",
+    "src/codex_plugin_scanner/guard/extension_builder",
+    "tests/fixtures/extension-controls/catalog-baseline.v1.json",
+    "tests/fixtures/guard-command-corpus/decision-diff-report.json",
+    "tests/fixtures/guard-command-corpus/decision-diff-report.framed-sha256",
+    "tests/test_guard_extension_trust.py",
+    "tests/test_policy_bundle_delivery_runtime.py",
+)
+
+# Canonical inputs whose changes can stale the projections above.
+REGEN_INPUT_PREFIXES: tuple[str, ...] = (
+    "contributions/",
+    "rust/",
+    "src/codex_plugin_scanner/guard/",
+    "contracts/extensions/",
+    "contracts/managed-controls/",
+    "docs/guard/",
+    "tests/fixtures/",
+    "tests/guard_command_",
+    "tests/test_guard_",
+)
+
 
 class ContributionDiffError(RuntimeError):
     """The PR base cannot safely establish whether contributions changed."""
@@ -95,6 +129,70 @@ def _contributions_changed(base_sha: str) -> list[str]:
     return [line for line in completed.stdout.splitlines() if line.strip()]
 
 
+def _git(*arguments: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", *arguments], cwd=ROOT, check=False, capture_output=True, text=True, timeout=30
+    )
+
+
+def pr_diff_paths() -> list[str] | None:
+    """Paths this ref changes relative to the base branch, or None outside PR context.
+
+    CI checkouts are shallow, so diff against a depth-1 fetch of the base ref —
+    tree-to-tree, no merge-base history required. Locally, fall back to the
+    merge-base against ``main`` when that ref exists.
+    """
+
+    import os
+
+    base_ref = os.environ.get("GITHUB_BASE_REF")
+    if base_ref:
+        probe = _git("rev-parse", "--is-shallow-repository")
+        shallow = probe.returncode != 0 or probe.stdout.strip() == "true"
+        fetch = [
+            "fetch", "-q", *(["--depth=1"] if shallow else []), "origin",
+            f"+refs/heads/{base_ref}:refs/remotes/pending-diff/base",
+        ]
+        if _git(*fetch).returncode:
+            return None
+        result = _git("diff", "--name-only", "pending-diff/base", "HEAD")
+        return result.stdout.splitlines() if result.returncode == 0 else None
+    if _git("rev-parse", "--verify", "main").returncode == 0:
+        result = _git("diff", "--name-only", "main...HEAD")
+        return result.stdout.splitlines() if result.returncode == 0 else None
+    return None
+
+
+def _owned_path(path: str) -> bool:
+    if path.endswith(".schema.json"):
+        return False
+    return any(
+        path == owned or path.startswith(owned.rstrip("/") + "/")
+        for owned in REGEN_OWNED_PATHS
+    )
+
+
+def regen_artifacts_absent_from_diff(diff: list[str] | None = None) -> bool:
+    """No regen-owned generated path appears in this PR's diff.
+
+    In PR context an absent artifact can never be refreshed by the author —
+    freshness enforcement belongs to main and regen PRs. Outside PR context
+    (no diff available) returns False so gates stay strict.
+    """
+
+    import os
+
+    if not os.environ.get("GITHUB_BASE_REF") and os.environ.get("CI"):
+        return False
+    if diff is None:
+        diff = pr_diff_paths()
+    if diff is None:
+        return False
+    if not os.environ.get("GITHUB_BASE_REF") and not diff:
+        return False
+    return not any(_owned_path(path) for path in diff)
+
+
 def main() -> int:
     """Print regeneration status only after any requested base comparison succeeds."""
     pending_ids = sorted(contribution_ids() - catalog_ids())
@@ -107,12 +205,19 @@ def main() -> int:
             print(str(error), file=sys.stderr)
             return 1
     pending = bool(pending_ids) or bool(changed)
-    if "--flag" in sys.argv:
+    if "--defer-freshness" in sys.argv:
+        print("true" if regen_artifacts_absent_from_diff() else "false")
+    elif "--flag" in sys.argv:
         print("true" if pending else "false")
     else:
         print(
             json.dumps(
-                {"pending": pending, "pending_ids": pending_ids, "changed_sources": changed},
+                {
+                    "pending": pending,
+                    "pending_ids": pending_ids,
+                    "changed_sources": changed,
+                    "defer_freshness": regen_artifacts_absent_from_diff(),
+                },
                 sort_keys=True,
             )
         )
