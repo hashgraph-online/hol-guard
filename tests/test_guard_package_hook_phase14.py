@@ -458,7 +458,10 @@ def test_phase14_package_hook_block_copy_stays_consistent_across_harnesses(
 
 
 @pytest.mark.usefixtures("native_hook_force")
-def test_phase14_claude_compatibility_hook_enforces_package_install_without_node(tmp_path: Path) -> None:
+def test_phase14_claude_compatibility_hook_enforces_package_install_without_node(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Claude compatibility hooks must not depend on Node for supply-chain enforcement."""
     from codex_plugin_scanner.guard.adapters.claude_code import ClaudeCodeHarnessAdapter
 
@@ -473,6 +476,18 @@ def test_phase14_claude_compatibility_hook_enforces_package_install_without_node
     )
     _seed_review_bundle(guard_home, harness_selector="claude-code")
     (guard_home / "config.toml").write_text("approval_wait_timeout_seconds = 0\n", encoding="utf-8")
+    # The fallback runs in a child process, so carry the same test-only auth
+    # context across the process boundary instead of attempting a live refresh.
+    monkeypatch.setenv(
+        "HOL_GUARD_TEST_SYNC_AUTH_CONTEXT_JSON",
+        json.dumps(
+            {
+                "sync_url": "https://hol.org/api/guard/receipts/sync",
+                "access_token": "demo-token",
+            },
+            separators=(",", ":"),
+        ),
+    )
 
     adapter = ClaudeCodeHarnessAdapter()
     command = adapter._daemon_hook_command_parts(context)
