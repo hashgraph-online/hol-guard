@@ -324,6 +324,10 @@ class StoreLocalMcpMixin:
         hash_value = _normalized_identity_hash(server_identity_hash)
         if hash_value is None:
             return None
+        if is_unbound_context_digest(env_values_hash):
+            # An unverifiable configured environment cannot satisfy any binding,
+            # including an exact identity hash derived from the same sentinel.
+            return None
         server_identity_hash = hash_value
         with self._connect() as connection:
             # SELECT alone does not start a sqlite3 transaction. Hold one read
