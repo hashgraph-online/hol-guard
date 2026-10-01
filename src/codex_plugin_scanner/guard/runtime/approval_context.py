@@ -826,7 +826,9 @@ def build_configured_environment_hash(
             _configured_values_payload(environment, configured_keys),
         )
     except NativeContextDigestUnavailableError:
-        return _unbound_context_digest()
+        # Deterministic so artifact content hashes don't churn; never a
+        # valid sha256 digest, so exact-binding comparisons still fail closed.
+        return "guard-context-unbound:configured-environment"
     return cast(str, result["digest"])
 
 
@@ -843,7 +845,9 @@ def build_configured_header_values_hash(
             _configured_values_payload(headers, configured_keys),
         )
     except NativeContextDigestUnavailableError:
-        return _unbound_context_digest()
+        # Deterministic so artifact content hashes don't churn; never a
+        # valid sha256 digest, so exact-binding comparisons still fail closed.
+        return "guard-context-unbound:configured-headers"
     return cast(str, result["digest"])
 
 
