@@ -68,11 +68,11 @@ _RESULT_CACHE: dict[tuple[str, str, str], dict[str, Any]] = {}
 _RESULT_CACHE_MAX = 256
 
 
-def bind_context_digest_home(guard_home: Path | None) -> Any:
+def bind_context_digest_home(guard_home: Path | None, *, remember: bool = True) -> Any:
     """Bind the enforcement path's guard home for ambient digest calls."""
 
     token = _BOUND_GUARD_HOME.set(guard_home)
-    if guard_home is not None:
+    if remember and guard_home is not None:
         global _LAST_BOUND_HOME
         with _LAST_BOUND_LOCK:
             _LAST_BOUND_HOME = guard_home

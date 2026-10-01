@@ -2344,7 +2344,7 @@ class StorePolicyMixin:
 
         # This is a read-only diagnostic: the binding must not leak into the
         # caller's context after return.
-        binding_token = bind_context_digest_home(self.guard_home)
+        binding_token = bind_context_digest_home(self.guard_home, remember=False)
         try:
             return self._approval_reuse_diagnostic_inner(
                 harness,
