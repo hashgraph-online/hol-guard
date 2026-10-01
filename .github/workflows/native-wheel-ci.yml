@@ -70,7 +70,7 @@ jobs:
       - name: Build and assemble version-matched native wheel
         env:
           HOL_GUARD_BUILD_SHA: ${{ github.sha }}
-          HOL_GUARD_PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          NATIVE_PR_BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
           MACOSX_DEPLOYMENT_TARGET: ${{ matrix.deployment_target }}
           PLATFORM_TAG: ${{ matrix.platform_tag }}
           TARGET: ${{ matrix.target }}
