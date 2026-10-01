@@ -39,59 +39,85 @@ os.environ.pop("HOL_GUARD_TEST_ALLOW_BROWSER_OPEN", None)
 
 @pytest.fixture(autouse=True)
 def _default_unit_tests_to_python_rollback(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Keep legacy unit fixtures on explicit, test-only oracle mode.
+    """Keep legacy unit fixtures off the production native default.
 
     Production default remains ``auto``. Native-authority tests monkeypatch
-    ``native_mode`` or delete this variable themselves. The oracle is injected
-    below; no production module imports the semantic evaluator.
+    ``native_mode`` or delete this variable themselves. There is no Python
+    semantic evaluator; ``off`` exercises the fail-safe surface.
     """
 
+    monkeypatch.setenv("HOL_GUARD_TEST_MODE", "1")
+    monkeypatch.setenv("HOL_GUARD_NATIVE_DIAGNOSTIC", "1")
     if "HOL_GUARD_NATIVE" not in os.environ:
         monkeypatch.setenv("HOL_GUARD_NATIVE", "off")
 
 
-@pytest.fixture(autouse=True)
-def _explicit_python_differential_oracle(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Install the Python reviewer only for explicit differential-test paths."""
+class _GuardCommandsProxy:
+    """Patch target that rebinds a symbol in every loaded guard module.
 
-    monkeypatch.setenv("HOL_GUARD_TEST_MODE", "1")
-    monkeypatch.setenv("HOL_GUARD_PYTHON_ORACLE", "1")
-    monkeypatch.setenv("HOL_GUARD_NATIVE_DIAGNOSTIC", "1")
+    The hook pipeline is split across ``commands_*``/``commands_support_*``
+    modules that share bindings through the ``commands_support`` union, so a
+    name patched on ``cli.commands`` alone would never reach the moved call
+    sites. ``monkeypatch.setattr(guard_commands_module, name, value)`` fans
+    the rebind out to every loaded ``codex_plugin_scanner`` module that holds
+    the same object, and restores through the same fan-out on teardown.
+    """
 
-    from codex_plugin_scanner.guard.cli import commands_hook_source_ref
-    from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config
-    from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
-    from codex_plugin_scanner.guard.runtime.hook_content_scanner import ContentScanner
-    from codex_plugin_scanner.guard.runtime.hook_decision_cache import HookDecisionCache
-    from codex_plugin_scanner.guard.runtime.hook_review_engine import HookReviewEngine
-    from codex_plugin_scanner.guard.runtime.hook_review_types import HookReviewRequest, HookReviewResponse
-    from codex_plugin_scanner.guard.store import GuardStore
+    @staticmethod
+    def _original(name: str) -> object:
+        sentinel = object()
+        commands = sys.modules.get("codex_plugin_scanner.guard.cli.commands")
+        if commands is not None:
+            value = getattr(commands, name, sentinel)
+            if value is not sentinel:
+                return value
+        for module in list(sys.modules.values()):
+            if not getattr(module, "__name__", "").startswith("codex_plugin_scanner"):
+                continue
+            value = getattr(module, name, sentinel)
+            if value is not sentinel:
+                return value
+        raise AttributeError(name)
 
-    def worker_oracle(worker: HookWorker) -> object:
-        return HookReviewEngine(
-            store=worker.store,
-            scanner=ContentScanner(),
-            cache=HookDecisionCache(worker.store),
-            config_loader=worker._load_config,
-            metrics=worker.metrics,
-        )
+    def __getattr__(self, name: str) -> object:
+        return self._original(name)
 
-    def source_ref_oracle(
-        request: HookReviewRequest,
-        store: GuardStore,
-        config: GuardConfig | None,
-    ) -> HookReviewResponse:
-        return HookReviewEngine(
-            store=store,
-            scanner=ContentScanner(),
-            cache=HookDecisionCache(store),
-            config_loader=lambda guard_home, workspace: (
-                config if config is not None else load_guard_config(guard_home, workspace=workspace)
-            ),
-        ).review(request)
+    def __setattr__(self, name: str, value: object) -> None:
+        original = self._original(name)
+        for module in list(sys.modules.values()):
+            if not getattr(module, "__name__", "").startswith("codex_plugin_scanner"):
+                continue
+            if getattr(module, name, None) is original:
+                setattr(module, name, value)
 
-    monkeypatch.setattr(HookWorker, "_test_python_oracle_factory", worker_oracle)
-    monkeypatch.setattr(commands_hook_source_ref, "_test_source_ref_oracle", source_ref_oracle)
+
+guard_commands_module = _GuardCommandsProxy()
+
+
+@pytest.fixture
+def native_hook_force(monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Drive hook entrypoints through the compiled native runtime.
+
+    Hook integration tests that assert real decisions (deny/review/allow)
+    need the Rust authority: ``force`` makes ``HOL_GUARD_NATIVE_BINARY``
+    authoritative, and the standalone CLI publishes its own policy snapshot.
+    There is no Python fallback, so the runtime is required, not skipped.
+    """
+
+    binary = os.environ.get("HOL_GUARD_NATIVE_BINARY")
+    if binary:
+        runtime = Path(binary).expanduser()
+    else:
+        root = Path(__file__).resolve().parents[1]
+        runtime = root / "rust" / "target" / "release" / "hol-guard-runtime"
+        if not runtime.is_file():
+            runtime = root / "rust" / "target" / "debug" / "hol-guard-runtime"
+    if not runtime.is_file():
+        pytest.fail("HOL_GUARD_NATIVE_BINARY must name the compiled Rust runtime; native retirement proof cannot skip")
+    runtime = runtime.resolve(strict=True)
+    monkeypatch.setenv("HOL_GUARD_NATIVE", "force")
+    monkeypatch.setenv("HOL_GUARD_NATIVE_BINARY", str(runtime))
+    return runtime
 
 
 @pytest.fixture

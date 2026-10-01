@@ -12,6 +12,7 @@ import pytest
 
 from codex_plugin_scanner.guard.adapters import cline_plugin, cline_plugin_probe
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from tests.coverage_ci import under_coverage_scale
 
 
 def _context(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> HarnessContext:
@@ -90,5 +91,13 @@ def test_real_node_checks_managed_source_without_executing_it(tmp_path, monkeypa
     path.write_text(prelude + source, encoding="utf-8")
     _write_state(context, str(path))
 
-    assert cline_plugin.cline_plugin_syntax_probe(context)["ok"] is ok
+    original_run = subprocess.run
+
+    def traced_run(*args, **kwargs):
+        kwargs["timeout"] *= under_coverage_scale(3.0)
+        return original_run(*args, **kwargs)
+
+    monkeypatch.setattr(cline_plugin_probe.subprocess, "run", traced_run)
+    result = cline_plugin.cline_plugin_syntax_probe(context)
+    assert result["ok"] is ok, result
     assert not marker.exists()

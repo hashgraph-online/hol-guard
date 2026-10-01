@@ -14,6 +14,20 @@ from .bounded_cli_hook_test_support import config as _config
 from .bounded_cli_hook_test_support import runner_result as _runner_result
 
 
+@pytest.mark.parametrize("harness", ["copilot", "grok", "hermes", "openclaw", "kimi", "zcode", "devin", "pi", "omp"])
+@pytest.mark.parametrize("explicit_block", [False, True])
+def test_unavailable_posttool_observation_preserves_explicit_decision(harness: str, explicit_block: bool) -> None:
+    response = {"reason_code": "native_post_tool_unavailable", "reason": "native miss"}
+    if explicit_block:
+        response["policy_action"] = "block"
+    stdout, _stderr, code = bounded_cli_hook_daemon._daemon_response_to_native(
+        response, harness=harness, event_name="PostToolUse"
+    )
+    payload = json.loads(stdout)
+    assert code == 0
+    assert payload["hookSpecificOutput"]["permissionDecision"] == ("deny" if explicit_block else "allow")
+
+
 def test_grok_should_block_respects_guard_event_contract() -> None:
     from codex_plugin_scanner.guard.adapters.grok_hooks import grok_hook_should_block
 

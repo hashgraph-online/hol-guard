@@ -8,13 +8,16 @@ import time
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from codex_plugin_scanner.guard.daemon.runtime_hook_evidence_writer import (
     RuntimeHookEvidenceWriter,
     _NativeDecisionReceiptRecord,
 )
-from codex_plugin_scanner.guard.native_decision_receipt import validate_native_decision_receipt
+from codex_plugin_scanner.guard.native_decision_receipt import receipt_matches_edge, validate_native_decision_receipt
 from codex_plugin_scanner.guard.native_response_decoder import response_from_payload
 from codex_plugin_scanner.guard.store import GuardStore
+from codex_plugin_scanner.guard.store_native_decision_receipts import native_decision_receipt_schema_statement
 
 
 def _receipt(**overrides: object) -> dict[str, object]:
@@ -67,6 +70,60 @@ def test_receipt_is_strictly_redacted_and_identity_bound() -> None:
     with_mutated_identity = dict(receipt)
     with_mutated_identity["reason_code"] = "native_other_reason"
     assert validate_native_decision_receipt(with_mutated_identity) is None
+
+
+def test_prompt_receipt_requires_matching_native_prompt_result() -> None:
+    receipt = _receipt(
+        event_name="UserPromptSubmit",
+        decision="deny",
+        model_output_action="not_applicable",
+        policy_action="block",
+        reason_code="native_guard_bypass_prompt",
+        prompt_risk_classes=["local_env_read", "exfil_intent", "guard_bypass_intent"],
+    )
+    result = {
+        "schema": "guard-pre-tool-result.v1",
+        "authority": "rust",
+        "decision": "deny",
+        "policy_action": "block",
+        "minimum_action": "block",
+        "reason_code": "native_guard_bypass_prompt",
+        "prompt_risk_classes": ["local_env_read", "exfil_intent", "guard_bypass_intent"],
+        "action": {"event": "UserPromptSubmit", "action_type": "prompt"},
+    }
+    edge = {
+        "schema": "guard-hook-edge-result.v2",
+        "authority": "rust",
+        "harness": "claude-code",
+        "event_name": "UserPromptSubmit",
+        "payload_kind": "inline",
+        "result": result,
+    }
+    assert validate_native_decision_receipt(receipt) == receipt
+    assert receipt_matches_edge(edge, receipt)
+    assert not receipt_matches_edge({**edge, "result": {**result, "decision": "allow"}}, receipt)
+    other_action = {**result, "action": {"event": "PreToolUse", "action_type": "prompt"}}
+    assert not receipt_matches_edge({**edge, "result": other_action}, receipt)
+    changed_classes = {**result, "prompt_risk_classes": ["local_env_read"]}
+    assert not receipt_matches_edge({**edge, "result": changed_classes}, receipt)
+    assert validate_native_decision_receipt({**receipt, "prompt_risk_classes": ["guard_bypass_intent"]}) is None
+
+
+@pytest.mark.parametrize(
+    "classes",
+    (
+        [],
+        ["local_env_read", "local_env_read"],
+        ["guard_bypass_intent", "local_env_read"],
+        ["unexpected_class"],
+        ["local_env_read"] * 7,
+    ),
+)
+def test_prompt_risk_classes_reject_unknown_duplicate_or_unbounded_values(classes: list[str]) -> None:
+    receipt = _receipt(event_name="UserPromptSubmit", model_output_action="not_applicable", prompt_risk_classes=classes)
+    assert validate_native_decision_receipt(receipt) is None
+    tool = _receipt(event_name="PreToolUse", prompt_risk_classes=["local_env_read"])
+    assert validate_native_decision_receipt(tool) is None
 
 
 def test_receipt_handoff_never_waits_for_persistence(tmp_path: Path) -> None:
@@ -203,6 +260,64 @@ def test_store_receipt_insert_is_idempotent(tmp_path: Path) -> None:
     assert store.native_decision_receipt_count() == 1
 
 
+def test_prompt_receipt_persists_without_rewriting_tool_receipt_schema(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    tool = _receipt()
+    prompt = _receipt(
+        event_name="UserPromptSubmit",
+        decision="deny",
+        model_output_action="not_applicable",
+        policy_action="block",
+        reason_code="native_guard_bypass_prompt",
+        prompt_risk_classes=["local_env_read", "exfil_intent", "guard_bypass_intent"],
+    )
+    assert store.record_native_decision_receipt(tool)
+    assert store.record_native_decision_receipt(prompt)
+    assert store.native_decision_receipt_count() == 2
+    assert store.get_native_decision_receipt(tool["decision_id"]) == tool
+    assert store.get_native_decision_receipt(prompt["decision_id"]) == prompt
+    with store._connect() as connection:
+        legacy = connection.execute(
+            "select sql from sqlite_schema where type = 'table' and name = 'native_hook_decision_receipts'"
+        ).fetchone()[0]
+        assert "event_name in ('PreToolUse', 'PostToolUse')" in legacy
+        assert connection.execute("select count(*) from schema_migrations where version = 29").fetchone()[0] == 1
+        connection.execute(
+            "update native_prompt_decision_receipts set prompt_risk_classes_json = ? where decision_id = ?",
+            ('["guard_bypass_intent"]', prompt["decision_id"]),
+        )
+    assert store.get_native_decision_receipt(prompt["decision_id"]) is None
+    assert store.get_native_decision_receipt(tool["decision_id"]) == tool
+
+
+def test_existing_tool_receipt_schema_gains_prompt_storage_additively(tmp_path: Path) -> None:
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    with sqlite3.connect(guard_home / "guard.db") as connection:
+        connection.execute(native_decision_receipt_schema_statement())
+        connection.execute("create table schema_migrations (version integer primary key, applied_at text not null)")
+        connection.execute("insert into schema_migrations values (26, '2026-01-01T00:00:00Z')")
+    store = GuardStore(guard_home, prime_policy_integrity=False)
+    existing = _receipt()
+    prompt = _receipt(
+        event_name="UserPromptSubmit",
+        decision="deny",
+        model_output_action="not_applicable",
+        policy_action="block",
+        reason_code="native_guard_bypass_prompt",
+    )
+    assert store.record_native_decision_receipt(existing)
+    assert store.record_native_decision_receipt(prompt)
+    assert store.get_native_decision_receipt(existing["decision_id"]) == existing
+    assert store.get_native_decision_receipt(prompt["decision_id"]) == prompt
+    with store._connect() as connection:
+        legacy = connection.execute(
+            "select sql from sqlite_schema where type = 'table' and name = 'native_hook_decision_receipts'"
+        ).fetchone()[0]
+        assert "event_name in ('PreToolUse', 'PostToolUse')" in legacy
+        assert connection.execute("select count(*) from schema_migrations where version = 29").fetchone()[0] == 1
+
+
 def test_store_initializes_receipt_schema_marker_and_recorded_at_index(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     with store._connect() as connection:
@@ -212,9 +327,7 @@ def test_store_initializes_receipt_schema_marker_and_recorded_at_index(tmp_path:
         assert table_row is not None and table_row[0] == 1
         migration_row = connection.execute("select 1 from schema_migrations where version = 26").fetchone()
         assert migration_row is not None and migration_row[0] == 1
-        indexes = {
-            str(row[1]) for row in connection.execute("pragma index_list(native_hook_decision_receipts)")
-        }
+        indexes = {str(row[1]) for row in connection.execute("pragma index_list(native_hook_decision_receipts)")}
     assert "idx_native_hook_decision_receipts_recorded_at" in indexes
 
 
