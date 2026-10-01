@@ -237,7 +237,17 @@ impl CompiledNativeCommandControls {
         let mut floor = if self.global_block {
             "block"
         } else if unsupported_model {
-            if self.blocked_extensions.is_empty() && self.blocked_permissions.is_empty() {
+            if self.blocked_extensions.is_empty()
+                && self.blocked_permissions.is_empty()
+                && !self.program.rules.iter().any(|rule| {
+                    self.program.extensions[rule.extension_index].required
+                        && !rule.is_compatibility_attribution_only()
+                        && rule.severity == "critical"
+                        && !self
+                            .explicitly_enabled_permissions
+                            .contains(&rule.permission_id)
+                })
+            {
                 "review"
             } else {
                 "block"
