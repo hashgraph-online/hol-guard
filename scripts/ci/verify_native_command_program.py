@@ -27,12 +27,14 @@ GENERATED_PATHS = (
 
 
 def _run(command: list[str]) -> None:
+    """Propagate a failed command before later verification stages execute."""
     completed = subprocess.run(command, cwd=ROOT, check=False)
     if completed.returncode:
         raise SystemExit(completed.returncode)
 
 
 def main() -> int:
+    """Choose strict or pending-source validation from a successful comparison."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--compiler", required=True)
     parser.add_argument("--changed-from")
@@ -40,13 +42,18 @@ def main() -> int:
 
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     from detect_pending_extension_regen import (
+        ContributionDiffError,
         _contributions_changed,
         catalog_ids,
         contribution_ids,
     )
 
     pending = sorted(contribution_ids() - catalog_ids())
-    changed = _contributions_changed(args.changed_from) if args.changed_from else []
+    try:
+        changed = _contributions_changed(args.changed_from) if args.changed_from else []
+    except ContributionDiffError as error:
+        print(str(error), file=sys.stderr)
+        return 1
     command = [
         sys.executable,
         "scripts/build_native_command_program.py",
