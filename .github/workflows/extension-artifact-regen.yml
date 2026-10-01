@@ -20,6 +20,7 @@ on:
     branches: [main]
     paths:
       - contributions/**
+      - rust/**
       - contracts/extensions/**
       - tests/fixtures/command-source-*.v1.json
       - scripts/refresh_extension_artifacts.py
