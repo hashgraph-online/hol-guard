@@ -110,13 +110,14 @@ def test_file_sha256_rejects_fifo_with_nonblocking_open(
 
     def observe_open(path_name: str, flags: int, *args: object, **kwargs: object) -> int:
         opened_flags.append(flags)
+        assert flags & os.O_NONBLOCK
         return real_open(path_name, flags, *args, **kwargs)
 
     monkeypatch.setattr(common_module.os, "open", observe_open)
 
     with pytest.raises(ValueError, match="bounded regular file"):
         _ = executor_module.file_sha256(str(path))
-    assert opened_flags and opened_flags[0] & os.O_NONBLOCK
+    assert opened_flags
 
 
 def test_file_sha256_rejects_short_read_for_stable_size(
