@@ -86,7 +86,43 @@ def _exact_package_launch(artifact: GuardArtifact, payload: Mapping[str, object]
         return False
     if package_launcher_name(command) != declared.strip().lower():
         return False
-    return _mcp_identity_field(artifact, "package_source") == "default"
+    if _mcp_identity_field(artifact, "package_source") != "default":
+        return False
+    return not _registry_env_override(_mcp_identity_field(artifact, "env_keys"))
+
+
+# Configured env keys that point a launcher at another registry or config file.
+# npm reads npm_config_* case-insensitively; a scoped "@scope:registry" key ends
+# in "registry" too.
+_REGISTRY_ENV_KEYS = frozenset(
+    {
+        "npm_config_userconfig",
+        "npm_config_globalconfig",
+        "uv_index",
+        "uv_index_url",
+        "uv_default_index",
+        "uv_extra_index_url",
+        "uv_find_links",
+        "pip_index_url",
+        "pip_extra_index_url",
+        "pip_find_links",
+        "pip_config_file",
+    }
+)
+
+
+def _registry_env_override(env_keys: object) -> bool:
+    if not isinstance(env_keys, (list, tuple)):
+        return False
+    for key in env_keys:
+        if not isinstance(key, str):
+            continue
+        lowered = key.strip().lower()
+        if lowered in _REGISTRY_ENV_KEYS:
+            return True
+        if lowered.startswith("npm_config_") and lowered.endswith("registry"):
+            return True
+    return False
 
 
 def matching_mcp_contribution(artifact: GuardArtifact) -> dict[str, object] | None:

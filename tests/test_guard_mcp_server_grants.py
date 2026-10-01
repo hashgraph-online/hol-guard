@@ -167,8 +167,8 @@ def test_allow_does_not_override_block_floor() -> None:
     assert apply_contributed_mcp_decision(enabled, artifact, "block") is None
 
 
-def _authyouragent(command: str, args: tuple[str, ...], tool_name: str):
-    identity = build_mcp_server_identity(config_path="", command=command, args=args, transport="stdio")
+def _authyouragent(command: str, args: tuple[str, ...], tool_name: str, env: dict[str, str] | None = None):
+    identity = build_mcp_server_identity(config_path="", command=command, args=args, transport="stdio", env=env)
     return build_tool_call_artifact(
         harness="codex",
         server_name="authyouragent",
@@ -208,6 +208,32 @@ def test_allow_default_applies_to_declared_launch(args: tuple[str, ...]) -> None
 def test_allow_default_needs_declared_launcher_and_default_registry(command: str, args: tuple[str, ...]) -> None:
     artifact = _authyouragent(command, args, "read_page")
     assert apply_contributed_mcp_decision(_AUTHYOURAGENT_ON, artifact, "review") is None
+
+
+@pytest.mark.parametrize(
+    "env_key",
+    ["npm_config_registry", "NPM_CONFIG_REGISTRY", "npm_config_@scope:registry", "npm_config_userconfig"],
+)
+def test_allow_default_refused_when_env_overrides_registry(env_key: str) -> None:
+    artifact = _authyouragent(
+        "npx", ("-y", "authyouragent-mcp"), "read_page", {env_key: "https://registry.example.test"}
+    )
+    assert apply_contributed_mcp_decision(_AUTHYOURAGENT_ON, artifact, "review") is None
+    review = _authyouragent(
+        "npx", ("-y", "authyouragent-mcp"), "fill_secret", {env_key: "https://registry.example.test"}
+    )
+    decision = apply_contributed_mcp_decision(_AUTHYOURAGENT_ON, review, "allow")
+    assert decision is not None
+    assert decision[0] == "review"
+
+
+def test_allow_default_kept_with_unrelated_env() -> None:
+    artifact = _authyouragent(
+        "npx", ("-y", "authyouragent-mcp"), "read_page", {"AUTHYOURAGENT_VAULT_URL": "http://127.0.0.1:8770"}
+    )
+    decision = apply_contributed_mcp_decision(_AUTHYOURAGENT_ON, artifact, "review")
+    assert decision is not None
+    assert decision[0] == "allow"
 
 
 @pytest.mark.parametrize(
