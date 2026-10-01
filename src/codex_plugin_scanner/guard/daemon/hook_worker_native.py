@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
 from ..cli.commands_support_command_activity import hook_post_succeeded
+from ..codex_binding_capture_writer import CodexBindingCaptureWriter
 from ..native_policy_snapshot_constants import NativePolicySnapshotError
 from ..native_runtime import NativeRuntimeStatus, native_mode
 from .hook_availability_policy import (
@@ -112,6 +113,7 @@ if TYPE_CHECKING:
 
 class _HookWorkerNativeHost(Protocol):
     store: GuardStore
+    capture_writer: CodexBindingCaptureWriter | None
 
     @property
     def metrics(self) -> _HookWorkerMetrics: ...
@@ -280,6 +282,7 @@ class HookWorkerNativeMixin:
         # unavailable route and cannot establish recording-only authority.
         recording_only = policy_snapshot is not None and policy_snapshot.get("mode") == "observe"
         fenced: bool | None = None
+        capture_receipts: list[Mapping[str, object]] = []
         try:
             with native_review_fence(
                 policy_snapshot=policy_snapshot,
@@ -302,6 +305,7 @@ class HookWorkerNativeMixin:
                     claim_saved_approval=claim_saved_approval,
                     claimed_saved_allow_hash=claimed_saved_allow_hash,
                     claimed_approval_request_id=claimed_approval_request_id,
+                    capture_receipts=capture_receipts,
                 )
                 if (
                     fenced
@@ -311,6 +315,11 @@ class HookWorkerNativeMixin:
                     and time.monotonic() >= deadline
                 ):
                     raise TimeoutError("native_review_fence_deadline")
+            if capture_receipts and self.capture_writer is not None:
+                with suppress(Exception):
+                    _ = self.capture_writer.submit_native_capture(
+                        guard_home=guard_home, payload=payload, receipt=capture_receipts[0]
+                    )
             if native_used:
                 self.metrics.record_route("native_resident")
             return response
@@ -357,6 +366,7 @@ class HookWorkerNativeMixin:
         claim_saved_approval: bool = True,
         claimed_saved_allow_hash: str | None = None,
         claimed_approval_request_id: str | None = None,
+        capture_receipts: list[Mapping[str, object]] | None = None,
     ) -> tuple[dict[str, object], bool]:
         edge = self._review_raw_hook_native(
             payload=payload,
@@ -415,6 +425,8 @@ class HookWorkerNativeMixin:
             )
         raw_receipt = edge.get("receipt")
         accepted_receipt = self._record_native_decision_receipt(raw_receipt)
+        if accepted_receipt is not None and capture_receipts is not None and native_harness == "codex":
+            capture_receipts.append(accepted_receipt)
         if native_event == "UserPromptSubmit":
             if accepted_receipt is None:
                 return (

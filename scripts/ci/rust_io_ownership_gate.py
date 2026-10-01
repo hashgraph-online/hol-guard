@@ -202,6 +202,7 @@ _PENDING_AUTHORITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/runtime/command_decision_adapter.py",
         "src/codex_plugin_scanner/guard/runtime/command_evaluation.py",
         "src/codex_plugin_scanner/guard/runtime/compound_git_inspection.py",
+        "src/codex_plugin_scanner/guard/runtime/contained_execution_common.py",
         "src/codex_plugin_scanner/guard/runtime/containment_executor.py",
         "src/codex_plugin_scanner/guard/runtime/direct_typescript_diagnostics.py",
         "src/codex_plugin_scanner/guard/runtime/direct_vitest.py",
@@ -270,6 +271,17 @@ _PENDING_AUTHORITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/shims.py",
         "src/codex_plugin_scanner/guard/trusted_local_tools.py",
         "src/codex_plugin_scanner/guard/trusted_package_tools.py",
+    }
+)
+_PERSISTENCE_ONLY_PATHS: Final = frozenset(
+    {
+        # Opt-in sealed diagnostics; these helpers never authorize a decision.
+        "src/codex_plugin_scanner/guard/codex_binding_capture.py",
+        "src/codex_plugin_scanner/guard/codex_binding_capture_bounds.py",
+        "src/codex_plugin_scanner/guard/codex_binding_capture_crypto.py",
+        "src/codex_plugin_scanner/guard/codex_binding_capture_fs.py",
+        "src/codex_plugin_scanner/guard/codex_binding_capture_join.py",
+        "src/codex_plugin_scanner/guard/codex_binding_capture_writer.py",
     }
 )
 
@@ -416,6 +428,8 @@ def _calls(record: FunctionRecord) -> tuple[str, ...]:
 def _category(path: str, kind: str) -> str:
     if path in _COMPATIBILITY_PATHS:
         return "compatibility_only"
+    if path in _PERSISTENCE_ONLY_PATHS:
+        return "persistence_only"
     if path in _TRANSPORT_IDENTITY_PATHS:
         return "transport_identity"
     if path in _TRANSPORT_DECODE_PATHS and kind == "decode":
