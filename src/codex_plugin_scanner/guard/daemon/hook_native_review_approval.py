@@ -9,6 +9,7 @@ execute mutable local code are not eligible for Python-side retry reuse.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import logging
 import re
@@ -18,9 +19,10 @@ import uuid
 from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from ..models import GuardApprovalRequest, format_local_http_origin
-from ..runtime.native_review_presentation import normalize_native_review_payload
+from ..runtime.actions import normalize_harness_payload
 from .hook_native_review_binding import native_review_policy_binding
 from .hook_request_parsing import pre_tool_command
 from .hook_worker_responses import (
@@ -28,8 +30,12 @@ from .hook_worker_responses import (
     harness_json_from_native_pre_tool_review,
 )
 
-_DEFAULT_APPROVAL_CENTER_PORT = 4781
+if TYPE_CHECKING:
+    from ..store import GuardStore
+
 _LOGGER = logging.getLogger(__name__)
+
+_DEFAULT_APPROVAL_CENTER_PORT = 4781
 _MUTABLE_CODE_LAUNCHERS = {
     ".",
     "source",
@@ -92,6 +98,10 @@ def pause_native_pre_tool_for_approval(
     native_receipt: Mapping[str, object] | None,
     workspace: Path | None,
     guard_home: Path,
+    home_dir: Path | None = None,
+    claim_saved_approval: bool = True,
+    claimed_saved_allow_hash: str | None = None,
+    claimed_approval_request_id: str | None = None,
 ) -> dict[str, object]:
     """Pause a native review result and attach any queued approval metadata."""
 
@@ -116,7 +126,24 @@ def pause_native_pre_tool_for_approval(
         native_receipt,
         workspace,
     )
-    if _native_review_matching_allow(
+    if claimed_saved_allow_hash is not None and _native_review_claimed_allow(
+        store,
+        harness=harness,
+        tool_name=tool_name,
+        workspace=workspace,
+        identity=identity,
+        claimed_saved_allow_hash=claimed_saved_allow_hash,
+        claimed_approval_request_id=claimed_approval_request_id,
+        claim_saved_approval=claim_saved_approval,
+    ):
+        allowed = dict(native_result)
+        allowed["decision"] = "allow"
+        allowed["minimum_action"] = "allow"
+        allowed["policy_action"] = "allow"
+        response = harness_json_from_native_pre_tool(harness, allowed)
+        response["approval_reuse_status"] = "accepted"
+        return response
+    if claim_saved_approval and _native_review_matching_allow(
         store,
         harness=harness,
         tool_name=tool_name,
@@ -139,6 +166,7 @@ def pause_native_pre_tool_for_approval(
         native_receipt=native_receipt,
         workspace=workspace,
         guard_home=guard_home,
+        home_dir=home_dir,
     )
     if queued is None:
         failed = dict(native_result)
@@ -168,6 +196,7 @@ def queue_native_pre_tool_review(
     native_receipt: Mapping[str, object] | None,
     workspace: Path | None,
     guard_home: Path,
+    home_dir: Path | None = None,
 ) -> dict[str, object] | None:
     """Persist one native review as an approval-center request."""
 
@@ -181,7 +210,6 @@ def queue_native_pre_tool_review(
         return None
     launch_target = _native_review_launch_target(payload)
     tool_name = _native_review_tool_name(payload)
-    command = pre_tool_command(payload)
     request_id = uuid.uuid4().hex
     artifact_id = _native_review_artifact_id(harness, tool_name)
     approval_center_url = _native_review_approval_center_url(store)
@@ -190,19 +218,18 @@ def queue_native_pre_tool_review(
     binding = _native_review_binding(harness, payload, native_result, native_receipt, workspace)
     try:
         action_envelope = _native_review_action_envelope(
-            request_id=request_id,
             harness=harness,
-            tool_name=tool_name,
-            command=command,
-            launch_target=launch_target,
-            workspace=workspace,
             payload=payload,
-            native_action=native_result.get("action"),
+            workspace=workspace,
+            home_dir=home_dir,
         )
     except (OSError, RuntimeError, TypeError, ValueError, KeyError) as error:
         # Never make an action approvable when its details could not be safely presented.
         # Exception messages can contain private tool input; log only the error class.
         _LOGGER.warning("Native review presentation failed for %s (%s)", request_id, type(error).__name__)
+        return None
+    if action_envelope is None:
+        _LOGGER.warning("Native review presentation failed for %s (ValueError)", request_id)
         return None
     request = GuardApprovalRequest(
         request_id=request_id,
@@ -233,6 +260,49 @@ def queue_native_pre_tool_review(
 
 def _native_review_artifact_id(harness: str, tool_name: str) -> str:
     return f"{harness}:native-pretool:{tool_name}"
+
+
+def record_claude_permission_notice_for_native_review(
+    store: GuardStore,
+    *,
+    harness: str,
+    payload: Mapping[str, object],
+    native_result: Mapping[str, object],
+    native_receipt: Mapping[str, object] | None,
+    workspace: Path | None,
+    guard_home: Path,
+) -> None:
+    """Persist the Claude permission-prompt notice for a queued native review.
+
+    Presentation only: this records the same session notice the CLI review path
+    writes so a later ``permission_prompt`` Notification can route Claude to the
+    HOL Guard approval question.
+    """
+    from ..cli.commands_support_hook_state import _record_claude_permission_notice
+    from ..models import GuardArtifact
+
+    tool_name = _native_review_tool_name(payload)
+    command = pre_tool_command(payload)
+    artifact_id = _native_review_artifact_id(harness, tool_name)
+    binding = _native_review_binding(harness, payload, native_result, native_receipt, workspace)
+    metadata: dict[str, object] = {"raw_command_text": command} if command else {}
+    artifact = GuardArtifact(
+        artifact_id=artifact_id,
+        name=tool_name,
+        harness=harness,
+        artifact_type="tool_call",
+        source_scope="project" if workspace is not None else "harness",
+        config_path=str(workspace if workspace is not None else guard_home),
+        command=command,
+        metadata=metadata,
+    )
+    _record_claude_permission_notice(
+        store=store,
+        payload=dict(payload),
+        reason=str(native_result.get("reason") or "HOL Guard requires review before this action can execute."),
+        artifact=artifact,
+        artifact_hash=binding or artifact_id,
+    )
 
 
 def _command_reuse_is_payload_bound(command: str) -> bool:
@@ -396,28 +466,87 @@ def _native_review_matching_allow(
         return False
 
 
-def _native_review_action_envelope(
+def _native_review_claimed_allow(
+    store: object,
     *,
-    request_id: str,
     harness: str,
     tool_name: str,
-    command: str | None,
-    launch_target: str,
     workspace: Path | None,
+    identity: str | None,
+    claimed_saved_allow_hash: str,
+    claimed_approval_request_id: str | None,
+    claim_saved_approval: bool,
+) -> bool:
+    """Settle a review from a MAC'd once-approval bound to this exact request.
+
+    The claimed hash must equal the freshly recomputed ``native-review-v4``
+    binding, so the approval can only authorize the identical request,
+    decision, and policy domain. The once-approval row itself is verified for
+    integrity, expiry, and the claimed request id before it may settle.
+    ``claim_saved_approval=False`` revalidates without spending the one-shot.
+    """
+
+    if identity is None or not hmac.compare_digest(identity, claimed_saved_allow_hash):
+        return False
+    peek = getattr(store, "peek_local_once_approval", None)
+    if not callable(peek):
+        return False
+    try:
+        decision = peek(
+            harness=harness,
+            artifact_id=_native_review_artifact_id(harness, tool_name),
+            artifact_hash=identity,
+            workspace=str(workspace) if workspace is not None else None,
+            publisher=None,
+            now=datetime.now(tz=timezone.utc).isoformat(),
+        )
+    except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
+        return False
+    if not isinstance(decision, Mapping) or decision.get("action") != "allow":
+        return False
+    if claimed_approval_request_id is not None and decision.get("request_id") != claimed_approval_request_id:
+        return False
+    if not claim_saved_approval:
+        return True
+    approval_id = decision.get("approval_id")
+    claim = getattr(store, "claim_local_once_approval", None)
+    if not isinstance(approval_id, str) or not callable(claim):
+        return False
+    try:
+        return (
+            claim(
+                approval_id,
+                claimed_at=datetime.now(tz=timezone.utc).isoformat(),
+                expected_decision=decision,
+            )
+            is True
+        )
+    except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
+        return False
+
+
+def _native_review_action_envelope(
+    *,
+    harness: str,
     payload: Mapping[str, object],
-    native_action: object = None,
-) -> dict[str, object]:
-    # Presentation only: approval identity and policy remain Rust-owned.
-    return normalize_native_review_payload(
-        harness,
-        payload,
-        request_id=request_id,
-        tool_name=tool_name,
-        command=command,
-        launch_target=launch_target,
-        workspace=workspace,
-        native_action=native_action,
-    )
+    workspace: Path | None,
+    home_dir: Path | None,
+) -> dict[str, object] | None:
+    """Store the canonical redacted envelope live revalidation compares.
+
+    The envelope must come from the shared harness normalizer: the live
+    decision endpoint recomputes ``stable_action_hash`` from the hook input and
+    rejects approvals whose stored envelope was built by a different mapping.
+    """
+
+    try:
+        return (
+            normalize_harness_payload(harness, "PreToolUse", dict(payload), workspace=workspace, home_dir=home_dir)
+            .with_pre_execution_result("review")
+            .to_dict()
+        )
+    except ValueError:
+        return None
 
 
 def _native_review_approval_center_url(store: object) -> str:
@@ -462,4 +591,5 @@ def _native_review_launch_target(payload: Mapping[str, object]) -> str:
 __all__ = [
     "pause_native_pre_tool_for_approval",
     "queue_native_pre_tool_review",
+    "record_claude_permission_notice_for_native_review",
 ]

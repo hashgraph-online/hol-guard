@@ -800,7 +800,7 @@ jobs:
         shell: bash
         run: |
           WHEEL_REQUIREMENT=$(python -c 'import json; print(json.load(open("verified-download.json", encoding="utf-8"))["requirement"])')
-          python -m venv "$RUNNER_TEMP/hol-guard-canary-venv"
+          python -m venv --copies "$RUNNER_TEMP/hol-guard-canary-venv"
           if [[ "$RUNNER_OS" == "Windows" ]]; then
             CANARY_PYTHON="$RUNNER_TEMP/hol-guard-canary-venv/Scripts/python.exe"
           else
@@ -826,6 +826,32 @@ jobs:
             exit 1
           fi
           test ! -e installed-canary/missing-proof-must-not-exist.json
+      - name: Run installed native worker outage qualification
+        shell: bash
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+          SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
+        run: |
+          PYTHONPATH= "$CANARY_PYTHON" -X "pycache_prefix=$RUNNER_TEMP/hol-guard-native-outage-cache" \
+            -m scripts.run_installed_native_outage \
+            --subject installed-canary/installed-canary-subject.json \
+            --version "$VERSION" \
+            --source-sha "$SOURCE_SHA" \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --output installed-canary/native-outage-evidence.json
+      - name: Run installed Codex outage regressions
+        shell: bash
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+          SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
+        run: |
+          PYTHONPATH= "$CANARY_PYTHON" -X "pycache_prefix=$RUNNER_TEMP/hol-guard-outage-cache" \
+            -m scripts.run_installed_codex_outage \
+            --subject installed-canary/installed-canary-subject.json \
+            --version "$VERSION" \
+            --source-sha "$SOURCE_SHA" \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --output installed-canary/codex-outage-evidence.json
       - name: Run installed 51k corpus and dashboard smoke
         shell: bash
         env:
@@ -839,6 +865,45 @@ jobs:
             --source-sha "$SOURCE_SHA" \
             --repo-root "$GITHUB_WORKSPACE" \
             --output installed-canary/evidence.json
+      - name: Verify installed bounded hook outage denials
+        shell: bash
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+          SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
+        run: |
+          PYTHONPATH= "$CANARY_PYTHON" -X "pycache_prefix=$RUNNER_TEMP/hol-guard-bounded-outage-cache" \
+            -m scripts.run_installed_bounded_outage \
+            --subject installed-canary/installed-canary-subject.json \
+            --version "$VERSION" \
+            --source-sha "$SOURCE_SHA" \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --output installed-canary/bounded-outage-evidence.json
+      - name: Verify installed Cursor unparsed-input denials
+        shell: bash
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+          SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
+        run: |
+          PYTHONPATH= "$CANARY_PYTHON" -X "pycache_prefix=$RUNNER_TEMP/hol-guard-cursor-outage-cache" \
+            -m scripts.run_installed_cursor_outage \
+            --subject installed-canary/installed-canary-subject.json \
+            --version "$VERSION" \
+            --source-sha "$SOURCE_SHA" \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --output installed-canary/cursor-outage-evidence.json
+      - name: Qualify installed parsed Cursor outage decisions
+        shell: bash
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+          SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
+        run: |
+          PYTHONPATH= "$CANARY_PYTHON" -X "pycache_prefix=$RUNNER_TEMP/hol-guard-evidence-cache" \
+            -m scripts.run_installed_cursor_parsed_outage \
+            --subject installed-canary/installed-canary-subject.json \
+            --version "$VERSION" \
+            --source-sha "$SOURCE_SHA" \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --output installed-canary/cursor-parsed-outage-evidence.json
       - name: Run canonical command extension analytics Dockerlab
         if: runner.os == 'Linux'
         shell: bash
@@ -886,6 +951,11 @@ jobs:
           name: installed-canary-evidence-${{ runner.os }}
           path: |
             installed-canary/evidence.json
+            installed-canary/bounded-outage-evidence.json
+            installed-canary/cursor-outage-evidence.json
+            installed-canary/cursor-parsed-outage-evidence.json
+            installed-canary/codex-outage-evidence.json
+            installed-canary/native-outage-evidence.json
             installed-canary/command-extension-analytics.json
             .artifacts/command-extension-analytics/playwright-output/**/*.png
           if-no-files-found: error
@@ -1669,6 +1739,33 @@ jobs:
             --notes-file "$body_file" \
             --verify-tag \
             "${ASSET_FILES[@]}"
+
+  wake-main-core-feeds:
+    name: Dispatch published Desktop Core feeds
+    needs: [build, release-main]
+    if: >-
+      always() && github.repository == 'hashgraph-online/hol-guard' &&
+      github.event_name == 'workflow_dispatch' && github.run_attempt == 1 &&
+      needs.release-main.result == 'success' && needs.build.outputs.channel == 'stable'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      # release-main verifies uploaded assets and provenance after the PyPI upload.
+      - name: Dispatch the exact published Core version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$VERSION" =~ ^3\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "Published Core version is not canonical stable" >&2
+            exit 1
+          fi
+          gh workflow run desktop-core-alpha-feed.yml --repo "$GITHUB_REPOSITORY" --ref main -f "core_version=$VERSION"
+          gh workflow run desktop-core-linux-feed.yml --repo "$GITHUB_REPOSITORY" --ref main -f "core_version=$VERSION"
 
   release-alpha:
     name: Create alpha GitHub prerelease

@@ -15,7 +15,6 @@ if __package__:
     from ..codex_hook_bridge_runtime import bridge_config_from_argv as _parse_bridge_config
     from ..config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS
     from ..daemon.hook_availability_policy import hook_event_is_permission_request
-    from ..daemon.hook_launcher_recovery import hook_action_is_launcher_recovery_safe
     from ..live_process_identity import (
         CODEX_BROWSER_WAIT_PROCESS_KEY,
         CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY,
@@ -46,9 +45,6 @@ else:  # pragma: no cover - exercised by subprocess integration tests
     from codex_plugin_scanner.guard.daemon.hook_availability_policy import (
         hook_event_is_permission_request,
     )
-    from codex_plugin_scanner.guard.daemon.hook_launcher_recovery import (
-        hook_action_is_launcher_recovery_safe,
-    )
     from codex_plugin_scanner.guard.live_process_identity import (
         CODEX_BROWSER_WAIT_PROCESS_KEY,
         CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY,
@@ -59,9 +55,12 @@ _HOOK_TIMEOUT_GRACE_SECONDS = 2
 _DISCOVERY_PROTOCOL_VERSION = 1
 _MAX_HOOK_INPUT_BYTES = 1_000_000
 _BRIDGE_FAILURE_SCHEMA = "hol-guard.codex-bridge-failure.v1"
-_FAIL_CLOSED_REASON = "HOL Guard could not authenticate the local daemon. Run `hol-guard daemon repair`, then retry."
+_FAIL_CLOSED_REASON = (
+    "HOL Guard could not authenticate the local daemon. Run `hol-guard daemon repair` from a terminal, then retry."
+)
 _LAUNCH_INTEGRITY_REASON = (
-    "HOL Guard could not authenticate its managed Codex hook launcher. Run `hol-guard install codex`, then retry."
+    "HOL Guard could not authenticate its managed Codex hook launcher. "
+    "Run `hol-guard install codex` from a terminal, then retry."
 )
 _OVERLOAD_REASON = (
     "HOL Guard is temporarily saturated and kept this action blocked. No approval was requested; retry the action."
@@ -136,15 +135,10 @@ def _unavailable_response(
     reason: str,
     data: str | None = None,
 ) -> dict[str, object]:
+    # A payload's command name or path is not an authenticated tool decision.
+    del data
     if event_name == "PreToolUse":
-        payload = _json_object(data) if data is not None else None
-        if payload is None or not hook_action_is_launcher_recovery_safe(payload):
-            return _fail_closed(event_name, reason)
-        return {
-            "continue": True,
-            "systemMessage": reason,
-            "hookSpecificOutput": {"hookEventName": event_name},
-        }
+        return _fail_closed(event_name, reason)
     if hook_event_is_permission_request(event_name):
         return _fail_closed(event_name, reason)
     return {
@@ -267,13 +261,8 @@ def main(
 
 
 def _launcher_integrity_response(event_name: str, data: str) -> dict[str, object]:
-    """Keep a bad launcher from approving work, without locking out its repair."""
+    """Deny tool actions through a bad launcher and identify a terminal repair."""
 
-    payload = _json_object(data)
-    if event_name == "PreToolUse" and payload is not None and hook_action_is_launcher_recovery_safe(payload):
-        return _unavailable_response(event_name, _LAUNCH_INTEGRITY_REASON, data)
-    if event_name in {"PreToolUse", "PermissionRequest"}:
-        return _fail_closed(event_name, _LAUNCH_INTEGRITY_REASON)
     return _unavailable_response(event_name, _LAUNCH_INTEGRITY_REASON, data)
 
 
