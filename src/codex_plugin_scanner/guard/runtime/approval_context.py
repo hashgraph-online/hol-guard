@@ -41,9 +41,6 @@ ApprovalContextValidationFailure = Literal[
 ]
 
 _TOKEN_VERSION = 1
-_TOKEN_DOMAIN = "hol.guard.approval-context"
-_CONFIGURED_ENV_HASH_DOMAIN = b"hol.guard.configured-environment:v1\x00"
-_CONFIGURED_HEADER_HASH_DOMAIN = b"hol.guard.configured-headers:v1\x00"
 _TOKEN_FIELDS = frozenset({"version", "identity", "content", "capabilities", "policy", "sandbox"})
 _ENCODED_PAYLOAD_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
 _SHA256_HEX_PATTERN = re.compile(r"^[0-9a-f]{64}$")
@@ -63,15 +60,61 @@ class ApprovalContextToken:
     policy_hash: str
     sandbox_hash: str
 
-    def _payload(self) -> dict[str, object]:
-        return {
-            "version": _TOKEN_VERSION,
-            "identity": self.identity_hash,
-            "content": self.content_hash,
-            "capabilities": self.capabilities_hash,
-            "policy": self.policy_hash,
-            "sandbox": self.sandbox_hash,
-        }
+
+class NativeContextDigestUnavailableError(RuntimeError):
+    """The native context-digest authority is required but unreachable."""
+
+
+@lru_cache(maxsize=4)
+def _context_digest_guard_home(home: str) -> Path:
+    """Resolve the resident's guard home, cached per user home."""
+
+    from ..config import resolve_guard_home_for_user_home
+
+    return resolve_guard_home_for_user_home(Path(home))
+
+
+def _context_digest_result(kind: str, fields: dict[str, object]) -> dict[str, object]:
+    """Run one native ``context_digest`` sub-operation.
+
+    The Rust worker owns the canonical encoding and hashing; this wrapper only
+    transports the request and projects the typed result.  ``None`` (runtime
+    unavailable, overloaded, or unbindable) raises the dedicated error, and a
+    worker-side input rejection maps back to the legacy ``TypeError``
+    boundary.
+
+    Enforcement entry points bind their deployment's guard home so digest
+    calls reach that flow's resident; unbound callers resolve the default
+    home for this process.
+    """
+
+    from ..native_context import context_digest_guard_home, native_context_digest
+
+    result = native_context_digest(
+        kind,
+        fields,
+        guard_home=context_digest_guard_home() or _context_digest_guard_home(str(Path.home())),
+    )
+    if result is None:
+        raise NativeContextDigestUnavailableError("native context digest authority unavailable")
+    if result.get("status") != "ok":
+        raise TypeError(f"approval context digest rejected input: {result.get('code')}")
+    return result
+
+
+def _require_json_component(name: str, value: object) -> None:
+    try:
+        json.dumps(value, ensure_ascii=True, allow_nan=False)
+    except (TypeError, ValueError) as exc:
+        raise TypeError(f"approval context component {name!r} must be JSON-compatible") from exc
+
+
+def _json_serializable(value: object) -> bool:
+    try:
+        json.dumps(value, ensure_ascii=True, allow_nan=False)
+    except (TypeError, ValueError):
+        return False
+    return True
 
 
 def build_approval_context_token(
@@ -90,27 +133,27 @@ def build_approval_context_token(
     ``content`` may be any artifact-hash text and is never parsed or embedded.
     """
 
-    parsed = ApprovalContextToken(
-        identity_hash=_component_hash("identity", identity),
-        content_hash=_component_hash("content", content),
-        capabilities_hash=_component_hash("capabilities", capabilities),
-        policy_hash=_component_hash(
-            "policy",
-            {
-                "extension_control_digest": current_extension_control_binding_digest(),
-                "policy": policy,
-            },
-        ),
-        sandbox_hash=_component_hash("sandbox", sandbox),
+    for name, value in (
+        ("identity", identity),
+        ("content", content),
+        ("capabilities", capabilities),
+        ("policy", policy),
+        ("sandbox", sandbox),
+    ):
+        _require_json_component(name, value)
+    components: dict[str, object] = {
+        "identity": identity,
+        "content": content,
+        "capabilities": capabilities,
+        "policy": policy,
+        "sandbox": sandbox,
+        "extension_control_digest": current_extension_control_binding_digest(),
+    }
+    result = _context_digest_result(
+        "build_approval_context_token",
+        {"components": components},
     )
-    payload = json.dumps(
-        parsed._payload(),
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=True,
-    ).encode("utf-8")
-    encoded = base64.urlsafe_b64encode(payload).decode("ascii").rstrip("=")
-    return f"{APPROVAL_CONTEXT_TOKEN_PREFIX}{encoded}"
+    return cast(str, result["token"])
 
 
 def parse_approval_context_token(token: object) -> ApprovalContextToken | None:
@@ -170,14 +213,31 @@ def approval_context_validation_reason(
 ) -> ApprovalContextValidationFailure | None:
     """Return the first changed context dimension for saved approval evidence."""
 
-    current_token = build_approval_context_token(
-        identity=identity,
-        content=content,
-        capabilities=capabilities,
-        policy=policy,
-        sandbox=sandbox,
+    for name, value in (
+        ("identity", identity),
+        ("content", content),
+        ("capabilities", capabilities),
+        ("policy", policy),
+        ("sandbox", sandbox),
+    ):
+        _require_json_component(name, value)
+    if not _json_serializable(saved_token):
+        return "approval_reuse_content_changed"
+    result = _context_digest_result(
+        "validate_approval_context",
+        {
+            "saved_token": saved_token,
+            "components": {
+                "identity": identity,
+                "content": content,
+                "capabilities": capabilities,
+                "policy": policy,
+                "sandbox": sandbox,
+                "extension_control_digest": current_extension_control_binding_digest(),
+            },
+        },
     )
-    return approval_context_tokens_validation_reason(saved_token, current_token)
+    return cast(ApprovalContextValidationFailure | None, result.get("validation_reason"))
 
 
 def approval_context_tokens_validation_reason(
@@ -190,21 +250,13 @@ def approval_context_tokens_validation_reason(
     dimensions are unchanged, so they fail closed as changed content.
     """
 
-    saved = parse_approval_context_token(saved_token)
-    current = parse_approval_context_token(current_token)
-    if saved is None or current is None:
+    if not (_json_serializable(saved_token) and _json_serializable(current_token)):
         return "approval_reuse_content_changed"
-    comparisons: tuple[tuple[str, str, ApprovalContextValidationFailure], ...] = (
-        (saved.identity_hash, current.identity_hash, "approval_reuse_identity_changed"),
-        (saved.content_hash, current.content_hash, "approval_reuse_content_changed"),
-        (saved.capabilities_hash, current.capabilities_hash, "approval_reuse_capability_changed"),
-        (saved.policy_hash, current.policy_hash, "approval_reuse_policy_changed"),
-        (saved.sandbox_hash, current.sandbox_hash, "approval_reuse_sandbox_changed"),
+    result = _context_digest_result(
+        "validate_approval_context_tokens",
+        {"saved_token": saved_token, "current_token": current_token},
     )
-    for saved_hash, current_hash, reason in comparisons:
-        if not hmac.compare_digest(saved_hash, current_hash):
-            return reason
-    return None
+    return cast(ApprovalContextValidationFailure | None, result.get("validation_reason"))
 
 
 def saved_allow_context_validation_reason(
@@ -708,6 +760,23 @@ def runtime_launch_identity_matches(
     )
 
 
+def _configured_values_payload(
+    values: Mapping[str, str] | object,
+    configured_keys: Sequence[str] | None,
+) -> dict[str, object]:
+    """Shape configured values for transport without re-deriving semantics.
+
+    ``str(key)`` mirrors the legacy normalization of non-string mapping keys;
+    the worker applies the authoritative strip/dedup/framing.  Non-mapping
+    inputs pass through so the worker reproduces the legacy failure boundary.
+    """
+
+    return {
+        "values": ({str(key): value for key, value in values.items()} if isinstance(values, Mapping) else values),
+        "configured_keys": ([str(key) for key in configured_keys] if configured_keys is not None else None),
+    }
+
+
 def build_configured_environment_hash(
     environment: Mapping[str, str] | None,
     *,
@@ -715,11 +784,11 @@ def build_configured_environment_hash(
 ) -> str:
     """Hash configured environment values without exposing or binding ambient values."""
 
-    return _build_configured_values_hash(
-        environment,
-        configured_keys=configured_keys,
-        domain=_CONFIGURED_ENV_HASH_DOMAIN,
+    result = _context_digest_result(
+        "configured_environment_hash",
+        _configured_values_payload(environment, configured_keys),
     )
+    return cast(str, result["digest"])
 
 
 def build_configured_header_values_hash(
@@ -729,37 +798,11 @@ def build_configured_header_values_hash(
 ) -> str:
     """Hash configured header values without retaining or exposing them."""
 
-    return _build_configured_values_hash(
-        headers,
-        configured_keys=configured_keys,
-        domain=_CONFIGURED_HEADER_HASH_DOMAIN,
+    result = _context_digest_result(
+        "configured_headers_hash",
+        _configured_values_payload(headers, configured_keys),
     )
-
-
-def _build_configured_values_hash(
-    values: Mapping[str, str] | None,
-    *,
-    configured_keys: Sequence[str] | None,
-    domain: bytes,
-) -> str:
-    """Hash one configured key/value namespace with stable framing."""
-
-    normalized_values = {str(key).strip(): value for key, value in (values or {}).items() if str(key).strip()}
-    keys = normalized_values.keys() if configured_keys is None else (str(key).strip() for key in configured_keys)
-    normalized_keys = sorted({key for key in keys if key})
-    digest = hashlib.sha256(domain)
-    for key in normalized_keys:
-        key_bytes = key.encode("utf-8")
-        digest.update(len(key_bytes).to_bytes(8, "big"))
-        digest.update(key_bytes)
-        if key not in normalized_values:
-            digest.update(b"\x00")
-            continue
-        value_bytes = normalized_values[key].encode("utf-8")
-        digest.update(b"\x01")
-        digest.update(len(value_bytes).to_bytes(8, "big"))
-        digest.update(value_bytes)
-    return digest.hexdigest()
+    return cast(str, result["digest"])
 
 
 def _normalized_launch_cwd(cwd: Path | None) -> Path:
@@ -770,11 +813,6 @@ def _normalized_launch_cwd(cwd: Path | None) -> Path:
         return candidate.expanduser().absolute()
 
 
-def _launch_argv_digest(argv: Sequence[str]) -> str:
-    material = json.dumps(list(argv), ensure_ascii=True, separators=(",", ":"))
-    return _opaque_identity_digest(material)
-
-
 def _opaque_identity_digest(material: str) -> str:
     """Return a stable launch-identity digest, not a credential verifier."""
 
@@ -783,6 +821,13 @@ def _opaque_identity_digest(material: str) -> str:
     # authenticate a secret, so a password KDF would be the wrong primitive.
     # codeql[py/weak-sensitive-data-hashing]
     return hashlib.sha256(material.encode("utf-8")).hexdigest()
+
+
+def _launch_argv_digest(argv: Sequence[str]) -> str:
+    # Stays local until the launch-identity filesystem slice migrates; the
+    # native ``launch_argv_digest`` kind is already parity-verified.
+    material = json.dumps(list(argv), ensure_ascii=True, separators=(",", ":"))
+    return _opaque_identity_digest(material)
 
 
 def _runtime_entrypoint_identity(
@@ -1697,26 +1742,6 @@ def _unreusable_executable_identity(
         "status": status,
         "reuse_nonce": secrets.token_hex(16),
     }
-
-
-def _component_hash(component: str, value: object) -> str:
-    material = {
-        "component": component,
-        "domain": _TOKEN_DOMAIN,
-        "value": value,
-        "version": _TOKEN_VERSION,
-    }
-    try:
-        canonical = json.dumps(
-            material,
-            sort_keys=True,
-            separators=(",", ":"),
-            ensure_ascii=True,
-            allow_nan=False,
-        )
-    except (TypeError, ValueError) as exc:
-        raise TypeError(f"approval context component {component!r} must be JSON-compatible") from exc
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def _is_sha256_hex(value: object) -> TypeGuard[str]:

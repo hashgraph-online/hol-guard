@@ -120,6 +120,104 @@ def native_hook_force(monkeypatch: pytest.MonkeyPatch) -> Path:
     return runtime
 
 
+@pytest.fixture(scope="session")
+def _native_context_home(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Path]:
+    """Session-shared guard home so the resident is spawned once per run."""
+
+    from codex_plugin_scanner.guard.native_policy_snapshot import (
+        provision_native_policy_verifier_key,
+    )
+    from codex_plugin_scanner.guard.native_resident_client import close_native_residents
+
+    guard_home = tmp_path_factory.mktemp("native-context-guard-home")
+    (guard_home / "native-runtime").mkdir(mode=0o700, parents=True)
+    # The managed resident refuses to serve until the policy verifier key the
+    # publisher would normally provision exists; seed a test key once.
+    provision_native_policy_verifier_key(guard_home, b"\x07" * 32)
+    yield guard_home
+    close_native_residents(guard_home)
+
+
+def _context_digest_runtime_binary() -> Path | None:
+    """Locate the compiled runtime for ambient digest calls."""
+
+    override = os.environ.get("HOL_GUARD_NATIVE_BINARY")
+    if override:
+        return Path(override).expanduser()
+    root = Path(__file__).resolve().parents[1]
+    # Release only: the debug resident exceeds the 600ms startup budget.
+    candidate = root / "rust" / "target" / "release" / "hol-guard-runtime"
+    return candidate if candidate.is_file() else None
+
+
+@pytest.fixture(autouse=True)
+def _ambient_context_digest_home(
+    _native_context_home: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Route ambient context-digest calls to the provisioned session resident.
+
+    ``context_digest`` calls resolve their guard home either from the bound
+    flow context or the default user home; both are pointed at the keyed
+    session home.  Unit tests default to ``HOL_GUARD_NATIVE=off`` so the
+    adapter's status probe is additionally re-evaluated under ``force`` —
+    scoped to the ``native_context`` module only, leaving every other
+    off-mode surface (hook eval, fail-safe denials) untouched.  With no
+    resolvable runtime the probe is left alone and digests stay unavailable,
+    preserving the no-binary behavior.
+    """
+
+    from codex_plugin_scanner.guard import native_context, native_runtime
+    from codex_plugin_scanner.guard.runtime import approval_context
+
+    real_status = native_runtime.native_runtime_status
+
+    def _digest_status() -> object:
+        status = real_status()
+        if status.mode != "off":
+            return status
+        binary = _context_digest_runtime_binary()
+        if binary is None:
+            return status
+        previous_mode = os.environ.get("HOL_GUARD_NATIVE")
+        previous_binary = os.environ.get("HOL_GUARD_NATIVE_BINARY")
+        os.environ["HOL_GUARD_NATIVE"] = "force"
+        os.environ["HOL_GUARD_NATIVE_BINARY"] = str(binary)
+        try:
+            return real_status()
+        finally:
+            if previous_mode is None:
+                os.environ.pop("HOL_GUARD_NATIVE", None)
+            else:
+                os.environ["HOL_GUARD_NATIVE"] = previous_mode
+            if previous_binary is None:
+                os.environ.pop("HOL_GUARD_NATIVE_BINARY", None)
+            else:
+                os.environ["HOL_GUARD_NATIVE_BINARY"] = previous_binary
+
+    monkeypatch.setattr(native_context, "native_runtime_status", _digest_status)
+    monkeypatch.setattr(native_context, "context_digest_guard_home", lambda: _native_context_home)
+    monkeypatch.setattr(
+        approval_context,
+        "_context_digest_guard_home",
+        lambda _home: _native_context_home,
+    )
+
+
+@pytest.fixture
+def native_context_digest(
+    native_hook_force: Path,
+    _native_context_home: Path,
+) -> Path:
+    """Force the compiled runtime and return the isolated session resident home.
+
+    Retained for tests that must prove the op works under ``force`` mode
+    specifically; the ambient home redirection is autouse.
+    """
+
+    return _native_context_home
+
+
 @pytest.fixture
 def native_command_artifact_reviews(monkeypatch: pytest.MonkeyPatch) -> None:
     """Supply actual native command evidence to legacy hook orchestration tests."""

@@ -716,6 +716,9 @@ def run_native_generic_payload(
     native_edge_result: Mapping[str, object] | None = None,
     native_edge_receipt: Mapping[str, object] | None = None,
 ) -> int:
+    from ..native_context import bind_context_digest_home
+
+    bind_context_digest_home(store.guard_home)
     payload_map = dict(payload)
     artifact_id = _coalesce_string(
         getattr(args, "artifact_id", None),

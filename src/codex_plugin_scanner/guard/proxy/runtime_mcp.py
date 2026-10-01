@@ -573,6 +573,9 @@ class RuntimeMcpGuardProxy:
         self.command = command
         self.context = context
         self.store = store
+        from ..native_context import bind_context_digest_home
+
+        bind_context_digest_home(context.guard_home)
         self.config = config
         self.source_scope = source_scope
         self.config_path = config_path

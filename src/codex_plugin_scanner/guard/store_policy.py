@@ -2340,6 +2340,9 @@ class StorePolicyMixin:
         current context-token contract from stale pre-token (legacy) evidence.
         """
 
+        from .native_context import bind_context_digest_home
+
+        bind_context_digest_home(self.guard_home)
         if artifact_id is None:
             return None, None
         current_time = _canonical_utc_timestamp(now or _now())

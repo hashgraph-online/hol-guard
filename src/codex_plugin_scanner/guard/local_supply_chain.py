@@ -1509,6 +1509,9 @@ def _final_package_protect_authority(
 ) -> tuple[_PackageProtectAuthority, Any]:
     """Refresh mode, claim required approval, then rebuild authority before spawn."""
 
+    from .native_context import bind_context_digest_home
+
+    bind_context_digest_home(store.guard_home)
     additional_action: object | None = initial.additional_current_action
     additional_context: dict[str, object] | None = initial.additional_policy_context
     current_config = config
@@ -2902,6 +2905,9 @@ def _package_request_artifact_hash(
     additional_current_action: object | None = None,
     additional_policy_context: dict[str, object] | None = None,
 ) -> str:
+    from .native_context import bind_context_digest_home
+
+    bind_context_digest_home(store.guard_home)
     policy_context = _package_current_policy_context(
         artifact=artifact,
         store=store,

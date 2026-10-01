@@ -88,6 +88,7 @@ def _pinned_token(proxy: StdioGuardProxy, artifact: GuardArtifact, config: Guard
 def test_stdio_sensitive_read_binds_pinned_executable_script_and_configured_env(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    native_context_digest: Path,
 ) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()

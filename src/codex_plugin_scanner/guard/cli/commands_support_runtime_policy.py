@@ -302,6 +302,9 @@ def _runtime_stored_policy_decision(
     callers that use this helper outside the authoritative runtime path.
     """
 
+    from ..native_context import bind_context_digest_home
+
+    bind_context_digest_home(store.guard_home)
     runtime_exact_match_context = _runtime_artifact_exact_match_context(artifact)
     ignored_local_integrity: Mapping[str, object] | None = None
     if isinstance(decision_lookup, Mapping):

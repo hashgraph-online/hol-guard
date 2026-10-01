@@ -15036,6 +15036,7 @@ def test_runtime_hook_approval_context_invalidates_one_changed_dimension(
     tmp_path,
     changed_dimension,
     expected_reason,
+    native_context_digest: Path,
 ):
     workspace = tmp_path / "workspace"
     artifact = GuardArtifact(
@@ -19150,7 +19151,7 @@ def _codex_browser_approval_context_token(*, current_action: str) -> str:
     )
 
 
-def test_codex_browser_approval_decision_updates_daemon_operation_status(tmp_path, monkeypatch):
+def test_codex_browser_approval_decision_updates_daemon_operation_status(tmp_path, monkeypatch, native_context_digest: Path):
     monkeypatch.setattr(interaction_module, "wait_for_approval_requests", wait_for_approval_requests)
     home_dir = tmp_path / "home"
     store = GuardStore(home_dir)
@@ -19216,7 +19217,7 @@ def test_codex_browser_approval_decision_updates_daemon_operation_status(tmp_pat
     assert payload["continuation"]["resolution_action"] == "allow"
 
 
-def test_codex_browser_block_decision_updates_daemon_operation_status(tmp_path, monkeypatch):
+def test_codex_browser_block_decision_updates_daemon_operation_status(tmp_path, monkeypatch, native_context_digest: Path):
     monkeypatch.setattr(interaction_module, "wait_for_approval_requests", wait_for_approval_requests)
     home_dir = tmp_path / "home"
     store = GuardStore(home_dir)

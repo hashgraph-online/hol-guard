@@ -1,0 +1,234 @@
+"""Unit tests for the native context-digest transport adapter.
+
+These exercise the adapter's binding/validation contract only; semantic
+parity with the legacy implementation is proven by the parity corpus in
+``tests/fixtures/context-digest-parity`` executed by the Rust tests and the
+resident integration tests.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+from pathlib import Path
+
+import pytest
+
+from codex_plugin_scanner.guard import native_context
+from codex_plugin_scanner.guard.native_runtime import (
+    NativeRuntimeCapabilities,
+    NativeRuntimeIdentity,
+    NativeRuntimeStatus,
+)
+
+_FEATURES = (
+    "resident-protocol-v2",
+    "native-resident-client-v1",
+    "native-resident-lifecycle-v1",
+    "context-digest-v1",
+)
+
+
+def _status(
+    *,
+    mode: str = "force",
+    available: bool = True,
+    compatible: bool = True,
+    features: tuple[str, ...] = _FEATURES,
+) -> NativeRuntimeStatus:
+    identity = NativeRuntimeIdentity(
+        path=Path("/runtime/hol-guard-runtime"),
+        size=1,
+        mtime_ns=1,
+        sha256="ab" * 32,
+    )
+    capabilities = NativeRuntimeCapabilities(
+        protocol_version=2,
+        runtime_version="0.0.0",
+        rule_digest="cd" * 32,
+        build_sha="ef" * 32,
+        target="test",
+        features=features,
+    )
+    return NativeRuntimeStatus(
+        mode=mode,
+        available=available,
+        compatible=compatible,
+        reason="ok",
+        identity=identity,
+        capabilities=capabilities,
+    )
+
+
+def _request_sha256(request: dict[str, object]) -> str:
+    canonical = json.dumps(request, sort_keys=True, separators=(",", ":"), ensure_ascii=True, allow_nan=False).encode(
+        "utf-8"
+    )
+    return hashlib.sha256(canonical).hexdigest()
+
+
+def _ok_result(request: dict[str, object]) -> bytes:
+    return json.dumps(
+        {
+            "schema": "guard-context-digest-result.v1",
+            "request_id": request["request_id"],
+            "request_sha256": _request_sha256(request),
+            "status": "ok",
+            "code": "ok",
+            "digest": "00" * 32,
+        }
+    ).encode("utf-8")
+
+
+def _prime(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    status: NativeRuntimeStatus | None = None,
+    response: bytes | None = None,
+) -> list[dict[str, object]]:
+    """Install a force-mode status and capture outgoing op requests."""
+    captured: list[dict[str, object]] = []
+    monkeypatch.setattr(native_context, "native_runtime_status", lambda: status or _status())
+
+    def _client(*_args: object, **kwargs: object) -> bytes | None:
+        payload = kwargs["payload"]
+        assert isinstance(payload, bytes)
+        envelope = json.loads(payload)
+        captured.append(envelope["request"])
+        if response is not None:
+            return response
+        return _ok_result(captured[-1])
+
+    monkeypatch.setattr(native_context, "native_resident_client_request", _client)
+    monkeypatch.setattr(native_context, "_isolated_environment", lambda: {})
+    return captured
+
+
+def test_native_context_digest_off_mode_returns_none(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _prime(monkeypatch, status=_status(mode="off"))
+    assert native_context.native_context_digest("launch_argv_digest", {"argv": ["x"]}, guard_home=tmp_path) is None
+
+
+def test_native_context_digest_missing_feature_returns_none(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _prime(
+        monkeypatch,
+        status=_status(features=tuple(f for f in _FEATURES if f != "context-digest-v1")),
+    )
+    assert native_context.native_context_digest("launch_argv_digest", {"argv": ["x"]}, guard_home=tmp_path) is None
+
+
+def test_native_context_digest_incompatible_returns_none(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _prime(monkeypatch, status=_status(compatible=False))
+    assert native_context.native_context_digest("launch_argv_digest", {"argv": ["x"]}, guard_home=tmp_path) is None
+
+
+def test_native_context_digest_happy_path_binds_request(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    captured = _prime(monkeypatch)
+    result = native_context.native_context_digest("launch_argv_digest", {"argv": ["hol-guard"]}, guard_home=tmp_path)
+    assert result is not None
+    assert result["status"] == "ok"
+    assert result["digest"] == "00" * 32
+    assert len(captured) == 1
+    assert captured[0]["schema"] == "guard-context-digest-request.v1"
+    assert captured[0]["kind"] == "launch_argv_digest"
+    assert captured[0]["argv"] == ["hol-guard"]
+
+
+def test_native_context_digest_transport_failure_returns_none(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _prime(monkeypatch, response=None)
+    monkeypatch.setattr(native_context, "native_resident_client_request", lambda **_kwargs: None)
+    assert native_context.native_context_digest("launch_argv_digest", {"argv": ["x"]}, guard_home=tmp_path) is None
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda request, result: result.update(schema="other"),
+        lambda request, result: result.update(request_id="deadbeef"),
+        lambda request, result: result.update(request_sha256="00" * 32),
+        lambda request, result: result.update(status="ok", code="native_context_values_invalid"),
+        lambda request, result: result.update(extra="field"),
+        lambda request, result: result.pop("code"),
+        lambda request, result: result.update(digest=42),
+    ],
+    ids=[
+        "bad_schema",
+        "bad_request_id",
+        "bad_request_sha256",
+        "status_code_mismatch",
+        "unknown_field",
+        "missing_code",
+        "non_string_optional",
+    ],
+)
+def test_native_context_digest_rejects_unbound_results(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    mutate: object,
+) -> None:
+    def _client(*_args: object, **kwargs: object) -> bytes:
+        envelope = json.loads(kwargs["payload"])
+        request = envelope["request"]
+        result: dict[str, object] = json.loads(_ok_result(request))
+        assert callable(mutate)
+        mutate(request, result)
+        return json.dumps(result).encode("utf-8")
+
+    monkeypatch.setattr(native_context, "native_runtime_status", lambda: _status())
+    monkeypatch.setattr(native_context, "native_resident_client_request", _client)
+    monkeypatch.setattr(native_context, "_isolated_environment", lambda: {})
+    assert native_context.native_context_digest("launch_argv_digest", {"argv": ["x"]}, guard_home=tmp_path) is None
+
+
+def test_native_context_digest_overload_returns_none(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    overloaded = json.dumps({"status": "error", "code": "native_overloaded"}).encode("utf-8")
+    _prime(monkeypatch, response=overloaded)
+    assert native_context.native_context_digest("launch_argv_digest", {"argv": ["x"]}, guard_home=tmp_path) is None
+
+
+def test_native_context_digest_propagates_worker_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def _client(*_args: object, **kwargs: object) -> bytes:
+        envelope = json.loads(kwargs["payload"])
+        request = envelope["request"]
+        return json.dumps(
+            {
+                "schema": "guard-context-digest-result.v1",
+                "request_id": request["request_id"],
+                "request_sha256": _request_sha256(request),
+                "status": "error",
+                "code": "native_context_values_invalid",
+            }
+        ).encode("utf-8")
+
+    monkeypatch.setattr(native_context, "native_runtime_status", lambda: _status())
+    monkeypatch.setattr(native_context, "native_resident_client_request", _client)
+    monkeypatch.setattr(native_context, "_isolated_environment", lambda: {})
+    result = native_context.native_context_digest("launch_argv_digest", {"argv": [42]}, guard_home=tmp_path)
+    assert result is not None
+    assert result["status"] == "error"
+    assert result["code"] == "native_context_values_invalid"
+
+
+def test_bound_context_digest_home_round_trip(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The suite-wide ambient fixture replaces the getter; restore the real
+    # ContextVar-driven implementation to exercise it directly.
+    monkeypatch.setattr(
+        native_context,
+        "context_digest_guard_home",
+        native_context._BOUND_GUARD_HOME.get,
+    )
+    # Enforcement binds intentionally persist for the context's lifetime —
+    # clear any residue bound by earlier tests in this shared process.
+    native_context._BOUND_GUARD_HOME.set(None)
+    home = Path("/bound/home")
+    token = native_context.bind_context_digest_home(home)
+    try:
+        assert native_context.context_digest_guard_home() == home
+        with native_context.bound_context_digest_home(Path("/inner")):
+            assert native_context.context_digest_guard_home() == Path("/inner")
+        assert native_context.context_digest_guard_home() == home
+    finally:
+        native_context.reset_context_digest_home(token)
+    assert native_context.context_digest_guard_home() is None

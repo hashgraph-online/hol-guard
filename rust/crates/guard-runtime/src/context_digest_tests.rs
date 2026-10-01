@@ -1,0 +1,286 @@
+//! Parity and unit coverage for the native approval-context digest op.
+
+use super::*;
+use serde_json::{json, Map, Value};
+
+const PARITY_FIXTURE: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../../tests/fixtures/context-digest-parity/cases.v1.json"
+));
+
+fn corpus() -> Value {
+    serde_json::from_str(PARITY_FIXTURE).expect("context digest parity fixture must parse")
+}
+
+fn request_for(kind: ContextDigestKindV1) -> ContextDigestRequestV1 {
+    ContextDigestRequestV1 {
+        schema: CONTEXT_DIGEST_REQUEST_SCHEMA.to_owned(),
+        request_id: "parity".to_owned(),
+        kind,
+    }
+}
+
+fn components_of(value: &Value, ext_digest: &str) -> ContextDigestComponentsV1 {
+    ContextDigestComponentsV1 {
+        identity: value.get("identity").cloned().unwrap_or(Value::Null),
+        content: value.get("content").cloned().unwrap_or(Value::Null),
+        capabilities: value.get("capabilities").cloned().unwrap_or(Value::Null),
+        policy: value.get("policy").cloned().unwrap_or(Value::Null),
+        sandbox: value.get("sandbox").cloned().unwrap_or(Value::Null),
+        extension_control_digest: ext_digest.to_owned(),
+    }
+}
+
+fn evaluate(request: ContextDigestRequestV1) -> ContextDigestResultV1 {
+    let bytes = evaluate_context_digest_request(&request).expect("request must encode a result");
+    serde_json::from_slice(&bytes).expect("result must decode")
+}
+
+#[test]
+fn component_cases_match_python_tokens() {
+    for case in corpus()["component_cases"].as_array().unwrap() {
+        let components = components_of(
+            &case["components"],
+            case["extension_control_digest"].as_str().unwrap(),
+        );
+        let result = evaluate(request_for(
+            ContextDigestKindV1::BuildApprovalContextToken { components },
+        ));
+        assert_eq!(result.status, "ok", "case {}", case["id"]);
+        let expected = case["token"].as_str().unwrap();
+        let actual = result.token.as_deref().unwrap();
+        if case.get("diverges_from_python").and_then(Value::as_bool) == Some(true) {
+            // Integers beyond u64::MAX cannot round-trip through serde_json;
+            // the adapter's request-digest check prevents shipping these.
+            assert_ne!(actual, expected, "case {}", case["id"]);
+        } else {
+            assert_eq!(actual, expected, "case {}", case["id"]);
+        }
+    }
+}
+
+#[test]
+fn value_cases_match_python_digests() {
+    for case in corpus()["value_cases"].as_array().unwrap() {
+        let values = case.get("values").cloned();
+        let configured_keys = case
+            .get("configured_keys")
+            .and_then(Value::as_array)
+            .map(|keys| {
+                keys.iter()
+                    .map(|key| key.as_str().unwrap().to_owned())
+                    .collect::<Vec<_>>()
+            });
+        let kind = match case["domain"].as_str().unwrap() {
+            "environment" => ContextDigestKindV1::ConfiguredEnvironmentHash {
+                values,
+                configured_keys,
+            },
+            "headers" => ContextDigestKindV1::ConfiguredHeadersHash {
+                values,
+                configured_keys,
+            },
+            other => panic!("unknown domain {other}"),
+        };
+        let result = evaluate(request_for(kind));
+        match case.get("error") {
+            Some(_) => {
+                assert_eq!(result.status, "error", "case {}", case["id"]);
+                assert_eq!(result.code, ERR_VALUES, "case {}", case["id"]);
+            }
+            None => {
+                assert_eq!(result.status, "ok", "case {}", case["id"]);
+                assert_eq!(
+                    result.digest.as_deref(),
+                    case["digest"].as_str(),
+                    "case {}",
+                    case["id"]
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn argv_cases_match_python_digests() {
+    for case in corpus()["argv_cases"].as_array().unwrap() {
+        let argv = case["argv"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|item| item.as_str().unwrap().to_owned())
+            .collect();
+        let result = evaluate(request_for(ContextDigestKindV1::LaunchArgvDigest { argv }));
+        assert_eq!(result.status, "ok", "case {}", case["id"]);
+        assert_eq!(
+            result.digest.as_deref(),
+            case["digest"].as_str(),
+            "case {}",
+            case["id"]
+        );
+    }
+}
+
+#[test]
+fn token_cases_match_python_parse() {
+    for case in corpus()["token_cases"].as_array().unwrap() {
+        let parsed = parse_context_token(&case["token"]);
+        match case.get("parsed") {
+            Some(Value::Null) | None => {
+                assert!(parsed.is_none(), "case {}", case["id"]);
+            }
+            Some(expected) => {
+                let parsed = parsed.unwrap_or_else(|| panic!("case {}", case["id"]));
+                assert_eq!(parsed.identity, expected["identity"].as_str().unwrap());
+                assert_eq!(parsed.content, expected["content"].as_str().unwrap());
+                assert_eq!(
+                    parsed.capabilities,
+                    expected["capabilities"].as_str().unwrap()
+                );
+                assert_eq!(parsed.policy, expected["policy"].as_str().unwrap());
+                assert_eq!(parsed.sandbox, expected["sandbox"].as_str().unwrap());
+            }
+        }
+    }
+}
+
+#[test]
+fn validation_cases_match_python_reasons() {
+    for case in corpus()["validation_cases"].as_array().unwrap() {
+        let result = evaluate(request_for(
+            ContextDigestKindV1::ValidateApprovalContextTokens {
+                saved_token: case["saved_token"].clone(),
+                current_token: case["current_token"].clone(),
+            },
+        ));
+        assert_eq!(result.status, "ok", "case {}", case["id"]);
+        assert_eq!(
+            result.validation_reason.as_deref(),
+            case["reason"].as_str(),
+            "case {}",
+            case["id"]
+        );
+    }
+}
+
+#[test]
+fn validate_context_kind_builds_and_compares() {
+    let corpus = corpus();
+    let case = &corpus["component_cases"].as_array().unwrap()[0];
+    let components = components_of(
+        &case["components"],
+        case["extension_control_digest"].as_str().unwrap(),
+    );
+    let saved = case["token"].clone();
+    let unchanged = evaluate(request_for(ContextDigestKindV1::ValidateApprovalContext {
+        saved_token: saved.clone(),
+        components: components.clone(),
+    }));
+    assert_eq!(unchanged.status, "ok");
+    assert_eq!(unchanged.validation_reason, None);
+
+    let mut drifted = components;
+    drifted.content = Value::String("different-content".to_owned());
+    let changed = evaluate(request_for(ContextDigestKindV1::ValidateApprovalContext {
+        saved_token: saved,
+        components: drifted,
+    }));
+    assert_eq!(changed.status, "ok");
+    assert_eq!(
+        changed.validation_reason.as_deref(),
+        Some("approval_reuse_content_changed")
+    );
+}
+
+#[test]
+fn python_float_repr_matches_cpython() {
+    let cases: [(f64, &str); 16] = [
+        (0.0, "0.0"),
+        (-0.0, "-0.0"),
+        (1.0, "1.0"),
+        (1.5, "1.5"),
+        (0.1, "0.1"),
+        (100.0, "100.0"),
+        (1e15, "1000000000000000.0"),
+        (1e16, "1e+16"),
+        (1e-4, "0.0001"),
+        (1e-5, "1e-05"),
+        (1e300, "1e+300"),
+        (-2.5e-7, "-2.5e-07"),
+        (0.30000000000000004, "0.30000000000000004"),
+        (1.7976931348623157e308, "1.7976931348623157e+308"),
+        (5e-324, "5e-324"),
+        (1234567890123456.0, "1234567890123456.0"),
+    ];
+    for (value, expected) in cases {
+        assert_eq!(python_float_repr(value), expected, "value {value}");
+    }
+}
+
+#[test]
+fn canonical_json_escapes_like_cpython() {
+    let mut out = Vec::new();
+    write_canonical_json(
+        &json!({"a": "café ☃ 😀", "b": "\u{0}\u{1f}\u{7f}\u{80}\"", "c": ["x\n", 1, true]}),
+        &mut out,
+    )
+    .unwrap();
+    let encoded = String::from_utf8(out).unwrap();
+    assert_eq!(
+        encoded,
+        "{\"a\":\"caf\\u00e9 \\u2603 \\ud83d\\ude00\",\"b\":\"\\u0000\\u001f\\u007f\\u0080\\\"\",\"c\":[\"x\\n\",1,true]}"
+    );
+}
+
+#[test]
+fn token_parse_rejects_malformed_variants() {
+    assert!(parse_context_token(&json!("not-a-token")).is_none());
+    assert!(parse_context_token(&json!(42)).is_none());
+    let prefix_only = APPROVAL_CONTEXT_TOKEN_PREFIX.to_string();
+    assert!(parse_context_token(&json!(prefix_only)).is_none());
+}
+
+#[test]
+fn schema_mismatch_fails_request() {
+    let request = ContextDigestRequestV1 {
+        schema: "wrong".to_owned(),
+        request_id: "x".to_owned(),
+        kind: ContextDigestKindV1::LaunchArgvDigest { argv: vec![] },
+    };
+    let error = evaluate_context_digest_request(&request).unwrap_err();
+    assert_eq!(error, "native_context_digest_schema_mismatch");
+}
+
+#[test]
+fn request_digest_is_order_independent() {
+    let bytes_a = br#"{"schema":"guard-context-digest-request.v1","request_id":"r","kind":"launch_argv_digest","argv":["a","b"]}"#;
+    let bytes_b = br#"{"request_id":"r","kind":"launch_argv_digest","argv":["a","b"],"schema":"guard-context-digest-request.v1"}"#;
+    let result_a = evaluate_context_digest_bytes(bytes_a).unwrap();
+    let result_b = evaluate_context_digest_bytes(bytes_b).unwrap();
+    let decoded_a: ContextDigestResultV1 = serde_json::from_slice(&result_a).unwrap();
+    let decoded_b: ContextDigestResultV1 = serde_json::from_slice(&result_b).unwrap();
+    assert_eq!(decoded_a.request_sha256, decoded_b.request_sha256);
+    assert_eq!(decoded_a.digest, decoded_b.digest);
+}
+
+#[test]
+fn oversized_component_fails() {
+    let mut components = Map::new();
+    components.insert(
+        "blob".to_owned(),
+        Value::String("x".repeat(CONTEXT_COMPONENT_MAX_BYTES + 1)),
+    );
+    let request = request_for(ContextDigestKindV1::BuildApprovalContextToken {
+        components: ContextDigestComponentsV1 {
+            identity: Value::Object(components),
+            content: Value::Null,
+            capabilities: Value::Null,
+            policy: Value::Null,
+            sandbox: Value::Null,
+            extension_control_digest: "0".repeat(64),
+        },
+    });
+    let result = evaluate(request);
+    assert_eq!(result.status, "error");
+    assert_eq!(result.code, ERR_COMPONENT);
+}

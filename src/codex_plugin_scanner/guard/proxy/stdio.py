@@ -390,6 +390,10 @@ class StdioGuardProxy:
         self._current_config_provider = current_config_provider
         self._active_launch_identity: dict[str, object] | None = None
         self._active_env_values_hash: str | None = None
+        if guard_store is not None:
+            from ..native_context import bind_context_digest_home
+
+            bind_context_digest_home(guard_store.guard_home)
 
     def _response_timeout_seconds(self) -> float:
         configured = getattr(self.guard_config, "approval_wait_timeout_seconds", None)

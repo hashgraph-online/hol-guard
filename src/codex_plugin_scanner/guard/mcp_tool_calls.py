@@ -565,6 +565,9 @@ def _revalidate_claimed_tool_call_approval(
     all of those inputs before returning an executable allow.
     """
 
+    from .native_context import bind_context_digest_home
+
+    bind_context_digest_home(store.guard_home)
     refresh_failed = False
     if fresh_authority_provider is None:
         fresh_config = initial_config
