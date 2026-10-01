@@ -88,7 +88,6 @@ _NATIVE_PROJECTION_PATHS: tuple[str, ...] = (
     "contracts/managed-controls/v1/extension-projection-digest-vector.json",
     "contracts/managed-controls/v1/policy-bundle-v2-extension-signature-vector.json",
     "src/codex_plugin_scanner/guard/contracts/data/extensions",
-    "src/codex_plugin_scanner/guard/extension_builder",
 )
 
 

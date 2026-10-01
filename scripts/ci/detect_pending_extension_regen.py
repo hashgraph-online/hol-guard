@@ -38,7 +38,6 @@ REGEN_OWNED_PATHS: tuple[str, ...] = (
     "docs/guard/extensions/catalog.v2.json",
     "src/codex_plugin_scanner/guard/contracts/data/extensions",
     "src/codex_plugin_scanner/guard/contracts/data/mcp_servers",
-    "src/codex_plugin_scanner/guard/extension_builder",
     "tests/fixtures/extension-controls/catalog-baseline.v1.json",
     "tests/fixtures/guard-command-corpus/decision-diff-report.json",
     "tests/fixtures/guard-command-corpus/decision-diff-report.framed-sha256",
@@ -50,6 +49,7 @@ REGEN_OWNED_PATHS: tuple[str, ...] = (
 REGEN_INPUT_PREFIXES: tuple[str, ...] = (
     "contributions/",
     "rust/",
+    "scripts/build_native_command_program.py",
     "src/codex_plugin_scanner/guard/",
     "contracts/extensions/",
     "contracts/managed-controls/",
@@ -139,31 +139,46 @@ def _git(*arguments: str) -> subprocess.CompletedProcess[str]:
 
 
 def pr_diff_paths() -> list[str] | None:
-    """Paths this ref changes relative to the base branch, or None outside PR context.
+    """Paths this PR changes relative to its base, or None outside PR context.
 
-    CI checkouts are shallow, so diff against a depth-1 fetch of the base ref —
-    tree-to-tree, no merge-base history required. Locally, fall back to the
+    Prefers the merge-checkout's second parent — the exact base commit the
+    build merged against — so artifact regeneration merged into main after the
+    checkout was built is never attributed to the PR. Head checkouts fall back
+    to a depth-1 fetch of the base ref tip. Locally, falls back to the
     merge-base against ``main`` when that ref exists.
     """
 
     import os
 
-    base_ref = os.environ.get("GITHUB_BASE_REF")
-    if base_ref:
-        probe = _git("rev-parse", "--is-shallow-repository")
-        shallow = probe.returncode != 0 or probe.stdout.strip() == "true"
-        fetch = [
-            "fetch", "-q", *(["--depth=1"] if shallow else []), "origin",
-            f"+refs/heads/{base_ref}:refs/remotes/pending-diff/base",
-        ]
-        if _git(*fetch).returncode:
-            return None
-        result = _git("diff", "--name-only", "pending-diff/base", "HEAD")
-        return result.stdout.splitlines() if result.returncode == 0 else None
-    if _git("rev-parse", "--verify", "main").returncode == 0:
-        result = _git("diff", "--name-only", "main...HEAD")
-        return result.stdout.splitlines() if result.returncode == 0 else None
-    return None
+    if not os.environ.get("GITHUB_BASE_REF"):
+        if _git("rev-parse", "--verify", "main").returncode == 0:
+            result = _git("diff", "--name-only", "main...HEAD")
+            return result.stdout.splitlines() if result.returncode == 0 else None
+        return None
+    commit = _git("cat-file", "commit", "HEAD")
+    parents = [
+        line.split()[1]
+        for line in commit.stdout.splitlines()
+        if line.startswith("parent ")
+    ]
+    if len(parents) >= 2:
+        # Merge checkout: the second parent is the base commit the build merged.
+        fetched = _git("fetch", "-q", "--depth=1", "origin", parents[1])
+        if fetched.returncode == 0:
+            result = _git("diff", "--name-only", "FETCH_HEAD", "HEAD")
+            if result.returncode == 0:
+                return result.stdout.splitlines()
+    base_ref = os.environ["GITHUB_BASE_REF"]
+    probe = _git("rev-parse", "--is-shallow-repository")
+    shallow = probe.returncode != 0 or probe.stdout.strip() == "true"
+    fetch = [
+        "fetch", "-q", *(["--depth=1"] if shallow else []), "origin",
+        f"+refs/heads/{base_ref}:refs/remotes/pending-diff/base",
+    ]
+    if _git(*fetch).returncode:
+        return None
+    result = _git("diff", "--name-only", "pending-diff/base", "HEAD")
+    return result.stdout.splitlines() if result.returncode == 0 else None
 
 
 def _owned_path(path: str) -> bool:
