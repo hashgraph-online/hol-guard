@@ -95,7 +95,6 @@ def test_trust_map_covers_every_builtin_extension() -> None:
         "command.mcp-instapods",
         "command.mcp-pr-ui-compare",
         "command.mcp-reaper",
-        "command.mcp-tether",
         "command.noodle",
         "command.ollama",
         "command.probe",
