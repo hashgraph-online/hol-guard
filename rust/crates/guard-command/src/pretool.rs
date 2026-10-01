@@ -335,7 +335,11 @@ pub fn evaluate_pre_tool(request: &CommandModelRequestV1) -> Result<PreToolDecis
             "HOL Guard blocked a command that combines sensitive data access with network transfer.",
         ));
     }
-    if !model.wrapper_chain.is_empty() {
+    if model
+        .wrapper_chain
+        .iter()
+        .any(|wrapper| wrapper != "timeout")
+    {
         return Ok(pretool_decision(
             model,
             "require-reapproval",
