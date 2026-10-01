@@ -70,12 +70,12 @@ def _config(tmp_path: Path, artifact_id: str) -> GuardConfig:
     workspace = tmp_path / "workspace"
     workspace.mkdir(parents=True, exist_ok=True)
     guard_home = tmp_path / "guard-home"
-    provision_native_policy_verifier_key(guard_home, b"\x07" * 32)
     store = GuardStore(guard_home)
     store.ensure_policy_integrity_ready_for_write(
         harness="gemini",
         now="2026-07-19T00:00:00Z",
     )
+    provision_native_policy_verifier_key(guard_home, b"\x07" * 32)
     return GuardConfig(
         guard_home=guard_home,
         workspace=workspace,
