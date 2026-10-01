@@ -11,9 +11,10 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from ..action_lattice import is_guard_action
-from ..daemon.hook_availability_policy import hook_reason_continues_session
+from ..daemon.hook_availability_policy import hook_event_pauses_when_unavailable, hook_reason_continues_session
 from ..private_file_io import read_private_regular_text
 from .bounded_cli_hook_bridge import _event_name, _json_object
+from .zcode_hooks import zcode_authority_block_reason, zcode_hook_process_exit
 
 _MAX_HOOK_RESPONSE_BYTES = 1_000_000
 _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
@@ -91,24 +92,39 @@ def _native_hook_permission_decision(policy_action: str) -> str | None:
     return None
 
 
-def _policy_action_from_daemon(daemon_response: Mapping[str, object]) -> str:
-    reason_code = str(daemon_response.get("reason_code") or "")
-    if hook_reason_continues_session(reason_code):
-        return "warn"
+def _zcode_envelope_decision(policy_action: str) -> str | None:
+    """ZCode envelope decisions aligned with the zcode exit policy.
+
+    ``sandbox-required`` keeps the blocking exit for zcode, so its envelope
+    must say ``deny``; ``ask`` paired with exit 2 would be discarded by zcode
+    and mislead any consumer that reads the JSON.
+    """
+
+    decision = _native_hook_permission_decision(policy_action)
+    if decision == "ask" and policy_action == "sandbox-required":
+        return "deny"
+    return decision
+
+
+def _policy_action_from_daemon(daemon_response: Mapping[str, object], *, event_name: str) -> str:
     raw_policy_action = daemon_response.get("policy_action")
     if isinstance(raw_policy_action, str) and is_guard_action(raw_policy_action.strip()):
         return raw_policy_action.strip()
+    reason_code = str(daemon_response.get("reason_code") or "")
+    if not hook_event_pauses_when_unavailable(event_name) and hook_reason_continues_session(reason_code):
+        return "warn"
     return "block"
 
 
 def _should_exit_block(harness: str, event_name: str, policy_action: str) -> bool:
     canonical = harness.strip().lower().replace("_", "-")
     compact = event_name.replace("_", "").replace("-", "").lower()
-    if canonical in {"kimi", "grok", "hermes", "pi", "omp", "zcode"} and compact in {
-        "pretooluse",
-        "userpromptsubmit",
-        "pretoolcall",
-    }:
+    blocking_events = {"pretooluse", "userpromptsubmit", "pretoolcall"}
+    if canonical == "devin":
+        blocking_events.add("permissionrequest")
+    if canonical in {"kimi", "grok", "hermes", "pi", "omp", "zcode", "devin"} and compact in blocking_events:
+        if canonical == "zcode":
+            return zcode_hook_process_exit(policy_action=policy_action, event_name=event_name) == 2
         return policy_action in {"review", "require-reapproval", "sandbox-required", "block"}
     return False
 
@@ -228,19 +244,27 @@ def _daemon_response_to_native(
             harness=harness,
             event_name=event_name,
         )
-        stdout = json.dumps(native_response, ensure_ascii=True, separators=(",", ":"))
         hook_specific = native_response.get("hookSpecificOutput")
         exit_code = 2 if _should_exit_block(harness, event_name, policy_action_for_exit) else 0
         stderr = ""
-        if exit_code == 2 and canonical == "kimi":
+        if exit_code == 2 and canonical in {"kimi", "devin", "zcode"}:
             reason = native_response.get("reason")
             if (not isinstance(reason, str) or not reason) and isinstance(hook_specific, dict):
                 reason = hook_specific.get("permissionDecisionReason")
-            if isinstance(reason, str) and reason:
-                stderr = reason
+            # ZCode prefers stderr over stdout when a hook exits 2; without it
+            # the raw JSON envelope becomes the user-facing block reason, so a
+            # missing reason falls back to a human-readable default.
+            if not isinstance(reason, str) or not reason:
+                reason = f"HOL Guard blocked this action ({policy_action_for_exit})"
+            stderr = zcode_authority_block_reason(reason) if canonical == "zcode" else reason
+        if exit_code == 2 and canonical == "devin":
+            native_response["decision"] = "block"
+            if not native_response.get("reason"):
+                native_response["reason"] = stderr or f"HOL Guard blocked this action ({policy_action_for_exit})"
+        stdout = json.dumps(native_response, ensure_ascii=True, separators=(",", ":"))
         return stdout, stderr, exit_code
 
-    policy_action = _policy_action_from_daemon(daemon_response)
+    policy_action = _policy_action_from_daemon(daemon_response, event_name=event_name)
     reason = str(daemon_response.get("reason") or daemon_response.get("permission_decision_reason") or "")
     payload: dict[str, object] = {}
     if event_name == "UserPromptSubmit":
@@ -258,6 +282,8 @@ def _daemon_response_to_native(
             payload["hookSpecificOutput"] = {"hookEventName": event_name}
     else:
         permission_decision = _native_hook_permission_decision(policy_action)
+        if canonical == "zcode":
+            permission_decision = _zcode_envelope_decision(policy_action)
         if canonical == "codex" and event_name == "PreToolUse" and permission_decision is None:
             return "", "", 0
         hook_specific_output: dict[str, object] = {"hookEventName": event_name}
@@ -285,9 +311,16 @@ def _daemon_response_to_native(
                 if value is not None:
                     payload[key] = value
 
-    stdout = json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
     exit_code = 2 if _should_exit_block(harness, event_name, policy_action) else 0
-    stderr = reason if exit_code == 2 and canonical == "kimi" else ""
+    if canonical == "devin" and exit_code == 2:
+        payload["decision"] = "block"
+        if not payload.get("reason"):
+            payload["reason"] = reason or f"HOL Guard blocked this action ({policy_action})"
+    stdout = json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
+    if exit_code == 2 and canonical == "zcode":
+        stderr = zcode_authority_block_reason(reason or f"HOL Guard blocked this action ({policy_action})")
+    else:
+        stderr = reason if exit_code == 2 and canonical in {"kimi", "devin"} else ""
     return stdout, stderr, exit_code
 
 

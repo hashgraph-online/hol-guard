@@ -13,7 +13,6 @@ import pytest
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import continuation_runtime as continuation_runtime_module
 from codex_plugin_scanner.guard.adapters import codex_daemon_hook_bridge as bridge
-from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.live_process_identity import (
     CODEX_BROWSER_WAIT_PROCESS_KEY,
@@ -26,6 +25,7 @@ from tests.codex_daemon_hook_bridge_fixtures import (
     _ProxyHandler,
     _write_authenticated_daemon_files,
 )
+from tests.conftest import guard_commands_module
 from tests.test_guard_codex_resume_endpoints import _post_json, _request, _seed_codex_operation
 from tests.test_guard_package_hook import (
     WORKSPACE_ID,
@@ -148,7 +148,7 @@ def test_codex_approve_without_resume_binding_returns_honest_manual_fallback(tmp
     assert payload["codexResume"]["supported"] is False
     assert payload["codexResume"]["strategy"] == "manual-only"
     assert "could not find the original Codex chat" in payload["resolution_summary"]
-    assert "approval is now saved" in payload["copy"]["body"]
+    assert "a new tool call may require fresh approval" in payload["copy"]["body"]
 
 
 @pytest.mark.parametrize("process_state", ["missing", "reused"])
@@ -212,6 +212,7 @@ def test_codex_approve_unproven_live_hook_terminalizes_through_daemon_endpoint(
 
 
 @pytest.mark.usefixtures("bundle_first_cloud")
+@pytest.mark.usefixtures("native_hook_force")
 def test_guard_hook_ask_package_fallback_does_not_wait_without_process_identity(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

@@ -15,16 +15,8 @@ HOOK_SCRIPT_TEMPLATE_TAIL = """def _recording_only_from_guard_home(workspace: st
 
 
 def _cursor_permission(policy_action: str, guard_payload: dict[str, object], workspace: str | None = None) -> str:
-    if _recording_only_from_guard_home(workspace):
-        return "allow"
-    reason_code = str(guard_payload.get("reason_code") or "")
-    try:
-        from codex_plugin_scanner.guard.daemon.hook_availability_policy import hook_reason_continues_session
-
-        if hook_reason_continues_session(reason_code):
-            return "allow"
-    except Exception:
-        pass
+    # Only the evaluator's decision establishes permission, never local mode or reason text.
+    del guard_payload, workspace
     if policy_action not in GUARD_ACTIONS:
         return "deny"
     if policy_action in {"block", "sandbox-required"}:
@@ -250,7 +242,6 @@ def _cursor_availability_response(
     workspace: str | None,
 ) -> tuple[dict[str, object], int]:
     workspace_path = Path(workspace) if workspace else None
-    recording_only = _recording_only_from_guard_home(workspace)
     try:
         from codex_plugin_scanner.guard.daemon.hook_availability_policy import cursor_fallback_permission
 
@@ -259,15 +250,20 @@ def _cursor_availability_response(
             hook_event_name=hook_event_name,
             workspace=workspace_path,
             guard_home=Path(GUARD_HOME),
-            recording_only=recording_only,
+            recording_only=False,
         )
     except Exception:
+        # This generated hook is the final denial boundary, including for faulty
+        # evaluators. An unexpected exception must never escape as a permission.
         compact = hook_event_name.strip().lower().replace("_", "").replace("-", "")
         if compact in {"aftershellexecution", "aftermcpexecution"}:
             return {}, 0
-        if recording_only or compact == "beforereadfile":
-            return {"permission": "allow"}, 0
-        return {"permission": "deny"}, 2
+        reason = "Guard could not complete a trusted hook decision. Retry or repair Guard from a terminal."
+        return {
+            "permission": "deny",
+            "user_message": reason,
+            "agent_message": reason,
+        }, 2
 
 
 _LAST_HOOK_EVENT_NAME = ""
@@ -292,18 +288,18 @@ def _exit_unparseable_cursor_input() -> int:
             cursor_unparseable_input_permission,
         )
 
-        response, code = cursor_unparseable_input_permission(
-            event_name,
-            recording_only=_recording_only_from_guard_home(),
-        )
+        # Unparsed input provides no acknowledged mode or action scope.
+        response, code = cursor_unparseable_input_permission(event_name)
     except Exception:
         compact = event_name.strip().lower().replace("_", "").replace("-", "")
         if compact in {"aftershellexecution", "aftermcpexecution"}:
             print("{}")
             return 0
-        allow = _recording_only_from_guard_home() or compact in {"beforereadfile", ""}
-        print(json.dumps({"permission": "allow" if allow else "deny"}))
-        return 0 if allow else 2
+        print(json.dumps({
+            "permission": "deny",
+            "user_message": "Guard could not process this hook request safely. Retry or repair Guard from a terminal.",
+        }))
+        return 2
     print("{}" if not response else json.dumps(response))
     return code
 
@@ -361,34 +357,6 @@ def _main_inner() -> int:
     )
     if daemon_result is None:
         recover_kind = daemon_failure_kind or "transport-failure"
-        if _recording_only_from_guard_home(workspace):
-            availability, availability_code = _cursor_availability_response(
-                prepared,
-                hook_event_name=hook_event_name,
-                workspace=workspace,
-            )
-            print(json.dumps(availability))
-            return availability_code
-        compact_event = hook_event_name.strip().lower().replace("_", "").replace("-", "")
-        if compact_event == "beforereadfile":
-            try:
-                from codex_plugin_scanner.guard.daemon.hook_availability_policy import hook_action_is_emergency_safe
-
-                workspace_path = Path(workspace) if workspace else None
-                check_payload = dict(prepared)
-                check_payload["hook_event_name"] = "PreToolUse"
-                check_payload.setdefault("tool_name", "Read")
-                safe_read = hook_action_is_emergency_safe(check_payload, workspace=workspace_path)
-            except Exception:
-                safe_read = False
-            if safe_read:
-                availability, availability_code = _cursor_availability_response(
-                    prepared,
-                    hook_event_name=hook_event_name,
-                    workspace=workspace,
-                )
-                print(json.dumps(availability))
-                return availability_code
         if recover_kind != "overload":
             _run_guard_recovery(
                 recover_kind,
@@ -437,9 +405,6 @@ def _main_inner() -> int:
         return 0
     raw_policy_action = guard_payload.get("policy_action")
     if not isinstance(raw_policy_action, str) or raw_policy_action not in GUARD_ACTIONS:
-        if _recording_only_from_guard_home(workspace):
-            print(json.dumps({"permission": "allow"}))
-            return 0
         response, exit_code = _cursor_availability_response(
             prepared,
             hook_event_name=hook_event_name,
@@ -448,6 +413,22 @@ def _main_inner() -> int:
         print(json.dumps(response))
         return exit_code
     policy_action = raw_policy_action
+    _restrictive = {"review", "require-reapproval", "sandbox-required", "block"}
+    # Accepted exits: 0 for any valid policy; 1 for a restriction with a reason;
+    # 2 for a restriction. All other policy/exit pairs mean unavailable evaluation.
+    # The --json CLI path uses 1 for restrictions; native paths may use 2.
+    reason_code = guard_payload.get("reason_code")
+    has_decision_reason = isinstance(reason_code, str) and bool(reason_code.strip())
+    if proc.returncode != 0 and not (
+        proc.returncode in {1, 2}
+        and policy_action in _restrictive
+        and (proc.returncode == 2 or has_decision_reason)
+    ):
+        response, exit_code = _cursor_availability_response(
+            prepared, hook_event_name=hook_event_name, workspace=workspace
+        )
+        print(json.dumps(response))
+        return exit_code
     if proc.returncode != 0 and not guard_payload:
         response, exit_code = _cursor_availability_response(
             prepared,

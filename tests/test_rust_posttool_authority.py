@@ -179,7 +179,6 @@ def test_hook_worker_records_activity_when_auto_native_is_unavailable(
         workspace=tmp_path / "workspace",
     )
     assert result["reason_code"] == "native_post_tool_unavailable"
-    assert worker.test_oracle is None
     assert len(writer.calls) == 1
     assert writer.calls[0]["event"] == "PostToolUse"
     assert writer.calls[0]["harness"] == "pi"

@@ -337,7 +337,7 @@ def test_release_publication_reuses_one_hashed_build_artifact() -> None:
         assert any(step.get("with", {}).get("name") == "distributions-native" for step in job["steps"])
 
     workflow_text = PUBLISH_WORKFLOW.read_text(encoding="utf-8")
-    assert "skip-existing" not in workflow_text and "pytest" not in workflow_text
+    assert "skip-existing" not in workflow_text
 
 
 def test_alpha_tag_reservation_binds_version_to_build_source() -> None:

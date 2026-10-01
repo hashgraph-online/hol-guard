@@ -17,6 +17,7 @@ from codex_plugin_scanner.guard.runtime.extension_contribution import (
 )
 from codex_plugin_scanner.guard.runtime.extension_trust import ids_for_class
 from codex_plugin_scanner.guard.runtime.mcp_server_contribution import mcp_catalog_ids
+from tests.support.extension_freshness import requires_fresh_projections
 
 _NOODLE = Path(__file__).resolve().parents[1] / "contributions/extensions/command.noodle.json"
 
@@ -27,6 +28,7 @@ def _noodle_payload() -> dict[str, object]:
     return payload
 
 
+@requires_fresh_projections
 def test_in_tree_contributions_match_reviewed_trust_classes() -> None:
     payloads = load_contribution_payloads()
     ids = {str(item["id"]) for item in payloads}
@@ -60,6 +62,18 @@ def test_contribution_rejects_unknown_icon_and_unbound_native_source() -> None:
     payload["nativeSource"] = dict(payload["nativeSource"], path="contributions/command-sources/command.git.json")
     with pytest.raises(ValueError, match="not bound"):
         validate_contribution(payload, filename="bind.json")
+
+
+def test_contribution_rejects_inconsistent_activation_and_invalid_id() -> None:
+    payload = _noodle_payload()
+    payload["activation"] = "default-on"
+    with pytest.raises(ValueError, match="trust class and activation projection disagree"):
+        validate_contribution(payload, filename="activation.json")
+
+    payload = _noodle_payload()
+    payload["id"] = "plugin.invalid"
+    with pytest.raises(ValueError, match="has invalid id"):
+        validate_contribution(payload, filename="id.json")
 
 
 def test_frozen_packaged_payloads_load_from_meipass(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

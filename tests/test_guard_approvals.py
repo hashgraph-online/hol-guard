@@ -1605,6 +1605,7 @@ class TestGuardApprovals:
             "_reap_stale_ephemeral_guard_daemons",
             lambda *_args, **_kwargs: None,
         )
+        monkeypatch.setattr(daemon_manager_module, "reap_orphaned_daemon_workers", lambda **_kwargs: None)
         monkeypatch.setattr(daemon_manager_module, "_running_ephemeral_guard_daemon_processes", lambda: [])
         monkeypatch.setattr(
             daemon_manager_module,

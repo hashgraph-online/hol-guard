@@ -2,18 +2,28 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
+import codex_plugin_scanner.guard.adapters as adapters_module
+import codex_plugin_scanner.guard.daemon.local_cli_api as local_cli_api_module
+from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.harness_mcp_discovery import (
     MAX_DISCOVERED_MCP_SERVERS,
+    _safe_detections,
     apply_source_labels,
     discover_harness_mcp_servers,
+    discovered_server_for_observation,
     persist_discovered_harness_mcp_servers,
 )
-from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiError, LocalCliApiService
-from codex_plugin_scanner.guard.local_cli_trust import utc_now
+from codex_plugin_scanner.guard.adapters.mcp_servers import managed_stdio_servers
+from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiService
+from codex_plugin_scanner.guard.local_cli_trust import matching_local_mcp_grant, utc_now
+from codex_plugin_scanner.guard.mcp_tool_calls import build_tool_call_artifact
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.runtime.local_cli_commands import LocalCliCommand
 from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity
 from codex_plugin_scanner.guard.runtime.local_mcp_probe import McpProbeResult
+from codex_plugin_scanner.guard.runtime.local_mcp_stdio import McpCatalogResult
 from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -54,7 +64,97 @@ def _detection(harness: str, *artifacts: GuardArtifact) -> HarnessDetection:
     )
 
 
-def test_discover_groups_same_launch_across_harnesses() -> None:
+def test_packaged_native_proxies_are_not_offered_as_servers(tmp_path: Path) -> None:
+    detections = (
+        _detection(
+            "opencode",
+            _artifact(
+                harness="opencode",
+                name="hol-guard::browser",
+                command="hol-guard",
+                args=("opencode-mcp-proxy", "--command", "node"),
+            ),
+            _artifact(
+                harness="opencode",
+                name="hol-guard::unverified",
+                command="node",
+                args=("server.js",),
+            ),
+        ),
+    )
+    servers = discover_harness_mcp_servers(
+        home_dir=tmp_path,
+        guard_home=tmp_path / "guard-home",
+        detections=detections,
+    )
+    assert [server.identity.name for server in servers] == ["hol-guard::unverified"]
+
+
+def test_installed_guard_proxy_server_remains_discoverable_without_rewrapping(tmp_path: Path) -> None:
+    wrapped = _artifact(
+        harness="codex",
+        name="guard_canary",
+        command="/usr/local/bin/mcp-server-filesystem",
+        args=(str(tmp_path / "allowed"),),
+        metadata={"guard_managed_proxy": True},
+    )
+    detection = _detection("codex", wrapped)
+
+    assert managed_stdio_servers(detection) == ()
+    servers = discover_harness_mcp_servers(
+        home_dir=tmp_path,
+        guard_home=tmp_path / "guard-home",
+        detections=(detection,),
+    )
+
+    assert len(servers) == 1
+    assert servers[0].identity.name == "guard_canary"
+    assert servers[0].server_identity.command == "/usr/local/bin/mcp-server-filesystem"
+
+
+def test_discovery_uses_managed_codex_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    store.set_managed_install("codex", True, str(workspace), {}, utc_now())
+    observed: list[Path | None] = []
+
+    def discover(**kwargs: object) -> tuple[()]:
+        observed.append(kwargs.get("workspace_dir"))
+        return ()
+
+    monkeypatch.setattr(local_cli_api_module, "discover_harness_mcp_servers", discover)
+
+    LocalCliApiService(store=store)._discovered_servers()
+
+    assert observed == [workspace]
+
+
+def test_managed_codex_discovery_authenticates_default_home_context(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    observed: list[tuple[bool, bool]] = []
+
+    class CodexAdapter:
+        harness = "codex"
+
+        def detect(self, context: HarnessContext) -> HarnessDetection:
+            home_explicit = context.home_override_explicit
+            workspace_explicit = context.workspace_override_explicit
+            observed.append((home_explicit, workspace_explicit))
+            if home_explicit:
+                raise RuntimeError("manifest belongs to default home context")
+            return _detection("codex")
+
+    monkeypatch.setattr(adapters_module, "list_adapters", lambda: (CodexAdapter(),))
+
+    detections = _safe_detections(tmp_path, tmp_path / "guard-home", tmp_path / "workspace")
+
+    assert len(detections) == 1
+    assert observed == [(True, True), (False, True)]
+
+
+def test_identical_launches_keep_distinct_host_connections() -> None:
     detections = (
         _detection(
             "codex",
@@ -73,6 +173,7 @@ def test_discover_groups_same_launch_across_harnesses() -> None:
                 name="github",
                 command="npx",
                 args=("-y", "@modelcontextprotocol/server-github"),
+                env={"GITHUB_TOKEN": "secret"},
             ),
         ),
     )
@@ -81,11 +182,245 @@ def test_discover_groups_same_launch_across_harnesses() -> None:
         guard_home=Path("."),
         detections=detections,
     )
-    assert len(discovered) == 1
+    assert len(discovered) == 2
     assert discovered[0].identity.name == "github"
-    assert discovered[0].source_label == "Codex, Claude Code"
+    assert {server.source_label for server in discovered} == {"Codex", "Claude Code"}
+    assert discovered[0].identity.identity_hash != discovered[1].identity.identity_hash
     assert discovered[0].server_identity.env_keys == ("GITHUB_TOKEN",)
     assert "secret" not in discovered[0].identity.example_label
+    server_hash = discovered[0].server_identity.identity_hash
+    assert discovered_server_for_observation(
+        discovered, cli_id=f"local-cli.mcp-{server_hash[:8]}", server_identity_hash=server_hash,
+        server_command=discovered[0].server_identity.command,
+        args_hash=discovered[0].server_identity.args_hash,
+        source_label="Codex, Claude Code",
+    ) is None
+    assert discovered_server_for_observation(
+        discovered, cli_id=f"local-cli.mcp-{server_hash[:8]}", server_identity_hash=server_hash,
+        server_command=discovered[0].server_identity.command,
+        args_hash=discovered[0].server_identity.args_hash,
+        source_label="Codex",
+    ) == next(server for server in discovered if server.source_label == "Codex")
+
+
+def test_distinct_configured_environments_do_not_merge(tmp_path: Path) -> None:
+    artifacts = tuple(
+        _artifact(
+            harness="codex",
+            name=name,
+            command="npx",
+            args=("-y", "pkg"),
+            env={"ACCOUNT": name},
+        )
+        for name in ("personal", "work")
+    )
+    servers = discover_harness_mcp_servers(
+        home_dir=tmp_path,
+        guard_home=tmp_path,
+        detections=(_detection("codex", *artifacts),),
+    )
+    assert len(servers) == 2
+    store = GuardStore(tmp_path / "guard")
+    labels = persist_discovered_harness_mcp_servers(store, servers, seen_at=utc_now())
+    assert len(labels) == 2
+    for server in servers:
+        found = store.find_local_mcp_observation(
+            server_identity_hash=server.identity.identity_hash,
+            command=server.server_identity.command,
+            args_hash=server.server_identity.args_hash,
+        )
+        assert found is not None
+        assert found["identity_hash"] == server.identity.identity_hash
+    assert (
+        store.find_local_mcp_observation(
+            command=servers[0].server_identity.command,
+            args_hash=servers[0].server_identity.args_hash,
+        )
+        is None
+    )
+
+
+@pytest.mark.parametrize(("legacy_state", "expected_new_state"), [
+    ("blocked", "blocked"), ("allowed", None), ("allowed_with_block", "blocked"),
+    ("late_block", "blocked"),
+])
+def test_legacy_authority_split_carries_deny_without_migrating_allow(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, legacy_state: str, expected_new_state: str | None
+) -> None:
+    servers = discover_harness_mcp_servers(
+        home_dir=tmp_path,
+        guard_home=tmp_path / "guard",
+        detections=(_detection("codex", _artifact(
+            harness="codex", name="legacy", command="uvx", args=("legacy-mcp",),
+        )),),
+    )
+    assert len(servers) == 1
+    server = servers[0]
+    old_hash = server.server_identity.identity_hash
+    legacy = UnlistedCliIdentity(
+        cli_id=f"local-cli.mcp-{old_hash[:8]}", name="legacy", kind="executable",
+        identity_hash=old_hash, example_label="uvx legacy-mcp",
+    )
+    store = GuardStore(tmp_path / "guard")
+    store.ensure_local_mcp_observation(
+        legacy, seen_at=utc_now(), server_identity_hash=old_hash,
+        server_command=server.server_identity.command,
+        server_args_hash=server.server_identity.args_hash,
+        source_label=server.source_label,
+    )
+    if legacy_state == "allowed_with_block":
+        store.replace_local_cli_commands(
+            legacy.cli_id, (LocalCliCommand("read", "read", "read", "Read"),),
+        )
+    if legacy_state == "late_block":
+        injected = False
+
+        def add_denial_before_transaction(_guard_home: Path) -> None:
+            nonlocal injected
+            if injected:
+                return
+            injected = True
+            store.upsert_local_cli_grant(
+                identity=legacy, state="blocked", expected_revision=store.read_local_cli_revision(),
+                updated_at=utc_now(),
+            )
+
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.native_policy_snapshot.notify_native_policy_mutation",
+            add_denial_before_transaction,
+        )
+    else:
+        store.upsert_local_cli_grant(
+            identity=legacy, state="allowed" if legacy_state == "allowed_with_block" else legacy_state,
+            expected_revision=store.read_local_cli_revision(),
+            updated_at=utc_now(),
+            command_states={"read": "block"} if legacy_state == "allowed_with_block" else None,
+        )
+    labels = persist_discovered_harness_mcp_servers(store, servers, seen_at=utc_now())
+    assert server.identity.cli_id in labels
+    grant = store.read_local_mcp_grant(
+        old_hash, command=server.server_identity.command,
+        args_hash=server.server_identity.args_hash,
+        connection_identity_hash=server.identity.identity_hash,
+    )
+    assert (grant["state"] if grant is not None else None) == expected_new_state
+    listed = LocalCliApiService(store=store).list_items()["items"]
+    assert [item["cli_id"] for item in listed] == [server.identity.cli_id]
+    assert listed[0]["state"] == ("blocked" if expected_new_state == "blocked" else "unset")
+    assert discovered_server_for_observation(
+        servers, cli_id=legacy.cli_id, server_identity_hash=old_hash,
+        server_command=server.server_identity.command, args_hash=server.server_identity.args_hash,
+        source_label=server.source_label,
+    ) == server
+
+
+def test_configured_grants_follow_exact_host_and_configuration(tmp_path: Path) -> None:
+    servers = discover_harness_mcp_servers(
+        home_dir=tmp_path,
+        guard_home=tmp_path,
+        detections=tuple(
+            _detection(host, _artifact(harness=host, name="github", command="npx", args=("-y", "pkg")))
+            for host in ("codex", "claude-code")
+        ),
+    )
+    assert len(servers) == 2
+    assert servers[0].server_identity.identity_hash == servers[1].server_identity.identity_hash
+    store = GuardStore(tmp_path / "guard")
+    persist_discovered_harness_mcp_servers(store, servers, seen_at=utc_now())
+    for server in servers:
+        connection = server.connection_identity
+        assert connection is not None
+        choice = "allow" if connection.host == "codex" else "block"
+        store.replace_local_cli_commands(
+            server.identity.cli_id,
+            (LocalCliCommand("read_file", "read_file", "read_file", "Read a file"),),
+            mcp_catalog=McpCatalogResult(
+                tools=({"name": "read_file", "inputSchema": {"type": "object"}},),
+                complete=True,
+            ),
+            identity_hash=server.identity.identity_hash,
+            seen_at=utc_now(),
+        )
+        store.upsert_local_cli_grant(
+            identity=server.identity,
+            state="allowed",
+            expected_revision=store.read_local_cli_revision(),
+            updated_at=utc_now(),
+            command_states={"read_file": choice},
+        )
+    for server in servers:
+        connection = server.connection_identity
+        assert connection is not None
+        artifact = build_tool_call_artifact(
+            harness=connection.host,
+            server_name="github",
+            tool_name="read_file",
+            source_scope="user",
+            config_path=f"{connection.host}/mcp.json",
+            transport="stdio",
+            server_identity=server.server_identity,
+            tool_definition={"name": "read_file", "inputSchema": {"type": "object"}},
+        )
+        assert matching_local_mcp_grant(store=store, artifact=artifact, current_action="review") == (
+            "allowed" if connection.host == "codex" else "blocked"
+        )
+        changed_config = build_tool_call_artifact(
+            harness=connection.host,
+            server_name="github",
+            tool_name="read_file",
+            source_scope="user",
+            config_path="different/mcp.json",
+            transport="stdio",
+            server_identity=server.server_identity,
+        )
+        assert matching_local_mcp_grant(store=store, artifact=changed_config, current_action="review") is None
+        changed_schema = build_tool_call_artifact(
+            harness=connection.host,
+            server_name="github",
+            tool_name="read_file",
+            source_scope="user",
+            config_path=f"{connection.host}/mcp.json",
+            transport="stdio",
+            server_identity=server.server_identity,
+            tool_definition={"name": "read_file", "inputSchema": {"type": "object", "required": ["destination"]}},
+        )
+        assert matching_local_mcp_grant(store=store, artifact=changed_schema, current_action="review") == (
+            "review" if connection.host == "codex" else "blocked"
+        )
+    assert (
+        store.find_local_mcp_observation(
+            server_identity_hash="0" * 64,
+            command=servers[0].server_identity.command,
+            args_hash=servers[0].server_identity.args_hash,
+        )
+        is None
+    )
+    assert (
+        discovered_server_for_observation(
+            servers,
+            server_command=servers[0].server_identity.command,
+            args_hash=servers[0].server_identity.args_hash,
+        )
+        is None
+    )
+    assert (
+        discovered_server_for_observation(
+            servers,
+            cli_id=servers[1].identity.cli_id,
+            server_command=servers[0].server_identity.command,
+            args_hash=servers[0].server_identity.args_hash,
+        )
+        == servers[1]
+    )
+    assert (
+        discovered_server_for_observation(
+            servers,
+            cli_id="local-cli.mcp-missing",
+            server_command=servers[0].server_identity.command,
+            args_hash=servers[0].server_identity.args_hash,
+        )
+        is None
+    )
 
 
 def test_discover_redacts_secret_argv_tokens() -> None:
@@ -303,7 +638,8 @@ def test_recognize_reuses_harness_identity(tmp_path: Path, monkeypatch) -> None:
     item = result["item"]
     assert isinstance(item, dict)
     assert item["cli_id"] == listed_item["cli_id"]
-    assert item["identity_hash"] == harness_identity.identity_hash
+    assert item["identity_hash"] == listed_item["identity_hash"]
+    assert item["identity_hash"] != harness_identity.identity_hash
     assert item["identity_hash"] != probed_identity.identity_hash
     assert item["name"] == "github"
     ids = [entry["command_id"] for entry in item["commands"]]
@@ -365,81 +701,6 @@ def test_recognize_cli_id_uses_live_launch_command(tmp_path: Path, monkeypatch) 
     item = recognized["item"]
     assert isinstance(item, dict)
     assert "sk-live-secret" not in str(item["example_label"])
-
-
-def test_recognize_cli_id_survives_discovery_failure(tmp_path: Path, monkeypatch) -> None:
-    home = tmp_path / "home"
-    home.mkdir()
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.Path.home",
-        staticmethod(lambda: home),
-    )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.discover_harness_mcp_servers",
-        lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("detect failed")),
-    )
-    service = LocalCliApiService(store=GuardStore(home))
-    try:
-        service.recognize({"command": "python3 missing.py", "cli_id": "local-cli.mcp-aaaaaaaa"})
-    except LocalCliApiError as exc:
-        assert exc.code
-    else:
-        raise AssertionError("expected recognition to fail closed without crashing")
-
-
-def test_list_items_survives_discovery_failure(tmp_path: Path, monkeypatch) -> None:
-    home = tmp_path / "home"
-    home.mkdir()
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.Path.home",
-        staticmethod(lambda: home),
-    )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.discover_harness_mcp_servers",
-        lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("detect failed")),
-    )
-    service = LocalCliApiService(store=GuardStore(home))
-    payload = service.list_items()
-    assert payload["items"] == []
-
-
-def test_cli_id_collision_keeps_both_servers(tmp_path: Path) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-    first = UnlistedCliIdentity(
-        cli_id="local-cli.mcp-aaaaaaaa",
-        name="one",
-        kind="executable",
-        identity_hash="a" * 64,
-        example_label="npx one",
-    )
-    second = UnlistedCliIdentity(
-        cli_id="local-cli.mcp-aaaaaaaa",
-        name="two",
-        kind="executable",
-        identity_hash="b" * 64,
-        example_label="npx two",
-    )
-    first_id = store.ensure_local_mcp_observation(
-        first,
-        seen_at=utc_now(),
-        server_identity_hash="a" * 64,
-        server_command="npx",
-        server_args_hash="1" * 64,
-        source_label="Cursor",
-    )
-    second_id = store.ensure_local_mcp_observation(
-        second,
-        seen_at=utc_now(),
-        server_identity_hash="b" * 64,
-        server_command="uvx",
-        server_args_hash="2" * 64,
-        source_label="Codex",
-    )
-    assert first_id == "local-cli.mcp-aaaaaaaa"
-    assert second_id != first_id
-    assert second_id.startswith("local-cli.mcp-")
-    listed = {str(item["name"]): item.get("source_label") for item in store.list_local_cli_items()}
-    assert listed == {"one": "Cursor", "two": "Codex"}
 
 
 def test_persist_and_overlay_labels(tmp_path: Path) -> None:

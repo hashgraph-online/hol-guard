@@ -41,6 +41,10 @@ assert(
   "Supply-chain subroutes keep their parent destination active",
 );
 assert(
+  canonicalNavigationView("protection-repair") === "extensions",
+  "Repair protection stays inside Extensions without a new navigation item",
+);
+assert(
   navigationItemForView("settings").label === "Settings",
   "The current section can be described without a select input",
 );
@@ -101,6 +105,7 @@ assert(
 const css = source("./shell-navigation.css");
 const drawerSource = source("./shell-navigation-drawer.tsx");
 const layoutSource = source("./approval-center-layout.tsx");
+const appSource = source("./app.tsx");
 const responsiveSource = source("./responsive-layout.css");
 const mainSource = source("./main.tsx");
 
@@ -137,6 +142,12 @@ assert(
 assert(
   drawerSource.includes("onSetUpdateChannel={props.onSetUpdateChannel}"),
   "The navigation drawer keeps the alpha update control",
+);
+assert(
+  layoutSource.includes("useGuardUpdate({ onReconnected: props.onGuardReconnected })") &&
+    !layoutSource.includes("enableUpdateStatus") &&
+    !appSource.includes("enableUpdateStatus"),
+  "Update status stays enabled on every view so the Update action cannot disappear on Inbox",
 );
 
 const alphaMarkup = renderToStaticMarkup(

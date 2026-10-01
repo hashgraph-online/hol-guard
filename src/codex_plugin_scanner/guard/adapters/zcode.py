@@ -34,6 +34,9 @@ from .base import (
     _shell_command,
 )
 from .bounded_cli_hook_bridge import bounded_cli_hook_command
+from .hook_group_merge import is_managed_handler as _shared_is_managed_handler
+from .hook_group_merge import merge_hook_entry as _shared_merge_hook_entry
+from .hook_group_merge import prune_managed_hook_entries as _shared_prune_managed_hook_entries
 from .zcode_config import (
     GUARD_MANAGED_MARKER,
     ZCODE_BUNDLE_IDENTIFIER,
@@ -60,6 +63,9 @@ from .zcode_config import (
 )
 
 _ZCODE_HOME_ENV_VAR = "ZCODE_HOME"
+# Current ZCode renders this label beside the hook in its Hooks settings UI
+# instead of the full managed command string.
+_GUARD_HOOK_STATUS_MESSAGE = "HOL Guard runtime policy enforcement"
 _ZCODE_PRETOOL_TIMEOUT_SECONDS = 30
 _ZCODE_PROMPT_TIMEOUT_SECONDS = 30
 _GUARD_HOOK_INTERNAL_TIMEOUT_SECONDS = 25
@@ -337,6 +343,7 @@ class ZCodeHarnessAdapter(HarnessAdapter):
                 "Guard hook entries added to ~/.zcode/cli/config.json under the hooks.events section",
                 "User mcp, plugins, and any pre-existing hooks were preserved",
                 "Legacy flat hook groups were migrated into hooks.events for current ZCode",
+                "Hook entries carry a statusMessage label rendered by ZCode's Hooks settings UI",
                 *shim_notes,
             ],
         }
@@ -399,11 +406,13 @@ class ZCodeHarnessAdapter(HarnessAdapter):
             "type": "command",
             "command": managed_command,
             "timeout": _ZCODE_PRETOOL_TIMEOUT_SECONDS,
+            "statusMessage": _GUARD_HOOK_STATUS_MESSAGE,
         }
         prompt_handler: dict[str, object] = {
             "type": "command",
             "command": managed_command,
             "timeout": _ZCODE_PROMPT_TIMEOUT_SECONDS,
+            "statusMessage": _GUARD_HOOK_STATUS_MESSAGE,
         }
         for matcher in ZCODE_PRETOOL_MATCHERS:
             pretool_entries = _merge_hook_entry(pretool_entries, matcher, pretool_handler)
@@ -462,65 +471,17 @@ class ZCodeHarnessAdapter(HarnessAdapter):
 
     @staticmethod
     def _prune_managed_entries(entries: list[object]) -> list[object]:
-        remaining: list[object] = []
-        for entry in entries:
-            if not isinstance(entry, dict):
-                remaining.append(entry)
-                continue
-            if is_guard_managed_hook_command(entry.get("command")):
-                continue
-            nested_hooks = entry.get("hooks")
-            if isinstance(nested_hooks, list):
-                filtered = [item for item in nested_hooks if not _is_managed_handler(item)]
-                if filtered:
-                    updated = dict(entry)
-                    updated["hooks"] = filtered
-                    remaining.append(updated)
-                continue
-            remaining.append(entry)
-        return remaining
+        return _shared_prune_managed_hook_entries(entries, is_managed=is_guard_managed_hook_command)
 
 
 def _is_managed_handler(handler: object) -> bool:
-    return isinstance(handler, dict) and is_guard_managed_hook_command(handler.get("command"))
+    return _shared_is_managed_handler(handler, is_guard_managed_hook_command)
 
 
 def _merge_hook_entry(entries: list[object], matcher: str | None, handler: dict[str, object]) -> list[object]:
-    """Add or refresh the Guard handler for a given matcher, preserving user hooks.
+    """Add or refresh the Guard handler for a given matcher, preserving user hooks."""
 
-    Non-dict entries (kept defensively by ``_prune_managed_entries``) are
-    passed through unchanged so the merge never drops user data.
-    """
-
-    normalized: list[object] = list(entries)
-    matcher_key = matcher.strip() if isinstance(matcher, str) and matcher.strip() else None
-    for index, entry in enumerate(normalized):
-        if not isinstance(entry, dict):
-            continue
-        entry_matcher = entry.get("matcher")
-        entry_matcher_key = entry_matcher.strip() if isinstance(entry_matcher, str) and entry_matcher.strip() else None
-        if entry_matcher_key != matcher_key:
-            continue
-        nested_hooks = entry.get("hooks")
-        if not isinstance(nested_hooks, list):
-            nested_hooks = []
-        if any(_is_managed_handler(item) for item in nested_hooks):
-            updated = dict(entry)
-            updated["hooks"] = [
-                handler if isinstance(item, dict) and _is_managed_handler(item) else item for item in nested_hooks
-            ]
-            normalized[index] = updated
-            return normalized
-        merged_hooks = [*nested_hooks, handler]
-        updated = dict(entry)
-        updated["hooks"] = merged_hooks
-        normalized[index] = updated
-        return normalized
-    group: dict[str, object] = {"hooks": [handler]}
-    if matcher_key is not None:
-        group["matcher"] = matcher_key
-    normalized.append(group)
-    return normalized
+    return _shared_merge_hook_entry(entries, matcher, handler, is_managed=is_guard_managed_hook_command)
 
 
 __all__ = ["ZCodeHarnessAdapter"]

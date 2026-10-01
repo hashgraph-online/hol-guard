@@ -197,7 +197,6 @@ def test_pretool_plugin_self_repair_commands_bypass_missing_runtime(tmp_path: Pa
     assert completed.stdout.strip() == "ok"
 
 
-
 def test_pretool_plugin_guard_block_message_appends_primary_approval_url(tmp_path: Path) -> None:
     message = _run_generated_guard_block_message(
         tmp_path,
@@ -385,7 +384,7 @@ const guardPlatform = "win32";
 """,
     )
     source = source.replace("process.platform", "guardPlatform")
-    source = source.replace('pythonTarget = resolveGuardPythonTarget();', 'pythonTarget = "python";')
+    source = source.replace("pythonTarget = resolveGuardPythonTarget();", 'pythonTarget = "python";')
     source = source.replace("verifyGuardPythonIdentity();", "")
     plugin_path = tmp_path / "guard-cleanup-failure.ts"
     _ = plugin_path.write_text(source, encoding="utf-8")
@@ -465,7 +464,7 @@ const guardPlatform = "win32";
     )
     source = source.replace("process.platform", "guardPlatform")
     source = source.replace("const GUARD_TASKKILL_PATH = null;", 'const GUARD_TASKKILL_PATH = "taskkill.exe";')
-    source = source.replace('pythonTarget = resolveGuardPythonTarget();', 'pythonTarget = "python";')
+    source = source.replace("pythonTarget = resolveGuardPythonTarget();", 'pythonTarget = "python";')
     source = source.replace("verifyGuardPythonIdentity();", "")
     source += "\nexport const getSpawnCalls = () => spawnCalls;\n"
     plugin_path = tmp_path / "guard-exited-parent.ts"
@@ -762,7 +761,7 @@ def test_opencode_verification_ready_with_guard_companion_servers(tmp_path: Path
 
 
 def test_refresh_opencode_pretool_plugin_rewrites_stale_plugin(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.cli import update_commands
+    from codex_plugin_scanner.guard.cli import update_opencode as update_commands
     from codex_plugin_scanner.guard.store import GuardStore
 
     ctx = _ctx(tmp_path)
@@ -788,7 +787,7 @@ def test_refresh_opencode_pretool_plugin_handles_runtime_error(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from codex_plugin_scanner.guard.cli import update_commands
+    from codex_plugin_scanner.guard.cli import update_opencode as update_commands
     from codex_plugin_scanner.guard.store import GuardStore
 
     ctx = _ctx(tmp_path)
@@ -810,7 +809,7 @@ def test_refresh_opencode_pretool_plugin_handles_install_runtime_error(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from codex_plugin_scanner.guard.cli import update_commands
+    from codex_plugin_scanner.guard.cli import update_opencode as update_commands
     from codex_plugin_scanner.guard.store import GuardStore
 
     ctx = _ctx(tmp_path)

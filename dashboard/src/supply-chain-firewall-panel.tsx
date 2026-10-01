@@ -32,6 +32,7 @@ import { EntitlementNotice, ConnectFlowCard } from "./supply-chain-firewall-view
 import type { CompletedOp } from "./supply-chain-firewall-views";
 import {
   isSupplyChainAuditConnectError,
+  isSupplyChainAuditWorkspaceInvalidError,
   isSupplyChainAuditWorkspaceRequiredError,
   packageAuditNeedsCloudConnect,
   resolveSupplyChainAuditConnectGate,
@@ -174,6 +175,7 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
   onAuditConnectGateChange?: (state: AuditConnectGateViewState | null) => void;
   onAuditErrorChange?: (message: string | null) => void;
   onAuditWorkspaceRequired?: () => void;
+  onAuditWorkspaceDiscovered?: (workspaceDir: string | null) => void;
   onStateChanged?: (requireComplete?: boolean) => Promise<void> | void;
   onAuditCompleted?: (resultDetail: Record<string, unknown>) => void;
   onAuditStarted?: () => void;
@@ -190,6 +192,7 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
     onAuditConnectGateChange,
     onAuditErrorChange,
     onAuditWorkspaceRequired,
+    onAuditWorkspaceDiscovered,
     onStateChanged,
     onAuditCompleted,
     onAuditStarted,
@@ -267,6 +270,13 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (panelLoad.phase !== "loaded") {
+      return;
+    }
+    onAuditWorkspaceDiscovered?.(panelLoad.data.audit_workspace_dir ?? null);
+  }, [onAuditWorkspaceDiscovered, panelLoad]);
 
   const refreshAfterOp = useCallback(async () => {
     const requestId = ++statusRequestId.current;
@@ -378,7 +388,7 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
           openAuditConnectGate(true);
           return false;
         }
-        if (isSupplyChainAuditWorkspaceRequiredError(err)) {
+        if (isSupplyChainAuditWorkspaceRequiredError(err) || isSupplyChainAuditWorkspaceInvalidError(err)) {
           onAuditWorkspaceRequired?.();
         }
         const message = supplyChainAuditUserMessage(err) ?? "Operation failed.";

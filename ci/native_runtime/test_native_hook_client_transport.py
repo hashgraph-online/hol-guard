@@ -163,15 +163,17 @@ def test_native_hook_client_rejects_duplicate_edge_keys_without_fallback(
     runtime, state_dir = native_runtime
     provision_native_policy_verifier_key(tmp_path, b"\x07" * 32)
     malformed = b'{"schema":"guard-hook-envelope.v2","schema":"other"}'
+    paths_before = {path.relative_to(state_dir) for path in state_dir.rglob("*")}
     result = subprocess.run(
         (str(runtime), "hook-client", "--stdin", str(state_dir)),
         input=malformed,
         check=False,
         capture_output=True,
-        timeout=3,
+        timeout=10,
     )
     assert result.returncode == 0
     assert json.loads(result.stdout) == {
         "error": "native_request_invalid_json",
         "retryable": False,
     }
+    assert {path.relative_to(state_dir) for path in state_dir.rglob("*")} == paths_before

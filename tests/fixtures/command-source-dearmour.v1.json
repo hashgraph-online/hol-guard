@@ -10487,14 +10487,14 @@
                 ],
                 "op": "any.v1"
               },
-              "rule_id": "command.dearmour.overwrite",
-              "rule_version": "1.0.0",
-              "safe_variants": [],
+              "native_capability": null,
               "permission_id": "command.dearmour.permission.overwrite",
               "risk_classes": [
                 "destructive_shell"
               ],
-              "native_capability": null,
+              "rule_id": "command.dearmour.overwrite",
+              "rule_version": "1.0.0",
+              "safe_variants": [],
               "safer_alternatives": [
                 "Run dearmour without --overwrite or --merge first.",
                 "Check the destination directory before extracting."
@@ -10513,18 +10513,29 @@
       }
     ],
     "trust": {
-      "schemaVersion": "guard.extension-trust-class-map.v1",
-      "publishers": {
-        "hol": {
-          "id": "hol",
-          "displayName": "Hashgraph Online"
-        },
-        "hol-curated": {
-          "id": "hol-curated",
-          "displayName": "HOL curated library"
-        }
-      },
       "classes": {
+        "external": [
+          "command.blitcp",
+          "command.cloudg",
+          "command.cogext",
+          "command.ctty",
+          "command.dearmour",
+          "command.digline",
+          "command.genclave",
+          "command.gitsync",
+          "command.mcp-filesystem",
+          "command.mcp-instapods",
+          "command.mcp-pr-ui-compare",
+          "command.mcp-reaper",
+          "command.noodle",
+          "command.ollama",
+          "command.probe",
+          "command.remote.essh",
+          "command.repo2nb",
+          "command.skill-base",
+          "command.skill-sunset",
+          "command.uivoid"
+        ],
         "first-party": [
           "command.container-runtime",
           "command.data-protection",
@@ -10590,21 +10601,19 @@
           "command.storage.azure-blob",
           "command.storage.google-cloud",
           "command.storage.minio"
-        ],
-        "external": [
-          "command.blitcp",
-          "command.dearmour",
-          "command.mcp-filesystem",
-          "command.mcp-instapods",
-          "command.noodle",
-          "command.ollama",
-          "command.probe",
-          "command.remote.essh",
-          "command.repo2nb",
-          "command.skill-sunset",
-          "command.uivoid"
         ]
-      }
+      },
+      "publishers": {
+        "hol": {
+          "displayName": "Hashgraph Online",
+          "id": "hol"
+        },
+        "hol-curated": {
+          "displayName": "HOL curated library",
+          "id": "hol-curated"
+        }
+      },
+      "schemaVersion": "guard.extension-trust-class-map.v1"
     }
   },
   "cases": [

@@ -219,7 +219,11 @@ def _exercise_installed_routes(
                 )
             )
         for event, payload in events:
-            response_payload = _installed_hook_request(daemon, guard_home, workspace, harness, event, payload)
+            try:
+                response_payload = _installed_hook_request(daemon, guard_home, workspace, harness, event, payload)
+            except TimeoutError as error:
+                # Report the failed route without exposing tokens or replaying a possibly dispatched request.
+                raise RuntimeError(f"installed hook transport timed out: harness={harness} event={event}") from error
             if response_payload is None:
                 raise RuntimeError(f"empty response for {harness} {event}")
             _require(
@@ -269,7 +273,7 @@ def _exercise_mode_invariants(
             mode_invariants[mode] = {
                 "decision": response.get("decision"),
                 "reason_code": response.get("reason_code"),
-                "python_oracle": daemon._server.hook_worker.test_oracle is not None,
+                "python_oracle": getattr(daemon._server.hook_worker, "test_oracle", None) is not None,
             }
             _require(mode_invariants[mode]["python_oracle"] is False, mode_invariants[mode])
     finally:
@@ -321,10 +325,15 @@ def _installed_hook_corpus(root: Path) -> dict[str, object]:
         worker_stats = wait_for_route_corpus(
             daemon._server.hook_worker.metrics,
             expected=len(route_receipts),
+            timeout_seconds=45.0 if os.name == "nt" else 5.0,
         )
         writer = daemon._server.runtime_hook_evidence_writer
         mode_invariants = _exercise_mode_invariants(daemon, guard_home, workspace)
-        evidence_stats = wait_for_receipt_corpus(writer, expected=len(route_receipts))
+        evidence_stats = wait_for_receipt_corpus(
+            writer,
+            expected=len(route_receipts),
+            timeout_seconds=45.0 if os.name == "nt" else 5.0,
+        )
     finally:
         daemon.stop()
     if not isinstance(worker_stats, Mapping) or not isinstance(evidence_stats, Mapping):
@@ -335,7 +344,7 @@ def _installed_hook_corpus(root: Path) -> dict[str, object]:
         raise RuntimeError(f"native_default_auto_probe_failed: invalid route metrics: {worker_stats}")
     observed_routes = cast(dict[str, int], observed_routes_raw)
     _require(expected > 0, "installed hook corpus is empty")
-    _require(expected == 21, {"expected": expected, "routes": routes})
+    _require(expected == 23, {"expected": expected, "routes": routes})
     _require(sum(observed_routes.values()) == expected, worker_stats)
     _require(observed_routes.get("native_resident") == expected, worker_stats)
     _require(receipt_corpus_is_complete(evidence_stats, expected=expected), evidence_stats)

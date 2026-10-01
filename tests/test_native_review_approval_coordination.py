@@ -10,12 +10,12 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker, HookWorkerUnsupported
+from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
 from codex_plugin_scanner.guard.native_decision_receipt import canonical_receipt_bytes
 from codex_plugin_scanner.guard.store import GuardStore
 
 
-def _edge(harness: str, *, url: str = "https://example.test") -> dict[str, object]:
+def _edge(harness: str, *, url: str = "https://example.test", action_type: str = "network") -> dict[str, object]:
     return {
         "schema": "guard-hook-edge-result.v2",
         "authority": "rust",
@@ -26,10 +26,11 @@ def _edge(harness: str, *, url: str = "https://example.test") -> dict[str, objec
             "schema": "guard-pre-tool-result.v1",
             "version": 1,
             "authority": "rust",
+            "action": {"action_type": action_type},
             "decision": "deny",
             "policy_action": "review",
             "minimum_action": "review",
-            "reason_code": "native_network_review",
+            "reason_code": "native_pre_tool_unknown_review" if action_type == "unknown" else "native_network_review",
             "reason": "HOL Guard requires review before this network action can execute.",
         },
     }
@@ -258,17 +259,14 @@ def test_native_review_does_not_raise_worker_unsupported(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     worker, _store = _worker(tmp_path, monkeypatch, _edge("codex"))
-    try:
-        worker.review_http_payload(
-            payload={"hook_event_name": "PreToolUse", "tool_input": {"url": "https://example.test"}},
-            params={},
-            default_harness="codex",
-            home_dir=tmp_path / "home",
-            guard_home=tmp_path / "guard-home",
-            workspace=tmp_path / "workspace",
-        )
-    except HookWorkerUnsupported:
-        pytest.fail("native review must queue an approval instead of raising HookWorkerUnsupported")
+    worker.review_http_payload(
+        payload={"hook_event_name": "PreToolUse", "tool_input": {"url": "https://example.test"}},
+        params={},
+        default_harness="codex",
+        home_dir=tmp_path / "home",
+        guard_home=tmp_path / "guard-home",
+        workspace=tmp_path / "workspace",
+    )
 
 
 def test_native_review_queue_failure_fails_closed(

@@ -1,0 +1,50 @@
+name: Evaluation wheel CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  UV_HTTP_TIMEOUT: "120"
+
+concurrency:
+  group: evaluation-wheel-${{ github.event_name }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  staged-evaluator-wheel:
+    name: Staged evaluator wheel (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-15]
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - name: Install locked dependencies without the source project
+        run: uv sync --frozen --no-dev --group ci-test --no-install-project --python 3.12
+      - name: Build and install the wheel
+        run: |
+          uv build --wheel --out-dir evaluation-dist
+          uv pip install --python .venv/bin/python --no-deps evaluation-dist/*.whl
+      - name: Verify installed staged evaluator with synthetic fixtures
+        run: |
+          VERSION=$(.venv/bin/python scripts/sync_repo_version.py --check)
+          .venv/bin/python -I scripts/ci/check_evaluation_wheel.py --expected-version "$VERSION"

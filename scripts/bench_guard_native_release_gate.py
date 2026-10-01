@@ -28,12 +28,12 @@ from pathlib import Path
 from codex_plugin_scanner.guard.codex_hook_launch_runtime import run_isolated_hook_process
 from codex_plugin_scanner.guard.daemon.hook_process_runner import HookProcessRunner
 from codex_plugin_scanner.guard.native_policy_test_support import native_policy_snapshot
+from codex_plugin_scanner.guard.native_resident_client import close_native_residents, native_resident_client_request
 from codex_plugin_scanner.guard.native_route_receipt import native_hook_route, reset_native_hook_route
 from codex_plugin_scanner.guard.native_runtime import (
     native_runtime_status,
     review_post_tool_native,
 )
-from codex_plugin_scanner.guard.native_runtime_resident import close_resident_native_runtimes, resident_native_request
 from codex_plugin_scanner.guard.runtime.hook_review_types import HookReviewRequest
 
 _MAX_RESPONSE_BYTES = 2 * 1024 * 1024
@@ -110,9 +110,10 @@ def _wire_request(
     guard_home: Path,
     request_id: str = "native-benchmark-oneshot",
     sample: int | None = None,
+    policy_snapshot: Mapping[str, object] | None = None,
 ) -> str:
-    return json.dumps(
-        {
+    if policy_snapshot is None:
+        request = {
             "protocol_version": 1,
             "request_id": request_id,
             "harness": "claude-code",
@@ -124,9 +125,30 @@ def _wire_request(
             "source_ref_external_allowed": False,
             "observe_mode": False,
             "deadline_budget_ms": 5_000,
-        },
-        separators=(",", ":"),
-    )
+        }
+    else:
+        generation = policy_snapshot.get("generation")
+        request = {
+            "schema": "guard-hook-envelope.v2",
+            "request_id": request_id,
+            "harness": "claude-code",
+            "event": "PostToolUse",
+            "raw_payload": _payload(sample),
+            "deadline_budget_ms": 5_000,
+            "policy_generation": generation,
+            "policy_snapshot": {
+                "generation": generation,
+                "policy_digest": policy_snapshot.get("policy_digest"),
+                "runtime_identity": policy_snapshot.get("runtime_identity"),
+            },
+            "source": {
+                "cwd": str(workspace),
+                "home_dir": str(workspace),
+                "guard_home": str(guard_home),
+                "source_ref_external_allowed": False,
+            },
+        }
+    return json.dumps(request, separators=(",", ":"))
 
 
 def _native_environment(workspace: Path) -> dict[str, str]:
@@ -212,6 +234,7 @@ def _bench_native_warm(
     workspace: Path,
     guard_home: Path,
     iterations: int,
+    policy_snapshot: Mapping[str, object],
 ) -> list[float]:
     """Measure direct authenticated resident IPC as a diagnostic."""
     status = native_runtime_status()
@@ -224,11 +247,11 @@ def _bench_native_warm(
             guard_home=guard_home,
             request_id=f"native-warm-{index}",
             sample=index,
+            policy_snapshot=policy_snapshot,
         )
         started = time.perf_counter()
-        response_bytes = resident_native_request(
+        response_bytes = native_resident_client_request(
             executable=status.identity.path,
-            identity_sha256=status.identity.sha256,
             guard_home=guard_home,
             environment=_native_environment(workspace),
             payload=request.encode("utf-8"),
@@ -237,8 +260,11 @@ def _bench_native_warm(
         values.append((time.perf_counter() - started) * 1_000.0)
         if response_bytes is None:
             raise RuntimeError("Native resident IPC request failed")
-        response = json.loads(response_bytes)
-        if response.get("decision") != "allow":
+        envelope = json.loads(response_bytes)
+        if envelope.get("schema") != "guard-hook-edge-result.v2" or envelope.get("authority") != "rust":
+            raise RuntimeError("Native resident IPC returned an invalid authority envelope")
+        response = envelope.get("result", {})
+        if not isinstance(response, dict) or response.get("decision") != "allow":
             raise RuntimeError(
                 "Native resident runtime did not return the expected allow decision: "
                 f"sample={index} response={response!r}"
@@ -325,7 +351,7 @@ def _bench_native_oneshot(
         if result.returncode != 0 or result.timed_out or result.containment_failed:
             raise RuntimeError("Cold native one-shot runtime failed")
         response = json.loads(result.stdout)
-        if response.get("decision") != "allow":
+        if not isinstance(response, dict) or response.get("decision") != "allow":
             raise RuntimeError("Cold native one-shot runtime returned an unexpected decision")
     return values
 
@@ -374,7 +400,7 @@ def _run_benchmarks(
             iterations=warm_iterations,
         )
 
-        close_resident_native_runtimes()
+        close_native_residents()
         try:
             with native_policy_snapshot(guard_home) as snapshot:
                 reset_native_hook_route()
@@ -403,10 +429,11 @@ def _run_benchmarks(
                     workspace=workspace,
                     guard_home=guard_home,
                     iterations=warm_iterations,
+                    policy_snapshot=snapshot,
                 )
         finally:
             _stop_native_resident(runtime, guard_home / "native-runtime", workspace)
-            close_resident_native_runtimes()
+            close_native_residents()
 
         python_cold = _bench_python_cold(
             workspace=workspace,

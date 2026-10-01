@@ -91,8 +91,16 @@ assert(
   "workspace audit errors should activate the project-folder recovery flow",
 );
 assert(
-  supplyChainAuditUserMessage(workspaceError)?.includes("Enter the project folder"),
+  supplyChainAuditUserMessage(workspaceError)?.includes("package manifest"),
   "workspace audit errors should direct users to the dashboard recovery field",
+);
+const busyPickerError = new GuardHarnessActionError(409, {
+  error: "folder_picker_busy",
+  operation: "choose-folder",
+});
+assert(
+  supplyChainAuditUserMessage(busyPickerError)?.includes("already open"),
+  "a busy folder picker should tell the user the dialog is already open",
 );
 assert(
   !isSupplyChainAuditConnectError(workspaceError),

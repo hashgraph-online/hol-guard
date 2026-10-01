@@ -9,8 +9,11 @@ from pathlib import Path
 from typing import Any, cast
 
 from .native_approval_errors import FINITE_FAILURE_CODES
-from .native_decision_receipt import receipt_matches_edge
-from .native_resident_client import native_resident_client_request, record_native_resident_client_failure_code
+from .native_decision_receipt import receipt_matches_edge, valid_prompt_risk_classes
+from .native_resident_client import (
+    native_resident_client_request,
+    record_native_resident_client_failure_code,
+)
 from .native_route_receipt import record_native_hook_result
 from .native_runtime import _isolated_environment, native_runtime_status
 from .native_runtime_resilience import (
@@ -130,7 +133,7 @@ def _valid_pre_tool_result_fields(result: dict[str, Any]) -> bool:
     )
 
 
-def _valid_pre_tool_action(action: dict[str, Any], *, harness: str) -> bool:
+def _valid_pre_tool_action(action: dict[str, Any], *, harness: str, event: str) -> bool:
     action_type = action.get("action_type")
     operation = action.get("operation")
     action_harness = action.get("harness")
@@ -138,7 +141,8 @@ def _valid_pre_tool_action(action: dict[str, Any], *, harness: str) -> bool:
         action.get("schema") != _GENERIC_PRE_TOOL_ACTION_SCHEMA
         or action.get("version") != 1
         or action_harness != harness
-        or action.get("event") != "PreToolUse"
+        or action.get("event") != event
+        or (event == "UserPromptSubmit" and action_type != "prompt")
         or not isinstance(action_type, str)
         or action_type not in _PRE_TOOL_ACTION_TYPES
         or not isinstance(operation, str)
@@ -153,10 +157,15 @@ def _valid_pre_tool_action(action: dict[str, Any], *, harness: str) -> bool:
     return operation in _PRE_TOOL_ACTION_OPERATIONS[action_type]
 
 
-def _decode_pre_tool_result(result: object, *, harness: str) -> bool:
-    if not isinstance(result, dict) or set(result) not in (
-        _PRE_TOOL_RESULT_KEYS,
-        _PRE_TOOL_RESULT_KEYS | {"command_extensions"},
+def _decode_pre_tool_result(result: object, *, harness: str, event: str = "PreToolUse") -> bool:
+    if (
+        not isinstance(result, dict)
+        or not set(result).issuperset(_PRE_TOOL_RESULT_KEYS)
+        or set(result) - _PRE_TOOL_RESULT_KEYS - {"command_extensions", "prompt_risk_classes"}
+    ):
+        return False
+    if "prompt_risk_classes" in result and (
+        event != "UserPromptSubmit" or not valid_prompt_risk_classes(result["prompt_risk_classes"])
     ):
         return False
     if "command_extensions" in result:
@@ -173,7 +182,7 @@ def _decode_pre_tool_result(result: object, *, harness: str) -> bool:
     action = result.get("action")
     if not isinstance(action, dict) or set(action) != _PRE_TOOL_ACTION_KEYS:
         return False
-    if not _valid_pre_tool_action(action, harness=harness):
+    if not _valid_pre_tool_action(action, harness=harness, event=event):
         return False
     decision = result["decision"]
     minimum_action = result["minimum_action"]
@@ -213,7 +222,7 @@ def _decode_edge(payload: object) -> dict[str, Any] | None:
         payload.get("schema") != "guard-hook-edge-result.v2"
         or payload.get("authority") != "rust"
         or not isinstance(event_name, str)
-        or event_name not in {"PreToolUse", "PostToolUse"}
+        or event_name not in {"PreToolUse", "PostToolUse", "UserPromptSubmit"}
         or not isinstance(payload_kind, str)
         or payload_kind not in {"inline", "source_file_ref", "encrypted_payload_ref"}
         or not isinstance(payload.get("harness"), str)
@@ -222,7 +231,11 @@ def _decode_edge(payload: object) -> dict[str, Any] | None:
         or not isinstance(payload.get("result"), dict)
     ):
         return None
-    if event_name == "PreToolUse" and not _decode_pre_tool_result(payload["result"], harness=payload["harness"]):
+    if event_name in {"PreToolUse", "UserPromptSubmit"} and not _decode_pre_tool_result(
+        payload["result"], harness=payload["harness"], event=event_name
+    ):
+        return None
+    if event_name == "UserPromptSubmit" and payload_kind != "inline":
         return None
     if event_name == "PreToolUse" and payload_kind == "encrypted_payload_ref":
         return None
@@ -304,6 +317,9 @@ def review_raw_hook_native(
         "beforereadfile",
         "beforewritefile",
         "beforemcpexecution",
+        "userpromptsubmit",
+        "userpromptsubmitted",
+        "prompt",
     }:
         required_features.add("pre-tool-generic-authority-v1")
     if (

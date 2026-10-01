@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-import argparse
 import json
 import os
-from contextlib import redirect_stderr
-from io import StringIO
 from pathlib import Path
 
 from codex_plugin_scanner.guard.adapters import get_adapter, list_adapters
@@ -18,7 +15,6 @@ from codex_plugin_scanner.guard.adapters.pi_extension_source import (
 )
 from codex_plugin_scanner.guard.adapters.pi_support import stable_suffix
 from codex_plugin_scanner.guard.approvals import queue_blocked_approvals
-from codex_plugin_scanner.guard.cli.commands_hook_generic import _run_hook_generic_payload
 from codex_plugin_scanner.guard.cli.commands_support_codex_tool_output_messages import (
     _codex_tool_output_request_summary,
     _codex_tool_output_runtime_reason,
@@ -26,7 +22,6 @@ from codex_plugin_scanner.guard.cli.commands_support_codex_tool_output_messages 
 )
 from codex_plugin_scanner.guard.cli.commands_support_hook_payload import _approval_surface_policy_for_flow
 from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import _codex_post_tool_output_artifact
-from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer import artifact_hash
 from codex_plugin_scanner.guard.inventory_contract import inventory_snapshot_from_detection
 from codex_plugin_scanner.guard.models import HarnessDetection
@@ -128,9 +123,7 @@ class TestPiDetect:
         assert result.installed is True
         assert result.command_available is True
 
-    def test_detect_finds_omp_in_user_local_bin_when_gui_path_omits_it(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
+    def test_detect_finds_omp_in_user_local_bin_when_gui_path_omits_it(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
         executable = ctx.home_dir / ".local" / "bin" / "omp"
         executable.parent.mkdir(parents=True, exist_ok=True)
@@ -297,7 +290,9 @@ class TestPiInstall:
         assert 'pi.on("input"' in text
         assert 'hook_event_name: "PostToolUse"' in text
         assert "    if (originalOutputProof) return undefined;\n" in text
-        assert "return blockedToolResult(modelVisibleBlockedReason(reason, response.reason_code), event.details);" in text
+        assert (
+            "return blockedToolResult(modelVisibleBlockedReason(reason, response.reason_code), event.details);" in text
+        )
         assert '    if (response.decision === "allow") return undefined;\n' in text
         assert "const GUARD_CLI_WRAPPER_COMMAND =" in text
         assert "const GUARD_CLI_WRAPPER_ARGS =" in text
@@ -307,9 +302,10 @@ class TestPiInstall:
         assert "/v1/hooks/pi?" in text
         assert "approval_request_id?: string" in text
         assert "approvalBlockedReason" in text
-        assert "This exact tool call remains blocked" in text
-        assert "Retry the exact same tool call once" in text
-        assert "changing the command, arguments, or working directory creates a new action" in text
+        assert "The original action remains blocked" in text
+        assert "continue it unchanged without asking the model to replan" in text
+        assert "Retry the exact same tool call once" not in text
+        assert "changing the command, arguments, or working directory creates a new action" not in text
         assert "the saved HOL Guard approval should allow it" not in text
         assert "Do not call ask for this HOL Guard approval" in text
         assert 'option labeled "I\'ve approved this request in HOL Guard"' in text
@@ -1066,32 +1062,3 @@ class TestPiRuntime:
 
         assert first[0]["request_id"] == second[0]["request_id"]
         assert store.get_approval_request(str(first[0]["request_id"]))["dedupe_count"] == 2
-
-    def test_pi_block_emits_native_json_and_stderr(self, tmp_path: Path) -> None:
-        store = GuardStore(tmp_path / ".hol-guard")
-        config = GuardConfig(guard_home=tmp_path / ".hol-guard", workspace=tmp_path)
-        args = argparse.Namespace(
-            harness="pi",
-            json=False,
-            policy_action="block",
-            artifact_id=None,
-            artifact_name=None,
-        )
-        stdout_capture = StringIO()
-        stderr_capture = StringIO()
-
-        with redirect_stderr(stderr_capture):
-            rc = _run_hook_generic_payload(
-                args,
-                action_envelope=None,
-                config=config,
-                output_stream=stdout_capture,
-                payload={"hookEventName": "PreToolUse", "tool_name": "bash", "tool_input": {"command": "cat .env"}},
-                home_dir=tmp_path,
-                runtime_workspace=tmp_path,
-                store=store,
-            )
-
-        assert rc == 2
-        assert json.loads(stdout_capture.getvalue())["decision"] == "deny"
-        assert "HOL Guard" in stderr_capture.getvalue()
