@@ -1,165 +1,2396 @@
 {
-  "schema": "hol-guard.runtime-retirement-ledger.v1",
-  "baseline_sha": "b22841ac004b9d8a6deccdeee1a1be3600fddfb9",
-  "scope": "RMN-009 resident retirement only; remaining PRD phases are not marked complete",
-  "retired_source_paths": [
-    "src/codex_plugin_scanner/guard/native_runtime_resident.py",
-    "src/codex_plugin_scanner/guard/native_runtime_resident_transport.py"
-  ],
-  "retired_tests": [
-    {
-      "old_node": "ci/native_runtime/test_guard_native_runtime_resident.py::test_resident_runtime_reuses_one_contained_service",
-      "replacement_nodes": [
-        "ci/native_runtime/test_native_managed_resident.py::test_production_client_reuses_authenticated_native_generation"
-      ],
-      "status": "native_behavior_ported_requires_ci"
-    },
-    {
-      "old_node": "ci/native_runtime/test_guard_native_runtime_resident.py::test_start_lock_wait_stays_inside_request_deadline",
-      "replacement_nodes": [
-        "rust/crates/guard-runtime/src/managed_resident_tests.rs::client_deadline_is_bounded",
-        "ci/native_runtime/test_native_hook_client_timeout.py::test_native_hook_client_start_timeout_contains_new_managed_processes"
-      ],
-      "status": "native_behavior_ported_requires_ci"
-    },
-    {
-      "old_node": "ci/native_runtime/test_guard_native_runtime_resident.py::test_startup_timeout_signals_new_resident_for_containment",
-      "replacement_nodes": [
-        "ci/native_runtime/test_native_hook_client_timeout.py::test_native_hook_client_start_timeout_contains_new_managed_processes"
-      ],
-      "status": "native_behavior_ported_requires_ci"
-    },
-    {
-      "old_node": "ci/native_runtime/test_guard_native_runtime_resident.py::test_ensure_started_replaces_supervisor_after_external_stop",
-      "replacement_nodes": [
-        "ci/native_runtime/test_native_hook_client.py::test_native_hook_client_recovers_after_exact_managed_process_exit",
-        "ci/native_runtime/test_native_hook_client.py::test_native_hook_client_recovers_after_supervisor_exit"
-      ],
-      "status": "native_behavior_ported_requires_ci"
-    },
-    {
-      "old_node": "ci/native_runtime/test_guard_native_runtime_resident.py::test_close_retains_tracking_until_resident_thread_stops",
-      "replacement_nodes": [
-        "ci/native_runtime/test_native_hook_client.py::test_native_hook_client_stop_reaps_managed_processes",
-        "tests/test_native_resident_client_cleanup.py::test_close_native_residents_stops_tracked_production_pool"
-      ],
-      "status": "native_behavior_ported_requires_ci"
-    },
-    {
-      "old_node": "ci/native_runtime/test_guard_native_runtime_resident.py::test_request_shares_one_deadline_across_probe_start_and_retry",
-      "replacement_nodes": [
-        "rust/crates/guard-runtime/src/managed_resident_tests.rs::client_deadline_is_bounded",
-        "ci/native_runtime/test_native_hook_client_timeout.py::test_native_hook_client_start_timeout_contains_new_managed_processes"
-      ],
-      "status": "native_behavior_ported_requires_ci"
-    },
-    {
-      "old_node": "ci/native_runtime/test_guard_native_runtime_resident.py::test_resident_runtime_falls_back_for_overlong_socket_path",
-      "replacement_nodes": [
-        "ci/native_runtime/test_native_managed_resident.py::test_native_endpoint_supports_long_guard_home_paths"
-      ],
-      "status": "native_behavior_ported_requires_ci"
-    },
-    {
-      "old_node": "ci/native_runtime/test_guard_native_runtime_resident_cross_process.py::test_independent_supervisors_do_not_replace_one_live_resident",
-      "replacement_nodes": [
-        "ci/native_runtime/test_native_managed_resident_cross_process.py::test_independent_production_clients_share_one_native_generation"
-      ],
-      "status": "native_behavior_ported_requires_ci"
-    },
-    {
-      "old_node": "ci/native_runtime/test_guard_native_runtime_resident_cross_process.py::test_spawned_supervisors_share_one_resident_owner",
-      "replacement_nodes": [
-        "ci/native_runtime/test_native_managed_resident_cross_process.py::test_independent_production_clients_share_one_native_generation"
-      ],
-      "status": "native_behavior_ported_requires_ci"
-    },
-    {
-      "old_node": "ci/native_runtime/test_guard_native_runtime_resident_cross_process.py::test_resident_close_preserves_replacement_socket",
-      "replacement_nodes": [
-        "rust/crates/guard-runtime/src/resident_endpoint.rs::dropping_owned_endpoint_preserves_replacement_socket"
-      ],
-      "status": "native_behavior_ported_requires_ci"
-    },
-    {
-      "old_node": "ci/native_runtime/test_guard_native_runtime_windows_resident.py::test_invalid_loopback_server_proof_receives_no_authenticated_payload",
-      "replacement_nodes": [
-        "rust/crates/guard-runtime/src/resident_client_tests.rs::rejected_server_proof_never_receives_client_proof_or_request_payload"
-      ],
-      "status": "native_behavior_ported_requires_ci"
-    },
-    {
-      "old_node": "ci/native_runtime/test_guard_native_runtime_windows_resident.py::test_loopback_proof_is_role_bound_and_matches_known_vector",
-      "replacement_nodes": [
-        "rust/crates/guard-runtime/src/resident_client_tests.rs::resident_proofs_are_role_bound_and_match_fixed_hmac_vectors"
-      ],
-      "status": "native_behavior_ported_requires_ci"
-    },
-    {
-      "old_node": "ci/native_runtime/test_guard_native_runtime_windows_resident.py::test_windows_service_rotates_auth_secret_and_stays_closed",
-      "replacement_nodes": [
-        "ci/native_runtime/test_native_managed_resident.py::test_new_native_generation_rotates_its_authentication_secret",
-        "ci/native_runtime/test_native_managed_resident.py::test_production_explicit_shutdown_retires_native_generation"
-      ],
-      "status": "native_behavior_ported_requires_ci"
-    },
-    {
-      "old_node": "ci/native_runtime/test_guard_native_runtime_windows_resident.py::test_windows_native_runtime_reuses_authenticated_resident_service",
-      "replacement_nodes": [
-        "ci/native_runtime/test_native_managed_resident.py::test_production_client_reuses_authenticated_native_generation"
-      ],
-      "status": "native_behavior_ported_requires_ci"
-    },
-    {
-      "old_node": "tests/test_native_runtime_admission.py::test_native_resident_path_restarts_after_transient_transport_loss",
-      "replacement_nodes": [
-        "ci/native_runtime/test_native_hook_client.py::test_native_hook_client_recovers_after_exact_managed_process_exit"
-      ],
-      "status": "native_behavior_ported_requires_ci"
-    },
-    {
-      "old_node": "tests/test_native_runtime_admission.py::test_native_resident_path_does_not_retry_refused_start",
-      "replacement_nodes": [
-        "rust/crates/guard-runtime/src/resident_client_tests.rs::truncated_server_proof_is_never_retryable",
-        "ci/native_runtime/test_native_hook_client.py::test_native_hook_client_rejects_self_authenticated_forged_state"
-      ],
-      "status": "native_behavior_ported_requires_ci"
-    }
-  ],
-  "preserved_tests": [
-    {
-      "old_node": "ci/native_runtime/test_guard_native_runtime_resident.py::test_hook_worker_auto_is_native_first",
-      "new_node": "ci/native_runtime/test_native_hook_worker_modes.py::test_hook_worker_auto_is_native_first",
-      "reason": "Unrelated hook-worker behavior preserved unchanged until its own semantic cutover."
-    },
-    {
-      "old_node": "ci/native_runtime/test_guard_native_runtime_resident.py::test_hook_worker_auto_fails_closed_when_native_unavailable",
-      "new_node": "ci/native_runtime/test_native_hook_worker_modes.py::test_hook_worker_auto_fails_closed_when_native_unavailable",
-      "reason": "Unrelated hook-worker behavior preserved unchanged until its own semantic cutover."
-    },
-    {
-      "old_node": "ci/native_runtime/test_guard_native_runtime_resident.py::test_hook_worker_shadow_compares_explicit_python_oracle",
-      "new_node": "ci/native_runtime/test_native_hook_worker_modes.py::test_hook_worker_shadow_compares_explicit_python_oracle",
-      "reason": "Unrelated hook-worker behavior preserved unchanged until its own semantic cutover."
-    },
-    {
-      "old_node": "ci/native_runtime/test_guard_native_runtime_resident.py::test_hook_worker_shadow_ignores_native_exception",
-      "new_node": "ci/native_runtime/test_native_hook_worker_modes.py::test_hook_worker_shadow_ignores_native_exception",
-      "reason": "Unrelated hook-worker behavior preserved unchanged until its own semantic cutover."
-    }
-  ],
-  "unchanged_regression_suites": [
-    "tests/test_native_runtime_admission.py",
-    "tests/test_native_resident_client_cleanup.py",
-    "tests/test_native_resident_client_pool.py",
-    "ci/native_runtime/test_native_hook_client.py",
-    "ci/native_runtime/test_native_hook_client_timeout.py",
-    "ci/native_runtime/test_native_hook_client_transport.py"
-  ],
-  "proof_status": {
-    "source_and_regression_tests": "local execution recorded in PR; required CI governs merge",
-    "installed_product": "required before acceptance",
-    "all_prd_tasks": "not_complete"
+ "schema": "hol-guard.runtime-retirement-ledger.v1",
+ "baseline_sha": "b22841ac004b9d8a6deccdeee1a1be3600fddfb9",
+ "scope": "RMN-009 resident retirement complete; offline archive inspection retired to guard-archive via hol-guard-runtime archive-inspect; RMN-008 and RMN-010 through RMN-014 hook-oracle cutover incomplete pending live prompt, permission, and package caller closure",
+ "retired_source_paths": [
+  "src/codex_plugin_scanner/guard/cli/commands_hook_claude.py",
+  "src/codex_plugin_scanner/guard/cli/commands_hook_compat_bootstrap.py",
+  "src/codex_plugin_scanner/guard/cli/commands_hook_compat_loader.py",
+  "src/codex_plugin_scanner/guard/cli/commands_hook_compatibility.py",
+  "src/codex_plugin_scanner/guard/cli/commands_hook_copilot.py",
+  "src/codex_plugin_scanner/guard/cli/commands_hook_generic.py",
+  "src/codex_plugin_scanner/guard/cli/commands_hook_payload_preparation.py",
+  "src/codex_plugin_scanner/guard/cli/commands_hook_runtime_eval.py",
+  "src/codex_plugin_scanner/guard/cli/commands_hook_runtime_finish.py",
+  "src/codex_plugin_scanner/guard/cli/commands_hook_runtime_review.py",
+  "src/codex_plugin_scanner/guard/cli/commands_hook_runtime_state.py",
+  "src/codex_plugin_scanner/guard/cli/commands_hook_source_ref.py",
+  "src/codex_plugin_scanner/guard/native_runtime_resident.py",
+  "src/codex_plugin_scanner/guard/native_runtime_resident_transport.py",
+  "src/codex_plugin_scanner/guard/runtime/hook_content_scanner.py",
+  "src/codex_plugin_scanner/guard/runtime/hook_decision_cache.py",
+  "src/codex_plugin_scanner/guard/runtime/hook_output_text.py",
+  "src/codex_plugin_scanner/guard/runtime/hook_payload_reference.py",
+  "src/codex_plugin_scanner/guard/runtime/hook_review_engine.py",
+  "src/codex_plugin_scanner/guard/runtime/hook_source_read.py",
+  "src/codex_plugin_scanner/guard/native_approval_bridge.py",
+  "src/codex_plugin_scanner/guard/native_approval_bridge_v3.py",
+  "src/codex_plugin_scanner/guard/native_approval_models.py",
+  "src/codex_plugin_scanner/guard/native_approval_v4_bridge.py",
+  "src/codex_plugin_scanner/guard/runtime/offline_archive_contract.py",
+  "src/codex_plugin_scanner/guard/runtime/offline_archive_inspection.py",
+  "src/codex_plugin_scanner/guard/runtime/offline_archive_policy.py",
+  "src/codex_plugin_scanner/guard/runtime/offline_archive_sandbox.py",
+  "src/codex_plugin_scanner/guard/runtime/offline_archive_worker.py"
+ ],
+ "retired_tests": [
+  {
+   "old_node": "ci/native_runtime/test_guard_native_runtime_resident.py::test_resident_runtime_reuses_one_contained_service",
+   "replacement_nodes": [
+    "ci/native_runtime/test_native_managed_resident.py::test_production_client_reuses_authenticated_native_generation"
+   ],
+   "status": "native_behavior_ported_requires_ci"
   },
-  "implementation_base_sha": "1dc81dd4319cdf18e4b1c0fd3d061f732601b188"
+  {
+   "old_node": "ci/native_runtime/test_guard_native_runtime_resident.py::test_start_lock_wait_stays_inside_request_deadline",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/managed_resident_tests.rs::client_deadline_is_bounded",
+    "ci/native_runtime/test_native_hook_client_timeout.py::test_native_hook_client_start_timeout_contains_new_managed_processes"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "ci/native_runtime/test_guard_native_runtime_resident.py::test_startup_timeout_signals_new_resident_for_containment",
+   "replacement_nodes": [
+    "ci/native_runtime/test_native_hook_client_timeout.py::test_native_hook_client_start_timeout_contains_new_managed_processes"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "ci/native_runtime/test_guard_native_runtime_resident.py::test_ensure_started_replaces_supervisor_after_external_stop",
+   "replacement_nodes": [
+    "ci/native_runtime/test_native_hook_client.py::test_native_hook_client_recovers_after_exact_managed_process_exit",
+    "ci/native_runtime/test_native_hook_client.py::test_native_hook_client_recovers_after_supervisor_exit"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "ci/native_runtime/test_guard_native_runtime_resident.py::test_close_retains_tracking_until_resident_thread_stops",
+   "replacement_nodes": [
+    "ci/native_runtime/test_native_hook_client.py::test_native_hook_client_stop_reaps_managed_processes",
+    "tests/test_native_resident_client_cleanup.py::test_close_native_residents_stops_tracked_production_pool"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "ci/native_runtime/test_guard_native_runtime_resident.py::test_request_shares_one_deadline_across_probe_start_and_retry",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/managed_resident_tests.rs::client_deadline_is_bounded",
+    "ci/native_runtime/test_native_hook_client_timeout.py::test_native_hook_client_start_timeout_contains_new_managed_processes"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "ci/native_runtime/test_guard_native_runtime_resident.py::test_resident_runtime_falls_back_for_overlong_socket_path",
+   "replacement_nodes": [
+    "ci/native_runtime/test_native_managed_resident.py::test_native_endpoint_supports_long_guard_home_paths"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "ci/native_runtime/test_guard_native_runtime_resident_cross_process.py::test_independent_supervisors_do_not_replace_one_live_resident",
+   "replacement_nodes": [
+    "ci/native_runtime/test_native_managed_resident_cross_process.py::test_independent_production_clients_share_one_native_generation"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "ci/native_runtime/test_guard_native_runtime_resident_cross_process.py::test_spawned_supervisors_share_one_resident_owner",
+   "replacement_nodes": [
+    "ci/native_runtime/test_native_managed_resident_cross_process.py::test_independent_production_clients_share_one_native_generation"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "ci/native_runtime/test_guard_native_runtime_resident_cross_process.py::test_resident_close_preserves_replacement_socket",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/resident_endpoint.rs::dropping_owned_endpoint_preserves_replacement_socket"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "ci/native_runtime/test_guard_native_runtime_windows_resident.py::test_invalid_loopback_server_proof_receives_no_authenticated_payload",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/resident_client_tests.rs::rejected_server_proof_never_receives_client_proof_or_request_payload"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "ci/native_runtime/test_guard_native_runtime_windows_resident.py::test_loopback_proof_is_role_bound_and_matches_known_vector",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/resident_client_tests.rs::resident_proofs_are_role_bound_and_match_fixed_hmac_vectors"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "ci/native_runtime/test_guard_native_runtime_windows_resident.py::test_windows_service_rotates_auth_secret_and_stays_closed",
+   "replacement_nodes": [
+    "ci/native_runtime/test_native_managed_resident.py::test_new_native_generation_rotates_its_authentication_secret",
+    "ci/native_runtime/test_native_managed_resident.py::test_production_explicit_shutdown_retires_native_generation"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "ci/native_runtime/test_guard_native_runtime_windows_resident.py::test_windows_native_runtime_reuses_authenticated_resident_service",
+   "replacement_nodes": [
+    "ci/native_runtime/test_native_managed_resident.py::test_production_client_reuses_authenticated_native_generation"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_native_runtime_admission.py::test_native_resident_path_restarts_after_transient_transport_loss",
+   "replacement_nodes": [
+    "ci/native_runtime/test_native_hook_client.py::test_native_hook_client_recovers_after_exact_managed_process_exit"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_native_runtime_admission.py::test_native_resident_path_does_not_retry_refused_start",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/resident_client_tests.rs::truncated_server_proof_is_never_retryable",
+    "ci/native_runtime/test_native_hook_client.py::test_native_hook_client_rejects_self_authenticated_forged_state"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_worker_native_post_tool_watch.py::test_complete_inline_recording_only_output_gets_matching_proof",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/policy_enforcement_post_tool_tests.rs::test_complete_inline_recording_only_output_gets_matching_proof"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_worker_native_post_tool_watch.py::test_source_ref_proof_is_copied_without_hashing_an_excerpt",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/policy_enforcement_post_tool_tests.rs::test_source_ref_proof_is_copied_without_hashing_an_excerpt"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_worker_native_post_tool_watch.py::test_inherited_excerpt_digest_is_removed_during_allow_original_rewrite",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/policy_enforcement_post_tool_tests.rs::test_inherited_excerpt_digest_is_removed_during_allow_original_rewrite"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_worker_native_post_tool_watch.py::test_inherited_excerpt_digest_is_removed_from_existing_allow_response",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/policy_enforcement_post_tool_tests.rs::test_inherited_excerpt_digest_is_removed_from_existing_allow_response"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_worker_native_post_tool_watch.py::test_stale_allow_original_uses_canonical_inline_proof",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/policy_enforcement_post_tool_tests.rs::test_stale_allow_original_uses_canonical_inline_proof"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_worker_native_post_tool_watch.py::test_summary_without_digest_falls_back_to_complete_inline_output",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/policy_enforcement_post_tool_tests.rs::test_summary_without_digest_falls_back_to_complete_inline_output"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_worker_native_post_tool_watch.py::test_truncated_or_excerpt_only_output_gets_no_fabricated_proof",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/policy_enforcement_post_tool_tests.rs::test_truncated_or_excerpt_only_output_gets_no_fabricated_proof"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_worker_native_post_tool_watch.py::test_existing_observe_mode_is_preserved_during_rewrite",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/policy_enforcement_post_tool_tests.rs::test_existing_observe_mode_is_preserved_during_rewrite"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_worker_native_post_tool_watch.py::test_truncated_inline_output_gets_no_proof",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/policy_enforcement_post_tool_tests.rs::test_truncated_inline_output_gets_no_proof"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_python_capability_cleanup_gate.py::test_retained_python_oracle_is_loaded_only_by_explicit_test_surface",
+   "replacement_nodes": [
+    "tests/test_python_capability_cleanup_gate.py::test_retired_module_rejects_renamed_test_copy",
+    "tests/test_python_capability_cleanup_gate.py::test_retired_module_rejects_dynamic_import_destination",
+    "tests/test_python_capability_cleanup_gate.py::test_retired_module_rejects_reintroduced_oracle_flag_read"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "The oracle compatibility surface and HOL_GUARD_PYTHON_ORACLE gate no longer exist; reintroduction coverage moved to the retirement gate negative controls."
+  },
+  {
+   "old_node": "tests/test_cli_hook_source_ref.py::TestCLISourceRefMismatch::test_cli_source_ref_mismatch_does_not_return_allow_original",
+   "replacement_nodes": [
+    "rust/crates/guard-hook-core/tests/decision_io.rs::source_replacement_between_observations_is_not_equivalent"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_cli_hook_source_ref.py::TestCLISourceRefSafeFile::test_cli_source_ref_safe_file_returns_allow_original",
+   "replacement_nodes": [
+    "ci/native_runtime/test_guard_native_runtime_differential.py::test_compiled_native_clean_source_read_parity"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_cli_hook_source_ref.py::TestCLISourceRefSensitivePath::test_cli_source_ref_sensitive_path_blocks",
+   "replacement_nodes": [
+    "ci/native_runtime/test_guard_native_runtime_differential.py::test_compiled_native_secret_source_read_parity"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_security_regressions.py::TestRawOversizedOutputNeverUnreviewed::test_large_source_with_secret_after_12k_never_allow_original",
+   "replacement_nodes": [
+    "rust/crates/guard-hook-core/tests/decision_io.rs::oversized_source_never_yields_allow_original",
+    "ci/native_runtime/test_guard_native_runtime_differential.py::test_compiled_native_secret_source_read_parity"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_security_regressions.py::TestRawOversizedOutputNeverUnreviewed::test_large_source_with_secret_near_5mb_tail_never_allow_original",
+   "replacement_nodes": [
+    "rust/crates/guard-hook-core/tests/decision_io.rs::oversized_source_never_yields_allow_original"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_security_regressions.py::TestSourceRefHashMismatch::test_output_hash_mismatch_no_allow_original",
+   "replacement_nodes": [
+    "rust/crates/guard-hook-core/tests/decision_io.rs::source_replacement_between_observations_is_not_equivalent"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_security_regressions.py::TestSourceRefSensitivePath::test_source_ref_path_to_env_no_allow_original",
+   "replacement_nodes": [
+    "ci/native_runtime/test_guard_native_runtime_differential.py::test_compiled_native_rejected_workspace_source_path_parity"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_security_regressions.py::TestSourceRefSymlinkSwap::test_source_ref_symlink_swap_no_allow_original",
+   "replacement_nodes": [
+    "rust/crates/guard-hook-core/tests/decision_io.rs::symlink_source_is_fail_closed",
+    "ci/native_runtime/test_guard_native_runtime_differential.py::test_compiled_native_source_symlink_rejection_parity"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_security_regressions.py::TestSourceRefFileChangesBetweenStatAndRead::test_source_ref_file_changes_no_allow_original",
+   "replacement_nodes": [
+    "rust/crates/guard-hook-core/tests/decision_io.rs::source_replacement_between_observations_is_not_equivalent",
+    "rust/crates/guard-hook-core/tests/decision_io.rs::source_growth_after_expected_output_is_not_equivalent"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_security_regressions.py::TestMalformedPostToolPayload::test_malformed_payload_blocks_safely",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/edge_tests.rs::rejects_malformed_source_reference_before_review"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_security_regressions.py::TestSourceRefTargetMismatch::test_source_ref_pointing_at_different_file_is_inconclusive",
+   "replacement_nodes": [
+    "rust/crates/guard-hook-core/tests/decision_io.rs::source_replacement_between_observations_is_not_equivalent"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_security_regressions.py::TestPreToolUseFallsBackToLegacy::test_pre_tool_use_raises_unsupported",
+   "replacement_nodes": [
+    "tests/test_guard_hook_worker.py::TestHookWorkerNonPostTool::test_pre_tool_use_fails_safe_when_native_unavailable"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_security_regressions.py::TestPreToolUseFallsBackToLegacy::test_post_tool_use_without_source_ref_uses_engine",
+   "replacement_nodes": [
+    "tests/test_guard_hook_worker.py::TestHookWorkerAllHarnessFallback::test_pi_with_source_ref_still_works"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_security_regressions.py::TestDaemonWorkerException::test_daemon_worker_exception_returns_deny_block",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Worker exceptions now surface as typed fail-safe responses (native_hook_worker_exception / daemon_worker_exception); the Python engine_exception contract retired with the engine."
+  },
+  {
+   "old_node": "tests/test_hook_security_regressions.py::TestMetricsNoRawContent::test_metrics_do_not_contain_fixture_secret",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Python engine metrics internals retired; native receipts carry digests only (covered by Rust serialization tests)."
+  },
+  {
+   "old_node": "tests/test_hook_security_regressions.py::TestCacheStaleOnPolicyChange::test_cache_stale_on_policy_change",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "HookDecisionCache internals retired; native policy snapshots are resident-ACKed per generation."
+  },
+  {
+   "old_node": "tests/test_hook_security_regressions.py::TestCacheStaleOnConfigChange::test_cache_stale_on_config_change",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "HookDecisionCache internals retired; native policy snapshots are resident-ACKed per generation."
+  },
+  {
+   "old_node": "tests/test_hook_review_observe_mode.py::test_watch_only_observes_sensitive_source_read_without_blocking",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/policy_enforcement_post_tool_tests.rs::test_existing_observe_mode_is_preserved_during_rewrite"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_review_observe_mode.py::test_watch_only_observes_inline_secret_output_without_blocking",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/policy_enforcement_post_tool_tests.rs::test_existing_observe_mode_is_preserved_during_rewrite"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_review_observe_mode.py::test_watch_only_preserves_clean_truncated_output",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/policy_enforcement_post_tool_tests.rs::test_truncated_inline_output_gets_no_proof"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_review_observe_mode.py::test_enforcing_modes_still_block_sensitive_source_read",
+   "replacement_nodes": [
+    "ci/native_runtime/test_guard_native_runtime_differential.py::test_compiled_native_secret_source_read_parity"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_hook_payload_reference.py::test_hook_payload_reference_hydrates_full_payload_for_runtime_review",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/edge_tests.rs::rejects_encrypted_payload_reference_until_supported"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_hook_payload_reference.py::test_hook_payload_reference_rejects_digest_mismatch",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/edge_tests.rs::rejects_encrypted_payload_reference_until_supported"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_hook_payload_reference.py::test_hook_payload_reference_rejects_authentication_failure",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/edge_tests.rs::rejects_encrypted_payload_reference_until_supported"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_hook_payload_reference.py::test_reject_path_outside_temp_root",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/edge_tests.rs::rejects_encrypted_payload_reference_until_supported",
+    "tests/test_guard_hook_payload_reference.py::test_hook_payload_reference_rejects_path_outside_temp_root"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_hook_payload_reference.py::test_reject_wrong_prefix_temp_dir",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/edge_tests.rs::rejects_encrypted_payload_reference_until_supported",
+    "tests/test_guard_hook_payload_reference.py::test_hook_payload_reference_rejects_path_outside_temp_root"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_hook_payload_reference.py::test_reject_directory_instead_of_file",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/edge_tests.rs::rejects_encrypted_payload_reference_until_supported",
+    "tests/test_guard_hook_payload_reference.py::test_hook_payload_reference_rejects_bad_digest"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_hook_payload_reference.py::test_reject_payload_over_5mb",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/edge_tests.rs::rejects_encrypted_payload_reference_until_supported"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_hook_payload_reference.py::test_reject_payload_growth_after_descriptor_size_check",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/edge_tests.rs::rejects_encrypted_payload_reference_until_supported"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_hook_payload_reference.py::test_reject_fifo_replacing_validated_reference",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/edge_tests.rs::rejects_encrypted_payload_reference_until_supported"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_hook_payload_reference.py::test_reject_invalid_aes_key_length",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/edge_tests.rs::rejects_encrypted_payload_reference_until_supported"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_hook_payload_reference.py::test_reject_invalid_nonce_length",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/edge_tests.rs::rejects_encrypted_payload_reference_until_supported"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_hook_payload_reference.py::test_reject_decrypted_json_list",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/edge_tests.rs::rejects_non_object_payload_reference"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_hook_payload_reference.py::test_hook_payload_reference_survives_sanitized_daemon_temp_environment",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/edge_tests.rs::rejects_encrypted_payload_reference_until_supported"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_hook_payload_reference.py::test_hook_payload_reference_reports_bounded_bytes_before_hydration",
+   "replacement_nodes": [
+    "tests/test_guard_hook_payload_reference.py::test_hook_payload_reference_reports_bounded_bytes"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_pi_extension_response_contract.py::test_generated_omp_payload_matches_real_python_review",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/policy_enforcement_post_tool_tests.rs::test_complete_inline_recording_only_output_gets_matching_proof"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_pi_extension_response_contract.py::test_generated_unicode_source_ref_matches_python_fast_path",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/policy_enforcement_post_tool_tests.rs::test_source_ref_proof_is_copied_without_hashing_an_excerpt"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_pi_extension_response_contract.py::test_generated_large_non_source_result_returns_reviewed_excerpt",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/policy_enforcement_post_tool_tests.rs::test_truncated_or_excerpt_only_output_gets_no_fabricated_proof"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_rust_pretool_authority.py::test_hook_worker_returns_native_allow",
+   "replacement_nodes": [
+    "tests/test_rust_pretool_authority.py::test_hook_worker_returns_fail_safe_when_native_off"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_hook_worker.py::TestHookWorkerNonPostTool::test_pre_tool_use_raises_unsupported",
+   "replacement_nodes": [
+    "tests/test_guard_hook_worker.py::TestHookWorkerNonPostTool::test_pre_tool_use_fails_safe_when_native_unavailable"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_cli_hook_source_ref.py::TestCLISourceRefNoSourceRef::test_no_source_ref_returns_none",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Source-ref oracle CLI seam retired; payloads route to the native edge which owns source verification (decision_io/edge tests cover the proof semantics)."
+  },
+  {
+   "old_node": "tests/test_cursor_hooks.py::test_cursor_native_shell_is_approved_for_lean_ctx_wrapped_retry",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Cursor native-shell saved-approval hash plumbing was Python-oracle internal; saved-approval integrity is owned by the native runtime and GuardStore."
+  },
+  {
+   "old_node": "tests/test_cursor_hooks.py::test_tampered_cursor_native_shell_allowance_fails_closed_with_integrity_event",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Cursor native-shell saved-approval hash plumbing was Python-oracle internal; saved-approval integrity is owned by the native runtime and GuardStore."
+  },
+  {
+   "old_node": "tests/test_cursor_hooks.py::test_unsigned_cursor_native_shell_allowance_fails_closed_with_integrity_event",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Cursor native-shell saved-approval hash plumbing was Python-oracle internal; saved-approval integrity is owned by the native runtime and GuardStore."
+  },
+  {
+   "old_node": "tests/test_grok_watch_hooks.py::test_observe_watch_config_allows_pretool_block",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Grok watch hooks exercised the generic-payload oracle seam; native edge returns observe-mode responses without the Python evaluator."
+  },
+  {
+   "old_node": "tests/test_guard_action_lattice.py::test_runtime_hook_absent_action_preserves_computed_policy_fallback",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Runtime-hook action normalization lived in the retired commands_hook_runtime_eval; the native edge owns action projection."
+  },
+  {
+   "old_node": "tests/test_guard_action_lattice.py::test_runtime_hook_present_unknown_action_normalizes_with_diagnostics",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Runtime-hook action normalization lived in the retired commands_hook_runtime_eval; the native edge owns action projection."
+  },
+  {
+   "old_node": "tests/test_guard_approval_policy_versions.py::test_generic_hook_evaluator_policy_version_is_the_only_changed_component",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Generic-hook approval context tokens were oracle-internal plumbing; native approvals are minted inside the Rust runtime/resident."
+  },
+  {
+   "old_node": "tests/test_guard_approval_precedence_generic_stdio.py::test_codex_pretool_observe_mode_persists_observed_decision_evidence",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Generic stdio hook approval/reuse semantics ran through the retired _run_hook_generic_payload oracle; approval storage and reuse primitives are covered by surviving store-level tests and the native approval flow."
+  },
+  {
+   "old_node": "tests/test_guard_approval_precedence_generic_stdio.py::test_codex_review_queue_retains_exact_shell_action_for_remembered_policy",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Generic stdio hook approval/reuse semantics ran through the retired _run_hook_generic_payload oracle; approval storage and reuse primitives are covered by surviving store-level tests and the native approval flow."
+  },
+  {
+   "old_node": "tests/test_guard_approval_precedence_generic_stdio.py::test_durable_exact_shell_approval_survives_reapproval_and_repeated_retries",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Generic stdio hook approval/reuse semantics ran through the retired _run_hook_generic_payload oracle; approval storage and reuse primitives are covered by surviving store-level tests and the native approval flow."
+  },
+  {
+   "old_node": "tests/test_guard_approval_precedence_generic_stdio.py::test_generic_hook_exact_decision_uses_its_own_integrity_result",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Generic stdio hook approval/reuse semantics ran through the retired _run_hook_generic_payload oracle; approval storage and reuse primitives are covered by surviving store-level tests and the native approval flow."
+  },
+  {
+   "old_node": "tests/test_guard_approval_precedence_generic_stdio.py::test_generic_hook_exact_review_approval_uses_v1_context_and_late_claim",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Generic stdio hook approval/reuse semantics ran through the retired _run_hook_generic_payload oracle; approval storage and reuse primitives are covered by surviving store-level tests and the native approval flow."
+  },
+  {
+   "old_node": "tests/test_guard_approval_precedence_generic_stdio.py::test_generic_hook_exact_v1_allow_cannot_hide_matching_legacy_block",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Generic stdio hook approval/reuse semantics ran through the retired _run_hook_generic_payload oracle; approval storage and reuse primitives are covered by surviving store-level tests and the native approval flow."
+  },
+  {
+   "old_node": "tests/test_guard_approval_precedence_generic_stdio.py::test_generic_hook_integrity_warning_does_not_hide_separate_valid_saved_block",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Generic stdio hook approval/reuse semantics ran through the retired _run_hook_generic_payload oracle; approval storage and reuse primitives are covered by surviving store-level tests and the native approval flow."
+  },
+  {
+   "old_node": "tests/test_guard_approval_precedence_generic_stdio.py::test_generic_hook_legacy_allow_fails_closed_but_legacy_block_is_preserved",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Generic stdio hook approval/reuse semantics ran through the retired _run_hook_generic_payload oracle; approval storage and reuse primitives are covered by surviving store-level tests and the native approval flow."
+  },
+  {
+   "old_node": "tests/test_guard_approval_precedence_generic_stdio.py::test_generic_hook_missing_post_claim_context_fails_closed",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Generic stdio hook approval/reuse semantics ran through the retired _run_hook_generic_payload oracle; approval storage and reuse primitives are covered by surviving store-level tests and the native approval flow."
+  },
+  {
+   "old_node": "tests/test_guard_approval_precedence_generic_stdio.py::test_generic_hook_observe_mode_does_not_queue_actions_policy_already_allows",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Generic stdio hook approval/reuse semantics ran through the retired _run_hook_generic_payload oracle; approval storage and reuse primitives are covered by surviving store-level tests and the native approval flow."
+  },
+  {
+   "old_node": "tests/test_guard_approval_precedence_generic_stdio.py::test_generic_hook_observe_mode_records_block_without_enforcing_it",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Generic stdio hook approval/reuse semantics ran through the retired _run_hook_generic_payload oracle; approval storage and reuse primitives are covered by surviving store-level tests and the native approval flow."
+  },
+  {
+   "old_node": "tests/test_guard_approval_precedence_generic_stdio.py::test_generic_hook_payload_digest_ignores_delivery_ids_but_keeps_nested_action_ids",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Generic stdio hook approval/reuse semantics ran through the retired _run_hook_generic_payload oracle; approval storage and reuse primitives are covered by surviving store-level tests and the native approval flow."
+  },
+  {
+   "old_node": "tests/test_guard_approval_precedence_generic_stdio.py::test_generic_hook_rebuilds_current_policy_after_atomic_claim",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Generic stdio hook approval/reuse semantics ran through the retired _run_hook_generic_payload oracle; approval storage and reuse primitives are covered by surviving store-level tests and the native approval flow."
+  },
+  {
+   "old_node": "tests/test_guard_approval_precedence_generic_stdio.py::test_generic_hook_rejects_non_exact_or_non_gate_durable_allow",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Generic stdio hook approval/reuse semantics ran through the retired _run_hook_generic_payload oracle; approval storage and reuse primitives are covered by surviving store-level tests and the native approval flow."
+  },
+  {
+   "old_node": "tests/test_guard_approval_precedence_generic_stdio.py::test_generic_hook_saved_allow_never_lowers_new_current_block",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Generic stdio hook approval/reuse semantics ran through the retired _run_hook_generic_payload oracle; approval storage and reuse primitives are covered by surviving store-level tests and the native approval flow."
+  },
+  {
+   "old_node": "tests/test_guard_approval_precedence_generic_stdio.py::test_generic_shell_memory_uses_exact_nested_command",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Generic stdio hook approval/reuse semantics ran through the retired _run_hook_generic_payload oracle; approval storage and reuse primitives are covered by surviving store-level tests and the native approval flow."
+  },
+  {
+   "old_node": "tests/test_guard_approval_precedence_generic_stdio.py::test_watch_only_exact_allow_requires_review_after_enforcement_is_enabled",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Generic stdio hook approval/reuse semantics ran through the retired _run_hook_generic_payload oracle; approval storage and reuse primitives are covered by surviving store-level tests and the native approval flow."
+  },
+  {
+   "old_node": "tests/test_guard_approval_precedence_generic_stdio.py::test_watch_only_exact_block_applies_after_enforcement_is_enabled",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Generic stdio hook approval/reuse semantics ran through the retired _run_hook_generic_payload oracle; approval storage and reuse primitives are covered by surviving store-level tests and the native approval flow."
+  },
+  {
+   "old_node": "tests/test_guard_cli.py::TestGuardCli::test_guard_codex_hook_allows_printf_pipe_with_unrelated_heredoc",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Native route fails closed or emits review instead of the Python allow/quiet behavior; positive allow parity deferred (Python semantic fast paths never shipped in auto/force)."
+  },
+  {
+   "old_node": "tests/test_guard_cli.py::TestGuardCli::test_guard_codex_hook_observe_mode_does_not_pause_risky_tool_use",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Native route fails closed or emits review instead of the Python allow/quiet behavior; positive allow parity deferred (Python semantic fast paths never shipped in auto/force)."
+  },
+  {
+   "old_node": "tests/test_guard_cli_commands_facade.py::test_commands_facade_restores_late_loaded_compatibility_overrides",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "The lazy compatibility facade was deleted; command surface composition is owned by cli/commands.py directly."
+  },
+  {
+   "old_node": "tests/test_guard_cli_commands_facade.py::test_commands_facade_restores_propagated_overrides",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "The lazy compatibility facade was deleted; command surface composition is owned by cli/commands.py directly."
+  },
+  {
+   "old_node": "tests/test_guard_codex_apply_patch_policy.py::test_apply_patch_relaxation_rejects_destructive_escape_or_instruction_targets",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "apply_patch relaxation and generic-payload plumbing were oracle internals; native apply_patch decisions are owned by the Rust command extension policy."
+  },
+  {
+   "old_node": "tests/test_guard_codex_apply_patch_policy.py::test_sensitive_apply_patch_still_builds_runtime_artifact",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "apply_patch relaxation and generic-payload plumbing were oracle internals; native apply_patch decisions are owned by the Rust command extension policy."
+  },
+  {
+   "old_node": "tests/test_guard_codex_apply_patch_policy.py::test_unrelated_sibling_repository_apply_patch_still_requires_review",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "apply_patch relaxation and generic-payload plumbing were oracle internals; native apply_patch decisions are owned by the Rust command extension policy."
+  },
+  {
+   "old_node": "tests/test_guard_codex_apply_patch_policy.py::test_verified_linked_worktree_apply_patch_uses_relaxed_default",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "apply_patch relaxation and generic-payload plumbing were oracle internals; native apply_patch decisions are owned by the Rust command extension policy."
+  },
+  {
+   "old_node": "tests/test_guard_codex_apply_patch_policy.py::test_verified_workspace_apply_patch_allows_plugin_metadata_bundle",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "apply_patch relaxation and generic-payload plumbing were oracle internals; native apply_patch decisions are owned by the Rust command extension policy."
+  },
+  {
+   "old_node": "tests/test_guard_codex_apply_patch_policy.py::test_verified_workspace_apply_patch_does_not_queue_approval",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "apply_patch relaxation and generic-payload plumbing were oracle internals; native apply_patch decisions are owned by the Rust command extension policy."
+  },
+  {
+   "old_node": "tests/test_guard_codex_apply_patch_policy.py::test_verified_workspace_apply_patch_uses_relaxed_default",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "apply_patch relaxation and generic-payload plumbing were oracle internals; native apply_patch decisions are owned by the Rust command extension policy."
+  },
+  {
+   "old_node": "tests/test_guard_codex_apply_patch_policy.py::test_watch_only_inbox_accepts_stamped_runtime_envelope",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "apply_patch relaxation and generic-payload plumbing were oracle internals; native apply_patch decisions are owned by the Rust command extension policy."
+  },
+  {
+   "old_node": "tests/test_guard_codex_apply_patch_policy.py::test_watch_only_inbox_failure_never_changes_execution",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "apply_patch relaxation and generic-payload plumbing were oracle internals; native apply_patch decisions are owned by the Rust command extension policy."
+  },
+  {
+   "old_node": "tests/test_guard_codex_apply_patch_policy.py::test_watch_only_workspace_apply_patch_nonblocking_actions_do_not_fill_inbox",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "apply_patch relaxation and generic-payload plumbing were oracle internals; native apply_patch decisions are owned by the Rust command extension policy."
+  },
+  {
+   "old_node": "tests/test_guard_codex_browser_authority.py::test_current_terminal_block_is_not_queued_or_browser_approved",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Codex browser-authority orchestration ran through the retired runtime_finish/state modules; native review queueing owns approval finalization."
+  },
+  {
+   "old_node": "tests/test_guard_codex_browser_authority.py::test_exact_browser_allow_finalizes_every_authoritative_surface_once",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Codex browser-authority orchestration ran through the retired runtime_finish/state modules; native review queueing owns approval finalization."
+  },
+  {
+   "old_node": "tests/test_guard_codex_browser_authority.py::test_fresh_sandbox_requirement_after_browser_wait_is_authoritative_everywhere",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Codex browser-authority orchestration ran through the retired runtime_finish/state modules; native review queueing owns approval finalization."
+  },
+  {
+   "old_node": "tests/test_guard_codex_prompt_attachments.py::test_benign_codex_attachment_prompt_remains_allowed",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Codex attachment scanning used the retired generic-payload default relaxation; native prompt handling fails closed without the Python classifier."
+  },
+  {
+   "old_node": "tests/test_guard_codex_prompt_attachments.py::test_codex_attachment_prompt_injection_requires_review",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Codex attachment scanning used the retired generic-payload default relaxation; native prompt handling fails closed without the Python classifier."
+  },
+  {
+   "old_node": "tests/test_guard_codex_prompt_attachments.py::test_relative_codex_attachment_prompt_injection_requires_review",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Codex attachment scanning used the retired generic-payload default relaxation; native prompt handling fails closed without the Python classifier."
+  },
+  {
+   "old_node": "tests/test_guard_command_activity_orchestration.py::test_copilot_orchestrators_assign_one_owner_for_each_valid_stage_flow",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Copilot command-activity orchestration internals ran through the retired copilot hook module; native receipts now record one route decision."
+  },
+  {
+   "old_node": "tests/test_guard_command_activity_orchestration.py::test_copilot_prompt_attribution_uses_pre_reuse_action",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Copilot command-activity orchestration internals ran through the retired copilot hook module; native receipts now record one route decision."
+  },
+  {
+   "old_node": "tests/test_guard_command_activity_orchestration.py::test_cursor_observer_verifier_failure_preserves_exact_hook_result",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Copilot command-activity orchestration internals ran through the retired copilot hook module; native receipts now record one route decision."
+  },
+  {
+   "old_node": "tests/test_guard_command_activity_orchestration.py::test_repeated_native_pre_hook_with_new_receipt_is_one_logical_activity",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Copilot command-activity orchestration internals ran through the retired copilot hook module; native receipts now record one route decision."
+  },
+  {
+   "old_node": "tests/test_guard_copilot_benign_policy_hint.py::test_copilot_payload_allow_cannot_lower_stronger_current_policy",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Copilot benign-hint evaluation was oracle-internal; the native route cannot consume daemon hints and fails closed (deferred parity)."
+  },
+  {
+   "old_node": "tests/test_guard_copilot_benign_policy_hint.py::test_unmodeled_copilot_payload_block_remains_conservative_deny",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Copilot benign-hint evaluation was oracle-internal; the native route cannot consume daemon hints and fails closed (deferred parity)."
+  },
+  {
+   "old_node": "tests/test_guard_copilot_benign_policy_hint.py::test_untrusted_permissive_daemon_hint_never_lowers_effective_policy",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Copilot benign-hint evaluation was oracle-internal; the native route cannot consume daemon hints and fails closed (deferred parity)."
+  },
+  {
+   "old_node": "tests/test_guard_copilot_benign_policy_hint.py::test_verified_benign_copilot_exact_stored_block_remains_terminal",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Copilot benign-hint evaluation was oracle-internal; the native route cannot consume daemon hints and fails closed (deferred parity)."
+  },
+  {
+   "old_node": "tests/test_guard_copilot_benign_policy_hint.py::test_verified_benign_copilot_hint_cannot_bypass_strict_daemon_failure",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Copilot benign-hint evaluation was oracle-internal; the native route cannot consume daemon hints and fails closed (deferred parity)."
+  },
+  {
+   "old_node": "tests/test_guard_copilot_benign_policy_hint.py::test_verified_benign_copilot_hint_cannot_lower_configured_block",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Copilot benign-hint evaluation was oracle-internal; the native route cannot consume daemon hints and fails closed (deferred parity)."
+  },
+  {
+   "old_node": "tests/test_guard_copilot_benign_policy_hint.py::test_verified_benign_copilot_hint_cannot_lower_trusted_cli_block",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Copilot benign-hint evaluation was oracle-internal; the native route cannot consume daemon hints and fails closed (deferred parity)."
+  },
+  {
+   "old_node": "tests/test_guard_copilot_benign_policy_hint.py::test_verified_benign_copilot_legacy_block_hint_stays_prompt_free_with_evidence",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Copilot benign-hint evaluation was oracle-internal; the native route cannot consume daemon hints and fails closed (deferred parity)."
+  },
+  {
+   "old_node": "tests/test_guard_cursor_exact_action.py::test_cursor_queue_receipt_and_response_preserve_exact_review_action",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "RuntimeArtifactHookState/receipt plumbing retired; the cursor action projection is produced by the native edge result."
+  },
+  {
+   "old_node": "tests/test_guard_durable_exact_shell_approval_expiry.py::test_exact_omp_npx_approval_survives_store_restart_after_fifteen_minutes",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exact shell-approval reuse ran through the retired generic hook; expiry/durability is GuardStore/native-approval owned (covered by approval_reuse tests)."
+  },
+  {
+   "old_node": "tests/test_guard_durable_exact_shell_approval_expiry.py::test_exact_omp_shell_approval_temporal_reuse_after_store_restart",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exact shell-approval reuse ran through the retired generic hook; expiry/durability is GuardStore/native-approval owned (covered by approval_reuse tests)."
+  },
+  {
+   "old_node": "tests/test_guard_external_archive_launch_binding.py::test_external_archive_hook_blocks_when_digest_binding_shim_is_unavailable",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "External archive approval binding was part of the retired runtime-artifact hook evaluation; no production caller remains and the native edge fails closed on artifact envelopes."
+  },
+  {
+   "old_node": "tests/test_guard_external_archive_launch_binding.py::test_external_archive_hook_uses_binding_shim_as_sole_approval_owner",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "External archive approval binding was part of the retired runtime-artifact hook evaluation; no production caller remains and the native edge fails closed on artifact envelopes."
+  },
+  {
+   "old_node": "tests/test_guard_external_archive_launch_binding.py::test_hook_binding_sink_accepts_one_simple_pinned_package_command",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "External archive approval binding was part of the retired runtime-artifact hook evaluation; no production caller remains and the native edge fails closed on artifact envelopes."
+  },
+  {
+   "old_node": "tests/test_guard_external_archive_launch_binding.py::test_hook_binding_sink_rejects_wrappers_and_effective_path_overrides",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "External archive approval binding was part of the retired runtime-artifact hook evaluation; no production caller remains and the native edge fails closed on artifact envelopes."
+  },
+  {
+   "old_node": "tests/test_guard_github_workflow_runtime.py::test_claimed_saved_allow_cannot_bypass_failed_workflow_capability",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "GitHub workflow runtime-artifact evaluation retired with commands_hook_runtime_eval; approval issuance is owned by the native edge."
+  },
+  {
+   "old_node": "tests/test_guard_github_workflow_runtime_eval.py::test_claimed_workflow_authorization_preserves_command_floor_approval_context",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Same retired runtime-artifact eval surface; workflow capability claims are no longer a Python hook seam."
+  },
+  {
+   "old_node": "tests/test_guard_github_workflow_runtime_eval.py::test_exact_workflow_capability_satisfies_require_reapproval_on_normal_retry",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Same retired runtime-artifact eval surface; workflow capability claims are no longer a Python hook seam."
+  },
+  {
+   "old_node": "tests/test_guard_grok_auto_resume.py::test_grok_generic_hook_does_not_wait_when_timeout_is_zero",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Grok auto-resume generic hook plumbing retired with commands_hook_generic."
+  },
+  {
+   "old_node": "tests/test_guard_hook_executable_identity.py::test_generic_hook_keeps_repeated_tilde_separators_inside_trusted_home",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Generic hook executable-identity plumbing ran through the retired generic payload path."
+  },
+  {
+   "old_node": "tests/test_guard_hook_executable_identity.py::test_generic_hook_rejects_exact_allow_after_only_interpreted_entrypoint_changes",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Generic hook executable-identity plumbing ran through the retired generic payload path."
+  },
+  {
+   "old_node": "tests/test_guard_hook_executable_identity.py::test_generic_hook_rejects_exact_allow_after_same_path_executable_replacement",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Generic hook executable-identity plumbing ran through the retired generic payload path."
+  },
+  {
+   "old_node": "tests/test_guard_hook_executable_identity.py::test_generic_hook_rejects_non_expanding_tilde_syntax",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Generic hook executable-identity plumbing ran through the retired generic payload path."
+  },
+  {
+   "old_node": "tests/test_guard_hook_executable_identity.py::test_generic_hook_resolved_interpreter_with_missing_entrypoint_never_reuses_allow",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Generic hook executable-identity plumbing ran through the retired generic payload path."
+  },
+  {
+   "old_node": "tests/test_guard_hook_executable_identity.py::test_generic_hook_resolves_tilde_executable_from_trusted_home",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Generic hook executable-identity plumbing ran through the retired generic payload path."
+  },
+  {
+   "old_node": "tests/test_guard_hook_executable_identity.py::test_generic_hook_unresolved_executable_never_reuses_exact_allow",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Generic hook executable-identity plumbing ran through the retired generic payload path."
+  },
+  {
+   "old_node": "tests/test_guard_hook_post_claim_freshness.py::test_browser_post_wait_revalidation_reloads_synced_policy",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Post-claim freshness via Python runtime-artifact flow retired; native policy snapshots are ACKed per generation."
+  },
+  {
+   "old_node": "tests/test_guard_hook_post_claim_freshness.py::test_copilot_action_is_consistent_across_native_receipt_inventory_and_event",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Post-claim freshness via Python runtime-artifact flow retired; native policy snapshots are ACKed per generation."
+  },
+  {
+   "old_node": "tests/test_guard_hook_post_claim_freshness.py::test_copilot_hook_reloads_synced_policy_after_atomic_claim",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Post-claim freshness via Python runtime-artifact flow retired; native policy snapshots are ACKed per generation."
+  },
+  {
+   "old_node": "tests/test_guard_hook_post_claim_freshness.py::test_copilot_permission_postclaim_uses_fresh_authority_without_observe_queue",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Post-claim freshness via Python runtime-artifact flow retired; native policy snapshots are ACKed per generation."
+  },
+  {
+   "old_node": "tests/test_guard_hook_post_claim_freshness.py::test_copilot_pretool_uses_fresh_provider_after_claim",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Post-claim freshness via Python runtime-artifact flow retired; native policy snapshots are ACKed per generation."
+  },
+  {
+   "old_node": "tests/test_guard_hook_post_claim_freshness.py::test_generic_hook_reloads_synced_policy_after_atomic_claim",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Post-claim freshness via Python runtime-artifact flow retired; native policy snapshots are ACKed per generation."
+  },
+  {
+   "old_node": "tests/test_guard_hook_post_claim_freshness.py::test_runtime_artifact_hook_missing_fresh_provider_fails_closed",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Post-claim freshness via Python runtime-artifact flow retired; native policy snapshots are ACKed per generation."
+  },
+  {
+   "old_node": "tests/test_guard_hook_post_claim_freshness.py::test_runtime_artifact_hook_rebuilds_policy_after_claim",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Post-claim freshness via Python runtime-artifact flow retired; native policy snapshots are ACKed per generation."
+  },
+  {
+   "old_node": "tests/test_guard_hook_post_claim_freshness.py::test_runtime_hook_current_allow_and_exact_allow_do_not_hide_tampered_broader_authority",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Post-claim freshness via Python runtime-artifact flow retired; native policy snapshots are ACKed per generation."
+  },
+  {
+   "old_node": "tests/test_guard_hook_post_claim_freshness.py::test_runtime_hook_reloads_synced_policy_after_atomic_claim",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Post-claim freshness via Python runtime-artifact flow retired; native policy snapshots are ACKed per generation."
+  },
+  {
+   "old_node": "tests/test_guard_hook_saved_block_terminal.py::test_copilot_observe_mode_allows_fresh_block_with_retrospective_queue",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Saved-block terminal/orchestration flow was Python-only; native observe mode records outcomes via the Rust policy enforcement rewrite."
+  },
+  {
+   "old_node": "tests/test_guard_hook_saved_block_terminal.py::test_copilot_permission_request_fresh_block_is_terminal_and_never_queued",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Saved-block terminal/orchestration flow was Python-only; native observe mode records outcomes via the Rust policy enforcement rewrite."
+  },
+  {
+   "old_node": "tests/test_guard_hook_saved_block_terminal.py::test_copilot_permission_request_observe_mode_does_not_enforce_saved_block",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Saved-block terminal/orchestration flow was Python-only; native observe mode records outcomes via the Rust policy enforcement rewrite."
+  },
+  {
+   "old_node": "tests/test_guard_hook_saved_block_terminal.py::test_copilot_pretool_observe_mode_records_saved_block_without_enforcing_it",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Saved-block terminal/orchestration flow was Python-only; native observe mode records outcomes via the Rust policy enforcement rewrite."
+  },
+  {
+   "old_node": "tests/test_guard_hook_saved_block_terminal.py::test_copilot_saved_allow_is_explained_in_native_response_and_allow_receipt",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Saved-block terminal/orchestration flow was Python-only; native observe mode records outcomes via the Rust policy enforcement rewrite."
+  },
+  {
+   "old_node": "tests/test_guard_hook_saved_block_terminal.py::test_runtime_final_action_rewrites_package_copy_and_preserves_observation",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Saved-block terminal/orchestration flow was Python-only; native observe mode records outcomes via the Rust policy enforcement rewrite."
+  },
+  {
+   "old_node": "tests/test_guard_hook_saved_block_terminal.py::test_runtime_observe_mode_preserves_executable_package_warning",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Saved-block terminal/orchestration flow was Python-only; native observe mode records outcomes via the Rust policy enforcement rewrite."
+  },
+  {
+   "old_node": "tests/test_guard_hook_saved_block_terminal.py::test_runtime_review_observe_mode_allows_fresh_block_with_retrospective_queue",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Saved-block terminal/orchestration flow was Python-only; native observe mode records outcomes via the Rust policy enforcement rewrite."
+  },
+  {
+   "old_node": "tests/test_guard_hook_saved_block_terminal.py::test_runtime_review_observe_mode_records_saved_block_without_enforcing_it",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Saved-block terminal/orchestration flow was Python-only; native observe mode records outcomes via the Rust policy enforcement rewrite."
+  },
+  {
+   "old_node": "tests/test_guard_hook_worker.py::TestHookWorkerException::test_worker_exception_returns_deny_block",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Worker test asserted the retired engine/Unsupported contract; the native fail-safe response replaces it."
+  },
+  {
+   "old_node": "tests/test_guard_hook_worker.py::TestHookWorkerOutputScanning::test_documentation_fixture_patch_output_allows_original",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Worker test asserted the retired engine/Unsupported contract; the native fail-safe response replaces it."
+  },
+  {
+   "old_node": "tests/test_guard_runtime.py::test_guard_hook_codex_falls_back_to_native_deny_after_daemon_request_failure",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Test exercised the retired runtime_review module tail of the hook path."
+  },
+  {
+   "old_node": "tests/test_guard_shell_execution_context.py::test_cisco_preflight_scans_every_distinct_effective_project",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Shell execution-context analyzer fed the retired runtime-eval hook path; native command evaluation owns shell semantics."
+  },
+  {
+   "old_node": "tests/test_guard_user_prompt_policy.py::test_plain_user_prompt_relaxes_broad_review_default",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "User-prompt runtime risk artifacts were produced by the retired generic payload pipeline."
+  },
+  {
+   "old_node": "tests/test_guard_user_prompt_policy.py::test_user_prompt_missing_artifact_fails_closed_for_detected_risk",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "User-prompt runtime risk artifacts were produced by the retired generic payload pipeline."
+  },
+  {
+   "old_node": "tests/test_guard_user_prompt_policy.py::test_user_prompt_preserves_narrow_override_and_block_default",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "User-prompt runtime risk artifacts were produced by the retired generic payload pipeline."
+  },
+  {
+   "old_node": "tests/test_hook_content_scanner.py::TestBudgetExhaustion::test_bytes_scanned_tracks_utf8",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Python ContentScanner internals retired; secret scanning is owned by guard-scanner/guard-hook-core (Rust)."
+  },
+  {
+   "old_node": "tests/test_hook_content_scanner.py::TestBudgetExhaustion::test_deadline_exhaustion_returns_budget_exhausted",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Python ContentScanner internals retired; secret scanning is owned by guard-scanner/guard-hook-core (Rust)."
+  },
+  {
+   "old_node": "tests/test_hook_content_scanner.py::TestBudgetExhaustion::test_max_bytes_exhaustion_returns_budget_exhausted",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Python ContentScanner internals retired; secret scanning is owned by guard-scanner/guard-hook-core (Rust)."
+  },
+  {
+   "old_node": "tests/test_hook_content_scanner.py::TestBudgetExhaustion::test_max_bytes_zero_returns_immediately",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Python ContentScanner internals retired; secret scanning is owned by guard-scanner/guard-hook-core (Rust)."
+  },
+  {
+   "old_node": "tests/test_hook_content_scanner.py::TestDetectSecrets::test_detect_github_token_single_chunk",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Python ContentScanner internals retired; secret scanning is owned by guard-scanner/guard-hook-core (Rust)."
+  },
+  {
+   "old_node": "tests/test_hook_content_scanner.py::TestDetectSecrets::test_detect_openai_key_in_later_chunk",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Python ContentScanner internals retired; secret scanning is owned by guard-scanner/guard-hook-core (Rust)."
+  },
+  {
+   "old_node": "tests/test_hook_content_scanner.py::TestDetectSecrets::test_detect_token_split_across_chunk_boundary",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Python ContentScanner internals retired; secret scanning is owned by guard-scanner/guard-hook-core (Rust)."
+  },
+  {
+   "old_node": "tests/test_hook_content_scanner.py::TestDetectSecrets::test_early_exit_on_critical_pem_key",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Python ContentScanner internals retired; secret scanning is owned by guard-scanner/guard-hook-core (Rust)."
+  },
+  {
+   "old_node": "tests/test_hook_content_scanner.py::TestDetectSecrets::test_local_content_unsuppresses_sample_assignments",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Python ContentScanner internals retired; secret scanning is owned by guard-scanner/guard-hook-core (Rust)."
+  },
+  {
+   "old_node": "tests/test_hook_content_scanner.py::TestDetectSecrets::test_no_local_content_suppresses_sample_assignments",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Python ContentScanner internals retired; secret scanning is owned by guard-scanner/guard-hook-core (Rust)."
+  },
+  {
+   "old_node": "tests/test_hook_content_scanner.py::TestDetectSecrets::test_no_secrets_returns_clean",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Python ContentScanner internals retired; secret scanning is owned by guard-scanner/guard-hook-core (Rust)."
+  },
+  {
+   "old_node": "tests/test_hook_content_scanner.py::TestNoSecretSamplesInResult::test_reason_field_is_generic",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Python ContentScanner internals retired; secret scanning is owned by guard-scanner/guard-hook-core (Rust)."
+  },
+  {
+   "old_node": "tests/test_hook_content_scanner.py::TestNoSecretSamplesInResult::test_result_never_contains_secret_sample_text",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Python ContentScanner internals retired; secret scanning is owned by guard-scanner/guard-hook-core (Rust)."
+  },
+  {
+   "old_node": "tests/test_hook_content_scanner.py::TestNonStringChunks::test_non_string_chunks_are_skipped",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Python ContentScanner internals retired; secret scanning is owned by guard-scanner/guard-hook-core (Rust)."
+  },
+  {
+   "old_node": "tests/test_hook_content_scanner.py::TestScanContext::test_absolute_paths_are_relativized_to_workspace",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Python ContentScanner internals retired; secret scanning is owned by guard-scanner/guard-hook-core (Rust)."
+  },
+  {
+   "old_node": "tests/test_hook_content_scanner.py::TestScanContext::test_absolute_paths_outside_workspace_ignore_parent_segments",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Python ContentScanner internals retired; secret scanning is owned by guard-scanner/guard-hook-core (Rust)."
+  },
+  {
+   "old_node": "tests/test_hook_content_scanner.py::TestScanContext::test_all_docs_targets_suppress_sample_assignment_retry",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Python ContentScanner internals retired; secret scanning is owned by guard-scanner/guard-hook-core (Rust)."
+  },
+  {
+   "old_node": "tests/test_hook_content_scanner.py::TestScanContext::test_docs_and_fixtures_suppress_sample_assignment_retry",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Python ContentScanner internals retired; secret scanning is owned by guard-scanner/guard-hook-core (Rust)."
+  },
+  {
+   "old_node": "tests/test_hook_content_scanner.py::TestScanContext::test_mixed_targets_keep_sample_assignment_retry",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Python ContentScanner internals retired; secret scanning is owned by guard-scanner/guard-hook-core (Rust)."
+  },
+  {
+   "old_node": "tests/test_hook_content_scanner.py::TestScanContext::test_source_paths_keep_local_sample_assignment_retry",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Python ContentScanner internals retired; secret scanning is owned by guard-scanner/guard-hook-core (Rust)."
+  },
+  {
+   "old_node": "tests/test_hook_content_scanner.py::TestScanContext::test_virtual_skill_and_describe_reads_keep_sample_assignment_retry",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Python ContentScanner internals retired; secret scanning is owned by guard-scanner/guard-hook-core (Rust)."
+  },
+  {
+   "old_node": "tests/test_hook_content_scanner.py::TestScannerVersion::test_version_includes_wrapper_and_rule_hash",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Python ContentScanner internals retired; secret scanning is owned by guard-scanner/guard-hook-core (Rust)."
+  },
+  {
+   "old_node": "tests/test_hook_content_scanner.py::TestScannerVersion::test_version_matches_rule_version",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Python ContentScanner internals retired; secret scanning is owned by guard-scanner/guard-hook-core (Rust)."
+  },
+  {
+   "old_node": "tests/test_hook_data_plane_ownership_gate.py::test_pretool_graph_gate_rejects_unknown_event_compatibility_escape",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Contract test updated for the retirement slice."
+  },
+  {
+   "old_node": "tests/test_hook_decision_cache.py::TestCacheGetSave::test_cache_miss_on_config_fingerprint_change",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "HookDecisionCache internals retired; native decisions are evaluated per-request by the Rust runtime."
+  },
+  {
+   "old_node": "tests/test_hook_decision_cache.py::TestCacheGetSave::test_cache_miss_on_content_hash_change",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "HookDecisionCache internals retired; native decisions are evaluated per-request by the Rust runtime."
+  },
+  {
+   "old_node": "tests/test_hook_decision_cache.py::TestCacheGetSave::test_cache_miss_on_policy_fingerprint_change",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "HookDecisionCache internals retired; native decisions are evaluated per-request by the Rust runtime."
+  },
+  {
+   "old_node": "tests/test_hook_decision_cache.py::TestCacheGetSave::test_cache_miss_on_scanner_version_change",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "HookDecisionCache internals retired; native decisions are evaluated per-request by the Rust runtime."
+  },
+  {
+   "old_node": "tests/test_hook_decision_cache.py::TestCacheGetSave::test_cache_miss_returns_none",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "HookDecisionCache internals retired; native decisions are evaluated per-request by the Rust runtime."
+  },
+  {
+   "old_node": "tests/test_hook_decision_cache.py::TestCacheGetSave::test_cache_save_then_get_returns_payload",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "HookDecisionCache internals retired; native decisions are evaluated per-request by the Rust runtime."
+  },
+  {
+   "old_node": "tests/test_hook_decision_cache.py::TestCacheGetSave::test_cached_payload_never_contains_raw_file_content",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "HookDecisionCache internals retired; native decisions are evaluated per-request by the Rust runtime."
+  },
+  {
+   "old_node": "tests/test_hook_decision_cache.py::TestHookConfigFingerprint::test_different_default_action_different_fingerprint",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "HookDecisionCache internals retired; native decisions are evaluated per-request by the Rust runtime."
+  },
+  {
+   "old_node": "tests/test_hook_decision_cache.py::TestHookConfigFingerprint::test_different_mode_different_fingerprint",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "HookDecisionCache internals retired; native decisions are evaluated per-request by the Rust runtime."
+  },
+  {
+   "old_node": "tests/test_hook_decision_cache.py::TestHookConfigFingerprint::test_different_risk_actions_different_fingerprint",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "HookDecisionCache internals retired; native decisions are evaluated per-request by the Rust runtime."
+  },
+  {
+   "old_node": "tests/test_hook_decision_cache.py::TestHookConfigFingerprint::test_same_config_returns_same_fingerprint",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "HookDecisionCache internals retired; native decisions are evaluated per-request by the Rust runtime."
+  },
+  {
+   "old_node": "tests/test_hook_decision_cache.py::TestPolicyFingerprint::test_different_harness_different_fingerprint",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "HookDecisionCache internals retired; native decisions are evaluated per-request by the Rust runtime."
+  },
+  {
+   "old_node": "tests/test_hook_decision_cache.py::TestPolicyFingerprint::test_different_workspace_different_fingerprint",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "HookDecisionCache internals retired; native decisions are evaluated per-request by the Rust runtime."
+  },
+  {
+   "old_node": "tests/test_hook_decision_cache.py::TestPolicyFingerprint::test_none_workspace_returns_fingerprint",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "HookDecisionCache internals retired; native decisions are evaluated per-request by the Rust runtime."
+  },
+  {
+   "old_node": "tests/test_hook_decision_cache.py::TestPolicyFingerprint::test_same_store_returns_same_fingerprint",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "HookDecisionCache internals retired; native decisions are evaluated per-request by the Rust runtime."
+  },
+  {
+   "old_node": "tests/test_hook_decision_cache.py::TestSourceInputHash::test_config_fingerprint_change_causes_different_hash",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "HookDecisionCache internals retired; native decisions are evaluated per-request by the Rust runtime."
+  },
+  {
+   "old_node": "tests/test_hook_decision_cache.py::TestSourceInputHash::test_content_hash_change_causes_different_hash",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "HookDecisionCache internals retired; native decisions are evaluated per-request by the Rust runtime."
+  },
+  {
+   "old_node": "tests/test_hook_decision_cache.py::TestSourceInputHash::test_policy_fingerprint_change_causes_different_hash",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "HookDecisionCache internals retired; native decisions are evaluated per-request by the Rust runtime."
+  },
+  {
+   "old_node": "tests/test_hook_decision_cache.py::TestSourceInputHash::test_same_material_returns_same_input_hash",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "HookDecisionCache internals retired; native decisions are evaluated per-request by the Rust runtime."
+  },
+  {
+   "old_node": "tests/test_hook_decision_cache.py::TestSourceInputHash::test_scanner_version_change_causes_different_hash",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "HookDecisionCache internals retired; native decisions are evaluated per-request by the Rust runtime."
+  },
+  {
+   "old_node": "tests/test_hook_decision_cache.py::TestSourceInputHash::test_stat_change_causes_different_hash",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "HookDecisionCache internals retired; native decisions are evaluated per-request by the Rust runtime."
+  },
+  {
+   "old_node": "tests/test_hook_decision_cache.py::TestSourceReadCacheMaterial::test_frozen_dataclass",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "HookDecisionCache internals retired; native decisions are evaluated per-request by the Rust runtime."
+  },
+  {
+   "old_node": "tests/test_hook_decision_cache.py::TestSourceTargetId::test_different_harness_different_target_id",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "HookDecisionCache internals retired; native decisions are evaluated per-request by the Rust runtime."
+  },
+  {
+   "old_node": "tests/test_hook_decision_cache.py::TestSourceTargetId::test_different_realpath_different_target_id",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "HookDecisionCache internals retired; native decisions are evaluated per-request by the Rust runtime."
+  },
+  {
+   "old_node": "tests/test_hook_decision_cache.py::TestSourceTargetId::test_same_material_returns_same_target_id",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "HookDecisionCache internals retired; native decisions are evaluated per-request by the Rust runtime."
+  },
+  {
+   "old_node": "tests/test_hook_review_engine.py::TestEngineException::test_engine_exception_returns_deny_block",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "HookReviewEngine was the retired Python oracle; native hook decisions are owned by guard-hook-core/guard-runtime."
+  },
+  {
+   "old_node": "tests/test_hook_review_engine.py::TestHookFailSafe::test_fail_safe_with_excerpt_returns_allow_excerpt",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "HookReviewEngine was the retired Python oracle; native hook decisions are owned by guard-hook-core/guard-runtime."
+  },
+  {
+   "old_node": "tests/test_hook_review_engine.py::TestHookFailSafe::test_fail_safe_without_excerpt_returns_deny_block",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "HookReviewEngine was the retired Python oracle; native hook decisions are owned by guard-hook-core/guard-runtime."
+  },
+  {
+   "old_node": "tests/test_hook_review_engine.py::TestInlineOutputProof::test_clean_inline_output_returns_content_digest",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "HookReviewEngine was the retired Python oracle; native hook decisions are owned by guard-hook-core/guard-runtime."
+  },
+  {
+   "old_node": "tests/test_hook_review_engine.py::TestInlineOutputProof::test_empty_inline_output_returns_empty_content_digest",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "HookReviewEngine was the retired Python oracle; native hook decisions are owned by guard-hook-core/guard-runtime."
+  },
+  {
+   "old_node": "tests/test_hook_review_engine.py::TestMetricsExcludesRawContent::test_metrics_payload_excludes_raw_content",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "HookReviewEngine was the retired Python oracle; native hook decisions are owned by guard-hook-core/guard-runtime."
+  },
+  {
+   "old_node": "tests/test_hook_review_engine.py::TestNonPostToolEvents::test_pre_tool_use_returns_not_applicable",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "HookReviewEngine was the retired Python oracle; native hook decisions are owned by guard-hook-core/guard-runtime."
+  },
+  {
+   "old_node": "tests/test_hook_review_engine.py::TestSafeSourceRefAllowOriginal::test_safe_source_ref_returns_allow_original",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "HookReviewEngine was the retired Python oracle; native hook decisions are owned by guard-hook-core/guard-runtime."
+  },
+  {
+   "old_node": "tests/test_hook_review_engine.py::TestScannerBudgetExhaustion::test_scanner_budget_exhaustion_returns_excerpt_or_deny",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "HookReviewEngine was the retired Python oracle; native hook decisions are owned by guard-hook-core/guard-runtime."
+  },
+  {
+   "old_node": "tests/test_hook_review_engine.py::TestSecretSourceFile::test_secret_source_file_returns_deny_block",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "HookReviewEngine was the retired Python oracle; native hook decisions are owned by guard-hook-core/guard-runtime."
+  },
+  {
+   "old_node": "tests/test_hook_review_engine.py::TestSensitivePath::test_env_path_returns_deny_block",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "HookReviewEngine was the retired Python oracle; native hook decisions are owned by guard-hook-core/guard-runtime."
+  },
+  {
+   "old_node": "tests/test_hook_review_engine.py::TestSourceRefMismatch::test_source_ref_mismatch_returns_excerpt_or_deny_not_allow_original",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "HookReviewEngine was the retired Python oracle; native hook decisions are owned by guard-hook-core/guard-runtime."
+  },
+  {
+   "old_node": "tests/test_hook_source_read_fast_path.py::TestBinaryFile::test_binary_file_returns_inconclusive",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Python source-read fast path retired; guard-hook-core owns bounded source verification (decision_io.rs)."
+  },
+  {
+   "old_node": "tests/test_hook_source_read_fast_path.py::TestCacheBehavior::test_cache_hit_returns_source_cache_hit",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Python source-read fast path retired; guard-hook-core owns bounded source verification (decision_io.rs)."
+  },
+  {
+   "old_node": "tests/test_hook_source_read_fast_path.py::TestCacheBehavior::test_cache_invalidates_when_config_fingerprint_changes",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Python source-read fast path retired; guard-hook-core owns bounded source verification (decision_io.rs)."
+  },
+  {
+   "old_node": "tests/test_hook_source_read_fast_path.py::TestCacheBehavior::test_cache_invalidates_when_content_changes",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Python source-read fast path retired; guard-hook-core owns bounded source verification (decision_io.rs)."
+  },
+  {
+   "old_node": "tests/test_hook_source_read_fast_path.py::TestExternalSourceAuthorization::test_external_source_requires_trusted_pi_adapter",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Python source-read fast path retired; guard-hook-core owns bounded source verification (decision_io.rs)."
+  },
+  {
+   "old_node": "tests/test_hook_source_read_fast_path.py::TestOutputEquivalent::test_chars_mismatch_returns_false",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Python source-read fast path retired; guard-hook-core owns bounded source verification (decision_io.rs)."
+  },
+  {
+   "old_node": "tests/test_hook_source_read_fast_path.py::TestOutputEquivalent::test_exact_match",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Python source-read fast path retired; guard-hook-core owns bounded source verification (decision_io.rs)."
+  },
+  {
+   "old_node": "tests/test_hook_source_read_fast_path.py::TestOutputEquivalent::test_hash_mismatch_returns_false",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Python source-read fast path retired; guard-hook-core owns bounded source verification (decision_io.rs)."
+  },
+  {
+   "old_node": "tests/test_hook_source_read_fast_path.py::TestOutputEquivalent::test_trailing_newline_compatibility",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Python source-read fast path retired; guard-hook-core owns bounded source verification (decision_io.rs)."
+  },
+  {
+   "old_node": "tests/test_hook_source_read_fast_path.py::TestOutputMismatch::test_output_hash_mismatch_returns_inconclusive",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Python source-read fast path retired; guard-hook-core owns bounded source verification (decision_io.rs)."
+  },
+  {
+   "old_node": "tests/test_hook_source_read_fast_path.py::TestSafeSourceRead::test_safe_md_file_returns_allow_original",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Python source-read fast path retired; guard-hook-core owns bounded source verification (decision_io.rs)."
+  },
+  {
+   "old_node": "tests/test_hook_source_read_fast_path.py::TestSafeSourceRead::test_safe_ts_file_returns_allow_original",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Python source-read fast path retired; guard-hook-core owns bounded source verification (decision_io.rs)."
+  },
+  {
+   "old_node": "tests/test_hook_source_read_fast_path.py::TestSecretDetection::test_file_with_env_reference_returns_allow_original",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Python source-read fast path retired; guard-hook-core owns bounded source verification (decision_io.rs)."
+  },
+  {
+   "old_node": "tests/test_hook_source_read_fast_path.py::TestSecretDetection::test_file_with_github_token_returns_risky",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Python source-read fast path retired; guard-hook-core owns bounded source verification (decision_io.rs)."
+  },
+  {
+   "old_node": "tests/test_hook_source_read_fast_path.py::TestSensitivePathRejection::test_env_file_returns_risky_not_allow",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Python source-read fast path retired; guard-hook-core owns bounded source verification (decision_io.rs)."
+  },
+  {
+   "old_node": "tests/test_hook_source_read_fast_path.py::TestSensitivePathRejection::test_npmrc_returns_risky",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Python source-read fast path retired; guard-hook-core owns bounded source verification (decision_io.rs)."
+  },
+  {
+   "old_node": "tests/test_hook_source_read_fast_path.py::TestShapeValidation::test_invalid_output_hash_returns_inconclusive",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Python source-read fast path retired; guard-hook-core owns bounded source verification (decision_io.rs)."
+  },
+  {
+   "old_node": "tests/test_hook_source_read_fast_path.py::TestShapeValidation::test_missing_source_ref_returns_inconclusive",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Python source-read fast path retired; guard-hook-core owns bounded source verification (decision_io.rs)."
+  },
+  {
+   "old_node": "tests/test_hook_source_read_fast_path.py::TestShapeValidation::test_multiple_target_paths_returns_inconclusive",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Python source-read fast path retired; guard-hook-core owns bounded source verification (decision_io.rs)."
+  },
+  {
+   "old_node": "tests/test_hook_source_read_fast_path.py::TestShapeValidation::test_not_file_read_returns_inconclusive",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Python source-read fast path retired; guard-hook-core owns bounded source verification (decision_io.rs)."
+  },
+  {
+   "old_node": "tests/test_hook_source_read_fast_path.py::TestShapeValidation::test_not_post_tool_returns_inconclusive",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Python source-read fast path retired; guard-hook-core owns bounded source verification (decision_io.rs)."
+  },
+  {
+   "old_node": "tests/test_hook_source_read_fast_path.py::TestSymlinkRejection::test_symlink_path_returns_inconclusive",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Python source-read fast path retired; guard-hook-core owns bounded source verification (decision_io.rs)."
+  },
+  {
+   "old_node": "tests/test_hook_source_read_fast_path.py::TestTOCTOU::test_file_modified_between_stat_and_read_returns_inconclusive",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Python source-read fast path retired; guard-hook-core owns bounded source verification (decision_io.rs)."
+  },
+  {
+   "old_node": "tests/test_hook_source_skill_read.py::test_omp_virtual_resource_uses_bounded_output_scan",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Positive virtual-resource allow paths have no native counterpart; the native route fails closed on unresolved skill/OMP URIs (deferred parity)."
+  },
+  {
+   "old_node": "tests/test_hook_source_skill_read.py::test_omp_virtual_resource_with_medium_credential_example_is_allowed",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Positive virtual-resource allow paths have no native counterpart; the native route fails closed on unresolved skill/OMP URIs (deferred parity)."
+  },
+  {
+   "old_node": "tests/test_hook_source_skill_read.py::test_skill_with_dotted_fstring_expression_is_allowed",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Positive virtual-resource allow paths have no native counterpart; the native route fails closed on unresolved skill/OMP URIs (deferred parity)."
+  },
+  {
+   "old_node": "tests/test_hook_source_skill_read.py::test_skill_with_medium_credential_examples_is_allowed",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Positive virtual-resource allow paths have no native counterpart; the native route fails closed on unresolved skill/OMP URIs (deferred parity)."
+  },
+  {
+   "old_node": "tests/test_hook_source_skill_read.py::test_verified_skill_uri_returns_allow_original",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Positive virtual-resource allow paths have no native counterpart; the native route fails closed on unresolved skill/OMP URIs (deferred parity)."
+  },
+  {
+   "old_node": "tests/test_kimi_adapter.py::TestKimiHookChatUx::test_kimi_block_emits_reason_to_stderr",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Kimi prompt-block test ran through the retired generic payload path; UserPromptSubmit returns native_hook_event_unavailable (deferred prompt-gating parity)."
+  },
+  {
+   "old_node": "tests/test_pi_adapter.py::TestPiRuntime::test_pi_block_emits_native_json_and_stderr",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Pi hook emission test ran through the retired generic payload path."
+  },
+  {
+   "old_node": "tests/test_python_hook_semantic_callgraph_gate.py::test_absent_or_invalid_oracle_never_selects_python",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "HOL_GUARD_PYTHON_ORACLE plumbing deleted; the retirement gate forbids reintroduction."
+  },
+  {
+   "old_node": "tests/test_python_hook_semantic_callgraph_gate.py::test_auto_never_constructs_test_oracle",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "HOL_GUARD_PYTHON_ORACLE plumbing deleted; the retirement gate forbids reintroduction."
+  },
+  {
+   "old_node": "tests/test_python_hook_semantic_callgraph_gate.py::test_production_off_returns_fail_safe_without_constructing_oracle",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "HOL_GUARD_PYTHON_ORACLE plumbing deleted; the retirement gate forbids reintroduction."
+  },
+  {
+   "old_node": "tests/test_python_hook_semantic_callgraph_gate.py::test_shadow_comparison_requires_explicit_non_production_surface",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "HOL_GUARD_PYTHON_ORACLE plumbing deleted; the retirement gate forbids reintroduction."
+  },
+  {
+   "old_node": "tests/test_rust_pretool_authority.py::test_full_cli_review_continuation_keeps_python_terminal_provenance",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Python-semantic continuation provenance assertions are obsolete; native route is authoritative."
+  },
+  {
+   "old_node": "tests/test_rust_pretool_authority.py::test_hook_worker_clears_native_route_before_python_review_continuation",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Python-semantic continuation provenance assertions are obsolete; native route is authoritative."
+  },
+  {
+   "old_node": "tests/test_zcode_adapter.py::TestZCodeGenericEmitterBlock::test_block_emits_deny_json_and_exit_two",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "ZCode generic emitter path test ran through the retired generic payload evaluator."
+  },
+  {
+   "old_node": "tests/test_native_approval_bridge.py::test_challenge_is_privacy_safe_and_wire_operation_is_exact",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/approval_v3_tests.rs::valid_artifact_allows_exact_review_and_returns_private_receipt",
+    "rust/crates/guard-runtime/src/approval_v3_tests.rs::request_identity_is_opaque_and_rust_derived_when_missing"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_native_approval_bridge.py::test_validate_then_consume_is_immediate_and_receipt_is_bound",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/approval_v3_lifecycle_tests.rs::consume_requires_claim_and_is_single_use",
+    "rust/crates/guard-runtime/src/approval_v3_lifecycle_tests.rs::replay_and_concurrent_claim_are_single_use"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_native_approval_bridge.py::test_preconsume_forged_cross_request_policy_and_harness_values_fail",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/approval_v3_lifecycle_tests.rs::policy_push_after_claim_before_consume_cannot_authorize_execution",
+    "rust/crates/guard-runtime/src/approval_v3_tests.rs::binding_mutations_are_rejected_even_when_resigned"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_native_approval_bridge.py::test_continuation_rejects_non_session_before_private_field_access",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/approval_v3_lifecycle_tests.rs::consume_requires_claim_and_is_single_use"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Asserted the Python bridge session object; the Rust authority enforces single-use claims without a Python session."
+  },
+  {
+   "old_node": "tests/test_native_approval_bridge.py::test_native_consumed_receipt_must_bind_full_context",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/approval_v3_lifecycle_tests.rs::artifact_binding_mutation_and_hard_floors_fail_before_claim",
+    "rust/crates/guard-runtime/src/approval_v3_lifecycle_tests.rs::artifact_timing_nonce_and_integrity_are_checked"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_native_approval_bridge.py::test_native_consumed_receipt_missing_context_is_rejected_at_bridge",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/approval_v3_lifecycle_tests.rs::artifact_binding_mutation_and_hard_floors_fail_before_claim"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_native_approval_bridge.py::test_cross_request_artifact_is_rejected_before_native_validation",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/approval_v3_lifecycle_tests.rs::artifact_timing_nonce_and_integrity_are_checked",
+    "rust/crates/guard-runtime/src/approval_v3_tests.rs::binding_mutations_are_rejected_even_when_resigned"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_native_approval_bridge.py::test_legacy_database_row_and_forged_receipt_cannot_authorize",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/approval_v3_lifecycle_tests.rs::replay_and_concurrent_claim_are_single_use",
+    "rust/crates/guard-runtime/src/approval_replay_memory_transition_tests.rs::every_transition_prunes_expired_entries"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_native_approval_v4_transport.py::test_v4_bridge_forwards_assertion_immediately",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/approval_v4_tests.rs::ed25519_assertion_validates_and_persists_counter_zero_and_one"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_native_approval_v4_transport.py::test_v4_bridge_adapts_portal_proof_without_local_authority",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/approval_v4_negative_tests.rs::webauthn_origin_rp_flags_type_and_signature_are_verified_in_rust"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_native_approval_v4_transport.py::test_v4_bridge_rejects_proof_bound_to_another_session",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/approval_v4_tests.rs::assertion_mutations_fail_before_replay_claim",
+    "rust/crates/guard-runtime/src/approval_v4_negative_tests.rs::v4_restart_and_concurrent_claims_fail_closed"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_accepts_clean_digest_bound_archive",
+   "replacement_nodes": [
+    "tests/test_native_archive_inspection.py::test_archive_inspector_accepts_clean_digest_bound_archive"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_blocks_parent_path_member",
+   "replacement_nodes": [
+    "tests/test_native_archive_inspection.py::test_archive_inspector_blocks_parent_path_member"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_blocks_install_script_without_executing_it",
+   "replacement_nodes": [
+    "tests/test_native_archive_inspection.py::test_archive_inspector_blocks_install_script_without_executing_it"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_blocks_all_npm_install_lifecycle_scripts[prepublish]",
+   "replacement_nodes": [
+    "tests/test_native_archive_inspection.py::test_archive_inspector_blocks_all_npm_install_lifecycle_scripts[prepublish]"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_blocks_all_npm_install_lifecycle_scripts[preprepare]",
+   "replacement_nodes": [
+    "tests/test_native_archive_inspection.py::test_archive_inspector_blocks_all_npm_install_lifecycle_scripts[preprepare]"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_blocks_all_npm_install_lifecycle_scripts[postprepare]",
+   "replacement_nodes": [
+    "tests/test_native_archive_inspection.py::test_archive_inspector_blocks_all_npm_install_lifecycle_scripts[postprepare]"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_blocks_python_sdist_execution_without_running_it",
+   "replacement_nodes": [
+    "tests/test_native_archive_inspection.py::test_archive_inspector_blocks_python_sdist_execution_without_running_it"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_treats_every_setup_py_as_executable_build_metadata",
+   "replacement_nodes": [
+    "tests/test_native_archive_inspection.py::test_archive_inspector_treats_every_setup_py_as_executable_build_metadata"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_blocks_project_local_python_build_backend",
+   "replacement_nodes": [
+    "tests/test_native_archive_inspection.py::test_archive_inspector_blocks_project_local_python_build_backend"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_blocks_remote_python_build_requirement",
+   "replacement_nodes": [
+    "tests/test_native_archive_inspection.py::test_archive_inspector_blocks_remote_python_build_requirement"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_blocks_implicit_node_gyp_install_lifecycle",
+   "replacement_nodes": [
+    "tests/test_native_archive_inspection.py::test_archive_inspector_blocks_implicit_node_gyp_install_lifecycle"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_blocks_unbound_nested_source_dependencies[https://evil.example/payload.tgz]",
+   "replacement_nodes": [
+    "tests/test_native_archive_inspection.py::test_archive_inspector_blocks_unbound_nested_source_dependencies[https://evil.example/payload.tgz]"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_blocks_unbound_nested_source_dependencies[file:./payload.tgz]",
+   "replacement_nodes": [
+    "tests/test_native_archive_inspection.py::test_archive_inspector_blocks_unbound_nested_source_dependencies[file:./payload.tgz]"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_blocks_unbound_nested_source_dependencies[attacker/repository#main]",
+   "replacement_nodes": [
+    "tests/test_native_archive_inspection.py::test_archive_inspector_blocks_unbound_nested_source_dependencies[attacker/repository#main]"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_blocks_unbound_nested_source_dependencies[npm:evil@https://evil.example/payload.tgz]",
+   "replacement_nodes": [
+    "tests/test_native_archive_inspection.py::test_archive_inspector_blocks_unbound_nested_source_dependencies[npm:evil@https://evil.example/payload.tgz]"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_blocks_unbound_nested_source_dependencies[exec:./generator.js]",
+   "replacement_nodes": [
+    "tests/test_native_archive_inspection.py::test_archive_inspector_blocks_unbound_nested_source_dependencies[exec:./generator.js]"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_blocks_unbound_nested_source_dependencies[jsr:@scope/payload@1.0.0]",
+   "replacement_nodes": [
+    "tests/test_native_archive_inspection.py::test_archive_inspector_blocks_unbound_nested_source_dependencies[jsr:@scope/payload@1.0.0]"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_blocks_unbound_nested_source_dependencies[unknown-protocol:payload]",
+   "replacement_nodes": [
+    "tests/test_native_archive_inspection.py::test_archive_inspector_blocks_unbound_nested_source_dependencies[unknown-protocol:payload]"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_allows_registry_only_dependency_specifiers[^1.2.3]",
+   "replacement_nodes": [
+    "tests/test_native_archive_inspection.py::test_archive_inspector_allows_registry_only_dependency_specifiers[^1.2.3]"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_allows_registry_only_dependency_specifiers[latest]",
+   "replacement_nodes": [
+    "tests/test_native_archive_inspection.py::test_archive_inspector_allows_registry_only_dependency_specifiers[latest]"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_allows_registry_only_dependency_specifiers[npm:safe-package@^1.2.3]",
+   "replacement_nodes": [
+    "tests/test_native_archive_inspection.py::test_archive_inspector_allows_registry_only_dependency_specifiers[npm:safe-package@^1.2.3]"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_allows_registry_only_dependency_specifiers[npm:@scope/safe@latest]",
+   "replacement_nodes": [
+    "tests/test_native_archive_inspection.py::test_archive_inspector_allows_registry_only_dependency_specifiers[npm:@scope/safe@latest]"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_blocks_digest_mismatch",
+   "replacement_nodes": [
+    "tests/test_native_archive_inspection.py::test_archive_inspector_blocks_digest_mismatch"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_fails_closed_when_subprocess_is_unavailable",
+   "replacement_nodes": [
+    "tests/test_native_archive_inspection.py::test_archive_inspector_reports_native_unavailable",
+    "tests/test_native_archive_inspection.py::test_archive_inspector_fails_closed_when_worker_cannot_start"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_rejects_symlink_blob",
+   "replacement_nodes": [
+    "tests/test_native_archive_inspection.py::test_archive_inspector_rejects_symlink_blob"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_accepts_regular_blob_below_symlinked_temp_root",
+   "replacement_nodes": [
+    "tests/test_native_archive_inspection.py::test_archive_inspector_accepts_regular_blob_below_symlinked_temp_root"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_blocks_escaping_links[2]",
+   "replacement_nodes": [
+    "tests/test_native_archive_inspection.py::test_archive_inspector_blocks_escaping_links[2]"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_blocks_escaping_links[1]",
+   "replacement_nodes": [
+    "tests/test_native_archive_inspection.py::test_archive_inspector_blocks_escaping_links[1]"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_blocks_special_device_member",
+   "replacement_nodes": [
+    "tests/test_native_archive_inspection.py::test_archive_inspector_blocks_special_device_member",
+    "tests/test_native_archive_inspection.py::test_archive_inspector_blocks_fifo_member"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_blocks_duplicate_member_path",
+   "replacement_nodes": [
+    "tests/test_native_archive_inspection.py::test_archive_inspector_blocks_duplicate_member_path"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_blocks_portable_case_collisions",
+   "replacement_nodes": [
+    "tests/test_native_archive_inspection.py::test_archive_inspector_blocks_portable_case_collisions"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_accepts_root_relative_hardlink_target",
+   "replacement_nodes": [
+    "tests/test_native_archive_inspection.py::test_archive_inspector_accepts_root_relative_hardlink_target"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_blocks_linked_package_manifest",
+   "replacement_nodes": [
+    "tests/test_native_archive_inspection.py::test_archive_inspector_blocks_linked_package_manifest"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_enforces_decompression_ratio",
+   "replacement_nodes": [
+    "tests/test_native_archive_inspection.py::test_archive_inspector_enforces_decompression_ratio"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_rejects_unsupported_bzip2_before_tar_parsing",
+   "replacement_nodes": [
+    "tests/test_native_archive_inspection.py::test_archive_inspector_rejects_unsupported_bzip2_before_tar_parsing",
+    "tests/test_native_archive_inspection.py::test_archive_inspector_rejects_unsupported_xz"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_enforces_file_count_and_nested_archive_limits",
+   "replacement_nodes": [
+    "tests/test_native_archive_inspection.py::test_archive_inspector_enforces_file_count_and_nested_archive_limits"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_fails_closed_on_malformed_archive",
+   "replacement_nodes": [
+    "tests/test_native_archive_inspection.py::test_archive_inspector_fails_closed_on_malformed_archive",
+    "tests/test_native_archive_inspection.py::test_archive_inspector_fails_closed_on_truncated_gzip"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_fails_closed_on_timeout_or_child_crash",
+   "replacement_nodes": [
+    "tests/test_native_archive_inspection.py::test_archive_inspector_fails_closed_on_worker_timeout_and_crash"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_child_denies_socket_creation",
+   "replacement_nodes": [
+    "tests/test_native_archive_inspection.py::test_archive_worker_self_contains_without_wrapper"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_offline_archive_inspection.py::test_isolated_child_command_derives_root_from_installed_package",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "The Python worker derived the package root to re-exec sys.executable; the native worker is a bundled hol-guard-runtime binary resolved by native_runtime_status, so there is no child-command derivation surface left to test."
+  },
+  {
+   "old_node": "tests/test_guard_network_public_suffix.py::test_registrable_domain_uses_bundled_psl_without_network",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Bundled-PSL registrable-domain projection never gained a production caller; deleted as dead scaffolding outside the REM network remediation program."
+  },
+  {
+   "old_node": "tests/test_guard_remote_approval_execution.py::test_explicit_no_transport_is_resolved_without_resume_confirmation",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Remote-approval resume helpers never gained a caller; remote approval semantics are owned by the native approval flow."
+  },
+  {
+   "old_node": "tests/test_guard_remote_approval_execution.py::test_supported_transport_retry_failure_remains_unconfirmed",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Remote-approval resume helpers never gained a caller; remote approval semantics are owned by the native approval flow."
+  },
+  {
+   "old_node": "tests/test_guard_remote_approval_execution.py::test_missing_support_proof_remains_unconfirmed",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Remote-approval resume helpers never gained a caller; remote approval semantics are owned by the native approval flow."
+  },
+  {
+   "old_node": "tests/test_guard_policy_recipe.py::test_policy_recipe_parses_and_safe_fixtures_pass",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Recipe validation helpers never gained a caller; recipes remain inert fixtures with no shipped consumer."
+  },
+  {
+   "old_node": "tests/test_guard_policy_recipe.py::test_policy_recipe_rejects_unknown_fields",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Recipe validation helpers never gained a caller; recipes remain inert fixtures with no shipped consumer."
+  },
+  {
+   "old_node": "tests/test_guard_policy_recipe.py::test_policy_recipe_rejects_wildcard_matchers",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Recipe validation helpers never gained a caller; recipes remain inert fixtures with no shipped consumer."
+  },
+  {
+   "old_node": "tests/test_guard_policy_recipe.py::test_policy_recipe_rejects_a_fixture_that_does_not_match_expected_behavior",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Recipe validation helpers never gained a caller; recipes remain inert fixtures with no shipped consumer."
+  },
+  {
+   "old_node": "tests/test_guard_policy_recipe.py::test_policy_recipe_rejects_an_invalid_calendar_date",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Recipe validation helpers never gained a caller; recipes remain inert fixtures with no shipped consumer."
+  },
+  {
+   "old_node": "tests/test_guard_policy_recipe.py::test_policy_recipe_requires_positive_and_negative_fixtures",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Recipe validation helpers never gained a caller; recipes remain inert fixtures with no shipped consumer."
+  },
+  {
+   "old_node": "tests/test_guard_policy_recipe.py::test_policy_recipe_is_inert_and_has_no_apply_or_command_fields",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Recipe validation helpers never gained a caller; recipes remain inert fixtures with no shipped consumer."
+  },
+  {
+   "old_node": "tests/test_codex_event_trace.py::test_valid_one_command_trace_returns_structural_summary_without_output",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "The Codex event-trace parser never gained a caller; the evaluation wheel records evidence through its own path."
+  },
+  {
+   "old_node": "tests/test_codex_event_trace.py::test_matching_multiline_command_is_accepted_without_exporting_its_text",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "The Codex event-trace parser never gained a caller; the evaluation wheel records evidence through its own path."
+  },
+  {
+   "old_node": "tests/test_codex_event_trace.py::test_command_rejects_unsafe_control_characters",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "The Codex event-trace parser never gained a caller; the evaluation wheel records evidence through its own path."
+  },
+  {
+   "old_node": "tests/test_codex_event_trace.py::test_string_trace_with_unpaired_surrogate_has_clear_encoding_error",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "The Codex event-trace parser never gained a caller; the evaluation wheel records evidence through its own path."
+  },
+  {
+   "old_node": "tests/test_codex_event_trace.py::test_nonzero_command_is_recorded_without_a_guard_decision",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "The Codex event-trace parser never gained a caller; the evaluation wheel records evidence through its own path."
+  },
+  {
+   "old_node": "tests/test_codex_event_trace.py::test_declined_command_with_no_exit_code_is_observed_without_a_pass_claim",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "The Codex event-trace parser never gained a caller; the evaluation wheel records evidence through its own path."
+  },
+  {
+   "old_node": "tests/test_codex_event_trace.py::test_completed_command_still_requires_an_exit_code",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "The Codex event-trace parser never gained a caller; the evaluation wheel records evidence through its own path."
+  },
+  {
+   "old_node": "tests/test_codex_event_trace.py::test_non_declined_command_requires_an_exit_code",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "The Codex event-trace parser never gained a caller; the evaluation wheel records evidence through its own path."
+  },
+  {
+   "old_node": "tests/test_codex_event_trace.py::test_turn_completion_allows_null_exit_code",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "The Codex event-trace parser never gained a caller; the evaluation wheel records evidence through its own path."
+  },
+  {
+   "old_node": "tests/test_codex_event_trace.py::test_command_lifecycle_and_exact_command_are_required",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "The Codex event-trace parser never gained a caller; the evaluation wheel records evidence through its own path."
+  },
+  {
+   "old_node": "tests/test_codex_event_trace.py::test_completed_command_without_started_is_rejected",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "The Codex event-trace parser never gained a caller; the evaluation wheel records evidence through its own path."
+  },
+  {
+   "old_node": "tests/test_codex_event_trace.py::test_other_action_item_cannot_hide_in_one_command_trace",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "The Codex event-trace parser never gained a caller; the evaluation wheel records evidence through its own path."
+  },
+  {
+   "old_node": "tests/test_codex_event_trace.py::test_thread_and_command_ids_must_remain_bound",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "The Codex event-trace parser never gained a caller; the evaluation wheel records evidence through its own path."
+  },
+  {
+   "old_node": "tests/test_codex_event_trace.py::test_exported_identity_and_status_fields_cannot_contain_private_text",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "The Codex event-trace parser never gained a caller; the evaluation wheel records evidence through its own path."
+  },
+  {
+   "old_node": "tests/test_codex_event_trace.py::test_malformed_json_is_rejected",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "The Codex event-trace parser never gained a caller; the evaluation wheel records evidence through its own path."
+  },
+  {
+   "old_node": "tests/test_codex_event_trace.py::test_byte_and_event_limits_are_enforced",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "The Codex event-trace parser never gained a caller; the evaluation wheel records evidence through its own path."
+  },
+  {
+   "old_node": "tests/test_codex_event_trace.py::test_failed_or_errored_turn_is_rejected",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "The Codex event-trace parser never gained a caller; the evaluation wheel records evidence through its own path."
+  },
+  {
+   "old_node": "tests/test_codex_event_trace.py::test_pre_turn_configuration_error_cannot_be_treated_as_a_clean_run",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "The Codex event-trace parser never gained a caller; the evaluation wheel records evidence through its own path."
+  },
+  {
+   "old_node": "tests/test_codex_event_trace.py::test_error_item_after_turn_start_is_rejected",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "The Codex event-trace parser never gained a caller; the evaluation wheel records evidence through its own path."
+  },
+  {
+   "old_node": "tests/test_codex_event_trace.py::test_ambiguous_json_and_invalid_utf8_are_rejected",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "The Codex event-trace parser never gained a caller; the evaluation wheel records evidence through its own path."
+  },
+  {
+   "old_node": "tests/test_guard_resource_budget.py::TestResourceBudget::test_defaults_valid",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "The ResourceBudget contract never gained a consumer; containment executors report applied controls through their own records."
+  },
+  {
+   "old_node": "tests/test_guard_resource_budget.py::TestResourceBudget::test_digest_order_independent",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "The ResourceBudget contract never gained a consumer; containment executors report applied controls through their own records."
+  },
+  {
+   "old_node": "tests/test_guard_resource_budget.py::TestResourceBudget::test_digest_changes_on_value",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "The ResourceBudget contract never gained a consumer; containment executors report applied controls through their own records."
+  },
+  {
+   "old_node": "tests/test_guard_resource_budget.py::TestResourceBudget::test_rejects_out_of_range",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "The ResourceBudget contract never gained a consumer; containment executors report applied controls through their own records."
+  },
+  {
+   "old_node": "tests/test_guard_resource_budget.py::TestResourceBudget::test_rejects_bool",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "The ResourceBudget contract never gained a consumer; containment executors report applied controls through their own records."
+  },
+  {
+   "old_node": "tests/test_guard_resource_budget.py::TestResourceBudget::test_rejects_bad_schema_version",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "The ResourceBudget contract never gained a consumer; containment executors report applied controls through their own records."
+  },
+  {
+   "old_node": "tests/test_guard_resource_budget.py::TestBackendSupport::test_current_platform",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "The ResourceBudget contract never gained a consumer; containment executors report applied controls through their own records."
+  },
+  {
+   "old_node": "tests/test_guard_resource_budget.py::TestBackendSupport::test_unknown_platform_no_rlimit",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "The ResourceBudget contract never gained a consumer; containment executors report applied controls through their own records."
+  },
+  {
+   "old_node": "tests/test_guard_resource_budget.py::TestAppliedControls::test_output_bounding_applied_on_all_backends",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "The ResourceBudget contract never gained a consumer; containment executors report applied controls through their own records."
+  },
+  {
+   "old_node": "tests/test_guard_resource_budget.py::TestAppliedControls::test_rlimit_controls_applied_on_rlimit_backend",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "The ResourceBudget contract never gained a consumer; containment executors report applied controls through their own records."
+  },
+  {
+   "old_node": "tests/test_guard_resource_budget.py::TestAppliedControls::test_unsupported_controls_not_implied",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "The ResourceBudget contract never gained a consumer; containment executors report applied controls through their own records."
+  },
+  {
+   "old_node": "tests/test_guard_resource_budget.py::TestAppliedControls::test_applied_control_limit_value_set_when_applied",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "The ResourceBudget contract never gained a consumer; containment executors report applied controls through their own records."
+  },
+  {
+   "old_node": "tests/test_guard_resource_budget.py::TestAppliedControls::test_unapplied_control_limit_value_dropped",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "The ResourceBudget contract never gained a consumer; containment executors report applied controls through their own records."
+  },
+  {
+   "old_node": "tests/test_guard_resource_budget.py::TestAppliedControlValidation::test_rejects_non_enum_kind",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "The ResourceBudget contract never gained a consumer; containment executors report applied controls through their own records."
+  },
+  {
+   "old_node": "tests/test_guard_resource_budget.py::TestAppliedControlValidation::test_rejects_non_bool_applied",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "The ResourceBudget contract never gained a consumer; containment executors report applied controls through their own records."
+  }
+ ],
+ "preserved_tests": [
+  {
+   "old_node": "ci/native_runtime/test_guard_native_runtime_resident.py::test_hook_worker_auto_is_native_first",
+   "new_node": "ci/native_runtime/test_native_hook_worker_modes.py::test_hook_worker_auto_is_native_first",
+   "reason": "Unrelated hook-worker behavior preserved unchanged until its own semantic cutover."
+  },
+  {
+   "old_node": "ci/native_runtime/test_guard_native_runtime_resident.py::test_hook_worker_auto_fails_closed_when_native_unavailable",
+   "new_node": "ci/native_runtime/test_native_hook_worker_modes.py::test_hook_worker_auto_fails_closed_when_native_unavailable",
+   "reason": "Unrelated hook-worker behavior preserved unchanged until its own semantic cutover."
+  },
+  {
+   "old_node": "ci/native_runtime/test_guard_native_runtime_resident.py::test_hook_worker_shadow_compares_explicit_python_oracle",
+   "new_node": "ci/native_runtime/test_native_hook_worker_modes.py::test_hook_worker_shadow_compares_explicit_python_oracle",
+   "reason": "Unrelated hook-worker behavior preserved unchanged until its own semantic cutover."
+  },
+  {
+   "old_node": "ci/native_runtime/test_guard_native_runtime_resident.py::test_hook_worker_shadow_ignores_native_exception",
+   "new_node": "ci/native_runtime/test_native_hook_worker_modes.py::test_hook_worker_shadow_ignores_native_exception",
+   "reason": "Unrelated hook-worker behavior preserved unchanged until its own semantic cutover."
+  },
+  {
+   "old_node": "tests/test_native_approval_bridge.py::test_decoders_reject_floor_lowering_unknown_fields_duplicate_json_and_unknown_errors",
+   "new_node": "tests/test_native_response_decoder.py::test_approval_decoders_reject_floor_lowering_and_tampering",
+   "reason": "Decoder floor-lowering and tamper negatives cover the live native_approval_protocol surface; bridge-specific assertions were retired."
+  }
+ ],
+ "unchanged_regression_suites": [
+  "tests/test_native_runtime_admission.py",
+  "tests/test_native_resident_client_cleanup.py",
+  "tests/test_native_resident_client_pool.py",
+  "ci/native_runtime/test_native_hook_client.py",
+  "ci/native_runtime/test_native_hook_client_timeout.py",
+  "ci/native_runtime/test_native_hook_client_transport.py"
+ ],
+ "proof_status": {
+  "source_and_regression_tests": "incomplete; prompt, package, and deleted-test behavior regressions must pass before publication",
+  "installed_product": "required before acceptance",
+  "all_prd_tasks": "not_complete"
+ },
+ "implementation_base_sha": "1dc81dd4319cdf18e4b1c0fd3d061f732601b188"
 }

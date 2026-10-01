@@ -24,6 +24,11 @@ _PUBLIC_FAILURE_CODES = frozenset(
         "configured_host_scan_failed",
         "observed_provider_scan_failed",
         "catalog_limit_reached",
+        "mcp_launch_failed",
+        "mcp_transport_failed",
+        "mcp_initialize_failed",
+        "mcp_protocol_unsupported",
+        "mcp_capability_rejected",
     }
 )
 

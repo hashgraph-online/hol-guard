@@ -9,6 +9,8 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import cast
 
+import pytest
+
 from codex_plugin_scanner.guard.cli.commands_support_hook_payload import (
     _action_envelope_json,
     _hook_action_envelope,
@@ -191,6 +193,7 @@ def test_explicit_home_is_part_of_exact_action_binding(tmp_path: Path) -> None:
     assert wrong_home is False
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_first_exact_live_allow_revalidates_through_resident_worker(tmp_path: Path) -> None:
     home_dir = tmp_path / "home"
     guard_home = tmp_path / "guard-home"
@@ -251,7 +254,6 @@ def test_first_exact_live_allow_revalidates_through_resident_worker(tmp_path: Pa
                 **request,
                 "claim_saved_approval": False,
                 "claimed_saved_allow_hash": claimed_hash,
-                "claimed_trusted_request_override": True,
                 "claimed_approval_request_id": claimed_request_id,
             },
             stores=stores,

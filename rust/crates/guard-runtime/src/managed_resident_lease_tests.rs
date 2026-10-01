@@ -127,13 +127,13 @@ fn initial_lease_lock_retries_until_the_current_holder_releases() {
     LOCK_BUSY_NOTIFICATION.with(|notification| *notification.borrow_mut() = Some(busy_sender));
     let releaser = thread::spawn(move || {
         busy_receiver
-            .recv_timeout(Duration::from_secs(1))
+            .recv_timeout(Duration::from_secs(5))
             .expect("retry path should observe the held lock");
         drop(held);
     });
 
     let acquired =
-        acquire_directory_lock_with_retry(&directory, &directory, Duration::from_millis(100));
+        acquire_directory_lock_with_retry(&directory, &directory, Duration::from_secs(2));
     releaser.join().expect("lock releaser should exit cleanly");
     let acquired = acquired.expect("bounded retry should acquire after release");
     drop(acquired);

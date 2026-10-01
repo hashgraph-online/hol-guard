@@ -8,6 +8,7 @@ rust-version.workspace = true
 [dependencies]
 guard-secure-fs = { path = "../guard-secure-fs" }
 guard-contracts = { path = "../guard-contracts" }
+regex.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
