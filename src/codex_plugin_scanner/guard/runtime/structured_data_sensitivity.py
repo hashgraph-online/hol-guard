@@ -16,8 +16,7 @@ from functools import partial
 from typing import Literal
 
 from ..strict_json_pairs import unique_json_object
-from .hook_content_scanner import ContentScanner
-from .secret_sensitivity import secret_content_rule_version
+from .secret_sensitivity import SecretContentMatch, classify_secret_content, secret_content_rule_version
 
 ScanStatus = Literal["matched", "no_declared_match", "unsupported"]
 FieldRole = Literal["protected_personal", "ordinary"]
@@ -113,6 +112,84 @@ def _reject_constant(_value: str) -> object:
     raise ValueError("nonstandard JSON constant")
 
 
+_CREDENTIAL_CHUNK_CHARS = 4096
+_CREDENTIAL_CONTEXT_CHARS = 8192
+_EARLY_EXIT_SENSITIVITIES = frozenset({"high", "critical"})
+
+
+@dataclass(frozen=True, slots=True)
+class _CredentialScan:
+    matches: tuple[SecretContentMatch, ...]
+    bytes_scanned: int
+    budget_exhausted: bool
+    reason_code: str
+
+
+def _scan_credential_window(
+    window: str,
+    matches_by_classifier: dict[str, SecretContentMatch],
+) -> None:
+    """Classify one rolling window and merge new matches."""
+    suppressed = classify_secret_content(window, suppress_samples=True, documentation_sample_context=False)
+    for match in suppressed:
+        matches_by_classifier.setdefault(match.classifier, match)
+    # Local content keeps the escalation of retrying with sample suppression
+    # disabled so sample-looking assignments still count as present.
+    if not suppressed:
+        for match in classify_secret_content(window, suppress_samples=False):
+            matches_by_classifier.setdefault(match.classifier, match)
+
+
+def _scan_credential_content(
+    text: str,
+    *,
+    deadline_monotonic: float | None,
+) -> _CredentialScan:
+    """Bounded chunked credential presence scan over declared local content.
+
+    Input is already bounded to ``MAX_INPUT_BYTES`` by the caller; the rolling
+    context window catches tokens split across chunk boundaries and the scan
+    exits early on high/critical matches so ``bytes_scanned`` reports only the
+    bytes actually consumed.
+    """
+    tail = ""
+    matches_by_classifier: dict[str, SecretContentMatch] = {}
+    bytes_scanned = 0
+    for index in range(0, len(text), _CREDENTIAL_CHUNK_CHARS):
+        if deadline_monotonic is not None and time.monotonic() >= deadline_monotonic:
+            return _CredentialScan(
+                matches=tuple(matches_by_classifier.values())[:MAX_MATCHES],
+                bytes_scanned=bytes_scanned,
+                budget_exhausted=True,
+                reason_code="deadline_exceeded",
+            )
+        chunk = text[index : index + _CREDENTIAL_CHUNK_CHARS]
+        bytes_scanned += len(chunk.encode("utf-8"))
+        window = tail + chunk
+        _scan_credential_window(window, matches_by_classifier)
+        if any(m.sensitivity in _EARLY_EXIT_SENSITIVITIES for m in matches_by_classifier.values()):
+            return _CredentialScan(
+                matches=tuple(matches_by_classifier.values())[:MAX_MATCHES],
+                bytes_scanned=bytes_scanned,
+                budget_exhausted=False,
+                reason_code="secret_match_early_exit",
+            )
+        if len(matches_by_classifier) >= MAX_MATCHES:
+            return _CredentialScan(
+                matches=tuple(matches_by_classifier.values())[:MAX_MATCHES],
+                bytes_scanned=bytes_scanned,
+                budget_exhausted=False,
+                reason_code="max_matches_reached",
+            )
+        tail = window[-_CREDENTIAL_CONTEXT_CHARS:] if len(window) > _CREDENTIAL_CONTEXT_CHARS else window
+    return _CredentialScan(
+        matches=tuple(matches_by_classifier.values())[:MAX_MATCHES],
+        bytes_scanned=bytes_scanned,
+        budget_exhausted=False,
+        reason_code="matches" if matches_by_classifier else "clean",
+    )
+
+
 def _typed_value(value: object, expected: FieldType) -> bool:
     if expected == "string":
         return isinstance(value, str)
@@ -173,12 +250,8 @@ def classify_declared_content(
     else:
         return finish("unsupported", "input_type_unsupported")
 
-    chunks = (text[index : index + 4096] for index in range(0, len(text), 4096))
-    credential_result = ContentScanner().scan_chunks(
-        chunks,
-        local_content=True,
-        source_context=False,
-        max_bytes=MAX_INPUT_BYTES,
+    credential_result = _scan_credential_content(
+        text,
         deadline_monotonic=deadline,
     )
     matches.extend(

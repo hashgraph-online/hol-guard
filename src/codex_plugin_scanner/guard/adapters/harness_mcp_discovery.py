@@ -18,7 +18,7 @@ from ..runtime.mcp_protection import McpServerIdentity, build_mcp_server_identit
 from .contracts import display_name_for
 from .mcp_servers import ManagedMcpServer, observable_stdio_servers_with_proxy, proxy_process_env
 
-MAX_DISCOVERED_MCP_SERVERS = 40
+MAX_DISCOVERED_MCP_SERVERS = 100
 logger = logging.getLogger(__name__)
 
 

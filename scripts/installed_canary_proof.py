@@ -31,6 +31,15 @@ class InstalledCanaryError(RuntimeError):
     pass
 
 
+def add_installed_canary_arguments(parser: argparse.ArgumentParser) -> None:
+    """Use the same immutable-subject contract for installed qualification runners."""
+    _ = parser.add_argument("--subject", type=Path, required=True)
+    _ = parser.add_argument("--version", required=True)
+    _ = parser.add_argument("--source-sha", required=True)
+    _ = parser.add_argument("--repo-root", type=Path, required=True)
+    _ = parser.add_argument("--output", type=Path, required=True)
+
+
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
