@@ -718,7 +718,7 @@ def run_native_generic_payload(
 ) -> int:
     from ..native_context import bind_context_digest_home
 
-    bind_context_digest_home(store.guard_home)
+    bind_context_digest_home(getattr(store, "guard_home", None))
     payload_map = dict(payload)
     artifact_id = _coalesce_string(
         getattr(args, "artifact_id", None),

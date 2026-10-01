@@ -65,6 +65,19 @@ class NativeContextDigestUnavailableError(RuntimeError):
     """The native context-digest authority is required but unreachable."""
 
 
+def _unbound_context_digest() -> str:
+    """Return a fresh nonce that can never satisfy a saved context binding.
+
+    Builders degrade to this when the native digest authority is unreachable
+    (``HOL_GUARD_NATIVE=off``, missing runtime, unprovisioned home): the
+    evaluation still completes, but no stored token or digest can equal a
+    per-call nonce, so approval reuse and unchanged-context claims fail
+    closed instead of trusting unverifiable context.
+    """
+
+    return f"guard-context-unbound:{secrets.token_hex(32)}"
+
+
 @lru_cache(maxsize=4)
 def _context_digest_guard_home(home: str) -> Path:
     """Resolve the resident's guard home, cached per user home."""
@@ -149,10 +162,13 @@ def build_approval_context_token(
         "sandbox": sandbox,
         "extension_control_digest": current_extension_control_binding_digest(),
     }
-    result = _context_digest_result(
-        "build_approval_context_token",
-        {"components": components},
-    )
+    try:
+        result = _context_digest_result(
+            "build_approval_context_token",
+            {"components": components},
+        )
+    except NativeContextDigestUnavailableError:
+        return _unbound_context_digest()
     return cast(str, result["token"])
 
 
@@ -804,10 +820,13 @@ def build_configured_environment_hash(
 ) -> str:
     """Hash configured environment values without exposing or binding ambient values."""
 
-    result = _context_digest_result(
-        "configured_environment_hash",
-        _configured_values_payload(environment, configured_keys),
-    )
+    try:
+        result = _context_digest_result(
+            "configured_environment_hash",
+            _configured_values_payload(environment, configured_keys),
+        )
+    except NativeContextDigestUnavailableError:
+        return _unbound_context_digest()
     return cast(str, result["digest"])
 
 
@@ -818,10 +837,13 @@ def build_configured_header_values_hash(
 ) -> str:
     """Hash configured header values without retaining or exposing them."""
 
-    result = _context_digest_result(
-        "configured_headers_hash",
-        _configured_values_payload(headers, configured_keys),
-    )
+    try:
+        result = _context_digest_result(
+            "configured_headers_hash",
+            _configured_values_payload(headers, configured_keys),
+        )
+    except NativeContextDigestUnavailableError:
+        return _unbound_context_digest()
     return cast(str, result["digest"])
 
 

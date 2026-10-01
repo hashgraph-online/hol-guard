@@ -233,15 +233,24 @@ def _ambient_context_digest_home(
 
 @pytest.fixture
 def native_context_digest(
-    native_hook_force: Path,
+    monkeypatch: pytest.MonkeyPatch,
     _native_context_home: Path,
 ) -> Path:
     """Force the compiled runtime and return the isolated session resident home.
 
-    Retained for tests that must prove the op works under ``force`` mode
-    specifically; the ambient home redirection is autouse.
+    Unlike ``native_hook_force`` this skips when no runtime binary is
+    resolvable: environments like the cross-platform regressions job never
+    build Rust artifacts, and the suite must stay runnable there.  Every job
+    that sets ``HOL_GUARD_NATIVE_BINARY`` — or ships a release/debug build —
+    still exercises the real resident, so native proof coverage is preserved
+    where the binary exists.
     """
 
+    binary = _context_digest_runtime_binary()
+    if binary is None:
+        pytest.skip("native context digest tests require the compiled Rust runtime")
+    monkeypatch.setenv("HOL_GUARD_NATIVE", "force")
+    monkeypatch.setenv("HOL_GUARD_NATIVE_BINARY", str(binary.resolve()))
     return _native_context_home
 
 

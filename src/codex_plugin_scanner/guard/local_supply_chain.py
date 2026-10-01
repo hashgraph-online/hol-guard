@@ -1511,7 +1511,7 @@ def _final_package_protect_authority(
 
     from .native_context import bind_context_digest_home
 
-    bind_context_digest_home(store.guard_home)
+    bind_context_digest_home(getattr(store, "guard_home", None))
     additional_action: object | None = initial.additional_current_action
     additional_context: dict[str, object] | None = initial.additional_policy_context
     current_config = config
@@ -2907,7 +2907,7 @@ def _package_request_artifact_hash(
 ) -> str:
     from .native_context import bind_context_digest_home
 
-    bind_context_digest_home(store.guard_home)
+    bind_context_digest_home(getattr(store, "guard_home", None))
     policy_context = _package_current_policy_context(
         artifact=artifact,
         store=store,

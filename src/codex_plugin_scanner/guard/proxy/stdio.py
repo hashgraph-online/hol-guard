@@ -393,7 +393,7 @@ class StdioGuardProxy:
         if guard_store is not None:
             from ..native_context import bind_context_digest_home
 
-            bind_context_digest_home(guard_store.guard_home)
+            bind_context_digest_home(getattr(guard_store, "guard_home", None))
 
     def _response_timeout_seconds(self) -> float:
         configured = getattr(self.guard_config, "approval_wait_timeout_seconds", None)
