@@ -85,6 +85,7 @@ _TRANSPORT_INTEGRITY_PATHS: Final = frozenset(
     {
         "src/codex_plugin_scanner/guard/native_decision_receipt.py",
         "src/codex_plugin_scanner/guard/native_command_observations.py",
+        "src/codex_plugin_scanner/guard/native_context.py",
         "src/codex_plugin_scanner/guard/daemon/hook_native_review_approval.py",
     }
 )
@@ -100,6 +101,7 @@ _TRANSPORT_DECODE_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_pretool.py",
         "src/codex_plugin_scanner/guard/native_resident_client.py",
         "src/codex_plugin_scanner/guard/native_runtime.py",
+        "src/codex_plugin_scanner/guard/native_context.py",
     }
 )
 _ASYNC_POLICY_PATHS: Final = frozenset(
