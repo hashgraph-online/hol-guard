@@ -72,6 +72,20 @@
         {
           "type": "object",
           "additionalProperties": false,
+          "required": ["kind", "command"],
+          "properties": {
+            "kind": { "const": "direct-command" },
+            "command": { "type": "string", "minLength": 1, "maxLength": 64 },
+            "args": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1, "maxLength": 128 },
+              "maxItems": 16
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
           "required": ["kind", "url", "serverNames"],
           "properties": {
             "kind": { "const": "remote-http" },

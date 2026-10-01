@@ -280,3 +280,27 @@ def test_evaluate_write_file_stays_review_while_inert(tmp_path: Path) -> None:
     )
     assert decision.action == "review"
     assert decision.source != "catalog-mcp-extension"
+
+
+def test_matching_direct_command_contribution() -> None:
+    from codex_plugin_scanner.guard.runtime.mcp_server_grants import matching_mcp_contribution
+
+    identity = build_mcp_server_identity(
+        config_path="",
+        command="run",
+        args=("--serve-mcp",),
+        transport="stdio",
+    )
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="run",
+        tool_name="set_cwd",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+        server_identity=identity,
+    )
+    payload = matching_mcp_contribution(artifact)
+    assert payload is not None
+    assert payload["id"] == "mcp.run"
+

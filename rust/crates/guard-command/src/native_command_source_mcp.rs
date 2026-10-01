@@ -38,6 +38,11 @@ enum Launch {
         command: String,
         package: String,
     },
+    DirectCommand {
+        command: String,
+        #[serde(default)]
+        args: Vec<String>,
+    },
     RemoteHttp {
         url: String,
         #[serde(rename = "serverNames")]
@@ -107,6 +112,21 @@ pub(super) fn lower(bytes: &[u8]) -> Result<LoweredMcp, &'static str> {
                 format!("{command} -y {package}"),
                 false,
             )
+        }
+        Launch::DirectCommand { command, args } => {
+            if command.is_empty()
+                || command.chars().count() > 64
+                || args.len() > 16
+                || args.iter().any(|a| a.is_empty() || a.chars().count() > 128)
+            {
+                return Err("command_source_mcp_launcher_invalid");
+            }
+            let example = if args.is_empty() {
+                command.clone()
+            } else {
+                format!("{command} {}", args.join(" "))
+            };
+            (vec![command.clone()], example, false)
         }
         Launch::RemoteHttp { url, server_names } => {
             if server_names.is_empty() || server_names.len() > 8 {
@@ -231,6 +251,7 @@ fn canonical_endpoint(value: &str) -> Result<String, &'static str> {
 
 pub(super) fn validate_inventory(program: &Value) -> Result<(), &'static str> {
     let mut packages = BTreeSet::new();
+    let mut direct_commands = BTreeSet::new();
     let mut endpoints = BTreeSet::new();
     let mut aliases = BTreeSet::new();
     for extension in program["extensions"]
@@ -245,6 +266,14 @@ pub(super) fn validate_inventory(program: &Value) -> Result<(), &'static str> {
                     .ok_or("command_source_mcp_projection_invalid")?;
                 if !packages.insert(package.trim().to_lowercase()) {
                     return Err("command_source_mcp_package_duplicate");
+                }
+            }
+            Some("direct-command") => {
+                let command = launch["command"]
+                    .as_str()
+                    .ok_or("command_source_mcp_projection_invalid")?;
+                if !direct_commands.insert(command.trim().to_lowercase()) {
+                    return Err("command_source_mcp_command_duplicate");
                 }
             }
             Some("remote-http") => {

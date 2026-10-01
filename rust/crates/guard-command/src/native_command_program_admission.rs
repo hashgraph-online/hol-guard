@@ -255,6 +255,23 @@ impl NativeCommandProgram {
                                 || !extension.executables.iter().any(|value| value == command)
                                 || mcp.mcp_launch.url.is_some()
                                 || !mcp.mcp_launch.server_names.is_empty()
+                                || !mcp.mcp_launch.args.is_empty()
+                        }
+                        "direct-command" => {
+                            let Some(command) = mcp.mcp_launch.command.as_deref() else {
+                                return true;
+                            };
+                            !bounded_id(command)
+                                || !extension.executables.iter().any(|value| value == command)
+                                || mcp.mcp_launch.package.is_some()
+                                || mcp.mcp_launch.url.is_some()
+                                || !mcp.mcp_launch.server_names.is_empty()
+                                || mcp.mcp_launch.args.len() > 16
+                                || mcp
+                                    .mcp_launch
+                                    .args
+                                    .iter()
+                                    .any(|arg| arg.is_empty() || arg.len() > 128)
                         }
                         "remote-http" => {
                             let Some(url) = mcp.mcp_launch.url.as_deref() else {
@@ -262,6 +279,7 @@ impl NativeCommandProgram {
                             };
                             mcp.mcp_launch.command.is_some()
                                 || mcp.mcp_launch.package.is_some()
+                                || !mcp.mcp_launch.args.is_empty()
                                 || !valid_remote_mcp_url(url)
                                 || mcp.mcp_launch.server_names.is_empty()
                                 || mcp.mcp_launch.server_names.len() > 8

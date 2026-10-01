@@ -358,3 +358,37 @@ fn canonical_mcp_sources_reject_remote_allow_and_unknown_fields() {
         Err("command_source_mcp_contract_invalid")
     ));
 }
+
+#[test]
+fn canonical_mcp_sources_support_direct_command() {
+    let mut source: Value = serde_json::from_slice(REMOTE_MCP).unwrap();
+    source["id"] = serde_json::json!("mcp.run");
+    source["name"] = serde_json::json!("run");
+    source["launch"] = serde_json::json!({
+        "kind": "direct-command",
+        "command": "run",
+        "args": ["--serve-mcp"]
+    });
+    let lowered = mcp::lower(&serde_json::to_vec(&source).unwrap()).unwrap();
+    assert_eq!(lowered.document.extension.executables, vec!["run"]);
+    assert_eq!(
+        lowered.document.extension.permissions[0]
+            .example_command
+            .as_deref(),
+        Some("run --serve-mcp")
+    );
+
+    let mut second = source.clone();
+    second["id"] = serde_json::json!("mcp.run-second");
+    assert!(matches!(
+        compile_addition_with_mcp(
+            &[],
+            &[
+                &serde_json::to_vec(&source).unwrap(),
+                &serde_json::to_vec(&second).unwrap()
+            ],
+            TRUST
+        ),
+        Err("command_source_mcp_command_duplicate")
+    ));
+}

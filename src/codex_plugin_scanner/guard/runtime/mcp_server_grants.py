@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from pathlib import Path
 
 from ..models import GuardAction, GuardArtifact
 from .extension_control_contract import ExtensionControlLayer
@@ -75,6 +76,16 @@ def matching_mcp_contribution(artifact: GuardArtifact) -> dict[str, object] | No
                 continue
             declared = launch.get("package")
             if isinstance(declared, str) and declared.strip().lower() == package:
+                return payload
+    cmd = _mcp_identity_command(artifact)
+    if isinstance(cmd, str) and cmd.strip():
+        cmd_name = Path(cmd.strip()).name.lower()
+        for payload in load_mcp_contribution_payloads():
+            launch = payload.get("launch")
+            if not isinstance(launch, dict) or launch.get("kind") != "direct-command":
+                continue
+            declared_cmd = launch.get("command")
+            if isinstance(declared_cmd, str) and declared_cmd.strip().lower() == cmd_name:
                 return payload
     for payload in load_mcp_contribution_payloads():
         launch = payload.get("launch")
