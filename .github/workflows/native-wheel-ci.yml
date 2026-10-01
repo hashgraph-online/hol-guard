@@ -238,7 +238,7 @@ jobs:
           name: hol-guard-native-build-linux-x64
       - name: Detect pending artifact regeneration
         run: |
-          if [ "${GITHUB_BASE_REF:-}" != "" ] && [ "$(python3 scripts/ci/detect_pending_extension_regen.py --defer-freshness 2>/dev/null || true)" = "true" ]; then
+          if [ "${GITHUB_BASE_REF:-}" != "" ] && [ "$(python3 scripts/ci/detect_pending_extension_regen.py --defer-freshness 2>/dev/null || echo true)" = "true" ]; then
             echo "HOL_DEFER_ARTIFACT_FRESHNESS=1" >> "$GITHUB_ENV"
           fi
       - name: Install this run's wheel and run installed proofs
@@ -453,7 +453,7 @@ jobs:
       - name: Detect pending artifact regeneration
         shell: pwsh
         run: |
-          if ($env:GITHUB_BASE_REF -and (python scripts/ci/detect_pending_extension_regen.py --defer-freshness) -eq "true") {
+          if ($env:GITHUB_BASE_REF -and (python scripts/ci/detect_pending_extension_regen.py --defer-freshness 2>$null) -eq "true" -or $LASTEXITCODE -ne 0) {
             "HOL_DEFER_ARTIFACT_FRESHNESS=1" | Out-File -FilePath $env:GITHUB_ENV -Append
           }
       - name: Install this run's wheel and run installed proofs
@@ -595,7 +595,7 @@ jobs:
         run: uv pip install --python .venv/bin/python --no-deps --force-reinstall native-dist/*.whl
       - name: Detect pending artifact regeneration
         run: |
-          if [ "${GITHUB_BASE_REF:-}" != "" ] && [ "$(python3 scripts/ci/detect_pending_extension_regen.py --defer-freshness 2>/dev/null || true)" = "true" ]; then
+          if [ "${GITHUB_BASE_REF:-}" != "" ] && [ "$(python3 scripts/ci/detect_pending_extension_regen.py --defer-freshness 2>/dev/null || echo true)" = "true" ]; then
             echo "HOL_DEFER_ARTIFACT_FRESHNESS=1" >> "$GITHUB_ENV"
           fi
       - name: Prove installed native default routes

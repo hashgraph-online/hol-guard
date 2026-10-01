@@ -95,7 +95,7 @@ def main() -> int:
         # Inputs changed without carried artifacts: validate the sources by
         # generating, leaving the checked-in projections to post-merge regen.
         print(
-            f"pending artifact regeneration (ids={pending}, inputs changed); "
+            f"pending artifact regeneration (ids={pending}, inputs in diff); "
             "validating sources by generating instead of checking freshness",
             file=sys.stderr,
         )
