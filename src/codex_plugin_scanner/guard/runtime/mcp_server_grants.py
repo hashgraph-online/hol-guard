@@ -96,6 +96,7 @@ def _exact_package_launch(artifact: GuardArtifact, payload: Mapping[str, object]
 # in "registry" too.
 _REGISTRY_ENV_KEYS = frozenset(
     {
+        "npm_config_registry",
         "npm_config_userconfig",
         "npm_config_globalconfig",
         "uv_index",
