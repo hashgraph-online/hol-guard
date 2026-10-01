@@ -55,7 +55,7 @@ _BOUND_GUARD_HOME: ContextVar[Path | None] = ContextVar("guard_context_digest_ho
 # resolving the default home.  Digest output is home-independent, so the worst
 # case is a second resident spawn, never a different answer.
 _LAST_BOUND_LOCK = threading.Lock()
-_LAST_BOUND_HOME: Path | None = None
+_last_bound_home: Path | None = None
 
 # Digest results are pure functions of (kind, canonical request, guard home):
 # identical requests always map to identical tokens/digests.  Enforcement paths
@@ -64,7 +64,7 @@ _LAST_BOUND_HOME: Path | None = None
 # trip per rebuild.  `request_sha256` cannot collide across differing inputs
 # without a SHA-256 break, so correctness does not depend on eviction order.
 _RESULT_CACHE_LOCK = threading.Lock()
-_RESULT_CACHE: dict[tuple[str, str, str], dict[str, Any]] = {}
+_RESULT_CACHE: dict[tuple[str, str], dict[str, Any]] = {}
 _RESULT_CACHE_MAX = 256
 
 
@@ -73,9 +73,9 @@ def bind_context_digest_home(guard_home: Path | None, *, remember: bool = True) 
 
     token = _BOUND_GUARD_HOME.set(guard_home)
     if remember and guard_home is not None:
-        global _LAST_BOUND_HOME
+        global _last_bound_home
         with _LAST_BOUND_LOCK:
-            _LAST_BOUND_HOME = guard_home
+            _last_bound_home = guard_home
     return token
 
 
@@ -88,7 +88,7 @@ def context_digest_guard_home() -> Path | None:
     if bound is not None:
         return bound
     with _LAST_BOUND_LOCK:
-        return _LAST_BOUND_HOME
+        return _last_bound_home
 
 
 @contextmanager
