@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import threading
 import time
 import uuid
@@ -124,11 +125,17 @@ def _canonical_request_sha256(request: dict[str, Any]) -> str:
 
 # Successful results must carry the output the kind's callers index; an `ok`
 # response missing it is an incomplete (and therefore invalid) result.
+# ``validation_reason`` is legitimately null when context is unchanged, so
+# validation kinds require field presence rather than a truthy value.
 _OK_OUTPUT_FIELD: dict[str, str] = {
     "build_approval_context_token": "token",
     "configured_environment_hash": "digest",
     "configured_headers_hash": "digest",
     "launch_argv_digest": "digest",
+}
+_OK_NULLABLE_OUTPUT_FIELD: dict[str, str] = {
+    "validate_approval_context": "validation_reason",
+    "validate_approval_context_tokens": "validation_reason",
 }
 
 
@@ -158,9 +165,13 @@ def _decode_result(
         value = payload.get(field)
         if value is not None and not isinstance(value, str):
             return None
-    required_output = _OK_OUTPUT_FIELD.get(kind)
-    if required_output is not None and payload.get("status") == "ok" and not payload.get(required_output):
-        return None
+    if payload.get("status") == "ok":
+        required_output = _OK_OUTPUT_FIELD.get(kind)
+        nullable_output = _OK_NULLABLE_OUTPUT_FIELD.get(kind)
+        if required_output is not None and not payload.get(required_output):
+            return None
+        if nullable_output is not None and nullable_output not in payload:
+            return None
     return payload
 
 
@@ -210,9 +221,13 @@ def native_context_digest(
         # non-finite floats) would fail inside the worker anyway; surface the
         # same failure boundary without shipping the request.
         return None
-    cache_key = (content_sha256, str(guard_home))
+    # Normalize so the same home spelled differently cannot duplicate entries.
+    cache_key = (content_sha256, os.path.normpath(os.fspath(guard_home)))
     with _RESULT_CACHE_LOCK:
         cached = _RESULT_CACHE.get(cache_key)
+        if cached is not None:
+            # Refresh recency so eviction tracks least-recently-used order.
+            _RESULT_CACHE[cache_key] = _RESULT_CACHE.pop(cache_key)
     if cached is not None:
         return cached
     try:

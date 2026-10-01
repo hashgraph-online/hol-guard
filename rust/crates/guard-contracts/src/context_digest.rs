@@ -117,6 +117,8 @@ pub struct ContextDigestResultV1 {
     pub token: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub digest: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    /// Always emitted — `null` is the explicit "unchanged" verdict, so a
+    /// result omitting the key is malformed rather than ambiguous.
+    #[serde(default)]
     pub validation_reason: Option<String>,
 }

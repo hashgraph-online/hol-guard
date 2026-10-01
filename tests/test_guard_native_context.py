@@ -229,6 +229,56 @@ def test_native_context_digest_ok_result_requires_output_field(
     assert native_context.native_context_digest("launch_argv_digest", {"argv": ["x"]}, guard_home=tmp_path) is None
 
 
+def test_native_context_digest_validate_kind_requires_reason_field(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Validation callers read `validation_reason`; an `ok` result that omits
+    # the field entirely would silently decode to "unchanged" — reject it.
+    _prime(monkeypatch)
+    def _client(*_args: object, **kwargs: object) -> bytes:
+        request = json.loads(kwargs["payload"])["request"]
+        return json.dumps(
+            {
+                "schema": "guard-context-digest-result.v1",
+                "request_id": request["request_id"],
+                "request_sha256": _request_sha256(request),
+                "status": "ok",
+                "code": "ok",
+            }
+        ).encode("utf-8")
+
+    monkeypatch.setattr(native_context, "native_resident_client_request", _client)
+    fields = {"saved_token": "guard-approval-context:v1:AAAA", "current_token": "guard-approval-context:v1:AAAA"}
+    assert (
+        native_context.native_context_digest("validate_approval_context_tokens", fields, guard_home=tmp_path) is None
+    )
+
+
+def test_native_context_digest_validate_kind_accepts_null_reason(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # `validation_reason: null` is the legitimate "unchanged" verdict — the
+    # key must be present, but null must not be rejected as missing output.
+    _prime(monkeypatch)
+    def _client(*_args: object, **kwargs: object) -> bytes:
+        request = json.loads(kwargs["payload"])["request"]
+        return json.dumps(
+            {
+                "schema": "guard-context-digest-result.v1",
+                "request_id": request["request_id"],
+                "request_sha256": _request_sha256(request),
+                "status": "ok",
+                "code": "ok",
+                "validation_reason": None,
+            }
+        ).encode("utf-8")
+
+    monkeypatch.setattr(native_context, "native_resident_client_request", _client)
+    fields = {"saved_token": "guard-approval-context:v1:AAAA", "current_token": "guard-approval-context:v1:AAAA"}
+    result = native_context.native_context_digest("validate_approval_context_tokens", fields, guard_home=tmp_path)
+    assert result is not None and result.get("validation_reason") is None
+
+
 def test_native_context_digest_propagates_worker_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     def _client(*_args: object, **kwargs: object) -> bytes:
         envelope = json.loads(kwargs["payload"])
