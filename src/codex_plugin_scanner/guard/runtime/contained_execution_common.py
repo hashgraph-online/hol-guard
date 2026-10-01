@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import json
 import os
@@ -17,7 +18,7 @@ _MAX_EXECUTABLE_BYTES = 256 * 1024 * 1024
 def file_sha256(path: str) -> str:
     """Hash one non-symlinked regular file without following a replacement link."""
 
-    no_follow = getattr(os, "O_NOFOLLOW", 0)
+    no_follow: int = getattr(os, "O_NOFOLLOW", 0)
     leaf_metadata = None
     if not no_follow:
         leaf_metadata = os.lstat(path)
@@ -25,7 +26,12 @@ def file_sha256(path: str) -> str:
             raise ValueError("executable must be a bounded regular file")
 
     flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NONBLOCK", 0) | no_follow
-    descriptor = os.open(path, flags)
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as exc:
+        if no_follow and exc.errno == errno.ELOOP:
+            raise ValueError("executable must not be a symlink") from exc
+        raise
     try:
         before = os.fstat(descriptor)
         if not stat.S_ISREG(before.st_mode) or before.st_size > _MAX_EXECUTABLE_BYTES:

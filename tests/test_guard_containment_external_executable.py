@@ -221,6 +221,17 @@ def test_file_sha256_rejects_path_replaced_by_symlink(
         _ = executor_module.file_sha256(str(path))
 
 
+@pytest.mark.skipif(not hasattr(os, "symlink"), reason="requires symlink support")
+def test_file_sha256_rejects_initial_symlink(tmp_path: Path) -> None:
+    path = tmp_path / "executable"
+    target = tmp_path / "target"
+    _ = target.write_bytes(b"target executable\n")
+    path.symlink_to(target)
+
+    with pytest.raises(ValueError, match="must not be a symlink"):
+        _ = executor_module.file_sha256(str(path))
+
+
 def test_user_owned_external_executable_is_copied_and_digest_pinned(tmp_path: Path) -> None:
     workspace = (tmp_path / "workspace").resolve()
     workspace.mkdir()
