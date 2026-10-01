@@ -10091,30 +10091,38 @@
       {
         "extension": {
           "action_classes": [
-            "CloudG asset collection command",
-            "CloudG pipeline execution command",
-            "CloudG scanner execution command"
+            "Aether-Vault commit command",
+            "Aether-Vault push command",
+            "Aether-Vault garbage collection command",
+            "Aether-Vault forced checkout command",
+            "Aether-Vault promote command",
+            "Aether-Vault stash drop command",
+            "Aether-Vault audit prune command"
           ],
           "aliases": [],
           "conflicts": [],
           "delegated_protection": null,
           "dependencies": [],
-          "description": "Reviews cloud credential use, security scanner execution, and Terraform file generation through the CloudG CLI.",
-          "ecosystem_ids": [],
-          "executables": [],
-          "extension_id": "command.cloudg",
-          "homepage": "https://github.com/morpheuslord/cloudg",
+          "description": "Reviews Aether-Vault commands that publish, promote, or delete model and dataset state; read-only commands stay quiet.",
+          "ecosystem_ids": [
+            "aether-vault"
+          ],
+          "executables": [
+            "av"
+          ],
+          "extension_id": "command.aether-vault",
+          "homepage": "https://github.com/leon1706-lol/Aether-Vault",
           "icon": {
-            "background": "#0E7490",
+            "background": "#0F766E",
             "kind": "react-icon",
-            "name": "HiMiniCloud"
+            "name": "HiMiniCube"
           },
-          "license": "MIT",
-          "name": "CloudG command protection",
+          "license": "PolyForm-Noncommercial-1.0.0",
+          "name": "Aether-Vault",
           "permissions": [
             {
               "action_classes": [
-                "CloudG asset collection command"
+                "Aether-Vault commit command"
               ],
               "baseline_floor": "review",
               "configurable": true,
@@ -10122,25 +10130,26 @@
               "default_enabled": true,
               "dependencies": [],
               "deprecated": false,
-              "description": "Identifies asset collection runs that resolve cloud credentials and enumerate resources through provider APIs.",
-              "example_command": "cloudg collect -p aws --profile prod --region us-east-1",
+              "description": "Identifies `av commit`, which records a new model or dataset version and uploads it to the registry unless --no-upload is given.",
+              "example_command": "av status",
               "family": null,
               "fixed_reason": null,
               "implementation_version": "1.0.0",
               "implied_permissions": [],
-              "introduced_version": "3.9.0",
-              "label": "CloudG asset collection",
-              "permission_id": "command.cloudg.permission.collect",
+              "introduced_version": "2.2.0",
+              "label": "Aether-Vault commit",
+              "permission_id": "command.aether-vault.permission.commit",
               "replacement_permission_id": null,
-              "risk_tier": "high",
+              "risk_tier": "medium",
               "safer_guidance": [
-                "Confirm the provider, profile, and region flags point at the account you intend to inventory."
+                "Inspect with `av status` / `av diff` before committing or pushing.",
+                "Use `av commit --no-upload` to persist locally and defer the upload to a reviewed `av push`."
               ],
               "typed_capabilities": []
             },
             {
               "action_classes": [
-                "CloudG pipeline execution command"
+                "Aether-Vault push command"
               ],
               "baseline_floor": "review",
               "configurable": true,
@@ -10148,26 +10157,25 @@
               "default_enabled": true,
               "dependencies": [],
               "deprecated": false,
-              "description": "Identifies full pipeline runs that resolve cloud credentials, enumerate assets across accounts and regions, execute security scanners, and write Terraform recreation files when --terraform is set.",
-              "example_command": "cloudg run -p aws --profile prod --terraform",
+              "description": "Identifies `av push`, which publishes committed model and dataset state to the remote registry.",
+              "example_command": "av status",
               "family": null,
               "fixed_reason": null,
               "implementation_version": "1.0.0",
               "implied_permissions": [],
-              "introduced_version": "3.9.0",
-              "label": "CloudG full pipeline",
-              "permission_id": "command.cloudg.permission.run",
+              "introduced_version": "2.2.0",
+              "label": "Aether-Vault push",
+              "permission_id": "command.aether-vault.permission.push",
               "replacement_permission_id": null,
               "risk_tier": "high",
               "safer_guidance": [
-                "Check the selected providers, credential flags, regions, and scanner list before running.",
-                "Leave --terraform off unless you want .tf.json recreation files written to the output directory."
+                "Inspect with `av status` / `av diff` before committing or pushing."
               ],
               "typed_capabilities": []
             },
             {
               "action_classes": [
-                "CloudG scanner execution command"
+                "Aether-Vault garbage collection command"
               ],
               "baseline_floor": "review",
               "configurable": true,
@@ -10175,19 +10183,125 @@
               "default_enabled": true,
               "dependencies": [],
               "deprecated": false,
-              "description": "Identifies scanner runs that execute external security tools such as Prowler, ScoutSuite, Checkov, and Trivy against cloud accounts, IaC directories, and container images.",
-              "example_command": "cloudg scan -p aws --scanners prowler,checkov",
+              "description": "Identifies `av gc`, which permanently deletes unreferenced local model and dataset state.",
+              "example_command": "av status",
               "family": null,
               "fixed_reason": null,
               "implementation_version": "1.0.0",
               "implied_permissions": [],
-              "introduced_version": "3.9.0",
-              "label": "CloudG scanner execution",
-              "permission_id": "command.cloudg.permission.scan",
+              "introduced_version": "2.2.0",
+              "label": "Aether-Vault garbage collection",
+              "permission_id": "command.aether-vault.permission.gc",
+              "replacement_permission_id": null,
+              "risk_tier": "critical",
+              "safer_guidance": [
+                "Review `av status` output before collecting; collected state is not recoverable."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "Aether-Vault forced checkout command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies `av checkout --force` (or `-f`), which discards uncommitted local state.",
+              "example_command": "av status",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "2.2.0",
+              "label": "Aether-Vault forced checkout",
+              "permission_id": "command.aether-vault.permission.checkout-force",
               "replacement_permission_id": null,
               "risk_tier": "high",
               "safer_guidance": [
-                "Review the scanner list, IaC directory, and image list before running; scanners inherit the resolved cloud credentials."
+                "Run `av checkout` without force to see why the checkout was refused."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "Aether-Vault promote command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies `av promote`, which promotes a candidate into a protected target; `--force` bypasses the armed policy gate.",
+              "example_command": "av status",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "2.2.0",
+              "label": "Aether-Vault promote",
+              "permission_id": "command.aether-vault.permission.promote",
+              "replacement_permission_id": null,
+              "risk_tier": "high",
+              "safer_guidance": [
+                "Run `av promote --dry-run` first to see which policy rule would decide the outcome.",
+                "Keep an `av policy set` guardrail armed on the target branch instead of using `--force`."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "Aether-Vault stash drop command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies `av stash drop`, which permanently removes a stashed state.",
+              "example_command": "av status",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "2.2.0",
+              "label": "Aether-Vault stash drop",
+              "permission_id": "command.aether-vault.permission.stash-drop",
+              "replacement_permission_id": null,
+              "risk_tier": "medium",
+              "safer_guidance": [
+                "List stashes with `av stash list` before dropping."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "Aether-Vault audit prune command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies `av audit prune`, which permanently deletes registry audit-log entries older than a cutoff.",
+              "example_command": "av status",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "2.2.0",
+              "label": "Aether-Vault audit prune",
+              "permission_id": "command.aether-vault.permission.audit-prune",
+              "replacement_permission_id": null,
+              "risk_tier": "high",
+              "safer_guidance": [
+                "Run `av audit prune --dry-run` first to see what would be deleted.",
+                "Export the audit log (`av audit export`) before pruning if retention may be needed later."
               ],
               "typed_capabilities": []
             }
@@ -10195,413 +10309,678 @@
           "project_markers": [],
           "publisher": {
             "display_name": "Community",
-            "id": "community.morpheuslord",
-            "url": "https://github.com/morpheuslord/cloudg"
+            "id": "community.leon1706-lol",
+            "url": "https://github.com/leon1706-lol/Aether-Vault"
           },
           "reference_urls": [
-            "https://github.com/morpheuslord/cloudg"
+            "https://github.com/leon1706-lol/Aether-Vault"
           ],
           "required": false,
           "risk_classes": [
-            "execution",
-            "network_egress"
+            "network_egress",
+            "destructive_shell"
           ],
           "rules": [
             {
               "action_classes": [
-                "CloudG asset collection command"
+                "Aether-Vault commit command"
               ],
               "default_mode": "review",
-              "description": "Identifies asset collection runs that resolve cloud credentials and enumerate resources through provider APIs.",
+              "description": "Identifies `av commit`, which records a new model or dataset version and uploads it to the registry unless --no-upload is given.",
               "family": null,
               "matcher": {
                 "config": {
-                  "allow_leading_options": true,
                   "executables": [
-                    "cloudg",
-                    "cloudg.cmd",
-                    "cloudg.exe"
+                    "av",
+                    "av.exe",
+                    "av.cmd"
                   ],
-                  "fail_secure_unknown_options": true,
                   "forbidden_flags": [],
-                  "interspersed_flags": [
-                    "--verbose",
-                    "-v"
-                  ],
-                  "interspersed_options_with_values": [
-                    "--config",
-                    "--log-file",
+                  "forbidden_flags_before_delimiter": [],
+                  "interleaved_options_with_values": [
+                    "--message",
+                    "--metric",
+                    "--metric-drawdown",
+                    "--metric-sharpe",
                     "--output",
-                    "--profile",
-                    "--project-id",
-                    "--provider",
-                    "--region",
-                    "--subscription-id",
-                    "-c",
-                    "-o",
-                    "-p"
+                    "--tag",
+                    "-m"
                   ],
-                  "inverse_flag_pairs": [],
-                  "leading_options_with_values": [
-                    "--config",
-                    "--log-file",
-                    "-c"
+                  "options_with_values": [
+                    "--message",
+                    "--metric",
+                    "--metric-drawdown",
+                    "--metric-sharpe",
+                    "--output",
+                    "--tag",
+                    "-m"
                   ],
-                  "options_with_values": [],
-                  "required_flags": [],
-                  "required_flags_in_all_arguments": false,
-                  "required_option_values": [],
+                  "required_flags_anywhere": [],
                   "subcommands": [
-                    "collect"
+                    "commit"
                   ]
                 },
-                "op": "executable.v1"
+                "op": "leading-subcommand.v1"
               },
               "native_capability": null,
-              "permission_id": "command.cloudg.permission.collect",
+              "permission_id": "command.aether-vault.permission.commit",
               "risk_classes": [
                 "network_egress"
               ],
-              "rule_id": "command.cloudg.collect",
+              "rule_id": "command.aether-vault.commit",
               "rule_version": "1.0.0",
               "safe_variants": [
                 {
                   "matcher": {
-                    "config": {
-                      "allow_leading_options": true,
-                      "executables": [
-                        "cloudg",
-                        "cloudg.cmd",
-                        "cloudg.exe"
-                      ],
-                      "fail_secure_unknown_options": true,
-                      "forbidden_flags": [],
-                      "interspersed_flags": [
-                        "--verbose",
-                        "-v"
-                      ],
-                      "interspersed_options_with_values": [
-                        "--config",
-                        "--log-file",
-                        "--output",
-                        "--profile",
-                        "--project-id",
-                        "--provider",
-                        "--region",
-                        "--subscription-id",
-                        "-c",
-                        "-o",
-                        "-p"
-                      ],
-                      "inverse_flag_pairs": [],
-                      "leading_options_with_values": [
-                        "--config",
-                        "--log-file",
-                        "-c"
-                      ],
-                      "options_with_values": [],
-                      "required_flags": [
-                        "--help"
-                      ],
-                      "required_flags_in_all_arguments": true,
-                      "required_option_values": [],
-                      "subcommands": [
-                        "collect"
-                      ]
-                    },
-                    "op": "executable.v1"
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {
+                          "executables": [
+                            "av",
+                            "av.exe",
+                            "av.cmd"
+                          ],
+                          "forbidden_flags": [],
+                          "forbidden_flags_before_delimiter": [],
+                          "interleaved_options_with_values": [
+                            "--message",
+                            "--metric",
+                            "--metric-drawdown",
+                            "--metric-sharpe",
+                            "--output",
+                            "--tag",
+                            "-m"
+                          ],
+                          "options_with_values": [
+                            "--message",
+                            "--metric",
+                            "--metric-drawdown",
+                            "--metric-sharpe",
+                            "--output",
+                            "--tag",
+                            "-m"
+                          ],
+                          "required_flags_anywhere": [
+                            "--help"
+                          ],
+                          "subcommands": [
+                            "commit"
+                          ]
+                        },
+                        "op": "leading-subcommand.v1"
+                      }
+                    ],
+                    "op": "any.v1"
                   },
-                  "title": "Command help",
+                  "title": "Aether-Vault command help",
                   "variant_id": "help"
                 }
               ],
               "safer_alternatives": [
-                "Confirm the provider, profile, and region flags point at the account you intend to inventory."
+                "Inspect with `av status` / `av diff` before committing or pushing.",
+                "Use `av commit --no-upload` to persist locally and defer the upload to a reviewed `av push`."
               ],
-              "severity": "high",
-              "title": "CloudG asset collection"
+              "severity": "medium",
+              "title": "Aether-Vault commit"
             },
             {
               "action_classes": [
-                "CloudG pipeline execution command"
+                "Aether-Vault push command"
               ],
               "default_mode": "review",
-              "description": "Identifies full pipeline runs that resolve cloud credentials, enumerate assets, execute security scanners, and write Terraform recreation files when --terraform is set.",
+              "description": "Identifies `av push`, which publishes committed model and dataset state to the remote registry.",
               "family": null,
               "matcher": {
                 "config": {
-                  "allow_leading_options": true,
                   "executables": [
-                    "cloudg",
-                    "cloudg.cmd",
-                    "cloudg.exe"
+                    "av",
+                    "av.exe",
+                    "av.cmd"
                   ],
-                  "fail_secure_unknown_options": true,
                   "forbidden_flags": [],
-                  "interspersed_flags": [
-                    "--azure-managed-identity",
-                    "--no-ontology",
-                    "--no-rag-export",
-                    "--no-terraform",
-                    "--ontology",
-                    "--rag-export",
-                    "--terraform",
-                    "--verbose",
-                    "-v"
+                  "forbidden_flags_before_delimiter": [],
+                  "interleaved_options_with_values": [
+                    "--output"
                   ],
-                  "interspersed_options_with_values": [
-                    "--aws-external-id",
-                    "--aws-key",
-                    "--aws-role-arn",
-                    "--aws-secret",
-                    "--aws-session-token",
-                    "--aws-web-identity-token-file",
-                    "--azure-cert-path",
-                    "--azure-client-id",
-                    "--azure-client-secret",
-                    "--azure-federated-token-file",
-                    "--azure-tenant-id",
-                    "--config",
-                    "--gcp-credentials-file",
-                    "--gcp-impersonate-sa",
-                    "--iac-dir",
-                    "--images",
-                    "--log-file",
-                    "--output",
-                    "--profile",
-                    "--project-id",
-                    "--provider",
-                    "--region",
-                    "--regions",
-                    "--scanners",
-                    "--subscription-id",
-                    "-c",
-                    "-o",
-                    "-p"
+                  "options_with_values": [
+                    "--output"
                   ],
-                  "inverse_flag_pairs": [],
-                  "leading_options_with_values": [
-                    "--config",
-                    "--log-file",
-                    "-c"
-                  ],
-                  "options_with_values": [],
-                  "required_flags": [],
-                  "required_flags_in_all_arguments": false,
-                  "required_option_values": [],
+                  "required_flags_anywhere": [],
                   "subcommands": [
-                    "run"
+                    "push"
                   ]
                 },
-                "op": "executable.v1"
+                "op": "leading-subcommand.v1"
               },
               "native_capability": null,
-              "permission_id": "command.cloudg.permission.run",
+              "permission_id": "command.aether-vault.permission.push",
               "risk_classes": [
-                "execution",
                 "network_egress"
               ],
-              "rule_id": "command.cloudg.run",
+              "rule_id": "command.aether-vault.push",
               "rule_version": "1.0.0",
               "safe_variants": [
                 {
                   "matcher": {
-                    "config": {
-                      "allow_leading_options": true,
-                      "executables": [
-                        "cloudg",
-                        "cloudg.cmd",
-                        "cloudg.exe"
-                      ],
-                      "fail_secure_unknown_options": true,
-                      "forbidden_flags": [],
-                      "interspersed_flags": [
-                        "--azure-managed-identity",
-                        "--no-ontology",
-                        "--no-rag-export",
-                        "--no-terraform",
-                        "--ontology",
-                        "--rag-export",
-                        "--terraform",
-                        "--verbose",
-                        "-v"
-                      ],
-                      "interspersed_options_with_values": [
-                        "--aws-external-id",
-                        "--aws-key",
-                        "--aws-role-arn",
-                        "--aws-secret",
-                        "--aws-session-token",
-                        "--aws-web-identity-token-file",
-                        "--azure-cert-path",
-                        "--azure-client-id",
-                        "--azure-client-secret",
-                        "--azure-federated-token-file",
-                        "--azure-tenant-id",
-                        "--config",
-                        "--gcp-credentials-file",
-                        "--gcp-impersonate-sa",
-                        "--iac-dir",
-                        "--images",
-                        "--log-file",
-                        "--output",
-                        "--profile",
-                        "--project-id",
-                        "--provider",
-                        "--region",
-                        "--regions",
-                        "--scanners",
-                        "--subscription-id",
-                        "-c",
-                        "-o",
-                        "-p"
-                      ],
-                      "inverse_flag_pairs": [],
-                      "leading_options_with_values": [
-                        "--config",
-                        "--log-file",
-                        "-c"
-                      ],
-                      "options_with_values": [],
-                      "required_flags": [
-                        "--help"
-                      ],
-                      "required_flags_in_all_arguments": true,
-                      "required_option_values": [],
-                      "subcommands": [
-                        "run"
-                      ]
-                    },
-                    "op": "executable.v1"
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {
+                          "executables": [
+                            "av",
+                            "av.exe",
+                            "av.cmd"
+                          ],
+                          "forbidden_flags": [],
+                          "forbidden_flags_before_delimiter": [],
+                          "interleaved_options_with_values": [
+                            "--output"
+                          ],
+                          "options_with_values": [
+                            "--output"
+                          ],
+                          "required_flags_anywhere": [
+                            "--help"
+                          ],
+                          "subcommands": [
+                            "push"
+                          ]
+                        },
+                        "op": "leading-subcommand.v1"
+                      }
+                    ],
+                    "op": "any.v1"
                   },
-                  "title": "Command help",
+                  "title": "Aether-Vault command help",
                   "variant_id": "help"
                 }
               ],
               "safer_alternatives": [
-                "Check the selected providers, credential flags, regions, and scanner list before running."
+                "Inspect with `av status` / `av diff` before committing or pushing."
               ],
               "severity": "high",
-              "title": "CloudG full pipeline"
+              "title": "Aether-Vault push"
             },
             {
               "action_classes": [
-                "CloudG scanner execution command"
+                "Aether-Vault garbage collection command"
               ],
               "default_mode": "review",
-              "description": "Identifies scanner runs that execute external security tools such as Prowler, ScoutSuite, Checkov, and Trivy.",
+              "description": "Identifies `av gc`, which permanently deletes unreferenced local model and dataset state.",
               "family": null,
               "matcher": {
                 "config": {
-                  "allow_leading_options": true,
                   "executables": [
-                    "cloudg",
-                    "cloudg.cmd",
-                    "cloudg.exe"
+                    "av",
+                    "av.exe",
+                    "av.cmd"
                   ],
-                  "fail_secure_unknown_options": true,
                   "forbidden_flags": [],
-                  "interspersed_flags": [
-                    "--verbose",
-                    "-v"
+                  "forbidden_flags_before_delimiter": [],
+                  "interleaved_options_with_values": [
+                    "--output"
                   ],
-                  "interspersed_options_with_values": [
-                    "--config",
-                    "--iac-dir",
-                    "--images",
-                    "--log-file",
-                    "--output",
-                    "--profile",
-                    "--provider",
-                    "--scanners",
-                    "-c",
-                    "-o",
-                    "-p"
+                  "options_with_values": [
+                    "--output"
                   ],
-                  "inverse_flag_pairs": [],
-                  "leading_options_with_values": [
-                    "--config",
-                    "--log-file",
-                    "-c"
-                  ],
-                  "options_with_values": [],
-                  "required_flags": [],
-                  "required_flags_in_all_arguments": false,
-                  "required_option_values": [],
+                  "required_flags_anywhere": [],
                   "subcommands": [
-                    "scan"
+                    "gc"
                   ]
                 },
-                "op": "executable.v1"
+                "op": "leading-subcommand.v1"
               },
               "native_capability": null,
-              "permission_id": "command.cloudg.permission.scan",
+              "permission_id": "command.aether-vault.permission.gc",
               "risk_classes": [
-                "execution",
-                "network_egress"
+                "destructive_shell"
               ],
-              "rule_id": "command.cloudg.scan",
+              "rule_id": "command.aether-vault.gc",
               "rule_version": "1.0.0",
               "safe_variants": [
                 {
                   "matcher": {
-                    "config": {
-                      "allow_leading_options": true,
-                      "executables": [
-                        "cloudg",
-                        "cloudg.cmd",
-                        "cloudg.exe"
-                      ],
-                      "fail_secure_unknown_options": true,
-                      "forbidden_flags": [],
-                      "interspersed_flags": [
-                        "--verbose",
-                        "-v"
-                      ],
-                      "interspersed_options_with_values": [
-                        "--config",
-                        "--iac-dir",
-                        "--images",
-                        "--log-file",
-                        "--output",
-                        "--profile",
-                        "--provider",
-                        "--scanners",
-                        "-c",
-                        "-o",
-                        "-p"
-                      ],
-                      "inverse_flag_pairs": [],
-                      "leading_options_with_values": [
-                        "--config",
-                        "--log-file",
-                        "-c"
-                      ],
-                      "options_with_values": [],
-                      "required_flags": [
-                        "--help"
-                      ],
-                      "required_flags_in_all_arguments": true,
-                      "required_option_values": [],
-                      "subcommands": [
-                        "scan"
-                      ]
-                    },
-                    "op": "executable.v1"
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {
+                          "executables": [
+                            "av",
+                            "av.exe",
+                            "av.cmd"
+                          ],
+                          "forbidden_flags": [],
+                          "forbidden_flags_before_delimiter": [],
+                          "interleaved_options_with_values": [
+                            "--output"
+                          ],
+                          "options_with_values": [
+                            "--output"
+                          ],
+                          "required_flags_anywhere": [
+                            "--help"
+                          ],
+                          "subcommands": [
+                            "gc"
+                          ]
+                        },
+                        "op": "leading-subcommand.v1"
+                      }
+                    ],
+                    "op": "any.v1"
                   },
-                  "title": "Command help",
+                  "title": "Aether-Vault command help",
                   "variant_id": "help"
                 }
               ],
               "safer_alternatives": [
-                "Review the scanner list, IaC directory, and image list before running; scanners inherit the resolved cloud credentials."
+                "Review `av status` output before collecting; collected state is not recoverable."
+              ],
+              "severity": "critical",
+              "title": "Aether-Vault garbage collection"
+            },
+            {
+              "action_classes": [
+                "Aether-Vault forced checkout command"
+              ],
+              "default_mode": "review",
+              "description": "Identifies `av checkout --force` (or `-f`), which discards uncommitted local state.",
+              "family": null,
+              "matcher": {
+                "config": {},
+                "matchers": [
+                  {
+                    "config": {
+                      "executables": [
+                        "av",
+                        "av.exe",
+                        "av.cmd"
+                      ],
+                      "forbidden_flags": [],
+                      "forbidden_flags_before_delimiter": [],
+                      "interleaved_options_with_values": [
+                        "--output"
+                      ],
+                      "options_with_values": [
+                        "--output"
+                      ],
+                      "required_flags_anywhere": [
+                        "--force"
+                      ],
+                      "subcommands": [
+                        "checkout"
+                      ]
+                    },
+                    "op": "leading-subcommand.v1"
+                  },
+                  {
+                    "config": {
+                      "executables": [
+                        "av",
+                        "av.exe",
+                        "av.cmd"
+                      ],
+                      "forbidden_flags": [],
+                      "forbidden_flags_before_delimiter": [],
+                      "interleaved_options_with_values": [
+                        "--output"
+                      ],
+                      "options_with_values": [
+                        "--output"
+                      ],
+                      "required_flags_anywhere": [
+                        "-f"
+                      ],
+                      "subcommands": [
+                        "checkout"
+                      ]
+                    },
+                    "op": "leading-subcommand.v1"
+                  }
+                ],
+                "op": "any.v1"
+              },
+              "native_capability": null,
+              "permission_id": "command.aether-vault.permission.checkout-force",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "rule_id": "command.aether-vault.checkout-force",
+              "rule_version": "1.0.0",
+              "safe_variants": [],
+              "safer_alternatives": [
+                "Run `av checkout` without force to see why the checkout was refused."
               ],
               "severity": "high",
-              "title": "CloudG scanner execution"
+              "title": "Aether-Vault forced checkout"
+            },
+            {
+              "action_classes": [
+                "Aether-Vault promote command"
+              ],
+              "default_mode": "review",
+              "description": "Identifies `av promote`, which promotes a candidate into a protected target; `--force` bypasses the armed policy gate.",
+              "family": null,
+              "matcher": {
+                "config": {
+                  "executables": [
+                    "av",
+                    "av.exe",
+                    "av.cmd"
+                  ],
+                  "forbidden_flags": [],
+                  "forbidden_flags_before_delimiter": [],
+                  "interleaved_options_with_values": [
+                    "--into",
+                    "--output"
+                  ],
+                  "options_with_values": [
+                    "--into",
+                    "--output"
+                  ],
+                  "required_flags_anywhere": [],
+                  "subcommands": [
+                    "promote"
+                  ]
+                },
+                "op": "leading-subcommand.v1"
+              },
+              "native_capability": null,
+              "permission_id": "command.aether-vault.permission.promote",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "rule_id": "command.aether-vault.promote",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {
+                          "executables": [
+                            "av",
+                            "av.exe",
+                            "av.cmd"
+                          ],
+                          "forbidden_flags": [],
+                          "forbidden_flags_before_delimiter": [],
+                          "interleaved_options_with_values": [
+                            "--into",
+                            "--output"
+                          ],
+                          "options_with_values": [
+                            "--into",
+                            "--output"
+                          ],
+                          "required_flags_anywhere": [
+                            "--dry-run"
+                          ],
+                          "subcommands": [
+                            "promote"
+                          ]
+                        },
+                        "op": "leading-subcommand.v1"
+                      }
+                    ],
+                    "op": "any.v1"
+                  },
+                  "title": "Aether-Vault dry-run preview",
+                  "variant_id": "dry-run"
+                },
+                {
+                  "matcher": {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {
+                          "executables": [
+                            "av",
+                            "av.exe",
+                            "av.cmd"
+                          ],
+                          "forbidden_flags": [],
+                          "forbidden_flags_before_delimiter": [],
+                          "interleaved_options_with_values": [
+                            "--into",
+                            "--output"
+                          ],
+                          "options_with_values": [
+                            "--into",
+                            "--output"
+                          ],
+                          "required_flags_anywhere": [
+                            "--help"
+                          ],
+                          "subcommands": [
+                            "promote"
+                          ]
+                        },
+                        "op": "leading-subcommand.v1"
+                      }
+                    ],
+                    "op": "any.v1"
+                  },
+                  "title": "Aether-Vault command help",
+                  "variant_id": "help"
+                }
+              ],
+              "safer_alternatives": [
+                "Run `av promote --dry-run` first to see which policy rule would decide the outcome.",
+                "Keep an `av policy set` guardrail armed on the target branch instead of using `--force`."
+              ],
+              "severity": "high",
+              "title": "Aether-Vault promote"
+            },
+            {
+              "action_classes": [
+                "Aether-Vault stash drop command"
+              ],
+              "default_mode": "review",
+              "description": "Identifies `av stash drop`, which permanently removes a stashed state.",
+              "family": null,
+              "matcher": {
+                "config": {
+                  "executables": [
+                    "av",
+                    "av.exe",
+                    "av.cmd"
+                  ],
+                  "forbidden_flags": [],
+                  "forbidden_flags_before_delimiter": [],
+                  "interleaved_options_with_values": [
+                    "--output"
+                  ],
+                  "options_with_values": [
+                    "--output"
+                  ],
+                  "required_flags_anywhere": [],
+                  "subcommands": [
+                    "stash",
+                    "drop"
+                  ]
+                },
+                "op": "leading-subcommand.v1"
+              },
+              "native_capability": null,
+              "permission_id": "command.aether-vault.permission.stash-drop",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "rule_id": "command.aether-vault.stash-drop",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {
+                          "executables": [
+                            "av",
+                            "av.exe",
+                            "av.cmd"
+                          ],
+                          "forbidden_flags": [],
+                          "forbidden_flags_before_delimiter": [],
+                          "interleaved_options_with_values": [
+                            "--output"
+                          ],
+                          "options_with_values": [
+                            "--output"
+                          ],
+                          "required_flags_anywhere": [
+                            "--help"
+                          ],
+                          "subcommands": [
+                            "stash",
+                            "drop"
+                          ]
+                        },
+                        "op": "leading-subcommand.v1"
+                      }
+                    ],
+                    "op": "any.v1"
+                  },
+                  "title": "Aether-Vault command help",
+                  "variant_id": "help"
+                }
+              ],
+              "safer_alternatives": [
+                "List stashes with `av stash list` before dropping."
+              ],
+              "severity": "medium",
+              "title": "Aether-Vault stash drop"
+            },
+            {
+              "action_classes": [
+                "Aether-Vault audit prune command"
+              ],
+              "default_mode": "review",
+              "description": "Identifies `av audit prune`, which permanently deletes registry audit-log entries older than a cutoff.",
+              "family": null,
+              "matcher": {
+                "config": {
+                  "executables": [
+                    "av",
+                    "av.exe",
+                    "av.cmd"
+                  ],
+                  "forbidden_flags": [],
+                  "forbidden_flags_before_delimiter": [],
+                  "interleaved_options_with_values": [
+                    "--before-days",
+                    "--output"
+                  ],
+                  "options_with_values": [
+                    "--before-days",
+                    "--output"
+                  ],
+                  "required_flags_anywhere": [],
+                  "subcommands": [
+                    "audit",
+                    "prune"
+                  ]
+                },
+                "op": "leading-subcommand.v1"
+              },
+              "native_capability": null,
+              "permission_id": "command.aether-vault.permission.audit-prune",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "rule_id": "command.aether-vault.audit-prune",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {
+                          "executables": [
+                            "av",
+                            "av.exe",
+                            "av.cmd"
+                          ],
+                          "forbidden_flags": [],
+                          "forbidden_flags_before_delimiter": [],
+                          "interleaved_options_with_values": [
+                            "--before-days",
+                            "--output"
+                          ],
+                          "options_with_values": [
+                            "--before-days",
+                            "--output"
+                          ],
+                          "required_flags_anywhere": [
+                            "--dry-run"
+                          ],
+                          "subcommands": [
+                            "audit",
+                            "prune"
+                          ]
+                        },
+                        "op": "leading-subcommand.v1"
+                      }
+                    ],
+                    "op": "any.v1"
+                  },
+                  "title": "Aether-Vault dry-run preview",
+                  "variant_id": "dry-run"
+                },
+                {
+                  "matcher": {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {
+                          "executables": [
+                            "av",
+                            "av.exe",
+                            "av.cmd"
+                          ],
+                          "forbidden_flags": [],
+                          "forbidden_flags_before_delimiter": [],
+                          "interleaved_options_with_values": [
+                            "--before-days",
+                            "--output"
+                          ],
+                          "options_with_values": [
+                            "--before-days",
+                            "--output"
+                          ],
+                          "required_flags_anywhere": [
+                            "--help"
+                          ],
+                          "subcommands": [
+                            "audit",
+                            "prune"
+                          ]
+                        },
+                        "op": "leading-subcommand.v1"
+                      }
+                    ],
+                    "op": "any.v1"
+                  },
+                  "title": "Aether-Vault command help",
+                  "variant_id": "help"
+                }
+              ],
+              "safer_alternatives": [
+                "Run `av audit prune --dry-run` first to see what would be deleted.",
+                "Export the audit log (`av audit export`) before pruning if retention may be needed later."
+              ],
+              "severity": "high",
+              "title": "Aether-Vault audit prune"
             }
           ],
           "safer_alternatives": [
-            "Generate reports from existing scan data with `cloudg report -i findings.json`, which reads a local file and does not touch cloud credentials or scanners."
+            "Inspect with `av status` / `av diff` before committing or pushing.",
+            "Use `--dry-run` where the command offers it (promote, audit prune).",
+            "Prefer an armed `av policy set` guardrail over `av promote --force`."
           ],
           "source": "built-in",
           "version": "1.0.0"
@@ -10715,232 +11094,117 @@
   },
   "cases": [
     {
-      "command": "cloudg collect -p aws --profile prod --region us-east-1",
+      "command": "av commit -m baseline",
       "disabled_permissions": [],
       "enabled_extensions": [
-        "command.cloudg"
+        "command.aether-vault"
       ],
       "expected_action": "review",
       "expected_effective_segments": [
         0
       ],
-      "id": "collect-aws",
-      "rule_id": "command.cloudg.collect"
+      "id": "commit-upload",
+      "rule_id": "command.aether-vault.commit"
     },
     {
-      "command": "cloudg collect -p azure --subscription-id 00000000-0000-0000-0000-000000000000",
+      "command": "av push",
       "disabled_permissions": [],
       "enabled_extensions": [
-        "command.cloudg"
+        "command.aether-vault"
       ],
       "expected_action": "review",
       "expected_effective_segments": [
         0
       ],
-      "id": "collect-azure",
-      "rule_id": "command.cloudg.collect"
+      "id": "push",
+      "rule_id": "command.aether-vault.push"
     },
     {
-      "command": "cloudg collect -p gcp --project-id my-project",
+      "command": "av gc",
       "disabled_permissions": [],
       "enabled_extensions": [
-        "command.cloudg"
+        "command.aether-vault"
       ],
       "expected_action": "review",
       "expected_effective_segments": [
         0
       ],
-      "id": "collect-gcp",
-      "rule_id": "command.cloudg.collect"
+      "id": "gc",
+      "rule_id": "command.aether-vault.gc"
     },
     {
-      "command": "cloudg collect -p aws -o ./reports",
+      "command": "av checkout main --force",
       "disabled_permissions": [],
       "enabled_extensions": [
-        "command.cloudg"
+        "command.aether-vault"
       ],
       "expected_action": "review",
       "expected_effective_segments": [
         0
       ],
-      "id": "collect-output-dir",
-      "rule_id": "command.cloudg.collect"
+      "id": "checkout-force",
+      "rule_id": "command.aether-vault.checkout-force"
     },
     {
-      "command": "cloudg run -p aws --profile prod",
+      "command": "av promote candidate-1 --into main",
       "disabled_permissions": [],
       "enabled_extensions": [
-        "command.cloudg"
+        "command.aether-vault"
       ],
       "expected_action": "review",
       "expected_effective_segments": [
         0
       ],
-      "id": "run-basic",
-      "rule_id": "command.cloudg.run"
+      "id": "promote",
+      "rule_id": "command.aether-vault.promote"
     },
     {
-      "command": "cloudg run -p aws --profile prod --terraform",
+      "command": "av stash drop 0",
       "disabled_permissions": [],
       "enabled_extensions": [
-        "command.cloudg"
+        "command.aether-vault"
       ],
       "expected_action": "review",
       "expected_effective_segments": [
         0
       ],
-      "id": "run-terraform",
-      "rule_id": "command.cloudg.run"
+      "id": "stash-drop",
+      "rule_id": "command.aether-vault.stash-drop"
     },
     {
-      "command": "cloudg run -p aws -p azure --subscription-id 00000000-0000-0000-0000-000000000000",
+      "command": "av audit prune --before-days 30",
       "disabled_permissions": [],
       "enabled_extensions": [
-        "command.cloudg"
+        "command.aether-vault"
       ],
       "expected_action": "review",
       "expected_effective_segments": [
         0
       ],
-      "id": "run-multi-provider",
-      "rule_id": "command.cloudg.run"
+      "id": "audit-prune",
+      "rule_id": "command.aether-vault.audit-prune"
     },
     {
-      "command": "cloudg run -p aws --aws-role-arn arn:aws:iam::123456789012:role/scan-readonly",
+      "command": "av status",
       "disabled_permissions": [],
       "enabled_extensions": [
-        "command.cloudg"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "run-role-arn",
-      "rule_id": "command.cloudg.run"
-    },
-    {
-      "command": "cloudg run -p aws --regions all",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.cloudg"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "run-all-regions",
-      "rule_id": "command.cloudg.run"
-    },
-    {
-      "command": "cloudg -v run -p gcp --project-id my-project",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.cloudg"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "run-leading-verbose",
-      "rule_id": "command.cloudg.run"
-    },
-    {
-      "command": "cloudg -c ./config.yaml run -p aws",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.cloudg"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "run-leading-config",
-      "rule_id": "command.cloudg.run"
-    },
-    {
-      "command": "cloudg scan",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.cloudg"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "scan-default",
-      "rule_id": "command.cloudg.scan"
-    },
-    {
-      "command": "cloudg scan -p aws --scanners prowler,checkov",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.cloudg"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "scan-scanner-list",
-      "rule_id": "command.cloudg.scan"
-    },
-    {
-      "command": "cloudg scan --scanners checkov --iac-dir ./infra",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.cloudg"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "scan-iac-dir",
-      "rule_id": "command.cloudg.scan"
-    },
-    {
-      "command": "cloudg scan --scanners trivy --images nginx:latest,alpine:3.20",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.cloudg"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "scan-images",
-      "rule_id": "command.cloudg.scan"
-    },
-    {
-      "command": "cloudg collect --help",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.cloudg"
+        "command.aether-vault"
       ],
       "expected_action": "review",
       "expected_effective_segments": [],
-      "id": "collect-help",
-      "rule_id": "command.cloudg.collect"
+      "id": "status-failclosed",
+      "rule_id": "command.aether-vault.push"
     },
     {
-      "command": "cloudg run --help",
+      "command": "ls -la",
       "disabled_permissions": [],
       "enabled_extensions": [
-        "command.cloudg"
+        "command.aether-vault"
       ],
-      "expected_action": "review",
+      "expected_action": "allow",
       "expected_effective_segments": [],
-      "id": "run-help",
-      "rule_id": "command.cloudg.run"
-    },
-    {
-      "command": "cloudg scan --help",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.cloudg"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [],
-      "id": "scan-help",
-      "rule_id": "command.cloudg.scan"
+      "id": "unrelated",
+      "rule_id": "command.aether-vault.push"
     }
   ],
   "schema": "guard.command-extension-fixtures.v1"

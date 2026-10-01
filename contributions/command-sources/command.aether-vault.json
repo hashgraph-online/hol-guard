@@ -1,0 +1,899 @@
+{
+ "extension": {
+  "action_classes": [
+   "Aether-Vault commit command",
+   "Aether-Vault push command",
+   "Aether-Vault garbage collection command",
+   "Aether-Vault forced checkout command",
+   "Aether-Vault promote command",
+   "Aether-Vault stash drop command",
+   "Aether-Vault audit prune command"
+  ],
+  "aliases": [],
+  "conflicts": [],
+  "delegated_protection": null,
+  "dependencies": [],
+  "description": "Reviews Aether-Vault commands that publish, promote, or delete model and dataset state; read-only commands stay quiet.",
+  "ecosystem_ids": [
+   "aether-vault"
+  ],
+  "executables": [
+   "av"
+  ],
+  "extension_id": "command.aether-vault",
+  "homepage": "https://github.com/leon1706-lol/Aether-Vault",
+  "icon": {
+   "background": "#0F766E",
+   "kind": "react-icon",
+   "name": "HiMiniCube"
+  },
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "name": "Aether-Vault",
+  "permissions": [
+   {
+    "action_classes": [
+     "Aether-Vault commit command"
+    ],
+    "baseline_floor": "review",
+    "configurable": true,
+    "conflicts": [],
+    "default_enabled": true,
+    "dependencies": [],
+    "deprecated": false,
+    "description": "Identifies `av commit`, which records a new model or dataset version and uploads it to the registry unless --no-upload is given.",
+    "example_command": "av status",
+    "family": null,
+    "fixed_reason": null,
+    "implementation_version": "1.0.0",
+    "implied_permissions": [],
+    "introduced_version": "2.2.0",
+    "label": "Aether-Vault commit",
+    "permission_id": "command.aether-vault.permission.commit",
+    "replacement_permission_id": null,
+    "risk_tier": "medium",
+    "safer_guidance": [
+     "Inspect with `av status` / `av diff` before committing or pushing.",
+     "Use `av commit --no-upload` to persist locally and defer the upload to a reviewed `av push`."
+    ],
+    "typed_capabilities": []
+   },
+   {
+    "action_classes": [
+     "Aether-Vault push command"
+    ],
+    "baseline_floor": "review",
+    "configurable": true,
+    "conflicts": [],
+    "default_enabled": true,
+    "dependencies": [],
+    "deprecated": false,
+    "description": "Identifies `av push`, which publishes committed model and dataset state to the remote registry.",
+    "example_command": "av status",
+    "family": null,
+    "fixed_reason": null,
+    "implementation_version": "1.0.0",
+    "implied_permissions": [],
+    "introduced_version": "2.2.0",
+    "label": "Aether-Vault push",
+    "permission_id": "command.aether-vault.permission.push",
+    "replacement_permission_id": null,
+    "risk_tier": "high",
+    "safer_guidance": [
+     "Inspect with `av status` / `av diff` before committing or pushing."
+    ],
+    "typed_capabilities": []
+   },
+   {
+    "action_classes": [
+     "Aether-Vault garbage collection command"
+    ],
+    "baseline_floor": "review",
+    "configurable": true,
+    "conflicts": [],
+    "default_enabled": true,
+    "dependencies": [],
+    "deprecated": false,
+    "description": "Identifies `av gc`, which permanently deletes unreferenced local model and dataset state.",
+    "example_command": "av status",
+    "family": null,
+    "fixed_reason": null,
+    "implementation_version": "1.0.0",
+    "implied_permissions": [],
+    "introduced_version": "2.2.0",
+    "label": "Aether-Vault garbage collection",
+    "permission_id": "command.aether-vault.permission.gc",
+    "replacement_permission_id": null,
+    "risk_tier": "critical",
+    "safer_guidance": [
+     "Review `av status` output before collecting; collected state is not recoverable."
+    ],
+    "typed_capabilities": []
+   },
+   {
+    "action_classes": [
+     "Aether-Vault forced checkout command"
+    ],
+    "baseline_floor": "review",
+    "configurable": true,
+    "conflicts": [],
+    "default_enabled": true,
+    "dependencies": [],
+    "deprecated": false,
+    "description": "Identifies `av checkout --force` (or `-f`), which discards uncommitted local state.",
+    "example_command": "av status",
+    "family": null,
+    "fixed_reason": null,
+    "implementation_version": "1.0.0",
+    "implied_permissions": [],
+    "introduced_version": "2.2.0",
+    "label": "Aether-Vault forced checkout",
+    "permission_id": "command.aether-vault.permission.checkout-force",
+    "replacement_permission_id": null,
+    "risk_tier": "high",
+    "safer_guidance": [
+     "Run `av checkout` without force to see why the checkout was refused."
+    ],
+    "typed_capabilities": []
+   },
+   {
+    "action_classes": [
+     "Aether-Vault promote command"
+    ],
+    "baseline_floor": "review",
+    "configurable": true,
+    "conflicts": [],
+    "default_enabled": true,
+    "dependencies": [],
+    "deprecated": false,
+    "description": "Identifies `av promote`, which promotes a candidate into a protected target; `--force` bypasses the armed policy gate.",
+    "example_command": "av status",
+    "family": null,
+    "fixed_reason": null,
+    "implementation_version": "1.0.0",
+    "implied_permissions": [],
+    "introduced_version": "2.2.0",
+    "label": "Aether-Vault promote",
+    "permission_id": "command.aether-vault.permission.promote",
+    "replacement_permission_id": null,
+    "risk_tier": "high",
+    "safer_guidance": [
+     "Run `av promote --dry-run` first to see which policy rule would decide the outcome.",
+     "Keep an `av policy set` guardrail armed on the target branch instead of using `--force`."
+    ],
+    "typed_capabilities": []
+   },
+   {
+    "action_classes": [
+     "Aether-Vault stash drop command"
+    ],
+    "baseline_floor": "review",
+    "configurable": true,
+    "conflicts": [],
+    "default_enabled": true,
+    "dependencies": [],
+    "deprecated": false,
+    "description": "Identifies `av stash drop`, which permanently removes a stashed state.",
+    "example_command": "av status",
+    "family": null,
+    "fixed_reason": null,
+    "implementation_version": "1.0.0",
+    "implied_permissions": [],
+    "introduced_version": "2.2.0",
+    "label": "Aether-Vault stash drop",
+    "permission_id": "command.aether-vault.permission.stash-drop",
+    "replacement_permission_id": null,
+    "risk_tier": "medium",
+    "safer_guidance": [
+     "List stashes with `av stash list` before dropping."
+    ],
+    "typed_capabilities": []
+   },
+   {
+    "action_classes": [
+     "Aether-Vault audit prune command"
+    ],
+    "baseline_floor": "review",
+    "configurable": true,
+    "conflicts": [],
+    "default_enabled": true,
+    "dependencies": [],
+    "deprecated": false,
+    "description": "Identifies `av audit prune`, which permanently deletes registry audit-log entries older than a cutoff.",
+    "example_command": "av status",
+    "family": null,
+    "fixed_reason": null,
+    "implementation_version": "1.0.0",
+    "implied_permissions": [],
+    "introduced_version": "2.2.0",
+    "label": "Aether-Vault audit prune",
+    "permission_id": "command.aether-vault.permission.audit-prune",
+    "replacement_permission_id": null,
+    "risk_tier": "high",
+    "safer_guidance": [
+     "Run `av audit prune --dry-run` first to see what would be deleted.",
+     "Export the audit log (`av audit export`) before pruning if retention may be needed later."
+    ],
+    "typed_capabilities": []
+   }
+  ],
+  "project_markers": [],
+  "publisher": {
+   "display_name": "Community",
+   "id": "community.leon1706-lol",
+   "url": "https://github.com/leon1706-lol/Aether-Vault"
+  },
+  "reference_urls": [
+   "https://github.com/leon1706-lol/Aether-Vault"
+  ],
+  "required": false,
+  "risk_classes": [
+   "network_egress",
+   "destructive_shell"
+  ],
+  "rules": [
+   {
+    "action_classes": [
+     "Aether-Vault commit command"
+    ],
+    "default_mode": "review",
+    "description": "Identifies `av commit`, which records a new model or dataset version and uploads it to the registry unless --no-upload is given.",
+    "family": null,
+    "matcher": {
+     "config": {
+      "executables": [
+       "av",
+       "av.exe",
+       "av.cmd"
+      ],
+      "forbidden_flags": [],
+      "forbidden_flags_before_delimiter": [],
+      "interleaved_options_with_values": [
+       "--message",
+       "--metric",
+       "--metric-drawdown",
+       "--metric-sharpe",
+       "--output",
+       "--tag",
+       "-m"
+      ],
+      "options_with_values": [
+       "--message",
+       "--metric",
+       "--metric-drawdown",
+       "--metric-sharpe",
+       "--output",
+       "--tag",
+       "-m"
+      ],
+      "required_flags_anywhere": [],
+      "subcommands": [
+       "commit"
+      ]
+     },
+     "op": "leading-subcommand.v1"
+    },
+    "native_capability": null,
+    "permission_id": "command.aether-vault.permission.commit",
+    "risk_classes": [
+     "network_egress"
+    ],
+    "rule_id": "command.aether-vault.commit",
+    "rule_version": "1.0.0",
+    "safe_variants": [
+     {
+      "matcher": {
+       "config": {},
+       "matchers": [
+        {
+         "config": {
+          "executables": [
+           "av",
+           "av.exe",
+           "av.cmd"
+          ],
+          "forbidden_flags": [],
+          "forbidden_flags_before_delimiter": [],
+          "interleaved_options_with_values": [
+           "--message",
+           "--metric",
+           "--metric-drawdown",
+           "--metric-sharpe",
+           "--output",
+           "--tag",
+           "-m"
+          ],
+          "options_with_values": [
+           "--message",
+           "--metric",
+           "--metric-drawdown",
+           "--metric-sharpe",
+           "--output",
+           "--tag",
+           "-m"
+          ],
+          "required_flags_anywhere": [
+           "--help"
+          ],
+          "subcommands": [
+           "commit"
+          ]
+         },
+         "op": "leading-subcommand.v1"
+        }
+       ],
+       "op": "any.v1"
+      },
+      "title": "Aether-Vault command help",
+      "variant_id": "help"
+     }
+    ],
+    "safer_alternatives": [
+     "Inspect with `av status` / `av diff` before committing or pushing.",
+     "Use `av commit --no-upload` to persist locally and defer the upload to a reviewed `av push`."
+    ],
+    "severity": "medium",
+    "title": "Aether-Vault commit"
+   },
+   {
+    "action_classes": [
+     "Aether-Vault push command"
+    ],
+    "default_mode": "review",
+    "description": "Identifies `av push`, which publishes committed model and dataset state to the remote registry.",
+    "family": null,
+    "matcher": {
+     "config": {
+      "executables": [
+       "av",
+       "av.exe",
+       "av.cmd"
+      ],
+      "forbidden_flags": [],
+      "forbidden_flags_before_delimiter": [],
+      "interleaved_options_with_values": [
+       "--output"
+      ],
+      "options_with_values": [
+       "--output"
+      ],
+      "required_flags_anywhere": [],
+      "subcommands": [
+       "push"
+      ]
+     },
+     "op": "leading-subcommand.v1"
+    },
+    "native_capability": null,
+    "permission_id": "command.aether-vault.permission.push",
+    "risk_classes": [
+     "network_egress"
+    ],
+    "rule_id": "command.aether-vault.push",
+    "rule_version": "1.0.0",
+    "safe_variants": [
+     {
+      "matcher": {
+       "config": {},
+       "matchers": [
+        {
+         "config": {
+          "executables": [
+           "av",
+           "av.exe",
+           "av.cmd"
+          ],
+          "forbidden_flags": [],
+          "forbidden_flags_before_delimiter": [],
+          "interleaved_options_with_values": [
+           "--output"
+          ],
+          "options_with_values": [
+           "--output"
+          ],
+          "required_flags_anywhere": [
+           "--help"
+          ],
+          "subcommands": [
+           "push"
+          ]
+         },
+         "op": "leading-subcommand.v1"
+        }
+       ],
+       "op": "any.v1"
+      },
+      "title": "Aether-Vault command help",
+      "variant_id": "help"
+     }
+    ],
+    "safer_alternatives": [
+     "Inspect with `av status` / `av diff` before committing or pushing."
+    ],
+    "severity": "high",
+    "title": "Aether-Vault push"
+   },
+   {
+    "action_classes": [
+     "Aether-Vault garbage collection command"
+    ],
+    "default_mode": "review",
+    "description": "Identifies `av gc`, which permanently deletes unreferenced local model and dataset state.",
+    "family": null,
+    "matcher": {
+     "config": {
+      "executables": [
+       "av",
+       "av.exe",
+       "av.cmd"
+      ],
+      "forbidden_flags": [],
+      "forbidden_flags_before_delimiter": [],
+      "interleaved_options_with_values": [
+       "--output"
+      ],
+      "options_with_values": [
+       "--output"
+      ],
+      "required_flags_anywhere": [],
+      "subcommands": [
+       "gc"
+      ]
+     },
+     "op": "leading-subcommand.v1"
+    },
+    "native_capability": null,
+    "permission_id": "command.aether-vault.permission.gc",
+    "risk_classes": [
+     "destructive_shell"
+    ],
+    "rule_id": "command.aether-vault.gc",
+    "rule_version": "1.0.0",
+    "safe_variants": [
+     {
+      "matcher": {
+       "config": {},
+       "matchers": [
+        {
+         "config": {
+          "executables": [
+           "av",
+           "av.exe",
+           "av.cmd"
+          ],
+          "forbidden_flags": [],
+          "forbidden_flags_before_delimiter": [],
+          "interleaved_options_with_values": [
+           "--output"
+          ],
+          "options_with_values": [
+           "--output"
+          ],
+          "required_flags_anywhere": [
+           "--help"
+          ],
+          "subcommands": [
+           "gc"
+          ]
+         },
+         "op": "leading-subcommand.v1"
+        }
+       ],
+       "op": "any.v1"
+      },
+      "title": "Aether-Vault command help",
+      "variant_id": "help"
+     }
+    ],
+    "safer_alternatives": [
+     "Review `av status` output before collecting; collected state is not recoverable."
+    ],
+    "severity": "critical",
+    "title": "Aether-Vault garbage collection"
+   },
+   {
+    "action_classes": [
+     "Aether-Vault forced checkout command"
+    ],
+    "default_mode": "review",
+    "description": "Identifies `av checkout --force` (or `-f`), which discards uncommitted local state.",
+    "family": null,
+    "matcher": {
+     "config": {},
+     "matchers": [
+      {
+       "config": {
+        "executables": [
+         "av",
+         "av.exe",
+         "av.cmd"
+        ],
+        "forbidden_flags": [],
+        "forbidden_flags_before_delimiter": [],
+        "interleaved_options_with_values": [
+         "--output"
+        ],
+        "options_with_values": [
+         "--output"
+        ],
+        "required_flags_anywhere": [
+         "--force"
+        ],
+        "subcommands": [
+         "checkout"
+        ]
+       },
+       "op": "leading-subcommand.v1"
+      },
+      {
+       "config": {
+        "executables": [
+         "av",
+         "av.exe",
+         "av.cmd"
+        ],
+        "forbidden_flags": [],
+        "forbidden_flags_before_delimiter": [],
+        "interleaved_options_with_values": [
+         "--output"
+        ],
+        "options_with_values": [
+         "--output"
+        ],
+        "required_flags_anywhere": [
+         "-f"
+        ],
+        "subcommands": [
+         "checkout"
+        ]
+       },
+       "op": "leading-subcommand.v1"
+      }
+     ],
+     "op": "any.v1"
+    },
+    "native_capability": null,
+    "permission_id": "command.aether-vault.permission.checkout-force",
+    "risk_classes": [
+     "destructive_shell"
+    ],
+    "rule_id": "command.aether-vault.checkout-force",
+    "rule_version": "1.0.0",
+    "safe_variants": [],
+    "safer_alternatives": [
+     "Run `av checkout` without force to see why the checkout was refused."
+    ],
+    "severity": "high",
+    "title": "Aether-Vault forced checkout"
+   },
+   {
+    "action_classes": [
+     "Aether-Vault promote command"
+    ],
+    "default_mode": "review",
+    "description": "Identifies `av promote`, which promotes a candidate into a protected target; `--force` bypasses the armed policy gate.",
+    "family": null,
+    "matcher": {
+     "config": {
+      "executables": [
+       "av",
+       "av.exe",
+       "av.cmd"
+      ],
+      "forbidden_flags": [],
+      "forbidden_flags_before_delimiter": [],
+      "interleaved_options_with_values": [
+       "--into",
+       "--output"
+      ],
+      "options_with_values": [
+       "--into",
+       "--output"
+      ],
+      "required_flags_anywhere": [],
+      "subcommands": [
+       "promote"
+      ]
+     },
+     "op": "leading-subcommand.v1"
+    },
+    "native_capability": null,
+    "permission_id": "command.aether-vault.permission.promote",
+    "risk_classes": [
+     "destructive_shell"
+    ],
+    "rule_id": "command.aether-vault.promote",
+    "rule_version": "1.0.0",
+    "safe_variants": [
+     {
+      "matcher": {
+       "config": {},
+       "matchers": [
+        {
+         "config": {
+          "executables": [
+           "av",
+           "av.exe",
+           "av.cmd"
+          ],
+          "forbidden_flags": [],
+          "forbidden_flags_before_delimiter": [],
+          "interleaved_options_with_values": [
+           "--into",
+           "--output"
+          ],
+          "options_with_values": [
+           "--into",
+           "--output"
+          ],
+          "required_flags_anywhere": [
+           "--dry-run"
+          ],
+          "subcommands": [
+           "promote"
+          ]
+         },
+         "op": "leading-subcommand.v1"
+        }
+       ],
+       "op": "any.v1"
+      },
+      "title": "Aether-Vault dry-run preview",
+      "variant_id": "dry-run"
+     },
+     {
+      "matcher": {
+       "config": {},
+       "matchers": [
+        {
+         "config": {
+          "executables": [
+           "av",
+           "av.exe",
+           "av.cmd"
+          ],
+          "forbidden_flags": [],
+          "forbidden_flags_before_delimiter": [],
+          "interleaved_options_with_values": [
+           "--into",
+           "--output"
+          ],
+          "options_with_values": [
+           "--into",
+           "--output"
+          ],
+          "required_flags_anywhere": [
+           "--help"
+          ],
+          "subcommands": [
+           "promote"
+          ]
+         },
+         "op": "leading-subcommand.v1"
+        }
+       ],
+       "op": "any.v1"
+      },
+      "title": "Aether-Vault command help",
+      "variant_id": "help"
+     }
+    ],
+    "safer_alternatives": [
+     "Run `av promote --dry-run` first to see which policy rule would decide the outcome.",
+     "Keep an `av policy set` guardrail armed on the target branch instead of using `--force`."
+    ],
+    "severity": "high",
+    "title": "Aether-Vault promote"
+   },
+   {
+    "action_classes": [
+     "Aether-Vault stash drop command"
+    ],
+    "default_mode": "review",
+    "description": "Identifies `av stash drop`, which permanently removes a stashed state.",
+    "family": null,
+    "matcher": {
+     "config": {
+      "executables": [
+       "av",
+       "av.exe",
+       "av.cmd"
+      ],
+      "forbidden_flags": [],
+      "forbidden_flags_before_delimiter": [],
+      "interleaved_options_with_values": [
+       "--output"
+      ],
+      "options_with_values": [
+       "--output"
+      ],
+      "required_flags_anywhere": [],
+      "subcommands": [
+       "stash",
+       "drop"
+      ]
+     },
+     "op": "leading-subcommand.v1"
+    },
+    "native_capability": null,
+    "permission_id": "command.aether-vault.permission.stash-drop",
+    "risk_classes": [
+     "destructive_shell"
+    ],
+    "rule_id": "command.aether-vault.stash-drop",
+    "rule_version": "1.0.0",
+    "safe_variants": [
+     {
+      "matcher": {
+       "config": {},
+       "matchers": [
+        {
+         "config": {
+          "executables": [
+           "av",
+           "av.exe",
+           "av.cmd"
+          ],
+          "forbidden_flags": [],
+          "forbidden_flags_before_delimiter": [],
+          "interleaved_options_with_values": [
+           "--output"
+          ],
+          "options_with_values": [
+           "--output"
+          ],
+          "required_flags_anywhere": [
+           "--help"
+          ],
+          "subcommands": [
+           "stash",
+           "drop"
+          ]
+         },
+         "op": "leading-subcommand.v1"
+        }
+       ],
+       "op": "any.v1"
+      },
+      "title": "Aether-Vault command help",
+      "variant_id": "help"
+     }
+    ],
+    "safer_alternatives": [
+     "List stashes with `av stash list` before dropping."
+    ],
+    "severity": "medium",
+    "title": "Aether-Vault stash drop"
+   },
+   {
+    "action_classes": [
+     "Aether-Vault audit prune command"
+    ],
+    "default_mode": "review",
+    "description": "Identifies `av audit prune`, which permanently deletes registry audit-log entries older than a cutoff.",
+    "family": null,
+    "matcher": {
+     "config": {
+      "executables": [
+       "av",
+       "av.exe",
+       "av.cmd"
+      ],
+      "forbidden_flags": [],
+      "forbidden_flags_before_delimiter": [],
+      "interleaved_options_with_values": [
+       "--before-days",
+       "--output"
+      ],
+      "options_with_values": [
+       "--before-days",
+       "--output"
+      ],
+      "required_flags_anywhere": [],
+      "subcommands": [
+       "audit",
+       "prune"
+      ]
+     },
+     "op": "leading-subcommand.v1"
+    },
+    "native_capability": null,
+    "permission_id": "command.aether-vault.permission.audit-prune",
+    "risk_classes": [
+     "destructive_shell"
+    ],
+    "rule_id": "command.aether-vault.audit-prune",
+    "rule_version": "1.0.0",
+    "safe_variants": [
+     {
+      "matcher": {
+       "config": {},
+       "matchers": [
+        {
+         "config": {
+          "executables": [
+           "av",
+           "av.exe",
+           "av.cmd"
+          ],
+          "forbidden_flags": [],
+          "forbidden_flags_before_delimiter": [],
+          "interleaved_options_with_values": [
+           "--before-days",
+           "--output"
+          ],
+          "options_with_values": [
+           "--before-days",
+           "--output"
+          ],
+          "required_flags_anywhere": [
+           "--dry-run"
+          ],
+          "subcommands": [
+           "audit",
+           "prune"
+          ]
+         },
+         "op": "leading-subcommand.v1"
+        }
+       ],
+       "op": "any.v1"
+      },
+      "title": "Aether-Vault dry-run preview",
+      "variant_id": "dry-run"
+     },
+     {
+      "matcher": {
+       "config": {},
+       "matchers": [
+        {
+         "config": {
+          "executables": [
+           "av",
+           "av.exe",
+           "av.cmd"
+          ],
+          "forbidden_flags": [],
+          "forbidden_flags_before_delimiter": [],
+          "interleaved_options_with_values": [
+           "--before-days",
+           "--output"
+          ],
+          "options_with_values": [
+           "--before-days",
+           "--output"
+          ],
+          "required_flags_anywhere": [
+           "--help"
+          ],
+          "subcommands": [
+           "audit",
+           "prune"
+          ]
+         },
+         "op": "leading-subcommand.v1"
+        }
+       ],
+       "op": "any.v1"
+      },
+      "title": "Aether-Vault command help",
+      "variant_id": "help"
+     }
+    ],
+    "safer_alternatives": [
+     "Run `av audit prune --dry-run` first to see what would be deleted.",
+     "Export the audit log (`av audit export`) before pruning if retention may be needed later."
+    ],
+    "severity": "high",
+    "title": "Aether-Vault audit prune"
+   }
+  ],
+  "safer_alternatives": [
+   "Inspect with `av status` / `av diff` before committing or pushing.",
+   "Use `--dry-run` where the command offers it (promote, audit prune).",
+   "Prefer an armed `av policy set` guardrail over `av promote --force`."
+  ],
+  "source": "built-in",
+  "version": "1.0.0"
+ },
+ "schema": "guard.command-extension-source.v1"
+}
