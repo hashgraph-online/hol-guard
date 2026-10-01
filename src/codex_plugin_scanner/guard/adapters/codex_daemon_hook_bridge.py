@@ -10,11 +10,13 @@ from contextlib import suppress
 from pathlib import Path
 
 if __package__:
+    from ..codex_binding_capture import record_bridge_ingress
     from ..codex_hook_bridge_runtime import BridgeConfig
     from ..codex_hook_bridge_runtime import bounded_hook_input as _hook_input
     from ..codex_hook_bridge_runtime import bridge_config_from_argv as _parse_bridge_config
     from ..config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS
     from ..daemon.hook_availability_policy import hook_event_is_permission_request
+    from ..daemon.hook_request_parsing import runtime_hook_event_name
     from ..live_process_identity import (
         CODEX_BROWSER_WAIT_PROCESS_KEY,
         CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY,
@@ -32,6 +34,7 @@ else:  # pragma: no cover - exercised by subprocess integration tests
     from codex_plugin_scanner.guard.adapters.codex_daemon_hook_resume import (
         apply_browser_approval_wait,
     )
+    from codex_plugin_scanner.guard.codex_binding_capture import record_bridge_ingress
     from codex_plugin_scanner.guard.codex_hook_bridge_runtime import (
         BridgeConfig,
     )
@@ -45,6 +48,7 @@ else:  # pragma: no cover - exercised by subprocess integration tests
     from codex_plugin_scanner.guard.daemon.hook_availability_policy import (
         hook_event_is_permission_request,
     )
+    from codex_plugin_scanner.guard.daemon.hook_request_parsing import runtime_hook_event_name
     from codex_plugin_scanner.guard.live_process_identity import (
         CODEX_BROWSER_WAIT_PROCESS_KEY,
         CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY,
@@ -79,8 +83,7 @@ def _event_name(data: str) -> str:
     payload = _json_object(data)
     if payload is None:
         return "PreToolUse"
-    value = payload.get("hook_event_name", payload.get("event", "PreToolUse"))
-    return value.strip() if isinstance(value, str) and value.strip() else "PreToolUse"
+    return runtime_hook_event_name(payload)
 
 
 def _with_browser_wait_process(data: str, *, wait_timeout_seconds: float) -> str:
@@ -186,10 +189,15 @@ def _codex_hook_response(response: Mapping[str, object], *, event_name: str) -> 
     return filtered
 
 
-def _bound_hook_input(hook_timeouts: Mapping[str, int]) -> tuple[str, str, float] | None:
+def _bound_hook_input(
+    hook_timeouts: Mapping[str, int],
+    *,
+    capture_guard_home: Path | None = None,
+) -> tuple[str, str, float, float] | None:
     raw_data = _hook_input(_MAX_HOOK_INPUT_BYTES)
     if raw_data is None:
         return None
+    input_ready_at = time.monotonic()
     event_name = _event_name(raw_data)
     timeout_seconds = _request_timeout(event_name, hook_timeouts)
     data = (
@@ -197,7 +205,15 @@ def _bound_hook_input(hook_timeouts: Mapping[str, int]) -> tuple[str, str, float
         if event_name == "PreToolUse"
         else raw_data
     )
-    return event_name, data, timeout_seconds
+    if capture_guard_home is not None:
+        with suppress(Exception):
+            record_bridge_ingress(
+                guard_home=capture_guard_home,
+                raw_payload=raw_data,
+                forwarded_payload=data,
+                event_name=event_name,
+            )
+    return event_name, data, timeout_seconds, input_ready_at
 
 
 def main(
@@ -212,12 +228,14 @@ def main(
 ) -> int:
     """Review one Codex hook through the resident daemon or a fail-safe fallback."""
 
-    hook_input = _bound_hook_input(hook_timeouts)
+    state = Path(state_path)
+    capture_guard_home = state.parent if state.is_absolute() and state.name == "daemon-state.json" else None
+    hook_input = _bound_hook_input(hook_timeouts, capture_guard_home=capture_guard_home)
     if hook_input is None:
         sys.stdout.write(json.dumps(_fail_closed("PreToolUse"), separators=(",", ":")))
     else:
-        event_name, data, timeout_seconds = hook_input
-        deadline = time.monotonic() + timeout_seconds
+        event_name, data, timeout_seconds, input_ready_at = hook_input
+        deadline = input_ready_at + timeout_seconds
         failure_causes = []
         response, daemon_overloaded, launch_integrity_failed = bridge_review_response(
             state_path=state_path,
