@@ -202,8 +202,10 @@ def _snapshot(
                 _require_current_execution(job, label)
         if len(jobs_by_id) == total_count:
             return tuple(states)
-        if len(jobs) != 100 or len(jobs_by_id) > total_count:
+        if len(jobs_by_id) > total_count:
             raise ShardWaitError("GitHub jobs API returned an incomplete job list")
+        if len(jobs) != 100:
+            raise _TransientApiError("GitHub jobs API returned an incomplete job list")
     raise ShardWaitError("GitHub jobs API exceeded its pagination limit")
 
 

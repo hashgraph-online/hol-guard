@@ -182,6 +182,10 @@ def _no_post_execution_proof_smoke() -> dict[str, object]:
     with tempfile.TemporaryDirectory() as temporary:
         root = Path(temporary)
         guard_home = root / "guard-home"
+        guard_home.mkdir()
+        # A fresh home may bootstrap a healthy resident. Block its state
+        # directory explicitly to exercise unavailable-native prevention.
+        (guard_home / "native-runtime").touch()
         workspace = root / "workspace"
         workspace.mkdir()
         initialized = subprocess.run(
@@ -238,7 +242,7 @@ def _no_post_execution_proof_smoke() -> dict[str, object]:
             or not isinstance(hook_output, dict)
             or hook_output.get("permissionDecision") != "deny"
         ):
-            raise InstalledCanaryError("Fresh no-post-proof home did not deny its unavailable native decision")
+            raise InstalledCanaryError("No-post-proof hook did not deny its unavailable native decision")
         store = GuardStore(guard_home, prime_policy_integrity=False)
         with closing(sqlite3.connect(store.path)) as connection:
             row = cast(

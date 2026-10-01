@@ -97,7 +97,10 @@ def _client_discovery_job_id(payload: dict[str, object]) -> str | None:
 
 class LocalCliApiService:
     def __init__(self, *, store: GuardStore) -> None:
+        from ..runtime.codex_host_inventory import CodexHostInventoryCache
+
         self._store = store
+        self._codex_host_inventory = CodexHostInventoryCache()
         self._discovery_cache: tuple[float, tuple[DiscoveredHarnessMcpServer, ...]] | None = None
         self._discovery_jobs = McpDiscoveryJobs()
         self._registry_setup_lock = threading.Lock()
@@ -310,6 +313,13 @@ class LocalCliApiService:
                 if not isinstance(job_id, str) or len(job_id) != 32 or any(c not in "0123456789abcdef" for c in job_id):
                     raise LocalCliApiError(400, "invalid_discovery_job")
                 return self._discovery_jobs.read(job_id, cancel=payload.get("cancel") is True)
+            if payload.get("operation") == "codex-host-connections":
+                return self._discovery_jobs.start(
+                    "inventory:codex-host",
+                    lambda cancel: self._codex_host_inventory.refresh(codex_home=Path.home() / ".codex", cancel=cancel),
+                    reuse_seconds=0 if payload.get("force_refresh") is True else 30,
+                    requested_job_id=_client_discovery_job_id(payload),
+                )
             if payload.get("operation") == "configured-connections":
 
                 def discover(cancel: threading.Event) -> None:
@@ -521,6 +531,7 @@ class LocalCliApiService:
             "revision": revision,
             "native_publication": local_cli_publication_status(self._store.guard_home, revision),
             "items": items,
+            "host_inventory": self._codex_host_inventory.read(),
             "cloud": decorate_local_cli_continuity(self._store, items),
         }
 

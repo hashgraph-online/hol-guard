@@ -42,6 +42,7 @@ class McpProbeError(RuntimeError):
             "invalid_initialize": "mcp_initialize_failed",
             "invalid_discovery": "mcp_initialize_failed",
             "unsupported_protocol": "mcp_protocol_unsupported",
+            "discovery_rejected": "mcp_capability_rejected",
         }.get(reason or "", "discovery_failed")
         super().__init__(self.code)
 
