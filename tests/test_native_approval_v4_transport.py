@@ -2,20 +2,15 @@
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
-from types import SimpleNamespace
 from typing import cast
 
-from codex_plugin_scanner.guard.native_approval_bridge import (
-    NativeApprovalBridge,
+from codex_plugin_scanner.guard.native_approval_protocol import _decode_json_object
+from codex_plugin_scanner.guard.native_approval_v4_protocol import (
     decode_native_approval_v4_artifact,
     decode_native_approval_v4_challenge,
     decode_native_approval_v4_proof,
     decode_native_approval_v4_result,
-    native_approval_continuation_allowed,
 )
-from codex_plugin_scanner.guard.native_approval_protocol import _decode_json_object
 
 _DIGEST_A = "a" * 64
 _DIGEST_B = "b" * 64
@@ -147,19 +142,6 @@ def _result(*, phase: str) -> dict[str, object]:
     }
 
 
-def _status(tmp_path: Path) -> SimpleNamespace:
-    return SimpleNamespace(
-        mode="auto",
-        available=True,
-        compatible=True,
-        identity=SimpleNamespace(path=tmp_path / "hol-guard-runtime"),
-        capabilities=SimpleNamespace(
-            protocol_version=1,
-            features=("resident-protocol-v2", "native-approval-webauthn-v4"),
-        ),
-    )
-
-
 def test_v4_decoders_bound_browser_shape_without_verifying_it() -> None:
     challenge = _challenge()
     assert decode_native_approval_v4_challenge(challenge) == challenge
@@ -233,8 +215,8 @@ def test_v4_challenge_origin_supports_loopback_and_requires_exact_rp_id() -> Non
 
     proof = _proof()
     proof["challenge"] = dict(cast(dict[str, object], proof["challenge"]), request_id="sha256:" + _DIGEST_B)
-    # The decoder only checks the transport shape. Binding to the actual
-    # session belongs to the bridge and, finally, to Rust.
+    # The decoder only checks the transport shape. Session binding belongs
+    # to the Rust approval authority.
     assert decode_native_approval_v4_proof(proof) is not None
 
     artifact = _artifact()
@@ -255,124 +237,3 @@ def test_v4_result_is_phase_and_context_bounded() -> None:
     assert decode_native_approval_v4_result(result, phase="consumed") is None
 
 
-def test_v4_bridge_forwards_assertion_immediately(tmp_path: Path) -> None:
-    calls: list[dict[str, object]] = []
-    responses = [_challenge(), _result(phase="validated"), _result(phase="consumed")]
-
-    def client(**kwargs: object) -> bytes:
-        payload = kwargs["payload"]
-        assert isinstance(payload, bytes)
-        request_value = json.loads(payload.decode("utf-8"))
-        assert isinstance(request_value, dict)
-        request = cast(dict[str, object], request_value)
-        calls.append(request)
-        return json.dumps(responses.pop(0), separators=(",", ":")).encode()
-
-    bridge = NativeApprovalBridge(
-        client_request=client,
-        status_provider=lambda: _status(tmp_path),
-        environment_provider=lambda: {},
-        clock=lambda: 100.0,
-    )
-    session = bridge.create_v4_challenge(
-        payload={"event": "PreToolUse", "tool_name": "Bash"},
-        harness="claude-code",
-        guard_home=tmp_path / "guard-home",
-        home_dir=tmp_path / "home",
-        cwd=tmp_path,
-        policy_snapshot={"generation": 7, "policy_digest": _DIGEST_C, "runtime_identity": _DIGEST_A},
-        deadline=100.5,
-    )
-    assert session is not None
-    consumed = bridge.validate_and_consume_v4(session, _artifact(), deadline=100.5)
-    assert consumed is not None
-    assert [call["operation"] for call in calls] == [
-        "approval_challenge_v4",
-        "approval_validate_v4",
-        "approval_consume_v4",
-    ]
-    assert native_approval_continuation_allowed(
-        consumed,
-        session=session,
-        request_id=session.request_id,
-        request_digest=session.request_digest,
-        action_digest=session.action_digest,
-        policy_generation=session.policy_generation,
-        policy_digest=session.policy_digest,
-        harness=session.harness,
-    )
-
-
-def test_v4_bridge_adapts_portal_proof_without_local_authority(tmp_path: Path) -> None:
-    calls: list[dict[str, object]] = []
-    responses = [_challenge(), _result(phase="validated"), _result(phase="consumed")]
-
-    def client(**kwargs: object) -> bytes:
-        payload = kwargs["payload"]
-        assert isinstance(payload, bytes)
-        request_value = json.loads(payload.decode("utf-8"))
-        assert isinstance(request_value, dict)
-        request = cast(dict[str, object], request_value)
-        calls.append(request)
-        return json.dumps(responses.pop(0), separators=(",", ":")).encode()
-
-    bridge = NativeApprovalBridge(
-        client_request=client,
-        status_provider=lambda: _status(tmp_path),
-        environment_provider=lambda: {},
-        clock=lambda: 100.0,
-    )
-    session = bridge.create_v4_challenge(
-        payload={"event": "PreToolUse", "tool_name": "Bash"},
-        harness="claude-code",
-        guard_home=tmp_path / "guard-home",
-        home_dir=tmp_path / "home",
-        cwd=tmp_path,
-        policy_snapshot={"generation": 7, "policy_digest": _DIGEST_C, "runtime_identity": _DIGEST_A},
-        deadline=100.5,
-    )
-    assert session is not None
-    consumed = bridge.validate_and_consume_v4(session, _proof(), deadline=100.5)
-    assert consumed is not None
-    request = calls[1]["request"]
-    assert isinstance(request, dict)
-    artifact = cast(dict[str, object], request["artifact"])
-    assert isinstance(artifact, dict)
-    assert artifact["schema"] == "guard-native-approval-artifact.v4"
-    assert artifact["approved_action"] == "allow"
-    assert artifact["webauthn"] == _proof()["assertion"]
-
-
-def test_v4_bridge_rejects_proof_bound_to_another_session(tmp_path: Path) -> None:
-    calls: list[dict[str, object]] = []
-
-    def client(**kwargs: object) -> bytes:
-        payload = kwargs["payload"]
-        assert isinstance(payload, bytes)
-        request_value = json.loads(payload.decode("utf-8"))
-        assert isinstance(request_value, dict)
-        calls.append(cast(dict[str, object], request_value))
-        return json.dumps(_challenge(), separators=(",", ":")).encode()
-
-    bridge = NativeApprovalBridge(
-        client_request=client,
-        status_provider=lambda: _status(tmp_path),
-        environment_provider=lambda: {},
-        clock=lambda: 100.0,
-    )
-    session = bridge.create_v4_challenge(
-        payload={"event": "PreToolUse", "tool_name": "Bash"},
-        harness="claude-code",
-        guard_home=tmp_path / "guard-home",
-        home_dir=tmp_path / "home",
-        cwd=tmp_path,
-        policy_snapshot={"generation": 7, "policy_digest": _DIGEST_C, "runtime_identity": _DIGEST_A},
-        deadline=100.5,
-    )
-    assert session is not None
-    proof = _proof()
-    proof_challenge = cast(dict[str, object], proof["challenge"])
-    proof["challenge"] = dict(proof_challenge, request_id="sha256:" + _DIGEST_B)
-    assert bridge.validate_and_consume_v4(session, proof, deadline=100.5) is None
-    assert bridge.last_error_code == "native_approval_binding_mismatch"
-    assert len(calls) == 1

@@ -1329,9 +1329,9 @@
         "baseline_git_blob": "4cc8d7ccdaa97ad49cb7a4e0bdae6dee04930431",
         "baseline_sha256": "12d74f5afa697c20ecb2af2b9539b1de2a38a812efba6ee13a37446579889255",
         "byte_identical": false,
-        "candidate_git_blob": "4a7ba531300a7d9938f3922a744520a27dadcd28",
-        "candidate_sha256": "7815628c58822adc116167578845b94ccb498a620be32270811248d1d074f91d",
-        "reviewed_change": "Admit only parser-recorded sudo wrappers; other wrapper/context uncertainty is unchanged."
+        "candidate_git_blob": "8088a4ad724c1235e9ee9313be5eae630aa39d5e",
+        "candidate_sha256": "365286ea9e10ea7d025e553e83c51b35dd097c3c753101bccf9f3491e6900c62",
+        "reviewed_change": "Extract compatibility_model_supported so hook-pipeline callers reuse the same compatibility predicate; decision semantics unchanged."
       },
       "rust/crates/guard-command/src/command_compatibility/domains.rs": {
         "baseline_git_blob": "9b3e5b7dfa3c418ac4710fdfc143adf6a54f23d8",

@@ -64,6 +64,18 @@ def test_contribution_rejects_unknown_icon_and_unbound_native_source() -> None:
         validate_contribution(payload, filename="bind.json")
 
 
+def test_contribution_rejects_inconsistent_activation_and_invalid_id() -> None:
+    payload = _noodle_payload()
+    payload["activation"] = "default-on"
+    with pytest.raises(ValueError, match="trust class and activation projection disagree"):
+        validate_contribution(payload, filename="activation.json")
+
+    payload = _noodle_payload()
+    payload["id"] = "plugin.invalid"
+    with pytest.raises(ValueError, match="has invalid id"):
+        validate_contribution(payload, filename="id.json")
+
+
 def test_frozen_packaged_payloads_load_from_meipass(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     repo = Path(__file__).resolve().parents[1]
     dest = tmp_path / "codex_plugin_scanner" / "guard" / "contracts" / "data" / "extensions"

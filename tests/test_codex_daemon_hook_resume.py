@@ -249,6 +249,7 @@ def test_pending_pretool_parses_request_binding_from_reason() -> None:
     )
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_codex_json_pretool_package_install_reason_includes_request(tmp_path: Path) -> None:
     exit_code, output = _run_hook(
         tmp_path,
