@@ -22,6 +22,7 @@ from dataclasses import replace
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
+from types import SimpleNamespace
 from typing import ClassVar
 
 import pytest
@@ -13959,9 +13960,9 @@ def test_guard_run_headless_waits_for_local_approval_and_resumes(tmp_path, capsy
         guard_commands_module, "schedule_guard_daemon_ensure", lambda _guard_home, **_kwargs: "http://127.0.0.1:4455"
     )
     monkeypatch.setattr(
-        guard_runner_module.subprocess,
-        "run",
-        lambda *args, **kwargs: subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""),
+        guard_runner_module,
+        "subprocess",
+        SimpleNamespace(run=lambda *args, **kwargs: subprocess.CompletedProcess(args=[], returncode=0)),
     )
 
     stop_resolver = threading.Event()
