@@ -24,7 +24,7 @@ import { customExtensionContinuityView } from "../managed-controls/custom-extens
 import { commandPermissionChanges, mcpCatalogCopy, mcpToolCanReceiveDirectAllow, rebaseCommandDraft } from "./mcp-catalog-state";
 import { McpProviderActions, type ProviderActionDraft } from "./mcp-provider-actions";
 import { ProviderWorkflows } from "./provider-workflows";
-import { bulkPolicyCopy, detailCatalogHeading, detailCatalogHelper, detailPolicyCopy, mcpPermissionStatusLabel, nativePublicationMessage, randomToken } from "./local-cli-panel-copy";
+import { bulkPolicyCopy, continuityCopy, customExtensionStateLabel, detailCatalogHeading, detailCatalogHelper, detailPolicyCopy, mcpPermissionStatusLabel, nativePublicationMessage, randomToken } from "./local-cli-panel-copy";
 import { CustomExtensionReviewModal } from "./local-cli-review-modal";
 
 export { customExtensionStateLabel } from "./local-cli-panel-copy";

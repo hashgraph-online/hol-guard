@@ -7,6 +7,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.cli.commands_support_codex_commands import (
     _codex_post_tool_command_is_read_only_source_inspection,
@@ -255,6 +257,7 @@ def test_kubectl_cp_only_flags_remote_secret_volume_sources() -> None:
     assert kubernetes_secret_read_source("kubectl cp ./token registry-frontend:/etc/secrets/token") is None
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_pi_pre_tool_use_blocks_kubectl_secret_printenv(tmp_path: Path, monkeypatch, capsys) -> None:
     home_dir = tmp_path / "home"
     guard_home = tmp_path / "guard-home"
@@ -294,6 +297,7 @@ def test_pi_pre_tool_use_blocks_kubectl_secret_printenv(tmp_path: Path, monkeypa
     assert "kubernetes secret read command" in output["reason"].lower()
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_pi_pre_tool_use_blocks_argv_wrapped_kubectl_secret_dump(tmp_path: Path, monkeypatch, capsys) -> None:
     home_dir = tmp_path / "home"
     guard_home = tmp_path / "guard-home"
@@ -428,8 +432,9 @@ def test_pi_post_tool_output_labels_later_commands_payload_kubernetes_secret_sou
     assert artifact.metadata["secret_source_family"] == "Kubernetes Secret resource"
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_pi_post_tool_output_keeps_sensitive_batched_command_even_with_read_only_sibling(
-    tmp_path: Path, monkeypatch, capsys
+    tmp_path: Path, monkeypatch, capsys, native_hook_force: Path
 ) -> None:
     home_dir = tmp_path / "home"
     guard_home = tmp_path / "guard-home"

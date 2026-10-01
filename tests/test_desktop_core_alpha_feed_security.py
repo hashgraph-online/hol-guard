@@ -49,7 +49,7 @@ def linux_publish_job() -> dict[str, object]:
     return publish_job("publish-linux-x64", linux=True)
 
 
-def test_feed_follows_the_newest_stable_release_and_wakes_after_main_publisher() -> None:
+def test_feed_preserves_trusted_push_without_publication_completion_overlap() -> None:
     text = workflow_text()
     trusted_push = """push:
     branches: [main]
@@ -58,8 +58,10 @@ def test_feed_follows_the_newest_stable_release_and_wakes_after_main_publisher()
       - scripts/release/desktop_core_alpha_feed.py"""
     assert trusted_push in text
     assert "branches: [main]" in text
-    assert 'workflows: ["Publish to PyPI"]' in text
-    assert "workflow_run.conclusion == 'success'" in text
+    config = workflow()
+    triggers = config.get("on", config.get(True))
+    assert isinstance(triggers, dict)
+    assert "workflow_run" not in triggers
 
 
 def test_release_discovery_selects_the_newest_stable_release(tmp_path: Path, capsys) -> None:
@@ -289,7 +291,7 @@ def test_linux_feed_publishes_digest_verified_gnu_sidecar() -> None:
     assert isinstance(build_run, str)
     assert "publish-linux-x64" not in workflow()["jobs"]
     assert linux_workflow_text().count("\n") <= 500
-    assert job["runs-on"] == "ubuntu-24.04"
+    assert job["runs-on"] == "ubuntu-22.04"
     assert job["env"]["RELEASE_TARGET"] == "x86_64-unknown-linux-gnu"
     assert job["env"]["NATIVE_RUNTIME_TARGET"] == "x86_64-unknown-linux-musl"
     assert job["permissions"] == {"contents": "write", "id-token": "write", "attestations": "write"}

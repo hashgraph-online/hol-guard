@@ -198,7 +198,7 @@ def test_declared_skills_are_listed_on_real_stdio_without_fetching_content(tmp_p
     skill = {"uri": "skill://report/SKILL.md", "frontmatter": {"name": "report", "description": "Synthetic workflow"},
              "resources": [{"uri": "skill://report/SKILL.md", "digest": "sha256:" + "a" * 64, "size": 50}]}
     catalog = run_mcp_catalog(_server(tmp_path, {"<root>": {
-        "resultType": "complete", "tools": _tools(1),
+        "resultType": "complete", "tools": _tools(1), "ttlMs": 0, "cacheScope": "private",
     }}, discovery=discovery, skills=[skill]), connection_identity_hash="b" * 64)
     assert catalog.complete
     assert catalog.skills_complete is True
@@ -216,7 +216,7 @@ def test_failed_skill_metadata_does_not_turn_tools_into_an_empty_catalog(tmp_pat
         resources={}, extensions={"io.modelcontextprotocol/skills": {}},
     )
     catalog = run_mcp_catalog(_server(tmp_path, {"<root>": {
-        "resultType": "complete", "tools": _tools(1),
+        "resultType": "complete", "tools": _tools(1), "ttlMs": 0, "cacheScope": "private",
     }}, discovery=discovery, skills=[{"uri": "skill://invalid/SKILL.md"}]), connection_identity_hash="b" * 64)
     assert catalog.complete and len(catalog.tools) == 1
     assert catalog.skills_complete is False
@@ -229,8 +229,11 @@ def test_modern_discovery_uses_request_metadata_without_initialization(tmp_path:
         _server(
             tmp_path,
             {
-                "<root>": {"resultType": "complete", "tools": first, "nextCursor": " next "},
-                " next ": {"resultType": "complete", "tools": second},
+                "<root>": {
+                    "resultType": "complete", "tools": first, "nextCursor": " next ",
+                    "ttlMs": 0, "cacheScope": "private",
+                },
+                " next ": {"resultType": "complete", "tools": second, "ttlMs": 0, "cacheScope": "private"},
             },
             discovery=_discovery(),
         )

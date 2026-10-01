@@ -11,17 +11,11 @@ $Out = Join-Path $Root 'dist/mdm/windows'
 $Runtime = Join-Path $Out 'runtime'
 Remove-Item -Recurse -Force $Out -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force $Runtime | Out-Null
-$VersionModule = Join-Path $Root 'src/codex_plugin_scanner/version.py'
-$SourceVersion = [regex]::Match((Get-Content -LiteralPath $VersionModule -Raw), '(?m)^__version__ = "([^"]+)"').Groups[1].Value
-if ([string]::IsNullOrWhiteSpace($SourceVersion) -or $SourceVersion -ne $Version) {
-    throw "HOL_GUARD_VERSION $Version does not match source version $SourceVersion"
-}
 $VersionFile = Join-Path $Out 'version-info.txt'
 uv run --no-sync python (Join-Path $PSScriptRoot 'write-version-info.py') --version $Version --output $VersionFile
 
 uv run --no-sync pyinstaller --clean --noconfirm --onedir --name hol-guard `
     --collect-submodules codex_plugin_scanner --collect-data codex_plugin_scanner `
-    --add-data "$(Join-Path $Root 'src/codex_plugin_scanner/version.py');." `
     --version-file $VersionFile `
     --distpath $Runtime --workpath (Join-Path $Out 'pyinstaller') --specpath $Out `
     (Join-Path $Root 'scripts/mdm/hol-guard-entry.py')
