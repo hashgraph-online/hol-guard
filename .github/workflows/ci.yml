@@ -127,6 +127,7 @@ jobs:
           name: pytest-native-command-projections
           path: |
             contracts/extensions/
+            contributions/extensions/
             src/codex_plugin_scanner/guard/contracts/data/extensions/
           if-no-files-found: error
           retention-days: 1
