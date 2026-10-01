@@ -22,6 +22,8 @@ def file_sha256(path: str) -> str:
     leaf_metadata = None
     if not no_follow:
         leaf_metadata = os.lstat(path)
+        if stat.S_ISLNK(leaf_metadata.st_mode):
+            raise ValueError("executable must not be a symlink")
         if not stat.S_ISREG(leaf_metadata.st_mode) or leaf_metadata.st_size > _MAX_EXECUTABLE_BYTES:
             raise ValueError("executable must be a bounded regular file")
 

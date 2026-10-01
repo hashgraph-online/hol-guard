@@ -232,6 +232,21 @@ def test_file_sha256_rejects_initial_symlink(tmp_path: Path) -> None:
         _ = executor_module.file_sha256(str(path))
 
 
+@pytest.mark.skipif(not hasattr(os, "symlink"), reason="requires symlink support")
+def test_file_sha256_rejects_initial_symlink_without_o_nofollow(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = tmp_path / "executable"
+    target = tmp_path / "target"
+    _ = target.write_bytes(b"target executable\n")
+    path.symlink_to(target)
+    monkeypatch.delattr(common_module.os, "O_NOFOLLOW", raising=False)
+
+    with pytest.raises(ValueError, match="must not be a symlink"):
+        _ = executor_module.file_sha256(str(path))
+
+
 def test_user_owned_external_executable_is_copied_and_digest_pinned(tmp_path: Path) -> None:
     workspace = (tmp_path / "workspace").resolve()
     workspace.mkdir()
