@@ -446,9 +446,9 @@ packaging==26.3 \
     --hash=sha256:94edc256424af38762eb31306eed28beb9f0efc50a8837492c9d6fd6004aed79 \
     --hash=sha256:d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c
     # via hol-guard (pyproject.toml)
-publicsuffixlist==1.0.2.20260726 \
-    --hash=sha256:52b88aae7fbd991a491f73e2ef9c31901748cfb08959cf3a2a304e86383344a5 \
-    --hash=sha256:6abd9eace2fa7a8734fdae9c8b32403a8c6b22c5872dad59367f19bc83d990ea
+publicsuffixlist==1.0.2.20260925 \
+    --hash=sha256:2bacd61c8b361ff3faa11f984a3554f2a3047327909467cb9cbd3a129d8065f8 \
+    --hash=sha256:f99c707b3f2fdc386b64e01fc4eca3a12631a677c43b62283aa0255fa7ea0412
     # via hol-guard (pyproject.toml)
 pycparser==3.0 ; implementation_name != 'PyPy' and platform_python_implementation != 'PyPy' \
     --hash=sha256:600f49d217304a5902ac3c37e1281c9fe94e4d0489de643a9504c5cdfdfc6b29 \
