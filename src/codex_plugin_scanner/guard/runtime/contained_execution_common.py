@@ -45,10 +45,11 @@ def file_sha256(path: str) -> str:
         if read_bytes != before.st_size:
             raise ValueError("executable identity changed while hashing")
         after = os.fstat(descriptor)
-        if content_stat_identity(after) != before_identity:
+        after_identity = content_stat_identity(after)
+        if after_identity != before_identity:
             raise ValueError("executable identity changed while hashing")
         final_path = os.lstat(path)
-        if not stat.S_ISREG(final_path.st_mode) or content_stat_identity(final_path) != content_stat_identity(after):
+        if not stat.S_ISREG(final_path.st_mode) or content_stat_identity(final_path) != after_identity:
             raise ValueError("executable identity changed while hashing")
         return digest.hexdigest()
     finally:

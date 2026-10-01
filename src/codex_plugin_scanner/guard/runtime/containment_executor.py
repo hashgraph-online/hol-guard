@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
-from .contained_execution_common import file_sha256
+from .contained_execution_common import _MAX_EXECUTABLE_BYTES, file_sha256
 from .containment_backend_status import bwrap_execution_completed
 from .containment_contract import (
     ContainmentAttestation,
@@ -24,7 +24,6 @@ from .containment_contract import (
 from .containment_outputs import ContainmentCapturedOutput, OutputBoundaryError, capture_declared_outputs
 
 _OUTPUT_LIMIT: Final = 64 * 1024
-_MAX_EXECUTABLE_BYTES: Final = 256 * 1024 * 1024
 _MAX_INPUT_BYTES: Final = 256 * 1024 * 1024
 _MAX_INPUT_FILES: Final = 20_000
 _LINUX_HOSTS: Final = "127.0.0.1 localhost\n::1 localhost ip6-localhost ip6-loopback\n"
