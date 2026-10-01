@@ -4,6 +4,7 @@ on:
     paths:
       - .github/workflows/desktop-core-alpha-feed.yml
       - tests/test_desktop_core_alpha_feed_security.py
+      - tests/test_desktop_core_feed_queue.py
       - tests/test_desktop_core_alpha_feed_macos_signing.py
       - tests/test_stage_native_runtime_for_desktop_core.py
       - tests/test_verify_*.py
@@ -41,9 +42,6 @@ on:
     branches: [main]
 permissions:
   contents: read
-concurrency:
-  group: desktop-core-stable-feed
-  cancel-in-progress: false
 jobs:
   validate:
     name: Validate workflow
@@ -64,9 +62,14 @@ jobs:
       - name: Install Actionlint
         run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.11
       - name: Validate workflow syntax
-        run: '"$(go env GOPATH)/bin/actionlint" .github/workflows/desktop-core-alpha-feed.yml'
+        # Actionlint 1.7.11 lacks the documented queue key; retain all other diagnostics.
+        run: '"$(go env GOPATH)/bin/actionlint" -ignore ''^unexpected key "queue" for "concurrency" section\.'' .github/workflows/desktop-core-alpha-feed.yml'
   publish-macos-arm64:
     name: Publish signed macOS arm64 Core sidecar
+    concurrency:
+      group: desktop-core-stable-feed
+      cancel-in-progress: false
+      queue: max
     if: >-
       github.event_name != 'pull_request' &&
       (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success')

@@ -4,18 +4,20 @@ on:
   workflow_run:
     workflows: ["Publish to PyPI"]
     types: [completed]
-  release:
-    types: [published]
   issues:
     types: [opened]
   push:
     branches:
       - main
     paths:
+      # Test-only changes are validated in PR CI without waking release producers.
       - .github/workflows/wake-desktop-core-alpha-feed.yml
+      - scripts/release/wake_desktop_core_feeds.py
   pull_request:
     paths:
       - .github/workflows/wake-desktop-core-alpha-feed.yml
+      - scripts/release/wake_desktop_core_feeds.py
+      - tests/test_wake_desktop_core_feeds.py
 
 permissions:
   contents: read
@@ -34,54 +36,37 @@ jobs:
         github.event.issue.author_association == 'MEMBER' ||
         github.event.issue.author_association == 'COLLABORATOR') &&
        startsWith(github.event.issue.title, '[desktop-core-feed]')) ||
-      (github.event_name == 'release' &&
-       startsWith(github.event.release.tag_name, 'v3.') &&
-       github.event.release.prerelease == false) ||
       (github.event_name == 'workflow_run' &&
        github.event.workflow_run.conclusion == 'success' &&
-       github.event.workflow_run.event == 'push' &&
-       github.event.workflow_run.head_branch == 'main')
+       (github.event.workflow_run.event == 'push' ||
+        github.event.workflow_run.event == 'workflow_dispatch') &&
+       ((github.event.workflow_run.event == 'workflow_dispatch' &&
+         github.event.workflow_run.head_branch == 'main') ||
+        startsWith(github.event.workflow_run.head_branch, 'v3.')))
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
       actions: write
       contents: read
     steps:
+      - name: Check out trusted wake automation
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      # The Python router applies strict stable-version validation to this coarse branch filter.
+      - name: Download completed publication checksums
+        if: github.event_name == 'workflow_run'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: distribution-sha256-native
+          path: .publication
+          repository: ${{ github.repository }}
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
       - name: Dispatch feed producer
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          import json
-          import os
-          import urllib.error
-          import urllib.request
-
-          class NoRedirect(urllib.request.HTTPRedirectHandler):
-              def redirect_request(self, req, fp, code, msg, headers, newurl):
-                  raise urllib.error.HTTPError(req.full_url, code, "redirect refused", headers, fp)
-
-          request = urllib.request.Request(
-              f"https://api.github.com/repos/{os.environ['REPOSITORY']}/actions/workflows/desktop-core-alpha-feed.yml/dispatches",
-              data=json.dumps({"ref": "main"}).encode(),
-              method="POST",
-              headers={
-                  "Accept": "application/vnd.github+json",
-                  "Authorization": f"Bearer {os.environ['GH_TOKEN']}",
-                  "Content-Type": "application/json",
-                  "X-GitHub-Api-Version": "2022-11-28",
-                  "User-Agent": "hol-guard-desktop-core-feed-wake",
-              },
-          )
-          opener = urllib.request.build_opener(NoRedirect())
-          try:
-              with opener.open(request, timeout=20) as response:
-                  if response.status != 204:
-                      detail = response.read(4096).decode("utf-8", errors="replace")
-                      raise SystemExit(f"Desktop Core feed dispatch returned HTTP {response.status}: {detail}")
-          except urllib.error.HTTPError as exc:
-              detail = exc.read(4096).decode("utf-8", errors="replace")
-              raise SystemExit(f"Desktop Core feed dispatch returned HTTP {exc.code}: {detail}") from None
-          PY
+          PUBLICATION_CHECKSUMS: .publication/distribution-sha256-native.txt
+        run: python3 scripts/release/wake_desktop_core_feeds.py

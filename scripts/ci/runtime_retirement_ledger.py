@@ -96,8 +96,7 @@ def _test_nodes(path: Path) -> set[str]:
             elif isinstance(node, ast.ClassDef) and node.name.startswith("Test"):
                 # Pytest does not collect test classes with custom constructors.
                 if not any(
-                    isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef))
-                    and child.name in {"__init__", "__new__"}
+                    isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)) and child.name in {"__init__", "__new__"}
                     for child in node.body
                 ):
                     collect(node.body, prefix + node.name + "::")
@@ -161,6 +160,17 @@ def validate_retirement_ledger(root: Path, contract: dict[str, object]) -> dict[
             replacements = entry.get(replacement_key)
             if section == "preserved_tests":
                 replacements = [replacements]
+            if section == "retired_tests" and entry.get("status") == "obsolete_implementation_assertion":
+                rationale = entry.get("rationale")
+                if not isinstance(rationale, str) or not rationale.strip():
+                    raise RuntimeError(f"obsolete retired test requires a rationale: {old}")
+                if not isinstance(replacements, list):
+                    raise RuntimeError(f"retirement ledger {replacement_key} must be a list: {old}")
+                for replacement in replacements:
+                    if not isinstance(replacement, str) or not node_exists(replacement):
+                        raise RuntimeError(f"retirement ledger replacement test node is missing: {replacement}")
+                    replacements_checked.add(replacement)
+                continue
             for replacement in _strings(replacements, replacement_key):
                 if not node_exists(replacement):
                     raise RuntimeError(f"retirement ledger replacement test node is missing: {replacement}")

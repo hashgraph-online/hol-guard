@@ -17,12 +17,22 @@ def test_desktop_core_feed_wake_is_narrow_and_least_privilege() -> None:
     value = yaml.safe_load(text)
     events = value[True]
     workflow_path = ".github/workflows/wake-desktop-core-alpha-feed.yml"
-    assert set(events) == {"workflow_run", "release", "issues", "push", "pull_request"}
+    script_path = "scripts/release/wake_desktop_core_feeds.py"
+    test_path = "tests/test_wake_desktop_core_feeds.py"
+    assert set(events) == {"workflow_run", "issues", "push", "pull_request"}
     assert events["workflow_run"] == {"workflows": ["Publish to PyPI"], "types": ["completed"]}
-    assert events["release"] == {"types": ["published"]}
     assert events["issues"] == {"types": ["opened"]}
-    assert events["push"] == {"branches": ["main"], "paths": [workflow_path]}
-    assert events["pull_request"] == {"paths": [workflow_path]}
+    assert events["push"] == {
+        "branches": ["main"],
+        "paths": [workflow_path, "scripts/release/wake_desktop_core_feeds.py"],
+    }
+    assert events["pull_request"] == {
+        "paths": [
+            workflow_path,
+            script_path,
+            test_path,
+        ]
+    }
     assert value["permissions"] == {"contents": "read"}
     assert set(value["jobs"]) == {"wake"}
     wake = value["jobs"]["wake"]
@@ -39,39 +49,60 @@ def test_desktop_core_feed_wake_is_narrow_and_least_privilege() -> None:
         "github.event.issue.author_association == 'MEMBER' || "
         "github.event.issue.author_association == 'COLLABORATOR') && "
         "startsWith(github.event.issue.title, '[desktop-core-feed]')) || "
-        "(github.event_name == 'release' && startsWith(github.event.release.tag_name, 'v3.') && "
-        "github.event.release.prerelease == false) || "
         "(github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && "
-        "github.event.workflow_run.event == 'push' && "
-        "github.event.workflow_run.head_branch == 'main')"
+        "(github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'workflow_dispatch') && "
+        "((github.event.workflow_run.event == 'workflow_dispatch' && "
+        "github.event.workflow_run.head_branch == 'main') || "
+        "startsWith(github.event.workflow_run.head_branch, 'v3.')))"
     )
     dispatch_steps = [step for step in wake["steps"] if step.get("name") == "Dispatch feed producer"]
     assert len(dispatch_steps) == 1
     dispatch = dispatch_steps[0]
-    assert dispatch["env"] == {"GH_TOKEN": "${{ github.token }}", "REPOSITORY": "${{ github.repository }}"}
+    assert dispatch["env"] == {
+        "GH_TOKEN": "${{ github.token }}",
+        "REPOSITORY": "${{ github.repository }}",
+        "PUBLICATION_CHECKSUMS": ".publication/distribution-sha256-native.txt",
+    }
+    download = next(step for step in wake["steps"] if step.get("name") == "Download completed publication checksums")
+    assert download["with"]["run-id"] == "${{ github.event.workflow_run.id }}"
+    assert download["with"]["name"] == "distribution-sha256-native"
+    checkout = wake["steps"][0]
+    assert checkout["with"] == {"ref": "${{ github.sha }}", "persist-credentials": False}
     parsed_values = json.dumps(value)
     assert not re.search(r"\$\{\{\s*secrets\.", parsed_values)
     assert "id-token: write" not in parsed_values
     assert "pypa/gh-action-pypi-publish" not in parsed_values
 
-    run = dispatch["run"]
-    python_source = run.split("python3 - <<'PY'\n", 1)[1].rsplit("\nPY", 1)[0]
+    assert dispatch["run"] == f"python3 {script_path}"
+    python_source = (WORKFLOW.parents[2] / script_path).read_text(encoding="utf-8")
     tree = ast.parse(python_source)
     requests = [
         node
         for node in ast.walk(tree)
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "Request"
     ]
+    requests = [
+        node
+        for node in requests
+        if any(
+            item.arg == "method" and isinstance(item.value, ast.Constant) and item.value.value == "POST"
+            for item in node.keywords
+        )
+    ]
     assert len(requests) == 1
     request = requests[0]
     assert len(request.args) == 1 and isinstance(request.args[0], ast.JoinedStr)
     url_parts = request.args[0].values
-    assert len(url_parts) == 3
+    assert len(url_parts) == 5
     assert isinstance(url_parts[0], ast.Constant) and url_parts[0].value == "https://api.github.com/repos/"
     assert isinstance(url_parts[1], ast.FormattedValue)
-    assert ast.unparse(url_parts[1].value) == "os.environ['REPOSITORY']"
+    assert ast.unparse(url_parts[1].value) == "repository"
     assert isinstance(url_parts[2], ast.Constant)
-    assert url_parts[2].value == "/actions/workflows/desktop-core-alpha-feed.yml/dispatches"
+    assert url_parts[2].value == "/actions/workflows/"
+    assert ast.unparse(url_parts[3].value) == "workflow"
+    assert url_parts[4].value == "/dispatches"
+    assert 'repository != "hashgraph-online/hol-guard"' in python_source
+    assert 'WORKFLOWS = ("desktop-core-alpha-feed.yml", "desktop-core-linux-feed.yml")' in python_source
     keywords = {item.arg: item.value for item in request.keywords if item.arg is not None}
     assert isinstance(keywords["method"], ast.Constant) and keywords["method"].value == "POST"
     data = keywords["data"]
@@ -80,12 +111,7 @@ def test_desktop_core_feed_wake_is_narrow_and_least_privilege() -> None:
     assert isinstance(dumps, ast.Call)
     assert isinstance(dumps.func, ast.Attribute)
     assert ast.unparse(dumps.func) == "json.dumps"
-    payload = dumps.args[0]
-    assert isinstance(payload, ast.Dict)
-    payload_items = [
-        (ast.literal_eval(key), ast.literal_eval(item)) for key, item in zip(payload.keys, payload.values, strict=True)
-    ]
-    assert payload_items == [("ref", "main")]
+    assert ast.unparse(dumps.args[0]) == "payload"
 
     redirect_classes = [
         node

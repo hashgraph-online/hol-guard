@@ -6220,6 +6220,10 @@
     }
   }
 
+  .aria-disabled\:opacity-50[aria-disabled="true"] {
+    opacity: .5;
+  }
+
   .aria-expanded\:border-brand-blue[aria-expanded="true"] {
     border-color: var(--brand-blue);
   }

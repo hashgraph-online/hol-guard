@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import argparse
 import hashlib
 import shlex
 from pathlib import Path
@@ -10,8 +9,6 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.cli.commands_hook_runtime_eval import _evaluate_runtime_artifact_hook
-from codex_plugin_scanner.guard.cli.commands_hook_runtime_state import RuntimeArtifactHookState
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.models import GuardArtifact, PolicyDecision
 from codex_plugin_scanner.guard.runtime import supply_chain_package_eval as evaluator
@@ -54,31 +51,6 @@ def _hook_inputs(
         "source_scope": "project",
     }
     return artifact, config, context, store, workspace, payload
-
-
-def _evaluate_hook(
-    *,
-    artifact: GuardArtifact,
-    config: GuardConfig,
-    context: HarnessContext,
-    store: GuardStore,
-    workspace: Path,
-    payload: dict[str, object],
-    trusted_request_override_hash: str | None = None,
-) -> int | RuntimeArtifactHookState:
-    return _evaluate_runtime_artifact_hook(
-        argparse.Namespace(harness="codex", policy_action=None, json=True),
-        action_envelope=None,
-        config=config,
-        context=context,
-        data_flow_signals=(),
-        guard_home=store.guard_home,
-        payload=payload,
-        runtime_artifact=artifact,
-        runtime_workspace=workspace,
-        store=store,
-        trusted_request_override_hash=trusted_request_override_hash,
-    )
 
 
 def _save_exact_allow(store: GuardStore, *, artifact: GuardArtifact, artifact_hash: str) -> None:
@@ -261,6 +233,7 @@ def test_external_archive_request_caps_aggregate_retained_bytes_and_cleans_blobs
         *,
         retain_download: bool = False,
         request_deadline: float | None = None,
+        guard_home: Path | None = None,
     ) -> tuple[dict[str, str], RestrictedArchiveDownload]:
         assert retain_download is True
         assert request_deadline is not None
@@ -301,7 +274,10 @@ def test_external_archive_request_caps_aggregate_retained_bytes_and_cleans_blobs
     assert paths and all(path.exists() is False for path in paths)
 
 
-def test_external_archive_request_deadline_fails_before_next_download(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_external_archive_request_deadline_fails_before_next_download(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(
         evaluator,
         "_download_external_tarball",
@@ -311,6 +287,7 @@ def test_external_archive_request_deadline_fails_before_next_download(monkeypatc
     result, retained = evaluator._scan_external_tarball(
         "https://packages.example.com/demo.tgz",
         request_deadline=evaluator.time.monotonic() - 1,
+        guard_home=tmp_path / "guard-home",
     )
 
     assert result is not None
@@ -342,8 +319,9 @@ def test_external_archive_cannot_be_shadowed_or_bypass_restricted_inspection(
         *,
         retain_download: bool = False,
         request_deadline: float | None = None,
+        guard_home: Path | None = None,
     ) -> tuple[dict[str, str], None]:
-        del request_deadline, retain_download
+        del request_deadline, retain_download, guard_home
         scans.append(scanned_url)
         return (
             {

@@ -33,11 +33,11 @@ def capability_contract(compatibility_modes: Iterable[str]) -> list[dict[str, ob
         },
         {
             "id": "archive_decode_package_inspection",
-            "authority": "rust_when_hook_reachable",
+            "authority": "rust",
             "rust_symbols": [
-                "guard_command::pretool::evaluate_pre_tool_envelope",
-                "guard_runtime::strict_json::parse",
-                "guard_hook_core::extract_payload_output",
+                "guard_archive::inspect_path",
+                "guard_secure_fs::open_immutable_blob",
+                "guard_runtime::archive_inspect::evaluate_archive_inspection_bytes",
             ],
             "python_semantic_fallback": False,
             "compatibility_modes": sorted(compatibility_modes),

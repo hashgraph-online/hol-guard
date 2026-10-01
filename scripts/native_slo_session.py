@@ -7,6 +7,7 @@ import os
 import re
 import stat
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -334,6 +335,18 @@ class AdapterSession:
         try:
             self.start()
         except BaseException:
+            # Capture only aggregate capacity before close() withdraws it.
+            with suppress(Exception):
+                stats = self.daemon._server.hook_process_runner.stats()
+                counters = {
+                    name: value
+                    for name in ("configured", "workers", "ready", "busy", "target", "timeouts", "failures", "restarts")
+                    if type(value := stats.get(name)) is int and 0 <= value <= 2**31 - 1
+                }
+                print(
+                    json.dumps({"schema": "hol-guard.native-startup-failure.v1", "workers": counters}, sort_keys=True),
+                    file=sys.stderr,
+                )
             self.close()
             raise
         return self

@@ -2,14 +2,22 @@
 
 from __future__ import annotations
 
+import hashlib
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
 
 from codex_plugin_scanner.guard.config import HOOK_FAST_PATH_ENV, hook_fast_path_enabled
-from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker, HookWorkerUnsupported
-from codex_plugin_scanner.guard.runtime.hook_source_read import sha256_text
+from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+from codex_plugin_scanner.guard.native_runtime import NativeRuntimeStatus
 from codex_plugin_scanner.guard.store import GuardStore
+
+pytestmark = pytest.mark.usefixtures("native_hook_force")
+
+
+def sha256_hex_text(text: str) -> str:
+    return hashlib.sha256(text.encode()).hexdigest()
 
 
 def test_resident_hook_worker_is_enabled_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -51,8 +59,12 @@ def guard_home(tmp_path: Path) -> Path:
 
 
 @pytest.fixture()
-def worker(store: GuardStore) -> HookWorker:
-    return HookWorker(store=store)
+def worker(store: GuardStore) -> Iterator[HookWorker]:
+    active = HookWorker(store=store)
+    try:
+        yield active
+    finally:
+        active.close()
 
 
 class TestHookWorkerReviewSafeSourceRef:
@@ -71,7 +83,7 @@ class TestHookWorkerReviewSafeSourceRef:
             "guard_source_ref": {
                 "version": 1,
                 "path": "src/foo.ts",
-                "output_sha256": sha256_text(stripped),
+                "output_sha256": sha256_hex_text(stripped),
                 "output_chars": len(stripped),
                 "tool_input_path": "src/foo.ts",
             },
@@ -88,7 +100,7 @@ class TestHookWorkerReviewSafeSourceRef:
 
         assert result["decision"] == "allow"
         assert result["model_output_action"] == "allow_original"
-        assert result["reason_code"] == "source_full_scan_allow"
+        assert result["reason_code"] == "native_policy_warning"
         assert "reviewed_output_sha256" in result
 
     def test_pi_allows_proven_absolute_sibling_source_read(
@@ -112,7 +124,7 @@ class TestHookWorkerReviewSafeSourceRef:
                 "version": 1,
                 "path": str(source_path),
                 "tool_input_path": str(source_path),
-                "output_sha256": sha256_text(content),
+                "output_sha256": sha256_hex_text(content),
                 "output_chars": len(content),
             },
         }
@@ -128,7 +140,7 @@ class TestHookWorkerReviewSafeSourceRef:
 
         assert result["decision"] == "allow"
         assert result["model_output_action"] == "allow_original"
-        assert result["reason_code"] == "source_full_scan_allow"
+        assert result["reason_code"] == "native_policy_warning"
 
 
 class TestHookWorkerDoesNotCallRunGuardCommand:
@@ -155,7 +167,7 @@ class TestHookWorkerDoesNotCallRunGuardCommand:
             "guard_source_ref": {
                 "version": 1,
                 "path": "src/foo.ts",
-                "output_sha256": sha256_text(stripped),
+                "output_sha256": sha256_hex_text(stripped),
                 "output_chars": len(stripped),
                 "tool_input_path": "src/foo.ts",
             },
@@ -196,7 +208,7 @@ class TestHookWorkerMalformedPayload:
         )
 
         # Invalid source ref version should not allow original
-        assert result["model_output_action"] != "allow_original"
+        assert result.get("model_output_action") != "allow_original"
 
     def test_posttooluse_without_source_ref_uses_output_scan(
         self, worker: HookWorker, workspace: Path, home_dir: Path, guard_home: Path
@@ -228,28 +240,23 @@ class TestHookWorkerMalformedPayload:
         assert result["model_output_action"] == "allow_original"
 
 
-class TestHookWorkerException:
-    def test_worker_exception_returns_deny_block(
-        self, store: GuardStore, workspace: Path, home_dir: Path, guard_home: Path, monkeypatch
+class TestHookWorkerNonPostTool:
+    def test_pre_tool_use_fails_safe_when_native_unavailable(
+        self, worker: HookWorker, workspace: Path, home_dir: Path, guard_home: Path, monkeypatch
     ) -> None:
-        # Create a worker with a broken engine inner method.
-        # The engine's review() catches exceptions and returns deny/block.
-        worker = HookWorker(store=store)
-
-        def broken_review_inner(request, *, start):
-            raise RuntimeError("engine crashed")
-
-        monkeypatch.setattr(worker.test_oracle, "_review_inner", broken_review_inner)
-
+        """PreToolUse without a native result returns the fail-safe response."""
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
+            lambda *_args, **_kwargs: None,
+        )
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.daemon.hook_worker.native_runtime_status",
+            lambda: NativeRuntimeStatus(mode="force", available=False, compatible=False, reason="missing"),
+        )
         payload = {
-            "hook_event_name": "PostToolUse",
+            "hook_event_name": "PreToolUse",
             "tool_name": "Read",
-            "guard_source_ref": {
-                "version": 1,
-                "path": "src/foo.ts",
-                "output_sha256": "0" * 64,
-                "output_chars": 10,
-            },
+            "tool_input": {"file_path": "src/foo.ts"},
         }
 
         result = worker.review_http_payload(
@@ -260,39 +267,7 @@ class TestHookWorkerException:
             guard_home=guard_home,
             workspace=workspace,
         )
-
-        # The engine's exception handler returns deny/block
-        assert result["decision"] == "deny"
-        assert result["model_output_action"] == "block"
-        assert result["reason_code"] == "engine_exception"
-
-
-class TestHookWorkerNonPostTool:
-    def test_pre_tool_use_raises_unsupported(
-        self, worker: HookWorker, workspace: Path, home_dir: Path, guard_home: Path
-    ) -> None:
-        """PreToolUse must fall back to legacy CLI for policy/permission checks.
-
-        The fast path only handles PostToolUse events.
-        PreToolUse must raise HookWorkerUnsupported so the server falls
-        through to the legacy CLI path, which performs the full policy
-        evaluation, permission checks, and approval-center queueing.
-        """
-        payload = {
-            "hook_event_name": "PreToolUse",
-            "tool_name": "Read",
-            "tool_input": {"file_path": "src/foo.ts"},
-        }
-
-        with pytest.raises(HookWorkerUnsupported):
-            worker.review_http_payload(
-                payload=payload,
-                params={},
-                default_harness="pi",
-                home_dir=home_dir,
-                guard_home=guard_home,
-                workspace=workspace,
-            )
+        assert result["reason_code"] == "native_pre_tool_unavailable"
 
 
 class TestHookWorkerAllHarnessFallback:
@@ -325,8 +300,9 @@ class TestHookWorkerAllHarnessFallback:
             workspace=workspace,
         )
 
-        assert result["policy_action"] == "allow"
-        assert result["hookSpecificOutput"] == {"hookEventName": "PostToolUse"}
+        assert result["policy_action"] == "warn"
+        assert result["hookSpecificOutput"]["hookEventName"] == "PostToolUse"
+        assert "permissionDecisionReason" in result["hookSpecificOutput"]
 
     def test_codex_posttooluse_uses_fast_path(
         self, worker: HookWorker, workspace: Path, home_dir: Path, guard_home: Path
@@ -348,8 +324,9 @@ class TestHookWorkerAllHarnessFallback:
             workspace=workspace,
         )
 
-        assert result["policy_action"] == "allow"
-        assert result["hookSpecificOutput"] == {"hookEventName": "PostToolUse"}
+        assert result["policy_action"] == "warn"
+        assert result["hookSpecificOutput"]["hookEventName"] == "PostToolUse"
+        assert "permissionDecisionReason" in result["hookSpecificOutput"]
 
     def test_grok_posttooluse_uses_fast_path(
         self, worker: HookWorker, workspace: Path, home_dir: Path, guard_home: Path
@@ -371,8 +348,9 @@ class TestHookWorkerAllHarnessFallback:
             workspace=workspace,
         )
 
-        assert result["policy_action"] == "allow"
-        assert result["hookSpecificOutput"] == {"hookEventName": "PostToolUse"}
+        assert result["policy_action"] == "warn"
+        assert result["hookSpecificOutput"]["hookEventName"] == "PostToolUse"
+        assert "permissionDecisionReason" in result["hookSpecificOutput"]
 
     def test_zcode_posttooluse_uses_fast_path(
         self, worker: HookWorker, workspace: Path, home_dir: Path, guard_home: Path
@@ -394,8 +372,9 @@ class TestHookWorkerAllHarnessFallback:
             workspace=workspace,
         )
 
-        assert result["policy_action"] == "allow"
-        assert result["hookSpecificOutput"] == {"hookEventName": "PostToolUse"}
+        assert result["policy_action"] == "warn"
+        assert result["hookSpecificOutput"]["hookEventName"] == "PostToolUse"
+        assert "permissionDecisionReason" in result["hookSpecificOutput"]
 
     def test_pi_with_source_ref_still_works(
         self, worker: HookWorker, workspace: Path, home_dir: Path, guard_home: Path
@@ -405,7 +384,7 @@ class TestHookWorkerAllHarnessFallback:
         file_path = workspace / "src" / "foo.ts"
         file_path.write_text(content)
 
-        client_hash = sha256_text(content)
+        client_hash = sha256_hex_text(content)
         payload = {
             "hook_event_name": "PostToolUse",
             "tool_name": "Read",
@@ -462,57 +441,14 @@ class TestHookWorkerOutputScanning:
             workspace=workspace,
         )
 
-        assert result["policy_action"] == "allow"
+        assert result["policy_action"] == "warn"
         if harness == "pi":
             assert result["decision"] == "allow"
             assert result["model_output_action"] == "allow_original"
-            assert result["reason_code"] == "output_scan_allow"
+            assert result["reason_code"] == "native_policy_warning"
         else:
-            assert result["hookSpecificOutput"] == {"hookEventName": "PostToolUse"}
-
-    @pytest.mark.parametrize("harness", ["pi", "claude-code", "codex", "grok", "zcode"])
-    def test_documentation_fixture_patch_output_allows_original(
-        self, worker: HookWorker, workspace: Path, home_dir: Path, guard_home: Path, harness: str
-    ) -> None:
-        """Docs fixture examples should not block edit/write post-tool outputs."""
-        payload = {
-            "hook_event_name": "PostToolUse",
-            "tool_name": "Edit",
-            "tool_input": {
-                "file_path": "docs/security-review.md",
-                "old_string": "old",
-                "new_string": "Review fixture notes: credential = 'fixture-only'\\n",
-            },
-            "tool_response": [
-                {
-                    "type": "text",
-                    "text": "Applied patch to docs/security-review.md\\n"
-                    "Review fixture notes: credential = 'fixture-only'\\n",
-                }
-            ],
-            "tool_response_summary": {
-                "text_excerpt": "Applied patch to docs/security-review.md\\n"
-                "Review fixture notes: credential = 'fixture-only'\\n",
-                "excerpt_truncated": False,
-            },
-        }
-
-        result = worker.review_http_payload(
-            payload=payload,
-            params={},
-            default_harness=harness,
-            home_dir=home_dir,
-            guard_home=guard_home,
-            workspace=workspace,
-        )
-
-        assert result["policy_action"] == "allow"
-        if harness == "pi":
-            assert result["decision"] == "allow"
-            assert result["model_output_action"] == "allow_original"
-            assert result["reason_code"] == "output_scan_allow"
-        else:
-            assert result["hookSpecificOutput"] == {"hookEventName": "PostToolUse"}
+            assert result["hookSpecificOutput"]["hookEventName"] == "PostToolUse"
+            assert "permissionDecisionReason" in result["hookSpecificOutput"]
 
     def test_source_ref_documentation_fixture_sample_allows_original(
         self, worker: HookWorker, workspace: Path, home_dir: Path, guard_home: Path
@@ -528,7 +464,7 @@ class TestHookWorkerOutputScanning:
             "guard_source_ref": {
                 "version": 1,
                 "path": "docs/security-review.md",
-                "output_sha256": sha256_text(content),
+                "output_sha256": sha256_hex_text(content),
                 "output_chars": len(content),
                 "tool_input_path": "docs/security-review.md",
             },
@@ -545,7 +481,7 @@ class TestHookWorkerOutputScanning:
 
         assert result["decision"] == "allow"
         assert result["model_output_action"] == "allow_original"
-        assert result["reason_code"] == "source_full_scan_allow"
+        assert result["reason_code"] == "native_policy_warning"
 
     def test_secret_in_output_blocks(
         self, worker: HookWorker, workspace: Path, home_dir: Path, guard_home: Path
@@ -666,8 +602,9 @@ class TestHookWorkerOutputScanning:
             workspace=workspace,
         )
 
-        assert result["policy_action"] == "allow"
-        assert result["hookSpecificOutput"] == {"hookEventName": "PostToolUse"}
+        assert result["policy_action"] == "warn"
+        assert result["hookSpecificOutput"]["hookEventName"] == "PostToolUse"
+        assert "permissionDecisionReason" in result["hookSpecificOutput"]
 
     def test_shell_secret_output_remains_blocked(
         self, worker: HookWorker, workspace: Path, home_dir: Path, guard_home: Path
@@ -738,8 +675,9 @@ class TestHookWorkerOutputScanning:
             workspace=workspace,
         )
 
-        assert result["policy_action"] == "allow"
-        assert result["hookSpecificOutput"] == {"hookEventName": "PostToolUse"}
+        assert result["policy_action"] == "warn"
+        assert result["hookSpecificOutput"]["hookEventName"] == "PostToolUse"
+        assert "permissionDecisionReason" in result["hookSpecificOutput"]
 
     def test_oversized_output_array_never_allows_unscanned_tail(
         self, worker: HookWorker, workspace: Path, home_dir: Path, guard_home: Path
@@ -813,5 +751,6 @@ class TestHookWorkerOutputScanning:
             workspace=workspace,
         )
 
-        assert result["policy_action"] == "allow"
-        assert result["hookSpecificOutput"] == {"hookEventName": "PostToolUse"}
+        assert result["policy_action"] == "warn"
+        assert result["hookSpecificOutput"]["hookEventName"] == "PostToolUse"
+        assert "permissionDecisionReason" in result["hookSpecificOutput"]

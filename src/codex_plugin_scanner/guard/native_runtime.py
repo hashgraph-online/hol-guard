@@ -418,7 +418,11 @@ def _capabilities_for_identity(
         Path(path),
         ("capabilities", "--json"),
         input_text="",
-        timeout_seconds=1.0,
+        # Cold-start allowance: the probe runs once per binary identity per
+        # process and the result is cached, including failure. A page-cold
+        # 25MB hash plus spawn can exceed a 1s budget on a loaded host, which
+        # would poison every later native check in the process.
+        timeout_seconds=5.0,
     )
     if output is None:
         return None

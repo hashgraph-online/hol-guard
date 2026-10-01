@@ -22,6 +22,7 @@ import { groupProtectionModules, protectionCategoryIdForExtension } from "./mode
 import { deriveProtectionStatus } from "./model/protection-presentation";
 import { CustomExtensionsSection } from "./custom-extensions-section";
 import type { LocalCliItem } from "../local-cli-api";
+import { LocalCliDetail } from "./local-clis-panel";
 
 assert.equal(PROTECTION_TERMS.navigation, "Extensions");
 assert.equal(PROTECTION_TERMS.pageTitle, "Extensions");
@@ -286,5 +287,18 @@ assert.match(customFiltered, /data-testid="custom-extensions-filter-empty"/);
 assert.match(customFiltered, /No custom extensions match these filters\./);
 assert.match(customFiltered, /Clear filters/);
 assert.doesNotMatch(customFiltered, /No custom extensions yet\./);
+
+for (const state of ["unset", "allowed", "blocked"] as const) {
+  const detail = renderToStaticMarkup(createElement(LocalCliDetail, {
+    item: { ...baseCustomExtension, surface: "mcp", state, name: "Synthetic MCP connector" },
+    revision: 0,
+    continuity: { sync_local_only: true, continuity_enabled: false, summary: "Local fixture" },
+    onBack: () => undefined,
+    onRefresh: async () => undefined,
+  }));
+  assert.match(detail, /data-testid="local-cli-detail"/);
+  assert.match(detail, /Synthetic MCP connector/);
+  assert.match(detail, /Refresh inventory/);
+}
 
 console.log("protection-center.test.tsx: all assertions passed");
