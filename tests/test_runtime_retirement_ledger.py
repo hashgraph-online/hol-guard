@@ -13,9 +13,13 @@ def ledger_repository(tmp_path: Path) -> tuple[Path, dict[str, object], dict[str
     (tmp_path / "tests").mkdir()
     (tmp_path / "rust").mkdir()
     (tmp_path / "tests/test_native.py").write_text(
+        "import pytest\n"
         "raise AssertionError('the integrity gate must not import tests')\n"
-        "class TestNative:\n    def test_roundtrip(self):\n        pass\n"
-        "async def test_preserved():\n    pass\n",
+        "class TestNative:\n"
+        "    @pytest.mark.parametrize('value', ['param', 'value'])\n"
+        "    def test_roundtrip(self, value):\n        pass\n"
+        "@pytest.mark.parametrize('case', ['param'])\n"
+        "async def test_preserved(case):\n    pass\n",
         encoding="utf-8",
     )
     (tmp_path / "rust/native.rs").write_text("#[test]\nfn roundtrip() {}\n", encoding="utf-8")
@@ -260,18 +264,58 @@ def test_ledger_rejects_python_class_with_custom_constructor(ledger_repository, 
 @pytest.mark.parametrize(
     "reference",
     [
+        "tests/test_native.py::TestNative::test_roundtrip[param]",
+        "tests/test_native.py::TestNative::test_roundtrip[value]",
+        "tests/test_native.py::test_preserved[param]",
+    ],
+)
+def test_ledger_accepts_parametrized_node_references(ledger_repository, reference: str) -> None:
+    _, _, ledger = ledger_repository
+    ledger["retired_tests"][0]["replacement_nodes"] = [reference]
+    ledger["preserved_tests"][0]["new_node"] = reference
+    assert _check(ledger_repository)["replacement_tests"] == 1
+
+
+@pytest.mark.parametrize(
+    "reference",
+    [
         "tests/test_native.py::",
         "tests/test_native.py::TestNative::::test_roundtrip",
-        "tests/test_native.py::TestNative::test_roundtrip[value]",
+        "tests/test_native.py::test_roundtrip[",
+        "tests/test_native.py::test_roundtrip[]",
+        "tests/test_native.py::test_roundtrip[param",
+        "tests/test_native.py::test_roundtrip]",
         "tests/test_native.py::not-a-node",
         "rust/native.rs::tests::roundtrip",
+        "rust/native.rs::roundtrip[param]",
         "tests/absent.md::test_case",
     ],
 )
 def test_ledger_rejects_malformed_node_identity(ledger_repository, reference: str) -> None:
     _, _, ledger = ledger_repository
     ledger["retired_tests"][0]["replacement_nodes"] = [reference]
-    with pytest.raises(RuntimeError, match="requires a non-parametrized test node"):
+    with pytest.raises(RuntimeError, match="malformed test node"):
+        _check(ledger_repository)
+
+
+@pytest.mark.parametrize(
+    "reference",
+    [
+        # Parametrized base, but pytest never generated this suffix.
+        "tests/test_native.py::TestNative::test_roundtrip[invented]",
+        # Bracketed reference to a non-parametrized test is not collectible.
+        "tests/test_native.py::test_plain[param]",
+    ],
+)
+def test_ledger_rejects_noncollectible_parametrized_nodes(ledger_repository, reference: str) -> None:
+    root, _, ledger = ledger_repository
+    (root / "tests/test_native.py").write_text(
+        (root / "tests/test_native.py").read_text(encoding="utf-8")
+        + "def test_plain():\n    pass\n",
+        encoding="utf-8",
+    )
+    ledger["retired_tests"][0]["replacement_nodes"] = [reference]
+    with pytest.raises(RuntimeError, match="replacement test node is missing"):
         _check(ledger_repository)
 
 

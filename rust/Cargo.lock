@@ -354,6 +354,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "guard-seatbelt"
+version = "0.1.0"
+
+[[package]]
 name = "guard-secure-fs"
 version = "0.1.0"
 dependencies = [
@@ -384,6 +388,7 @@ dependencies = [
  "guard-policy-snapshot",
  "guard-rule-contract",
  "guard-runtime-windows-process",
+ "guard-seatbelt",
  "guard-secure-fs",
  "hex",
  "libc",
