@@ -141,6 +141,7 @@ def run_guard_command(
     output_stream: TextIO | None = None,
 ) -> int:
     "Execute a Guard subcommand."
+
     if args.guard_command == "extensions":
         from .extension_builder_commands import run_extension_builder_command
 

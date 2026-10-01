@@ -69,6 +69,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         "hook-envelope-v2".into(),
         "native-resident-client-v1".into(),
         "native-resident-lifecycle-v1".into(),
+        guard_contracts::ARCHIVE_INSPECTION_FEATURE.into(),
     ];
     if cfg!(windows) {
         features.push("authenticated-loopback-resident-v1".into());

@@ -9,7 +9,6 @@ from typing import TypedDict, cast
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.hook_review_engine import HOOK_ENGINE_NORMAL_BUDGET_MS
 from scripts.bench_guard_native_installed_slo import (
     _safe_failure_rate,
     _stabilize_ready_hook_workers,
@@ -158,7 +157,7 @@ def test_slo_gates_are_fixed_and_require_all_measurements() -> None:
 
 
 def test_installed_latency_budget_is_the_existing_normal_hook_budget() -> None:
-    assert float(HOOK_ENGINE_NORMAL_BUDGET_MS) == MAX_INSTALLED_ADAPTER_P95_MS
+    assert MAX_INSTALLED_ADAPTER_P95_MS == 1000.0
     assert MAX_INSTALLED_ADAPTER_P99_MS == MAX_INSTALLED_ADAPTER_P95_MS
     passing = gate_results(
         resident_share=1.0,

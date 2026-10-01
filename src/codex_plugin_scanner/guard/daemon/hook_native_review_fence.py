@@ -23,7 +23,7 @@ def native_review_fence(
         policy_snapshot.get("command_extensions_bound") is True
         or isinstance(policy_snapshot.get("command_extensions"), Mapping)
     )
-    if not bound or event_name != "PreToolUse" or recording_only:
+    if not bound or event_name not in {"PreToolUse", "UserPromptSubmit"} or recording_only:
         yield False
         return
     # A missing deadline grants no additional lock wait. Normal HTTP callers

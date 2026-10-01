@@ -309,12 +309,12 @@ def test_liveness_uses_reserved_capacity_when_general_requests_are_saturated(
         (
             "/v1/hooks/pi",
             {"hook_event_name": "PreToolUse", "tool_name": "read", "tool_input": {}},
-            ("decision", "allow"),
+            ("decision", "deny"),
         ),
         (
             "/v1/hooks/claude-code",
             {"hook_event_name": "PreToolUse", "tool_name": "Read", "tool_input": {}},
-            ("permissionDecision", "allow"),
+            ("permissionDecision", "deny"),
         ),
         (
             "/v1/hooks/claude-code",

@@ -105,7 +105,8 @@ for (const width of [1280, 390]) {
         }
         if (refreshRequests.length > 1) {
           await route.fulfill({ json: { job_id: "d".repeat(32), cli_id: item.cli_id,
-            state: refreshRequests.length === 2 ? "failed" : "running", error: "discovery_failed" } });
+            state: refreshRequests.length === 2 ? "failed" : "running",
+            error: width === 390 ? "mcp_initialize_failed" : "discovery_failed" } });
           return;
         }
         item.commands.splice(2, 0, tool("search", "Search records"));
@@ -182,7 +183,9 @@ for (const width of [1280, 390]) {
     await search.getByRole("radio", { name: "Ask", exact: true }).click();
     await expect(search.getByRole("radio", { name: "Ask", exact: true })).toHaveAttribute("aria-checked", "true");
     await detail.getByRole("button", { name: "Refresh inventory", exact: true }).click();
-    await expect(detail.getByRole("alert")).toContainText("Discovery did not finish. Known tools and choices were kept.");
+    await expect(detail.getByRole("alert")).toContainText(width === 390
+      ? "The MCP server did not complete initialization."
+      : "Discovery did not finish. Known tools and choices were kept.");
     await expect(read.getByRole("radio", { name: "Allow", exact: true })).toHaveAttribute("aria-checked", "true");
     await detail.getByRole("button", { name: "Refresh inventory", exact: true }).click();
     await detail.getByRole("button", { name: "Cancel refresh", exact: true }).click();

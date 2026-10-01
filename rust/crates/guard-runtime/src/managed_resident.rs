@@ -16,6 +16,8 @@ mod client_stream;
 mod containment;
 #[path = "managed_resident_lease.rs"]
 mod lease;
+pub(crate) use lease::client_request;
+use lease::client_request_with_lease;
 #[path = "managed_resident_transport.rs"]
 mod managed_resident_transport;
 #[cfg(windows)]
@@ -42,8 +44,8 @@ pub(crate) fn client_stream(state_base: &Path) -> Result<(), String> {
     client_stream::run(state_base)
 }
 
-const CLIENT_START_TIMEOUT: Duration =
-    Duration::from_millis(if cfg!(windows) { 9_000 } else { 600 });
+// Startup may use the caller's remaining budget, never more than nine seconds.
+const CLIENT_START_TIMEOUT: Duration = Duration::from_millis(9_000);
 const CLIENT_RETRY_DELAY: Duration = Duration::from_millis(5);
 
 fn try_live_or_restart(
@@ -136,8 +138,7 @@ fn try_home_states(
     let runtime_digest = runtime_digest()?;
     for (_scope, _digest, state) in discover_home_states_prefer(state_base, Some(preferred_digest))?
     {
-        let timeout = deadline.saturating_duration_since(Instant::now());
-        if timeout.is_zero() {
+        if deadline.saturating_duration_since(Instant::now()).is_zero() {
             return Ok(None);
         }
         let same_runtime = runtime_digest == state.runtime_sha256;
@@ -160,6 +161,10 @@ fn try_home_states(
             start_marker: &state.process_start_marker,
             digest: (!same_runtime).then_some(&state.runtime_sha256),
         };
+        let timeout = deadline.saturating_duration_since(Instant::now());
+        if timeout.is_zero() {
+            return Ok(None);
+        }
         match crate::resident_client::send_request_for_digest_detailed(
             &state.transport,
             &state.endpoint,
@@ -177,28 +182,18 @@ fn try_home_states(
     Ok(None)
 }
 
-pub(crate) fn client_request(
+fn client_request_with_deadline(
     state_base: &Path,
     payload: &[u8],
-    timeout: Duration,
-) -> Result<Vec<u8>, String> {
-    let client_lease = lease::acquire(state_base)?;
-    client_request_with_lease(state_base, payload, timeout, &client_lease)
-}
-
-fn client_request_with_lease(
-    state_base: &Path,
-    payload: &[u8],
-    timeout: Duration,
+    overall_deadline: Instant,
     _client_lease: &lease::ClientLease,
 ) -> Result<Vec<u8>, String> {
-    if timeout.is_zero() {
-        return Err("native_client_deadline_exceeded".to_owned());
-    }
     // Keep the caller's budget intact. Windows spawn already has
     // CLIENT_START_TIMEOUT; shrinking every live request by 300ms makes the
     // 250ms command-model SLO miss the ready serve entirely.
-    let overall_deadline = Instant::now() + timeout;
+    if Instant::now() >= overall_deadline {
+        return Err("native_client_deadline_exceeded".to_owned());
+    }
     let digest = runtime_digest()?;
     let scope = state_scope(state_base, &digest)?;
     if let Some(response) = try_home_states(state_base, payload, overall_deadline, &digest)? {
@@ -223,7 +218,9 @@ fn client_request_with_lease(
             {
                 return Ok(response);
             }
-            thread::sleep(CLIENT_RETRY_DELAY);
+            thread::sleep(
+                CLIENT_RETRY_DELAY.min(deadline.saturating_duration_since(Instant::now())),
+            );
         }
         if clear_stale_startup_lock(state_base, &digest)? {
             lock = acquire_startup_lock(state_base)?;
@@ -246,27 +243,33 @@ fn client_request_with_lease(
         &digest,
         &token,
         std::process::id(),
+        overall_deadline,
     )?;
     let deadline = overall_deadline.min(Instant::now() + CLIENT_START_TIMEOUT);
     let request_result = loop {
         if Instant::now() >= deadline {
-            break Ok(None);
+            break Err("native_resident_start_timeout".to_owned());
         }
         match try_live_or_restart(state_base, payload, overall_deadline, &digest) {
-            Ok(Some(response)) => break Ok(Some(response)),
+            Ok(Some(response)) => break Ok(response),
             Ok(None) => {}
             Err(error) => break Err(error),
         }
-        thread::sleep(CLIENT_RETRY_DELAY);
+        thread::sleep(CLIENT_RETRY_DELAY.min(deadline.saturating_duration_since(Instant::now())));
     };
     match request_result {
-        Ok(Some(response)) => Ok(response),
-        Ok(None) => {
-            containment::abort_spawned_managed(&mut spawned, &scope, &digest, generation, &token);
-            Err("native_resident_start_timeout".to_owned())
-        }
+        Ok(response) => Ok(response),
         Err(error) => {
-            containment::abort_spawned_managed(&mut spawned, &scope, &digest, generation, &token);
+            // Cleanup retries share the request deadline. A failed containment
+            // check must remain visible rather than be hidden by the request error.
+            containment::abort_spawned_managed(
+                &mut spawned,
+                &scope,
+                &digest,
+                generation,
+                &token,
+                overall_deadline,
+            )?;
             Err(error)
         }
     }
