@@ -19,8 +19,7 @@ def test_desktop_core_feed_wake_is_narrow_and_least_privilege() -> None:
     workflow_path = ".github/workflows/wake-desktop-core-alpha-feed.yml"
     script_path = "scripts/release/wake_desktop_core_feeds.py"
     test_path = "tests/test_wake_desktop_core_feeds.py"
-    assert set(events) == {"workflow_run", "issues", "push", "pull_request"}
-    assert events["workflow_run"] == {"workflows": ["Publish to PyPI"], "types": ["completed"]}
+    assert set(events) == {"issues", "push", "pull_request"}
     assert events["issues"] == {"types": ["opened"]}
     assert events["push"] == {
         "branches": ["main"],
@@ -31,6 +30,7 @@ def test_desktop_core_feed_wake_is_narrow_and_least_privilege() -> None:
             workflow_path,
             script_path,
             test_path,
+            "tests/test_core_feed_publication_handoff.py",
         ]
     }
     assert value["permissions"] == {"contents": "read"}
@@ -48,12 +48,7 @@ def test_desktop_core_feed_wake_is_narrow_and_least_privilege() -> None:
         "(github.event.issue.author_association == 'OWNER' || "
         "github.event.issue.author_association == 'MEMBER' || "
         "github.event.issue.author_association == 'COLLABORATOR') && "
-        "startsWith(github.event.issue.title, '[desktop-core-feed]')) || "
-        "(github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && "
-        "(github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'workflow_dispatch') && "
-        "((github.event.workflow_run.event == 'workflow_dispatch' && "
-        "github.event.workflow_run.head_branch == 'main') || "
-        "startsWith(github.event.workflow_run.head_branch, 'v3.')))"
+        "startsWith(github.event.issue.title, '[desktop-core-feed]'))"
     )
     dispatch_steps = [step for step in wake["steps"] if step.get("name") == "Dispatch feed producer"]
     assert len(dispatch_steps) == 1
@@ -61,11 +56,8 @@ def test_desktop_core_feed_wake_is_narrow_and_least_privilege() -> None:
     assert dispatch["env"] == {
         "GH_TOKEN": "${{ github.token }}",
         "REPOSITORY": "${{ github.repository }}",
-        "PUBLICATION_CHECKSUMS": ".publication/distribution-sha256-native.txt",
     }
-    download = next(step for step in wake["steps"] if step.get("name") == "Download completed publication checksums")
-    assert download["with"]["run-id"] == "${{ github.event.workflow_run.id }}"
-    assert download["with"]["name"] == "distribution-sha256-native"
+    assert not any(step.get("name") == "Download completed publication checksums" for step in wake["steps"])
     checkout = wake["steps"][0]
     assert checkout["with"] == {"ref": "${{ github.sha }}", "persist-credentials": False}
     parsed_values = json.dumps(value)

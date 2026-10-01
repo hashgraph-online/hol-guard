@@ -1,11 +1,11 @@
 """Mechanical transport adapter for native archive inspection.
 
-This module is transport plumbing only: it validates request shape, takes the
-per-guard-home admission lease, forwards a bounded JSON request to
-``hol-guard-runtime archive-inspect --stdin``, and projects the typed result
-back to the package evaluator. Archive admission, hashing, decompression,
-member policy, and manifest risk evaluation are owned by the Rust worker;
-there is no Python semantic fallback.
+This module is transport plumbing only: it validates request shape, forwards a
+bounded JSON request to ``hol-guard-runtime archive-inspect --stdin``, and
+projects the typed result back to the package evaluator. Archive admission —
+including the one-inspector lease — hashing, decompression, member policy, and
+manifest risk evaluation are owned by the Rust worker; there is no Python
+semantic fallback.
 """
 
 from __future__ import annotations
@@ -16,16 +16,13 @@ import math
 import os
 import re
 import secrets
-import sys
 import time
-from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
 from .codex_hook_launch_runtime import run_isolated_hook_process
 from .native_runtime import native_runtime_status
-from .store_base import _acquire_advisory_file_lock, _release_advisory_file_lock
 
 ArchiveInspectionStatus = Literal["clean", "blocked", "incomplete"]
 
@@ -33,9 +30,25 @@ _REQUEST_SCHEMA = "guard-archive-inspection.v1"
 _RESULT_SCHEMA = "guard-archive-inspection-result.v1"
 _NATIVE_FEATURE = "archive-inspection-v1"
 _RESULT_MAX_BYTES = 16 * 1024
+_MAX_CODE_CHARS = 128
+_MAX_MESSAGE_CHARS = 512
+_MAX_COUNTER = 2**62
+_RESULT_KEYS = frozenset(
+    {
+        "schema",
+        "request_id",
+        "request_sha256",
+        "status",
+        "code",
+        "message",
+        "severity",
+        "sha256",
+        "runtime_sha256",
+        "counters",
+    }
+)
+_COUNTER_KEYS = frozenset({"members", "expanded_bytes", "elapsed_ms"})
 _HEX_64_RE = re.compile(r"[0-9a-f]{64}")
-_SANDBOX_EXEC = Path("/usr/bin/sandbox-exec")
-_SANDBOX_PROFILE = "(version 1) (allow default) (deny network*)"
 
 # Caller-facing defaults identical to the retired Python worker contract.
 _DEFAULT_TIMEOUT_SECONDS = 2.0
@@ -83,14 +96,6 @@ def _worker_environment() -> dict[str, str]:
         if value:
             environment[key] = value
     return environment
-
-
-def _sandboxed_command(command: list[str]) -> list[str] | None:
-    if sys.platform != "darwin":
-        return command
-    if not _SANDBOX_EXEC.is_file():
-        return None
-    return [str(_SANDBOX_EXEC), "-p", _SANDBOX_PROFILE, *command]
 
 
 def inspect_archive_native(
@@ -148,7 +153,10 @@ def inspect_archive_native(
             severity="high",
         )
     archive_path = resolved_parent / path.name
-    status = native_runtime_status()
+    # The caller's timeout covers the whole adapter; pass the absolute
+    # deadline through so a cold capabilities probe can never spend longer
+    # than the request has left.
+    status = native_runtime_status(deadline_monotonic=deadline_monotonic)
     if (
         not status.available
         or not status.compatible
@@ -162,15 +170,10 @@ def inspect_archive_native(
             "External archive inspection requires the Guard native runtime.",
             severity="high",
         )
+    # No wrapper is applied here: macOS refuses a nested sandbox_init, so the
+    # worker must self-apply its seatbelt profile as the first containment
+    # step and prove the denial before any untrusted bytes are parsed.
     command = [str(status.identity.path), "archive-inspect", "--stdin"]
-    sandboxed = _sandboxed_command(command)
-    if sandboxed is None:
-        return _result(
-            "incomplete",
-            "external_archive_sandbox_unavailable",
-            "External archive offline inspector sandbox is unavailable.",
-            severity="high",
-        )
     worker_budget = deadline_monotonic - time.monotonic() - 0.5
     if worker_budget <= 0:
         return _result(
@@ -179,10 +182,21 @@ def inspect_archive_native(
             "External archive inspection exceeded Guard's time limit.",
             severity="high",
         )
+    try:
+        state_dir.mkdir(parents=True, exist_ok=True)
+        canonical_state_dir = state_dir.resolve(strict=True)
+    except OSError:
+        return _result(
+            "incomplete",
+            "external_archive_inspection_incomplete",
+            "External archive inspection lease could not be established.",
+            severity="high",
+        )
     request = {
         "schema": _REQUEST_SCHEMA,
         "request_id": secrets.token_hex(16),
         "archive_path": str(archive_path),
+        "state_dir": str(canonical_state_dir),
         "expected_sha256": expected_sha256,
         "timeout_ms": math.ceil(worker_budget * 1000),
         "caps": {
@@ -199,108 +213,96 @@ def inspect_archive_native(
     }
     request_bytes = json.dumps(request, separators=(",", ":"), sort_keys=True).encode("utf-8")
     request_digest = hashlib.sha256(request_bytes).hexdigest()
-    try:
-        state_dir.mkdir(parents=True, exist_ok=True)
-        lease_file = (state_dir / "archive-inspect.lock").open("a+b")
-    except OSError:
+    completed = run_isolated_hook_process(
+        command,
+        input_text=request_bytes.decode("utf-8"),
+        cwd=archive_path.parent,
+        environment=_worker_environment(),
+        deadline_monotonic=deadline_monotonic,
+        output_limit=_RESULT_MAX_BYTES + 1024,
+        parent_liveness=True,
+    )
+    if completed.timed_out:
+        return _result(
+            "incomplete",
+            "external_archive_inspection_timeout",
+            "External archive inspection exceeded Guard's time limit.",
+            severity="high",
+        )
+    if (
+        completed.returncode != 0
+        or completed.output_limit_exceeded
+        or completed.containment_failed
+        or len(completed.stdout.encode("utf-8")) > _RESULT_MAX_BYTES
+    ):
         return _result(
             "incomplete",
             "external_archive_inspection_incomplete",
-            "External archive inspection lease could not be established.",
+            "External archive offline inspector did not complete successfully.",
             severity="high",
         )
     try:
-        # At most one archive inspector per Guard home, across client
-        # processes and runtime generations; contention is a bounded
-        # incomplete result, never a queue.
-        _acquire_advisory_file_lock(lease_file)
-    except (BlockingIOError, OSError):
-        lease_file.close()
+        payload = json.loads(completed.stdout.strip())
+    except (KeyError, TypeError, UnicodeDecodeError, json.JSONDecodeError):
         return _result(
             "incomplete",
-            "external_archive_inspection_overloaded",
-            "External archive inspection capacity is currently saturated.",
+            "external_archive_inspection_incomplete",
+            "External archive offline inspector returned an invalid result.",
             severity="high",
         )
-    try:
-        completed = run_isolated_hook_process(
-            sandboxed,
-            input_text=request_bytes.decode("utf-8"),
-            cwd=archive_path.parent,
-            environment=_worker_environment(),
-            deadline_monotonic=deadline_monotonic,
-            output_limit=_RESULT_MAX_BYTES + 1024,
+    if not isinstance(payload, dict) or not _RESULT_KEYS.issuperset(payload):
+        return _result(
+            "incomplete",
+            "external_archive_inspection_incomplete",
+            "External archive offline inspector returned an invalid result.",
+            severity="high",
         )
-        if completed.timed_out:
-            return _result(
-                "incomplete",
-                "external_archive_inspection_timeout",
-                "External archive inspection exceeded Guard's time limit.",
-                severity="high",
-            )
-        if (
-            completed.returncode != 0
-            or completed.output_limit_exceeded
-            or completed.containment_failed
-            or len(completed.stdout.encode("utf-8")) > _RESULT_MAX_BYTES
-        ):
-            return _result(
-                "incomplete",
-                "external_archive_inspection_incomplete",
-                "External archive offline inspector did not complete successfully.",
-                severity="high",
-            )
-        try:
-            payload = json.loads(completed.stdout.strip())
-        except (KeyError, TypeError, UnicodeDecodeError, json.JSONDecodeError):
-            return _result(
-                "incomplete",
-                "external_archive_inspection_incomplete",
-                "External archive offline inspector returned an invalid result.",
-                severity="high",
-            )
-        if not isinstance(payload, dict):
-            return _result(
-                "incomplete",
-                "external_archive_inspection_incomplete",
-                "External archive offline inspector returned an invalid result.",
-                severity="high",
-            )
-        status_value = payload.get("status")
-        code = payload.get("code")
-        message = payload.get("message")
-        severity = payload.get("severity")
-        sha256 = payload.get("sha256")
-        if (
-            payload.get("schema") != _RESULT_SCHEMA
-            or payload.get("request_id") != request["request_id"]
-            or payload.get("request_sha256") != request_digest
-            or status_value not in {"clean", "blocked", "incomplete"}
-            or not isinstance(code, str)
-            or not isinstance(message, str)
-            or severity not in {"low", "medium", "high", "critical"}
-            or (sha256 is not None and (not isinstance(sha256, str) or not _HEX_64_RE.fullmatch(sha256)))
-        ):
-            return _result(
-                "incomplete",
-                "external_archive_inspection_incomplete",
-                "External archive offline inspector returned an invalid result.",
-                severity="high",
-            )
-        if status_value == "clean" and sha256 != expected_sha256:
-            return _result(
-                "blocked",
-                "external_archive_digest_mismatch",
-                "External archive inspector did not verify the expected digest.",
-                severity="high",
-                sha256=sha256,
-            )
-        return ArchiveInspectionResult(status_value, code, message, severity, sha256)
-    finally:
-        with suppress(OSError, ValueError):
-            _release_advisory_file_lock(lease_file)
-        with suppress(OSError, ValueError):
-            lease_file.close()
+    status_value = payload.get("status")
+    code = payload.get("code")
+    message = payload.get("message")
+    severity = payload.get("severity")
+    sha256 = payload.get("sha256")
+    runtime_sha256 = payload.get("runtime_sha256")
+    counters = payload.get("counters")
+    counters_valid = (
+        isinstance(counters, dict)
+        and _COUNTER_KEYS.issuperset(counters)
+        and all(
+            isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= _MAX_COUNTER
+            for value in counters.values()
+        )
+    )
+    if (
+        payload.get("schema") != _RESULT_SCHEMA
+        or payload.get("request_id") != request["request_id"]
+        or payload.get("request_sha256") != request_digest
+        or status_value not in {"clean", "blocked", "incomplete"}
+        or not isinstance(code, str)
+        or not 0 < len(code) <= _MAX_CODE_CHARS
+        or not isinstance(message, str)
+        or not 0 < len(message) <= _MAX_MESSAGE_CHARS
+        or severity not in {"low", "medium", "high", "critical"}
+        or (sha256 is not None and (not isinstance(sha256, str) or not _HEX_64_RE.fullmatch(sha256)))
+        or not isinstance(runtime_sha256, str)
+        or not _HEX_64_RE.fullmatch(runtime_sha256)
+        or runtime_sha256 != status.identity.sha256
+        or not counters_valid
+    ):
+        return _result(
+            "incomplete",
+            "external_archive_inspection_incomplete",
+            "External archive offline inspector returned an invalid result.",
+            severity="high",
+        )
+    if status_value == "clean" and sha256 != expected_sha256:
+        return _result(
+            "blocked",
+            "external_archive_digest_mismatch",
+            "External archive inspector did not verify the expected digest.",
+            severity="high",
+            sha256=sha256,
+        )
+    return ArchiveInspectionResult(status_value, code, message, severity, sha256)
 
 
 __all__ = ["ArchiveInspectionResult", "inspect_archive_native"]

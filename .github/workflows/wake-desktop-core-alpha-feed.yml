@@ -1,9 +1,6 @@
 name: Wake Desktop Core stable feed
 
 on:
-  workflow_run:
-    workflows: ["Publish to PyPI"]
-    types: [completed]
   issues:
     types: [opened]
   push:
@@ -18,6 +15,7 @@ on:
       - .github/workflows/wake-desktop-core-alpha-feed.yml
       - scripts/release/wake_desktop_core_feeds.py
       - tests/test_wake_desktop_core_feeds.py
+      - tests/test_core_feed_publication_handoff.py
 
 permissions:
   contents: read
@@ -35,14 +33,7 @@ jobs:
        (github.event.issue.author_association == 'OWNER' ||
         github.event.issue.author_association == 'MEMBER' ||
         github.event.issue.author_association == 'COLLABORATOR') &&
-       startsWith(github.event.issue.title, '[desktop-core-feed]')) ||
-      (github.event_name == 'workflow_run' &&
-       github.event.workflow_run.conclusion == 'success' &&
-       (github.event.workflow_run.event == 'push' ||
-        github.event.workflow_run.event == 'workflow_dispatch') &&
-       ((github.event.workflow_run.event == 'workflow_dispatch' &&
-         github.event.workflow_run.head_branch == 'main') ||
-        startsWith(github.event.workflow_run.head_branch, 'v3.')))
+       startsWith(github.event.issue.title, '[desktop-core-feed]'))
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -54,19 +45,8 @@ jobs:
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
-      # The Python router applies strict stable-version validation to this coarse branch filter.
-      - name: Download completed publication checksums
-        if: github.event_name == 'workflow_run'
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          name: distribution-sha256-native
-          path: .publication
-          repository: ${{ github.repository }}
-          run-id: ${{ github.event.workflow_run.id }}
-          github-token: ${{ github.token }}
       - name: Dispatch feed producer
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
-          PUBLICATION_CHECKSUMS: .publication/distribution-sha256-native.txt
         run: python3 scripts/release/wake_desktop_core_feeds.py

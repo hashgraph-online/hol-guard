@@ -1740,6 +1740,33 @@ jobs:
             --verify-tag \
             "${ASSET_FILES[@]}"
 
+  wake-main-core-feeds:
+    name: Dispatch published Desktop Core feeds
+    needs: [build, release-main]
+    if: >-
+      always() && github.repository == 'hashgraph-online/hol-guard' &&
+      github.event_name == 'workflow_dispatch' && github.run_attempt == 1 &&
+      needs.release-main.result == 'success' && needs.build.outputs.channel == 'stable'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      # release-main verifies uploaded assets and provenance after the PyPI upload.
+      - name: Dispatch the exact published Core version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$VERSION" =~ ^3\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "Published Core version is not canonical stable" >&2
+            exit 1
+          fi
+          gh workflow run desktop-core-alpha-feed.yml --repo "$GITHUB_REPOSITORY" --ref main -f "core_version=$VERSION"
+          gh workflow run desktop-core-linux-feed.yml --repo "$GITHUB_REPOSITORY" --ref main -f "core_version=$VERSION"
+
   release-alpha:
     name: Create alpha GitHub prerelease
     if: >-

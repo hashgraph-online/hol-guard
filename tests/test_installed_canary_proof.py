@@ -74,7 +74,7 @@ def test_installed_corpus_reports_malformed_json_clearly(tmp_path: Path, monkeyp
 
 
 @pytest.mark.usefixtures("native_hook_force")
-def test_fresh_harness_without_acknowledged_policy_records_prevention(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_unavailable_native_harness_records_prevention(monkeypatch: pytest.MonkeyPatch) -> None:
     # Exercise the installed native route in the child process; the unit-test
     # oracle callbacks do not cross the subprocess boundary with their env vars.
     monkeypatch.setenv("HOL_GUARD_NATIVE", "auto")
@@ -85,6 +85,9 @@ def test_fresh_harness_without_acknowledged_policy_records_prevention(monkeypatc
 
     def capture_native_hook(command: list[str], **kwargs):
         is_hook = command[:3] == [sys.executable, "-m", "codex_plugin_scanner.cli"]
+        if is_hook:
+            guard_home = Path(command[command.index("--guard-home") + 1])
+            assert (guard_home / "native-runtime").is_file()
         completed = run(command, **kwargs)
         if is_hook:
             assert completed.returncode == 0, (completed.stdout, completed.stderr)
@@ -101,7 +104,7 @@ def test_fresh_harness_without_acknowledged_policy_records_prevention(monkeypatc
         "decision_reason_code": "policy",
     }
     assert len(hook_responses) == 1
-    # A fresh home has no resident-ACKed policy. Denial must remain explicit;
+    # The blocked resident state directory makes unavailability deterministic;
     # this unavailable request does not establish healthy enforcement proof.
     assert hook_responses[0]["reason_code"] == "native_pre_tool_unavailable"
     assert hook_responses[0]["policy_action"] == "block"

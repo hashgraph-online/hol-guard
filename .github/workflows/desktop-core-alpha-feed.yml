@@ -5,6 +5,7 @@ on:
       - .github/workflows/desktop-core-alpha-feed.yml
       - tests/test_desktop_core_alpha_feed_security.py
       - tests/test_desktop_core_feed_queue.py
+      - tests/test_core_feed_publication_handoff.py
       - tests/test_desktop_core_alpha_feed_macos_signing.py
       - tests/test_stage_native_runtime_for_desktop_core.py
       - tests/test_verify_*.py
@@ -36,10 +37,6 @@ on:
       core_version:
         description: Optional exact published stable Core version to backfill
         type: string
-  workflow_run:
-    workflows: ["Publish to PyPI"]
-    types: [completed]
-    branches: [main]
 permissions:
   contents: read
 jobs:
@@ -70,9 +67,7 @@ jobs:
       group: desktop-core-stable-feed
       cancel-in-progress: false
       queue: max
-    if: >-
-      github.event_name != 'pull_request' &&
-      (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success')
+    if: github.event_name != 'pull_request'
     needs: validate
     runs-on: macos-15
     timeout-minutes: 90

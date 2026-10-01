@@ -5,6 +5,7 @@ members = [
     "crates/guard-contracts",
     "crates/guard-rules",
     "crates/guard-scanner",
+    "crates/guard-seatbelt",
     "crates/guard-secure-fs",
     "crates/guard-hook-core",
     "crates/guard-policy-snapshot",
