@@ -218,7 +218,7 @@ def test_main_degrades_when_daemon_returns_malformed_json(
     output = capsys.readouterr().out
     payload = json.loads(output)
     assert payload["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
-    assert payload["hookSpecificOutput"]["permissionDecision"] == "allow"
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
 def test_run_local_fallback_degrades_invalid_json() -> None:
@@ -230,11 +230,11 @@ def test_run_local_fallback_degrades_invalid_json() -> None:
 
     payload = json.loads(response)
     assert payload["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
-    assert payload["hookSpecificOutput"]["permissionDecision"] == "allow"
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
     assert "malformed hook JSON" in payload["hookSpecificOutput"]["permissionDecisionReason"]
 
 
-def test_degraded_pretool_allows_emergency_safe_read() -> None:
+def test_degraded_pretool_requires_review_even_for_read() -> None:
     response = bridge._degraded(
         "daemon unavailable",
         json.dumps(
@@ -247,7 +247,7 @@ def test_degraded_pretool_allows_emergency_safe_read() -> None:
     )
 
     payload = json.loads(response)
-    assert payload["hookSpecificOutput"]["permissionDecision"] == "allow"
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
 def test_valid_hook_json_degrades_empty_daemon_body() -> None:
@@ -259,7 +259,7 @@ def test_valid_hook_json_degrades_empty_daemon_body() -> None:
 
     payload = json.loads(response)
     assert payload["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
-    assert payload["hookSpecificOutput"]["permissionDecision"] == "allow"
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
 def test_daemon_response_body_is_size_bounded() -> None:
@@ -463,7 +463,7 @@ def test_fallback_timeout_kills_descendants(tmp_path: Path) -> None:
     )
     time.sleep(0.4)
 
-    assert json.loads(response)["hookSpecificOutput"]["permissionDecision"] == "allow"
+    assert json.loads(response)["hookSpecificOutput"]["permissionDecision"] == "deny"
     assert not marker.exists()
 
 

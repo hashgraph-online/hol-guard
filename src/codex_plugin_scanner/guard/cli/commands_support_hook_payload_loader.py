@@ -34,9 +34,6 @@ def load_hook_payload(
     if not isinstance(payload, dict):
         return {}
     if normalize:
-        from ..runtime.hook_payload_reference import hydrate_hook_payload_reference
-
-        payload = hydrate_hook_payload_reference(payload)
         return normalize_hook_payload(payload, harness=harness)
     return payload
 

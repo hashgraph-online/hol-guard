@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+import pytest
+
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.approval_hook_copy import (
     join_native_hook_reason,
@@ -192,6 +194,7 @@ def test_load_reconciles_watch_posture_when_mode_is_still_prompt(tmp_path: Path)
     assert config.mode == "observe"
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_watch_posture_with_stale_prompt_mode_does_not_block_codex_hook(tmp_path: Path, capsys) -> None:
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"

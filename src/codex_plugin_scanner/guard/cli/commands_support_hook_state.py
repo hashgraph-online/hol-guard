@@ -70,11 +70,16 @@ def _should_emit_prequeue_native_hook_response(
     args: argparse.Namespace,
     *,
     output_stream: TextIO | None,
+    event_name: str | None = None,
 ) -> bool:
     if _canonical_harness_name(args.harness) != "claude-code":
         return False
     if not getattr(args, "json", False):
         return True
+    if event_name == "UserPromptSubmit":
+        # Prompt submits keep the composed envelope surface under --json so
+        # approval state, risk detail, and the decision copy stay together.
+        return False
     return output_stream is not None
 
 
