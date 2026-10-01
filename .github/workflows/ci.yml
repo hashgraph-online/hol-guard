@@ -230,22 +230,30 @@ jobs:
           pattern: pytest-durations-${{ github.run_attempt }}-*
           path: duration-reports
       - name: Build duration manifest candidate
+        id: duration-manifest
         shell: bash
         run: |
           shopt -s globstar nullglob
           reports=(duration-reports/**/pytest-durations.json)
-          test "${#reports[@]}" -eq 128
+          if [ "${#reports[@]}" -ne 128 ]; then
+            echo "Incomplete attempt reports; retain the previous duration manifest."
+            echo "complete=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           python3 scripts/ci/build_pytest_duration_manifest.py \
             --output pytest-duration-manifest-candidate.json.gz \
             --observed-at "$(date --utc +%Y-%m-%dT%H:%M:%SZ)" \
             "${reports[@]}"
+          echo "complete=true" >> "$GITHUB_OUTPUT"
       - name: Upload pytest duration manifest candidate
+        if: steps.duration-manifest.outputs.complete == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: pytest-duration-manifest-candidate
           path: pytest-duration-manifest-candidate.json.gz
           if-no-files-found: error
           retention-days: 90
+          overwrite: true
 
   sonar:
     if: vars.SONAR_CI_ENABLED == 'true'
@@ -504,8 +512,9 @@ jobs:
 
   mutation-baseline:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    needs: native-command-evaluators
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
@@ -520,6 +529,19 @@ jobs:
           cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
           save-cache: false
       - run: uv sync --frozen --extra dev --python 3.12
+      - name: Download native command evaluators
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: pytest-native-command-evaluators
+          path: rust/target/release
+      - run: |
+          chmod 0755 rust/target/release/guard-command-source rust/target/release/hol-guard-runtime
+          echo "HOL_GUARD_NATIVE_SOURCE_COMPILER=$GITHUB_WORKSPACE/rust/target/release/guard-command-source" >> "$GITHUB_ENV"
+          echo "HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER=$GITHUB_WORKSPACE/rust/target/release/guard-command-source" >> "$GITHUB_ENV"
+          echo "HOL_GUARD_NATIVE_BINARY=$GITHUB_WORKSPACE/rust/target/release/hol-guard-runtime" >> "$GITHUB_ENV"
+          echo "HOL_GUARD_NATIVE_REGRESSION=1" >> "$GITHUB_ENV"
+      - name: Prepare mutation artifact directories
+        run: mkdir -p mutants/docs/guard/contracts
       - name: Run command parser mutation baseline
         run: uv run --no-sync mutmut run --max-children 4
       - name: Validate mutation baseline

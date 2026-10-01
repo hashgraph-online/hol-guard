@@ -35,6 +35,7 @@ from ..cli.commands_support_command_activity import (
     hook_post_succeeded,
     record_post_hook_command_activity_best_effort,
 )
+from ..codex_binding_capture_writer import CodexBindingCaptureWriter
 from ..config import load_guard_config
 from ..native_hook_edge import review_raw_hook_native
 from ..native_policy_snapshot import get_native_policy_snapshot_publisher
@@ -111,12 +112,14 @@ class HookWorker(HookWorkerNativeMixin):
         *,
         store: GuardStore,
         activity_writer: CommandActivityWriter | None = None,
+        capture_writer: CodexBindingCaptureWriter | None = None,
         wait_for_native_policy: bool = True,
         publish_native_policy: bool = True,
     ):
         self.store = store
         self.guard_home = store.guard_home
         self.activity_writer = activity_writer
+        self.capture_writer = capture_writer
         self._publish_native_policy = publish_native_policy
         self._last_native_decision_receipt: dict[str, object] | None = None
         from .hook_metrics import HookMetricsRecorder

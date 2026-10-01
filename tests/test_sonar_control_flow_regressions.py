@@ -115,7 +115,11 @@ def test_codex_review_emits_original_decision_once(
     response = {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": decision}}
     review = Mock(return_value=(response, False, False))
     output = Mock(side_effect=lambda value, **_kwargs: json.dumps(value))
-    monkeypatch.setattr(bridge, "_bound_hook_input", Mock(return_value=("PreToolUse", "{}", 5)))
+    monkeypatch.setattr(
+        bridge,
+        "_bound_hook_input",
+        Mock(return_value=("PreToolUse", "{}", 5, bridge.time.monotonic())),
+    )
     monkeypatch.setattr(bridge, "bridge_review_response", review)
     monkeypatch.setattr(bridge, "_bridge_output", output)
 
