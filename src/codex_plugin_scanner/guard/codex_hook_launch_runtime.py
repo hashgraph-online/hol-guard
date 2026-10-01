@@ -35,11 +35,9 @@ _HOOK_ENVIRONMENT_KEYS = frozenset(
         "HOL_GUARD_HOOK_FAILURE_KIND",
         "HOL_GUARD_NATIVE",
         "HOL_GUARD_NATIVE_BINARY",
-        # Test-only differential and non-production diagnostic markers. They
-        # are forwarded solely so an explicitly configured test oracle keeps
-        # the same boundary in contained hook processes.
+        # Test-mode and non-production diagnostic markers forwarded so a
+        # contained hook process keeps the same boundary as its parent.
         "HOL_GUARD_TEST_MODE",
-        "HOL_GUARD_PYTHON_ORACLE",
         "HOL_GUARD_NATIVE_DIAGNOSTIC",
         "LANG",
         "PATH",

@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { type ChangeEvent, useCallback, useId, useMemo, useState } from "react";
 import { HiMiniMagnifyingGlass, HiMiniPlus, HiMiniXMark } from "react-icons/hi2";
 
 import {
@@ -15,7 +15,7 @@ import {
 import { mcpCatalogCopy } from "./mcp-catalog-state";
 
 const CUSTOM_EXTENSION_PREVIEW_COUNT = 8;
-const CUSTOM_EXTENSION_RENDER_LIMIT = 100;
+const CUSTOM_EXTENSION_PAGE_SIZE = 25;
 
 function CustomExtensionRow(props: { item: LocalCliItem; onOpen: (cliId: string) => void }) {
   const cliId = props.item.cli_id;
@@ -95,29 +95,48 @@ function CustomExtensionEmptyState(props: {
  * add-your-own entry point never disappears: with nothing to show it renders
  * an empty state instead of unmounting. Rows group into needs-review and
  * reviewed using the same attention signal that orders them, long lists
- * preview their first rows behind a show-all control instead of paginating,
+ * preview their first rows before expanding into bounded pages,
  * and the search appears once the list is long enough to search — and stays
  * while a query is active so it can always be edited or cleared.
  */
-export function CustomExtensionsSection(props: {
+interface CustomExtensionsSectionProps {
   items: LocalCliItem[];
   onOpen: (cliId: string) => void;
   onAdd: () => void;
   discovering?: boolean;
   filteredOut?: boolean;
   onClearFilters?: () => void;
-}) {
+}
+
+export function CustomExtensionsSection(props: CustomExtensionsSectionProps) {
   const [search, setSearch] = useState("");
   const [showAll, setShowAll] = useState(false);
-  const all = connectorWorkspaceItems(props.items);
-  const added = search ? connectorWorkspaceItems(props.items, search) : all;
+  const [page, setPage] = useState(0);
+  const rowsId = useId();
+  const all = useMemo(() => connectorWorkspaceItems(props.items), [props.items]);
+  const added = useMemo(() => search ? connectorWorkspaceItems(props.items, search) : all,
+    [props.items, search, all]);
   const searchable = all.length > CUSTOM_EXTENSION_PREVIEW_COUNT || search !== "";
   const filteredOut = props.filteredOut === true && search === "";
   const needsReview = added.filter(customExtensionNeedsReview);
   const reviewed = added.filter((item) => !customExtensionNeedsReview(item));
   const grouped = needsReview.length > 0 && reviewed.length > 0;
-  const expandedLimit = showAll ? CUSTOM_EXTENSION_RENDER_LIMIT : CUSTOM_EXTENSION_PREVIEW_COUNT;
-  const visible = added.length > expandedLimit ? added.slice(0, expandedLimit) : added;
+  const pageCount = Math.max(1, Math.ceil(added.length / CUSTOM_EXTENSION_PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount - 1);
+  const handleSearchChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setSearch(event.target.value);
+    setShowAll(false);
+    setPage(0);
+  }, []);
+  const handleClearSearch = useCallback(() => { setSearch(""); setPage(0); }, []);
+  const handleExpand = useCallback(() => { setShowAll(true); setPage(0); }, []);
+  const handleCollapse = useCallback(() => { setShowAll(false); setPage(0); }, []);
+  const handlePrevious = useCallback(() => { if (currentPage > 0) setPage(currentPage - 1); }, [currentPage]);
+  const handleNext = useCallback(() => {
+    if (currentPage < pageCount - 1) setPage(currentPage + 1);
+  }, [currentPage, pageCount]);
+  const start = showAll ? currentPage * CUSTOM_EXTENSION_PAGE_SIZE : 0;
+  const visible = added.slice(start, start + (showAll ? CUSTOM_EXTENSION_PAGE_SIZE : CUSTOM_EXTENSION_PREVIEW_COUNT));
   const visibleNeedsReview = grouped ? visible.filter(customExtensionNeedsReview) : visible;
   const visibleReviewed = grouped ? visible.filter((item) => !customExtensionNeedsReview(item)) : [];
   const unit = added.length === 1 ? "extension" : "extensions";
@@ -135,7 +154,7 @@ export function CustomExtensionsSection(props: {
                 <span className="sr-only">Search custom extensions</span>
                 <HiMiniMagnifyingGlass className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-brand-dark/55" aria-hidden="true" />
                 <input type="search" value={search}
-                  onChange={(event) => { setSearch(event.target.value); setShowAll(false); }}
+                  onChange={handleSearchChange}
                   placeholder="Search connectors"
                   className="min-h-11 w-full rounded-xl border border-slate-300 bg-white pl-9 pr-3 text-sm font-normal text-brand-dark sm:w-64" />
               </label>
@@ -154,10 +173,10 @@ export function CustomExtensionsSection(props: {
           discovering={props.discovering}
           onAdd={props.onAdd}
           onClearFilters={props.onClearFilters}
-          onClearSearch={() => setSearch("")}
+          onClearSearch={handleClearSearch}
         />
       ) : (
-        <div className="mt-4">
+        <div className="mt-4" id={rowsId}>
           {grouped && visibleNeedsReview.length > 0 ? (
             <p className="text-xs font-semibold text-brand-dark/55">
               Needs review · {needsReview.length}
@@ -174,26 +193,43 @@ export function CustomExtensionsSection(props: {
           {visibleReviewed.map((item) => (
             <CustomExtensionRow key={item.cli_id} item={item} onOpen={props.onOpen} />
           ))}
-          {added.length > visible.length ? (
+          {!showAll && added.length > visible.length ? (
             <div className="mt-4 flex flex-wrap items-center gap-3">
-              {showAll ? null : (
-                <button type="button" onClick={() => setShowAll(true)}
+                <button type="button" onClick={handleExpand} aria-controls={rowsId}
                   className="min-h-11 rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-brand-dark">
-                  {added.length > CUSTOM_EXTENSION_RENDER_LIMIT
-                    ? `Show first ${CUSTOM_EXTENSION_RENDER_LIMIT}`
+                  {added.length > CUSTOM_EXTENSION_PAGE_SIZE
+                    ? `Browse all ${added.length} ${unit}`
                     : `Show all ${added.length} ${unit}`}
                 </button>
-              )}
               <p className="text-sm text-brand-dark/70">
                 Showing {visible.length} of {added.length}. Search to narrow the list.
               </p>
             </div>
           ) : null}
           {showAll && added.length > CUSTOM_EXTENSION_PREVIEW_COUNT ? (
-            <button type="button" onClick={() => setShowAll(false)}
-              className="mt-4 min-h-11 rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-brand-dark">
-              Show fewer
-            </button>
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              {pageCount > 1 ? (
+                <nav aria-label="Custom extension pages" className="flex flex-wrap items-center gap-3">
+                  <button type="button" aria-disabled={currentPage === 0} aria-controls={rowsId}
+                    onClick={handlePrevious}
+                    className="min-h-11 rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-brand-dark aria-disabled:opacity-50">
+                    Previous page
+                  </button>
+                  <p role="status" className="text-sm text-brand-dark/70 tabular-nums">
+                    Page {currentPage + 1} of {pageCount} · Showing {start + 1}–{start + visible.length} of {added.length}
+                  </p>
+                  <button type="button" aria-disabled={currentPage === pageCount - 1} aria-controls={rowsId}
+                    onClick={handleNext}
+                    className="min-h-11 rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-brand-dark aria-disabled:opacity-50">
+                    Next page
+                  </button>
+                </nav>
+              ) : null}
+              <button type="button" onClick={handleCollapse} aria-controls={rowsId}
+                className="min-h-11 rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-brand-dark">
+                Show fewer
+              </button>
+            </div>
           ) : null}
         </div>
       )}

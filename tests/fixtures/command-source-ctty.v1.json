@@ -10139,7 +10139,7 @@
               "replacement_permission_id": null,
               "risk_tier": "high",
               "safer_guidance": [
-                "Preview targets with `ctty exec --tags … --list-hosts` (or `--dry-run`) before approving SSH.",
+                "Preview targets with `ctty exec --tags \u2026 --list-hosts` (or `--dry-run`) before approving SSH.",
                 "Confirm with `ctty search --format json` / `ctty info` when useful.",
                 "Keep the host set minimal before approving batch execution."
               ],
@@ -10155,7 +10155,7 @@
               "default_enabled": true,
               "dependencies": [],
               "deprecated": false,
-              "description": "Identifies `ctty <host> <command…>` / `ctty <host> -- <command…>` remote execution (and similar host-first invocations) that are not a known Cobra subcommand. Known subcommands are cleared via safe variants to avoid false positives on `search`, `info`, `sftp`, etc.",
+              "description": "Identifies `ctty <host> <command\u2026>` / `ctty <host> -- <command\u2026>` remote execution (and similar host-first invocations) that are not a known Cobra subcommand. Known subcommands are cleared via safe variants to avoid false positives on `search`, `info`, `sftp`, etc.",
               "example_command": "ctty prod-web -- uptime",
               "family": null,
               "fixed_reason": null,
@@ -10631,7 +10631,7 @@
                 }
               ],
               "safer_alternatives": [
-                "Preview with `ctty exec --tags … --list-hosts` or `--dry-run` (optionally `--format json`).",
+                "Preview with `ctty exec --tags \u2026 --list-hosts` or `--dry-run` (optionally `--format json`).",
                 "Confirm hosts with search/info before batch execution."
               ],
               "severity": "high",
@@ -10642,7 +10642,7 @@
                 "ctty bare-host remote execution command"
               ],
               "default_mode": "review",
-              "description": "Identifies host-first remote execution and interactive SSH (`ctty <host>`, `ctty <host> <cmd>`, `ctty <host> -- <cmd>`). Safe variants clear every known top-level Cobra subcommand so `search`/`info`/`sftp`/… do not inherit this rule.",
+              "description": "Identifies host-first remote execution and interactive SSH (`ctty <host>`, `ctty <host> <cmd>`, `ctty <host> -- <cmd>`). Safe variants clear every known top-level Cobra subcommand so `search`/`info`/`sftp`/\u2026 do not inherit this rule.",
               "family": null,
               "matcher": {
                 "config": {
@@ -14014,7 +14014,7 @@
             }
           ],
           "safer_alternatives": [
-            "Use search/info and … ls --format json for read-only inspection.",
+            "Use search/info and \u2026 ls --format json for read-only inspection.",
             "Preview imports with --dry-run; confirm hosts before exec/transfers."
           ],
           "source": "built-in",
@@ -14031,7 +14031,6 @@
           "command.cogext",
           "command.ctty",
           "command.digline",
-          "command.errand",
           "command.genclave",
           "command.gitsync",
           "command.mcp-filesystem",
@@ -14045,7 +14044,6 @@
           "command.repo2nb",
           "command.skill-base",
           "command.skill-sunset",
-          "command.syngraphe",
           "command.uivoid"
         ],
         "first-party": [

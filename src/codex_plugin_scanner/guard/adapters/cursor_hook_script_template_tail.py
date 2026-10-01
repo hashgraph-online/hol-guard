@@ -288,18 +288,18 @@ def _exit_unparseable_cursor_input() -> int:
             cursor_unparseable_input_permission,
         )
 
-        response, code = cursor_unparseable_input_permission(
-            event_name,
-            recording_only=_recording_only_from_guard_home(),
-        )
+        # Unparsed input provides no acknowledged mode or action scope.
+        response, code = cursor_unparseable_input_permission(event_name)
     except Exception:
         compact = event_name.strip().lower().replace("_", "").replace("-", "")
         if compact in {"aftershellexecution", "aftermcpexecution"}:
             print("{}")
             return 0
-        allow = _recording_only_from_guard_home() or compact in {"beforereadfile", ""}
-        print(json.dumps({"permission": "allow" if allow else "deny"}))
-        return 0 if allow else 2
+        print(json.dumps({
+            "permission": "deny",
+            "user_message": "Guard could not process this hook request safely. Retry or repair Guard from a terminal.",
+        }))
+        return 2
     print("{}" if not response else json.dumps(response))
     return code
 

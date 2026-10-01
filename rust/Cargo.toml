@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "crates/guard-archive",
     "crates/guard-command",
     "crates/guard-contracts",
     "crates/guard-rules",

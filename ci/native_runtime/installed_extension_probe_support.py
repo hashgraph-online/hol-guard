@@ -218,6 +218,37 @@ def receipt_processed_count(writer: _ReceiptProgressWriter) -> int | None:
     return value
 
 
+def receipt_persistence_diagnostic(
+    writer: _ReceiptProgressWriter | None, processed_before: int | None
+) -> dict[str, object]:
+    """Retain bounded writer progress without receipt, policy, or exception data."""
+
+    counters: dict[str, int] = {}
+    try:
+        snapshot = writer.stats() if writer is not None else None
+        if isinstance(snapshot, Mapping):
+            for key in (
+                "receipt_accepted",
+                "receipt_processed",
+                "receipt_deduped",
+                "receipt_dropped",
+                "receipt_failures",
+                "receipt_durable_pending",
+            ):
+                value = snapshot.get(key)
+                if type(value) is int and 0 <= value <= 2**31 - 1:
+                    counters[key] = value
+    except Exception:
+        counters = {}
+    return {
+        "schema": "guard.installed-native-receipt-persistence-failure.v1",
+        "processed_before": processed_before
+        if type(processed_before) is int and 0 <= processed_before <= 2**31 - 1
+        else None,
+        "writer_counters": counters,
+    }
+
+
 def await_persisted_native_receipt(
     store: GuardStore,
     known_ids: set[str],
@@ -267,6 +298,7 @@ def await_persisted_native_receipt(
                 if receipt is not None:
                     return receipt
         time.sleep(0.02)
+    print(json.dumps(receipt_persistence_diagnostic(writer, receipt_processed_before), sort_keys=True), flush=True)
     raise RuntimeError("installed_native_extensions_failed:receipt_persistence_missing")
 
 

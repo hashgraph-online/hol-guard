@@ -41,6 +41,7 @@ struct DecisionReceiptInputs<'a> {
     reviewed_output_sha256: Option<&'a str>,
     observe_mode: bool,
     command_extensions: Option<&'a guard_contracts::NativeCommandReceiptBindingV1>,
+    prompt_risk_classes: &'a [guard_contracts::NativePromptRiskClassV1],
 }
 
 fn build_decision_receipt(
@@ -82,6 +83,10 @@ fn build_decision_receipt(
         identity["command_extensions"] = serde_json::to_value(binding)
             .map_err(|_| "native_hook_decision_receipt_digest_failed".to_owned())?;
     }
+    if !inputs.prompt_risk_classes.is_empty() {
+        identity["prompt_risk_classes"] = serde_json::to_value(inputs.prompt_risk_classes)
+            .map_err(|_| "native_hook_decision_receipt_digest_failed".to_owned())?;
+    }
     let canonical = guard_policy_snapshot::canonical_json_bytes(&identity)
         .map_err(|_| "native_hook_decision_receipt_digest_failed".to_owned())?;
     let decision_id = hex::encode(Sha256::digest(&canonical));
@@ -110,6 +115,7 @@ fn build_decision_receipt(
         observe_mode: inputs.observe_mode,
         deadline_budget_ms: envelope.deadline_budget_ms,
         command_extensions: inputs.command_extensions.cloned(),
+        prompt_risk_classes: inputs.prompt_risk_classes.to_vec(),
     };
     let encoded = serde_json::to_vec(&receipt)
         .map_err(|_| "native_hook_decision_receipt_encode_failed".to_owned())?;
@@ -135,7 +141,7 @@ pub(crate) fn receipt_from_pre_tool(
             request_id,
             request_digest,
             harness,
-            event_name: "PreToolUse",
+            event_name: &result.action.event,
             payload_kind,
             decision: &result.decision,
             model_output_action: "not_applicable",
@@ -148,6 +154,7 @@ pub(crate) fn receipt_from_pre_tool(
                 .command_extensions
                 .as_ref()
                 .map(|value| &value.binding),
+            prompt_risk_classes: &result.prompt_risk_classes,
         },
     )
 }
@@ -178,6 +185,7 @@ pub(crate) fn receipt_from_post_tool(
             reviewed_output_sha256: result.reviewed_output_sha256.as_deref(),
             observe_mode: result.observe_mode,
             command_extensions: None,
+            prompt_risk_classes: &[],
         },
     )
 }

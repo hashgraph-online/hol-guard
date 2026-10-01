@@ -10617,7 +10617,6 @@
           "command.cogext",
           "command.ctty",
           "command.digline",
-          "command.errand",
           "command.genclave",
           "command.gitsync",
           "command.mcp-filesystem",
@@ -10631,7 +10630,6 @@
           "command.repo2nb",
           "command.skill-base",
           "command.skill-sunset",
-          "command.syngraphe",
           "command.uivoid"
         ],
         "first-party": [

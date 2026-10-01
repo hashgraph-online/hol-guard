@@ -36,7 +36,7 @@ runs:
         save-cache: false
     - name: Install locked test dependencies without the source package
       shell: bash
-      run: uv sync --frozen --no-dev --extra dev --no-install-project --python 3.12
+      run: uv sync --frozen --no-dev --group ci-test --no-install-project --python 3.12
     - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
       with:
         name: ${{ inputs.artifact-name }}

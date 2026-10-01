@@ -445,6 +445,16 @@ export async function waitForMcpDiscoveryJob(cliId: string, initialJob: unknown,
         switch (job.error) {
           case "mcp_refresh_unavailable":
             message = "Guard cannot list this connection directly. Refresh it in its host app."; break;
+          case "mcp_launch_failed":
+            message = "Guard could not launch this MCP server. Check its configured executable and dependencies in the host app. Known tools and choices were kept."; break;
+          case "mcp_transport_failed":
+            message = "Guard could not communicate with this MCP server. Check its executable, dependencies, and server logs in the host app. Known tools and choices were kept."; break;
+          case "mcp_initialize_failed":
+            message = "The MCP server did not complete initialization. Check that it starts in the host app and uses stdio MCP. Known tools and choices were kept."; break;
+          case "mcp_protocol_unsupported":
+            message = "This server uses an MCP protocol version Guard does not support. Check the server and Guard versions. Known tools and choices were kept."; break;
+          case "mcp_capability_rejected":
+            message = "The MCP server rejected Guard's discovery capabilities. Check the server's client requirements and Guard version. Known tools and choices were kept."; break;
           case "catalog_revision_conflict":
             message = "A newer discovery finished first. Reload the inventory."; break;
           case "configured_host_scan_failed":

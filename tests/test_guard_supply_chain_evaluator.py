@@ -1588,7 +1588,7 @@ def test_evaluate_package_request_artifact_rejects_untrusted_cloud_endpoint_befo
 def test_evaluate_external_tarball_requires_approval_without_network(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    def fail_scan(_source_url: str) -> object:
+    def fail_scan(_source_url: str, **_kwargs: object) -> object:
         raise AssertionError("external archive inspection ran before approval")
 
     def fail_cloud(*_args: object, **_kwargs: object) -> object:
@@ -1610,7 +1610,7 @@ def test_evaluate_external_tarball_requires_approval_without_network(
 
 
 def test_evaluate_package_request_artifact_blocks_external_tarball_zip_slip(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, native_hook_force: Path
 ) -> None:
     archive = _tarball_bytes([("../escape.sh", b"#!/bin/sh\necho pwned\n")])
     downloaded = _downloaded_archive(tmp_path, archive)
@@ -1629,7 +1629,7 @@ def test_evaluate_package_request_artifact_blocks_external_tarball_zip_slip(
 
 
 def test_evaluate_package_request_artifact_blocks_external_tarball_install_scripts(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, native_hook_force: Path
 ) -> None:
     marker_path = tmp_path / "postinstall-marker.txt"
     package_json = json.dumps(
@@ -1662,7 +1662,7 @@ def test_evaluate_package_request_artifact_blocks_external_tarball_install_scrip
 
 
 def test_evaluate_package_request_artifact_blocks_shai_hulud_style_credential_theft_tarball_fixture(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, native_hook_force: Path
 ) -> None:
     package_json = json.dumps(
         {
@@ -1695,7 +1695,7 @@ def test_evaluate_package_request_artifact_blocks_shai_hulud_style_credential_th
 
 
 def test_evaluate_package_request_artifact_reviews_clean_external_tarball(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, native_hook_force: Path
 ) -> None:
     package_json = json.dumps({"name": "safe-package", "version": "1.0.0"}).encode("utf-8")
     archive = _tarball_bytes([("package/package.json", package_json)])
@@ -1709,7 +1709,7 @@ def test_evaluate_package_request_artifact_reviews_clean_external_tarball(
         external_archive_network_authorized=True,
     )
 
-    assert result.decision == "ask"
+    assert result.decision == "ask", [r.get("code") for r in result.reasons]
     assert result.policy_action == "review"
     assert any(reason["code"] == "external_tarball_source" for reason in result.reasons)
 

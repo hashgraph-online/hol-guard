@@ -54,6 +54,7 @@ from .discovery import (
 from .file_locking import lock_daemon_file as _lock_daemon_start_file
 from .file_locking import try_lock_daemon_file as _try_lock_daemon_file
 from .lifecycle_journal import record_daemon_lifecycle_event
+from .pipx_import_paths import pipx_shared_import_paths
 from .start_classification import (
     GuardDaemonStillStartingError,
     SpawnedDaemonSignals,
@@ -267,6 +268,8 @@ def _trusted_daemon_import_paths() -> tuple[Path, ...]:
         value = configured_paths.get(key)
         if isinstance(value, str) and value.strip():
             candidates.append(Path(value).expanduser())
+
+    candidates.extend(pipx_shared_import_paths(_trusted_daemon_prefix(sys.prefix), configured_paths))
 
     trusted_paths: list[Path] = []
     seen: set[Path] = set()
