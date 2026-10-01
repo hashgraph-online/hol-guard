@@ -678,8 +678,15 @@ def test_guard_protect_requires_reapproval_for_untrusted_package_sources_without
     assert payload["verdict"]["action"] == expected_action
 
 
-def test_package_manager_shim_runs_allowed_command_once_when_shim_dir_is_on_path(tmp_path: Path, capsys) -> None:
+def test_package_manager_shim_runs_allowed_command_once_when_shim_dir_is_on_path(
+    tmp_path: Path,
+    capsys,
+    native_hook_force: Path,
+) -> None:
+    from codex_plugin_scanner.guard.native_policy_snapshot import provision_native_policy_verifier_key
+
     home_dir = tmp_path / "guard-home"
+    provision_native_policy_verifier_key(home_dir, b"\x07" * 32)
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir(parents=True, exist_ok=True)
     fake_bin = tmp_path / "fake-bin"
@@ -1635,8 +1642,15 @@ def test_package_shim_tries_owned_containment_before_guard_review(tmp_path: Path
     assert "except Exception:\n        contained_result = None" in shim_source
 
 
-def test_guard_package_shim_preserves_argv_cwd_env_exitcode_and_stdio(tmp_path: Path, capsys) -> None:
+def test_guard_package_shim_preserves_argv_cwd_env_exitcode_and_stdio(
+    tmp_path: Path,
+    capsys,
+    native_hook_force: Path,
+) -> None:
+    from codex_plugin_scanner.guard.native_policy_snapshot import provision_native_policy_verifier_key
+
     home_dir = tmp_path / "guard-home"
+    provision_native_policy_verifier_key(home_dir, b"\x07" * 32)
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir(parents=True, exist_ok=True)
     fake_bin = tmp_path / "fake-bin"
