@@ -18,13 +18,14 @@ from codex_plugin_scanner.guard.adapters import pi_extension_source
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.pi_extension_runtime_ownership import PiExtensionRuntimeOwnership
 from codex_plugin_scanner.guard.adapters.pi_extension_source import legacy_managed_extension_source
-from codex_plugin_scanner.guard.cli import update_commands
+from codex_plugin_scanner.guard.cli import commands_support_workspace, update_commands
 from codex_plugin_scanner.guard.cli.commands import (
     _resolve_default_install_workspace,
     _resolve_guard_workspace,
 )
 from codex_plugin_scanner.guard.config import resolve_guard_home
 from codex_plugin_scanner.guard.launcher import merge_guard_launcher_env
+from codex_plugin_scanner.guard.models import HarnessDetection
 from codex_plugin_scanner.guard.store import GuardStore
 
 LEGACY_OMP_BASE_SOURCE_SHA256 = "fbd87651af3850ea8bf0772bc0649c91f791b9fa01dbb493934209eb139e2bce"
@@ -46,6 +47,80 @@ def _install_args(*, harness: str = "cursor", workspace: str | None = None) -> a
         harness=harness,
         all=False,
     )
+
+
+def test_workspace_detection_uses_selected_home_and_explicit_marker(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cwd = tmp_path / "project"
+    cwd.mkdir()
+    selected_home = tmp_path / "selected-home"
+    selected_home.mkdir()
+    guard_home = tmp_path / "guard-home"
+    seen: list[HarnessContext] = []
+
+    class _Adapter:
+        def detect(self, context: HarnessContext) -> HarnessDetection:
+            seen.append(context)
+            return HarnessDetection(
+                harness="codex",
+                installed=True,
+                command_available=False,
+                config_paths=(str(cwd / ".codex" / "config.toml"),),
+                artifacts=(),
+            )
+
+    monkeypatch.setattr(commands_support_workspace, "get_adapter", lambda _harness: _Adapter())
+    monkeypatch.chdir(cwd)
+    monkeypatch.delenv("CURSOR_PROJECT_DIR", raising=False)
+
+    resolved = commands_support_workspace._resolve_default_install_workspace(
+        _install_args(harness="codex"),
+        guard_home=guard_home,
+        home_dir=selected_home,
+        home_override_explicit=True,
+    )
+
+    assert resolved == cwd.resolve()
+    assert seen and seen[0].home_dir == selected_home.resolve()
+    assert seen[0].home_override_explicit is True
+
+
+@pytest.mark.parametrize("home_name", ["default-home", "foreign-home"])
+def test_workspace_detection_rejects_config_paths_outside_current_project(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    home_name: str,
+) -> None:
+    cwd = tmp_path / "project"
+    cwd.mkdir()
+    candidate_home = tmp_path / home_name
+    candidate_home.mkdir()
+    guard_home = tmp_path / "guard-home"
+
+    class _Adapter:
+        def detect(self, context: HarnessContext) -> HarnessDetection:
+            return HarnessDetection(
+                harness="codex",
+                installed=True,
+                command_available=False,
+                config_paths=(str(context.home_dir / ".codex" / "config.toml"),),
+                artifacts=(),
+            )
+
+    monkeypatch.setattr(commands_support_workspace, "get_adapter", lambda _harness: _Adapter())
+    monkeypatch.chdir(cwd)
+    monkeypatch.delenv("CURSOR_PROJECT_DIR", raising=False)
+
+    resolved = commands_support_workspace._resolve_default_install_workspace(
+        _install_args(harness="codex"),
+        guard_home=guard_home,
+        home_dir=candidate_home,
+        home_override_explicit=home_name == "foreign-home",
+    )
+
+    assert resolved is None
 
 
 def test_resolve_default_install_workspace_prefers_cwd_markers_over_git_root(
