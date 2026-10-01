@@ -31,9 +31,7 @@ from codex_plugin_scanner.guard.runtime.extension_control_runtime import (
     use_extension_control_snapshot,
 )
 from codex_plugin_scanner.guard.runtime.extension_trust import (
-    activation_for,
     catalog_enabled,
-    extension_is_active,
     ids_for_class,
     mapped_ids,
     trust_class_for,
@@ -91,7 +89,6 @@ def test_trust_map_covers_every_builtin_extension() -> None:
         "command.cogext",
         "command.ctty",
         "command.digline",
-        "command.errand",
         "command.genclave",
         "command.gitsync",
         "command.mcp-filesystem",
@@ -105,7 +102,6 @@ def test_trust_map_covers_every_builtin_extension() -> None:
         "command.repo2nb",
         "command.skill-base",
         "command.skill-sunset",
-        "command.syngraphe",
         "command.uivoid",
     }
     assert trust_class_for("command.git") == "first-party"
@@ -114,14 +110,6 @@ def test_trust_map_covers_every_builtin_extension() -> None:
     assert trust_class_for("command.noodle") == "external"
     assert trust_class_for("command.unmapped-community") == "first-party"
     assert trust_class_for("command.test") == "first-party"
-
-
-@pytest.mark.parametrize("extension_id", ["command.errand", "command.syngraphe"])
-def test_pending_contributions_stay_external_and_opt_in(extension_id: str) -> None:
-    assert trust_class_for(extension_id) == "external"
-    assert activation_for(extension_id) == "opt-in"
-    assert catalog_enabled(extension_id, required=False) is False
-    assert extension_is_active(extension_id, layers=()) is False
 
 
 def test_local_catalog_marks_external_off_and_libraries_on() -> None:

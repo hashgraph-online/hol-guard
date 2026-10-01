@@ -84,13 +84,9 @@ def example(compiler: Path, build: dict) -> dict:
 
 
 @requires_fresh_projections
-def test_checked_in_program_matches_native_authoring(compiled: dict) -> None:
+def test_checked_in_program_matches_native_authoring(compiler: Path, compiled: dict) -> None:
     checked_in = json.loads((ROOT / "contracts/extensions/native-command-program.v1.json").read_bytes())
     assert checked_in == compiled["program"]
-
-
-def test_embedded_program_matches_checked_in_program(compiler: Path) -> None:
-    checked_in = json.loads((ROOT / "contracts/extensions/native-command-program.v1.json").read_bytes())
     result = subprocess.run(
         [str(compiler), "evaluate-batch"],
         input=canonical(

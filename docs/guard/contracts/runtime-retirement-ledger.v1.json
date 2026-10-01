@@ -1814,9 +1814,23 @@
    "status": "native_behavior_ported_requires_ci"
   },
   {
-   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_blocks_all_npm_install_lifecycle_scripts",
+   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_blocks_all_npm_install_lifecycle_scripts[prepublish]",
    "replacement_nodes": [
-    "tests/test_native_archive_inspection.py::test_archive_inspector_blocks_all_npm_install_lifecycle_scripts"
+    "tests/test_native_archive_inspection.py::test_archive_inspector_blocks_all_npm_install_lifecycle_scripts[prepublish]"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_blocks_all_npm_install_lifecycle_scripts[preprepare]",
+   "replacement_nodes": [
+    "tests/test_native_archive_inspection.py::test_archive_inspector_blocks_all_npm_install_lifecycle_scripts[preprepare]"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_blocks_all_npm_install_lifecycle_scripts[postprepare]",
+   "replacement_nodes": [
+    "tests/test_native_archive_inspection.py::test_archive_inspector_blocks_all_npm_install_lifecycle_scripts[postprepare]"
    ],
    "status": "native_behavior_ported_requires_ci"
   },
@@ -1856,16 +1870,79 @@
    "status": "native_behavior_ported_requires_ci"
   },
   {
-   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_blocks_unbound_nested_source_dependencies",
+   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_blocks_unbound_nested_source_dependencies[https://evil.example/payload.tgz]",
    "replacement_nodes": [
-    "tests/test_native_archive_inspection.py::test_archive_inspector_blocks_unbound_nested_source_dependencies"
+    "tests/test_native_archive_inspection.py::test_archive_inspector_blocks_unbound_nested_source_dependencies[https://evil.example/payload.tgz]"
    ],
    "status": "native_behavior_ported_requires_ci"
   },
   {
-   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_allows_registry_only_dependency_specifiers",
+   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_blocks_unbound_nested_source_dependencies[file:./payload.tgz]",
    "replacement_nodes": [
-    "tests/test_native_archive_inspection.py::test_archive_inspector_allows_registry_only_dependency_specifiers"
+    "tests/test_native_archive_inspection.py::test_archive_inspector_blocks_unbound_nested_source_dependencies[file:./payload.tgz]"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_blocks_unbound_nested_source_dependencies[attacker/repository#main]",
+   "replacement_nodes": [
+    "tests/test_native_archive_inspection.py::test_archive_inspector_blocks_unbound_nested_source_dependencies[attacker/repository#main]"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_blocks_unbound_nested_source_dependencies[npm:evil@https://evil.example/payload.tgz]",
+   "replacement_nodes": [
+    "tests/test_native_archive_inspection.py::test_archive_inspector_blocks_unbound_nested_source_dependencies[npm:evil@https://evil.example/payload.tgz]"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_blocks_unbound_nested_source_dependencies[exec:./generator.js]",
+   "replacement_nodes": [
+    "tests/test_native_archive_inspection.py::test_archive_inspector_blocks_unbound_nested_source_dependencies[exec:./generator.js]"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_blocks_unbound_nested_source_dependencies[jsr:@scope/payload@1.0.0]",
+   "replacement_nodes": [
+    "tests/test_native_archive_inspection.py::test_archive_inspector_blocks_unbound_nested_source_dependencies[jsr:@scope/payload@1.0.0]"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_blocks_unbound_nested_source_dependencies[unknown-protocol:payload]",
+   "replacement_nodes": [
+    "tests/test_native_archive_inspection.py::test_archive_inspector_blocks_unbound_nested_source_dependencies[unknown-protocol:payload]"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_allows_registry_only_dependency_specifiers[^1.2.3]",
+   "replacement_nodes": [
+    "tests/test_native_archive_inspection.py::test_archive_inspector_allows_registry_only_dependency_specifiers[^1.2.3]"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_allows_registry_only_dependency_specifiers[latest]",
+   "replacement_nodes": [
+    "tests/test_native_archive_inspection.py::test_archive_inspector_allows_registry_only_dependency_specifiers[latest]"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_allows_registry_only_dependency_specifiers[npm:safe-package@^1.2.3]",
+   "replacement_nodes": [
+    "tests/test_native_archive_inspection.py::test_archive_inspector_allows_registry_only_dependency_specifiers[npm:safe-package@^1.2.3]"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_allows_registry_only_dependency_specifiers[npm:@scope/safe@latest]",
+   "replacement_nodes": [
+    "tests/test_native_archive_inspection.py::test_archive_inspector_allows_registry_only_dependency_specifiers[npm:@scope/safe@latest]"
    ],
    "status": "native_behavior_ported_requires_ci"
   },
@@ -1899,9 +1976,16 @@
    "status": "native_behavior_ported_requires_ci"
   },
   {
-   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_blocks_escaping_links",
+   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_blocks_escaping_links[2]",
    "replacement_nodes": [
-    "tests/test_native_archive_inspection.py::test_archive_inspector_blocks_escaping_links"
+    "tests/test_native_archive_inspection.py::test_archive_inspector_blocks_escaping_links[2]"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_blocks_escaping_links[1]",
+   "replacement_nodes": [
+    "tests/test_native_archive_inspection.py::test_archive_inspector_blocks_escaping_links[1]"
    ],
    "status": "native_behavior_ported_requires_ci"
   },
@@ -1981,8 +2065,7 @@
   {
    "old_node": "tests/test_guard_offline_archive_inspection.py::test_offline_archive_inspector_child_denies_socket_creation",
    "replacement_nodes": [
-    "tests/test_native_archive_inspection.py::test_archive_worker_self_denies_without_seatbelt",
-    "tests/test_native_archive_inspection.py::test_archive_worker_self_contains_via_seccomp"
+    "tests/test_native_archive_inspection.py::test_archive_worker_self_contains_without_wrapper"
    ],
    "status": "native_behavior_ported_requires_ci"
   },

@@ -14891,7 +14891,7 @@ def test_runtime_hook_integrity_rejection_outranks_valid_exact_one_shot_allow(tm
         publisher=None,
         action="allow",
         created_at="2026-07-17T12:00:00+00:00",
-        expires_at="2027-07-17T13:00:00+00:00",
+        expires_at="2099-07-17T13:00:00+00:00",
     )
     assert approval_id is not None
     store.upsert_policy(
@@ -22453,7 +22453,7 @@ def test_policy_bundle_exact_artifact_rules_apply_with_workspace_scope(tmp_path)
     block_artifact = "codex:project:file-read:secret-env"
     bundle = {
         "bundleVersion": "policy-2026-06-05.9",
-        "expiresAt": "2026-12-01T00:00:00+00:00",
+        "expiresAt": "2099-12-01T00:00:00+00:00",
         "rules": [
             {
                 "ruleId": "memory-allow-deploy",
@@ -22482,7 +22482,7 @@ def test_policy_bundle_exact_artifact_rules_apply_with_workspace_scope(tmp_path)
                     "harnesses": ["codex"],
                     "locations": [workspace_a],
                 },
-                "expiresAt": "2027-10-01T00:00:00+00:00",
+                "expiresAt": "2100-10-01T00:00:00+00:00",
                 "sourceDecisionId": "decision-block",
                 "sourceSuggestionId": "suggestion-block",
             },
@@ -22508,10 +22508,10 @@ def test_policy_bundle_exact_artifact_rules_apply_with_workspace_scope(tmp_path)
         store.resolve_policy("codex", "codex:project:tool-action:other", "hash", workspace=workspace_a, now=now) is None
     )
     assert store.resolve_policy("codex", allow_artifact, "hash", workspace=workspace_b, now=now) is None
-    expiry = "2026-12-01T00:00:00+00:00"
+    expiry = "2099-12-01T00:00:00+00:00"
     assert store.resolve_policy("codex", allow_artifact, "hash", workspace=workspace_a, now=expiry) is None
     assert store.resolve_policy("codex", block_artifact, "hash", workspace=workspace_a, now=expiry) == "block"
-    expiry = "2027-10-01T00:00:00+00:00"
+    expiry = "2100-10-01T00:00:00+00:00"
     assert store.resolve_policy("codex", block_artifact, "hash", workspace=workspace_a, now=expiry) is None
     assert store.resolve_policy("codex", allow_artifact, "hash", workspace=workspace_a, now=expiry) is None
     exact_decisions = [item for item in store.list_policy_decisions() if item["source"] == "policy-bundle"]
@@ -22521,8 +22521,8 @@ def test_policy_bundle_exact_artifact_rules_apply_with_workspace_scope(tmp_path)
     assert next(iter(stored_workspaces)).startswith("workspace:")
     assert {item["artifact_id"] for item in exact_decisions} == {allow_artifact, block_artifact}
     assert {item["expires_at"] for item in exact_decisions} == {
-        "2026-12-01T00:00:00.000000+00:00",
-        "2027-10-01T00:00:00.000000+00:00",
+        "2099-12-01T00:00:00.000000+00:00",
+        "2100-10-01T00:00:00.000000+00:00",
     }
 
 
