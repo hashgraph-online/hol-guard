@@ -1,4 +1,4 @@
-use guard_contracts::PreToolActionTypeV1;
+use guard_contracts::{NativePromptRiskClassV1, PreToolActionTypeV1};
 use serde_json::{Map, Value};
 
 use super::bounded_selector_value;
@@ -67,6 +67,7 @@ pub(crate) fn tool_matches(tool: &str, terms: &[&str]) -> bool {
 }
 
 pub(crate) fn classify_tool_name(tool: &str) -> PreToolActionTypeV1 {
+    // tool_matches also recognizes namespaced forms such as functions.exec_command.
     let lowered = tool.to_ascii_lowercase();
     if lowered.starts_with("mcp__")
         || lowered.starts_with("mcp_")
@@ -134,6 +135,7 @@ pub(crate) fn classify_tool_name(tool: &str) -> PreToolActionTypeV1 {
             "terminal",
             "run_command",
             "execute_command",
+            "exec_command",
         ],
     ) {
         PreToolActionTypeV1::Command
@@ -146,10 +148,29 @@ pub(crate) fn risk_classes(
     action_type: PreToolActionTypeV1,
     sensitive_target: bool,
     reason_code: &str,
+    prompt_classes: &[NativePromptRiskClassV1],
 ) -> Vec<&'static str> {
     let mut risks = Vec::new();
     if sensitive_target {
         risks.push("local_secret_read");
+    }
+    for class in prompt_classes {
+        match class {
+            NativePromptRiskClassV1::LocalEnvRead | NativePromptRiskClassV1::SensitiveMaterial => {
+                risks.push("local_secret_read")
+            }
+            NativePromptRiskClassV1::ExfilIntent => {
+                risks.push("credential_exfiltration");
+                risks.push("data_flow_exfiltration");
+            }
+            NativePromptRiskClassV1::DestructiveIntent => risks.push("destructive_shell"),
+            NativePromptRiskClassV1::SubprocessIntent => risks.push("execution"),
+            NativePromptRiskClassV1::GuardBypassIntent => {
+                risks.push("guard_bypass");
+                risks.push("policy_bypass");
+            }
+            NativePromptRiskClassV1::PromptInjectionIntent => risks.push("prompt_injection"),
+        }
     }
     match action_type {
         PreToolActionTypeV1::Command => risks.push("execution"),
@@ -161,7 +182,12 @@ pub(crate) fn risk_classes(
         PreToolActionTypeV1::ProcessService => risks.push("persistence"),
         PreToolActionTypeV1::Browser => risks.push("network_egress"),
         PreToolActionTypeV1::Config => risks.push("guard_bypass"),
-        PreToolActionTypeV1::Prompt => risks.push("prompt_injection"),
+        PreToolActionTypeV1::Prompt
+            if reason_code != "native_prompt_benign" || sensitive_target =>
+        {
+            risks.push("prompt_injection");
+        }
+        PreToolActionTypeV1::Prompt => {}
         PreToolActionTypeV1::Harness => risks.push("execution"),
         PreToolActionTypeV1::Unknown => {}
     }
@@ -174,6 +200,9 @@ pub(crate) fn risk_classes(
     }
     if reason_code.contains("network") {
         risks.push("network_egress");
+    }
+    if reason_code.contains("subprocess") {
+        risks.push("execution");
     }
     risks.sort_unstable();
     risks.dedup();

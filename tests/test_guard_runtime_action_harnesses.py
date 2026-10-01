@@ -318,6 +318,8 @@ def test_shared_action_envelope_contract_covers_every_registered_harness(tmp_pat
         "cline-cli": "cline",
         "cline-vscode": "cline",
         "zai": "zcode",
+        "devin-cli": "devin",
+        "cognition-devin": "devin",
     }
     for harness in action_envelope_harnesses():
         envelope = normalize_harness_payload(
@@ -351,7 +353,7 @@ def test_hook_runtime_helpers_survive_action_normalizer_first_import(tmp_path: P
             "from codex_plugin_scanner.guard.runtime.actions import normalize_harness_payload",
             "normalize_harness_payload('kimi', 'PreToolUse', "
             "{'tool_name': 'Bash', 'tool_input': {'command': 'printf safe'}})",
-            "from codex_plugin_scanner.guard.cli.commands_hook_generic import _artifact_id_from_event",
+            "from codex_plugin_scanner.guard.cli.commands_hook_native_generic import _artifact_id_from_event",
             "from codex_plugin_scanner.guard.cli.commands_support_codex_paths import _collect_codex_tool_response_text",
             "assert _artifact_id_from_event('pi', {'tool_name': 'Bash'}).endswith(':Bash')",
             "assert _collect_codex_tool_response_text({'stdout': 'safe'}) == 'safe'",

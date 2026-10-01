@@ -4,9 +4,11 @@ import importlib.util
 import json
 import sys
 from datetime import datetime, timedelta, timezone
+from fnmatch import fnmatchcase
 from pathlib import Path
 
 import pytest
+import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_PATH = ROOT / "scripts" / "ci" / "pytest_duration_manifest.py"
@@ -38,6 +40,37 @@ def test_manifest_merges_reports_deterministically_and_rejects_duplicate_nodes(t
         duration_manifest.merge_duration_reports([first, second])
 
 
+def test_ci_duration_artifacts_cannot_mix_rerun_attempts(tmp_path: Path) -> None:
+    workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
+    upload = next(
+        step
+        for step in workflow["jobs"]["coverage"]["steps"]
+        if step.get("with", {}).get("path") == "pytest-durations.json"
+    )["with"]["name"]
+    candidate = workflow["jobs"]["duration-manifest-candidate"]["steps"]
+    pattern = next(step for step in candidate if "pattern" in step.get("with", {}))["with"]["pattern"]
+    selected_pattern = pattern.replace("${{ github.run_attempt }}", "3")
+    reports = []
+    for attempt in (1, 3):
+        for shard in range(128):
+            name = upload.replace("${{ github.run_attempt }}", str(attempt)).replace(
+                "${{ matrix.shard-index }}", str(shard)
+            )
+            path = tmp_path / name
+            # A rerun may use a different shard plan; old reports must not fill its gaps.
+            node = (shard + attempt) % 128
+            _write_report(path, {f"tests/test_fixture.py::test_{node}": float(attempt)})
+            if fnmatchcase(name, selected_pattern):
+                reports.append(path)
+    assert len(reports) == 128
+    merged = duration_manifest.merge_duration_reports(reports)
+    assert len(merged) == 128
+    assert set(merged.values()) == {3.0}
+    assert 'test "${#reports[@]}" -eq 128' in next(
+        step["run"] for step in candidate if step.get("name") == "Build duration manifest candidate"
+    )
+
+
 def test_manifest_round_trip_and_age_validation(tmp_path: Path) -> None:
     output = tmp_path / "manifest.json"
     observed_at = datetime(2026, 7, 26, 16, 0, tzinfo=timezone.utc)
@@ -63,3 +96,58 @@ def test_manifest_rejects_non_finite_durations(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="invalid duration"):
         duration_manifest.load_duration_report(output)
+
+
+@pytest.mark.parametrize("newer_filename", ["committed.json.gz", "trusted-artifact.json.gz"])
+@pytest.mark.parametrize("reverse", [False, True])
+def test_latest_manifest_uses_observation_time_independent_of_path_order(
+    tmp_path: Path, newer_filename: str, reverse: bool
+) -> None:
+    now = datetime(2026, 9, 20, 16, 10, tzinfo=timezone.utc)
+    paths = [tmp_path / "committed.json.gz", tmp_path / "trusted-artifact.json.gz"]
+    for path in paths:
+        newer = path.name == newer_filename
+        duration_manifest.write_duration_manifest(
+            path,
+            {"tests/test_a.py::test_a": 3.0 if newer else 20.0},
+            now - timedelta(hours=1 if newer else 24),
+        )
+
+    durations, selected = duration_manifest.load_latest_duration_manifest(
+        reversed(paths) if reverse else paths, now=now, max_age=timedelta(days=28)
+    )
+
+    assert selected == tmp_path / newer_filename
+    assert durations == {duration_manifest.node_id_digest("tests/test_a.py::test_a"): 3.0}
+
+
+@pytest.mark.parametrize("invalid_kind", ["missing", "corrupt", "truncated", "stale", "future"])
+def test_latest_manifest_falls_back_when_an_optional_source_is_invalid(tmp_path: Path, invalid_kind: str) -> None:
+    now = datetime(2026, 9, 20, 16, 10, tzinfo=timezone.utc)
+    valid = tmp_path / "committed.json.gz"
+    invalid = tmp_path / "optional.json.gz"
+    duration_manifest.write_duration_manifest(valid, {"tests/test_a.py::test_a": 4.0}, now - timedelta(hours=1))
+    if invalid_kind == "corrupt":
+        invalid.write_bytes(b"not a gzip stream")
+    elif invalid_kind == "truncated":
+        invalid.write_bytes(valid.read_bytes()[:10])
+    elif invalid_kind in {"stale", "future"}:
+        observed_at = now - timedelta(days=29) if invalid_kind == "stale" else now + timedelta(seconds=1)
+        duration_manifest.write_duration_manifest(invalid, {"tests/test_a.py::test_a": 99.0}, observed_at)
+
+    durations, selected = duration_manifest.load_latest_duration_manifest(
+        [valid, invalid], now=now, max_age=timedelta(days=28)
+    )
+
+    assert selected == valid
+    assert durations == {duration_manifest.node_id_digest("tests/test_a.py::test_a"): 4.0}
+
+
+def test_latest_manifest_rejects_all_invalid_candidates(tmp_path: Path) -> None:
+    now = datetime(2026, 9, 20, 16, 10, tzinfo=timezone.utc)
+    stale = tmp_path / "stale.json.gz"
+    missing = tmp_path / "missing.json.gz"
+    duration_manifest.write_duration_manifest(stale, {"tests/test_a.py::test_a": 4.0}, now - timedelta(days=29))
+
+    with pytest.raises(ValueError, match="no current pytest duration manifest"):
+        duration_manifest.load_latest_duration_manifest([stale, missing], now=now, max_age=timedelta(days=28))

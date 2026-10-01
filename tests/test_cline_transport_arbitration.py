@@ -131,6 +131,16 @@ def test_plugin_is_noop_when_native_hooks_are_selected(tmp_path: Path) -> None:
     assert result is None
     assert not log.exists()
 
+    posttool_result = _run_plugin(
+        source,
+        tmp_path,
+        'plugin.hooks.afterTool({toolCall:{toolCallId:"arb-2b",toolName:"read_files"},'
+        'input:{paths:["README.md"]},result:{output:"native hook owns this result",isError:false}})',
+        log=log,
+    )
+    assert posttool_result is None
+    assert not log.exists()
+
 
 def test_plugin_fails_closed_when_transport_state_is_missing(tmp_path: Path) -> None:
     context = _context(tmp_path)

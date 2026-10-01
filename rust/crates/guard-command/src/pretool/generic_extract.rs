@@ -1,9 +1,11 @@
 use super::super::sensitive_command;
 use crate::MAX_COMMAND_BYTES;
+use regex::Regex;
 use serde::de::{DeserializeSeed, Deserializer, MapAccess, SeqAccess, Visitor};
 use serde_json::{Map, Value};
 use std::collections::HashSet;
 use std::fmt;
+use std::sync::OnceLock;
 
 pub(super) const MAX_PRE_TOOL_DEPTH: usize = 32;
 const MAX_PRE_TOOL_KEYS: usize = 512;
@@ -180,9 +182,18 @@ pub(super) struct GenericSignals {
     pub(super) command: Option<String>,
     pub(super) tool_name: Option<String>,
     pub(super) package_present: bool,
+    pub(super) package_values: Vec<String>,
     pub(super) path_values: Vec<String>,
     pub(super) url_values: Vec<String>,
     pub(super) prompt_present: bool,
+    pub(super) env_reference: bool,
+    pub(super) benign_prompt: bool,
+    pub(super) guard_bypass_intent: bool,
+    pub(super) prompt_injection_intent: bool,
+    pub(super) exfil_intent: bool,
+    pub(super) destructive_intent: bool,
+    pub(super) subprocess_intent: bool,
+    pub(super) content_sensitive: bool,
     pub(super) sensitive_target: bool,
     pub(super) event_hint: Option<String>,
 }
@@ -430,6 +441,149 @@ fn sensitive_text(values: &[String]) -> bool {
     values.iter().any(|value| sensitive_command(value))
 }
 
+fn guard_bypass_prompt(values: &[String]) -> bool {
+    values.iter().any(|value| {
+        let lowered = value.to_ascii_lowercase();
+        let normalized = lowered.split_whitespace().collect::<Vec<_>>().join(" ");
+        [
+            "disable hol-guard",
+            "hol-guard disable",
+            "hol-guard off",
+            "hol-guard uninstall",
+            "disable guard",
+            "turn off guard",
+            "uninstall guard",
+            "use another mcp server",
+            "guard-bypass",
+            "guard_bypass",
+        ]
+        .iter()
+        .any(|pattern| normalized.contains(pattern))
+            || ["approval_policy=\"never\"", "approval_policy='never'"]
+                .iter()
+                .any(|pattern| normalized.replace(' ', "").contains(pattern))
+    })
+}
+
+fn prompt_injection_intent(values: &[String]) -> bool {
+    static INJECTION: OnceLock<Regex> = OnceLock::new();
+    let pattern = INJECTION.get_or_init(|| {
+        Regex::new(r"(?i)\b(?:ignore\s+(?:all\s+)?(?:previous|prior|earlier)\s+instructions?|ignore\s+(?:the\s+)?system\s+prompt|(?:do\s+not|don't)\s+(?:tell|notify|alert|inform)\s+(?:the\s+)?users?|hide\s+(?:this|it|the\s+(?:action|instruction|request))\s+from\s+(?:the\s+)?logs?|(?:reveal|print|show)\s+(?:the\s+)?(?:system\s+prompt|developer\s+instructions?)|(?:remove|strip)\s+(?:the\s+)?(?:guard\s+)?hooks?)\b")
+            .expect("bounded prompt injection intent")
+    });
+    values.iter().any(|value| pattern.is_match(value))
+}
+
+fn exfil_prompt_intent(values: &[String]) -> bool {
+    static PATTERNS: OnceLock<Vec<Regex>> = OnceLock::new();
+    let patterns = PATTERNS.get_or_init(|| {
+        [
+            r"(?i)\b(?:upload|exfiltrate|transfer|paste|gist|webhook)\b[^.!?;\n]{0,80}\b(?:contents?|data|payload|file|secret|token|key|credentials?|config|output)\b",
+            r"(?i)\b(?:send|post|upload|transfer|paste|sync)\b[^.!?;\n]{0,120}(?:\.env\b|/\.ssh/|/\.aws/|\.npmrc\b|\.pypirc\b|\.authrc\b|\.envrc\b)[^.!?;\n]{0,80}\b(?:to|into|onto|via|through|over|at)\b[^.!?;\n]{0,80}(?:[a-z][a-z0-9+.-]*://|webhook|gist|pastebin|slack|discord|telegram|server|endpoint|url)",
+            r"(?i)\b(?:send|post|upload|transfer|paste|sync)\b[^.!?;\n]{0,80}\b(?:to|into|onto|via|through|over|at)\b[^.!?;\n]{0,40}\b(?:webhook|gist|pastebin|slack|discord|telegram|server|endpoint|url)\b",
+            r"(?i)\b(?:send|post|upload|transfer|paste|sync)\b[^.!?;\n]{0,80}\b(?:contents?|data|payload|file|secret|token|key|credentials?|config|output)\b[^.!?;\n]{0,40}\b(?:to|into|onto|via|through|over|at)\b[^.!?;\n]{0,40}(?:[a-z][a-z0-9+.-]*://|webhook|gist|pastebin|slack|discord|telegram|server|endpoint|url)",
+        ]
+        .into_iter()
+        .map(|pattern| Regex::new(pattern).expect("bounded exfiltration prompt intent"))
+        .collect()
+    });
+    values
+        .iter()
+        .any(|value| patterns.iter().any(|pattern| pattern.is_match(value)))
+}
+
+fn destructive_prompt_intent(values: &[String]) -> bool {
+    static PATTERN: OnceLock<Regex> = OnceLock::new();
+    let pattern = PATTERN.get_or_init(|| {
+        Regex::new(r"(?i)(?:\brm\s+-[a-z]*[rf]\b|\b(?:delete|remove|overwrite|truncate|chmod|chown|mv)\b[^.!?;\n]{0,60}\b(?:file|directory|repo|workspace|contents?)\b)")
+            .expect("bounded destructive prompt intent")
+    });
+    values.iter().any(|value| pattern.is_match(value))
+}
+
+fn subprocess_prompt_intent(values: &[String]) -> bool {
+    static PATTERN: OnceLock<Regex> = OnceLock::new();
+    let pattern = PATTERN.get_or_init(|| {
+        Regex::new(r"(?i)\b(?:bash\s+-c\b|sh\s+-c\b|zsh\s+-c\b|powershell\b|cmd\s+/c\b|subprocess\b|exec\s*\(|spawn\s*\()")
+            .expect("bounded subprocess prompt intent")
+    });
+    values.iter().any(|value| pattern.is_match(value))
+}
+
+fn benign_prompt_text(text: &str) -> bool {
+    static NEGATED_READ: OnceLock<Regex> = OnceLock::new();
+    static DOCUMENTED_READ: OnceLock<Regex> = OnceLock::new();
+    static DOCUMENTED_ENV: OnceLock<Regex> = OnceLock::new();
+    static DOCUMENT_END: OnceLock<Regex> = OnceLock::new();
+    static ENV_TEMPLATE: OnceLock<Regex> = OnceLock::new();
+    static RISK_ACTION: OnceLock<Regex> = OnceLock::new();
+    static REFERENT_ACTION: OnceLock<Regex> = OnceLock::new();
+
+    let normalized = text.to_ascii_lowercase();
+    let mut remainder = normalized.clone();
+    let documents = [
+        "create ",
+        "write ",
+        "draft ",
+        "document ",
+        "generate ",
+        "outline ",
+    ]
+    .iter()
+    .any(|prefix| normalized.trim_start().starts_with(prefix))
+        && ["markdown", "docs", "documentation", "checklist", "guide"]
+            .iter()
+            .any(|target| normalized.contains(target));
+    if documents {
+        let documented_end = DOCUMENT_END.get_or_init(|| {
+            Regex::new(r"(?i)(?:must\s+stay\s+blocked|reads?\s+require\s+approval)\s*[.!?]?\s*$")
+                .expect("bounded documented guardrail ending")
+        });
+        if sensitive_command(&normalized) && !documented_end.is_match(&normalized) {
+            return false;
+        }
+        let documented_read = DOCUMENTED_READ.get_or_init(|| {
+            Regex::new(
+                r"(?i)`(?:cat|read|head|tail|grep|rg)\s+[^`]{0,512}`\s+must\s+stay\s+blocked",
+            )
+            .expect("bounded documented read expression")
+        });
+        remainder = documented_read.replace_all(&remainder, " ").into_owned();
+        let documented_env = DOCUMENTED_ENV.get_or_init(|| {
+            Regex::new(r"(?i)`\.env(?:\.[a-z0-9_.-]+)?`\s+reads?\s+require\s+approval")
+                .expect("bounded documented environment reference")
+        });
+        remainder = documented_env.replace_all(&remainder, " ").into_owned();
+    }
+    let negated_read = NEGATED_READ.get_or_init(|| {
+        Regex::new(r#"(?i)\b(?:never|do\s+not|don't|dont|must\s+not|should\s+not)\s+(?:read|open|print|show|dump|cat|inspect|copy|use|include|grab)\s+[`'"]?\.env(?:\.[a-z0-9_.-]+)?[`'"]?(?:\s+files?)?"#)
+            .expect("bounded negated environment read")
+    });
+    let negated_suffix = negated_read
+        .find_iter(&remainder)
+        .last()
+        .map(|matched| remainder[matched.end()..].to_owned());
+    remainder = negated_read.replace_all(&remainder, " ").into_owned();
+    if negated_suffix.is_some_and(|suffix| {
+        REFERENT_ACTION
+            .get_or_init(|| {
+                Regex::new(r"(?i)\b(?:read|open|print|show|dump|copy|inspect|summari[sz]e|include|upload|send|transfer|use|grab|access|do(?:ing)?|perform|execute|run|follow|try)\b[^.!?;\n]{0,80}\b(?:it|them|those|these|its|their)\b")
+                    .expect("bounded referential follow-up")
+            })
+            .is_match(&suffix)
+    }) {
+        return false;
+    }
+    let env_template = ENV_TEMPLATE
+        .get_or_init(|| Regex::new(r"(?i)\.env\.example\b").expect("bounded template reference"));
+    remainder = env_template.replace_all(&remainder, " ").into_owned();
+    let risky_action = RISK_ACTION.get_or_init(|| {
+        Regex::new(r"(?i)\b(?:rm\s+-[a-z]*[rf]\b|delete\b|erase\b|wipe\b|format\b|kill\b|upload\b|exfiltrat[a-z]*\b|transfer\b|curl\b|wget\b|sudo\b|bash\s+-c\b|sh\s+-c\b|powershell\b|cmd\s+/c\b|subprocess\b|spawn\s*\(|exec\s*\(|send\s+(?:data|payload|file|secret|token|credential)\b|post\s+(?:payload|data|file|secret)\b|sync\s+(?:output|data)\b|(?:send|post|sync|transfer)\s+(?:to|over|via|at)\s+(?:webhook|server|slack|discord|https?://)\b|then\s+(?:read|open|print|summari[sz]e|show|dump|include|use|grab|upload|send)\s+(?:it|them|those|files|secrets)\b|(?:now|then|afterwards|also)\s+(?:do|perform|execute|follow|run|use)\s+(?:it|that|this|them|example)\b)")
+            .expect("bounded risky prompt action")
+    });
+    !sensitive_command(&remainder) && !risky_action.is_match(&remainder)
+}
+
 pub(super) fn extract_generic_signals(
     payload: &Value,
 ) -> Result<GenericSignals, GenericExtractionError> {
@@ -440,6 +594,44 @@ pub(super) fn extract_generic_signals(
     };
     let mut maps = Vec::new();
     collect_maps(payload, &mut maps);
+    // Some harnesses (for example GitHub Copilot) ship tool arguments as a
+    // JSON-encoded string instead of an object. Decode those strings once so
+    // their nested fields join the same bounded signal surface.
+    let mut embedded = Vec::new();
+    for record in &maps {
+        for key in [
+            "toolArgs",
+            "tool_args",
+            "toolArgsJson",
+            "tool_input",
+            "toolInput",
+            "toolArguments",
+            "tool_arguments",
+            "arguments",
+            "args",
+            "input",
+            "parameters",
+            "params",
+        ] {
+            if let Some(Value::String(text)) = record.get(key) {
+                let trimmed = text.trim();
+                if !(trimmed.starts_with('{') || trimmed.starts_with('['))
+                    || trimmed.len() > MAX_COMMAND_BYTES
+                {
+                    continue;
+                }
+                if let Ok(parsed) = parse_strict_nested_json(trimmed.as_bytes()) {
+                    if embedded.len() >= MAX_PRE_TOOL_STRINGS {
+                        return Err(GenericExtractionError::Bounds);
+                    }
+                    embedded.push(parsed);
+                }
+            }
+        }
+    }
+    for value in &embedded {
+        collect_maps(value, &mut maps);
+    }
     let command = collect_commands(&maps)?;
     let tool_name = collect_tool_names(payload)?;
     let path_values = collect_key_strings(
@@ -475,18 +667,56 @@ pub(super) fn extract_generic_signals(
     )?;
     let text_values = collect_key_strings(&maps, &["text"])?;
     let event_hint = collect_event_hint(root)?;
-    let sensitive_target = sensitive_text(&path_values)
+    let env_reference = prompt_values.iter().any(|value| {
+        let lowered = value.to_ascii_lowercase();
+        lowered.split(".env").skip(1).any(|suffix| {
+            !suffix.starts_with(".example")
+                && suffix
+                    .chars()
+                    .next()
+                    .is_none_or(|character| !character.is_ascii_alphanumeric() && character != '_')
+        })
+    });
+    let guard_bypass_intent = guard_bypass_prompt(&prompt_values);
+    let prompt_injection_intent = prompt_injection_intent(&prompt_values);
+    let exfil_intent = exfil_prompt_intent(&prompt_values);
+    let destructive_intent = destructive_prompt_intent(&prompt_values);
+    let subprocess_intent = subprocess_prompt_intent(&prompt_values);
+    let benign_prompt = !guard_bypass_intent
+        && !prompt_injection_intent
+        && !exfil_intent
+        && !destructive_intent
+        && !subprocess_intent
+        && prompt_values.len() == 1
+        && command.is_none()
+        && tool_name.is_none()
+        && path_values.is_empty()
+        && package_values.is_empty()
+        && url_values.is_empty()
+        && text_values.is_empty()
+        && benign_prompt_text(&prompt_values[0]);
+    let content_sensitive = sensitive_text(&path_values)
         || sensitive_text(&url_values)
         || sensitive_text(&prompt_values)
         || sensitive_text(&text_values)
         || command.as_deref().is_some_and(sensitive_command);
+    let sensitive_target = guard_bypass_intent || content_sensitive;
     Ok(GenericSignals {
         command,
         tool_name,
         package_present: !package_values.is_empty(),
+        package_values,
         path_values,
         url_values,
         prompt_present: !prompt_values.is_empty(),
+        env_reference,
+        benign_prompt,
+        guard_bypass_intent,
+        prompt_injection_intent,
+        exfil_intent,
+        destructive_intent,
+        subprocess_intent,
+        content_sensitive,
         sensitive_target,
         event_hint,
     })

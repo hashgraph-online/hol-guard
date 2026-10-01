@@ -40,6 +40,10 @@ pub struct NativeHookDecisionReceiptV1 {
     pub reviewed_output_sha256: Option<String>,
     pub observe_mode: bool,
     pub deadline_budget_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command_extensions: Option<super::NativeCommandReceiptBindingV1>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub prompt_risk_classes: Vec<super::NativePromptRiskClassV1>,
 }
 
 impl NativeHookDecisionReceiptV1 {

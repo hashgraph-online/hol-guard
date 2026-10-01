@@ -37,6 +37,17 @@ const unconfiguredSettingsPayload = {
     },
   },
 };
+const disabledUnconfiguredSettingsPayload = {
+  ...gatedSettingsPayload,
+  settings: {
+    ...gatedSettingsPayload.settings,
+    approval_gate: {
+      ...gatedSettingsPayload.settings.approval_gate,
+      enabled: false,
+      configured: false,
+    },
+  },
+};
 
 async function mountSettingsFixture(page: Page, settingsPayload = gatedSettingsPayload): Promise<{ settingsUpdates: Record<string, unknown>[] }> {
   const settingsUpdates: Record<string, unknown>[] = [];
@@ -124,6 +135,44 @@ test("first-time approval password setup is discoverable beside the gate", async
   const updateSettings = fixture.settingsUpdates[0]?.settings as Record<string, unknown> | undefined;
   expect(updateSettings).toBeDefined();
   expect(Object.keys(updateSettings ?? {})).toEqual(["approval_gate"]);
+});
+
+test("approval password setup stays reachable while the gate is off", async ({ page }) => {
+  const fixture = await mountSettingsFixture(page, disabledUnconfiguredSettingsPayload);
+  await page.goto(`/settings?${DAEMON}&section=approval`);
+
+  await page.getByRole("tabpanel", { name: "Approval gate settings" }).waitFor();
+  await expect(page.getByRole("button", { name: "Set up approval password" })).toBeVisible();
+  await expect(page.getByText("Authenticator app", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Set up approval password" }).click();
+  const setupDialog = page.getByRole("dialog", { name: "Set your approval password" });
+  await expect(setupDialog).toBeVisible();
+  await setupDialog.getByRole("textbox", { name: "Password", exact: true }).fill("test-password");
+  const confirmation = setupDialog.getByRole("textbox", { name: "Confirm password", exact: true });
+  await confirmation.fill("test-password");
+  await confirmation.press("Enter");
+  await expect.poll(() => fixture.settingsUpdates).toHaveLength(1);
+  const updateSettings = fixture.settingsUpdates[0]?.settings as Record<string, unknown> | undefined;
+  const gateUpdate = updateSettings?.approval_gate as Record<string, unknown> | undefined;
+  expect(gateUpdate?.enabled).toBe(true);
+  expect(gateUpdate?.new_password).toBe("test-password");
+});
+
+test("cancelling first-time password setup restores the off gate state", async ({ page }) => {
+  const fixture = await mountSettingsFixture(page, disabledUnconfiguredSettingsPayload);
+  await page.goto(`/settings?${DAEMON}&section=approval`);
+
+  await page.getByRole("tabpanel", { name: "Approval gate settings" }).waitFor();
+  const gateToggle = page.locator("#settings-approval-gate");
+  await expect(gateToggle).not.toBeChecked();
+  await page.getByRole("button", { name: "Set up approval password" }).click();
+  const setupDialog = page.getByRole("dialog", { name: "Set your approval password" });
+  await expect(setupDialog).toBeVisible();
+  await expect(gateToggle).toBeChecked();
+  await setupDialog.getByRole("button", { name: "Go back" }).click();
+  await expect(setupDialog).toBeHidden();
+  await expect(gateToggle).not.toBeChecked();
+  expect(fixture.settingsUpdates).toHaveLength(0);
 });
 
 test("Enter on Go back cancels password proof rather than confirming it", async ({ page }) => {

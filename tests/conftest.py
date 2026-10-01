@@ -17,73 +17,123 @@ pytest_plugins = ["tests.bundle_first_cloud"]
 SRC_PATH = Path(__file__).resolve().parents[1] / "src"
 SUPPORT_PATH = Path(__file__).resolve().parent / "support"
 
-if str(SRC_PATH) not in sys.path:
+use_installed_package = os.environ.get("HOL_GUARD_TEST_USE_INSTALLED") == "1"
+if not use_installed_package and str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
 if str(SUPPORT_PATH) not in sys.path:
     sys.path.insert(0, str(SUPPORT_PATH))
 
 existing_pythonpath = os.environ.get("PYTHONPATH", "")
 pythonpath_entries = [entry for entry in existing_pythonpath.split(os.pathsep) if entry]
-pythonpath_prefix = [str(path) for path in (SUPPORT_PATH, SRC_PATH) if str(path) not in pythonpath_entries]
+source_paths = (SUPPORT_PATH,) if use_installed_package else (SUPPORT_PATH, SRC_PATH)
+pythonpath_prefix = [str(path) for path in source_paths if str(path) not in pythonpath_entries]
 if pythonpath_prefix:
     os.environ["PYTHONPATH"] = os.pathsep.join([*pythonpath_prefix, *pythonpath_entries])
+
+# Unit tests must never open real browser tabs. The flag is assigned at import
+# time so it is also inherited by helpers spawned from session-scoped fixtures,
+# and so an inherited value cannot silently re-enable launches.
+os.environ["HOL_GUARD_TEST_DISABLE_BROWSER_OPEN"] = "1"
+os.environ.pop("HOL_GUARD_TEST_ALLOW_BROWSER_OPEN", None)
 
 
 @pytest.fixture(autouse=True)
 def _default_unit_tests_to_python_rollback(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Keep legacy unit fixtures on explicit, test-only oracle mode.
+    """Keep legacy unit fixtures off the production native default.
 
     Production default remains ``auto``. Native-authority tests monkeypatch
-    ``native_mode`` or delete this variable themselves. The oracle is injected
-    below; no production module imports the semantic evaluator.
+    ``native_mode`` or delete this variable themselves. There is no Python
+    semantic evaluator; ``off`` exercises the fail-safe surface.
     """
 
+    monkeypatch.setenv("HOL_GUARD_TEST_MODE", "1")
+    monkeypatch.setenv("HOL_GUARD_NATIVE_DIAGNOSTIC", "1")
     if "HOL_GUARD_NATIVE" not in os.environ:
         monkeypatch.setenv("HOL_GUARD_NATIVE", "off")
 
 
-@pytest.fixture(autouse=True)
-def _explicit_python_differential_oracle(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Install the Python reviewer only for explicit differential-test paths."""
+class _GuardCommandsProxy:
+    """Patch target that rebinds a symbol in every loaded guard module.
 
-    monkeypatch.setenv("HOL_GUARD_TEST_MODE", "1")
-    monkeypatch.setenv("HOL_GUARD_PYTHON_ORACLE", "1")
-    monkeypatch.setenv("HOL_GUARD_NATIVE_DIAGNOSTIC", "1")
+    The hook pipeline is split across ``commands_*``/``commands_support_*``
+    modules that share bindings through the ``commands_support`` union, so a
+    name patched on ``cli.commands`` alone would never reach the moved call
+    sites. ``monkeypatch.setattr(guard_commands_module, name, value)`` fans
+    the rebind out to every loaded ``codex_plugin_scanner`` module that holds
+    the same object, and restores through the same fan-out on teardown.
+    """
 
-    from codex_plugin_scanner.guard.cli import commands_hook_source_ref
-    from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config
-    from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
-    from codex_plugin_scanner.guard.runtime.hook_content_scanner import ContentScanner
-    from codex_plugin_scanner.guard.runtime.hook_decision_cache import HookDecisionCache
-    from codex_plugin_scanner.guard.runtime.hook_review_engine import HookReviewEngine
-    from codex_plugin_scanner.guard.runtime.hook_review_types import HookReviewRequest, HookReviewResponse
-    from codex_plugin_scanner.guard.store import GuardStore
+    @staticmethod
+    def _original(name: str) -> object:
+        sentinel = object()
+        commands = sys.modules.get("codex_plugin_scanner.guard.cli.commands")
+        if commands is not None:
+            value = getattr(commands, name, sentinel)
+            if value is not sentinel:
+                return value
+        for module in list(sys.modules.values()):
+            if not getattr(module, "__name__", "").startswith("codex_plugin_scanner"):
+                continue
+            value = getattr(module, name, sentinel)
+            if value is not sentinel:
+                return value
+        raise AttributeError(name)
 
-    def worker_oracle(worker: HookWorker) -> object:
-        return HookReviewEngine(
-            store=worker.store,
-            scanner=ContentScanner(),
-            cache=HookDecisionCache(worker.store),
-            config_loader=worker._load_config,
-            metrics=worker.metrics,
-        )
+    def __getattr__(self, name: str) -> object:
+        return self._original(name)
 
-    def source_ref_oracle(
-        request: HookReviewRequest,
-        store: GuardStore,
-        config: GuardConfig | None,
-    ) -> HookReviewResponse:
-        return HookReviewEngine(
-            store=store,
-            scanner=ContentScanner(),
-            cache=HookDecisionCache(store),
-            config_loader=lambda guard_home, workspace: (
-                config if config is not None else load_guard_config(guard_home, workspace=workspace)
-            ),
-        ).review(request)
+    def __setattr__(self, name: str, value: object) -> None:
+        original = self._original(name)
+        for module in list(sys.modules.values()):
+            if not getattr(module, "__name__", "").startswith("codex_plugin_scanner"):
+                continue
+            if getattr(module, name, None) is original:
+                setattr(module, name, value)
 
-    monkeypatch.setattr(HookWorker, "_test_python_oracle_factory", worker_oracle)
-    monkeypatch.setattr(commands_hook_source_ref, "_test_source_ref_oracle", source_ref_oracle)
+
+guard_commands_module = _GuardCommandsProxy()
+
+
+@pytest.fixture
+def native_hook_force(monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Drive hook entrypoints through the compiled native runtime.
+
+    Hook integration tests that assert real decisions (deny/review/allow)
+    need the Rust authority: ``force`` makes ``HOL_GUARD_NATIVE_BINARY``
+    authoritative, and the standalone CLI publishes its own policy snapshot.
+    There is no Python fallback, so the runtime is required, not skipped.
+    """
+
+    binary = os.environ.get("HOL_GUARD_NATIVE_BINARY")
+    if binary:
+        runtime = Path(binary).expanduser()
+    else:
+        root = Path(__file__).resolve().parents[1]
+        runtime = root / "rust" / "target" / "release" / "hol-guard-runtime"
+        if not runtime.is_file():
+            runtime = root / "rust" / "target" / "debug" / "hol-guard-runtime"
+    if not runtime.is_file():
+        pytest.fail("HOL_GUARD_NATIVE_BINARY must name the compiled Rust runtime; native retirement proof cannot skip")
+    runtime = runtime.resolve(strict=True)
+    monkeypatch.setenv("HOL_GUARD_NATIVE", "force")
+    monkeypatch.setenv("HOL_GUARD_NATIVE_BINARY", str(runtime))
+    return runtime
+
+
+@pytest.fixture
+def native_command_artifact_reviews(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Supply actual native command evidence to legacy hook orchestration tests."""
+    from codex_plugin_scanner.guard.cli import commands_support_runtime_artifacts
+    from tests.native_command_test_support import real_native_command_evaluation
+
+    def review(command: str, *, guard_home: Path, cwd: Path | None = None, home_dir: Path | None = None):
+        del guard_home
+        try:
+            return real_native_command_evaluation(command, cwd=cwd, home_dir=home_dir)
+        except Exception as exc:
+            pytest.fail(f"Native command artifact fixture failed: {type(exc).__name__}: {exc}")
+
+    monkeypatch.setattr(commands_support_runtime_artifacts, "review_command_native", review)
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -96,9 +146,12 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    fault_injection_enabled = os.environ.get("GUARD_FAULT_INJECTION") == "1"
     for item in items:
         for marker in invariant_markers_for_nodeid(item.nodeid):
             item.add_marker(marker)
+        if not fault_injection_enabled and item.get_closest_marker("fault_injection") is not None:
+            item.add_marker(pytest.mark.skip(reason="requires GUARD_FAULT_INJECTION=1"))
 
     if not config.getoption("--validate-test-invariants"):
         return

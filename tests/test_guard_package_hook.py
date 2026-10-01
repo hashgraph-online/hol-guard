@@ -16,14 +16,15 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generat
 
 import codex_plugin_scanner.guard.runtime.supply_chain_package_eval as evaluator_module
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.runtime.signals import RiskSignalV2
 from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import (
     PackageRequestEvaluation,
     SupplyChainUserCopy,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.conftest import guard_commands_module
 from tests.guard_cli_facade_isolation import isolate_terminal_block_patches, restore_cli_facade_approval_hooks
+from tests.guard_signed_approval_fixtures import write_synthetic_daemon_auth_token
 
 
 @pytest.fixture(autouse=True)
@@ -253,6 +254,7 @@ def _data_flow_signal_v2() -> RiskSignalV2:
     )
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_guard_hook_terminal_package_block_is_not_queued_for_browser_approval(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -313,6 +315,7 @@ def test_guard_hook_terminal_package_block_is_not_queued_for_browser_approval(
     assert store.list_approval_requests(limit=5) == []
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_guard_hook_ask_queues_package_approval_with_advisory_context(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -367,6 +370,7 @@ def test_guard_hook_ask_queues_package_approval_with_advisory_context(
     assert "minimist" in risk_summary.lower()
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_guard_hook_cloud_timeout_queues_package_review_instead_of_terminal_block(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -417,6 +421,7 @@ def test_guard_hook_cloud_timeout_queues_package_review_instead_of_terminal_bloc
     assert pending[0]["decision_v2_json"]["package_review_cloud_reason_code"] == "cloud_timeout"
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_guard_hook_ask_package_native_denial_surfaces_approval_url(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -484,6 +489,7 @@ def test_guard_hook_ask_package_native_denial_surfaces_approval_url(
     assert captured.err == ""
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_guard_hook_ask_package_direct_hook_caps_browser_approval_wait(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -504,6 +510,7 @@ def test_guard_hook_ask_package_direct_hook_caps_browser_approval_wait(
         ),
         "2026-05-19T00:00:00Z",
     )
+    write_synthetic_daemon_auth_token(home_dir)
     (home_dir / "config.toml").write_text("approval_wait_timeout_seconds = 120\n", encoding="utf-8")
     observed_timeouts: list[int] = []
     monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
@@ -546,10 +553,12 @@ def test_guard_hook_ask_package_direct_hook_caps_browser_approval_wait(
     assert observed_timeouts == [8]
     reason = payload["hookSpecificOutput"]["permissionDecisionReason"]
     assert "/requests/" in reason
+    assert "guard-token=gld1." in reason
     assert "retry the same Codex action" in reason
     assert "waiting for approval in your browser" in captured.err
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_guard_hook_warns_for_package_request_without_blocking(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
@@ -588,6 +597,7 @@ def test_guard_hook_warns_for_package_request_without_blocking(
     assert "approval_requests" not in output
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_guard_hook_keeps_block_copy_when_scanner_escalates_package_warning(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -651,6 +661,7 @@ def test_guard_hook_keeps_block_copy_when_scanner_escalates_package_warning(
     )
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_guard_hook_keeps_data_flow_summary_when_package_warning_is_weaker(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -718,6 +729,7 @@ def test_guard_hook_keeps_data_flow_summary_when_package_warning_is_weaker(
     assert evidence[0]["category"] == "supply-chain"
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_guard_hook_preserves_cloud_reconnect_guidance_for_compound_package_install(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -801,6 +813,7 @@ def test_guard_hook_preserves_cloud_reconnect_guidance_for_compound_package_inst
     assert "Open HOL Guard" in decision["retry_instruction"]
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_guard_hook_does_not_tell_allowed_package_install_to_retry(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

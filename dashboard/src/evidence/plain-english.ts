@@ -96,16 +96,24 @@ export function resolveActionTitle(receipt: GuardReceipt): string {
     return mcpTool;
   }
 
-  // Package: show package name
-  const packageName = envelope?.package_name?.trim();
-  if (type === "Package" && packageName && packageName.length > 0) {
-    return packageName;
-  }
-
   // Scanner evidence title is usually more descriptive than raw artifact_name
   const signals = (receipt.scanner_evidence ?? []).filter(isRiskSignalEvidence);
   if (signals.length > 0 && signals[0]?.title) {
     return signals[0].title;
+  }
+
+  // Some receipts retain the raw command while the typed envelope has
+  // no command field. Keep the risk title above this fallback, then show the
+  // command instead of the executable name alone.
+  const rawCommand = receipt.raw_command_text?.trim();
+  if (rawCommand) {
+    return truncate(rawCommand, 80);
+  }
+
+  // Package: show package name
+  const packageName = envelope?.package_name?.trim();
+  if (type === "Package" && packageName && packageName.length > 0) {
+    return packageName;
   }
 
   // provenance_summary for hook events is more descriptive than a generic tool name like "Bash"
@@ -143,6 +151,20 @@ export function resolveActionTitle(receipt: GuardReceipt): string {
   return type;
 }
 
+/** Return the untruncated command when the action title is command-derived. */
+export function resolveActionTitleTooltip(receipt: GuardReceipt): string {
+  const title = resolveActionTitle(receipt);
+  const envelopeCommand = getEnvelope(receipt)?.command?.trim();
+  if (resolveActionType(receipt) === "Shell command" && envelopeCommand) {
+    return envelopeCommand;
+  }
+  const rawCommand = receipt.raw_command_text?.trim();
+  if (rawCommand && title === truncate(rawCommand, 80)) {
+    return rawCommand;
+  }
+  return title;
+}
+
 export function resolveActionSubtitle(receipt: GuardReceipt): string | null {
   const signals = (receipt.scanner_evidence ?? []).filter(isRiskSignalEvidence);
   const firstSignal = signals[0];
@@ -174,10 +196,15 @@ export function resolveActionSubtitle(receipt: GuardReceipt): string | null {
   const provenance = receipt.provenance_summary?.trim();
   const isCapsUseful = caps && caps !== "hook artifact · codex" && !caps.toLowerCase().startsWith("guard local daemon completed");
   const isProvenanceUseful = provenance && provenance !== "hook artifact · codex" && !provenance.toLowerCase().startsWith("guard local daemon completed");
+  const actionTitle = resolveActionTitle(receipt);
+  const fullActionTitle = resolveActionTitleTooltip(receipt);
+  const rawCommand = receipt.raw_command_text?.trim();
+  // A capability summary that repeats the command adds no context to the row.
+  const capsRepeatsRawCommand = Boolean(rawCommand && caps?.toLowerCase() === rawCommand.toLowerCase());
 
-  if (isCapsUseful) {
+  if (isCapsUseful && caps?.toLowerCase() !== actionTitle.toLowerCase() && caps?.toLowerCase() !== fullActionTitle.toLowerCase() && !capsRepeatsRawCommand) {
     parts.push(caps);
-  } else if (isProvenanceUseful && provenance?.toLowerCase() !== caps?.toLowerCase() && provenance !== resolveActionTitle(receipt)) {
+  } else if (isProvenanceUseful && provenance?.toLowerCase() !== caps?.toLowerCase() && provenance !== actionTitle) {
     parts.push(provenance);
   }
 

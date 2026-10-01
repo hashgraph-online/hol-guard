@@ -7,21 +7,26 @@ import re
 import shutil
 import tempfile
 from dataclasses import dataclass
+from importlib import resources
 from pathlib import Path
 
 from . import BUILDER_VERSION
 from .errors import BuilderError
 from .io import canonical_json, checked_path, parse_json, read_bytes, read_json, sha256
 from .models import Discovery, load_discovery
+from .native_source_compiler import NativeSourceCompilerError, compile_source, run_source_compiler
 from .render_native import (
+    COMMAND_FIXTURE_SCHEMA,
+    command_fixture_path,
+    command_source_path,
     contribution_path,
-    detector_path,
+    render_command_fixture_cases,
+    render_command_source,
     render_contribution,
-    render_detector,
     revision_digest,
     test_path,
 )
-from .render_tests import render_cli_tests, render_mcp_tests
+from .render_tests import render_mcp_tests
 from .review import Review, load_review
 
 MANIFEST_SCHEMA = "guard.extension-kit.v1"
@@ -94,6 +99,29 @@ def _report(discovery: Discovery, review: Review) -> dict[str, object]:
 def _readme(discovery: Discovery) -> str:
     metadata = discovery.metadata
     safe_name = re.sub(r"([\\`*_{}\[\]()#+.!|<>~-])", r"\\\1", metadata.name)
+    if metadata.kind == "cli":
+        verification = f"""The command source is `{command_source_path(metadata)}` and its portable fixture
+is `{command_fixture_path(metadata)}`. Kit validation compiles the source and
+runs these cases with Rust. CLI kits do not generate a Python detector or a
+Python test module.
+
+After integration, follow the [native validation sequence](https://github.com/hashgraph-online/hol-guard/blob/main/docs/guard/extension-builder/VALIDATION.md):
+regenerate the complete program, rebuild the native compiler and runtime, and
+run the fixture with a build envelope assembled from the destination checkout's
+canonical sources. The kit's `base: "packaged"` envelope is for a new addition;
+it cannot replace an extension already embedded in the rebuilt compiler.
+"""
+    else:
+        verification = f"""The MCP contribution is `{contribution_path(metadata)}`. Its generated Python
+tests validate contribution metadata and native registration:
+
+```sh
+python -m pytest {test_path(metadata)}
+```
+
+Follow the [native validation sequence](https://github.com/hashgraph-online/hol-guard/blob/main/docs/guard/extension-builder/VALIDATION.md)
+to regenerate and verify the complete catalog after integration.
+"""
     return f"""# {safe_name}: Guard contribution kit
 
 This is generated contributor knowledge, not a security certificate. The extension
@@ -103,7 +131,13 @@ validation never run the target or change Guard policy.
 ## Review first
 
 Read `report.json` and inspect every operation against the upstream implementation.
-Edit `review.json`, not the generated artifacts. Changed behavior needs
+Copy the review file from this kit's parent directory:
+
+```sh
+cp KIT/review.json REVIEW.json
+```
+
+Edit `REVIEW.json`. Changed behavior needs
 `reviewed: true`, rationale, and an HTTPS evidence reference. Names, descriptions,
 help flags, and MCP annotations do not establish safety. Unknown CLI invocations
 retain review; unknown MCP tools inherit existing Guard handling.
@@ -111,21 +145,29 @@ retain review; unknown MCP tools inherit existing Guard handling.
 Recompile edits into a new directory from this kit's parent directory:
 
 ```sh
-hol-guard extensions generate --from snapshot --input KIT/discovery.json --review KIT/review.json --output REVIEWED_KIT
+hol-guard extensions generate --from snapshot --input KIT/discovery.json --review REVIEW.json --output REVIEWED_KIT
 hol-guard extensions validate REVIEWED_KIT
 hol-guard extensions apply REVIEWED_KIT --repo /path/to/hol-guard
 ```
 
-Replace `KIT`, `REVIEWED_KIT`, and the checkout path with your actual paths.
-Inspect the plan, then explicitly add `--write` and optionally
-`--expected-plan PLAN_DIGEST`. Apply never commits, activates, or submits a PR.
+Replace `KIT`, `REVIEW.json`, `REVIEWED_KIT`, and the checkout path with your actual paths.
+Edit the copied review file before running snapshot generation. Inspect the plan,
+then apply with `--expected-plan PLAN_DIGEST --write` using its printed digest.
+Apply never commits, activates, or submits a PR.
 Existing manual edits are conflicts, not permission to overwrite work.
 
 ## Native verification in the destination checkout
 
+Stage the shared review resources before running contribution tests:
+
 ```sh
 python scripts/release/stage_guard_cloud_review_artifacts.py
-python -m pytest {test_path(metadata)}
+```
+
+{verification}
+Run the shared contribution checks:
+
+```sh
 python -m pytest tests/test_guard_extension_contribution.py tests/test_guard_mcp_server_contribution.py
 ```
 
@@ -147,6 +189,58 @@ crash-atomic filesystem transaction. After a crash, inspect Git status and the
 """
 
 
+def _trust_map() -> dict[str, object]:
+    try:
+        packaged = resources.files("codex_plugin_scanner.guard.contracts.data.extensions")
+        value = parse_json((packaged / "trust-class-map.v1.json").read_bytes())
+    except (FileNotFoundError, ModuleNotFoundError, OSError):
+        path = Path(__file__).resolve().parents[4] / "contracts/extensions/trust-class-map.v1.json"
+        value = read_json(path)
+    if not isinstance(value, dict):
+        raise BuilderError("native_trust", "The packaged extension trust map is invalid.")
+    return value
+
+
+def _compile_command_artifacts(discovery: Discovery, review: Review) -> dict[str, str]:
+    metadata = discovery.metadata
+    source_text = render_command_source(discovery, review)
+    source = parse_json(source_text.encode("utf-8"))
+    build = {
+        "schema": "guard.command-extension-build.v1",
+        "sources": [source],
+        "trust": _trust_map(),
+        "base": "packaged",
+    }
+    try:
+        compiled = compile_source(build)
+        fixture = {
+            "schema": COMMAND_FIXTURE_SCHEMA,
+            "build": build,
+            "cases": render_command_fixture_cases(discovery, review),
+        }
+        fixture_result = run_source_compiler("test", fixture)
+    except NativeSourceCompilerError as exc:
+        location = f" at {exc.pointer}" if exc.pointer else ""
+        raise BuilderError(
+            "native_source", f"Native source validation failed{location}: {exc.code or str(exc)}"
+        ) from exc
+    if fixture_result.get("ok") is not True:
+        raise BuilderError("native_fixtures", "Native source fixtures did not match the reviewed behavior.")
+    descriptors = compiled.get("descriptors")
+    if not isinstance(descriptors, list):
+        raise BuilderError("native_descriptor", "Native source compiler omitted generated descriptors.")
+    descriptor = next(
+        (row for row in descriptors if isinstance(row, dict) and row.get("id") == metadata.catalog_id), None
+    )
+    if descriptor is None:
+        raise BuilderError("native_descriptor", "Native source compiler omitted this contribution descriptor.")
+    return {
+        command_source_path(metadata): source_text,
+        command_fixture_path(metadata): canonical_json(fixture),
+        contribution_path(metadata): canonical_json(descriptor),
+    }
+
+
 def build_kit(discovery: Discovery, review: Review) -> Kit:
     # Normalization can expand a small source into a large document. Enforce the
     # same byte and structure budgets that subsequent on-disk replay will use.
@@ -158,13 +252,13 @@ def build_kit(discovery: Discovery, review: Review) -> Kit:
         "review.json": canonical_json(review.to_dict()),
         "report.json": canonical_json(_report(discovery, review)),
         "README.md": _readme(discovery),
-        f"artifacts/{contribution_path(metadata)}": render_contribution(discovery, review),
-        f"artifacts/{test_path(metadata)}": (
-            render_cli_tests(discovery, review) if metadata.kind == "cli" else render_mcp_tests(discovery, review)
-        ),
     }
     if metadata.kind == "cli":
-        files[f"artifacts/{detector_path(metadata)}"] = render_detector(discovery, review)
+        artifacts = _compile_command_artifacts(discovery, review)
+        files.update({f"artifacts/{path}": content for path, content in artifacts.items()})
+    else:
+        files[f"artifacts/{contribution_path(metadata)}"] = render_contribution(discovery, review)
+        files[f"artifacts/{test_path(metadata)}"] = render_mcp_tests(discovery, review)
     manifest = {
         "schemaVersion": MANIFEST_SCHEMA,
         "builderVersion": BUILDER_VERSION,

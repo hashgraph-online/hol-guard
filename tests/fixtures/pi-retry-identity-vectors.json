@@ -1,0 +1,52 @@
+[
+  {
+    "name": "session-bound pi retry", "harness": "pi", "same_identity": true,
+    "before": {"tool_name": "eval", "session_id": "session-a", "tool_call_id": "first", "tool_input": {"code": "1 + 1"}},
+    "after": {"tool_name": "eval", "session_id": "session-a", "tool_call_id": "retry", "tool_input": {"code": "1 + 1"}}
+  },
+  {
+    "name": "session-bound omp retry", "harness": "omp", "same_identity": true,
+    "before": {"tool_name": "read", "session_id": "session-a", "tool_call_id": "first", "tool_input": {"path": "example.py"}},
+    "after": {"tool_name": "read", "session_id": "session-a", "tool_call_id": "retry", "tool_input": {"path": "example.py"}}
+  },
+  {
+    "name": "missing session", "harness": "pi", "same_identity": false,
+    "before": {"tool_name": "eval", "tool_call_id": "first", "tool_input": {"code": "1 + 1"}},
+    "after": {"tool_name": "eval", "tool_call_id": "retry", "tool_input": {"code": "1 + 1"}}
+  },
+  {
+    "name": "empty session", "harness": "omp", "same_identity": false,
+    "before": {"tool_name": "eval", "session_id": "", "tool_call_id": "first", "tool_input": {"code": "1 + 1"}},
+    "after": {"tool_name": "eval", "session_id": "", "tool_call_id": "retry", "tool_input": {"code": "1 + 1"}}
+  },
+  {
+    "name": "changed session", "harness": "pi", "same_identity": false,
+    "before": {"tool_name": "eval", "session_id": "session-a", "tool_call_id": "first", "tool_input": {"code": "1 + 1"}},
+    "after": {"tool_name": "eval", "session_id": "session-b", "tool_call_id": "retry", "tool_input": {"code": "1 + 1"}}
+  },
+  {
+    "name": "changed code", "harness": "omp", "same_identity": false,
+    "before": {"tool_name": "eval", "session_id": "session-a", "tool_input": {"code": "1 + 1"}},
+    "after": {"tool_name": "eval", "session_id": "session-a", "tool_input": {"code": "2 + 2"}}
+  },
+  {
+    "name": "nested call id is input", "harness": "pi", "same_identity": false,
+    "before": {"tool_name": "eval", "session_id": "session-a", "tool_input": {"tool_call_id": "argument-a"}},
+    "after": {"tool_name": "eval", "session_id": "session-a", "tool_input": {"tool_call_id": "argument-b"}}
+  },
+  {
+    "name": "other harness retains call id", "harness": "codex", "same_identity": false,
+    "before": {"tool_name": "eval", "session_id": "session-a", "tool_call_id": "first"},
+    "after": {"tool_name": "eval", "session_id": "session-a", "tool_call_id": "retry"}
+  },
+  {
+    "name": "root timestamp is transport", "harness": "omp", "same_identity": true,
+    "before": {"tool_name": "eval", "timestamp": 1, "tool_input": {"code": "1 + 1"}},
+    "after": {"tool_name": "eval", "timestamp": 2, "tool_input": {"code": "1 + 1"}}
+  },
+  {
+    "name": "nested timestamp is input", "harness": "omp", "same_identity": false,
+    "before": {"tool_name": "eval", "tool_input": {"timestamp": 1}},
+    "after": {"tool_name": "eval", "tool_input": {"timestamp": 2}}
+  }
+]

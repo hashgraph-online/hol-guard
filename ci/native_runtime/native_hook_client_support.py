@@ -16,6 +16,7 @@ from pathlib import Path
 
 import pytest
 
+from ci.native_runtime.native_process_test_support import process_is_alive
 from codex_plugin_scanner.guard.live_process_identity import process_start_token
 from codex_plugin_scanner.guard.native_policy_snapshot import (
     _policy_snapshot_push_bytes_v3,
@@ -65,6 +66,7 @@ def _request(
     command: str = "pwd",
     default_action: str = "allow",
     deadline_budget_ms: int = 1_000,
+    risk_actions: dict[str, str] | None = None,
 ) -> bytes:
     runtime_identity = hashlib.sha256(runtime.read_bytes()).hexdigest()
     rule_digest = _rule_digest(runtime)
@@ -80,7 +82,7 @@ def _request(
             "changed_hash_action": "require-reapproval",
             "new_network_domain_action": "warn",
             "subprocess_action": "allow",
-            "risk_actions": {},
+            "risk_actions": dict(risk_actions or {}),
             "harness_risk_actions": {},
             "harness_actions": {},
             "publisher_actions": {},
@@ -118,6 +120,32 @@ def _request(
     ).encode()
 
 
+def _startup_diagnostic(runtime: Path, state_dir: Path) -> str:
+    """Expose only bounded native error codes from a failed test-only startup."""
+    try:
+        result = subprocess.run(
+            (
+                str(runtime),
+                "serve-managed",
+                "--state-dir",
+                str(state_dir),
+                "--generation",
+                str(time.time_ns()),
+                "--owner-process-id",
+                str(os.getpid()),
+                "--runtime-sha256",
+                hashlib.sha256(runtime.read_bytes()).hexdigest(),
+            ),
+            input=b"51" * 32 + b"\n",
+            capture_output=True,
+            check=False,
+            timeout=3,
+        )
+    except subprocess.TimeoutExpired:
+        return "native_test_direct_start_timeout"
+    return _native_diagnostic(result.stderr) if result.returncode else "native_test_direct_start_ok"
+
+
 def _push_snapshot(runtime: Path, state_dir: Path, request: bytes) -> None:
     value = json.loads(request)
     assert isinstance(value, dict)
@@ -131,7 +159,10 @@ def _push_snapshot(runtime: Path, state_dir: Path, request: bytes) -> None:
         timeout=8,
     )
     if result.returncode != 0:
-        raise AssertionError(f"native policy push failed: {_native_diagnostic(result.stderr)}")
+        raise AssertionError(
+            f"native policy push failed: {_native_diagnostic(result.stderr)}; "
+            f"direct startup: {_startup_diagnostic(runtime, state_dir)}"
+        )
     try:
         acknowledgement = json.loads(result.stdout)
     except (UnicodeDecodeError, json.JSONDecodeError, TypeError):
@@ -317,12 +348,13 @@ def _terminate_process(process_id: int) -> None:
     except OSError:
         return
     deadline = time.monotonic() + 2
+    # Signal 0 is CTRL_C_EVENT on Windows, not a harmless liveness probe.
+    # Query the process handle there instead of interrupting the test console.
     while time.monotonic() < deadline:
-        try:
-            os.kill(process_id, 0)
-        except OSError:
+        if not process_is_alive(process_id):
             return
         time.sleep(0.01)
+    raise AssertionError("native test process did not terminate within its deadline")
 
 
 def _read_exact(client: socket.socket, length: int) -> bytes:

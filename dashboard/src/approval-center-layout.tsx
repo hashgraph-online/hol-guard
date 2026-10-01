@@ -79,6 +79,7 @@ type LayoutProps = {
   supplyChainHubContent?: ReactNode;
   policyContent?: ReactNode;
   aboutContent?: ReactNode;
+  protectionRepairContent?: ReactNode;
   onGoHome: () => void;
   onNavigate: (pathname: string) => void;
   onOpenRequest: (requestId: string) => void;
@@ -100,7 +101,6 @@ type LayoutProps = {
   onClearEvidence?: () => void;
   onRetryResume?: () => void;
   onGuardReconnected?: () => void;
-  enableUpdateStatus?: boolean;
 };
 
 function InboxWatchBanner(props: { onRestored?: () => void; onOpenSettings: () => void }) {
@@ -204,6 +204,9 @@ function renderViewContent(props: LayoutProps): ReactNode {
   if (props.view === "extensions") {
     return props.extensionsContent;
   }
+  if (props.view === "protection-repair") {
+    return props.protectionRepairContent ?? null;
+  }
   if (props.view === "settings") {
     return props.settingsContent;
   }
@@ -266,7 +269,7 @@ export function ApprovalCenterLayout(props: LayoutProps) {
     onUpdateGuard,
     onReinstallGuard,
     onSetUpdateChannel,
-  } = useGuardUpdate({ onReconnected: props.onGuardReconnected, enabled: props.enableUpdateStatus });
+  } = useGuardUpdate({ onReconnected: props.onGuardReconnected });
 
   return (
     <div className="min-h-screen bg-white text-brand-dark">

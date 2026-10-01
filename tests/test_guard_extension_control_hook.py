@@ -49,6 +49,8 @@ from codex_plugin_scanner.guard.store import GuardStore
         ("git push --force origin feature", "command.git.permission.force-push", True),
     ),
 )
+@pytest.mark.usefixtures("native_command_artifact_reviews")
+@pytest.mark.usefixtures("native_hook_force")
 def test_guard_hook_honors_explicit_extension_permission(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -79,7 +81,7 @@ def test_guard_hook_honors_explicit_extension_permission(
         catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
         layers=(layer,),
     )
-    monkeypatch.setattr(store, "read_extension_control_authority_for_registry", lambda _registry: authority)
+    monkeypatch.setattr(store, "read_extension_control_authority_for_registry", lambda _registry, **_kwargs: authority)
     output = io.StringIO()
     result = commands_hook._run_guard_hook_command(
         argparse.Namespace(

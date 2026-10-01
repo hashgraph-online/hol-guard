@@ -134,6 +134,20 @@ _PROMPT_PATH_PATTERN = re.compile(
     r"(?![A-Za-z0-9_.-])"
 )
 _NETWORK_HOST_PATTERN = re.compile(r"(?:https?|wss?|grpcs?)://(?P<host>[A-Za-z0-9.-]+)(?::\d+)?(?:[/?#]|$)")
+_CURSOR_NETWORK_TOOL_NAMES = frozenset(
+    {
+        "webfetch",
+        "websearch",
+        "fetch_web_content",
+        "web_fetch",
+        "web_search",
+        "browser",
+        "browser_action",
+        "open_url",
+        "visit_url",
+    }
+)
+_CURSOR_NETWORK_URL_KEYS = ("url", "urls", "link", "links")
 _GENERIC_POSIX_ABSOLUTE_PATH_PATTERN = re.compile(
     r"(?<![:A-Za-z0-9_./-])(?P<path>/(?:[A-Za-z0-9_.-]+/)+[A-Za-z0-9_.-]+)(?![A-Za-z0-9_.-])"
 )
@@ -439,13 +453,22 @@ def normalize_cursor_hook_payload(
 
     from ..adapters.cursor_hooks import prepare_cursor_hook_payload
 
-    return _normalize_action_payload(
-        prepare_cursor_hook_payload(payload),
+    prepared = prepare_cursor_hook_payload(payload)
+    envelope = _normalize_action_payload(
+        prepared,
         harness="cursor",
         default_event_name=None,
         workspace=workspace,
         home_dir=home_dir,
     )
+    if envelope.event_name != "PreToolUse":
+        return envelope
+    tool_name = (envelope.tool_name or "").strip().lower()
+    if tool_name not in _CURSOR_NETWORK_TOOL_NAMES:
+        return envelope
+    urls = _cursor_tool_input_urls(prepared.get("tool_input"))
+    hosts = tuple(dict.fromkeys(match.group("host") for url in urls for match in _NETWORK_HOST_PATTERN.finditer(url)))
+    return replace(envelope, action_id="", action_type="network_request", network_hosts=hosts)
 
 
 def normalize_grok_hook_payload(
@@ -494,6 +517,29 @@ def normalize_zcode_hook_payload(
     return _normalize_action_payload(
         prepare_zcode_hook_payload(payload),
         harness="zcode",
+        default_event_name=None,
+        workspace=workspace,
+        home_dir=home_dir,
+    )
+
+
+def normalize_devin_hook_payload(
+    payload: Mapping[str, object],
+    *,
+    workspace: Path | str | None = None,
+    home_dir: Path | str | None = None,
+) -> GuardActionEnvelope:
+    """Normalize a Devin CLI hook payload into a typed action envelope.
+
+    Devin speaks the Claude Code wire protocol, so payloads normalize onto the
+    shared Guard shape through the Devin hook helpers.
+    """
+
+    from ..adapters.devin_hooks import prepare_devin_hook_payload
+
+    return _normalize_action_payload(
+        prepare_devin_hook_payload(payload),
+        harness="devin",
         default_event_name=None,
         workspace=workspace,
         home_dir=home_dir,
@@ -573,6 +619,9 @@ _ACTION_PAYLOAD_NORMALIZERS = {
     "omp": normalize_omp_payload,
     "zcode": normalize_zcode_hook_payload,
     "zai": normalize_zcode_hook_payload,
+    "devin": normalize_devin_hook_payload,
+    "devin-cli": normalize_devin_hook_payload,
+    "cognition-devin": normalize_devin_hook_payload,
 }
 
 
@@ -1063,6 +1112,19 @@ def apply_patch_target_paths(tool_input: Mapping[str, object]) -> tuple[str, ...
             continue
         paths.extend(match.group("path").strip() for match in _PATCH_FILE_HEADER_PATTERN.finditer(patch_text))
     return tuple(dict.fromkeys(paths))
+
+
+def _cursor_tool_input_urls(tool_input: object) -> tuple[str, ...]:
+    if not isinstance(tool_input, Mapping):
+        return ()
+    urls: list[str] = []
+    for key in _CURSOR_NETWORK_URL_KEYS:
+        value = tool_input.get(key)
+        if isinstance(value, str) and value.strip():
+            urls.append(value.strip())
+        elif isinstance(value, (list, tuple)):
+            urls.extend(item.strip() for item in value if isinstance(item, str) and item.strip())
+    return tuple(urls)
 
 
 def _network_hosts(command: str | None, prompt_excerpt: str | None) -> tuple[str, ...]:

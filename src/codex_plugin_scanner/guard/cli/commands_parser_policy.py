@@ -368,6 +368,11 @@ def _configure_guard_policy_parsers(
     _add_guard_common_args(doctor_parser)
     doctor_parser.add_argument("--json", action="store_true")
     doctor_parser.add_argument(
+        "--incident",
+        action="store_true",
+        help="With 'doctor codex', emit a bounded offline incident report",
+    )
+    doctor_parser.add_argument(
         "--harnesses",
         action="store_true",
         help="List all supported harnesses with their protection contract",

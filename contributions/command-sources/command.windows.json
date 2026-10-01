@@ -1,0 +1,136 @@
+{
+  "extension": {
+    "action_classes": [
+      "windows destructive command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews destructive Windows storage and operating-system commands.",
+    "ecosystem_ids": [],
+    "executables": [],
+    "extension_id": "command.windows",
+    "homepage": null,
+    "icon": {
+      "kind": "none"
+    },
+    "license": null,
+    "name": "Windows protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "windows destructive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies Windows commands that clear, format, or remove storage volumes.",
+        "example_command": "clear-disk",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Destructive Windows storage operation",
+        "permission_id": "command.windows.permission.destructive-storage",
+        "replacement_permission_id": null,
+        "risk_tier": "critical",
+        "safer_guidance": [
+          "Inspect the disk and partition identifiers with read-only PowerShell commands first."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": null,
+    "reference_urls": [],
+    "required": true,
+    "risk_classes": [
+      "destructive_shell"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "windows destructive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies Windows commands that clear, format, or remove storage volumes.",
+        "family": null,
+        "matcher": {
+          "config": {
+            "allow_leading_options": false,
+            "executables": [
+              "clear-disk",
+              "format-volume",
+              "remove-partition"
+            ],
+            "fail_secure_unknown_options": false,
+            "forbidden_flags": [],
+            "interspersed_flags": [],
+            "interspersed_options_with_values": [],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [],
+            "options_with_values": [],
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": []
+          },
+          "op": "executable.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.windows.permission.destructive-storage",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.windows.destructive-storage",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "clear-disk",
+                  "format-volume",
+                  "remove-partition"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [
+                  "-whatif"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": []
+              },
+              "op": "executable.v1"
+            },
+            "title": "PowerShell operation preview",
+            "variant_id": "what-if"
+          }
+        ],
+        "safer_alternatives": [
+          "Inspect the disk and partition identifiers with read-only PowerShell commands first."
+        ],
+        "severity": "critical",
+        "title": "Destructive Windows storage operation"
+      }
+    ],
+    "safer_alternatives": [
+      "Use read-only PowerShell inventory commands to verify exact targets first."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

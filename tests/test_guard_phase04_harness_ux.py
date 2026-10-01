@@ -8,11 +8,14 @@ from contextlib import redirect_stdout
 from io import StringIO
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.opencode import OpenCodeHarnessAdapter
-from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.cli.commands import add_guard_root_parser, run_guard_command
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.conftest import guard_commands_module
+from tests.guard_signed_approval_fixtures import write_synthetic_daemon_auth_token
 
 
 def _parse_guard_args(argv: list[str]) -> argparse.Namespace:
@@ -132,10 +135,12 @@ def _answer_claude_guard_question(tmp_path: Path, *, session_id: str, answer: st
     )
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_gr076_codex_prompt_secret_read_returns_branded_approval_context(tmp_path: Path) -> None:
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir(parents=True, exist_ok=True)
     (guard_home / "config.toml").write_text("approval_wait_timeout_seconds = 0\n", encoding="utf-8")
+    write_synthetic_daemon_auth_token(guard_home)
 
     exit_code, output = _run_hook(
         tmp_path,
@@ -161,6 +166,7 @@ def test_gr076_codex_prompt_secret_read_returns_branded_approval_context(tmp_pat
     }
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_codex_prompt_secret_read_json_hook_exits_zero_with_native_block(tmp_path: Path) -> None:
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir(parents=True, exist_ok=True)
@@ -185,6 +191,7 @@ def test_codex_prompt_secret_read_json_hook_exits_zero_with_native_block(tmp_pat
     assert "HOL Guard stopped this Codex prompt" in str(payload["reason"])
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_gr076b_codex_prompt_secret_read_caps_browser_approval_wait(
     tmp_path: Path,
     monkeypatch,
@@ -192,6 +199,7 @@ def test_gr076b_codex_prompt_secret_read_caps_browser_approval_wait(
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir(parents=True, exist_ok=True)
     (guard_home / "config.toml").write_text("approval_wait_timeout_seconds = 120\n", encoding="utf-8")
+    write_synthetic_daemon_auth_token(guard_home)
     observed_timeouts: list[int] = []
 
     def unresolved_wait(*args: object, **kwargs: object) -> dict[str, object]:
@@ -223,6 +231,7 @@ def test_gr076b_codex_prompt_secret_read_caps_browser_approval_wait(
     assert "/requests/" in str(payload["reason"])
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_codex_post_tool_secret_output_caps_browser_approval_wait(
     tmp_path: Path,
     monkeypatch,
@@ -230,6 +239,7 @@ def test_codex_post_tool_secret_output_caps_browser_approval_wait(
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir(parents=True, exist_ok=True)
     (guard_home / "config.toml").write_text("approval_wait_timeout_seconds = 120\n", encoding="utf-8")
+    write_synthetic_daemon_auth_token(guard_home)
     observed_timeouts: list[int] = []
 
     def unresolved_wait(*args: object, **kwargs: object) -> dict[str, object]:
@@ -263,6 +273,7 @@ def test_codex_post_tool_secret_output_caps_browser_approval_wait(
     assert "/requests/" in str(payload["reason"])
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_gr077_codex_shell_exfil_canary_gets_native_denial(tmp_path: Path) -> None:
     exit_code, output = _run_hook(
         tmp_path,
@@ -285,6 +296,7 @@ def test_gr077_codex_shell_exfil_canary_gets_native_denial(tmp_path: Path) -> No
     assert "network" in str(hook_output["permissionDecisionReason"]).lower()
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_gr077b_codex_read_secret_file_gets_native_denial(tmp_path: Path) -> None:
     exit_code, output = _run_hook(
         tmp_path,
@@ -309,6 +321,7 @@ def test_gr077b_codex_read_secret_file_gets_native_denial(tmp_path: Path) -> Non
     assert "secret" in str(hook_output["permissionDecisionReason"]).lower()
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_gr078_codex_safe_read_allows_without_native_denial(tmp_path: Path) -> None:
     exit_code, output = _run_hook(
         tmp_path,
@@ -325,6 +338,7 @@ def test_gr078_codex_safe_read_allows_without_native_denial(tmp_path: Path) -> N
     assert output == ""
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_gr080_codex_permission_request_uses_native_review_message(tmp_path: Path) -> None:
     exit_code, output = _run_hook(
         tmp_path,
@@ -345,6 +359,7 @@ def test_gr080_codex_permission_request_uses_native_review_message(tmp_path: Pat
     assert "HOL Guard" in str(payload["systemMessage"])
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_gr081_codex_native_runtime_returns_json_denial_for_yolo_shell_exfil(
     tmp_path: Path,
     monkeypatch,
@@ -409,7 +424,7 @@ def test_gr081c_codex_live_wait_opens_and_prints_approval_url(monkeypatch, capsy
             "approval_requests": [
                 {
                     "request_id": "req-1",
-                    "approval_url": "http://127.0.0.1:5475/requests/req-1",
+                    "approval_url": "https://example.invalid/requests/req-1",
                 }
             ]
         }
@@ -417,10 +432,11 @@ def test_gr081c_codex_live_wait_opens_and_prints_approval_url(monkeypatch, capsy
 
     captured = capsys.readouterr()
 
-    assert opened_urls == ["http://127.0.0.1:5475/requests/req-1"]
-    assert "http://127.0.0.1:5475/requests/req-1" in captured.err
+    assert opened_urls == ["https://example.invalid/requests/req-1"]
+    assert "https://example.invalid/requests/req-1" in captured.err
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_gr082_claude_pretooluse_brands_native_prompt(tmp_path: Path) -> None:
     exit_code, output = _run_hook(
         tmp_path,
@@ -442,6 +458,7 @@ def test_gr082_claude_pretooluse_brands_native_prompt(tmp_path: Path) -> None:
     assert "HOL Guard" in str(hook_output["permissionDecisionReason"])
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_gr083_claude_permission_request_routes_to_ask_user_question(tmp_path: Path) -> None:
     first_exit_code, _first_output = _run_hook(
         tmp_path,
@@ -475,6 +492,7 @@ def test_gr083_claude_permission_request_routes_to_ask_user_question(tmp_path: P
     assert "Keep blocked" in str(hook_output)
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_gr084_claude_keep_blocked_persists_for_repeated_sensitive_read(tmp_path: Path) -> None:
     event = _claude_sensitive_read_event("session-gr084")
 
@@ -510,6 +528,7 @@ def test_gr084_claude_keep_blocked_persists_for_repeated_sensitive_read(tmp_path
     assert "HOL Guard blocked Claude" in str(repeat_payload["hookSpecificOutput"])
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_gr085_claude_allow_once_cannot_lower_current_reapproval(tmp_path: Path) -> None:
     event = _claude_sensitive_read_event("session-gr085", "~/.npmrc")
 
@@ -548,6 +567,7 @@ def test_gr085_claude_allow_once_cannot_lower_current_reapproval(tmp_path: Path)
     assert changed_payload["hookSpecificOutput"]["permissionDecision"] == "ask"
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_gr086_claude_session_allow_cannot_lower_current_reapproval(tmp_path: Path) -> None:
     event = _claude_sensitive_read_event("session-gr086", "~/.npmrc")
 
@@ -595,6 +615,7 @@ def test_gr087_opencode_managed_mcp_uses_native_ask_runtime_overlay(tmp_path: Pa
     assert "native ask" in " ".join(str(note) for note in manifest["notes"])
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_gr089_copilot_autopilot_shell_exfil_returns_terminal_stop(tmp_path: Path) -> None:
     exit_code, output = _run_hook(
         tmp_path,

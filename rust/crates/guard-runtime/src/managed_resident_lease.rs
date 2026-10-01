@@ -5,8 +5,6 @@ use std::fs::OpenOptions;
 use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime};
 #[cfg(test)]
@@ -58,30 +56,10 @@ fn notify_lock_retry_deadline_for_test() {
     });
 }
 
-pub(super) struct ClientLease {
-    directory: PathBuf,
-    path: PathBuf,
-    private_root: PathBuf,
-    identity: LeaseIdentity,
-    stopped: Arc<AtomicBool>,
-    heartbeat: Option<thread::JoinHandle<()>>,
-}
-
-impl Drop for ClientLease {
-    fn drop(&mut self) {
-        self.stopped.store(true, Ordering::Release);
-        if let Some(heartbeat) = self.heartbeat.take() {
-            let _ = heartbeat.join();
-        }
-        if let Ok(_lock) = acquire_directory_lock_with_retry(
-            &self.directory,
-            &self.private_root,
-            LEASE_CLEANUP_RETRY_BUDGET,
-        ) {
-            let _ = self.identity.remove_if_same(&self.path);
-        }
-    }
-}
+#[path = "managed_resident_lease_owner.rs"]
+mod owner;
+use owner::deadline_for_timeout;
+pub(super) use owner::ClientLease;
 
 struct LeaseDirectoryLock {
     file: File,
@@ -125,10 +103,29 @@ fn acquire_directory_lock_with_retry(
     retry_budget: Duration,
 ) -> Result<LeaseDirectoryLock, String> {
     let deadline = Instant::now() + retry_budget;
+    acquire_directory_lock_until(directory, private_root, deadline)
+}
+
+fn acquire_directory_lock_until(
+    directory: &Path,
+    private_root: &Path,
+    deadline: Instant,
+) -> Result<LeaseDirectoryLock, String> {
     let mut delay = LEASE_ACQUIRE_RETRY_INITIAL_DELAY;
     loop {
+        if Instant::now() >= deadline {
+            #[cfg(test)]
+            notify_lock_retry_deadline_for_test();
+            return Err("native_resident_lease_busy".to_owned());
+        }
         if let Some(lock) = acquire_directory_lock(directory, private_root)? {
-            return Ok(lock);
+            if Instant::now() < deadline {
+                return Ok(lock);
+            }
+            drop(lock);
+            #[cfg(test)]
+            notify_lock_retry_deadline_for_test();
+            return Err("native_resident_lease_busy".to_owned());
         }
         let remaining = deadline.saturating_duration_since(Instant::now());
         if remaining.is_zero() {
@@ -142,6 +139,42 @@ fn acquire_directory_lock_with_retry(
 }
 
 pub(super) fn acquire(state_base: &Path) -> Result<ClientLease, String> {
+    acquire_with_lock(state_base, |directory, private_root| {
+        acquire_directory_lock_with_retry(directory, private_root, LEASE_ACQUIRE_RETRY_BUDGET)
+    })
+}
+
+pub(super) fn acquire_until(state_base: &Path, deadline: Instant) -> Result<ClientLease, String> {
+    acquire_with_lock(state_base, |directory, private_root| {
+        acquire_directory_lock_until(directory, private_root, deadline)
+    })
+    .map(|lease| lease.with_deadline(deadline))
+}
+
+pub(crate) fn client_request(
+    state_base: &Path,
+    payload: &[u8],
+    timeout: Duration,
+) -> Result<Vec<u8>, String> {
+    let overall_deadline = deadline_for_timeout(timeout)?;
+    let client_lease = acquire_until(state_base, overall_deadline)?;
+    super::client_request_with_deadline(state_base, payload, overall_deadline, &client_lease)
+}
+
+pub(super) fn client_request_with_lease(
+    state_base: &Path,
+    payload: &[u8],
+    timeout: Duration,
+    client_lease: &ClientLease,
+) -> Result<Vec<u8>, String> {
+    let overall_deadline = deadline_for_timeout(timeout)?;
+    super::client_request_with_deadline(state_base, payload, overall_deadline, client_lease)
+}
+
+fn acquire_with_lock<F>(state_base: &Path, acquire_lock: F) -> Result<ClientLease, String>
+where
+    F: FnOnce(&Path, &Path) -> Result<LeaseDirectoryLock, String>,
+{
     let private_root = private_root_for_state_base(state_base)?;
     let directory = lease_directory(state_base)?;
     let process_id = std::process::id();
@@ -152,8 +185,7 @@ pub(super) fn acquire(state_base: &Path) -> Result<ClientLease, String> {
     let nonce = crate::resident_state_encoding::hex_bytes(&nonce);
     let path = directory.join(format!("{LEASE_PREFIX}{process_id}-{nonce}{LEASE_SUFFIX}"));
     let contents = format!("{process_id}\n{start_marker}\n{digest}\n");
-    let directory_lock =
-        acquire_directory_lock_with_retry(&directory, &private_root, LEASE_ACQUIRE_RETRY_BUDGET)?;
+    let directory_lock = acquire_lock(&directory, &private_root)?;
     let mut file = crate::resident_state::private_file(&path, true, &private_root)?;
     let identity = match LeaseIdentity::from_file(&file) {
         Ok(identity) => identity,
@@ -175,50 +207,13 @@ pub(super) fn acquire(state_base: &Path) -> Result<ClientLease, String> {
         let _ = identity.remove_if_same(&path);
         return Err("native_resident_lease_write_failed".to_owned());
     }
-    let stopped = Arc::new(AtomicBool::new(false));
-    let heartbeat_stopped = Arc::clone(&stopped);
-    let heartbeat_directory = directory.clone();
-    let heartbeat_path = path.clone();
-    let heartbeat_private_root = private_root.clone();
-    let heartbeat_contents = contents.clone();
-    let heartbeat = thread::spawn(move || {
-        while !heartbeat_stopped.load(Ordering::Acquire) {
-            thread::sleep(LEASE_HEARTBEAT);
-            if heartbeat_stopped.load(Ordering::Acquire) {
-                break;
-            }
-            if let Ok(Some(directory_lock)) =
-                acquire_directory_lock(&heartbeat_directory, &heartbeat_private_root)
-            {
-                let Ok(mut file) = crate::resident_state::private_file(
-                    &heartbeat_path,
-                    false,
-                    &heartbeat_private_root,
-                ) else {
-                    break;
-                };
-                // As with initial publication, keep the directory lock
-                // only for opening the identity-bound lease path. A
-                // recent partial heartbeat is conservatively live.
-                drop(directory_lock);
-                if file
-                    .write_all(heartbeat_contents.as_bytes())
-                    .and_then(|()| file.sync_all())
-                    .is_err()
-                {
-                    break;
-                }
-            }
-        }
-    });
-    Ok(ClientLease {
+    Ok(ClientLease::new(
         directory,
         path,
         private_root,
         identity,
-        stopped,
-        heartbeat: Some(heartbeat),
-    })
+        contents,
+    ))
 }
 
 struct LeaseFile {
@@ -396,12 +391,32 @@ fn remove_stale_lease(path: &Path, private_root: &Path) -> bool {
     let Ok(age) = SystemTime::now().duration_since(record.modified) else {
         return false;
     };
-    if age <= LEASE_EXPIRY
-        || process_start_marker(record.process_id).is_ok_and(|actual| actual == record.start_marker)
+    if age <= LEASE_EXPIRY {
+        return false;
+    }
+    // A client whose heartbeat has stopped can still be the same process.
+    // Re-read the file before unlinking so a refresh or replacement is kept.
+    let confirmed = match read_lease(path, private_root) {
+        Ok(record) => record,
+        Err(
+            LeaseReadError::Missing | LeaseReadError::Unavailable | LeaseReadError::Malformed(_),
+        ) => {
+            return false;
+        }
+    };
+    if confirmed.process_id != record.process_id
+        || confirmed.start_marker != record.start_marker
+        || !confirmed.digest.eq_ignore_ascii_case(&record.digest)
     {
         return false;
     }
-    record.identity.remove_if_same(path)
+    let Ok(confirmed_age) = SystemTime::now().duration_since(confirmed.modified) else {
+        return false;
+    };
+    if confirmed_age <= LEASE_EXPIRY {
+        return false;
+    }
+    confirmed.identity.remove_if_same(path)
 }
 
 fn any_live_with_digest(state_base: &Path, expected_digest: Option<&str>) -> bool {
@@ -423,13 +438,18 @@ fn any_live_with_digest(state_base: &Path, expected_digest: Option<&str>) -> boo
         return true;
     };
     let mut paths = Vec::with_capacity(LEASE_MAX_FILES);
+    let mut stopped_before_end = false;
     for (entry_count, entry) in entries.enumerate() {
         if entry_count >= LEASE_MAX_DIRECTORY_ENTRIES {
             // Do not scan an attacker-controlled directory without a bound.
-            // Any uninspected entry may be a live lease, so retain the resident.
-            return true;
+            // Any uninspected entry may be a live lease, so retain the resident
+            // after this bounded pass. Stale records in the inspected batch are
+            // still removed so a later probe can reach the remainder.
+            stopped_before_end = true;
+            break;
         }
         let Ok(entry) = entry else {
+            let _ = batch_has_live_lease(&mut paths, expected_digest, &private_root);
             return true;
         };
         let name = entry.file_name();
@@ -437,22 +457,32 @@ fn any_live_with_digest(state_base: &Path, expected_digest: Option<&str>) -> boo
         if !name.starts_with(LEASE_PREFIX) || !name.ends_with(LEASE_SUFFIX) {
             continue;
         }
-        if paths.len() >= LEASE_MAX_FILES {
-            // More matching lease records than the verifier can inspect must
-            // retain the resident, even before the directory-entry bound.
+        if paths.len() >= LEASE_MAX_FILES
+            && batch_has_live_lease(&mut paths, expected_digest, &private_root)
+        {
             return true;
         }
         paths.push(entry.path());
     }
+    let found_live = batch_has_live_lease(&mut paths, expected_digest, &private_root);
+    found_live || stopped_before_end
+}
+
+fn batch_has_live_lease(
+    paths: &mut Vec<PathBuf>,
+    expected_digest: Option<&str>,
+    private_root: &Path,
+) -> bool {
     paths.sort_unstable();
-    paths.into_iter().fold(false, |found_live, path| {
-        if lease_is_live(&path, expected_digest, &private_root) {
+    let found_live = paths.drain(..).fold(false, |found_live, path| {
+        if lease_is_live(&path, expected_digest, private_root) {
             true
         } else {
-            let _ = remove_stale_lease(&path, &private_root);
+            let _ = remove_stale_lease(&path, private_root);
             found_live
         }
-    })
+    });
+    found_live
 }
 
 #[cfg(test)]

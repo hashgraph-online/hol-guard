@@ -8,6 +8,8 @@ import re
 from collections.abc import Mapping
 from typing import Final, cast
 
+from .native_command_observations import valid_native_command_receipt_binding, validate_native_command_observations
+
 NATIVE_HOOK_DECISION_RECEIPT_SCHEMA: Final = "guard-native-hook-decision-receipt.v1"
 NATIVE_HOOK_DECISION_RECEIPT_MAX_BYTES: Final = 16 * 1024
 NATIVE_HOOK_DECISION_RECEIPT_MAX_STRING_BYTES: Final = 512
@@ -18,6 +20,16 @@ _HARNESS = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 _ACTIONS = frozenset({"allow", "warn", "review", "require-reapproval", "sandbox-required", "block"})
 _MODEL_ACTIONS = frozenset({"allow_original", "replace_with_reviewed_excerpt", "block", "not_applicable"})
 _PAYLOAD_KINDS = frozenset({"inline", "source_file_ref", "encrypted_payload_ref"})
+_PROMPT_RISK_CLASSES = (
+    "local_env_read",
+    "sensitive_material",
+    "exfil_intent",
+    "destructive_intent",
+    "subprocess_intent",
+    "guard_bypass_intent",
+    "prompt_injection_intent",
+)
+_OPTIONAL_FIELDS = frozenset({"command_extensions", "prompt_risk_classes"})
 _REQUIRED_FIELDS = frozenset(
     {
         "schema",
@@ -53,7 +65,7 @@ def _bounded_identifier(value: object, *, pattern: re.Pattern[str], maximum: int
     return value
 
 
-def _optional_digest(value: object) -> str | None | object:
+def _optional_digest(value: object) -> str | object | None:
     if value is None:
         return None
     if isinstance(value, str) and _HEX64.fullmatch(value):
@@ -64,8 +76,17 @@ def _optional_digest(value: object) -> str | None | object:
 _INVALID = object()
 
 
+def valid_prompt_risk_classes(value: object) -> bool:
+    if not isinstance(value, list) or not 0 < len(value) <= 6:
+        return False
+    if any(not isinstance(item, str) or item not in _PROMPT_RISK_CLASSES for item in value):
+        return False
+    indexes = [_PROMPT_RISK_CLASSES.index(item) for item in value]
+    return indexes == sorted(set(indexes))
+
+
 def _identity_payload(receipt: Mapping[str, object]) -> dict[str, object]:
-    return {
+    identity = {
         "schema": "guard-native-hook-decision-identity.v1",
         "version": 1,
         "request_id": receipt["request_id"],
@@ -88,6 +109,11 @@ def _identity_payload(receipt: Mapping[str, object]) -> dict[str, object]:
         "observe_mode": receipt["observe_mode"],
         "deadline_budget_ms": receipt["deadline_budget_ms"],
     }
+    if "command_extensions" in receipt:
+        identity["command_extensions"] = receipt["command_extensions"]
+    if "prompt_risk_classes" in receipt:
+        identity["prompt_risk_classes"] = receipt["prompt_risk_classes"]
+    return identity
 
 
 def canonical_receipt_bytes(receipt: Mapping[str, object]) -> bytes:
@@ -115,9 +141,11 @@ def _validate_receipt_identity(receipt: dict[str, object]) -> str | None:
         return None
     event_name = receipt["event_name"]
     payload_kind = receipt["payload_kind"]
-    if not isinstance(event_name, str) or event_name not in {"PreToolUse", "PostToolUse"}:
+    if not isinstance(event_name, str) or event_name not in {"PreToolUse", "PostToolUse", "UserPromptSubmit"}:
         return None
     if not isinstance(payload_kind, str) or payload_kind not in _PAYLOAD_KINDS:
+        return None
+    if event_name == "UserPromptSubmit" and payload_kind != "inline":
         return None
     generation = receipt["policy_generation"]
     if isinstance(generation, bool) or not isinstance(generation, int) or not 0 < generation <= 2**63 - 1:
@@ -134,6 +162,12 @@ def _validate_receipt_policy(receipt: dict[str, object]) -> bool:
     if not isinstance(decision, str) or decision not in {"allow", "deny"}:
         return False
     if not isinstance(model_output_action, str) or model_output_action not in _MODEL_ACTIONS:
+        return False
+    if receipt["event_name"] == "UserPromptSubmit" and model_output_action != "not_applicable":
+        return False
+    if "prompt_risk_classes" in receipt and (
+        receipt["event_name"] != "UserPromptSubmit" or not valid_prompt_risk_classes(receipt["prompt_risk_classes"])
+    ):
         return False
     for field in ("policy_action", "observed_policy_action"):
         action = receipt[field]
@@ -167,7 +201,9 @@ def validate_native_decision_receipt(value: object) -> dict[str, object] | None:
     if not isinstance(value, Mapping):
         return None
     receipt = dict(cast(Mapping[str, object], value))
-    if set(receipt) != _REQUIRED_FIELDS:
+    if not set(receipt).issuperset(_REQUIRED_FIELDS) or set(receipt) - _REQUIRED_FIELDS - _OPTIONAL_FIELDS:
+        return None
+    if "command_extensions" in receipt and not valid_native_command_receipt_binding(receipt["command_extensions"]):
         return None
     decision_id = _validate_receipt_identity(receipt)
     if decision_id is None or not _validate_receipt_policy(receipt) or not _validate_receipt_limits(receipt):
@@ -200,16 +236,41 @@ def receipt_matches_edge(payload: Mapping[str, object], receipt: object) -> bool
     request_id = payload.get("request_id")
     if request_id is not None and validated["request_id"] != request_id:
         return False
+    if event_name == "UserPromptSubmit":
+        action = result.get("action")
+        if (
+            not isinstance(action, Mapping)
+            or action.get("event") != event_name
+            or action.get("action_type") != "prompt"
+        ):
+            return False
     expected = {
         "decision": result.get("decision"),
-        "model_output_action": ("not_applicable" if event_name == "PreToolUse" else result.get("model_output_action")),
+        "model_output_action": (
+            "not_applicable" if event_name in {"PreToolUse", "UserPromptSubmit"} else result.get("model_output_action")
+        ),
         "policy_action": result.get("policy_action"),
         "observed_policy_action": result.get("observed_policy_action"),
         "reason_code": result.get("reason_code"),
         "reviewed_output_sha256": result.get("reviewed_output_sha256"),
         "observe_mode": result.get("observe_mode") is True,
     }
-    return all(validated[key] == value for key, value in expected.items())
+    extension_evidence = result.get("command_extensions")
+    if extension_evidence is not None:
+        extension_evidence = validate_native_command_observations(extension_evidence)
+        if extension_evidence is None or event_name not in {"PreToolUse", "UserPromptSubmit"}:
+            return False
+        expected["command_extensions"] = extension_evidence["binding"]
+    elif "command_extensions" in validated:
+        return False
+    prompt_classes = result.get("prompt_risk_classes")
+    if prompt_classes is not None:
+        if event_name != "UserPromptSubmit" or not valid_prompt_risk_classes(prompt_classes):
+            return False
+        expected["prompt_risk_classes"] = prompt_classes
+    elif "prompt_risk_classes" in validated:
+        return False
+    return all(validated.get(key) == value for key, value in expected.items())
 
 
 __all__ = [
@@ -217,5 +278,6 @@ __all__ = [
     "NATIVE_HOOK_DECISION_RECEIPT_SCHEMA",
     "canonical_receipt_bytes",
     "receipt_matches_edge",
+    "valid_prompt_risk_classes",
     "validate_native_decision_receipt",
 ]

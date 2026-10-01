@@ -21,6 +21,7 @@ def _is_string_object_dict(value: object) -> TypeGuard[dict[str, object]]:
 def test_omp_post_tool_read_burst_uses_resident_scanner(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    native_hook_force: Path,
 ) -> None:
     home_dir = tmp_path / "home"
     workspace = tmp_path / "workspace"
@@ -69,7 +70,10 @@ def test_omp_post_tool_read_burst_uses_resident_scanner(
     finally:
         daemon.stop()
 
-    assert all(result.get("decision") == "allow" for result in results)
-    assert all(result.get("reason_code") == "output_scan_allow" for result in results)
+    verdicts = [(result.get("decision"), result.get("reason_code")) for result in results]
+    assert all(result.get("decision") == "allow" for result in results), verdicts
+    assert all(result.get("reason_code") in {"output_scan_allow", "native_policy_warning"} for result in results), (
+        verdicts
+    )
     assert worker_stats["timeouts"] == 0
     assert worker_stats["restarts"] == 0

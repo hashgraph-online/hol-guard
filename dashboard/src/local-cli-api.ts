@@ -1,4 +1,10 @@
 import { fetchLocalCliApi } from "./guard-api";
+import { waitForDiscoveryJob } from "./discovery-job-wait";
+import { SHA256_PATTERN, isLocalCliId, isRecord, requiredInt, requiredString } from "./local-cli-fields";
+import { normalizeHelpStatus, normalizeLocalCliItem, normalizeLocalCliList, normalizeMcpClassification } from "./local-cli-normalize";
+export { isLocalCliId } from "./local-cli-fields";
+export { normalizeLocalCliItem, normalizeLocalCliCommand, normalizeLocalCliList } from "./local-cli-normalize";
+import { startCancelableDiscoveryJob } from "./discovery-job-start";
 import type { LocalCliContinuity } from "./custom-extension-continuity-api";
 
 export type {
@@ -8,8 +14,12 @@ export type {
 
 export type LocalCliKind = "executable" | "script";
 export type LocalCliState = "unset" | "allowed" | "blocked";
-export type LocalCliCommandState = "inherit" | "allow" | "block";
+export type LocalCliCommandState = "inherit" | "allow" | "review" | "block";
 export type LocalCliSurface = "cli" | "mcp" | "package-scripts";
+export type McpClassification = {
+  effect: string; data: string; destination: string; reversibility: string;
+  confidence: "reviewed-mapping" | "limited"; evidence: string[]; warnings: string[];
+};
 export type LocalCliCommand = {
   command_id: string;
   name: string;
@@ -17,6 +27,24 @@ export type LocalCliCommand = {
   description: string;
   parent_id: string | null;
   state: LocalCliCommandState;
+  classification?: McpClassification;
+};
+
+export type LocalMcpCatalog = {
+  complete: boolean;
+  stale: boolean;
+  reason: string | null;
+  pages: number;
+  listed_count: number;
+  known_count: number;
+  protocol_version: string | null;
+  revision: number;
+  updated_at: string;
+  last_complete_at: string | null;
+  changes?: Record<"added" | "changed" | "removed" | "stale", string[]>;
+  fresh_until?: string;
+  cache_scope?: "private" | "public";
+  skills_catalog?: { declared: boolean; complete: boolean; stale: boolean; known_count: number; reason: string | null };
 };
 
 export type LocalCliItem = {
@@ -41,11 +69,28 @@ export type LocalCliItem = {
   suggestion_score: number;
   commands: LocalCliCommand[];
   continuity?: LocalCliContinuity | null;
+  mcp_catalog?: LocalMcpCatalog;
+  provider_catalog?: {
+    provider: "composio";
+    known_count: number;
+    full_schema_count: number;
+    updated_at: string;
+    coverage: "discovery-subset";
+    account_binding: "unverified";
+  };
+  permission_scope?: "configured-connection" | "host-namespace" | "legacy-device";
 };
 
 export type LocalCliListResponse = {
+  host_inventory?: import("./codex-host-inventory").CodexHostInventory;
   schema_version: string;
   revision: number;
+  discovery_issue?: "catalog_limit_reached" | "observed_provider_scan_failed" | "configured_host_scan_failed" | "package_catalog_refresh_failed";
+  native_publication?: {
+    state: "acknowledged" | "pending" | "failed" | "unavailable";
+    revision: number;
+    generation?: number;
+  };
   items: LocalCliItem[];
   cloud: {
     sync_local_only: boolean;
@@ -65,6 +110,7 @@ export type LocalCliMutationPayload = {
   previous_revision: number;
   session_nonce: string;
   commands?: Array<{ command_id: string; state: LocalCliCommandState }>;
+  provider_actions?: Array<{ tool_slug: string; state: "review" | "block"; revision: number }>;
   approval_password?: string;
   approval_totp_code?: string;
 };
@@ -77,35 +123,26 @@ export class LocalCliApiError extends Error {
   }
 }
 
-const CLI_ID_PATTERN = /^local-cli\.[a-z0-9]+(?:-[a-z0-9]+){0,8}$/;
-const SHA256_PATTERN = /^[0-9a-f]{64}$/;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function requiredString(value: unknown, field: string): string {
-  if (typeof value !== "string" || !value.trim()) throw new Error(`Invalid local CLI ${field}`);
-  return value.trim();
-}
-
-function requiredInt(value: unknown, field: string): number {
-  if (typeof value !== "number" || !Number.isInteger(value)) throw new Error(`Invalid local CLI ${field}`);
-  return value;
-}
-
-function optionalString(value: unknown): string | null {
-  if (value === null || value === undefined) return null;
-  if (typeof value !== "string") throw new Error("Invalid local CLI string");
-  return value;
-}
-
-export function isLocalCliId(value: string): boolean {
-  return CLI_ID_PATTERN.test(value);
-}
-
 export function addedCustomExtensions(items: readonly LocalCliItem[]): LocalCliItem[] {
   return items.filter((item) => item.state !== "unset");
+}
+
+/** True when the connector needs a decision: not enrolled yet, stale, or its tool inventory changed. */
+export function customExtensionNeedsReview(item: LocalCliItem): boolean {
+  return item.stale || item.state === "unset" || item.mcp_catalog?.stale
+    || item.mcp_catalog?.complete === false || Boolean(item.mcp_catalog?.changes?.added.length)
+    || Boolean(item.mcp_catalog?.changes?.changed.length);
+}
+
+export function connectorWorkspaceItems(items: readonly LocalCliItem[], query = ""): LocalCliItem[] {
+  const needle = query.trim().toLowerCase();
+  return items.filter((item) => item.state !== "unset" || (item.surface === "mcp" && item.suggestable))
+    .filter((item) => !needle || [item.name, item.source_label, item.surface,
+      ...item.commands.flatMap((command) => [command.name, command.usage, command.description])]
+      .some((value) => value?.toLowerCase().includes(needle)))
+    .sort((a, b) => Number(customExtensionNeedsReview(b)) - Number(customExtensionNeedsReview(a))
+      || (Date.parse(b.last_seen_at ?? "") || 0) - (Date.parse(a.last_seen_at ?? "") || 0)
+      || a.name.localeCompare(b.name) || a.cli_id.localeCompare(b.cli_id));
 }
 
 export function suggestedCustomExtensions(items: readonly LocalCliItem[]): LocalCliItem[] {
@@ -300,137 +337,6 @@ function suggestionMatchesQuery(item: LocalCliItem, needle: string): boolean {
   return item.commands.some((command) => commandMatchesQuery(command, compact));
 }
 
-export function normalizeLocalCliItem(value: unknown): LocalCliItem {
-  if (!isRecord(value)) throw new Error("Invalid local CLI item");
-  const cliId = requiredString(value.cli_id, "id");
-  if (!isLocalCliId(cliId)) throw new Error("Invalid local CLI id");
-  const identityHash = requiredString(value.identity_hash, "identity");
-  if (!SHA256_PATTERN.test(identityHash)) throw new Error("Invalid local CLI identity");
-  const kind = value.kind;
-  if (kind !== "executable" && kind !== "script") throw new Error("Invalid local CLI kind");
-  const state = value.state;
-  if (state !== "unset" && state !== "allowed" && state !== "blocked") throw new Error("Invalid local CLI state");
-  return {
-    cli_id: cliId,
-    name: requiredString(value.name, "name").slice(0, 120),
-    kind,
-    identity_hash: identityHash,
-    example_label: requiredString(value.example_label, "example").slice(0, 160),
-    interpreter_name: optionalString(value.interpreter_name),
-    observed_count: requiredInt(value.observed_count, "count"),
-    last_seen_at: optionalString(value.last_seen_at),
-    source_path: optionalString(value.source_path),
-    help_status: normalizeHelpStatus(value.help_status),
-    surface: normalizeSurface(value.surface),
-    server_identity_hash: normalizeIdentityHash(value.server_identity_hash),
-    source_label: optionalSourceLabel(value.source_label),
-    state,
-    stale: value.stale === true,
-    grant_revision: value.grant_revision === null || value.grant_revision === undefined
-      ? null
-      : requiredInt(value.grant_revision, "grant revision"),
-    authority_revision: requiredInt(value.authority_revision, "revision"),
-    suggestable: value.suggestable === true,
-    suggestion_score: optionalScore(value.suggestion_score),
-    commands: Array.isArray(value.commands) ? value.commands.map(normalizeLocalCliCommand) : [],
-    continuity: normalizeContinuity(value.continuity),
-  };
-}
-
-function normalizeContinuity(value: unknown): LocalCliContinuity | null {
-  if (!isRecord(value)) return null;
-  const status = value.status;
-  if (
-    status !== "applied" &&
-    status !== "pending_observation" &&
-    status !== "changed_identity" &&
-    status !== "locally_overridden" &&
-    status !== "removed" &&
-    status !== "stale"
-  ) return null;
-  return {
-    status,
-    reason: typeof value.reason === "string" ? value.reason : "",
-    cloud_revision: typeof value.cloud_revision === "number" && Number.isInteger(value.cloud_revision)
-      ? value.cloud_revision
-      : null,
-    surface: value.surface === "cli" || value.surface === "mcp" || value.surface === "package-scripts"
-      ? value.surface
-      : null,
-  };
-}
-
-function normalizeSurface(value: unknown): LocalCliSurface {
-  if (value === "mcp") return "mcp";
-  if (value === "package-scripts") return "package-scripts";
-  return "cli";
-}
-
-function normalizeHelpStatus(value: unknown): LocalCliItem["help_status"] {
-  if (value === "ok" || value === "empty" || value === "failed") return value;
-  return null;
-}
-
-function normalizeIdentityHash(value: unknown): string | null {
-  if (value === null || value === undefined || value === "") return null;
-  if (typeof value !== "string" || !SHA256_PATTERN.test(value)) return null;
-  return value;
-}
-
-function optionalScore(value: unknown): number {
-  if (value === null || value === undefined) return 0;
-  if (typeof value !== "number" || !Number.isInteger(value)) {
-    throw new Error("Invalid local CLI suggestion score");
-  }
-  return value;
-}
-
-function optionalSourceLabel(value: unknown): string | null {
-  if (value === null || value === undefined || value === "") return null;
-  if (typeof value !== "string") return null;
-  return value.trim().slice(0, 120) || null;
-}
-
-export function normalizeLocalCliCommand(value: unknown): LocalCliCommand {
-  if (!isRecord(value)) throw new Error("Invalid local CLI command");
-  const state = value.state;
-  if (state !== "inherit" && state !== "allow" && state !== "block") {
-    throw new Error("Invalid local CLI command state");
-  }
-  const parent = value.parent_id;
-  if (parent !== null && parent !== undefined && typeof parent !== "string") {
-    throw new Error("Invalid local CLI command parent");
-  }
-  return {
-    command_id: requiredString(value.command_id, "command").slice(0, 80),
-    name: requiredString(value.name, "command name").slice(0, 120),
-    usage: requiredString(value.usage, "command usage").slice(0, 160),
-    description: typeof value.description === "string" ? value.description.slice(0, 240) : "",
-    parent_id: typeof parent === "string" && parent.trim() ? parent : null,
-    state,
-  };
-}
-
-export function normalizeLocalCliList(value: unknown): LocalCliListResponse {
-  if (!isRecord(value)) throw new Error("Invalid local CLI list");
-  const cloud = isRecord(value.cloud) ? value.cloud : {};
-  const items = Array.isArray(value.items)
-    ? value.items.flatMap((entry) => { try { return [normalizeLocalCliItem(entry)]; } catch { return []; } })
-    : [];
-  return {
-    schema_version: requiredString(value.schema_version, "schema"),
-    revision: requiredInt(value.revision, "revision"),
-    items,
-    cloud: {
-      sync_local_only: cloud.sync_local_only !== false,
-      continuity_enabled: cloud.continuity_enabled === true,
-      summary: typeof cloud.summary === "string"
-        ? cloud.summary
-        : "Custom Extensions remain local to this device until portable continuity is enabled.",
-    },
-  };
-}
-
 async function readJson(response: Response): Promise<unknown> {
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
@@ -463,7 +369,7 @@ export async function previewLocalCliMutation(payload: LocalCliMutationPayload):
 
 export async function recognizeLocalCli(
   command: string,
-  options?: { cliId?: string },
+  options?: { cliId?: string; refresh?: boolean },
 ): Promise<{
   item: LocalCliItem;
   summary: string;
@@ -476,6 +382,7 @@ export async function recognizeLocalCli(
     body: JSON.stringify({
       command,
       ...(options?.cliId ? { cli_id: options.cliId } : {}),
+      ...(options?.refresh ? { refresh: true } : {}),
     }),
   }));
   if (!isRecord(body)) throw new Error("Invalid local CLI recognition");
@@ -494,4 +401,84 @@ export async function applyLocalCliMutation(payload: LocalCliMutationPayload): P
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   }));
+}
+
+export async function refreshMcpInventory(
+  cliId: string, signal: AbortSignal, configuredConnections = false, forceRefresh = false,
+): Promise<void> {
+  if (signal.aborted) return;
+  const initialJob = await startCancelableDiscoveryJob(signal, async (clientJobId) => readJson(await fetchLocalCliApi(
+    "/v1/local-clis/refresh-job", {
+      method: "POST", headers: { "Content-Type": "application/json" }, signal,
+      body: JSON.stringify(configuredConnections
+        ? { operation: "configured-connections", client_job_id: clientJobId, ...(forceRefresh ? { force_refresh: true } : {}) }
+        : { cli_id: cliId, confirm_process_start: true, client_job_id: clientJobId }),
+    },
+  )));
+  if (initialJob === null) return;
+  await waitForMcpDiscoveryJob(cliId, initialJob, signal);
+}
+
+export async function refreshCodexHostInventory(signal: AbortSignal, forceRefresh = false): Promise<void> {
+  if (signal.aborted) return;
+  const initialJob = await startCancelableDiscoveryJob(signal, async (clientJobId) => readJson(await fetchLocalCliApi(
+    "/v1/local-clis/refresh-job", {
+      method: "POST", headers: { "Content-Type": "application/json" }, signal,
+      body: JSON.stringify({ operation: "codex-host-connections", client_job_id: clientJobId,
+        ...(forceRefresh ? { force_refresh: true } : {}) }),
+    },
+  )));
+  if (initialJob !== null) await waitForMcpDiscoveryJob("inventory:codex-host", initialJob, signal);
+}
+
+export async function waitForMcpDiscoveryJob(cliId: string, initialJob: unknown, signal: AbortSignal): Promise<void> {
+  await waitForDiscoveryJob(cliId, initialJob, signal, readJson);
+}
+
+export type McpProviderAction = {
+  tool_slug: string;
+  toolkit: string;
+  description: string;
+  full_schema: boolean;
+  revision: number;
+  updated_at: string;
+  permission_state: "review" | "block";
+  allow_supported: false;
+  account_binding: "unverified";
+  classification?: McpClassification;
+};
+
+export async function fetchMcpProviderActions(
+  cliId: string, options: { search: string; offset: number; signal?: AbortSignal; catalogToken?: string },
+): Promise<{ actions: McpProviderAction[]; nextOffset: number | null; catalogToken: string }> {
+  const body = await readJson(await fetchLocalCliApi("/v1/local-clis/provider-actions", {
+    method: "POST", headers: { "Content-Type": "application/json" }, signal: options.signal,
+    body: JSON.stringify({ cli_id: cliId, search: options.search, offset: options.offset, limit: 50,
+      ...(options.catalogToken ? { catalog_token: options.catalogToken } : {}) }),
+  }));
+  if (!isRecord(body) || body.cli_id !== cliId || body.coverage !== "discovery-subset"
+    || !Array.isArray(body.actions) || body.actions.length > 50
+    || typeof body.catalog_token !== "string" || !SHA256_PATTERN.test(body.catalog_token)) throw new Error("Invalid provider action inventory");
+  const actions = body.actions.map((entry): McpProviderAction => {
+    if (!isRecord(entry) || typeof entry.tool_slug !== "string" || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(entry.tool_slug)
+      || typeof entry.toolkit !== "string" || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(entry.toolkit)
+      || typeof entry.description !== "string" || entry.description.length > 2000
+      || typeof entry.full_schema !== "boolean" || !["review", "block"].includes(String(entry.permission_state)) || entry.allow_supported !== false
+      || entry.account_binding !== "unverified" || typeof entry.revision !== "number"
+      || !Number.isSafeInteger(entry.revision) || entry.revision < 1
+      || typeof entry.updated_at !== "string" || !Number.isFinite(Date.parse(entry.updated_at))) {
+      throw new Error("Invalid provider action evidence");
+    }
+    return {
+      tool_slug: entry.tool_slug, toolkit: entry.toolkit, description: entry.description, full_schema: entry.full_schema,
+      revision: entry.revision, updated_at: entry.updated_at,
+      permission_state: entry.permission_state as "review" | "block", allow_supported: false,
+      account_binding: "unverified",
+      classification: normalizeMcpClassification(entry.classification),
+    };
+  });
+  const nextOffset = body.next_offset;
+  if (nextOffset !== null && (typeof nextOffset !== "number" || !Number.isSafeInteger(nextOffset)
+    || nextOffset !== options.offset + 50 || nextOffset > 10_000)) throw new Error("Invalid provider inventory page");
+  return { actions, nextOffset, catalogToken: body.catalog_token };
 }

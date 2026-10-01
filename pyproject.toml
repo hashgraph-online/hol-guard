@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "hol-guard"
-version = "3.0.1"
+version = "3.16.0"
 description = "Open-source antivirus and runtime protection for AI agents, tools, MCP servers, plugins, skills, and package installs."
 readme = "README.md"
 license = "Apache-2.0"
@@ -53,7 +53,6 @@ dependencies = [
     "pyyaml>=6.0.3",
     "regex>=2025.0.0,<2027",
     "requests>=2.32,<3",
-    "publicsuffixlist==1.0.2.20260726",
     "tomli>=2.0; python_version < '3.11'",
     "mcp>=1.28.1,<2; python_version >= '3.10'",
 ]
@@ -78,6 +77,12 @@ publish = [
 ]
 
 [dependency-groups]
+ci-test = [
+    "build>=1.5.0",
+    "pytest>=9.0.3",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.15.15",
+]
 cisco-mcp = [
     "cisco-ai-mcp-scanner==4.8.1; python_full_version >= '3.11.4'",
 ]
@@ -88,6 +93,7 @@ dev = [
 [tool.uv]
 override-dependencies = [
     "aiohttp==3.14.3",
+    "anyio==4.14.2",
     "click==8.4.1",
     "cisco-ai-skill-scanner==2.0.12",
     "fastapi==0.137.1",
@@ -96,16 +102,17 @@ override-dependencies = [
     "litellm==1.93.2",
     "magika==1.0.3",
     "openai==2.41.1",
-    "pyjwt==2.13.0",
+    "pyjwt==2.14.0",
     "python-dotenv==1.2.2",
     "python-multipart==0.0.32",
     "starlette==1.3.1",
     "tokenizers==0.23.1",
-    "urllib3==2.7.0",
+    "urllib3==2.8.0",
 ]
 
 [project.scripts]
 hol-guard = "codex_plugin_scanner.cli:main"
+hol-guard-eval = "codex_plugin_scanner.guard.evaluation_cli:main"
 hol-guard-secrets = "codex_plugin_scanner.guard.secrets.cli:main"
 plugin-scanner = "codex_plugin_scanner.cli:main"
 plugin-guard = "codex_plugin_scanner.cli:main"
@@ -129,20 +136,28 @@ line-length = 120
 packages = ["src/codex_plugin_scanner"]
 
 [tool.hatch.build.targets.wheel.force-include]
+"contracts/extensions/native-command-program.v1.json" = "codex_plugin_scanner/guard/contracts/data/extensions/native-command-program.v1.json"
+"contracts/extensions/command-catalog.v1.json" = "codex_plugin_scanner/guard/contracts/data/extensions/command-catalog.v1.json"
 "contracts/guard-cloud-review/v2/contract.json" = "codex_plugin_scanner/guard/contracts/data/guard-cloud-review/v2/contract.json"
 "contracts/guard-cloud-review/v2/command-result.json" = "codex_plugin_scanner/guard/contracts/data/guard-cloud-review/v2/command-result.json"
 "contracts/guard-cloud-review/v2/fixtures.json" = "codex_plugin_scanner/guard/contracts/data/guard-cloud-review/v2/fixtures.json"
 "docs/guard/contracts/guard-cloud-review.md" = "codex_plugin_scanner/guard/contracts/data/guard-cloud-review/guard-cloud-review.md"
 "contracts/extensions/trust-class-map.v1.json" = "codex_plugin_scanner/guard/contracts/data/extensions/trust-class-map.v1.json"
 "contracts/extensions/contribution.v1.schema.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contribution.v1.schema.json"
+"contracts/extensions/contribution.v2.schema.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contribution.v2.schema.json"
 "contributions/extensions/command.blitcp.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contributions/command.blitcp.json"
 "contributions/extensions/command.noodle.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contributions/command.noodle.json"
+"contributions/extensions/command.ollama.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contributions/command.ollama.json"
 "contributions/extensions/command.probe.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contributions/command.probe.json"
 "contributions/extensions/command.remote.essh.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contributions/command.remote.essh.json"
 "contributions/extensions/command.repo2nb.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contributions/command.repo2nb.json"
 "contributions/extensions/command.skill-sunset.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contributions/command.skill-sunset.json"
+"contributions/extensions/command.uivoid.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contributions/command.uivoid.json"
 "contracts/mcp-servers/contribution.v1.schema.json" = "codex_plugin_scanner/guard/contracts/data/mcp_servers/contribution.v1.schema.json"
 "contributions/mcp-servers/mcp.filesystem.json" = "codex_plugin_scanner/guard/contracts/data/mcp_servers/contributions/mcp.filesystem.json"
+"contributions/mcp-servers/mcp.instapods.json" = "codex_plugin_scanner/guard/contracts/data/mcp_servers/contributions/mcp.instapods.json"
+"contributions/mcp-servers/mcp.pr-ui-compare.json" = "codex_plugin_scanner/guard/contracts/data/mcp_servers/contributions/mcp.pr-ui-compare.json"
+"contributions/mcp-servers/mcp.reaper.json" = "codex_plugin_scanner/guard/contracts/data/mcp_servers/contributions/mcp.reaper.json"
 
 [tool.hatch.build]
 artifacts = [
@@ -150,6 +165,11 @@ artifacts = [
     "src/codex_plugin_scanner/guard/schemas/**",
 ]
 exclude = [
+    "src/codex_plugin_scanner/_native/guard-command-source",
+    "src/codex_plugin_scanner/_native/source-compiler-manifest.json",
+    "src/codex_plugin_scanner/guard/contracts/data/extensions/native-command-program.v1.json",
+    "src/codex_plugin_scanner/guard/contracts/data/extensions/command-catalog.v1.json",
+    "src/codex_plugin_scanner/guard/contracts/data/extensions/trust-class-map.v1.json",
     ".guard-live/**",
     ".guard-package-venv/**",
     ".guard-e2e/**",
@@ -160,7 +180,6 @@ exclude = [
     ".venv/**",
     ".venv-*/**",
     "dashboard/node_modules/**",
-    "src/codex_plugin_scanner/guard/native_runtime_resident.py",
 ]
 
 [tool.ruff.lint]
@@ -182,6 +201,7 @@ markers = [
   "daemon_headless_queue: enables request-triggered daemon cloud sync for focused tests",
   "daemon_headless_refresh: enables the daemon headless cloud sync worker for focused tests",
   "daemon_service_workers: enables command queue and live request sync workers for focused tests",
+  "fault_injection: destructive store fault tests; only run with GUARD_FAULT_INJECTION=1",
   "installed: requires verification through an installed package artifact",
   "integration: verifies multiple Guard subsystems together",
   "parser: verifies parsing or normalization security semantics",

@@ -41,6 +41,24 @@ def _runtime_artifact_command_action_floor(artifact: GuardArtifact) -> GuardActi
     return normalize_guard_action(artifact.metadata.get("command_action_floor"), unknown_action="block")
 
 
+def _runtime_artifact_fail_closed_floor(artifact: GuardArtifact) -> bool:
+    """Return whether the native decision plane blocked on matcher uncertainty.
+
+    A matcher failure means the evaluator could not fully prove the command,
+    so the block is a fail-closed boundary rather than a classified deny.
+    """
+    plane = artifact.metadata.get("command_decision_plane")
+    if not isinstance(plane, Mapping):
+        return False
+    controlling = plane.get("controlling_reasons")
+    if not isinstance(controlling, Sequence) or isinstance(controlling, str):
+        return False
+    return any(
+        isinstance(reason, Mapping) and reason.get("reason_code") in {"matcher-failure", "uncertainty.matcher-failure"}
+        for reason in controlling
+    )
+
+
 def _runtime_artifact_has_explicit_permission_allow(artifact: GuardArtifact) -> bool:
     if _runtime_artifact_command_action_floor(artifact) != "allow":
         return False
@@ -139,6 +157,16 @@ def _runtime_artifact_policy_action(config: GuardConfig, artifact: GuardArtifact
         if resolved_actions:
             return with_config_policy(most_restrictive_guard_action(*resolved_actions))
     guard_default_action = _runtime_artifact_guard_default_action(artifact)
+    if (
+        guard_default_action == "require-reapproval"
+        and artifact.metadata.get("reason_code") == "shell_local_script_execution_review"
+        and set(risk_classes).issubset({"execution"})
+    ):
+        # This detector establishes an approval floor, not a terminal execution block.
+        # Explicit risk_actions were applied above; the built-in execution posture
+        # must not silently strengthen this specific review contract. Other
+        # independent risks must still reach their normal policy resolution.
+        return with_config_policy(guard_default_action)
     if guard_default_action == "sandbox-required" and pytest_restricted_sandbox:
         return with_config_policy(guard_default_action)
     risk_actions = [resolve_risk_action(config, risk_class, harness=canonical_harness) for risk_class in risk_classes]

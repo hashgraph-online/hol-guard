@@ -12,6 +12,9 @@ from typing import TYPE_CHECKING, TextIO, TypeAlias
 
 from ..redaction import redact_text
 from ..value_coercion import coerce_int as _coerce_int
+from .doctor_readiness import doctor_runtime_readiness
+from .protect_output import _protect_harness_message_for_render, _restore_ephemeral_signed_approval_output
+from .render_doctor_readiness import build_doctor_harness_table, readiness_text
 from .render_uninstall import render_self_uninstall
 
 try:
@@ -54,6 +57,25 @@ except ImportError:
         )
 
 
+def _bullet() -> str:
+    """Use an ASCII marker when the Windows console cannot show a bullet."""
+
+    return "\u2022" if _windows_console_supports_unicode() else "-"
+
+
+def _windows_console_supports_unicode() -> bool:
+    """Box drawing is only safe when the Windows console is UTF-8."""
+
+    if sys.platform != "win32":
+        return True
+    try:
+        import ctypes
+
+        return int(ctypes.windll.kernel32.GetConsoleOutputCP()) == 65001
+    except (AttributeError, OSError, ValueError):
+        return False
+
+
 PayloadDict: TypeAlias = dict[str, object]
 PayloadMapping: TypeAlias = Mapping[str, object]
 
@@ -85,9 +107,20 @@ else:
             SIMPLE_HEAVY = "simple_heavy"
 
         class Console:
-            def __init__(self, *, file: TextIO | None = None, soft_wrap: bool = False) -> None:
+            def __init__(
+                self,
+                *,
+                file: TextIO | None = None,
+                soft_wrap: bool = False,
+                legacy_windows: bool | None = None,
+                safe_box: bool = True,
+            ) -> None:
                 self.file = sys.stdout if file is None else file
                 self.soft_wrap = soft_wrap
+                # Accepted so callers can use the rich.Console signature. The
+                # fallback printer does not change glyphs from these flags.
+                self.legacy_windows = legacy_windows
+                self.safe_box = safe_box
 
             def print(self, *objects: object) -> None:
                 self.file.write(" ".join(str(item) for item in objects))
@@ -231,6 +264,7 @@ def emit_guard_payload(command: str, payload: PayloadDict, as_json: bool) -> Non
         return
 
     redacted_payload = _coerce_object_dict(_sanitize_payload_for_output(payload, command=command))
+    _restore_ephemeral_signed_approval_output(payload, redacted_payload, command=command)
     if not _RICH_AVAILABLE:
         plain_renderer = _PLAIN_TEXT_RENDERERS.get(command)
         if plain_renderer is None:
@@ -241,7 +275,13 @@ def emit_guard_payload(command: str, payload: PayloadDict, as_json: bool) -> Non
         sys.stdout.write("\n")
         return
 
-    console = Console(file=sys.stdout, soft_wrap=True)
+    unicode_console = _windows_console_supports_unicode()
+    console = Console(
+        file=sys.stdout,
+        soft_wrap=True,
+        legacy_windows=None,
+        safe_box=not unicode_console,
+    )
     renderer = _RENDERERS.get(command, _render_fallback)
     renderer(console, redacted_payload)
 
@@ -293,6 +333,36 @@ def _safe_json_output_text(command: str, payload: PayloadDict) -> str:
     return _render_redacted_json_payload(sanitized_payload)
 
 
+def _protect_guidance_lines(payload: PayloadDict) -> list[str]:
+    supply_chain_evaluation = payload.get("supply_chain_evaluation")
+    user_copy = supply_chain_evaluation.get("user_copy") if isinstance(supply_chain_evaluation, dict) else None
+    user_copy_map = _coerce_object_dict(user_copy)
+    lines: list[str] = []
+    harness_message = str(user_copy_map.get("harness_message") or "").strip()
+    if harness_message:
+        lines.append(harness_message)
+
+    next_step = str(user_copy_map.get("next_step") or "").strip()
+    if next_step and next_step not in harness_message:
+        lines.append(f"Next step: {next_step}")
+
+    signed_url = payload.get("_ephemeral_signed_approval_url")
+    if isinstance(signed_url, str) and signed_url.strip():
+        dashboard_url = signed_url.strip()
+    elif (
+        "dashboard_url" in user_copy_map
+        and user_copy_map.get("dashboard_url") is None
+        and not payload.get("primary_approval_url")
+    ):
+        dashboard_url = ""
+    else:
+        dashboard_url = str(payload.get("primary_approval_url") or user_copy_map.get("dashboard_url") or "").strip()
+    if dashboard_url and not any(dashboard_url in line for line in lines):
+        lines.append(f"Review: {dashboard_url}")
+
+    return lines
+
+
 def _plain_text_protect(payload: PayloadDict) -> str:
     if str(payload.get("mode") or "") == "status":
         lines = ["HOL Guard install protection is active."]
@@ -328,21 +398,7 @@ def _plain_text_protect(payload: PayloadDict) -> str:
     if reason:
         lines.append(f"Reason: {reason}")
 
-    supply_chain_evaluation = payload.get("supply_chain_evaluation")
-    user_copy = supply_chain_evaluation.get("user_copy") if isinstance(supply_chain_evaluation, dict) else None
-    user_copy_map = _coerce_object_dict(user_copy)
-    harness_message = str(user_copy_map.get("harness_message") or "").strip()
-    if harness_message:
-        lines.append(harness_message)
-
-    next_step = str(user_copy_map.get("next_step") or "").strip()
-    if next_step and next_step not in harness_message:
-        lines.append(f"Next step: {next_step}")
-
-    dashboard_url = str(user_copy_map.get("dashboard_url") or "").strip()
-    if dashboard_url and dashboard_url not in harness_message:
-        lines.append(f"Review: {dashboard_url}")
-
+    lines.extend(_protect_guidance_lines(payload))
     return "\n".join(lines)
 
 
@@ -421,7 +477,8 @@ def _render_detect(console: Console, payload: dict[str, object]) -> None:
     console.print(
         Panel.fit(
             f"[bold]HOL Guard local harness status[/bold]\n"
-            f"{len(detections)} harnesses • {total_artifacts} artifacts • {attention_count} need attention",
+            f"{len(detections)} harnesses {_bullet()} {total_artifacts} artifacts "
+            f"{_bullet()} {attention_count} need attention",
             border_style="cyan",
         )
     )
@@ -439,7 +496,8 @@ def _render_start(console: Console, payload: dict[str, object]) -> None:
     console.print(
         Panel.fit(
             f"[bold]HOL Guard first run[/bold]\n"
-            f"{len(harnesses)} harnesses detected • {payload.get('receipt_count', 0)} receipts recorded • "
+            f"{len(harnesses)} harnesses detected {_bullet()} {payload.get('receipt_count', 0)} receipts recorded "
+            f"{_bullet()} "
             f"{payload.get('pending_approvals', 0)} approvals waiting",
             border_style="cyan",
         )
@@ -507,7 +565,7 @@ def _render_command_inspection(console: Console, payload: dict[str, object]) -> 
     if extensions:
         alternatives = _coerce_string_list(extensions[0].get("safer_alternatives"))
         if alternatives:
-            console.print(Panel("\n".join(f"• {item}" for item in alternatives), title="Safer approaches"))
+            console.print(Panel("\n".join(f"{_bullet()} {item}" for item in alternatives), title="Safer approaches"))
     if str(payload.get("mode") or "") == "explain":
         trace = _coerce_dict_list(payload.get("trace"))
         trace_table = Table(title="Evaluation trace", box=box.SIMPLE_HEAD, show_lines=False)
@@ -712,9 +770,9 @@ def _render_status(console: Console, payload: dict[str, object]) -> None:
         Panel.fit(
             f"[bold]HOL Guard status[/bold]\n"
             f"{protection_line}\n"
-            f"{payload.get('managed_harnesses', 0)} managed harnesses • "
-            f"{payload.get('receipt_count', 0)} receipts • "
-            f"{payload.get('pending_approvals', 0)} approvals • "
+            f"{payload.get('managed_harnesses', 0)} managed harnesses {_bullet()} "
+            f"{payload.get('receipt_count', 0)} receipts {_bullet()} "
+            f"{payload.get('pending_approvals', 0)} approvals {_bullet()} "
             f"sync {'connected' if payload.get('sync_configured') else 'local only'}",
             border_style="red" if protection_off else "cyan",
         )
@@ -728,7 +786,8 @@ def _render_status(console: Console, payload: dict[str, object]) -> None:
         console.print(
             Panel(
                 "\n".join(
-                    f"• {item.get('harness')}: run [bold]{item.get('review_command')}[/bold]" for item in review_items
+                    f"{_bullet()} {item.get('harness')}: run [bold]{item.get('review_command')}[/bold]"
+                    for item in review_items
                 ),
                 title="Needs review",
                 border_style="yellow",
@@ -799,7 +858,7 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
             )
         )
         adapters = _coerce_dict_list(payload.get("adapters"))
-        console.print(_build_harness_table(adapters))
+        console.print(build_doctor_harness_table(adapters))
     elif "harnesses" in payload and all("install_aliases" in h for h in _coerce_dict_list(payload.get("harnesses"))):
         contracts = _coerce_dict_list(payload.get("harnesses"))
         table = Table(title="HOL Guard supported harnesses", box=box.SIMPLE_HEAD, show_lines=False)
@@ -826,6 +885,10 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
         summary = Table.grid(padding=(0, 1))
         summary.add_row("Harness", f"[bold]{payload.get('harness', 'unknown')}[/bold]")
         summary.add_row("Installed", _bool_label(bool(payload.get("installed"))))
+        summary.add_row("Registration", str(payload.get("setup_status") or "unknown"))
+        readiness = doctor_runtime_readiness(payload)
+        summary.add_row("Runtime readiness", readiness_text(readiness))
+        summary.add_row("Evidence", Text(readiness["detail"]))
         summary.add_row("Command", _bool_label(bool(payload.get("command_available"))))
         summary.add_row("Artifacts", str(len(_coerce_dict_list(payload.get("artifacts")))))
         registry = payload.get("runtime_detector_registry")
@@ -855,7 +918,7 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
         if warnings:
             warning_text = "\n".join(
                 textwrap.fill(
-                    f"• {warning}",
+                    f"{_bullet()} {warning}",
                     width=72,
                     subsequent_indent="  ",
                 )
@@ -1543,7 +1606,7 @@ def _managed_install_batch_summary(payload: dict[str, object], managed_installs:
     body.add_row("Harnesses", str(len(managed_installs)))
     if payload.get("auto_detected") is not None:
         body.add_row("Selection", "Auto-detected" if bool(payload.get("auto_detected")) else "Requested")
-    body.add_row("Protection", f"{installed_count} installed • {removed_count} removed")
+    body.add_row("Protection", f"{installed_count} installed {_bullet()} {removed_count} removed")
     return body
 
 
@@ -1581,7 +1644,7 @@ def _managed_install_batch_notes(managed_installs: list[dict[str, object]]) -> l
 
 def _notes_panel(notes: list[str]) -> Panel:
     return Panel(
-        Text("\n".join(f"• {note}" for note in notes), overflow="fold", no_wrap=False),
+        Text("\n".join(f"{_bullet()} {note}" for note in notes), overflow="fold", no_wrap=False),
         title="Notes",
         border_style="blue",
     )
@@ -1660,8 +1723,8 @@ def _render_connect(console: Console, payload: dict[str, object]) -> None:
     console.print(
         Panel.fit(
             f"[bold]HOL Guard connect[/bold]\n"
-            f"{payload.get('cloud_state_label', 'Local only')} • "
-            f"{payload.get('receipt_count', 0)} receipts • "
+            f"{payload.get('cloud_state_label', 'Local only')} {_bullet()} "
+            f"{payload.get('receipt_count', 0)} receipts {_bullet()} "
             f"{payload.get('pending_approvals', 0)} approvals",
             border_style=border_style,
         )
@@ -1807,7 +1870,7 @@ def _render_update(console: Console, payload: dict[str, object]) -> None:
     stderr = str(payload.get("stderr") or "").strip()
     error = str(payload.get("error") or "").strip()
     if notes:
-        console.print(Panel("\n".join(f"• {note}" for note in notes), title="Notes", border_style="blue"))
+        console.print(Panel("\n".join(f"{_bullet()} {note}" for note in notes), title="Notes", border_style="blue"))
     if status in {"updated", "failed"} and stdout and stdout != str(payload.get("message") or "").strip():
         console.print(Panel(stdout, title="stdout", border_style="green"))
     if status == "failed" and stderr:
@@ -2027,7 +2090,7 @@ def _render_consumer_evidence_panels(console: Console, payload: dict[str, object
         if findings:
             console.print(
                 Panel(
-                    "\n".join(f"• {item}" for item in findings[:5]),
+                    "\n".join(f"{_bullet()} {item}" for item in findings[:5]),
                     title="Evidence highlights",
                     border_style="yellow",
                 )
@@ -2148,19 +2211,18 @@ def _render_protect(console: Console, payload: dict[str, object]) -> None:
         body.add_row("Executed", _bool_label(bool(payload.get("executed"))))
         body.add_row("Reason", str(verdict.get("reason") or "unknown"))
     console.print(Panel(body, title="Install protection", border_style="cyan"))
-    supply_chain_evaluation = payload.get("supply_chain_evaluation")
-    if isinstance(supply_chain_evaluation, dict):
-        user_copy = supply_chain_evaluation.get("user_copy")
-        if isinstance(user_copy, dict):
-            harness_message = str(user_copy.get("harness_message") or "").strip()
-            if harness_message:
-                console.print(
-                    Panel(
-                        Text(harness_message, no_wrap=False, overflow="fold"),
-                        title="Guard guidance",
-                        border_style="magenta",
-                    )
-                )
+    guidance = _protect_guidance_lines(payload)
+    if guidance:
+        guidance_text, signed_approval_url = _protect_harness_message_for_render(payload, "\n".join(guidance))
+        console.print(
+            Panel(
+                Text(guidance_text, no_wrap=False, overflow="fold"),
+                title="Guard guidance",
+                border_style="magenta",
+            )
+        )
+        if isinstance(signed_approval_url, str) and signed_approval_url:
+            console.print(Text(signed_approval_url), soft_wrap=True)
     supply_chain = payload.get("supply_chain")
     if isinstance(supply_chain, dict):
         console.print(_build_supply_chain_posture_panel(supply_chain))
@@ -2168,7 +2230,7 @@ def _render_protect(console: Console, payload: dict[str, object]) -> None:
     if risk_signals:
         console.print(
             Panel(
-                "\n".join(f"• {item}" for item in risk_signals),
+                "\n".join(f"{_bullet()} {item}" for item in risk_signals),
                 title="Risk signals",
                 border_style="yellow",
             )
@@ -2322,19 +2384,20 @@ def _render_harness_detail(console: Console, detection: dict[str, object]) -> No
     config_paths = _coerce_string_list(detection.get("config_paths"))
     body.add_row("Config", "\n".join(_short_path(path) for path in config_paths) or "none")
     if warnings:
-        body.add_row("Warnings", "\n".join(f"• {warning}" for warning in warnings))
+        body.add_row("Warnings", "\n".join(f"{_bullet()} {warning}" for warning in warnings))
     console.print(Panel(body, title=str(detection.get("harness", "unknown")), border_style="blue"))
     if artifacts:
         console.print(_build_artifact_table(artifacts))
 
 
 def _build_artifact_table(artifacts: list[dict[str, object]]) -> Table:
+    overflow = "fold" if not _windows_console_supports_unicode() else "ellipsis"
     table = Table(box=box.SIMPLE_HEAVY, show_header=True)
-    table.add_column("Artifact", style="bold")
-    table.add_column("Type")
+    table.add_column("Artifact", style="bold", overflow=overflow)
+    table.add_column("Type", overflow=overflow)
     table.add_column("Scope")
     table.add_column("Transport")
-    table.add_column("Source")
+    table.add_column("Source", overflow=overflow)
     for artifact in artifacts:
         table.add_row(
             str(artifact.get("name") or artifact.get("artifact_id") or "unknown"),

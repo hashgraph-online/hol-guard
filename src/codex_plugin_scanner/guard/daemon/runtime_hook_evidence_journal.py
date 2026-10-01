@@ -21,6 +21,7 @@ from ..native_decision_receipt import (
 )
 from ..runtime.command_activity_contract import CorrelationHandle, CorrelationKind
 from ..runtime.command_activity_display import INVOCATION_PREVIEW_MAX_CHARS
+from .runtime_hook_mcp_evidence import _McpDiscoveryRecord
 
 try:
     import fcntl
@@ -213,7 +214,7 @@ class _NativeDecisionReceiptRecord:
         return cls(receipt=receipt, payload_bytes=len(record.serialized()))
 
 
-_EvidenceRecord = _CommandActivityRecord | _NativeDecisionReceiptRecord
+_EvidenceRecord = _CommandActivityRecord | _NativeDecisionReceiptRecord | _McpDiscoveryRecord
 
 
 def _read_journal_records_locked(path: Path, *, max_bytes: int) -> tuple[list[_EvidenceRecord], int]:
@@ -236,6 +237,8 @@ def _read_journal_records_locked(path: Path, *, max_bytes: int) -> tuple[list[_E
             record = _NativeDecisionReceiptRecord.from_json(decoded)
             if record is None:
                 record = _CommandActivityRecord.from_json(decoded)
+            if record is None:
+                record = _McpDiscoveryRecord.from_json(decoded)
         except (json.JSONDecodeError, UnicodeDecodeError):
             record = None
         if record is None:
@@ -248,7 +251,7 @@ def _read_journal_records_locked(path: Path, *, max_bytes: int) -> tuple[list[_E
 def recover_journal_records(path: Path, *, max_bytes: int) -> tuple[list[_EvidenceRecord], int]:
     with _journal_lock(path):
         records, invalid_records = _read_journal_records_locked(path, max_bytes=max_bytes)
-        return _attach_invocation_previews(path, records), invalid_records
+        return _attach_invocation_previews(path, records, max_bytes=max_bytes), invalid_records
 
 
 def _preview_sidecar_path(path: Path) -> Path:
@@ -264,12 +267,19 @@ def _validated_sidecar_preview(value: object) -> str | None:
     return stripped
 
 
-def _read_preview_sidecar(path: Path) -> dict[str, str]:
+def _read_preview_sidecar(path: Path, *, max_bytes: int) -> dict[str, str]:
     sidecar = _preview_sidecar_path(path)
     try:
-        raw_lines = sidecar.read_bytes().splitlines()
+        descriptor = _open_journal(sidecar, os.O_RDONLY)
     except FileNotFoundError:
         return {}
+    try:
+        metadata = os.fstat(descriptor)
+        if metadata.st_size > max_bytes:
+            raise OSError("evidence journal preview sidecar exceeds the configured size limit")
+        raw_lines = os.read(descriptor, max_bytes + 1).splitlines()
+    finally:
+        os.close(descriptor)
     previews: dict[str, str] = {}
     for raw_line in raw_lines:
         try:
@@ -309,9 +319,13 @@ def _append_preview_sidecar(path: Path, record: _EvidenceRecord) -> None:
         os.close(descriptor)
 
 
-def _rewrite_preview_sidecar(path: Path, remaining: tuple[_EvidenceRecord, ...]) -> None:
+def _rewrite_preview_sidecar(path: Path, remaining: tuple[_EvidenceRecord, ...], *, max_bytes: int) -> None:
     keep_ids = {record.record_id for record in remaining}
-    kept = {record_id: preview for record_id, preview in _read_preview_sidecar(path).items() if record_id in keep_ids}
+    kept = {
+        record_id: preview
+        for record_id, preview in _read_preview_sidecar(path, max_bytes=max_bytes).items()
+        if record_id in keep_ids
+    }
     sidecar = _preview_sidecar_path(path)
     if not kept:
         sidecar.unlink(missing_ok=True)
@@ -340,8 +354,8 @@ def _rewrite_preview_sidecar(path: Path, remaining: tuple[_EvidenceRecord, ...])
         temporary.unlink(missing_ok=True)
 
 
-def _attach_invocation_previews(path: Path, records: list[_EvidenceRecord]) -> list[_EvidenceRecord]:
-    previews = _read_preview_sidecar(path)
+def _attach_invocation_previews(path: Path, records: list[_EvidenceRecord], *, max_bytes: int) -> list[_EvidenceRecord]:
+    previews = _read_preview_sidecar(path, max_bytes=max_bytes)
     if not previews:
         return records
     attached: list[_EvidenceRecord] = []
@@ -394,7 +408,7 @@ def rewrite_journal(path: Path, *, remove_record_id: str, max_bytes: int) -> int
             finally:
                 os.close(descriptor)
             os.replace(temporary, path)
-            _rewrite_preview_sidecar(path, remaining)
+            _rewrite_preview_sidecar(path, remaining, max_bytes=max_bytes)
         finally:
             temporary.unlink(missing_ok=True)
     return invalid_records
