@@ -16,8 +16,13 @@ source_compiler="$target_dir/release/guard-command-source"
 # The ARM image includes Rosetta for this build-time sanity check.
 # Installed Intel performance is measured on macos-15-intel below.
 "$runtime" self-test --json
+verify_arguments=(--compiler "$source_compiler")
+if [[ -n "${PR_BASE_SHA:-}" ]]; then
+  verify_arguments+=(--changed-from "$PR_BASE_SHA")
+fi
+python scripts/ci/verify_native_command_program.py "${verify_arguments[@]}"
+uv build --wheel --out-dir pure-dist
 RULE_DIGEST=$("$runtime" capabilities --json | python -c 'import json,sys; print(json.load(sys.stdin)["rule_digest"])')
-python scripts/build_native_command_program.py --check --compiler "$source_compiler"
 jq -n --slurpfile source rust/crates/guard-command/tests/fixtures/command-source-example.v1.json --slurpfile trust contracts/extensions/trust-class-map.v1.json \
   '{schema:"guard.command-extension-build.v1",sources:$source,mcp_sources:[],trust:$trust[0],base:"packaged"}' > source-build.json
 "$source_compiler" compile < source-build.json > source-compiled.json

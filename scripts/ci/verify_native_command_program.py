@@ -6,8 +6,8 @@ plain ``--check`` would reject an otherwise-valid contribution. This wrapper:
 
 - fresh tree: runs ``build_native_command_program.py --check`` as before
 - pending tree (new/edited contribution source): runs the generator without
-  ``--check`` to validate that the sources compile, then restores generated
-  paths so later steps see the checked-in state
+  ``--check``, retains the generated workspace projections, and rebuilds the
+  native binaries so subsequent proofs and packaging use the same program
 """
 
 from __future__ import annotations
@@ -18,12 +18,21 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-GENERATED_PATHS = (
-    "contracts/extensions",
-    "contributions/extensions",
-    "src/codex_plugin_scanner/guard/contracts/data/extensions",
-    "src/codex_plugin_scanner/guard/extension_builder",
-)
+
+def _rebuild_command(compiler: str) -> list[str]:
+    path = ROOT / compiler
+    relative = path.resolve().relative_to((ROOT / "rust" / "target").resolve())
+    parts = relative.parts
+    if len(parts) not in (2, 3) or parts[-2] not in ("debug", "release"):
+        raise ValueError("compiler must be in rust/target/[target/]debug or release")
+    command = ["cargo", "build", "--manifest-path", "rust/Cargo.toml", "--locked",
+               "-p", "hol-guard-runtime", "-p", "guard-command",
+               "--bin", "hol-guard-runtime", "--bin", "guard-command-source"]
+    if parts[-2] == "release":
+        command.append("--release")
+    if len(parts) == 3:
+        command.extend(["--target", parts[0]])
+    return command
 
 
 def _run(command: list[str]) -> None:
@@ -59,9 +68,10 @@ def main() -> int:
             "validating sources by generating instead of checking freshness",
             file=sys.stderr,
         )
+        rebuild = _rebuild_command(args.compiler)
         _run(command)
-        _run(["git", "checkout", "--", *GENERATED_PATHS])
-        _run(["git", "clean", "-fdq", "--", *GENERATED_PATHS])
+        _run(rebuild)
+        _run([*command, "--check"])
         return 0
     _run([*command, "--check"])
     return 0
