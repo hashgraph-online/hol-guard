@@ -73,13 +73,18 @@ def test_macos_cross_build_keeps_native_platform_proofs_and_cache_isolation() ->
     assert "--locked --release" in commands
     assert '--platform-tag "$PLATFORM_TAG"' in commands
     assert '--source-sha "$HOL_GUARD_BUILD_SHA"' in commands
+    build_step = next(step for step in build["steps"] if step.get("name", "").startswith("Build and assemble"))
+    assert build_step["env"]["HOL_GUARD_CONTRIBUTION_BASE"] == "${{ github.event.pull_request.base.sha }}"
 
 
 @pytest.mark.skipif(os.name == "nt", reason="macOS wheel builds execute in Bash")
 @pytest.mark.skipif(sys.version_info < (3, 11), reason="Native wheel workflow uses Python 3.12 with tomllib")
 @pytest.mark.parametrize("target", ["x86_64-apple-darwin", "aarch64-apple-darwin"])
-@pytest.mark.parametrize("failed_stage", ["cargo", "self-test", "capabilities"])
-def test_macos_build_failures_stop_before_packaging(tmp_path: Path, target: str, failed_stage: str) -> None:
+@pytest.mark.parametrize("failed_stage", ["cargo", "self-test", "capabilities", "program"])
+@pytest.mark.parametrize("base_sha", ["", "fixture-base"])
+def test_macos_build_failures_stop_before_packaging(
+    tmp_path: Path, target: str, failed_stage: str, base_sha: str
+) -> None:
     """Run the workflow's build command and reject each failed native build stage."""
     job = _workflow("native-wheel-ci.yml")["jobs"]["macos-build"]
     commands = next(step["run"] for step in job["steps"] if step.get("name", "").startswith("Build and assemble"))
@@ -110,6 +115,11 @@ def test_macos_build_failures_stop_before_packaging(tmp_path: Path, target: str,
     build_helper.write_text(
         (ROOT / "scripts/ci/build-native-wheel-macos.sh").read_text(encoding="utf-8"), encoding="utf-8"
     )
+    (build_helper.parent / "verify_native_command_program.py").write_text(
+        "import json, sys\nfrom pathlib import Path\n"
+        'Path("verify-arguments.json").write_text(json.dumps(sys.argv[1:]))\nsys.exit(23)\n',
+        encoding="utf-8",
+    )
     (scripts / "build_native_hol_guard_wheel.py").write_text(
         'from pathlib import Path\nPath("packaged").touch()\n', encoding="utf-8"
     )
@@ -122,6 +132,7 @@ def test_macos_build_failures_stop_before_packaging(tmp_path: Path, target: str,
             "TARGET": target,
             "PLATFORM_TAG": "fixture-platform",
             "HOL_GUARD_BUILD_SHA": "fixture-sha",
+            "HOL_GUARD_CONTRIBUTION_BASE": base_sha,
             "FAILED_STAGE": failed_stage,
         },
         capture_output=True,
@@ -135,6 +146,14 @@ def test_macos_build_failures_stop_before_packaging(tmp_path: Path, target: str,
     assert ("--target" in cargo_arguments) == (target == "x86_64-apple-darwin")
     if "--target" in cargo_arguments:
         assert cargo_arguments[cargo_arguments.index("--target") + 1] == target
+    if failed_stage == "program":
+        import json
+
+        arguments = json.loads((tmp_path / "verify-arguments.json").read_text(encoding="utf-8"))
+        expected = ["--compiler", (output / "release/guard-command-source").relative_to(tmp_path).as_posix()]
+        if base_sha:
+            expected += ["--changed-from", base_sha]
+        assert arguments == expected
 
 
 def test_bounded_stress_never_claims_full_soak_qualification() -> None:

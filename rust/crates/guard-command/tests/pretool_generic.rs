@@ -27,6 +27,26 @@ fn allows_bounded_command_without_returning_raw_content() {
 }
 
 #[test]
+fn pipeline_input_preserves_benign_and_git_context_decisions() {
+    for harness in ["zcode", "pi", "opencode", "claude-code"] {
+        for (command, reason) in [
+            ("git status --short | head -2", "native_exact_safe_command"),
+            (
+                "git status --short | head -2 && git log --oneline -1",
+                "native_git_helper_context_review",
+            ),
+        ] {
+            let result = evaluate_pre_tool_envelope(
+                harness,
+                "PreToolUse",
+                &json!({"tool_name": "Bash", "tool_input": {"command": command}}),
+            );
+            assert_eq!(result.reason_code, reason, "{harness}: {command}");
+        }
+    }
+}
+
+#[test]
 fn covers_generic_action_classes_and_dangerous_process_floor() {
     let cases = [
         (
