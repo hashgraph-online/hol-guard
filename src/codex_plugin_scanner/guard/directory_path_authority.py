@@ -17,6 +17,20 @@ class DirectoryPathTrustError(ValueError):
         super().__init__(reason)
 
 
+def canonical_guard_home_path(guard_home: Path | str) -> str:
+    """Canonical spelling of a Guard home for identity bindings and cache keys.
+
+    Resolves ``~``, relative components, and symlinks so the same directory
+    spelled differently cannot duplicate identity-scoped state.
+    """
+    expanded = Path(guard_home).expanduser()
+    try:
+        candidate = os.path.realpath(os.fspath(expanded))
+    except (OSError, RuntimeError):
+        candidate = os.fspath(expanded)
+    return os.path.normpath(candidate)
+
+
 def trusted_guard_directory_roots(guard_home: Path) -> tuple[Path, ...]:
     current_home = Path.home().resolve()
     guard_home_root = guard_home.expanduser().resolve().parent

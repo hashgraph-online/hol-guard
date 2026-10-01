@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import threading
 import time
 import uuid
@@ -22,6 +21,7 @@ from contextvars import ContextVar
 from pathlib import Path
 from typing import Any
 
+from .directory_path_authority import canonical_guard_home_path
 from .native_resident_client import native_resident_client_request
 from .native_response_decoder import native_error as _native_error
 from .native_runtime import _isolated_environment, native_runtime_status
@@ -223,12 +223,9 @@ def native_context_digest(
         # same failure boundary without shipping the request.
         return None
     # Canonicalize (including symlinks) so the same home spelled differently
-    # cannot duplicate entries.
-    try:
-        normalized_home = os.path.normpath(os.fspath(Path(guard_home).expanduser().resolve()))
-    except (OSError, RuntimeError):
-        normalized_home = os.path.normpath(os.fspath(guard_home))
-    cache_key = (content_sha256, normalized_home)
+    # cannot duplicate entries.  Path canonicalization is directory-path
+    # authority, not transport work.
+    cache_key = (content_sha256, canonical_guard_home_path(guard_home))
     with _RESULT_CACHE_LOCK:
         cached = _RESULT_CACHE.get(cache_key)
         if cached is not None:
