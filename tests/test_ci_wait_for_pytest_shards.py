@@ -287,8 +287,41 @@ def test_missing_shard_and_partial_reruns_expire_without_accepting_old_coverage(
 
 @pytest.mark.parametrize("payload", [None, {}, {"total_count": True, "jobs": []}, {"total_count": 101, "jobs": []}])
 def test_rejects_malformed_or_incomplete_api_pages(payload: object) -> None:
-    with pytest.raises(barrier.ShardWaitError, match=r"invalid|incomplete"):
-        barrier.wait_for_shards("owner/repo", _RUN_ID, 2, fetch_json=lambda *_args: payload)
+    now = [0.0]
+    with pytest.raises(barrier.ShardWaitError, match=r"invalid|incomplete|three bounded retries"):
+        barrier.wait_for_shards(
+            "owner/repo",
+            _RUN_ID,
+            2,
+            fetch_json=lambda *_args: payload,
+            clock=lambda: now[0],
+            sleep=lambda delay: now.__setitem__(0, now[0] + delay),
+        )
+
+
+def test_incomplete_jobs_response_retries_without_accepting_partial_coverage() -> None:
+    now = [0.0]
+    calls = []
+
+    def fetch(path: str, _timeout: float) -> dict[str, object]:
+        calls.append(path)
+        if len(calls) == 1:
+            return {"total_count": barrier.SHARD_COUNT, "jobs": _jobs()[:99]}
+        page = int(path.rsplit("=", 1)[1])
+        return {"total_count": barrier.SHARD_COUNT, "jobs": _jobs()[(page - 1) * 100 : page * 100]}
+
+    barrier.wait_for_shards(
+        "owner/repo",
+        _RUN_ID,
+        2,
+        fetch_json=fetch,
+        clock=lambda: now[0],
+        sleep=lambda delay: now.__setitem__(0, now[0] + delay),
+    )
+    assert now[0] == 5
+    assert len(calls) == 3
+    assert calls[0] == calls[1]
+    assert calls[2].endswith("page=2")
 
 
 def test_success_received_after_deadline_cannot_pass() -> None:
@@ -410,6 +443,6 @@ def test_sonar_installs_same_pinned_scanner_before_wait_without_analysis_credent
     assert installer["uses"] == analysis["uses"]
     assert installer["with"] == {"args": "--version"}
     assert installer["env"] == {"SONAR_USER_HOME": analysis["env"]["SONAR_USER_HOME"]}
-    assert "with" not in analysis
+    assert analysis["with"] == {"args": "-Dsonar.python.analysis.threads=4"}
     assert analysis["env"]["SONAR_TOKEN"] == "${{ secrets.SONAR_TOKEN }}"
     assert steps.index(installer) < steps.index(waiter) < steps.index(analysis)
