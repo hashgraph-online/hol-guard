@@ -10,12 +10,12 @@ fn test_containment_requirement_cannot_override_lockdown() {
         "revision": 1, "managed_revision": 0, "effective_digest": "", "layers": []
     }))
     .unwrap();
-    let evaluate = |binding: &NativeCommandControlBindingV1| {
+    let evaluate = |binding: &NativeCommandControlBindingV1, command: &str| {
         let controls = CompiledNativeCommandControls::new(binding).unwrap();
         crate::pretool::evaluate_pre_tool_envelope_with_context(
             "omp",
             "PreToolUse",
-            &serde_json::json!({"tool_name":"bash","tool_input":{"command":"python3 -m pytest -q"}}),
+            &serde_json::json!({"tool_name":"bash","tool_input":{"command":command}}),
             Some(&controls),
             None,
             Some("/home/tester"),
@@ -24,7 +24,7 @@ fn test_containment_requirement_cannot_override_lockdown() {
     };
     binding.effective_digest = binding.compute_effective_digest().unwrap();
     assert_eq!(
-        evaluate(&binding).minimum_action,
+        evaluate(&binding, "python3 -m pytest -q").minimum_action,
         if cfg!(target_os = "macos") {
             "sandbox-required"
         } else {
@@ -37,11 +37,20 @@ fn test_containment_requirement_cannot_override_lockdown() {
     }]))
     .unwrap();
     binding.effective_digest = binding.compute_effective_digest().unwrap();
-    assert_eq!(evaluate(&binding).minimum_action, "block");
-    assert_ne!(
-        evaluate(&binding).reason_code,
-        "native_pytest_readonly_containment_required"
-    );
+    for command in [
+        "python3 -m pytest -q",
+        "python3 -c 'import json; print(1)'",
+        "node -e 'console.log(1)'",
+    ] {
+        let result = evaluate(&binding, command);
+        assert_eq!(result.minimum_action, "block", "{command}");
+        assert!(
+            !result
+                .reason_code
+                .ends_with("readonly_containment_required"),
+            "{command}"
+        );
+    }
 }
 
 #[test]

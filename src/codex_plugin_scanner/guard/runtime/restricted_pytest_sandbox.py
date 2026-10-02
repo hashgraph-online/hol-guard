@@ -127,6 +127,7 @@ def _macos_profile(plan: RestrictedPytestPlan, *, private_root: Path) -> str:
         "vitest-readonly-v1",
         "node-tool-readonly-v1",
         "node-build-output-v1",
+        "node-eval-readonly-v1",
     }:
         # Node initializes OpenSSL before collection; never grant the wider config tree.
         read_files.extend(

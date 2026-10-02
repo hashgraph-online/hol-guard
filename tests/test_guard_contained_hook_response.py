@@ -52,6 +52,16 @@ def test_package_test_routing_is_not_unprotected_execution_permission() -> None:
     assert "approval_request_id" not in response
 
 
+@pytest.mark.parametrize("runtime", ["python", "node"])
+def test_inline_eval_requires_its_own_enforced_profile(runtime) -> None:
+    native = result()
+    native["reason_code"] = f"native_{runtime}_eval_readonly_containment_required"
+    response = harness_json_from_native_pre_tool("omp", native)
+    assert response["decision"] == "deny"
+    assert response["required_execution_profile"] == f"{runtime}-eval-readonly-v1"
+    assert "approval_request_id" not in response
+
+
 @pytest.mark.parametrize("permission", ["package-protection", "other"])
 def test_vitest_profile_accepts_only_known_package_control_evidence(permission: str) -> None:
     native = result()

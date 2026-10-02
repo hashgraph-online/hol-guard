@@ -192,6 +192,49 @@ fn git_inspections_require_protected_execution_not_helper_consent() {
 }
 
 #[test]
+fn inline_data_analysis_requires_real_readonly_enforcement() {
+    for (command, runtime) in [
+        (
+            "python3 -c 'import json; print(json.loads(\"[1,2,3]\"))'",
+            "python",
+        ),
+        (
+            "/usr/bin/python3.14 -c 'import json; print(json.loads(\"[1,2,3]\"))'",
+            "python",
+        ),
+        ("node -e 'console.log(JSON.parse(\"[1,2,3]\"))'", "node"),
+    ] {
+        let result = classify("omp", command);
+        assert_eq!(result.decision, "deny", "{command}");
+        if cfg!(target_os = "macos") {
+            assert_eq!(
+                result.reason_code,
+                format!("native_{runtime}_eval_readonly_containment_required"),
+                "{command}: {result:?}"
+            );
+        }
+    }
+    for command in [
+        "python3 -c 'import json' && rm -rf /",
+        "node -e '1' | sh",
+        "sudo python3 -c '1'",
+        "node --require preload.js -e '1'",
+        "python3 file.py",
+        "node file.js",
+    ] {
+        let result = classify("omp", command);
+        assert_ne!(
+            result.reason_code, "native_python_eval_readonly_containment_required",
+            "{command}"
+        );
+        assert_ne!(
+            result.reason_code, "native_node_eval_readonly_containment_required",
+            "{command}"
+        );
+    }
+}
+
+#[test]
 fn package_tests_require_manifest_resolution_and_protected_execution() {
     for command in [
         "npm test",

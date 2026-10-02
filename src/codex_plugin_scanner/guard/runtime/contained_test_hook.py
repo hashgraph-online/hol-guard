@@ -10,6 +10,7 @@ import stat
 from collections.abc import Callable, Mapping
 from pathlib import Path
 
+from .restricted_inline_eval import is_inline_eval, prepare_restricted_inline_eval, run_restricted_inline_eval
 from .restricted_package_test import (
     PACKAGE_TEST_PROFILE,
     PACKAGE_TEST_REASON,
@@ -117,6 +118,7 @@ def run_authorized_contained_test(
     package_test = is_package_test(command)
     if package_test:
         command = list(resolve_package_test(command, workspace=workspace))
+    inline_eval = is_inline_eval(command)
     # Fail before the authority request if the backend cannot enforce the profile.
     node_test = len(command) > 1 and Path(command[0]).name in {"node", "nodejs"} and command[1] == "--test"
     vitest = bool(command) and (
@@ -143,7 +145,9 @@ def run_authorized_contained_test(
             )
         )
     )
-    if node_tool:
+    if inline_eval:
+        inline_plan = prepare_restricted_inline_eval(command, workspace=workspace)
+    elif node_tool:
         from .restricted_node_tool import prepare_restricted_node_tool, run_restricted_node_tool
 
         node_tool_plan = prepare_restricted_node_tool(command, workspace=workspace, cwd=workspace)
@@ -162,7 +166,11 @@ def run_authorized_contained_test(
     else:
         prepare_restricted_pytest(command, workspace=workspace, cwd=workspace, read_only_workspace=True)
     reason = (
-        "native_node_build_output_containment_required"
+        "native_node_eval_readonly_containment_required"
+        if inline_eval and inline_plan.profile_version == "node-eval-readonly-v1"
+        else "native_python_eval_readonly_containment_required"
+        if inline_eval
+        else "native_node_build_output_containment_required"
         if node_tool and node_tool_plan.profile_version == NODE_BUILD_OUTPUT_PROFILE_VERSION
         else "native_node_tool_readonly_containment_required"
         if node_tool
@@ -175,7 +183,9 @@ def run_authorized_contained_test(
         else "native_pytest_readonly_containment_required"
     )
     profile = (
-        node_tool_plan.profile_version
+        inline_plan.profile_version
+        if inline_eval
+        else node_tool_plan.profile_version
         if node_tool
         else GIT_READ_ONLY_PROFILE_VERSION
         if git
@@ -219,6 +229,13 @@ def run_authorized_contained_test(
             raise _reject()
 
     # No shell and no unsandboxed retry: the required profile is the actual sink.
+    if inline_eval:
+        underlying = {**payload, "tool_input": {**tool_input, "command": shlex.join(inline_plan.command)}}
+        if not required(authorize(underlying)):
+            raise _reject()
+        return run_restricted_inline_eval(
+            inline_plan, timeout_seconds=timeout_seconds, authorize_capability=authorize_capability
+        )
     if node_tool:
         underlying = {**payload, "tool_input": {**tool_input, "command": shlex.join(node_tool_plan.command)}}
         if not required(authorize(underlying)):

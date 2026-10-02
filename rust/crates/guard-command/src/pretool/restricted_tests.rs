@@ -1,5 +1,14 @@
 use crate::CanonicalCommandV1;
 
+fn python_runtime_name(name: &str) -> bool {
+    name.strip_prefix("python").is_some_and(|suffix| {
+        suffix.is_empty()
+            || suffix
+                .split('.')
+                .all(|part| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit()))
+    })
+}
+
 /// Classify a direct pytest invocation for delegation, never direct allowance.
 /// The execution sink must resolve the interpreter and enforce pytest-readonly-v2.
 pub(super) fn requires_pytest_containment(model: &CanonicalCommandV1) -> bool {
@@ -43,6 +52,15 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
     }
     let executable = segment.executable.as_deref()?;
     let arguments = segment.arguments.as_slice();
+    match (super::executable_basename(executable), arguments) {
+        (name, [flag, _program]) if python_runtime_name(name) && flag == "-c" => {
+            return Some("native_python_eval_readonly_containment_required");
+        }
+        ("node" | "nodejs", [flag, _program]) if matches!(flag.as_str(), "-e" | "--eval") => {
+            return Some("native_node_eval_readonly_containment_required");
+        }
+        _ => {}
+    }
     if matches!(
         super::executable_basename(executable),
         "npm" | "pnpm" | "bun"
