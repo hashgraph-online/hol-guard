@@ -28,6 +28,7 @@ from typing import BinaryIO, Literal, TypedDict, cast
 
 from ...version import __version__
 from .. import windows_processes
+from ..fork_safety import forget_in_child
 from ..frozen_runtime_commands import (
     FROZEN_DAEMON_SERVE_ARG,
     decode_frozen_daemon_serve_payload,
@@ -154,6 +155,9 @@ _EPHEMERAL_REAP_SCHEDULE_LOCK = threading.Lock()
 _EPHEMERAL_REAP_IN_FLIGHT = False
 _DUPLICATE_RETIRE_SCHEDULE_LOCK = threading.Lock()
 _DUPLICATE_RETIRE_IN_FLIGHT: set[str] = set()
+forget_in_child(_RECOVERY_LOCKS)
+forget_in_child(_STATE_WRITE_LOCKS)
+forget_in_child(_DUPLICATE_RETIRE_IN_FLIGHT)
 _LAST_EPHEMERAL_REAP_AT = 0.0
 _runtime_fingerprint_cache: tuple[str, str] | None = None
 

@@ -51,6 +51,7 @@ jobs:
         run: |
           set -euo pipefail
           npm ci --ignore-scripts --prefix .github/tools/mcpb-cli
+          node .github/tools/mcpb-cli/harden-forge.cjs
           MCPB_CLI="$GITHUB_WORKSPACE/.github/tools/mcpb-cli/node_modules/.bin/mcpb"
           "$MCPB_CLI" validate distributions/mcpb
           "$MCPB_CLI" pack distributions/mcpb "$RUNNER_TEMP/hol-guard.mcpb"
@@ -172,6 +173,7 @@ jobs:
         run: |
           set -euo pipefail
           npm ci --ignore-scripts --prefix .github/tools/mcpb-cli
+          node .github/tools/mcpb-cli/harden-forge.cjs
           MCPB_CLI="$GITHUB_WORKSPACE/.github/tools/mcpb-cli/node_modules/.bin/mcpb"
           "$MCPB_CLI" validate "$BUNDLE_DIR"
           "$MCPB_CLI" pack "$BUNDLE_DIR" "$ARTIFACT"

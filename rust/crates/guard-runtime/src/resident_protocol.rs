@@ -2,9 +2,9 @@ use guard_command::CommandModelRequestV1;
 use guard_contracts::{
     ApprovalChallengeRequestV3, ApprovalChallengeRequestV4, ApprovalConsumeRequestV3,
     ApprovalConsumeRequestV4, ApprovalValidateRequestV3, ApprovalValidateRequestV4,
-    GuardHookEnvelopeV2, NativeHookRequestV1, RuntimeCapabilitiesV1, GUARD_HOOK_ENVELOPE_V2_SCHEMA,
-    MAX_NATIVE_RESPONSE_BYTES, NATIVE_APPROVAL_ERROR_CODES, NATIVE_APPROVAL_MAX_BYTES,
-    NATIVE_PROTOCOL_VERSION, NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES,
+    ContextDigestRequestV1, GuardHookEnvelopeV2, NativeHookRequestV1, RuntimeCapabilitiesV1,
+    GUARD_HOOK_ENVELOPE_V2_SCHEMA, MAX_NATIVE_RESPONSE_BYTES, NATIVE_APPROVAL_ERROR_CODES,
+    NATIVE_APPROVAL_MAX_BYTES, NATIVE_PROTOCOL_VERSION, NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES,
 };
 use guard_hook_core::review_post_tool;
 use serde::Deserialize;
@@ -24,6 +24,7 @@ pub(crate) enum ResidentOperationV1 {
     ApprovalChallengeV4(ApprovalChallengeRequestV4),
     ApprovalValidateV4(ApprovalValidateRequestV4),
     ApprovalConsumeV4(ApprovalConsumeRequestV4),
+    ContextDigest(ContextDigestRequestV1),
     Health(Value),
     Shutdown(Value),
 }
@@ -70,6 +71,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         "native-resident-client-v1".into(),
         "native-resident-lifecycle-v1".into(),
         guard_contracts::ARCHIVE_INSPECTION_FEATURE.into(),
+        guard_contracts::CONTEXT_DIGEST_FEATURE.into(),
     ];
     if cfg!(windows) {
         features.push("authenticated-loopback-resident-v1".into());
@@ -172,6 +174,9 @@ pub(crate) fn evaluate_resident_bytes(
                 let policy_store =
                     policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
                 crate::approval::approval_v4::consume_approval(request, policy_store)
+            }
+            ResidentOperationV1::ContextDigest(request) => {
+                crate::context_digest::evaluate_context_digest_request(&request)
             }
             ResidentOperationV1::Health(_request) => encode_response(&serde_json::json!({
                 "status": "ready",

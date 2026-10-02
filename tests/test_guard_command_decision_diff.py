@@ -28,7 +28,7 @@ from tests.guard_command_decision_diff import (
     report_framed_sha256,
     source_binding_id,
 )
-from tests.support.extension_freshness import requires_fresh_decision_diff
+from tests.support.extension_freshness import requires_fresh_decision_diff, requires_fresh_projections
 
 _OPAQUE_ID = re.compile(r"c-[0-9a-f]{24}")
 _REPORT_FRAMED_DIGEST_PATH = REPORT_PATH.with_name("decision-diff-report.framed-sha256")
@@ -312,6 +312,7 @@ def test_report_contains_only_privacy_safe_deterministic_evidence() -> None:
     assert not _OPAQUE_ID.search(payload)
 
 
+@requires_fresh_projections
 @pytest.mark.parametrize(
     ("hash_seed", "timezone", "locale"),
     [("1", "UTC", "C"), ("8731", "US/Pacific", "C.UTF-8")],

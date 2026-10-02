@@ -4022,16 +4022,18 @@ class TestGuardSurfaceServer:
                 method="POST",
             )
             operation_error = None
+            operation_error_body = None
             try:
                 urllib.request.urlopen(operation_request, timeout=5)
             except urllib.error.HTTPError as error:
                 operation_error = error
+                operation_error_body = error.read()
         finally:
             daemon.stop()
 
         assert operation_error is not None
         assert operation_error.code == 400
-        assert json.loads(operation_error.read().decode("utf-8")) == {
+        assert json.loads(operation_error_body.decode("utf-8")) == {
             "error": "Unknown guard session: missing-session",
         }
         assert store.list_guard_operations(session_id="missing-session") == []

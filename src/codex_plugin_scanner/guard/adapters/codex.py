@@ -62,6 +62,7 @@ from ..codex_hook_registration import (
 from ..codex_hook_registration import (
     remove_manifest_bound_hook_events as _remove_manifest_bound_hook_events,
 )
+from ..codex_hook_rollback import require_unchanged_config_for_rollback, rollback_file_identity
 from ..codex_hook_sources import (
     require_hook_inventory_sources_unchanged as _require_hook_inventory_sources_unchanged,
 )
@@ -1681,20 +1682,46 @@ class CodexHarnessAdapter(HarnessAdapter):
 
         if config_path.exists() or config_path.is_symlink():
             validate_regular_file(config_path, role="config_target", executable_required=False)
-            original_config = config_path.read_text(encoding="utf-8")
+        try:
+            original_config_identity = rollback_file_identity(config_path)
+        except RuntimeError as error:
+            raise RuntimeError(
+                "codex_hook_config_invalid: Codex configuration must be a single-link regular file."
+            ) from error
+        if config_path.exists() or config_path.is_symlink():
+            original_config = config_path.read_bytes()
+            try:
+                _ = original_config.decode("utf-8")
+            except UnicodeDecodeError as error:
+                raise RuntimeError("codex_hook_config_invalid: Codex configuration is not valid UTF-8.") from error
         else:
             original_config = None
+        try:
+            second_snapshot_identity = rollback_file_identity(config_path)
+        except RuntimeError as error:
+            raise RuntimeError(
+                "codex_hook_config_invalid: Codex configuration became an invalid target during its snapshot."
+            ) from error
+        if second_snapshot_identity != original_config_identity:
+            raise RuntimeError("codex_hook_config_invalid: Codex configuration changed during its snapshot.")
         manifest_path = hook_manifest_path(context.guard_home, config_path)
         secret_path = hook_secret_path(context.guard_home)
         original_manifest = snapshot_regular_file(manifest_path)
         original_secret = snapshot_regular_file(secret_path)
+        rendered_config = dump_toml(payload)
+        written_config_identity: tuple[int, int, int, int, int] | None = None
+
+        def remember_written_config(identity: tuple[int, int, int, int, int]) -> None:
+            nonlocal written_config_identity
+            written_config_identity = identity
+
         try:
             manifest = build_authenticated_hook_manifest(
                 _hook_manifest_spec(context), previous_manifest=previous_manifest
             )
             _assert_package_reauthentication_is_safe(previous_manifest, manifest)
             write_hook_manifest(context.guard_home, config_path, manifest)
-            atomic_write_text(config_path, dump_toml(payload), mode=0o600)
+            atomic_write_text(config_path, rendered_config, mode=0o600, on_publish=remember_written_config)
             written_payload = _strict_toml_object(config_path, label="rendered Codex config file")
             _require_hook_semantics_readback(
                 payload,
@@ -1709,15 +1736,30 @@ class CodexHarnessAdapter(HarnessAdapter):
                     f"{_AUTHORITATIVE_HOOK_UNAVAILABLE_REASON}: Codex hook authentication readback failed: {reason}"
                 )
             return state
-        except BaseException:
+        except BaseException as transaction_error:
+            # Never overwrite a config changed by another writer. Manifest and
+            # secret are still restored so the unknown config fails closed
+            # against the pre-transaction authentication state.
+            rollback_conflict: BaseException | None = None
+            try:
+                require_unchanged_config_for_rollback(
+                    config_path,
+                    original_config,
+                    rendered_config.encode("utf-8"),
+                    original_identity=original_config_identity,
+                    written_identity=written_config_identity,
+                )
+            except BaseException as conflict:
+                rollback_conflict = conflict
             rollback_error: BaseException | None = None
             try:
-                if original_config is None:
-                    if config_path.is_symlink():
-                        raise RuntimeError("Guard refused to unlink a symlink while rolling back Codex config.")
-                    config_path.unlink(missing_ok=True)
-                else:
-                    atomic_write_text(config_path, original_config, mode=0o600)
+                if rollback_conflict is None:
+                    if original_config is None:
+                        if config_path.is_symlink():
+                            raise RuntimeError("Guard refused to unlink a symlink while rolling back Codex config.")
+                        config_path.unlink(missing_ok=True)
+                    else:
+                        atomic_write_text(config_path, original_config.decode("utf-8"), mode=0o600)
                 restore_private_file(manifest_path, original_manifest)
                 restore_private_file(secret_path, original_secret)
             except BaseException as exc:  # pragma: no cover - catastrophic local I/O failure
@@ -1726,6 +1768,8 @@ class CodexHarnessAdapter(HarnessAdapter):
                 raise RuntimeError(
                     "Codex hook transaction failed and rollback could not be completed."
                 ) from rollback_error
+            if rollback_conflict is not None:
+                raise rollback_conflict from transaction_error
             raise
 
     @staticmethod

@@ -357,7 +357,8 @@
     "src/codex_plugin_scanner/guard/native_approval_errors.py",
     "src/codex_plugin_scanner/guard/native_approval_protocol.py",
     "src/codex_plugin_scanner/guard/native_approval_v4_portal.py",
-    "src/codex_plugin_scanner/guard/native_approval_v4_protocol.py"
+    "src/codex_plugin_scanner/guard/native_approval_v4_protocol.py",
+    "src/codex_plugin_scanner/guard/native_context.py"
    ],
    "current": "mechanical bounded guard-hook-envelope.v2 and guard-archive-inspection.v1 serialization, package-bound native invocation, typed result decoding, and harness response projection; the archive-inspection lease is owned inside the native worker",
    "target": "minimal launcher, serialization, and response projection only"
@@ -395,6 +396,7 @@
     "src/codex_plugin_scanner/guard/native_runtime_admission.py",
     "src/codex_plugin_scanner/guard/native_route_receipt.py",
     "src/codex_plugin_scanner/guard/native_runtime_resilience.py",
+    "src/codex_plugin_scanner/guard/native_context.py",
     "src/codex_plugin_scanner/guard/native_mode.py",
     "src/codex_plugin_scanner/guard/daemon/discovery.py",
     "src/codex_plugin_scanner/guard/daemon/manager.py",

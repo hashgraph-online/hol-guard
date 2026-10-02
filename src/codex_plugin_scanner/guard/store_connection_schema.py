@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, ClassVar, cast
 from uuid import uuid4
 
 from . import store_connection_scope, store_native_decision_receipts, store_review_event_outbox_schema
+from .fork_safety import forget_in_child
 from .mcp.policy_store import ensure_mcp_policy_request_schema
 from .sqlite_profile import (
     SQLiteMigrationGateReport,
@@ -1553,3 +1554,6 @@ class StoreConnectionSchemaMixin:
         with self._connect() as connection:
             rows = connection.execute("select name from sqlite_master where type = 'table'").fetchall()
         return sorted(str(row["name"]) for row in rows)
+
+
+forget_in_child(StoreConnectionSchemaMixin._schema_initialization_states)
