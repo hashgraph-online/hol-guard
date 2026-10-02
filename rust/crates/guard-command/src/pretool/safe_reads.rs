@@ -85,8 +85,8 @@ pub(super) fn safe_read_target(argument: &str) -> bool {
 
 /// Structured file-tool read floor. `home_dir`/`cwd` are the envelope's
 /// verified roots; `~` expands against `home_dir`. Absolute and anchored
-/// candidates must canonicalize to an existing regular file inside a
-/// verified root — symlink escapes resolve to their real target — and stay
+/// candidates must canonicalize to an existing regular file — symlinks
+/// resolve to their real target — and stay
 /// outside the sensitive roots, credential families, sensitive filenames,
 /// and hidden directories. Workspace-relative paths keep the legacy
 /// lexical allowance, but when `cwd` is known and the file resolves, the
@@ -132,8 +132,8 @@ pub(super) fn bounded_file_read_target(
     safe_read_target(path)
 }
 
-/// The canonicalized target must be a regular file under a verified root
-/// and clear every sensitive-content screen.
+/// Location outside the workspace is not itself a risk. The resolved regular
+/// file must still clear every sensitive-path screen.
 fn resolved_file_read_allowed(
     canonical: &std::path::Path,
     home_dir: Option<&str>,
@@ -142,16 +142,14 @@ fn resolved_file_read_allowed(
     if !canonical.is_file() {
         return false;
     }
-    let under_root = [home_dir, cwd]
-        .into_iter()
-        .flatten()
-        .map(str::trim)
-        .filter(|root| root.starts_with('/'))
-        .filter_map(|root| std::fs::canonicalize(root).ok())
-        .any(|root| canonical.starts_with(root));
-    if !under_root {
-        return false;
-    }
+    resolved_path_allowed(canonical, home_dir, cwd)
+}
+
+fn resolved_path_allowed(
+    canonical: &std::path::Path,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+) -> bool {
     let rendered = canonical.to_string_lossy().replace('\\', "/");
     let lowered = rendered.to_ascii_lowercase();
     const ROOTS: [&str; 7] = [
@@ -166,6 +164,7 @@ fn resolved_file_read_allowed(
     if ROOTS
         .iter()
         .any(|prefix| lowered == *prefix || lowered.starts_with(&format!("{prefix}/")))
+        || foreign_user_home(canonical, home_dir, cwd)
         || super::sensitive_command(&rendered)
         || guard_secure_fs::sensitive_path_family(canonical).is_some()
         || guard_secure_fs::sensitive_external_filename(canonical)
@@ -175,24 +174,124 @@ fn resolved_file_read_allowed(
                 guard_secure_fs::EXTERNAL_SENSITIVE_PARTS.contains(&part.as_str())
             })
         })
-        || !(guard_secure_fs::hidden_read_parts_allowed(canonical) || guard_safety_doc(canonical))
+        || !(guard_secure_fs::hidden_read_parts_allowed(canonical)
+            || guard_safety_doc(canonical, home_dir)
+            || agent_skill_document(canonical, home_dir))
     {
         return false;
     }
     true
 }
 
+pub(super) fn bounded_file_write_target(value: &str, cwd: Option<&str>) -> bool {
+    let Some(workspace) = cwd.and_then(|root| std::fs::canonicalize(root).ok()) else {
+        return false;
+    };
+    if value.is_empty()
+        || value.len() > 4096
+        || value.contains([
+            '$', '`', '|', ';', '&', '<', '>', '\n', '\r', '\0', '*', '?', '[', ']', '{', '}',
+        ])
+        || value.split(['/', '\\']).any(|part| part == "..")
+    {
+        return false;
+    }
+    let supplied = std::path::Path::new(value);
+    let target = if supplied.is_absolute() {
+        supplied.to_path_buf()
+    } else {
+        workspace.join(supplied)
+    };
+    let canonical = match std::fs::canonicalize(&target) {
+        Ok(path) if path.is_file() => path,
+        Ok(_) => return false,
+        Err(_) => {
+            // A dangling symlink is not a new file. Only a missing leaf in
+            // an existing canonical parent can receive routine-write proof.
+            if target.symlink_metadata().is_ok() {
+                return false;
+            }
+            let Some(parent) = target
+                .parent()
+                .and_then(|parent| std::fs::canonicalize(parent).ok())
+            else {
+                return false;
+            };
+            let Some(name) = target.file_name() else {
+                return false;
+            };
+            parent.join(name)
+        }
+    };
+    canonical.starts_with(&workspace)
+        && resolved_path_allowed(&canonical, None, cwd)
+        && !autostart_write_target(&canonical)
+}
+
+fn autostart_write_target(path: &std::path::Path) -> bool {
+    let rendered = path
+        .to_string_lossy()
+        .replace('\\', "/")
+        .to_ascii_lowercase();
+    let parts: Vec<&str> = rendered
+        .split('/')
+        .filter(|part| !part.is_empty())
+        .collect();
+    parts.windows(2).any(|pair| {
+        matches!(
+            pair,
+            ["library", "launchagents"]
+                | ["library", "launchdaemons"]
+                | [".config", "autostart"]
+                | [".config", "systemd"]
+        )
+    }) || parts
+        .windows(3)
+        .any(|parts| parts == ["start menu", "programs", "startup"])
+}
+
+fn agent_skill_document(canonical: &std::path::Path, home_dir: Option<&str>) -> bool {
+    let Some(home) = home_dir.and_then(|root| std::fs::canonicalize(root).ok()) else {
+        return false;
+    };
+    let Ok(skills) = std::fs::canonicalize(home.join(".agents/skills")) else {
+        return false;
+    };
+    let Ok(relative) = canonical.strip_prefix(skills) else {
+        return false;
+    };
+    canonical.extension().is_some_and(|extension| extension == "md")
+        && relative.components().count() >= 2
+        && relative.components().all(|component| {
+            matches!(component, std::path::Component::Normal(part) if !part.to_string_lossy().starts_with('.'))
+        })
+}
+
 /// `~/.hol-support/SAFETY.md` is the harness-facing safety guide that agents
 /// are instructed to read before acting; it gets the same explicit allowance
 /// the Python source-path classifier grants.
-fn guard_safety_doc(canonical: &std::path::Path) -> bool {
-    canonical
-        .file_name()
-        .is_some_and(|name| name == "SAFETY.md")
-        && canonical
-            .parent()
-            .and_then(|dir| dir.file_name())
-            .is_some_and(|dir| dir == ".hol-support")
+fn guard_safety_doc(canonical: &std::path::Path, home_dir: Option<&str>) -> bool {
+    home_dir
+        .and_then(|root| std::fs::canonicalize(root).ok())
+        .is_some_and(|home| canonical == home.join(".hol-support/SAFETY.md"))
+}
+
+fn foreign_user_home(
+    canonical: &std::path::Path,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+) -> bool {
+    let user_root = ["/home", "/Users"].iter().find_map(|root| {
+        let relative = canonical.strip_prefix(root).ok()?;
+        let user = relative.components().next()?;
+        Some(std::path::Path::new(root).join(user.as_os_str()))
+    });
+    user_root.is_some_and(|user_root| {
+        ![home_dir, cwd]
+            .into_iter()
+            .flatten()
+            .any(|root| std::fs::canonicalize(root).is_ok_and(|root| root.starts_with(&user_root)))
+    })
 }
 
 fn expand_home_read_path(path: &str, home_dir: Option<&str>) -> Option<String> {
@@ -244,6 +343,41 @@ pub(super) fn safe_listing_arguments(arguments: &[String]) -> bool {
         }
         safe_read_target(argument)
     })
+}
+
+pub(super) fn safe_sed_arguments(arguments: &[String], piped_input: bool) -> bool {
+    let (quiet, rest) = if arguments.first().is_some_and(|arg| arg == "-n") {
+        (true, &arguments[1..])
+    } else {
+        (false, arguments)
+    };
+    let Some((program, targets)) = rest.split_first() else {
+        return false;
+    };
+    if program.len() > 256 || program.contains(['\n', '\r', '\\', ';']) {
+        return false;
+    }
+    let bounded_print = quiet
+        && program.strip_suffix('p').is_some_and(|range| {
+            let counts: Vec<_> = range.split(',').collect();
+            (1..=2).contains(&counts.len())
+                && counts.iter().all(|count| {
+                    !count.is_empty()
+                        && count.len() <= 6
+                        && count.bytes().all(|byte| byte.is_ascii_digit())
+                        && count.parse::<u32>().is_ok_and(|count| count > 0)
+                })
+        });
+    // Exactly one substitution with inert flags. No e/w commands, program
+    // files, in-place edits, or additional statements can enter this proof.
+    let substitution = !quiet
+        && program.strip_prefix("s/").is_some_and(|body| {
+            let parts: Vec<_> = body.split('/').collect();
+            parts.len() == 3 && matches!(parts[2], "" | "g")
+        });
+    (bounded_print || substitution)
+        && (matches!(targets, [target] if !target.starts_with('-') && safe_read_target(target))
+            || (targets.is_empty() && piped_input))
 }
 
 pub(super) fn safe_plain_file_arguments(arguments: &[String]) -> bool {

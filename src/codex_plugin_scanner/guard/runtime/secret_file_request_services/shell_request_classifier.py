@@ -94,11 +94,17 @@ def _destructive_shell_tool_action_request(
         native_allow_floor_only = bool(native_evaluation.matches) and all(
             owned.match.rule.default_mode == "disabled" for owned in native_evaluation.matches
         )
-        if native_evaluation.minimum_action == "allow" and (native_explicitly_benign or native_allow_floor_only):
+        if (
+            native_evaluation.minimum_action == "allow"
+            and (native_explicitly_benign or native_allow_floor_only)
+            and not native_evaluation.control_resolution.explicitly_enabled_permission_ids
+        ):
             # The resident has bound this exact command and supplied the
             # benign proof.  The legacy shell classifier must not turn it
             # back into a sensitive action request.
             return None
+        # Explicit execution consent still needs artifact/harness risk-policy
+        # composition. It must not discard an independent configured deny.
         if (
             native_evaluation.matches
             and (

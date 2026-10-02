@@ -3,6 +3,8 @@ use guard_secure_fs::sensitive_path_family;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
+mod pure_expression;
+mod restricted_tests;
 mod safe_reads;
 mod search;
 
@@ -109,7 +111,7 @@ fn sensitive_path_argument_with_credentials(value: &str, include_credential_name
         normalized.rsplit_once(':').map_or("", |(_, tail)| tail),
     ];
     candidates.iter().any(|candidate| {
-        let relative = candidate.trim_start_matches("./");
+        let relative = candidate.strip_prefix("./").unwrap_or(candidate);
         sensitive_path_family(Path::new(relative)).is_some()
             || (include_credential_names
                 && (guard_secure_fs::credential_named_path(Path::new(relative))
@@ -278,7 +280,9 @@ fn exact_safe_command(model: &CanonicalCommandV1, allow_git_helper_context: bool
             return false;
         };
         let basename = executable_basename(executable);
-        if sensitive_command(&segment.text)
+        let inert_search = matches!(basename, "rg" | "grep")
+            && safe_search_arguments(basename, &segment.arguments);
+        if (!inert_search && sensitive_command(&segment.text))
             || (!matches!(basename, "rg" | "grep")
                 && segment
                     .arguments
@@ -305,9 +309,37 @@ fn exact_safe_command(model: &CanonicalCommandV1, allow_git_helper_context: bool
             "git" => safe_git_arguments(&segment.arguments, allow_git_helper_context),
             "gh" => safe_gh_arguments(&segment.arguments),
             "rg" | "grep" => safe_search_arguments(basename, &segment.arguments),
+            "sed" => safe_reads::safe_sed_arguments(&segment.arguments, segment.pipeline_index > 0),
+            "python" | "python3" | "node" | "nodejs" =>
+                pure_expression::safe_inline_expression(basename, &segment.arguments),
             _ => false,
         }
     })
+}
+
+fn exact_safe_search_command(model: &CanonicalCommandV1) -> bool {
+    exact_safe_command(model, false)
+        && model.segments.iter().all(|segment| {
+            segment
+                .executable
+                .as_deref()
+                .is_some_and(|executable| matches!(executable_basename(executable), "rg" | "grep"))
+        })
+}
+
+pub(super) fn sensitive_command_input(value: &str) -> bool {
+    if !sensitive_command(value) {
+        return false;
+    }
+    let request = CommandModelRequestV1 {
+        command: value.to_owned(),
+        dialect: "posix".to_owned(),
+        transport: "shell_string".to_owned(),
+        extraction_provenance: "guard-shell".to_owned(),
+    };
+    // Only parsed, bounded search data may shed the raw keyword signal.
+    // Structured paths, prompts, URLs and arbitrary executable text keep it.
+    !parse_command(&request).is_ok_and(|model| exact_safe_search_command(&model))
 }
 
 fn exact_destructive_tool_introspection(model: &CanonicalCommandV1) -> bool {
@@ -332,6 +364,14 @@ fn exact_destructive_tool_introspection(model: &CanonicalCommandV1) -> bool {
 pub fn evaluate_pre_tool(request: &CommandModelRequestV1) -> Result<PreToolDecisionV1, String> {
     let model = parse_command(request)?;
     let normalized = model.normalized_text.as_str();
+    if exact_safe_search_command(&model) {
+        return Ok(pretool_decision(
+            model,
+            "allow",
+            "native_exact_safe_command",
+            "The Rust command authority proved this bounded source search explicitly benign.",
+        ));
+    }
     if exact_destructive_tool_introspection(&model) {
         return Ok(pretool_decision(
             model,
@@ -340,7 +380,15 @@ pub fn evaluate_pre_tool(request: &CommandModelRequestV1) -> Result<PreToolDecis
             "The Rust command authority proved this command only inspects tool metadata.",
         ));
     }
-    if destructive_command(normalized) {
+    let destructive_remote_sync = model.segments.iter().any(|segment| {
+        segment.executable.as_deref().is_some_and(|executable| {
+            matches!(executable_basename(executable), "gh" | "gh.exe")
+        }) && matches!(segment.arguments.as_slice(), [repo, sync, ..] if repo == "repo" && sync == "sync")
+            && segment.arguments.iter().take_while(|arg| arg.as_str() != "--")
+                .any(|arg| arg == "--force")
+            && !segment.arguments.iter().any(|arg| matches!(arg.as_str(), "--help" | "-h"))
+    });
+    if destructive_command(normalized) || destructive_remote_sync {
         return Ok(pretool_decision(
             model,
             "block",

@@ -278,7 +278,10 @@ enum SearchValueRole {
 fn unsafe_search_value(role: SearchValueRole, value: &str) -> bool {
     match role {
         SearchValueRole::Glob | SearchValueRole::Path => {
-            sensitive_path_argument(value) || glob_can_select_sensitive_path(value)
+            value.starts_with(['/', '~'])
+                || value.split(['/', '\\']).any(|part| part == "..")
+                || sensitive_path_argument(value)
+                || glob_can_select_sensitive_path(value)
         }
         SearchValueRole::TypeGlob => value.split_once(':').is_none_or(|(_, glob)| {
             sensitive_path_argument(glob) || glob_can_select_sensitive_path(glob)
@@ -404,7 +407,7 @@ fn safe_rg_arguments(arguments: &[String]) -> bool {
             continue;
         }
         if paths_only || pattern_supplied {
-            if sensitive_path_argument(argument) || glob_can_select_sensitive_path(argument) {
+            if unsafe_search_value(SearchValueRole::Path, argument) {
                 return false;
             }
         } else {
@@ -477,7 +480,7 @@ fn safe_grep_arguments(arguments: &[String]) -> bool {
             continue;
         }
         if pattern_supplied {
-            if sensitive_path_argument(argument) || glob_can_select_sensitive_path(argument) {
+            if unsafe_search_value(SearchValueRole::Path, argument) {
                 return false;
             }
         } else {

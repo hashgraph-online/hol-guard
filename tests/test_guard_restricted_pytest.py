@@ -139,7 +139,12 @@ def test_terminal_pytest_profile_cannot_be_downgraded_by_exact_allow(tmp_path: P
     assert _runtime_artifact_policy_action(config, artifact, "codex") == "sandbox-required"
 
 
-def test_pytest_contained_cli_dispatches_exact_argv(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+@pytest.mark.parametrize("read_only_workspace", (False, True))
+def test_pytest_contained_cli_dispatches_exact_argv(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    read_only_workspace: bool,
+) -> None:
     observed: dict[str, object] = {}
 
     def fake_run_restricted_pytest(command, **kwargs):
@@ -159,6 +164,7 @@ def test_pytest_contained_cli_dispatches_exact_argv(monkeypatch: pytest.MonkeyPa
             str(tmp_path),
             "--timeout-seconds",
             "45",
+            *(["--read-only-workspace"] if read_only_workspace else []),
             "--",
             sys.executable,
             "-m",
@@ -173,6 +179,7 @@ def test_pytest_contained_cli_dispatches_exact_argv(monkeypatch: pytest.MonkeyPa
         "workspace": tmp_path,
         "cwd": tmp_path,
         "timeout_seconds": 45,
+        "read_only_workspace": read_only_workspace,
     }
 
 
