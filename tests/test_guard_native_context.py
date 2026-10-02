@@ -398,3 +398,37 @@ def test_bind_context_digest_home_does_not_inherit_held_lock_across_fork(tmp_pat
         child.join(timeout=5)
     assert child.exitcode == 0
     assert results.get(timeout=1) == "bound"
+
+
+def test_native_runtime_status_memo_shares_one_probe_within_ttl(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A digest burst (environment_material hashes one value per env var) must
+    # not re-probe the runtime status per digest — memoize the snapshot so the
+    # burst shares one binary validation.
+    native_context._status_memo = None
+    calls = []
+    status = _status()
+
+    def _probe() -> NativeRuntimeStatus:
+        calls.append(1)
+        return status
+
+    monkeypatch.setattr(native_context, "native_runtime_status", _probe)
+    first = native_context._native_runtime_status_memo()
+    second = native_context._native_runtime_status_memo()
+    assert first is status
+    assert second is status
+    assert len(calls) == 1
+
+
+def test_native_runtime_status_memo_reprobes_when_probe_replaced(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A monkeypatched ``native_runtime_status`` has a different callable
+    # identity, so a memoized snapshot from the prior probe must not mask it —
+    # each new probe gets a fresh call within its own TTL.
+    native_context._status_memo = None
+    first_status = _status()
+    monkeypatch.setattr(native_context, "native_runtime_status", lambda: first_status)
+    assert native_context._native_runtime_status_memo() is first_status
+
+    second_status = _status(mode="off", available=False)
+    monkeypatch.setattr(native_context, "native_runtime_status", lambda: second_status)
+    assert native_context._native_runtime_status_memo() is second_status
