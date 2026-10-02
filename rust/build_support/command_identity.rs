@@ -34,7 +34,9 @@ pub fn emit(root: &Path) -> String {
         .map(|entry| entry.expect("native crate").path())
         .collect();
     crates.sort();
-    println!("cargo:rerun-if-changed={}", root.join("crates").display());
+    // Cargo manifests and each production src directory below are watched.
+    // Watching the entire crates directory would also invalidate this build
+    // for portable test fixtures, recreating the fixture/recompile cycle.
     for directory in crates {
         if directory.join("Cargo.toml").is_file() {
             files.push(directory.join("Cargo.toml"));

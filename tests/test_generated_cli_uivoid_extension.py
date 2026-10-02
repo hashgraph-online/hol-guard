@@ -44,6 +44,12 @@ def test_uivoid_source_is_present_and_declares_its_action_classes() -> None:
     }
 
 
+def _trust_classes(trust: dict, extension_id: str) -> tuple[str, ...]:
+    classes = tuple(name for name, ids in trust["classes"].items() if extension_id in ids)
+    assert len(classes) == 1, "each fixture source needs exactly one reviewed trust class"
+    return classes
+
+
 def test_uivoid_portable_fixture_binds_canonical_sources() -> None:
     fixture = json.loads(_FIXTURE_PATH.read_text())
     assert fixture["schema"] == "guard.command-extension-fixtures.v1"
@@ -58,7 +64,13 @@ def test_uivoid_portable_fixture_binds_canonical_sources() -> None:
     for source, extension_id in zip(sources, ids, strict=True):
         canonical = ROOT / "contributions/command-sources" / f"{extension_id}.json"
         assert source == json.loads(canonical.read_text())
-    assert build["trust"] == json.loads((ROOT / "contracts/extensions/trust-class-map.v1.json").read_text())
+    canonical_trust = json.loads((ROOT / "contracts/extensions/trust-class-map.v1.json").read_text())
+    assert build["trust"]["schemaVersion"] == canonical_trust["schemaVersion"]
+    assert build["trust"]["publishers"] == canonical_trust["publishers"]
+    # Only the fixture's sources determine its trust contract. Another
+    # contributor joining the catalog must not rewrite this behavioral fixture.
+    for extension_id in ids:
+        assert _trust_classes(build["trust"], extension_id) == _trust_classes(canonical_trust, extension_id)
 
 
 def test_uivoid_behavior_fixtures_pass_against_the_native_evaluator() -> None:
@@ -71,3 +83,16 @@ def test_uivoid_behavior_fixtures_pass_against_the_native_evaluator() -> None:
     assert len(result["cases"]) == len(fixture["cases"])
     failures = [case for case in result.get("cases", []) if not case["passed"]]
     assert result.get("ok") is True, f"{len(failures)} fixture case(s) failed: {failures[:5]}"
+
+
+@pytest.mark.parametrize("change", ["missing", "duplicate", "promoted"])
+def test_uivoid_fixture_trust_rejects_missing_ambiguous_or_promoted_identity(change: str) -> None:
+    fixture_trust = json.loads(_FIXTURE_PATH.read_text())["build"]["trust"]
+    canonical = json.loads((ROOT / "contracts/extensions/trust-class-map.v1.json").read_text())
+    identity = "command.uivoid"
+    if change != "duplicate":
+        fixture_trust["classes"]["external"].remove(identity)
+    if change != "missing":
+        fixture_trust["classes"]["first-party"].append(identity)
+    with pytest.raises(AssertionError):
+        assert _trust_classes(fixture_trust, identity) == _trust_classes(canonical, identity)

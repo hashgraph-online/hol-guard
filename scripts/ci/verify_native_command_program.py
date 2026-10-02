@@ -31,6 +31,8 @@ def main() -> int:
         help="Accepted for existing callers; validation always covers the complete current source tree.",
     )
     args = parser.parse_args()
+    if sys.platform == "win32" and not Path(args.compiler).suffix:
+        args.compiler += ".exe"
     command = [sys.executable, "scripts/build_native_command_program.py", "--compiler", args.compiler]
     _run(command)
     _run([*command, "--check"])
