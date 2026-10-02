@@ -382,9 +382,13 @@ pub fn evaluate_pre_tool_envelope_with_context(
         }
         result.prompt_risk_classes = classes;
     }
-    match (controls, command_decision) {
-        (Some(controls), Some(Ok(decision))) => controls.apply_with_tool(
-            Some(&decision.command_model),
+    let command_model = command_decision
+        .as_ref()
+        .and_then(|decision| decision.as_ref().ok())
+        .map(|decision| &decision.command_model);
+    let mut result = match (controls, command_model) {
+        (Some(controls), Some(model)) => controls.apply_with_tool(
+            Some(model),
             result,
             signals.tool_name.as_deref(),
             &signals.package_values,
@@ -398,7 +402,32 @@ pub fn evaluate_pre_tool_envelope_with_context(
             deadline,
         ),
         _ => result,
+    };
+    if event == "PreToolUse"
+        && matches!(harness, "omp" | "oh-my-pi")
+        && cwd.is_some()
+        && result.action.action_type == PreToolActionTypeV1::Command
+        && !result.action.sensitive_target
+        && result.reason_code == "native_command_review_required"
+        && result.minimum_action == "review"
+        && result.command_extensions.as_ref().is_none_or(|extensions| {
+            extensions.binding.uncertainty_count == 0
+                && extensions.evaluation_error.is_none()
+                && extensions.observations.is_empty()
+                && extensions.permission_observations.is_empty()
+        })
+        && command_model.is_some_and(super::restricted_tests::requires_pytest_containment)
+    {
+        result.minimum_action = "sandbox-required".into();
+        result.policy_action = "sandbox-required".into();
+        result.reason_code = "native_pytest_readonly_containment_required".into();
+        result.reason = concat!(
+            "HOL Guard requires the read-only test runner for this repository execution. ",
+            "Direct execution remains blocked.",
+        )
+        .into();
     }
+    result
 }
 
 fn evaluate_signals(

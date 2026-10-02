@@ -85,6 +85,8 @@ Date.now = () => forceExpiredDeadline ? realDateNow() + 60_000 : realDateNow();
 {_generated_structured_helper(source)}
 
 function sourceFileRefForPostToolUse() {{ return null; }}
+// This fixture executes output mediation only, without a session request map.
+function cleanupContainedTestRequest() {{}}
 function toolCallIdKey(value) {{ return typeof value === "string" && value.trim() ? value.trim() : null; }}
 {blocked_reason}
 function blockedToolResult(reason, details) {{

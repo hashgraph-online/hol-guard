@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 mod pure_expression;
+mod restricted_tests;
 mod safe_reads;
 mod search;
 

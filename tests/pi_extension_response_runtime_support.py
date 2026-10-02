@@ -281,6 +281,8 @@ let guardResponse = {{ decision: "allow", model_output_action: "allow_original" 
 {_generated_structured_helper(source)}
 
 function sourceFileRefForPostToolUse() {{ return null; }}
+// Containment lifecycle is exercised separately with its real request map.
+function cleanupContainedTestRequest() {{}}
 function toolCallIdKey(value) {{ return typeof value === "string" && value.trim() ? value.trim() : null; }}
 function modelVisibleBlockedReason(reason) {{ return `blocked: ${{reason}}`; }}
 function blockedToolResult(reason, details) {{

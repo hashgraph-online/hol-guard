@@ -135,6 +135,34 @@ def harness_json_from_native_pre_tool(harness: str, response: Mapping[str, objec
     reason = str(response.get("reason") or "HOL Guard requires native review before execution.")
     reason_code = str(response.get("reason_code") or "native_pre_tool_review")
     canonical = _canonical_hook_harness(harness)
+    if (
+        canonical == "omp"
+        and action == "sandbox-required"
+        and response.get("policy_action") == "sandbox-required"
+        and response.get("decision") == "deny"
+        and response.get("authority") == "rust"
+        and response.get("schema") == "guard-pre-tool-result.v1"
+        and reason_code == "native_pytest_readonly_containment_required"
+    ):
+        extensions = response.get("command_extensions")
+        binding = extensions.get("binding") if isinstance(extensions, Mapping) else None
+        if (
+            isinstance(binding, Mapping)
+            and type(binding.get("uncertainty_count")) is int
+            and binding["uncertainty_count"] == 0
+            and extensions.get("evaluation_error") is None
+            and extensions.get("observations") == []
+            and extensions.get("permission_observations") == []
+        ):
+            # This is not permission to execute the original input. New adapters
+            # may route it to the protected sink; old adapters still see deny.
+            return {
+                "decision": "deny",
+                "policy_action": "sandbox-required",
+                "reason_code": reason_code,
+                "reason": reason,
+                "required_execution_profile": "pytest-readonly-v2",
+            }
     if action in {"allow", "warn"} and response.get("decision") == "allow":
         if canonical in {"pi", "omp"}:
             output: dict[str, object] = {
