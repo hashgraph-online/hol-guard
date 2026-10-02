@@ -445,7 +445,7 @@ def _category(path: str, kind: str) -> str:
         return "transport_identity"
     if path in _TRANSPORT_DECODE_PATHS and kind == "decode":
         return "transport_decode"
-    if path in _TRANSPORT_INTEGRITY_PATHS and kind in {"hash", "filesystem"}:
+    if path in _TRANSPORT_INTEGRITY_PATHS and kind == "hash":
         return "transport_integrity"
     if path in _TRANSPORT_AUTHORITY_PATHS and kind == "filesystem":
         return "transport_authority"
