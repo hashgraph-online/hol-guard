@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from .._shell_execution_context_support import SHELL_CWD_UNRESOLVED_PARENT_SHELL
@@ -29,6 +30,7 @@ from .pytest_target_detection import _shell_command_targets_pytest
 from .request_models import ToolActionRequestMatch
 from .shell_initial_risk import initial_shell_risk_match
 from .shell_quote_parsing import _bounded_current_workspace_source_edit_execution_context, literal_cd_execution_context
+from .shell_static_safety import _is_python_interpreter_command
 from .source_edit_context import (
     _bounded_verified_source_edit_execution_context,
     low_risk_compound_developer_execution_context,
@@ -36,6 +38,60 @@ from .source_edit_context import (
 
 
 def _destructive_shell_tool_action_request(
+    *,
+    tool_name: str,
+    normalized_tool_name: str,
+    command_text: str,
+    cwd: Path | None,
+    home_dir: Path | None,
+    canonical_command: CanonicalCommand | None = None,
+    raw_command_text: str | None = None,
+    execution_context: ShellExecutionContext | None = None,
+    raw_execution_context: ShellExecutionContext | None = None,
+    native_evaluation: CompositeCommandEvaluation | None = None,
+) -> ToolActionRequestMatch | None:
+    result = _classify_shell_tool_action_request(
+        tool_name=tool_name,
+        normalized_tool_name=normalized_tool_name,
+        command_text=command_text,
+        cwd=cwd,
+        home_dir=home_dir,
+        canonical_command=canonical_command,
+        raw_command_text=raw_command_text,
+        execution_context=execution_context,
+        raw_execution_context=raw_execution_context,
+        native_evaluation=native_evaluation,
+    )
+    if result is not None or normalized_tool_name not in _SHELL_TOOL_NAMES or os.name != "nt":
+        return result
+    canonical_command = canonical_command or parse_shell_command(command_text, cwd=cwd, home_dir=home_dir)
+    # Hash binding is not a Windows host ACL proof. Add this floor only after
+    # normal classification so it never hides a deny or sandbox requirement.
+    if (
+        len(canonical_command.segments) > 1
+        and any(_is_python_interpreter_command(segment.executable or "") for segment in canonical_command.segments)
+        and (native_evaluation is None or native_evaluation.minimum_action == "allow")
+    ):
+        return ToolActionRequestMatch(
+            tool_name=tool_name,
+            normalized_tool_name=normalized_tool_name,
+            command_text=command_text,
+            action_class="unverified compound interpreter host",
+            reason="Guard requires review because this compound Python launch has no Windows host ACL proof.",
+            canonical_command=canonical_command,
+            guard_default_action="require-reapproval",
+            reason_code="interpreter_host_binding_unverified",
+            interpreter_executable_identities=_python_interpreter_executable_identities(
+                raw_command_text or command_text,
+                cwd=cwd,
+                home_dir=home_dir,
+                execution_context=raw_execution_context or execution_context,
+            ),
+        )
+    return None
+
+
+def _classify_shell_tool_action_request(
     *,
     tool_name: str,
     normalized_tool_name: str,
@@ -82,12 +138,12 @@ def _destructive_shell_tool_action_request(
     # Command-extension interaction is authoritative native pre-tool evidence.
     # This legacy request classifier retains its independent shell checks only.
     extension_interaction = CommandExtensionInteraction(None, None)
+    if native_evaluation is not None and (
+        native_evaluation.command.normalized_text != canonical_command.normalized_text
+        or native_evaluation.command.security_identity != canonical_command.security_identity
+    ):
+        raise ValueError("native command evaluation does not match the classified command")
     if native_evaluation is not None:
-        if (
-            native_evaluation.command.normalized_text != canonical_command.normalized_text
-            or native_evaluation.command.security_identity != canonical_command.security_identity
-        ):
-            raise ValueError("native command evaluation does not match the classified command")
         native_explicitly_benign = any(
             reason.reason_code == "native.explicit-benign" for reason in native_evaluation.decision_plane.reasons
         )

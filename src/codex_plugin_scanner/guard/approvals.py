@@ -833,6 +833,27 @@ def apply_approval_resolution(
                 created_at=resolved_at,
             )
 
+    elif (
+        persist_policy is False
+        and scope == "artifact"
+        and exact_context_allow
+        and temporary_mcp_selection is None
+        and local_tool_selection is None
+    ):
+        # "Do not remember" still authorizes the exact approved retry once.
+        store.ensure_policy_integrity_ready_for_write(
+            harness=decision.harness,
+            approval_gate_grant=resolved_gate_grant,
+            now=resolved_at,
+        )
+        local_once_fallback = _record_local_once_approval(
+            store,
+            request_id=request_id,
+            decision=decision,
+            harness=_approval_policy_harness(request),
+            created_at=resolved_at,
+        )
+
     temporary_mcp_result: dict[str, object] | None = None
     temporary_mcp_resolved_ids: list[str] = []
     if temporary_mcp_selection is not None:

@@ -404,7 +404,9 @@ def build_runtime_executable_identity(
     if require_executable and os.name != "nt" and metadata.st_mode & 0o111 == 0:
         return with_launch_cwd(_unreusable_executable_identity(command, status="not_executable", path=canonical))
     stat_key = _executable_stat_key(metadata)
-    digest, hash_status, shebang, shebang_status = _cached_executable_hash(str(canonical), stat_key)
+    digest, hash_status, shebang, shebang_status = _cached_executable_hash(
+        str(canonical), stat_key, expected_birthtime_ns=getattr(metadata, "st_birthtime_ns", None)
+    )
     final_path_chain = _executable_path_chain_snapshot(launch_path)
     if final_path_chain is None or final_path_chain != initial_path_chain:
         return with_launch_cwd(_unreusable_executable_identity(command, status="path_changed", path=launch_path))
@@ -1239,6 +1241,7 @@ def _raw_shebang_for_identity(identity: Mapping[str, object]) -> tuple[str | Non
     digest, hash_status, shebang, shebang_status = _cached_executable_hash(
         path,
         _executable_stat_key(metadata),
+        expected_birthtime_ns=getattr(metadata, "st_birthtime_ns", None),
     )
     if (
         hash_status != "verified"
@@ -1743,6 +1746,8 @@ def _without_runtime_reuse_nonces(value: object) -> object:
 def _cached_executable_hash(
     path: str,
     expected_stat: tuple[int, int, int, int, int, int],
+    *,
+    expected_birthtime_ns: int | None = None,
 ) -> tuple[str | None, str, str | None, str]:
     flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
     try:
@@ -1752,7 +1757,21 @@ def _cached_executable_hash(
     try:
         opened_stat = os.fstat(descriptor)
         observed_stat = _executable_stat_key(opened_stat)
-        if observed_stat != expected_stat or not stat.S_ISREG(opened_stat.st_mode):
+        path_stat = expected_stat
+        descriptor_stat = observed_stat
+        opened_birthtime_ns = getattr(opened_stat, "st_birthtime_ns", None)
+        if os.name == "nt":
+            # stat derives executable bits from the filename; fstat cannot.
+            # Keep file type and read/write bits equal across both APIs.
+            path_stat = (*path_stat[:5], path_stat[5] & ~0o111)
+            descriptor_stat = (*descriptor_stat[:5], descriptor_stat[5] & ~0o111)
+        if os.name == "nt" and expected_birthtime_ns is not None and opened_birthtime_ns is not None:
+            # Windows stat reports creation time in ctime, while fstat may
+            # report ChangeTime. Compare birthtime across APIs only; retain
+            # the full descriptor ChangeTime check across the actual read.
+            path_stat = (*path_stat[:4], expected_birthtime_ns, path_stat[5])
+            descriptor_stat = (*descriptor_stat[:4], opened_birthtime_ns, descriptor_stat[5])
+        if descriptor_stat != path_stat or not stat.S_ISREG(opened_stat.st_mode):
             return None, "identity_raced", None, "unverified"
         if opened_stat.st_size > _MAX_EXECUTABLE_HASH_BYTES:
             return None, "too_large", None, "unverified"
