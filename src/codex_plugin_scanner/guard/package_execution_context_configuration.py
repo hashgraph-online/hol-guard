@@ -364,8 +364,13 @@ def environment_material(
     names.update(manager_names)
     names.update(name.lower() for name in manager_names)
     names.update(referenced_names)
+    # identity hash; strict=False degrades to byte-identical local hash
     values = {
-        name: context_opaque_digest(environment[name], unbound_label="env-var", strict=False) if name in environment else None  # identity hash; strict=False = byte-identical degrade
+        name: (
+            context_opaque_digest(environment[name], unbound_label="env-var", strict=False)
+            if name in environment
+            else None
+        )
         for name in sorted(names)
     }
     return {"variables": values}

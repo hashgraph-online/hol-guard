@@ -5,9 +5,9 @@ from __future__ import annotations
 import os
 import shutil
 from dataclasses import dataclass
-from ..native_context import context_sha256_digest
 from pathlib import Path, PurePath
 
+from ..native_context import context_sha256_digest
 from .approval_context import build_configured_environment_hash
 
 

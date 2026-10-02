@@ -251,7 +251,10 @@ def executable_material(
         "requested": Path(requested).name,
     }
     if not ("/" in requested or "\\" in requested):
-        material["search_path_digest"] = context_opaque_digest(environment.get("PATH") or "", unbound_label="search-path")
+        material["search_path_digest"] = context_opaque_digest(
+            environment.get("PATH") or "",
+            unbound_label="search-path",
+        )
     if not runtime_launch_identity_is_reusable(launch_identity):
         material["status"] = "package_manager_launch_identity_unavailable"
         return material, "package_manager_launch_identity_unavailable"

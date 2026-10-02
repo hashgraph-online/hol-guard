@@ -491,7 +491,9 @@ def _executable_path_chain_snapshot(path: Path) -> tuple[tuple[tuple[str, object
                 "mode": stat.S_IMODE(metadata.st_mode),
                 "modified_time_ns": metadata.st_mtime_ns,
                 "path": current_text,
-                "target_sha256": context_opaque_digest(target, unbound_label="path-target") if target is not None else None,
+                "target_sha256": (
+                    context_opaque_digest(target, unbound_label="path-target") if target is not None else None
+                ),
             }
             snapshots.append(tuple(sorted(snapshot.items())))
     return tuple(snapshots) if snapshots else None

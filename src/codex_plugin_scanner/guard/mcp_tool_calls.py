@@ -17,6 +17,7 @@ from .collections_support import dedupe_preserving_order
 from .config import DEFAULT_SECURITY_LEVEL, GuardConfig, resolve_risk_action
 from .local_cli_trust import apply_local_mcp_extension_decision
 from .models import GuardAction, GuardArtifact, GuardReceipt, PolicyDecision
+from .native_context import context_opaque_digest, context_sha256_digest
 from .receipts import build_receipt
 from .runtime.approval_context import (
     approval_context_tokens_validation_reason,
@@ -46,7 +47,6 @@ from .runtime.mcp_protection import (
     mcp_tool_identity_metadata,
 )
 from .runtime.mcp_skill_firewall import enrich_artifact_with_mcp_skill_firewall, scanner_evidence_for_mcp_skill_firewall
-from .native_context import context_opaque_digest, context_sha256_digest
 from .store import GuardStore, browser_mcp_exact_match_context
 from .temporary_mcp_approvals import runtime_grant_selectors
 
@@ -268,7 +268,9 @@ def build_tool_call_artifact(
         server_hash = server_identity.identity_hash
     else:
         server_hash = server_id or context_opaque_digest(
-            f"{harness}:{source_scope}:{server_name}", unbound_label="mcp-server", strict=False  # identity hash; stored rows share this producer
+            f"{harness}:{source_scope}:{server_name}",
+            unbound_label="mcp-server",
+            strict=False,  # identity hash; stored rows share this producer
         )
     tool_identity = build_mcp_tool_identity(
         server_hash=server_hash,
