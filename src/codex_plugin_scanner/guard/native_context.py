@@ -83,7 +83,8 @@ def _reset_context_state_after_fork() -> None:
     _RESULT_CACHE.clear()
 
 
-os.register_at_fork(after_in_child=_reset_context_state_after_fork)
+if hasattr(os, "register_at_fork"):
+    os.register_at_fork(after_in_child=_reset_context_state_after_fork)
 
 
 def bind_context_digest_home(guard_home: Path | None, *, remember: bool = True) -> Any:
