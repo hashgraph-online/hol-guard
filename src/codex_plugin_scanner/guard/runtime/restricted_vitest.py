@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import tempfile
 from collections.abc import Mapping, Sequence
@@ -58,9 +59,30 @@ def prepare_restricted_vitest(
             "vitest_restricted_dependency_unavailable",
             "Vitest is not installed inside this workspace. Guard did not download or execute a replacement.",
         ) from error
+    args = _readonly_config_arguments(args, entry.parent / "package.json")
     return replace(
         plan, profile_version=VITEST_READ_ONLY_PROFILE_VERSION, command=(str(plan.executable), str(entry), *args)
     )
+
+
+def _readonly_config_arguments(args: tuple[str, ...], manifest: Path) -> tuple[str, ...]:
+    """Avoid Vite's source-tree config bundle without overriding explicit loaders."""
+    if any(value == "--configLoader" or value.startswith("--configLoader=") for value in args):
+        return args
+    try:
+        with manifest.open("rb") as handle:
+            raw = handle.read(65537)
+        if len(raw) > 65536:
+            return args
+        package = json.loads(raw)
+        version = package.get("version", "") if isinstance(package, dict) else ""
+        major = version.split(".", 1)[0] if isinstance(version, str) else ""
+        # Older releases are not assumed to support this CLI/Vite capability.
+        if package.get("name") == "vitest" and major.isascii() and major.isdigit() and int(major) >= 4:
+            return (*args, "--configLoader", "runner")
+    except (OSError, ValueError, AttributeError):
+        pass
+    return args
 
 
 def run_restricted_vitest(

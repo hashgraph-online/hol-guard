@@ -1,5 +1,6 @@
 """Local-only wrapper parsing and underlying native-policy denial checks."""
 
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -8,6 +9,25 @@ import pytest
 from codex_plugin_scanner.guard.runtime import contained_test_hook as sink
 from codex_plugin_scanner.guard.runtime import restricted_vitest as vitest
 from codex_plugin_scanner.guard.runtime.restricted_pytest_model import RestrictedPytestError
+
+
+@pytest.mark.parametrize("version, supported", [("4.1.8", True), ("3.2.0", False), ("invalid", False)])
+def test_readonly_config_loader_is_version_bounded(tmp_path: Path, version: str, supported: bool) -> None:
+    manifest = tmp_path / "package.json"
+    manifest.write_text(json.dumps({"name": "vitest", "version": version}))
+    args = ("run", "tests/example.test.ts")
+    assert vitest._readonly_config_arguments(args, manifest) == (
+        (*args, "--configLoader", "runner") if supported else args
+    )
+    explicit = (*args, "--configLoader=native")
+    assert vitest._readonly_config_arguments(explicit, manifest) == explicit
+
+
+def test_invalid_manifest_cannot_enable_config_loader(tmp_path: Path) -> None:
+    manifest = tmp_path / "package.json"
+    for content in ('[]', '{broken', 'x' * 65537):
+        manifest.write_text(content)
+        assert vitest._readonly_config_arguments(("run",), manifest) == ("run",)
 
 
 @pytest.mark.parametrize(
