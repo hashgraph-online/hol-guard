@@ -406,9 +406,7 @@ fn review_source(
     let Ok(text) = std::str::from_utf8(&read.bytes) else {
         return inconclusive_source();
     };
-    if !output_equivalent(text, &source.output_sha256, source.output_chars) {
-        return inconclusive_source();
-    }
+    let raw_output_matches = output_equivalent(text, &source.output_sha256, source.output_chars);
     let scan = scan_text(
         text,
         local_samples_should_be_unsuppressed(&source.path),
@@ -424,6 +422,25 @@ fn review_source(
             "source_secret_match",
             "HOL Guard blocked this output because it contains sensitive content.",
         );
+    }
+    if !raw_output_matches {
+        // Hosts may add line anchors or headers. Scan the entire presentation
+        // independently, but never promote a partial excerpt to original output.
+        let output = extract_payload_output(&request.payload);
+        let excerpt_truncated = request
+            .payload
+            .get("tool_response_summary")
+            .and_then(|summary| summary.get("excerpt_truncated"))
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        if output.truncated
+            || excerpt_truncated
+            || output.text.chars().count() != source.output_chars as usize
+            || sha256_text(&output.text) != source.output_sha256
+        {
+            return inconclusive_source();
+        }
+        return review_inline(request);
     }
     let mut response = HookReviewResponseV1::allow("source_full_scan_allow");
     response.reviewed_output_sha256 = Some(source.output_sha256.clone());

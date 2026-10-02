@@ -175,7 +175,15 @@ pub(crate) fn risk_classes(
     match action_type {
         PreToolActionTypeV1::Command => risks.push("execution"),
         PreToolActionTypeV1::FileRead => {}
-        PreToolActionTypeV1::FileWrite => risks.push("persistence"),
+        PreToolActionTypeV1::FileWrite
+            if !matches!(
+                reason_code,
+                "native_exact_safe_file_write" | "output_scan_allow" | "source_full_scan_allow"
+            ) =>
+        {
+            risks.push("persistence")
+        }
+        PreToolActionTypeV1::FileWrite => {}
         PreToolActionTypeV1::Package => risks.push("package_script"),
         PreToolActionTypeV1::McpTool => risks.push("mcp_dangerous_tool"),
         PreToolActionTypeV1::Network => risks.push("network_egress"),

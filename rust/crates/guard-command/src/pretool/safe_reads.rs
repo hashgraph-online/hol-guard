@@ -142,6 +142,14 @@ fn resolved_file_read_allowed(
     if !canonical.is_file() {
         return false;
     }
+    resolved_path_allowed(canonical, home_dir, cwd)
+}
+
+fn resolved_path_allowed(
+    canonical: &std::path::Path,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+) -> bool {
     let rendered = canonical.to_string_lossy().replace('\\', "/");
     let lowered = rendered.to_ascii_lowercase();
     const ROOTS: [&str; 7] = [
@@ -173,6 +181,49 @@ fn resolved_file_read_allowed(
         return false;
     }
     true
+}
+
+pub(super) fn bounded_file_write_target(value: &str, cwd: Option<&str>) -> bool {
+    let Some(workspace) = cwd.and_then(|root| std::fs::canonicalize(root).ok()) else {
+        return false;
+    };
+    if value.is_empty()
+        || value.len() > 4096
+        || value.contains([
+            '$', '`', '|', ';', '&', '<', '>', '\n', '\r', '\0', '*', '?', '[', ']', '{', '}',
+        ])
+        || value.split(['/', '\\']).any(|part| part == "..")
+    {
+        return false;
+    }
+    let supplied = std::path::Path::new(value);
+    let target = if supplied.is_absolute() {
+        supplied.to_path_buf()
+    } else {
+        workspace.join(supplied)
+    };
+    let canonical = match std::fs::canonicalize(&target) {
+        Ok(path) if path.is_file() => path,
+        Ok(_) => return false,
+        Err(_) => {
+            // A dangling symlink is not a new file. Only a missing leaf in
+            // an existing canonical parent can receive routine-write proof.
+            if target.symlink_metadata().is_ok() {
+                return false;
+            }
+            let Some(parent) = target
+                .parent()
+                .and_then(|parent| std::fs::canonicalize(parent).ok())
+            else {
+                return false;
+            };
+            let Some(name) = target.file_name() else {
+                return false;
+            };
+            parent.join(name)
+        }
+    };
+    canonical.starts_with(&workspace) && resolved_path_allowed(&canonical, None, cwd)
 }
 
 fn agent_skill_document(canonical: &std::path::Path, home_dir: Option<&str>) -> bool {
@@ -268,6 +319,41 @@ pub(super) fn safe_listing_arguments(arguments: &[String]) -> bool {
         }
         safe_read_target(argument)
     })
+}
+
+pub(super) fn safe_sed_arguments(arguments: &[String], piped_input: bool) -> bool {
+    let (quiet, rest) = if arguments.first().is_some_and(|arg| arg == "-n") {
+        (true, &arguments[1..])
+    } else {
+        (false, arguments)
+    };
+    let Some((program, targets)) = rest.split_first() else {
+        return false;
+    };
+    if program.len() > 256 || program.contains(['\n', '\r', '\\', ';']) {
+        return false;
+    }
+    let bounded_print = quiet
+        && program.strip_suffix('p').is_some_and(|range| {
+            let counts: Vec<_> = range.split(',').collect();
+            (1..=2).contains(&counts.len())
+                && counts.iter().all(|count| {
+                    !count.is_empty()
+                        && count.len() <= 6
+                        && count.bytes().all(|byte| byte.is_ascii_digit())
+                        && count.parse::<u32>().is_ok_and(|count| count > 0)
+                })
+        });
+    // Exactly one substitution with inert flags. No e/w commands, program
+    // files, in-place edits, or additional statements can enter this proof.
+    let substitution = !quiet
+        && program.strip_prefix("s/").is_some_and(|body| {
+            let parts: Vec<_> = body.split('/').collect();
+            parts.len() == 3 && matches!(parts[2], "" | "g")
+        });
+    (bounded_print || substitution)
+        && (matches!(targets, [target] if safe_read_target(target))
+            || (targets.is_empty() && piped_input))
 }
 
 pub(super) fn safe_plain_file_arguments(arguments: &[String]) -> bool {

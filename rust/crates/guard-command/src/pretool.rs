@@ -3,6 +3,7 @@ use guard_secure_fs::sensitive_path_family;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
+mod pure_expression;
 mod safe_reads;
 mod search;
 
@@ -305,6 +306,9 @@ fn exact_safe_command(model: &CanonicalCommandV1, allow_git_helper_context: bool
             "git" => safe_git_arguments(&segment.arguments, allow_git_helper_context),
             "gh" => safe_gh_arguments(&segment.arguments),
             "rg" | "grep" => safe_search_arguments(basename, &segment.arguments),
+            "sed" => safe_reads::safe_sed_arguments(&segment.arguments, segment.pipeline_index > 0),
+            "python" | "python3" | "node" | "nodejs" =>
+                pure_expression::safe_inline_expression(basename, &segment.arguments),
             _ => false,
         }
     })

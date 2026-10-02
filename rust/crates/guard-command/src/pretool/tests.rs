@@ -304,16 +304,16 @@ fn defers_only_exact_safe_git_helper_context() {
 }
 
 #[test]
-fn denies_uncertain_or_networked_commands() {
-    for command in [
-        "echo $(whoami)",
-        "pwd && rm -rf /",
-        "python -c 'print(1)'",
-        "git push origin main",
-        "PATH=/tmp:$PATH ls",
+fn denies_uncertain_or_networked_commands_but_allows_proven_constant_expression() {
+    for (command, permitted) in [
+        ("echo $(whoami)", false),
+        ("pwd && rm -rf /", false),
+        ("python -c 'print(1)'", true),
+        ("git push origin main", false),
+        ("PATH=/tmp:$PATH ls", false),
     ] {
         let decision = evaluate_pre_tool(&request(command)).unwrap();
-        assert_eq!(decision.decision, "deny", "{command}");
-        assert_ne!(decision.minimum_action, "allow", "{command}");
+        assert_eq!(decision.decision == "allow", permitted, "{command}");
+        assert_eq!(decision.minimum_action == "allow", permitted, "{command}");
     }
 }

@@ -586,6 +586,24 @@ fn evaluate_signals(
             "The Rust command authority proved this bounded file read explicitly benign.",
         );
     }
+    if action_type == PreToolActionTypeV1::FileWrite
+        && signals.tool_name.as_deref().is_some_and(|tool| {
+            tool_matches(tool, &["write", "edit", "patch", "replace", "create_file"])
+                && !tool_matches(tool, &["delete", "remove", "mkdir"])
+        })
+        && !signals.sensitive_target
+        && signals.url_values.is_empty()
+        && signals.command.is_none()
+        && signals.path_values.len() == 1
+        && super::safe_reads::bounded_file_write_target(&signals.path_values[0], cwd)
+    {
+        return generic_result(
+            action,
+            "allow",
+            "native_exact_safe_file_write",
+            "The Rust authority proved this ordinary file write stays inside the verified workspace.",
+        );
+    }
     let (reason_code, reason) = review_reason(action_type);
     generic_result(action, "review", reason_code, reason)
 }
