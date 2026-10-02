@@ -235,6 +235,10 @@ def _read_only_credential_denials(*, hide_metadata: bool = False) -> tuple[str, 
 
 
 def _bubblewrap_argv(plan: RestrictedPytestPlan, *, private_root: Path) -> list[str]:
+    if plan.profile_version in READ_ONLY_TEST_PROFILES:
+        from .restricted_linux_namespace import linux_readonly_argv
+
+        return linux_readonly_argv(plan, private_root=private_root)
     argv = [
         str(plan.backend_executable),
         "--die-with-parent",
@@ -327,12 +331,12 @@ def _symlink_runtime_roots(executable: Path) -> tuple[Path, ...]:
 
 
 def _current_user_process_ceiling() -> int:
-    if sys.platform != "darwin":
+    if sys.platform not in {"darwin", "linux"}:
         return _DEFAULT_PROCESSES
     try:
         with tempfile.TemporaryFile(mode="w+b") as output:
             result = subprocess.run(
-                ["/bin/ps", "-U", str(os.getuid()), "-o", "pid="],
+                ["/bin/ps", "-U", str(os.getuid()), "-o", "nlwp=" if sys.platform == "linux" else "pid="],
                 stdin=subprocess.DEVNULL,
                 stdout=output,
                 stderr=subprocess.DEVNULL,
@@ -345,7 +349,11 @@ def _current_user_process_ceiling() -> int:
         rows = raw.splitlines()
         if result.returncode != 0 or len(raw) > 1_048_576 or not rows or any(not row.strip().isdigit() for row in rows):
             raise ValueError("invalid bounded process count")
-        return len(rows) + _DEFAULT_PROCESSES
+        # Linux counts threads against RLIMIT_NPROC, not just process leaders.
+        current = sum(int(row.strip()) for row in rows) if sys.platform == "linux" else len(rows)
+        if current <= 0:
+            raise ValueError("invalid bounded thread count")
+        return current + _DEFAULT_PROCESSES
     except (OSError, ValueError, subprocess.TimeoutExpired) as error:
         raise RestrictedPytestError(
             PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE,

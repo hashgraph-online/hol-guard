@@ -48,6 +48,25 @@ def test_desktop_process_budget_accounts_for_existing_processes(
             sandbox._current_user_process_ceiling()
 
 
+@pytest.mark.parametrize("output", [b"8\n30\n3\n", b"0\n", b"bad\n"])
+def test_linux_process_budget_counts_existing_threads(monkeypatch: pytest.MonkeyPatch, output: bytes) -> None:
+    from codex_plugin_scanner.guard.runtime import restricted_pytest_sandbox as sandbox
+
+    monkeypatch.setattr(sandbox.sys, "platform", "linux")
+
+    def measure(argv, **kwargs):
+        assert argv[-1] == "nlwp="
+        kwargs["stdout"].write(output)
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(sandbox.subprocess, "run", measure)
+    if output.startswith(b"8"):
+        assert sandbox._current_user_process_ceiling() == 41 + sandbox._DEFAULT_PROCESSES
+    else:
+        with pytest.raises(RestrictedPytestError):
+            sandbox._current_user_process_ceiling()
+
+
 @pytest.mark.parametrize(
     "argv",
     [

@@ -40,11 +40,24 @@ def test_readonly_rejects_backend_without_credential_filtering() -> None:
         prepare_restricted_pytest(
             [sys.executable, "-m", "pytest"],
             workspace=Path.cwd(),
-            platform="linux",
+            platform="win32",
             backend_executable=Path("/usr/bin/true"),
             read_only_workspace=True,
         )
     assert error.value.reason_code == PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE
+
+
+def test_linux_readonly_preparation_requires_the_filtered_profile() -> None:
+    plan = prepare_restricted_pytest(
+        [sys.executable, "-m", "pytest", "-q"],
+        workspace=Path.cwd(),
+        platform="linux",
+        backend_executable=Path("/usr/bin/true"),
+        read_only_workspace=True,
+    )
+    assert plan.backend == "linux-bubblewrap"
+    assert plan.profile_version == PYTEST_READ_ONLY_PROFILE_VERSION
+    assert "workspace-credential-read" in plan.to_evidence()["denied_capabilities"]
 
 
 @pytest.mark.skipif(sys.platform != "darwin", reason="requires the macOS Seatbelt backend")

@@ -90,6 +90,41 @@ def test_directory_reads_and_writes_never_grant_execution(monkeypatch):
         boundary._WRITE_DIRECTORY | boundary._READ_FILE | boundary._READ_DIR,
     ]
     assert all(rights & boundary._EXECUTE == 0 for rights in syscall.rules)
+    assert all(rights & (boundary._MAKE_CHAR | boundary._MAKE_BLOCK) == 0 for rights in syscall.rules)
+
+
+@pytest.mark.parametrize("name, minor, writable", [("null", 3, True), ("random", 8, False), ("urandom", 9, False)])
+def test_namespace_devices_receive_only_the_required_file_access(monkeypatch, name, minor, writable):
+    syscall = _kernel(monkeypatch)
+    monkeypatch.setattr(boundary.os, "open", lambda path, flags: 21)
+    monkeypatch.setattr(boundary.os, "fstat", lambda fd: SimpleNamespace(st_mode=stat.S_IFCHR, st_rdev=minor))
+    monkeypatch.setattr(boundary.os, "major", lambda device: 1)
+    monkeypatch.setattr(boundary.os, "minor", lambda device: device)
+    monkeypatch.setattr(boundary.os, "close", lambda fd: None)
+    boundary.enforce_landlock(**_plan(device_files=(Path("/dev") / name,)))
+    assert syscall.rules == [boundary._READ_FILE | (boundary._WRITE_FILE if writable else 0)]
+
+
+@pytest.mark.parametrize(
+    "path, mode, major, minor",
+    [
+        ("/dev/zero", stat.S_IFCHR, 1, 5),
+        ("/dev/null", stat.S_IFREG, 1, 3),
+        ("/dev/null", stat.S_IFLNK, 1, 3),
+        ("/dev/null", stat.S_IFCHR, 2, 3),
+        ("/dev/null", stat.S_IFCHR, 1, 9),
+    ],
+)
+def test_unexpected_namespace_device_aborts_before_execution(monkeypatch, path, mode, major, minor):
+    syscall = _kernel(monkeypatch)
+    monkeypatch.setattr(boundary.os, "open", lambda path, flags: 21)
+    monkeypatch.setattr(boundary.os, "fstat", lambda fd: SimpleNamespace(st_mode=mode, st_rdev=0))
+    monkeypatch.setattr(boundary.os, "major", lambda device: major)
+    monkeypatch.setattr(boundary.os, "minor", lambda device: minor)
+    monkeypatch.setattr(boundary.os, "close", lambda fd: None)
+    with pytest.raises(boundary.LinuxContainmentUnavailableError, match="device"):
+        boundary.enforce_landlock(**_plan(device_files=(Path(path),)))
+    assert syscall.rules == []
 
 
 @pytest.mark.parametrize("mode", [stat.S_IFDIR, stat.S_IFLNK])

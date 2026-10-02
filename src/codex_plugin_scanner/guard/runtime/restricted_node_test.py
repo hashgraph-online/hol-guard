@@ -69,7 +69,7 @@ def prepare_restricted_node_test(
     ):
         raise RestrictedPytestError(_INVALID, "Protected Node execution requires direct node --test argv.")
     backend, backend_path = _select_backend(platform=platform or sys.platform, backend_executable=backend_executable)
-    if backend != "macos-seatbelt":
+    if backend not in {"macos-seatbelt", "linux-bubblewrap"}:
         raise RestrictedPytestError(
             "node_test_restricted_sandbox_unavailable",
             "Credential-filtering Node containment is unavailable; execution was not started.",

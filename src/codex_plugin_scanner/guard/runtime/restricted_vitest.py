@@ -119,7 +119,7 @@ def run_restricted_node_plan(
             NODE_TOOL_READ_ONLY_PROFILE_VERSION,
             NODE_BUILD_OUTPUT_PROFILE_VERSION,
         }
-        or plan.backend != "macos-seatbelt"
+        or plan.backend not in {"macos-seatbelt", "linux-bubblewrap"}
     ):
         raise RestrictedPytestError(
             "vitest_restricted_invalid_command", "Protected Vitest requires its validated OS plan."

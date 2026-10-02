@@ -62,7 +62,7 @@ def prepare_restricted_pytest(
         platform=platform or sys.platform,
         backend_executable=backend_executable,
     )
-    if read_only_workspace and selected_backend != "macos-seatbelt":
+    if read_only_workspace and selected_backend not in {"macos-seatbelt", "linux-bubblewrap"}:
         raise RestrictedPytestError(
             PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE,
             "The read-only pytest profile requires enforced workspace credential filtering; "
