@@ -69,9 +69,7 @@ def collect_linux_read_grants(root: Path, *, max_entries: int = _MAX_ENTRIES) ->
 
     try:
         if root.resolve(strict=True) != root or any(
-            part.lower() in _PROTECTED_DIRECTORIES
-            or part.lower() == ".env"
-            or part.lower().startswith(".env.")
+            part.lower() in _PROTECTED_DIRECTORIES or part.lower() == ".env" or part.lower().startswith(".env.")
             for part in root.parts
         ):
             raise LinuxContainmentUnavailableError("Linux workspace is not a canonical nonsensitive directory.")
