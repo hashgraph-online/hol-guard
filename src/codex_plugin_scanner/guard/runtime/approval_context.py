@@ -72,19 +72,28 @@ def is_unbound_context_digest(value: object) -> bool:
     return isinstance(value, str) and value.startswith(_UNBOUND_PREFIX)
 
 
-def _unbound_context_digest(label: str = "context") -> str:
-    """Return a fresh nonce that can never satisfy a saved context binding.
+def _unbound_context_digest(label: str, *, material: object) -> str:
+    """Return a degraded sentinel that can never validate as context proof.
 
     Builders degrade to this when the native digest authority is unreachable
-    (``HOL_GUARD_NATIVE=off``, missing runtime, unprovisioned home): the
-    evaluation still completes, but no stored token or digest can equal a
-    per-call nonce, so approval reuse and unchanged-context claims fail
-    closed instead of trusting unverifiable context.  Unlike the deterministic
-    configured-environment/header sentinels, the nonce must stay unique per
-    call — it stands in for values where *any* equality would be wrong.
+    (``HOL_GUARD_NATIVE=off``, missing runtime, unprovisioned home).  The
+    ``guard-context-unbound:`` prefix is rejected by token parsing and by
+    ``is_unbound_context_digest`` call sites, so equality between two degraded
+    values can never mint approval reuse or an unchanged-context claim.
+    Determinism over the caller's canonical ``material`` maps identical
+    degraded inputs to one sentinel, so restrictive stored rows (saved
+    blocks) keyed by artifact hash stay reachable, while validation still
+    rejects every unbound value on sight.
     """
 
-    return f"{_UNBOUND_PREFIX}{label}:{secrets.token_hex(32)}"
+    canonical = json.dumps(
+        {"label": label, "material": material},
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+        allow_nan=False,
+    ).encode("utf-8")
+    return f"{_UNBOUND_PREFIX}{label}:{hashlib.sha256(canonical).hexdigest()}"
 
 
 @lru_cache(maxsize=4)
@@ -177,7 +186,11 @@ def build_approval_context_token(
             {"components": components},
         )
     except NativeContextDigestUnavailableError:
-        return _unbound_context_digest("approval-context-token")
+        # Degrade deterministically over the already-validated components: the
+        # unbound prefix still fails every validation path, but stored
+        # restrictive rows (saved blocks) keyed by this token stay reachable
+        # across identical degraded invocations.
+        return _unbound_context_digest("approval-context-token", material=components)
     return cast(str, result["token"])
 
 

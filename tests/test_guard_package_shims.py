@@ -2941,6 +2941,7 @@ def test_guard_protect_saved_allow_never_lowers_current_cached_advisory_block(
         and reason.get("code")
         in {
             "approval_reuse_current_block",
+            "approval_reuse_content_changed",
             "approval_reuse_policy_changed",
             "approval_reuse_reapproval_required",
             "approval_reuse_claim_failed",
@@ -3071,6 +3072,7 @@ def test_guard_protect_reloads_cached_advisory_authority_after_atomic_claim(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     install_fake_system_keyring,
+    native_context_digest: Path,
 ) -> None:
     install_fake_system_keyring()
     home_dir = tmp_path / "guard-home"
