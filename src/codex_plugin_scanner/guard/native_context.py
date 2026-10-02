@@ -83,13 +83,12 @@ _status_memo: tuple[float, object] | None = None
 
 def _native_runtime_status_memo() -> object:
     global _status_memo
-    now = time.monotonic()
     with _STATUS_MEMO_LOCK:
-        if _status_memo is not None and now - _status_memo[0] < _STATUS_MEMO_TTL_SECONDS:
+        if _status_memo is not None and time.monotonic() - _status_memo[0] < _STATUS_MEMO_TTL_SECONDS:
             return _status_memo[1]
     status = native_runtime_status()
     with _STATUS_MEMO_LOCK:
-        _status_memo = (now, status)
+        _status_memo = (time.monotonic(), status)
     return status
 
 
