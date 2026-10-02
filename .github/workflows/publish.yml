@@ -374,6 +374,16 @@ jobs:
             exit 0
           fi
           uv run --no-sync python scripts/sync_repo_version.py --version "$VERSION"
+      - name: Generate projections for release source distributions
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          HOL_GUARD_BUILD_SHA: ${{ steps.version.outputs.source_sha }}
+          HOL_GUARD_PACKAGE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          rustup toolchain install 1.88.0 --profile minimal
+          cargo +1.88.0 build --manifest-path rust/Cargo.toml --locked --release \
+            -p guard-command --bin guard-command-source
+          python scripts/build_native_command_program.py --compiler rust/target/release/guard-command-source
       - name: Build Guard package (hol-guard)
         run: |
           cp pyproject.toml pyproject.toml.bak
