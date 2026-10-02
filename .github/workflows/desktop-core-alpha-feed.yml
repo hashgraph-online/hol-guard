@@ -321,6 +321,11 @@ jobs:
           NATIVE_MANIFEST="$RUNNER_TEMP/native-runtime/runtime-manifest.json"
           test -f "$NATIVE_RUNTIME"
           test -f "$NATIVE_MANIFEST"
+          # Freeze the attested package data, not stale projections in the tag.
+          WHEELS=("$RUNNER_TEMP/core-trust-assets"/hol_guard-"$CORE_VERSION"-*-macosx_*_arm64.whl)
+          test "${#WHEELS[@]}" -eq 1
+          cmp "${WHEELS[0]}" "$RUNNER_TEMP/attested-macos-arm64.whl"
+          uv pip install --python "$SOURCE/.venv/bin/python" --no-deps --force-reinstall "${WHEELS[0]}"
           codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$NATIVE_RUNTIME"
           codesign --verify --deep --strict --verbose=2 "$NATIVE_RUNTIME"
           python3 -I scripts/release/stage_native_runtime_for_desktop_core.py \
