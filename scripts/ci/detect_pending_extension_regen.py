@@ -58,6 +58,9 @@ REGEN_INPUT_PREFIXES: tuple[str, ...] = (
     "tests/guard_command_",
     "tests/test_guard_",
 )
+REGEN_INPUT_PATHSPECS: tuple[str, ...] = tuple(
+    prefix if prefix.endswith("/") else f"{prefix}*" for prefix in REGEN_INPUT_PREFIXES
+)
 
 
 class ContributionDiffError(RuntimeError):
@@ -94,12 +97,8 @@ def _contributions_changed(base_sha: str) -> list[str]:
         """Read source changes without exposing Git output in error messages."""
         # Ordinary PRs cannot commit regenerated projections, including Rust
         # identity updates; generated-artifacts-guard enforces that ownership.
-        pathspecs = [
-            prefix if prefix.endswith("/") else f"{prefix}*"
-            for prefix in REGEN_INPUT_PREFIXES
-        ]
         return subprocess.run(
-            ["git", "diff", "--name-only", normalized_sha, "HEAD", "--", *pathspecs],
+            ["git", "diff", "--name-only", normalized_sha, "HEAD", "--", *REGEN_INPUT_PATHSPECS],
             cwd=ROOT,
             capture_output=True,
             text=True,

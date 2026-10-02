@@ -29,7 +29,7 @@ def detector():
 ])
 def test_source_only_native_changes_report_pending(detector, monkeypatch, capsys, changed):
     def diff(command, **kwargs):
-        assert command[-len(detector.REGEN_INPUT_PREFIXES):] == list(detector.REGEN_INPUT_PREFIXES)
+        assert command[-len(detector.REGEN_INPUT_PATHSPECS):] == list(detector.REGEN_INPUT_PATHSPECS)
         return subprocess.CompletedProcess(command, 0, stdout=changed + "\n", stderr="")
 
     monkeypatch.setattr(subprocess, "run", diff)

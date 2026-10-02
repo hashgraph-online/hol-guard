@@ -43,14 +43,14 @@ def test_known_base_is_compared_without_fetch(monkeypatch: pytest.MonkeyPatch, s
         "git", "diff", "--name-only", BASE, "HEAD", "--",
         "contributions/",
         "rust/",
-        "scripts/build_native_command_program.py",
+        "scripts/build_native_command_program.py*",
         "src/codex_plugin_scanner/guard/",
         "contracts/extensions/",
         "contracts/managed-controls/",
         "docs/guard/",
         "tests/fixtures/",
-        "tests/guard_command_",
-        "tests/test_guard_",
+        "tests/guard_command_*",
+        "tests/test_guard_*",
     ]]
 
 
