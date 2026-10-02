@@ -156,7 +156,10 @@ def collect_mapping_evidence(
             if total > _MAX_MAPPING_BYTES:
                 raise ValueError("Executable mapping memory budget exceeded.")
             stream.seek(0)
-            digest = hashlib.file_digest(stream, "sha256").hexdigest()
+            hasher = hashlib.sha256()
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                hasher.update(chunk)
+            digest = hasher.hexdigest()
             if _identity(before) != _identity(os.fstat(stream.fileno())):
                 raise ValueError("Executable mapping changed during inspection.")
         record = {"path": str(path), "identity": list(_identity(before)), "sha256": digest}
@@ -187,14 +190,13 @@ def collect_mapping_evidence(
 
     try:
         records = closure(sorted(images))
-        for module in optional:
-            try:
-                component = closure([module])
-            except (MissingDependencyError, InvalidImageError):
-                # Unused invalid modules or missing dependencies stay noexec;
-                # they must not prevent unrelated ordinary work from starting.
-                continue
-            records.update(component)
     except (OSError, ValueError, struct.error, UnicodeError) as error:
         raise LinuxContainmentUnavailableError("Linux executable mapping evidence could not be verified.") from error
+    for module in optional:
+        try:
+            component = closure([module])
+        except (OSError, ValueError, struct.error, UnicodeError):
+            # Unverifiable optional modules remain noexec, not execution grants.
+            continue
+        records.update(component)
     return [records[path] for path in sorted(records)]

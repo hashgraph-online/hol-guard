@@ -40,27 +40,30 @@ def harness_json_from_native_pre_tool(harness: str, response: Mapping[str, objec
     ):
         extensions = response.get("command_extensions")
         binding = extensions.get("binding") if isinstance(extensions, Mapping) else None
+        observations = extensions.get("observations") if isinstance(extensions, Mapping) else None
+        permission_observations = extensions.get("permission_observations") if isinstance(extensions, Mapping) else None
         if (
-            isinstance(binding, Mapping)
+            isinstance(extensions, Mapping)
+            and isinstance(binding, Mapping)
             and type(binding.get("uncertainty_count")) is int
             and binding["uncertainty_count"] == 0
             and extensions.get("evaluation_error") is None
             and (
-                extensions.get("observations") == []
+                observations == []
                 or (
                     reason_code == "native_git_readonly_containment_required"
-                    and isinstance(extensions.get("observations"), list)
+                    and isinstance(observations, list)
                     and all(
                         isinstance(item, Mapping)
                         and item.get("rule_id") in {"command.git.diff", "command.git.log", "command.git.show"}
                         and item.get("uncertainty_reasons") == []
                         and item.get("effective_segment_indexes") == [0]
-                        for item in extensions["observations"]
+                        for item in observations
                     )
                 )
             )
             and (
-                extensions.get("permission_observations") == []
+                permission_observations == []
                 or (
                     reason_code
                     in {
@@ -69,13 +72,13 @@ def harness_json_from_native_pre_tool(harness: str, response: Mapping[str, objec
                         "native_node_tool_readonly_containment_required",
                         "native_node_build_output_containment_required",
                     }
-                    and isinstance(extensions.get("permission_observations"), list)
+                    and isinstance(permission_observations, list)
                     and all(
                         isinstance(item, Mapping)
                         and item.get("extension_id") == "command.package.node"
                         and item.get("permission_id") == "command.package.node.permission.package-protection"
                         and item.get("uncertainty_reasons") == []
-                        for item in extensions["permission_observations"]
+                        for item in permission_observations
                     )
                 )
             )

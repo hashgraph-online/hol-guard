@@ -14,6 +14,7 @@ import os
 import stat
 import sys
 from pathlib import Path
+from typing import Any
 
 _FIELDS = frozenset(
     {
@@ -42,7 +43,7 @@ def _unique(pairs):
     return result
 
 
-def load_plan(path: Path, digest: str) -> dict:
+def load_plan(path: Path, digest: str) -> dict[str, Any]:
     if not path.is_absolute() or len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest):
         raise ValueError("Invalid private Linux plan locator.")
     parent = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)

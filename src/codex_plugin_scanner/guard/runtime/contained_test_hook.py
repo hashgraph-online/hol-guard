@@ -10,6 +10,7 @@ import stat
 from collections.abc import Callable, Mapping
 from pathlib import Path
 
+from . import restricted_git, restricted_node_test, restricted_node_tool, restricted_vitest
 from .restricted_inline_eval import is_inline_eval, prepare_restricted_inline_eval, run_restricted_inline_eval
 from .restricted_package_test import (
     PACKAGE_TEST_PROFILE,
@@ -145,33 +146,26 @@ def run_authorized_contained_test(
             )
         )
     )
+    inline_plan = node_tool_plan = git_plan = vitest_plan = node_test_plan = None
     if inline_eval:
         inline_plan = prepare_restricted_inline_eval(command, workspace=workspace)
     elif node_tool:
-        from .restricted_node_tool import prepare_restricted_node_tool, run_restricted_node_tool
-
-        node_tool_plan = prepare_restricted_node_tool(command, workspace=workspace, cwd=workspace)
+        node_tool_plan = restricted_node_tool.prepare_restricted_node_tool(command, workspace=workspace, cwd=workspace)
     elif git:
-        from .restricted_git import prepare_restricted_git, run_restricted_git
-
-        git_plan = prepare_restricted_git(command, workspace=workspace, cwd=workspace)
+        git_plan = restricted_git.prepare_restricted_git(command, workspace=workspace, cwd=workspace)
     elif vitest:
-        from .restricted_vitest import prepare_restricted_vitest, run_restricted_vitest
-
-        vitest_plan = prepare_restricted_vitest(command, workspace=workspace, cwd=workspace)
+        vitest_plan = restricted_vitest.prepare_restricted_vitest(command, workspace=workspace, cwd=workspace)
     elif node_test:
-        from .restricted_node_test import prepare_restricted_node_test, run_restricted_node_test
-
-        node_test_plan = prepare_restricted_node_test(command, workspace=workspace, cwd=workspace)
+        node_test_plan = restricted_node_test.prepare_restricted_node_test(command, workspace=workspace, cwd=workspace)
     else:
         prepare_restricted_pytest(command, workspace=workspace, cwd=workspace, read_only_workspace=True)
-    if inline_eval:
+    if inline_plan is not None:
         profile = inline_plan.profile_version
         if profile == "node-eval-readonly-v1":
             reason = "native_node_eval_readonly_containment_required"
         else:
             reason = "native_python_eval_readonly_containment_required"
-    elif node_tool:
+    elif node_tool_plan is not None:
         profile = node_tool_plan.profile_version
         if profile == NODE_BUILD_OUTPUT_PROFILE_VERSION:
             reason = "native_node_build_output_containment_required"
@@ -219,29 +213,29 @@ def run_authorized_contained_test(
             raise _reject()
 
     # No shell and no unsandboxed retry: the required profile is the actual sink.
-    if inline_eval:
+    if inline_plan is not None:
         underlying = {**payload, "tool_input": {**tool_input, "command": shlex.join(inline_plan.command)}}
         if not required(authorize(underlying)):
             raise _reject()
         return run_restricted_inline_eval(
             inline_plan, timeout_seconds=timeout_seconds, authorize_capability=authorize_capability
         )
-    if node_tool:
+    if node_tool_plan is not None:
         underlying = {**payload, "tool_input": {**tool_input, "command": shlex.join(node_tool_plan.command)}}
         if not required(authorize(underlying)):
             raise _reject()
-        return run_restricted_node_tool(
+        return restricted_node_tool.run_restricted_node_tool(
             node_tool_plan, timeout_seconds=timeout_seconds, authorize_capability=authorize_capability
         )
-    if git:
-        return run_restricted_git(git_plan, timeout_seconds=timeout_seconds)
-    if vitest:
+    if git_plan is not None:
+        return restricted_git.run_restricted_git(git_plan, timeout_seconds=timeout_seconds)
+    if vitest_plan is not None:
         # Check the resolved Node/script action too: wrapper consent must not
         # override an extension deny for the underlying executable.
         underlying = {**payload, "tool_input": {**tool_input, "command": shlex.join(vitest_plan.command)}}
         if not required(authorize(underlying)):
             raise _reject()
-        return run_restricted_vitest(
+        return restricted_vitest.run_restricted_vitest(
             command,
             workspace=workspace,
             cwd=workspace,
@@ -249,11 +243,11 @@ def run_authorized_contained_test(
             prepared_plan=vitest_plan,
             authorize_capability=authorize_capability,
         )
-    if node_test:
+    if node_test_plan is not None:
         underlying = {**payload, "tool_input": {**tool_input, "command": shlex.join(node_test_plan.command)}}
         if not required(authorize(underlying)):
             raise _reject()
-        return run_restricted_node_test(
+        return restricted_node_test.run_restricted_node_test(
             command,
             workspace=workspace,
             cwd=workspace,

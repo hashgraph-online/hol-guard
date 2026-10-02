@@ -99,7 +99,10 @@ def linux_readonly_argv(plan: RestrictedPytestPlan, *, private_root: Path) -> li
         images=images, read_files=set(indexed), runtime_roots=runtime_roots, workspace=plan.workspace
     )
     for record in mapping_records:
-        canonical = Path(record["path"])
+        record_path = record["path"]
+        if not isinstance(record_path, str):
+            raise LinuxContainmentUnavailableError("Invalid executable mapping path.")
+        canonical = Path(record_path)
         aliases = {canonical}
         for destination in mounts:
             source = destination.resolve(strict=True)

@@ -122,6 +122,15 @@ def test_missing_optional_library_dependency_stays_noexec_without_blocking_runne
     assert [record["path"] for record in records] == [str(program)]
 
 
+def test_oversized_optional_library_stays_noexec_without_blocking_runner(tmp_path, monkeypatch):
+    program = _image(tmp_path / "runner")
+    optional = _image(tmp_path / "unused.so", library=True)
+    optional.write_bytes(optional.read_bytes() + bytes(1024))
+    monkeypatch.setattr(mapping, "_MAX_FILE_BYTES", program.stat().st_size + 1)
+    records = _collect(tmp_path, [program], [optional])
+    assert [record["path"] for record in records] == [str(program)]
+
+
 @pytest.mark.parametrize("content", [b"library placeholder", b"\x7fELFtruncated"])
 def test_invalid_optional_module_stays_noexec_without_blocking_runner(tmp_path, content):
     program = _image(tmp_path / "runner")

@@ -48,12 +48,14 @@ def resolve_package_test(command: Sequence[str], *, workspace: Path) -> tuple[st
     lexer.whitespace_split = True
     lexer.commenters = ""
     try:
-        tokens = tuple(lexer)
+        tokens = list(lexer)
     except ValueError as error:
         raise RestrictedPytestError(
             "package_test_invalid_command", "The local test script could not be parsed."
         ) from error
-    if not tokens or any(token and all(char in ";&|<>" for char in token) for token in tokens):
+    if not tokens:
+        raise RestrictedPytestError("package_test_invalid_command", "The test script is empty.")
+    if any(token and all(char in ";&|<>" for char in token) for token in tokens):
         raise RestrictedPytestError("package_test_invalid_command", "Test shell effects need separate evaluation.")
     node = Path(tokens[0]).name in {"node", "nodejs"} and len(tokens) > 1 and tokens[1] == "--test"
     vitest = tokens[0] == "vitest" and len(tokens) > 1 and tokens[1] == "run"
