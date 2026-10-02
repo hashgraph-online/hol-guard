@@ -43,6 +43,21 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
     }
     let executable = segment.executable.as_deref()?;
     let arguments = segment.arguments.as_slice();
+    if matches!(
+        super::executable_basename(executable),
+        "npm" | "pnpm" | "bun"
+    ) {
+        let rest = match arguments {
+            [test, rest @ ..] if test == "test" => Some(rest),
+            [run, test, rest @ ..] if run == "run" && test == "test" => Some(rest),
+            _ => None,
+        };
+        if rest.is_some_and(|rest| rest.is_empty() || rest.first().is_some_and(|arg| arg == "--")) {
+            // This is only a routing receipt. The sink resolves the manifest,
+            // rejects lifecycle/shell effects and checks the underlying runner.
+            return Some("native_package_test_readonly_containment_required");
+        }
+    }
     let build = match super::executable_basename(executable) {
         "bun" | "npm" | "pnpm" => {
             matches!(arguments, [run, task] if run == "run" && task == "build")

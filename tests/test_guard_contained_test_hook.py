@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -112,7 +113,11 @@ def test_node_requires_its_own_fresh_profile(
     from codex_plugin_scanner.guard.runtime import restricted_node_test as node
 
     executed = []
-    monkeypatch.setattr(node, "prepare_restricted_node_test", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        node,
+        "prepare_restricted_node_test",
+        lambda *args, **kwargs: SimpleNamespace(command=("/usr/bin/node", "--test", "tests/test.mjs")),
+    )
     monkeypatch.setattr(node, "run_restricted_node_test", lambda *args, **kwargs: executed.append(args) or 0)
     original = payload()
     original["tool_input"] = {"command": "node --test tests/test.mjs"}

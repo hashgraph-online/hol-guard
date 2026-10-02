@@ -416,6 +416,7 @@ pub fn evaluate_pre_tool_envelope_with_context(
                 contained_test_reason,
                 Some(
                     "native_vitest_readonly_containment_required"
+                        | "native_package_test_readonly_containment_required"
                         | "native_node_tool_readonly_containment_required"
                         | "native_node_build_output_containment_required"
                 )
@@ -428,6 +429,7 @@ pub fn evaluate_pre_tool_envelope_with_context(
                 contained_test_reason,
                 Some(
                     "native_node_tool_readonly_containment_required"
+                        | "native_package_test_readonly_containment_required"
                         | "native_node_build_output_containment_required"
                 )
             ) && result.reason_code == "native_package_review"))
@@ -452,6 +454,7 @@ pub fn evaluate_pre_tool_envelope_with_context(
                             contained_test_reason,
                             Some(
                                 "native_vitest_readonly_containment_required"
+                                    | "native_package_test_readonly_containment_required"
                                     | "native_node_tool_readonly_containment_required"
                                     | "native_node_build_output_containment_required"
                             )

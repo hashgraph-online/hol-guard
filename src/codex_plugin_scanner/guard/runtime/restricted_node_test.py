@@ -110,11 +110,17 @@ def run_restricted_node_test(
     cwd: Path | None = None,
     env: Mapping[str, str] | None = None,
     timeout_seconds: int = 1800,
+    prepared_plan: RestrictedPytestPlan | None = None,
     authorize_capability: Callable[[tuple[str, ...]], None] | None = None,
 ) -> int:
     if timeout_seconds <= 0 or timeout_seconds > 86400:
         raise RestrictedPytestError(_INVALID, "Protected Node timeout must be between 1 second and 24 hours.")
-    plan = prepare_restricted_node_test(command, workspace=workspace, cwd=cwd)
+    plan = prepared_plan or prepare_restricted_node_test(command, workspace=workspace, cwd=cwd)
+    if plan.profile_version != NODE_TEST_READ_ONLY_PROFILE_VERSION or plan.backend not in {
+        "macos-seatbelt",
+        "linux-bubblewrap",
+    }:
+        raise RestrictedPytestError(_INVALID, "Unexpected protected Node execution profile.")
     with tempfile.TemporaryDirectory(prefix="hol-guard-node-test-") as temporary:
         root = Path(temporary).resolve()
         home, tmp = root / "home", root / "tmp"

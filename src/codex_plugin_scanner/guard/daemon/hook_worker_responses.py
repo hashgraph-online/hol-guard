@@ -147,6 +147,7 @@ def harness_json_from_native_pre_tool(harness: str, response: Mapping[str, objec
             "native_pytest_readonly_containment_required",
             "native_node_test_readonly_containment_required",
             "native_vitest_readonly_containment_required",
+            "native_package_test_readonly_containment_required",
             "native_git_readonly_containment_required",
             "native_node_tool_readonly_containment_required",
             "native_node_build_output_containment_required",
@@ -179,6 +180,7 @@ def harness_json_from_native_pre_tool(harness: str, response: Mapping[str, objec
                     reason_code
                     in {
                         "native_vitest_readonly_containment_required",
+                        "native_package_test_readonly_containment_required",
                         "native_node_tool_readonly_containment_required",
                         "native_node_build_output_containment_required",
                     }
@@ -201,7 +203,9 @@ def harness_json_from_native_pre_tool(harness: str, response: Mapping[str, objec
                 "reason_code": reason_code,
                 "reason": reason,
                 "required_execution_profile": (
-                    "node-build-output-v1"
+                    "package-test-readonly-v1"
+                    if reason_code == "native_package_test_readonly_containment_required"
+                    else "node-build-output-v1"
                     if reason_code == "native_node_build_output_containment_required"
                     else "node-tool-readonly-v1"
                     if reason_code == "native_node_tool_readonly_containment_required"

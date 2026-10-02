@@ -10,6 +10,12 @@ import stat
 from collections.abc import Callable, Mapping
 from pathlib import Path
 
+from .restricted_package_test import (
+    PACKAGE_TEST_PROFILE,
+    PACKAGE_TEST_REASON,
+    is_package_test,
+    resolve_package_test,
+)
 from .restricted_pytest import RestrictedPytestError, prepare_restricted_pytest, run_restricted_pytest
 from .restricted_pytest_model import (
     GIT_READ_ONLY_PROFILE_VERSION,
@@ -108,6 +114,9 @@ def run_authorized_contained_test(
         command = shlex.split(tool_input["command"], posix=True)
     except ValueError as error:
         raise _reject() from error
+    package_test = is_package_test(command)
+    if package_test:
+        command = list(resolve_package_test(command, workspace=workspace))
     # Fail before the authority request if the backend cannot enforce the profile.
     node_test = len(command) > 1 and Path(command[0]).name in {"node", "nodejs"} and command[1] == "--test"
     vitest = bool(command) and (
@@ -149,7 +158,7 @@ def run_authorized_contained_test(
     elif node_test:
         from .restricted_node_test import prepare_restricted_node_test, run_restricted_node_test
 
-        prepare_restricted_node_test(command, workspace=workspace, cwd=workspace)
+        node_test_plan = prepare_restricted_node_test(command, workspace=workspace, cwd=workspace)
     else:
         prepare_restricted_pytest(command, workspace=workspace, cwd=workspace, read_only_workspace=True)
     reason = (
@@ -177,18 +186,26 @@ def run_authorized_contained_test(
         else PYTEST_READ_ONLY_PROFILE_VERSION
     )
 
-    def required(response: object) -> bool:
+    def required(response: object, *, expected_reason: str = reason, expected_profile: str = profile) -> bool:
         return (
             isinstance(response, Mapping)
             and response.get("decision") == "deny"
             and response.get("policy_action") == "sandbox-required"
-            and response.get("reason_code") == reason
-            and response.get("required_execution_profile") == profile
+            and response.get("reason_code") == expected_reason
+            and response.get("required_execution_profile") == expected_profile
             and response.get("observe_mode") is not True
         )
 
-    if not required(authorize(payload)):
+    if not required(
+        authorize(payload),
+        expected_reason=PACKAGE_TEST_REASON if package_test else reason,
+        expected_profile=PACKAGE_TEST_PROFILE if package_test else profile,
+    ):
         raise _reject()
+    if package_test:
+        underlying = {**payload, "tool_input": {**tool_input, "command": shlex.join(command)}}
+        if not required(authorize(underlying)):
+            raise _reject()
 
     def authorize_capability(argv: tuple[str, ...]) -> None:
         capability = {**payload, "tool_input": {**tool_input, "command": shlex.join(argv)}}
@@ -226,11 +243,15 @@ def run_authorized_contained_test(
             authorize_capability=authorize_capability,
         )
     if node_test:
+        underlying = {**payload, "tool_input": {**tool_input, "command": shlex.join(node_test_plan.command)}}
+        if not required(authorize(underlying)):
+            raise _reject()
         return run_restricted_node_test(
             command,
             workspace=workspace,
             cwd=workspace,
             timeout_seconds=timeout_seconds,
+            prepared_plan=node_test_plan,
             authorize_capability=authorize_capability,
         )
     return run_restricted_pytest(

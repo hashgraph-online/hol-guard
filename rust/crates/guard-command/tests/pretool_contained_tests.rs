@@ -192,6 +192,39 @@ fn git_inspections_require_protected_execution_not_helper_consent() {
 }
 
 #[test]
+fn package_tests_require_manifest_resolution_and_protected_execution() {
+    for command in [
+        "npm test",
+        "npm test -- test/unit.js",
+        "npm run test",
+        "pnpm run test",
+        "bun run test",
+    ] {
+        let result = classify("omp", command);
+        assert_eq!(result.decision, "deny", "{command}");
+        if cfg!(target_os = "macos") {
+            assert_eq!(
+                result.reason_code, "native_package_test_readonly_containment_required",
+                "{command}"
+            );
+        }
+    }
+    for command in [
+        "npm run other",
+        "npm test --prefix /tmp/project",
+        "npm test && rm -rf /",
+        "npm test | sh",
+        "NODE_OPTIONS=--require=x npm test",
+    ] {
+        assert_ne!(
+            classify("omp", command).reason_code,
+            "native_package_test_readonly_containment_required",
+            "{command}"
+        );
+    }
+}
+
+#[test]
 fn local_lint_typecheck_requires_actual_protected_execution() {
     for command in [
         "bun run lint",
