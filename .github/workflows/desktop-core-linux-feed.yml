@@ -306,7 +306,7 @@ jobs:
           test -f "$NATIVE_RUNTIME"
           test -f "$NATIVE_MANIFEST"
           # Freeze the attested package data, not stale projections in the tag.
-          WHEELS=("$RUNNER_TEMP/core-trust-assets"/hol_guard-"$CORE_VERSION"-*-manylinux_*_x86_64.whl)
+          WHEELS=("$RUNNER_TEMP/core-trust-assets/hol_guard-${CORE_VERSION}-"*-manylinux_*_x86_64.whl)
           test "${#WHEELS[@]}" -eq 1
           cmp "${WHEELS[0]}" "$RUNNER_TEMP/attested-linux-x64.whl"
           uv pip install --python "$SOURCE/.venv/bin/python" --no-deps --force-reinstall "${WHEELS[0]}"
