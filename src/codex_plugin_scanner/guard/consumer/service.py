@@ -1130,6 +1130,11 @@ def evaluate_detection(
 ) -> dict[str, Any]:
     """Apply policy, generate diffs, and persist receipts for a harness."""
 
+    from ..native_context import bind_context_digest_home
+
+    # Some consumer entry points run against partial stores (tests, shims)
+    # that carry no guard_home; binding None is a valid no-op.
+    bind_context_digest_home(getattr(store, "guard_home", None))
     workspace = _consumer_policy_workspace(config)
     results: list[dict[str, object]] = []
     blocked = False

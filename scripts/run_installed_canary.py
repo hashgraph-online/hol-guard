@@ -103,7 +103,7 @@ def _validate_corpus_bindings(repo_root: Path) -> dict[str, object]:
 
 def _run_corpus(repo_root: Path) -> dict[str, object]:
     bindings = _validate_corpus_bindings(repo_root)
-    native_root = Path(distribution("hol-guard").locate_file("codex_plugin_scanner/_native"))
+    native_root = Path(str(distribution("hol-guard").locate_file("codex_plugin_scanner/_native")))
     suffix = ".exe" if sys.platform == "win32" else ""
     runtime = native_root / f"hol-guard-runtime{suffix}"
     compiler = native_root / f"guard-command-source{suffix}"
@@ -183,9 +183,6 @@ def _no_post_execution_proof_smoke() -> dict[str, object]:
         root = Path(temporary)
         guard_home = root / "guard-home"
         guard_home.mkdir()
-        # A fresh home may bootstrap a healthy resident. Block its state
-        # directory explicitly to exercise unavailable-native prevention.
-        (guard_home / "native-runtime").touch()
         workspace = root / "workspace"
         workspace.mkdir()
         initialized = subprocess.run(
@@ -205,6 +202,13 @@ def _no_post_execution_proof_smoke() -> dict[str, object]:
             "cwd": str(workspace),
             "source_scope": "project",
         }
+        # A bundled runtime can initialize a fresh home's policy. Exercise an
+        # explicit fail-safe outage rather than relying on source-only absence.
+        hook_env = dict(os.environ)
+        hook_env["HOL_GUARD_NATIVE"] = "off"
+        hook_env["PYTHONPATH"] = ""
+        hook_env.pop("HOL_GUARD_PYTHON_ORACLE", None)
+        hook_env.pop("HOL_GUARD_NATIVE_DIAGNOSTIC", None)
         completed = subprocess.run(
             [
                 sys.executable,
@@ -226,6 +230,7 @@ def _no_post_execution_proof_smoke() -> dict[str, object]:
             capture_output=True,
             check=False,
             cwd=workspace,
+            env=hook_env,
             encoding="utf-8",
             timeout=30,
         )
@@ -237,12 +242,12 @@ def _no_post_execution_proof_smoke() -> dict[str, object]:
         hook_output = response.get("hookSpecificOutput") if isinstance(response, dict) else None
         if (
             not isinstance(response, dict)
-            or response.get("reason_code") != "native_pre_tool_unavailable"
+            or response.get("reason_code") != "native_hook_disabled"
             or response.get("policy_action") != "block"
             or not isinstance(hook_output, dict)
             or hook_output.get("permissionDecision") != "deny"
         ):
-            raise InstalledCanaryError("No-post-proof hook did not deny its unavailable native decision")
+            raise InstalledCanaryError("No-post-proof harness did not deny explicitly disabled native review")
         store = GuardStore(guard_home, prime_policy_integrity=False)
         with closing(sqlite3.connect(store.path)) as connection:
             row = cast(

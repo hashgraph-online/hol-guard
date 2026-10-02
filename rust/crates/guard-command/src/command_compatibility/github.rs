@@ -32,6 +32,27 @@ fn one(capability: &'static str) -> Capabilities {
     Some(vec![capability])
 }
 
+pub(super) fn arguments_are_read_only(arguments: &[String]) -> bool {
+    !arguments.iter().any(|argument| {
+        argument == "--web"
+            || argument.starts_with("--web=")
+            || argument == "--cache"
+            || argument.starts_with("--cache=")
+            || (argument.starts_with('-')
+                && !argument.starts_with("--")
+                && !argument.starts_with("-R")
+                && argument[1..]
+                    .split('=')
+                    .next()
+                    .is_some_and(|flags| flags.contains('w')))
+    }) && classify(arguments).is_some_and(|capabilities| {
+        !capabilities.is_empty()
+            && capabilities
+                .iter()
+                .all(|capability| matches!(*capability, "read_local" | "read_remote"))
+    })
+}
+
 fn classify(original: &[String]) -> Capabilities {
     // Quoted dynamic-looking values are deliberately outside this small native
     // grammar too. Distinguishing their expansion provenance needs literal proof.
@@ -81,11 +102,19 @@ fn classify(original: &[String]) -> Capabilities {
         return match subcommand.as_str() {
             "token" => one("secret_remote"),
             "status"
-                if options::has_option(tail, "--show-token") || options::has_option(tail, "-t") =>
+                if options::has_option(tail, "--show-token")
+                    || tail.iter().any(|argument| {
+                        argument.starts_with('-')
+                            && !argument.starts_with("--")
+                            && argument[1..]
+                                .split('=')
+                                .next()
+                                .is_some_and(|flags| flags.contains('t'))
+                    }) =>
             {
                 one("secret_remote")
             }
-            "status" => one("read_local"),
+            "status" => Some(vec!["read_local", "read_remote"]),
             "switch" if tail.len() == 1 && tail[0] == "--help" => one("read_local"),
             "login" | "logout" | "switch" | "refresh" | "setup-git" => one("write_local"),
             _ => one("unknown"),

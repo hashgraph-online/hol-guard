@@ -142,7 +142,10 @@ pub(super) fn environment_observation(executable: &str, arguments: &[String]) ->
         matches!(pair[0].as_str(), "-c" | "-e" | "-p" | "-r").then_some(pair[1].as_str())
     });
     let Some(script) = script else {
-        return Some(true);
+        // Lack of inline source is not evidence of environment access.
+        // Independent execution review still prevents an unscanned program
+        // from running; do not fabricate a failed secret-read matcher.
+        return None;
     };
     if (python || node)
         && (literal_printer(script, python) || named_public_environment_read(script, python))
@@ -155,7 +158,7 @@ pub(super) fn environment_observation(executable: &str, arguments: &[String]) ->
         || compact.contains("process.env")
         || compact.contains("ENV[")
         || compact.contains("System.getenv(");
-    Some(!explicit)
+    explicit.then_some(false)
 }
 
 #[cfg(test)]
@@ -186,7 +189,7 @@ mod tests {
     }
 
     #[test]
-    fn secret_lookups_and_unknown_programs_retain_owned_review() {
+    fn secret_lookups_retain_owned_review_without_inventing_unknown_access() {
         for script in [
             "import os; print(os.environ)",
             "import os; print(os.getenv('GOOGLE_CLOUD_PRIVATE_KEY'))",
@@ -200,11 +203,22 @@ mod tests {
         }
         assert_eq!(
             environment_observation("python3", &arguments(&["script.py"])),
-            Some(true)
+            None
         );
         assert_eq!(
             environment_observation("php", &arguments(&["-r", "artisan"])),
-            Some(true)
+            None
         );
+    }
+
+    #[test]
+    fn routine_execution_has_no_unproven_secret_read_attribution() {
+        for (executable, args) in [
+            ("python3", vec!["-m", "pytest", "tests/test_example.py"]),
+            ("python3", vec!["-c", "print(1 + 1)"]),
+            ("node", vec!["--test", "tests/example.test.js"]),
+        ] {
+            assert_eq!(environment_observation(executable, &arguments(&args)), None);
+        }
     }
 }

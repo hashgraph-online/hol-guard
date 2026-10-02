@@ -7255,8 +7255,8 @@ def test_guard_hook_emits_copilot_native_allow_response_for_benign_node_transfor
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
-    assert output["approval_reuse"]["action"] == "block"
+    assert rc == 0
+    assert output == {"permissionDecision": "allow"}
 
 
 def test_guard_hook_emits_copilot_native_allow_response_for_node_string_literal_with_dotted_mutator_text(
@@ -7445,8 +7445,8 @@ def test_guard_hook_emits_copilot_native_allow_response_for_benign_mixed_case_no
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
-    assert output["approval_reuse"]["action"] == "block"
+    assert rc == 0
+    assert output == {"permissionDecision": "allow"}
 
 
 def test_guard_hook_emits_copilot_native_ask_response_for_node_print_followed_by_eval_flag(
@@ -7850,8 +7850,8 @@ def test_guard_hook_emits_copilot_native_allow_response_for_perl_sleep_wait(
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 1
-    assert output["approval_reuse"]["action"] == "block"
+    assert rc == 0
+    assert output == {"permissionDecision": "allow"}
 
 
 @pytest.mark.usefixtures("native_command_artifact_reviews")
@@ -15036,6 +15036,7 @@ def test_runtime_hook_approval_context_invalidates_one_changed_dimension(
     tmp_path,
     changed_dimension,
     expected_reason,
+    native_context_digest: Path,
 ):
     workspace = tmp_path / "workspace"
     artifact = GuardArtifact(
@@ -19150,7 +19151,11 @@ def _codex_browser_approval_context_token(*, current_action: str) -> str:
     )
 
 
-def test_codex_browser_approval_decision_updates_daemon_operation_status(tmp_path, monkeypatch):
+def test_codex_browser_approval_decision_updates_daemon_operation_status(
+    tmp_path,
+    monkeypatch,
+    native_context_digest: Path,
+):
     monkeypatch.setattr(interaction_module, "wait_for_approval_requests", wait_for_approval_requests)
     home_dir = tmp_path / "home"
     store = GuardStore(home_dir)
@@ -19216,7 +19221,11 @@ def test_codex_browser_approval_decision_updates_daemon_operation_status(tmp_pat
     assert payload["continuation"]["resolution_action"] == "allow"
 
 
-def test_codex_browser_block_decision_updates_daemon_operation_status(tmp_path, monkeypatch):
+def test_codex_browser_block_decision_updates_daemon_operation_status(
+    tmp_path,
+    monkeypatch,
+    native_context_digest: Path,
+):
     monkeypatch.setattr(interaction_module, "wait_for_approval_requests", wait_for_approval_requests)
     home_dir = tmp_path / "home"
     store = GuardStore(home_dir)

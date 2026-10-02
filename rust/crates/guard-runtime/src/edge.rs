@@ -11,7 +11,9 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::time::{Duration, Instant};
 
-use crate::native_hook_receipt::{receipt_from_post_tool, receipt_from_pre_tool};
+use crate::native_hook_receipt::{
+    receipt_from_post_tool, receipt_from_pre_tool, NativeReceiptIdentity,
+};
 
 const MAX_HARNESS_BYTES: usize = 64;
 const MAX_EVENT_BYTES: usize = 64;
@@ -106,6 +108,32 @@ fn stable_policy_identity(snapshot: &Value, generation: u64) -> Value {
     })
 }
 
+fn canonical_identity_digest(value: &Value, error_code: &str) -> Result<String, String> {
+    let canonical =
+        guard_policy_snapshot::canonical_json_bytes(value).map_err(|_| error_code.to_owned())?;
+    Ok(hex::encode(Sha256::digest(&canonical)))
+}
+
+/// Bind the exact validated tool intent without policy-generation identity.
+/// Policy evaluation remains bound by `request_identity`; this commitment is
+/// only the stable action/source input for a later native review anchor.
+pub(crate) fn execution_intent_digest(envelope: &GuardHookEnvelopeV2) -> Result<String, String> {
+    let harness = canonical_harness(&envelope.harness)?;
+    let event = authoritative_event(envelope)?;
+    let payload = request_payload_identity(&envelope.raw_payload, &harness, &event)?;
+    let value = serde_json::json!({
+        "schema": "guard-native-execution-intent.v1",
+        "version": 1,
+        "event": event,
+        "harness": harness,
+        "payload": payload,
+        "source": {
+            "cwd": envelope.source.cwd,
+        },
+    });
+    canonical_identity_digest(&value, "native_hook_execution_intent_digest_failed")
+}
+
 /// Derive a stable opaque identity when the harness omitted a request ID.
 /// The digest covers semantic request inputs only. Transport deadlines,
 /// object field order, and event-alias spelling are deliberately excluded.
@@ -130,11 +158,7 @@ pub(crate) fn request_identity(envelope: &GuardHookEnvelopeV2) -> Result<(String
         "policy": stable_policy_identity(&envelope.policy_snapshot, envelope.policy_generation),
         "source": source,
     });
-    let value =
-        serde_json::to_value(value).map_err(|_| "native_hook_request_digest_failed".to_owned())?;
-    let canonical = guard_policy_snapshot::canonical_json_bytes(&value)
-        .map_err(|_| "native_hook_request_digest_failed".to_owned())?;
-    let digest = hex::encode(Sha256::digest(&canonical));
+    let digest = canonical_identity_digest(&value, "native_hook_request_digest_failed")?;
     let request_id = match envelope.request_id.as_deref() {
         Some(value) if request_id_is_safe(value) => value.to_owned(),
         Some(_) => return Err("native_hook_request_id_invalid".to_owned()),
@@ -318,15 +342,22 @@ fn validate_pre_tool_result(result: &Value) -> Result<(), String> {
 fn evaluate_validated_envelope(
     envelope: GuardHookEnvelopeV2,
     policy_snapshot: Option<&AdmittedPolicySnapshot>,
+    origin_store: Option<&crate::policy_store::PolicySnapshotStore>,
 ) -> Result<Vec<u8>, String> {
     let harness = canonical_harness(&envelope.harness)?;
     let event_name = authoritative_event(&envelope)?;
     let kind = payload_kind(&envelope.raw_payload)?;
     let (request_id, request_digest) = request_identity(&envelope)?;
+    let intent_digest = execution_intent_digest(&envelope)?;
+    let receipt_identity = NativeReceiptIdentity {
+        request_id: &request_id,
+        request_digest: &request_digest,
+        execution_intent_digest: Some(&intent_digest),
+    };
     if kind == GuardHookPayloadKindV2::EncryptedPayloadRef {
         return Err("native_hook_encrypted_payload_unsupported".to_owned());
     }
-    let (result, receipt) = match event_name.as_str() {
+    let (result, mut receipt) = match event_name.as_str() {
         "PreToolUse" | "UserPromptSubmit" => {
             let native = guard_command::pretool::evaluate_pre_tool_envelope_with_context(
                 &harness,
@@ -359,8 +390,7 @@ fn evaluate_validated_envelope(
             let receipt = receipt_from_pre_tool(
                 &envelope,
                 policy_snapshot.map(AdmittedPolicySnapshot::snapshot),
-                &request_id,
-                &request_digest,
+                &receipt_identity,
                 &harness,
                 &kind,
                 &typed,
@@ -400,8 +430,7 @@ fn evaluate_validated_envelope(
             let receipt = receipt_from_post_tool(
                 &envelope,
                 policy_snapshot.map(AdmittedPolicySnapshot::snapshot),
-                &request_id,
-                &request_digest,
+                &receipt_identity,
                 &harness,
                 &kind,
                 &evaluated,
@@ -412,6 +441,9 @@ fn evaluate_validated_envelope(
         }
         _ => return Err("native_hook_event_unsupported".to_owned()),
     };
+    if let Some(store) = origin_store {
+        crate::policy_store::native_review_origin::authenticate(store, &mut receipt)?;
+    }
     crate::encode_response(&GuardHookEdgeResultV2 {
         schema: GUARD_HOOK_EDGE_RESULT_V2_SCHEMA.to_owned(),
         authority: "rust".to_owned(),
@@ -437,7 +469,7 @@ pub(crate) fn evaluate_envelope_with_store(
         envelope.policy_generation,
     )?;
     let _command_lease = policy_store.command_authority_lease(snapshot.snapshot())?;
-    evaluate_validated_envelope(envelope, Some(snapshot.as_ref()))
+    evaluate_validated_envelope(envelope, Some(snapshot.as_ref()), Some(policy_store))
 }
 
 /// Evaluate against a snapshot while the policy store's request fence is
@@ -448,7 +480,7 @@ pub(crate) fn evaluate_envelope_with_snapshot(
     snapshot: &AdmittedPolicySnapshot,
 ) -> Result<Vec<u8>, String> {
     validate_envelope_shape(&envelope)?;
-    evaluate_validated_envelope(envelope, Some(snapshot))
+    evaluate_validated_envelope(envelope, Some(snapshot), None)
 }
 
 #[cfg(test)]

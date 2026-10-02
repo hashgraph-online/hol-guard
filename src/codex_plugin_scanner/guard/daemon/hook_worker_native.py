@@ -718,12 +718,22 @@ class HookWorkerNativeMixin:
             )
             if repaired_result:
                 native_result = repaired_result
+            from ..adapters.zcode_contained_tests import route_zcode_containment
+
+            rendered = route_zcode_containment(
+                harness_json_from_native_pre_tool(native_harness, native_result),
+                harness=native_harness,
+                payload=payload,
+                guard_home=guard_home,
+                home_dir=home_dir,
+                workspace=workspace,
+            )
             return (
                 _record_native_pre_activity(
                     self,
                     native_harness,
                     payload,
-                    harness_json_from_native_pre_tool(native_harness, native_result),
+                    rendered,
                     accepted_receipt,
                 ),
                 True,

@@ -136,7 +136,7 @@ def test_real_native_review_classification_accepts_explicit_stash_permission(
         force_rule_ids=("command.git.stash",),
         controls=(("permission", "command.git.permission.stash", "enabled"),),
     )
-    assert fixture.payload["minimum_action"] == "review"
+    assert fixture.payload["minimum_action"] == "allow"
     monkeypatch.setattr(native_command_evaluation, "review_pre_tool_native", lambda *_args, **_kwargs: fixture.payload)
     reviewed = native_command_evaluation.review_command_native(
         fixture.command,
@@ -144,7 +144,7 @@ def test_real_native_review_classification_accepts_explicit_stash_permission(
         extension_control_snapshot=fixture.snapshot,
     )
     assert reviewed is not None
-    assert reviewed.native_minimum_action == "review"
+    assert reviewed.native_minimum_action == "allow"
     assert reviewed.evaluation.minimum_action == "allow"
     assert reviewed.evaluation.control_resolution.explicitly_enabled_permission_ids == ("command.git.permission.stash",)
 

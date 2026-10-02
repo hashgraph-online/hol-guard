@@ -9,6 +9,7 @@ import pytest
 import yaml
 
 from scripts.ci.build_pytest_shard_plan import SCHEDULING_ONLY_NODE_IDS
+from tests.support.ci_workflow import expand_ci_job_actions
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_PATH = ROOT / "scripts" / "ci" / "pytest_shard.py"
@@ -36,6 +37,12 @@ def test_ci_shards_cover_every_test_file_once_and_deterministically() -> None:
 
 
 def _workflow_job(workflow: str, job_name: str, next_job_name: str | None) -> str:
+    """Inspect the expanded steps of the requested CI job."""
+    document = yaml.safe_load(workflow)
+    if any(
+        step.get("uses", "").startswith("./.github/actions/ci-job-") for step in document["jobs"][job_name]["steps"]
+    ):
+        return yaml.safe_dump(expand_ci_job_actions(document)["jobs"][job_name], sort_keys=False, width=100_000)
     section = workflow.split(f"  {job_name}:\n", maxsplit=1)[1]
     if next_job_name is not None:
         section = section.split(f"\n  {next_job_name}:", maxsplit=1)[0]
@@ -43,10 +50,11 @@ def _workflow_job(workflow: str, job_name: str, next_job_name: str | None) -> st
 
 
 def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -> None:
+    """Verify CI workflow cancels stale runs and uses precomputed affinity shards."""
     workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
-    payload = yaml.safe_load(workflow)
+    payload = expand_ci_job_actions(yaml.safe_load(workflow))
     jobs = payload["jobs"]
-    plan_action = yaml.safe_load((ROOT / ".github/actions/plan-pytest/action.yml").read_text())
+    plan_action = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/actions/plan-pytest/action.yml").read_text()))
     plan_steps = plan_action["runs"]["steps"]
     collector = next(step["run"] for step in plan_steps if "build_pytest_shard_plan.py" in step.get("run", ""))
     assert "cancel-in-progress: true" in workflow
@@ -59,7 +67,16 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
     assert payload["env"]["CI_PYTHON_VERSION"] == "3.12.14"
     assert "test-plan" not in jobs
     assert "tests" not in jobs
-    assert "needs" not in jobs["coverage-plan"]
+    assert jobs["coverage-plan"]["needs"] == "native-command-evaluators"
+    for name in ("coverage-plan", "compatibility", "cisco-full", "cross-platform", "windows-updater"):
+        assert jobs[name]["needs"] == "native-command-evaluators"
+        resources = [
+            step
+            for step in jobs[name]["steps"]
+            if step.get("with", {}).get("name") == "pytest-native-command-projections"
+        ]
+        assert len(resources) == 1
+        assert "if" not in resources[0]
     native_steps = jobs["native-command-evaluators"]["steps"]
     verify_index = next(
         index for index, step in enumerate(native_steps) if "verify_native_command_program.py" in step.get("run", "")
@@ -112,7 +129,7 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
         assert '"@$shard_file"' in commands
 
     coverage_job = _workflow_job(workflow, "coverage", "duration-manifest-candidate")
-    scheduling_job = _workflow_job(workflow, "scheduling-sensitive", "compatibility")
+    scheduling_job = "\n".join(step.get("run", "") for step in jobs["scheduling-sensitive"]["steps"])
     assert "--cov --cov-branch --cov-report=" in coverage_job
     assert "COVERAGE_CORE" not in coverage_job
     assert "-p pytest_coverage_core" not in coverage_job
@@ -169,7 +186,8 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
 )
 @pytest.mark.parametrize("result", ["failure", "skipped", "cancelled"])
 def test_required_python_gate_rejects_incomplete_coverage_or_timing_proofs(failed_dependency: str, result: str) -> None:
-    workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
+    """Verify required Python gate rejects incomplete coverage or timing proofs."""
+    workflow = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text()))
     step = workflow["jobs"]["ci-python-312"]["steps"][0]
     env = dict(os.environ, **dict.fromkeys(step["env"], "success"))
     env[failed_dependency] = result

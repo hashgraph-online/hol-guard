@@ -440,6 +440,35 @@ def test_env_drift_cannot_inherit_same_launch_grant(tmp_path: Path) -> None:
     assert matching_local_mcp_grant(store=store, artifact=artifact, current_action="review") is None
 
 
+def test_unbound_env_hash_cannot_satisfy_package_launcher_binding(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    npx = _clean_npx()
+    if npx is None:
+        pytest.skip("npx is not on PATH")
+    import codex_plugin_scanner.guard.store_local_mcp as store_local_mcp
+
+    sentinel = "guard-context-unbound:configured-environment"
+    # Simulate detection and lookup both running without the native digest
+    # authority: the recorded hash and the recomputed hash share the sentinel.
+    monkeypatch.setattr(
+        store_local_mcp, "build_configured_environment_hash", lambda *_a, **_k: sentinel
+    )
+    identity = _identity()
+    store = GuardStore(tmp_path / "guard-home")
+    _enroll(store, identity, states={"read_file": "allow"})
+    runtime = build_mcp_server_identity(
+        config_path="",
+        command=npx,
+        args=("-y", "@modelcontextprotocol/server-filesystem"),
+        transport="stdio",
+    )
+    runtime = replace(runtime, env_values_hash=sentinel)
+    assert runtime.identity_hash != identity.identity_hash
+    artifact = _artifact(runtime, "read_file")
+    assert matching_local_mcp_grant(store=store, artifact=artifact, current_action="review") is None
+
+
 def test_npx_absolute_path_still_matches_command_and_args(tmp_path: Path) -> None:
     npx = _clean_npx()
     if npx is None:

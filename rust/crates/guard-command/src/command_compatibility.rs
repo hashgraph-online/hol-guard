@@ -20,6 +20,10 @@ mod github;
 
 pub use catalog::compatibility_rule_ids;
 
+pub(crate) fn github_arguments_are_read_only(arguments: &[String]) -> bool {
+    github::arguments_are_read_only(arguments)
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CompatibilityMatch {
     pub rule_id: &'static str,

@@ -390,6 +390,10 @@ class StdioGuardProxy:
         self._current_config_provider = current_config_provider
         self._active_launch_identity: dict[str, object] | None = None
         self._active_env_values_hash: str | None = None
+        if guard_store is not None:
+            from ..native_context import bind_context_digest_home
+
+            bind_context_digest_home(getattr(guard_store, "guard_home", None))
 
     def _response_timeout_seconds(self) -> float:
         configured = getattr(self.guard_config, "approval_wait_timeout_seconds", None)
@@ -500,13 +504,15 @@ class StdioGuardProxy:
 
     def _start_process(self) -> subprocess.Popen[str]:
         launch_env = _build_scrubbed_env(self.env)
-        self._active_launch_identity = self._build_launch_identity(launch_env)
-        self._active_env_values_hash = build_configured_environment_hash(
-            launch_env,
-            configured_keys=tuple(self.env),
-        )
         process: subprocess.Popen[str] | None = None
         try:
+            # Digest calls raise when the native resident is unreachable; keep
+            # them inside the failure boundary so partial state is unwound.
+            self._active_launch_identity = self._build_launch_identity(launch_env)
+            self._active_env_values_hash = build_configured_environment_hash(
+                launch_env,
+                configured_keys=tuple(self.env),
+            )
             process = subprocess.Popen(
                 self.command,
                 stdin=subprocess.PIPE,

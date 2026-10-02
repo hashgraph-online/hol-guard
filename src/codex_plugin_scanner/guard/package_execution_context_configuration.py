@@ -8,6 +8,7 @@ import re
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
+from .native_context import context_opaque_digest, context_sha256_digest
 from .package_execution_context_inputs import ContextFiles, ContextUnavailableError
 
 _JS_MANAGERS = frozenset({"bun", "bunx", "npm", "npx", "pnpm", "yarn"})
@@ -363,8 +364,13 @@ def environment_material(
     names.update(manager_names)
     names.update(name.lower() for name in manager_names)
     names.update(referenced_names)
+    # identity hash; strict=False degrades to byte-identical local hash
     values = {
-        name: hashlib.sha256(environment[name].encode("utf-8")).hexdigest() if name in environment else None
+        name: (
+            context_opaque_digest(environment[name], unbound_label="env-var", strict=False)
+            if name in environment
+            else None
+        )
         for name in sorted(names)
     }
     return {"variables": values}
@@ -398,7 +404,10 @@ def _entry_sort_key(value: Mapping[str, str]) -> tuple[str, str]:
 
 
 def _digest_json(value: object) -> str:
-    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+    # Canonical-JSON digest — owned by the native canonical_sha256 op.
+    # Identity digest: strict=False degrades to byte-identical local canonical
+    # hash (stored rows share this producer).
+    return context_sha256_digest(value, unbound_label="package-config-json", strict=False)
 
 
 __all__ = ["configuration_material", "environment_material"]

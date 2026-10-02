@@ -28,7 +28,7 @@ def classify_github_auth(normalized: Sequence[str]) -> GitHubCommandAssessment |
         )
     if auth_subcommand == "status":
         return github_assessment(
-            "read_local",
+            "read_remote",
             "github.command.local-auth-read",
             "The command reads local CLI auth state.",
         )

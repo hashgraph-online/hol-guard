@@ -143,6 +143,7 @@ from ..action_lattice import (
 )
 from ..local_cli_hook import apply_local_cli_grant, observe_unlisted_cli
 from ..models import GuardAction, GuardArtifact, HarnessDetection
+from ..retry_lineage import capture_retry_lineage
 from ..runtime.actions import _command_detail
 from ..runtime.approval_context import (
     approval_context_tokens_validation_reason,
@@ -716,6 +717,9 @@ def run_native_generic_payload(
     native_edge_result: Mapping[str, object] | None = None,
     native_edge_receipt: Mapping[str, object] | None = None,
 ) -> int:
+    from ..native_context import bind_context_digest_home
+
+    bind_context_digest_home(getattr(store, "guard_home", None))
     payload_map = dict(payload)
     artifact_id = _coalesce_string(
         getattr(args, "artifact_id", None),
@@ -1291,6 +1295,20 @@ def run_native_generic_payload(
                 "request_summary": "Guard requires approval because no command rule matched this tool action.",
             },
         )
+        queued_at = _now()
+        hook_metadata: dict[str, object] = {
+            "tool_name": str(payload_map.get("tool_name", "")),
+            "hook_event_name": hook_event_name,
+            "workspace": str(runtime_workspace) if runtime_workspace else None,
+        }
+        retry_lineage = capture_retry_lineage(
+            payload_map,
+            harness=str(args.harness),
+            workspace=str(runtime_workspace) if runtime_workspace else None,
+            action_envelope=action_envelope.to_dict() if action_envelope is not None else None,
+        )
+        if retry_lineage is not None:
+            hook_metadata["retry_lineage"] = retry_lineage
         queued = queue_blocked_approvals(
             detection=HarnessDetection(
                 harness=args.harness,
@@ -1325,8 +1343,15 @@ def run_native_generic_payload(
             },
             store=store,
             approval_center_url=approval_center_url,
-            now=_now(),
+            now=queued_at,
             redaction_level=config.receipt_redaction_level,
+            continuation_operation={
+                "created_at": queued_at,
+                "harness": args.harness,
+                "metadata": hook_metadata,
+                "status": "waiting_on_approval",
+                "updated_at": queued_at,
+            },
         )
         payload_map["approval_requests"] = queued
         payload_map["approval_center_url"] = approval_center_url

@@ -124,9 +124,10 @@ def test_parse_shell_command_marks_malformed_and_unsupported_input() -> None:
     assert unsupported.segments == ()
 
 
-def test_parse_shell_command_marks_over_limit_input_uncertain() -> None:
+@pytest.mark.parametrize("multibyte_chars", [(MAX_COMMAND_BYTES // 2) + 1, MAX_COMMAND_BYTES])
+def test_parse_shell_command_marks_over_limit_input_uncertain(multibyte_chars: int) -> None:
     parsed = parse_shell_command("x" * (MAX_COMMAND_BYTES + 1))
-    multibyte = parse_shell_command("é" * ((MAX_COMMAND_BYTES // 2) + 1))
+    multibyte = parse_shell_command("é" * multibyte_chars)
 
     assert parsed.confidence == "uncertain"
     assert parsed.uncertainty_reason == "command_byte_limit_exceeded"

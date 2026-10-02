@@ -317,6 +317,24 @@ impl CompiledNativeCommandControls {
                     .count()
                 + usize::from(batch.evaluation_error.is_some()),
         };
+        if result.reason_code == "native_command_review_required"
+            && result.minimum_action == "review"
+            && result.action.bounded
+            && !result.action.sensitive_target
+            && floor == "allow"
+            && binding.uncertainty_count == 0
+            && command.is_some_and(|model| self.explicit_permissions_cover_command(model, &batch))
+        {
+            // Authenticated consent to every classified command segment can
+            // settle the generic unknown-command floor, never an intrinsic risk.
+            result.minimum_action = "allow".into();
+            result.policy_action = "allow".into();
+            result.decision = "allow".into();
+            result.explicitly_benign = true;
+            result.reason_code = "native_command_explicit_permission_allow".into();
+            result.reason =
+                "This command is allowed by its authenticated extension permissions.".into();
+        }
         let evaluation_error = batch.evaluation_error.clone();
         result.command_extensions = Some(NativeCommandObservationsV1 {
             schema: NATIVE_COMMAND_OBSERVATIONS_SCHEMA.to_owned(),
@@ -331,6 +349,40 @@ impl CompiledNativeCommandControls {
         }
         strengthen(&mut result, floor, reason);
         result
+    }
+
+    fn explicit_permissions_cover_command(
+        &self,
+        command: &CanonicalCommandV1,
+        batch: &NativeCommandObservationBatchV1,
+    ) -> bool {
+        if command.confidence != "exact"
+            || command.path_overridden
+            || !command.wrapper_chain.is_empty()
+            || command.segments.is_empty()
+        {
+            return false;
+        }
+        let mut covered = BTreeSet::new();
+        for observation in &batch.observations {
+            if observation.effective_segment_indexes.is_empty() {
+                continue;
+            }
+            let Some(index) = self.rule_indices.get(&observation.rule_id) else {
+                return false;
+            };
+            if !self
+                .explicitly_enabled_permissions
+                .contains(&self.program.rules[*index].permission_id)
+            {
+                return false;
+            }
+            covered.extend(observation.effective_segment_indexes.iter().copied());
+        }
+        // Delegated package-firewall ownership is not execution consent. Only
+        // verified rule observations can cover a segment; an extra unclassified
+        // command in a shell chain must retain its own review.
+        (0..command.segments.len()).all(|index| covered.contains(&index))
     }
 }
 

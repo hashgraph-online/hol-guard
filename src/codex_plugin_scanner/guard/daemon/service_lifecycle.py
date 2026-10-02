@@ -198,6 +198,7 @@ def contain_failed_service_start(
             server._server.server_close()
         except Exception:
             serve_thread_contained = False
+            _ = server._record_quarantine_state(contained=False)
     service_finished = server._finish_service()
     if serve_thread_started and serve_thread is not None:
         serve_thread_contained = (
