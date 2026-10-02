@@ -606,13 +606,11 @@ jobs:
           SOURCE_COMPILER: ${{ matrix.source_compiler }}
           RUST_TARGET: ${{ matrix.target }}
         run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            # Generated projections may lag their canonical tagged inputs.
-            # Bind both the binary and packaged JSON to this release build.
-            python scripts/build_native_command_program.py --compiler "$SOURCE_COMPILER"
-            cargo build --manifest-path rust/Cargo.toml --locked --release --target "$RUST_TARGET" \
-              -p hol-guard-runtime -p guard-command --bin hol-guard-runtime --bin guard-command-source
-          fi
+          # Generated projections may lag their canonical tagged inputs.
+          # Bind both the binary and packaged JSON to this release build.
+          python scripts/build_native_command_program.py --compiler "$SOURCE_COMPILER"
+          cargo build --manifest-path rust/Cargo.toml --locked --release --target "$RUST_TARGET" \
+            -p hol-guard-runtime -p guard-command --bin hol-guard-runtime --bin guard-command-source
           arguments=(--compiler "$SOURCE_COMPILER")
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
             arguments+=(--changed-from "${{ github.event.pull_request.base.sha }}")

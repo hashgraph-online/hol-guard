@@ -94,7 +94,7 @@ def test_pr_native_wheel_checkout_cannot_write_release_compilation_cache() -> No
     assert "github.event.pull_request.head.sha" in checkout_ref
     assert "needs.build.outputs.source_sha" in checkout_ref
     setup_uv = _action_step(steps, "astral-sh/setup-uv")
-    assert setup_uv["if"] == "github.event_name == 'pull_request'"
+    assert "if" not in setup_uv
     assert steps.index(setup_python) < steps.index(checkout)
     caches = [step for step in steps if "cache" in str(step.get("uses", ""))]
     assert len(caches) == 1

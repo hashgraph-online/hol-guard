@@ -16,10 +16,10 @@ def test_native_pr_base_wheel_rebuild_has_uv_available() -> None:
         if step.get("name") == "Rebuild Guard base wheel after projection regeneration"
     )
     rebuild = steps[rebuild_index]
-    assert rebuild["if"] == "github.event_name == 'pull_request'"
+    assert "if" not in rebuild
     assert "uv build" in rebuild["run"]
     setup = next(step for step in steps[:rebuild_index] if step.get("uses", "").startswith("astral-sh/setup-uv@"))
-    assert setup.get("if") in (None, rebuild["if"])
+    assert "if" not in setup
     assert setup["with"]["version"] == "0.9.26"
 
 
