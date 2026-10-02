@@ -65,3 +65,20 @@ def test_linked_metadata_has_listing_without_parent_checkout_or_secret_read_gran
     assert "--unshare-all" in argv and argv[argv.index("--cap-drop") + 1] == "ALL"
     assert "CAP_SYS_ADMIN" in argv and "CAP_SETPCAP" in argv
     assert "/guard-approved-mappings" in argv
+
+    # The only plan locator is fixed inside the namespace; argv carries just its digest.
+    import hashlib
+
+    fixed_plan = str(namespace.PLAN_DIRECTORY / namespace.PLAN_FILENAME)
+    snapshot_path = private / namespace.PLAN_FILENAME
+    assert argv[-1] == hashlib.sha256(snapshot_path.read_bytes()).hexdigest()
+    assert argv[-2].endswith("restricted_linux_entry.py")
+    entrypoint_index = argv.index("--")
+    assert str(snapshot_path) not in argv[entrypoint_index:]
+    plan_mount = argv.index(fixed_plan)
+    assert argv[plan_mount - 2 : plan_mount + 1] == ["--ro-bind", str(snapshot_path), fixed_plan]
+    plan_directory = argv.index(str(namespace.PLAN_DIRECTORY))
+    assert argv[plan_directory - 3 : plan_directory + 1] == ["--perms", "0700", "--dir", str(namespace.PLAN_DIRECTORY)]
+    mappings = argv.index("/guard-approved-mappings")
+    assert argv[mappings - 3 : mappings] == ["--perms", "0700", "--tmpfs"]
+    assert "/tmp" not in argv
