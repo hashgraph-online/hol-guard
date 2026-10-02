@@ -1,0 +1,51 @@
+"""Extra metadata reads stay indexed; listing never becomes blanket file access."""
+
+import json
+import sys
+from pathlib import Path
+
+from codex_plugin_scanner.guard.runtime import restricted_linux_namespace as namespace
+from codex_plugin_scanner.guard.runtime import restricted_pytest_model as model
+from codex_plugin_scanner.guard.runtime import restricted_pytest_sandbox as sandbox
+
+
+def test_linked_metadata_has_listing_without_parent_checkout_or_secret_read_grants(monkeypatch, tmp_path):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "ordinary.txt").write_text("ordinary")
+    parent = tmp_path / "other-checkout"
+    metadata = parent / ".git"
+    metadata.mkdir(parents=True)
+    (metadata / "HEAD").write_text("ref: refs/heads/main\n")
+    (metadata / ".env").write_text("synthetic fixture")
+    private = tmp_path / "private"
+    private.mkdir(mode=0o700)
+    executable = tmp_path / "bin" / "git"
+    executable.parent.mkdir()
+    executable.write_bytes(b"\x7fELF")
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setattr(model, "_LINUX_READ_ROOTS", ())
+    monkeypatch.setattr(model, "_LINUX_READ_FILES", ())
+    monkeypatch.setattr(sandbox, "_runtime_read_roots", lambda plan: ())
+    monkeypatch.setattr(namespace, "resolve_linux_elf_loader", lambda path: None)
+    plan = model.RestrictedPytestPlan(
+        profile_version=model.GIT_READ_ONLY_PROFILE_VERSION,
+        backend="linux-bubblewrap",
+        backend_executable=Path("/usr/bin/bwrap"),
+        workspace=workspace,
+        cwd=workspace,
+        command=(str(executable), "diff", "--stat"),
+        executable=executable,
+        allowed_executables=(executable,),
+        read_only_roots=(metadata,),
+        denied_capabilities=("workspace-write", "workspace-credential-read", "network"),
+    )
+    argv = namespace.linux_readonly_argv(plan, private_root=private)
+    snapshot = json.loads((private / "linux-plan.json").read_text())
+    assert snapshot["list_roots"] == [str(workspace), str(metadata)]
+    assert snapshot["read_roots"] == []
+    assert str(metadata / "HEAD") in snapshot["read_files"]
+    assert str(metadata / ".env") not in snapshot["read_files"]
+    assert str(parent) not in argv
+    assert snapshot["write_roots"] == [str(private)]
+    assert "--unshare-all" in argv and argv[argv.index("--cap-drop") + 1] == "ALL"

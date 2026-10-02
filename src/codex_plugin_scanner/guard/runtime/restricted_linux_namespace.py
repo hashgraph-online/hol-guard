@@ -61,12 +61,14 @@ def linux_readonly_argv(plan: RestrictedPytestPlan, *, private_root: Path) -> li
     ]
     grants = list(collect_linux_read_grants(plan.workspace))
     indexed = {grant.path: (grant.device, grant.inode) for grant in grants}
+    list_roots = [plan.workspace]
     for root in (*runtime_roots, *plan.read_only_roots):
         canonical = root.resolve(strict=True)
         if canonical.is_relative_to(plan.workspace) or any(canonical.is_relative_to(path) for path in system_roots):
             continue
         for grant in collect_linux_read_grants(canonical):
             indexed[grant.path] = (grant.device, grant.inode)
+        list_roots.append(canonical)
         mounts.append(canonical)
     files = [path.resolve() for path in _LINUX_READ_FILES if path.is_file()]
     if plan.profile_version.startswith(("node-", "vitest-")):
@@ -90,7 +92,7 @@ def linux_readonly_argv(plan: RestrictedPytestPlan, *, private_root: Path) -> li
         "command": list(plan.command),
         "read_roots": list(map(str, system_roots)),
         "read_files": list(map(str, indexed)),
-        "list_roots": [str(plan.workspace)],
+        "list_roots": list(map(str, dict.fromkeys(list_roots))),
         "write_roots": list(map(str, write_roots)),
         "executables": list(map(str, sorted(images))),
         "read_identities": [[str(path), *identity] for path, identity in indexed.items()],

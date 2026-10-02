@@ -39,6 +39,21 @@ def test_fresh_native_deny_prevents_execution(monkeypatch, tmp_path):
     assert not executed
 
 
+def test_linux_git_uses_the_filtered_readonly_profile(monkeypatch, tmp_path):
+    (tmp_path / ".git").mkdir()
+    executable = tmp_path / "git"
+    executable.write_text("synthetic image")
+    monkeypatch.setattr(git, "_select_backend", lambda **kwargs: ("linux-bubblewrap", tmp_path / "bwrap"))
+    monkeypatch.setattr(git, "_resolve_executable", lambda *args, **kwargs: executable)
+    monkeypatch.setattr(git, "git_binary_path_is_trusted", lambda *args, **kwargs: True)
+    plan = git.prepare_restricted_git(["git", "diff", "--stat"], workspace=tmp_path)
+    assert plan.backend == "linux-bubblewrap"
+    assert plan.profile_version == "git-readonly-v1"
+    assert plan.allowed_executables == (executable,)
+    assert "--no-ext-diff" in plan.command and "--no-textconv" in plan.command
+    assert plan.command[plan.command.index("-c") + 1] == "core.fsmonitor=false"
+
+
 @pytest.mark.skipif(sys.platform != "darwin" or not shutil.which("sandbox-exec"), reason="macOS OS boundary")
 @pytest.mark.parametrize("linked", [False, True])
 def test_actual_git_inspection_does_not_invoke_helpers(tmp_path, capfd, linked):

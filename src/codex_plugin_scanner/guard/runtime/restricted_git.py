@@ -88,7 +88,7 @@ def prepare_restricted_git(command: Sequence[str], *, workspace: Path, cwd: Path
     root = _resolve_workspace(workspace)
     directory = _resolve_cwd(cwd or root, workspace=root)
     backend, backend_path = _select_backend(platform=sys.platform, backend_executable=None)
-    if backend != "macos-seatbelt":
+    if backend not in {"macos-seatbelt", "linux-bubblewrap"}:
         raise RestrictedPytestError("git_restricted_sandbox_unavailable", "Protected Git filtering is unavailable.")
     executable = _resolve_executable(argv[0], cwd=directory)
     if not git_binary_path_is_trusted(executable, cwd=directory):
@@ -131,7 +131,7 @@ def run_restricted_git(
 ) -> int:
     if (
         plan.profile_version != GIT_READ_ONLY_PROFILE_VERSION
-        or plan.backend != "macos-seatbelt"
+        or plan.backend not in {"macos-seatbelt", "linux-bubblewrap"}
         or not 0 < timeout_seconds <= 86400
     ):
         raise RestrictedPytestError("git_restricted_invalid_command", "Invalid protected Git plan.")
