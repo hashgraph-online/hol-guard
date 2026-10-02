@@ -98,16 +98,9 @@ impl CompiledNativeCommandControls {
                 });
                 let command_match = mcp.mcp_launch.kind == "direct-command"
                     && mcp.mcp_launch.command.as_deref().is_some_and(|expected| {
-                        packages
-                            .iter()
-                            .any(|package| package.eq_ignore_ascii_case(expected))
-                            || command.is_some_and(|c| {
-                                c.segments.iter().any(|seg| {
-                                    seg.executable.as_deref().is_some_and(|exe| {
-                                        basename(exe).eq_ignore_ascii_case(expected)
-                                    })
-                                })
-                            })
+                        packages.iter().any(|package| {
+                            basename(package).eq_ignore_ascii_case(basename(expected))
+                        })
                     });
                 let remote_named = mcp.mcp_launch.kind == "remote-http"
                     && mcp.mcp_launch.server_names.iter().any(|server| {

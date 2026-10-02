@@ -220,6 +220,11 @@ def test_direct_command_launch_validation() -> None:
     with pytest.raises(ValueError, match="schema"):
         validate_mcp_contribution(invalid_args, filename="invalid_args.json")
 
+    path_cmd = dict(payload)
+    path_cmd["launch"] = {"kind": "direct-command", "command": "/usr/bin/run"}
+    with pytest.raises(ValueError, match="path separators"):
+        validate_mcp_contribution(path_cmd, filename="path_cmd.json")
+
 
 def test_duplicate_direct_command_rejected(tmp_path: Path) -> None:
     run_path = Path(__file__).resolve().parents[1] / "contributions/mcp-servers/mcp.run.json"

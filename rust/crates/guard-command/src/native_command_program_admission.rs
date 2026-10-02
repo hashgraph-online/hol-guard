@@ -271,7 +271,7 @@ impl NativeCommandProgram {
                                     .mcp_launch
                                     .args
                                     .iter()
-                                    .any(|arg| arg.is_empty() || arg.len() > 128)
+                                    .any(|arg| arg.is_empty() || arg.chars().count() > 128)
                         }
                         "remote-http" => {
                             let Some(url) = mcp.mcp_launch.url.as_deref() else {

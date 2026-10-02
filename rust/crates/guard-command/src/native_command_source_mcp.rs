@@ -116,6 +116,7 @@ pub(super) fn lower(bytes: &[u8]) -> Result<LoweredMcp, &'static str> {
         Launch::DirectCommand { command, args } => {
             if command.is_empty()
                 || command.chars().count() > 64
+                || command.contains(['/', '\\'])
                 || args.len() > 16
                 || args.iter().any(|a| a.is_empty() || a.chars().count() > 128)
             {
@@ -249,6 +250,10 @@ fn canonical_endpoint(value: &str) -> Result<String, &'static str> {
     Ok(format!("https://{host}{path}"))
 }
 
+fn basename(value: &str) -> &str {
+    value.rsplit(['/', '\\']).next().unwrap_or(value)
+}
+
 pub(super) fn validate_inventory(program: &Value) -> Result<(), &'static str> {
     let mut packages = BTreeSet::new();
     let mut direct_commands = BTreeSet::new();
@@ -272,7 +277,7 @@ pub(super) fn validate_inventory(program: &Value) -> Result<(), &'static str> {
                 let command = launch["command"]
                     .as_str()
                     .ok_or("command_source_mcp_projection_invalid")?;
-                if !direct_commands.insert(command.trim().to_lowercase()) {
+                if !direct_commands.insert(basename(command.trim()).to_lowercase()) {
                     return Err("command_source_mcp_command_duplicate");
                 }
             }

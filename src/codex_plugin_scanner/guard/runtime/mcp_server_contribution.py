@@ -16,6 +16,7 @@ from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError
 
 from .extension_contribution import frozen_package_data
+from .mcp_protection import _command_name
 
 _SCHEMA_VERSION: Final = "guard.mcp-server-contribution.v1"
 _ALLOWED_ICON_NAMES: Final = frozenset(
@@ -239,9 +240,16 @@ def validate_mcp_contribution(payload: Mapping[str, object], *, filename: str = 
         cmd = launch.get("command")
         if not isinstance(cmd, str) or not cmd.strip():
             raise ValueError(f"{filename} direct command is invalid")
+        if "/" in cmd or "\\" in cmd:
+            raise ValueError(f"{filename} direct command cannot contain path separators")
         args = launch.get("args")
-        if args is not None and (not isinstance(args, list) or any(not isinstance(a, str) for a in args)):
-            raise ValueError(f"{filename} direct command args must be a list of strings")
+        if args is not None:
+            if not isinstance(args, list) or any(not isinstance(a, str) for a in args):
+                raise ValueError(f"{filename} direct command args must be a list of strings")
+            if len(args) > 16:
+                raise ValueError(f"{filename} direct command args exceeds 16 items")
+            if any(len(a) > 128 for a in args):
+                raise ValueError(f"{filename} direct command arg exceeds 128 characters")
     elif launch_kind == "remote-http":
         if normalized_remote_mcp_url(launch.get("url")) is None:
             raise ValueError(
@@ -392,7 +400,7 @@ def _finalize_payloads(payloads: tuple[dict[str, object], ...]) -> tuple[dict[st
             cmd = launch.get("command")
             if not isinstance(cmd, str) or not cmd.strip():
                 raise ValueError(f"{mcp_id} is missing a direct command")
-            key = cmd.strip().lower()
+            key = _command_name(cmd.strip())
             previous = direct_commands.get(key)
             if previous is not None:
                 raise ValueError(f"duplicate MCP direct command {cmd} for {previous} and {mcp_id}")

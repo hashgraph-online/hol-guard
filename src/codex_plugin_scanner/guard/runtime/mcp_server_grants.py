@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from pathlib import Path
 
 from ..models import GuardAction, GuardArtifact
 from .extension_control_contract import ExtensionControlLayer
 from .extension_trust import extension_is_active
+from .mcp_protection import _command_name, _stable_digest
 from .mcp_server_contribution import (
     catalog_id_for_mcp_id,
     load_mcp_contribution_payloads,
@@ -79,14 +79,20 @@ def matching_mcp_contribution(artifact: GuardArtifact) -> dict[str, object] | No
                 return payload
     cmd = _mcp_identity_command(artifact)
     if isinstance(cmd, str) and cmd.strip():
-        cmd_name = Path(cmd.strip()).name.lower()
+        cmd_name = _command_name(cmd.strip())
+        identity_args_hash = _mcp_identity_args_hash(artifact)
         for payload in load_mcp_contribution_payloads():
             launch = payload.get("launch")
             if not isinstance(launch, dict) or launch.get("kind") != "direct-command":
                 continue
             declared_cmd = launch.get("command")
-            if isinstance(declared_cmd, str) and declared_cmd.strip().lower() == cmd_name:
-                return payload
+            if not isinstance(declared_cmd, str) or _command_name(declared_cmd.strip()) != cmd_name:
+                continue
+            declared_args = list(launch.get("args") or [])
+            expected_args_hash = _stable_digest(declared_args)
+            if identity_args_hash != expected_args_hash:
+                continue
+            return payload
     for payload in load_mcp_contribution_payloads():
         launch = payload.get("launch")
         if not isinstance(launch, dict) or launch.get("kind") != "remote-http":
@@ -152,6 +158,19 @@ def _mcp_identity_command(artifact: GuardArtifact) -> object:
     if not isinstance(identity, Mapping):
         return None
     return identity.get("command")
+
+
+def _mcp_identity_args_hash(artifact: GuardArtifact) -> str | None:
+    metadata = artifact.metadata
+    if not isinstance(metadata, Mapping):
+        return None
+    identity = metadata.get("mcp_server_identity")
+    if not isinstance(identity, Mapping):
+        return None
+    args_hash = identity.get("args_hash")
+    if not isinstance(args_hash, str) or not args_hash.strip():
+        return None
+    return args_hash.strip()
 
 
 def _mcp_transport(artifact: GuardArtifact) -> str | None:
