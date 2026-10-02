@@ -145,6 +145,7 @@ _PRESENTATION_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/approval_scope_support.py",
         "src/codex_plugin_scanner/guard/approvals.py",
         "src/codex_plugin_scanner/guard/codex_app_server.py",
+        "src/codex_plugin_scanner/guard/daemon/hook_pretool_rendering.py",
         "src/codex_plugin_scanner/guard/continuation_runtime.py",
         "src/codex_plugin_scanner/guard/edge_events.py",
         "src/codex_plugin_scanner/guard/harness_usage.py",

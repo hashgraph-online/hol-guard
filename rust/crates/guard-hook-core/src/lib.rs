@@ -425,6 +425,11 @@ fn review_source(
         );
     }
     if !raw_output_matches {
+        // A logical skill URI claims this exact installed document, rather
+        // than a host-formatted ordinary file presentation.
+        if source.path.starts_with("skill://") {
+            return inconclusive_source();
+        }
         // Hosts may add line anchors or headers. Scan the entire presentation
         // independently, but never promote a partial excerpt to original output.
         let output = extract_payload_output(&request.payload);
