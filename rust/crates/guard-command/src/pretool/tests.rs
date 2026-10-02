@@ -10,6 +10,48 @@ fn request(command: &str) -> CommandModelRequestV1 {
 }
 
 #[test]
+fn permits_only_standalone_plain_directory_changes() {
+    assert!(!safe_directory_target(r"~/.ss\h"));
+    for command in [
+        "cd ~/CascadeProjects/project",
+        "cd ./project",
+        "cd /opt/project",
+    ] {
+        let decision = evaluate_pre_tool(&request(command)).unwrap();
+        assert_eq!(decision.minimum_action, "allow", "{command}");
+    }
+    for command in [
+        "cd $(touch marker)",
+        "cd `touch marker`",
+        "cd ~/project && python script.py",
+        "cd /opt/project | cat file.txt",
+        "cd ~/.ssh",
+        "cd /opt/user/.ssh",
+        "cd ~/.s*",
+        "cd .ssh*",
+        "cd ./project?",
+        "cd ./[project]",
+        "cd -",
+        "cd ~+",
+        "cd ~-",
+        "cd ~+/project",
+        "cd ~-/project",
+        "cd ~0",
+        "cd ~1",
+        "cd ~0/project",
+        "cd ~12/project",
+        "cd ~+1/project",
+        "cd ~-1/project",
+    ] {
+        let result = evaluate_pre_tool(&request(command));
+        assert!(
+            result.is_err() || result.unwrap().minimum_action != "allow",
+            "{command}"
+        );
+    }
+}
+
+#[test]
 fn blocks_destructive_and_device_commands() {
     for command in [
         "rm -rf /",

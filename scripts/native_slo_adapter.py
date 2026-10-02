@@ -36,6 +36,9 @@ class Observation:
     # True only when the adapter returned an explicit bounded-capacity result;
     # a generic native fail-safe must not be mistaken for accepted overload.
     overloaded: bool = False
+    # The adapter's own request timer is distinct from any enclosing benchmark
+    # task timer.  It is optional for compatibility with synthetic fixtures.
+    enclosing_latency_ms: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
