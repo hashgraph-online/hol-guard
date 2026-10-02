@@ -1,9 +1,9 @@
 name: Extension artifact regen
 
-# Contributors own canonical contribution sources. The generated projections
-# derived from them (command catalog, native command program, trust map,
-# baselines, digest vectors, directory render) are maintainer-owned and
-# regenerated here after merges so contribution PRs never conflict on them.
+# Source and generated evidence must now pass validation in the same PR before
+# merging. This workflow repairs inherited drift; it is not the normal path
+# for making a source merge consistent. Generated projections remain reviewed
+# by maintainers, with no direct-to-main publication or approval exemption.
 #
 # NOTE: the main-branch ruleset requires every change to arrive through a
 # reviewed pull request, so refreshed artifacts are published as a short-lived

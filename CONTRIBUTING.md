@@ -45,10 +45,16 @@ not copy their registration pattern to add an extension.
    which enables automatic repair for mechanical schema, binding, and generated-projection issues.
 
 The canonical source, portable fixture, and external trust entry are the contributor-owned inputs.
-Generated projections (command catalog, native program, baselines, digest vectors, directory
-render) are maintainer-owned: keep them out of the contribution diff. CI validates sources
-additively while they are pending, and `extension-artifact-regen` regenerates the projections
-on `main` after merge, so projection drift alone never bounces a contribution.
+Generated projections remain maintainer-reviewed, but they must merge with their source changes.
+Contributors may open a source-only draft; before merge, a maintainer or contributor runs
+`uv run --no-sync python scripts/refresh_extension_artifacts.py` on that PR or its upstream intake
+branch and commits the generated changes. Do not hand-edit generated expectations.
+
+`generated-artifacts-guard` checks committed evidence bindings and packaged copies. Required CI
+also checks the native compiler's embedded program and runs full decision-report reproducibility
+tests. Source-only drift cannot pass by generating temporary files or deferring checks until
+`main`. The post-merge `extension-artifact-regen` workflow is a repair backstop, not the normal
+publication path. See [atomic generated evidence](docs/guard/ci-artifact-lifecycle.md).
 
 Gitar does not choose command semantics, trust, claim authority, or safe variants. Contributors
 can request analysis without changes at any time with `gitar auto-apply:off`.
@@ -126,7 +132,8 @@ cargo +1.88.0 test --locked --manifest-path rust/Cargo.toml --workspace --all-ta
 
 Command source changes need native fixture evaluation and generated-artifact checks. Contributors
 submit the source, its portable fixture, and the reviewed trust-map entry; maintainers run the
-documented preparation command to synchronize descriptors and public catalogs. Follow the
+documented preparation command on the PR or intake branch and commit synchronized descriptors,
+public catalogs, and evidence before merge. Follow the
 [extension validation steps](docs/guard/extensions/contributing.md#local-validation); a passing
 Python reference test alone does not establish native behavior.
 
@@ -164,12 +171,12 @@ checks authoring outside the checkout. Include the relevant CI results in the PR
 2. For a new extension or material authority change, describe the capability boundary and stable
    IDs in a draft pull request using the **Command extension** template. Keep the PR draft until the
    scope is reviewable; maintainers can redirect overlapping IDs there before implementation is complete.
-3. Make one coherent change, with native behavior fixtures when applicable. Never commit
-   regen-owned generated artifacts (catalogs, the native command program, packaged contract
-   copies, digest vectors, the decision-diff report, generated test snapshots): the
-   `generated-artifacts-guard` check rejects them, and `extension-artifact-regen` reproduces them
-   on `main` after merge. (`trust-class-map.v1.json` stays authored — contributions add their
-   `external` entry there; regen only appends unmapped ids.)
+3. Make one coherent change, with native behavior fixtures when applicable. Generate affected
+   catalogs, the native command program, packaged contract copies, digest vectors, decision-diff
+   evidence, and snapshots with the maintained generator. Review and commit them on this PR
+   branch alongside the source changes; a maintainer can prepare them on an upstream intake
+   branch when fork edits are unavailable. `trust-class-map.v1.json` stays authored: contributions
+   add their reviewed `external` entry there; regeneration only appends unmapped ids.
 4. Run the relevant validation and inspect the complete diff.
 5. For a command extension, run `hol-guard extensions handoff` and use the **Command extension**
    PR template. Describe the problem, resulting behavior, exact validation commands, and any

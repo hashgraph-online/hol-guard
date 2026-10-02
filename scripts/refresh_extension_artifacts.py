@@ -1,4 +1,4 @@
-"""Regenerate every maintainer-owned extension projection after contributions land.
+"""Regenerate extension projections before source changes merge, or repair drift.
 
 Contributors own the canonical source, portable fixture, and trust entry.
 Everything derived from those inputs is maintainer-owned and regenerated here:
