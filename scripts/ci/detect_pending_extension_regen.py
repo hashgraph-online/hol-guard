@@ -59,7 +59,10 @@ REGEN_INPUT_PREFIXES: tuple[str, ...] = (
     "tests/test_guard_",
 )
 REGEN_INPUT_PATHSPECS: tuple[str, ...] = tuple(
-    prefix if prefix.endswith("/") else f"{prefix}*" for prefix in REGEN_INPUT_PREFIXES
+    # Directory prefixes work as pathspecs; file-prefix families need a glob
+    # suffix while exact files keep their literal pathspec.
+    prefix if prefix.endswith("/") or Path(prefix).suffix else f"{prefix}*"
+    for prefix in REGEN_INPUT_PREFIXES
 )
 
 
@@ -164,13 +167,6 @@ def pr_diff_paths() -> list[str] | None:
         for line in commit.stdout.splitlines()
         if line.startswith("parent ")
     ]
-    if len(parents) >= 2:
-        # Merge checkout: the first parent is the base commit the build merged.
-        fetched = _git("fetch", "-q", "--depth=1", "origin", parents[0])
-        if fetched.returncode == 0:
-            result = _git("diff", "--name-only", "FETCH_HEAD", "HEAD")
-            if result.returncode == 0:
-                return result.stdout.splitlines()
     base_ref = os.environ["GITHUB_BASE_REF"]
     probe = _git("rev-parse", "--is-shallow-repository")
     shallow = probe.returncode != 0 or probe.stdout.strip() == "true"
@@ -178,9 +174,35 @@ def pr_diff_paths() -> list[str] | None:
         "fetch", "-q", *(["--depth=1"] if shallow else []), "origin",
         f"+refs/heads/{base_ref}:refs/remotes/pending-diff/base",
     ]
+    base_tip = "pending-diff/base"
     if _git(*fetch).returncode:
+        base_tip = None
+    head_sha = None
+    event_path = os.environ.get("GITHUB_EVENT_PATH")
+    if event_path:
+        try:
+            head_sha = json.loads(Path(event_path).read_text())["pull_request"]["head"]["sha"]
+        except (OSError, KeyError, ValueError):
+            head_sha = None
+    current = _git("rev-parse", "HEAD")
+    synthetic_merge = (
+        len(parents) >= 2
+        and head_sha is not None
+        and current.returncode == 0
+        and current.stdout.strip() != head_sha
+    )
+    if synthetic_merge:
+        # HEAD is the synthetic refs/pull merge, so its first parent is the
+        # exact base commit this build merged — diffing it never attributes
+        # main-side regeneration to the PR.
+        fetched = _git("fetch", "-q", "--depth=1", "origin", parents[0])
+        if fetched.returncode == 0:
+            result = _git("diff", "--name-only", "FETCH_HEAD", "HEAD")
+            if result.returncode == 0:
+                return result.stdout.splitlines()
+    if base_tip is None:
         return None
-    result = _git("diff", "--name-only", "pending-diff/base", "HEAD")
+    result = _git("diff", "--name-only", base_tip, "HEAD")
     return result.stdout.splitlines() if result.returncode == 0 else None
 
 
