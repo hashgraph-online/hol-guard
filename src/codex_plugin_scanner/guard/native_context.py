@@ -97,6 +97,17 @@ def context_digest_guard_home() -> Path | None:
         return _last_bound_home
 
 
+def _resolve_digest_home(guard_home: Path | None) -> Path:
+    if guard_home is not None:
+        return guard_home
+    bound = context_digest_guard_home()
+    if bound is not None:
+        return bound
+    from .runtime.approval_context import _context_digest_guard_home
+
+    return _context_digest_guard_home(str(Path.home()))
+
+
 @contextmanager
 def bound_context_digest_home(guard_home: Path | None) -> Iterator[None]:
     """Bind ``guard_home`` for digest calls made inside the ``with`` block."""
@@ -312,15 +323,7 @@ def is_unbound_context_digest(value: object) -> bool:
 
 
 def _unbound_material_digest(material: object) -> str:
-    canonical = json.dumps(
-        material,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=True,
-        allow_nan=False,
-        default=str,
-    ).encode("utf-8")
-    return hashlib.sha256(canonical).hexdigest()
+    return hashlib.sha256(_canonical_material_bytes(material)).hexdigest()
 
 
 def _canonical_material_bytes(material: object) -> bytes:
@@ -329,7 +332,6 @@ def _canonical_material_bytes(material: object) -> bytes:
         sort_keys=True,
         separators=(",", ":"),
         ensure_ascii=True,
-        allow_nan=False,
         default=str,
     ).encode("utf-8")
 
@@ -354,15 +356,11 @@ def context_sha256_digest(
     value is byte-for-byte the same output the worker returns.
     """
 
-    home = guard_home if guard_home is not None else context_digest_guard_home()
-    result = (
-        native_context_digest(
-            "canonical_sha256",
-            {"material": material, "prefix": prefix},
-            guard_home=home,
-        )
-        if home is not None
-        else None
+    home = _resolve_digest_home(guard_home)
+    result = native_context_digest(
+        "canonical_sha256",
+        {"material": material, "prefix": prefix},
+        guard_home=home,
     )
     digest = result.get("digest") if isinstance(result, dict) else None
     if isinstance(digest, str) and digest:
@@ -387,15 +385,11 @@ def context_opaque_digest(
     ``strict`` semantics match :func:`context_sha256_digest`.
     """
 
-    home = guard_home if guard_home is not None else context_digest_guard_home()
-    result = (
-        native_context_digest(
-            "opaque_material_digest",
-            {"material": material},
-            guard_home=home,
-        )
-        if home is not None
-        else None
+    home = _resolve_digest_home(guard_home)
+    result = native_context_digest(
+        "opaque_material_digest",
+        {"material": material},
+        guard_home=home,
     )
     digest = result.get("digest") if isinstance(result, dict) else None
     if isinstance(digest, str) and digest:

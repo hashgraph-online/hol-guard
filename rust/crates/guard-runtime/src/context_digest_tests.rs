@@ -182,7 +182,6 @@ fn opaque_material_cases_match_python_digests() {
     }
 }
 
-
 #[test]
 fn token_cases_match_python_parse() {
     for case in corpus()["token_cases"].as_array().unwrap() {

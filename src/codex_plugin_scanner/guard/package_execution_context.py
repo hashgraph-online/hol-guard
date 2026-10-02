@@ -8,8 +8,6 @@ never registry credentials or configuration contents.
 
 from __future__ import annotations
 
-import hashlib
-import json
 import os
 import re
 from collections.abc import Mapping, Sequence
