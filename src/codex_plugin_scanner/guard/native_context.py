@@ -74,14 +74,36 @@ _RESULT_CACHE_MAX = 256
 # value per env var, launch verification re-hashes argv/shebang/search-path)
 # would otherwise re-validate the binary once per digest — tens of MB of
 # rehashing and per-call resident probes inside a single launch.  Memoize the
-# status snapshot for a short window so a burst of digests shares one probe;
-# a replaced binary is still re-detected within the TTL on the next batch.
+# status snapshot for a short window so a burst of digests shares one probe.
+# A cached result is only reused while the binary's (size, mtime_ns) still
+# matches the memoized identity — a binary replaced inside the TTL is
+# re-validated on the next digest rather than served from the stale snapshot.
 _STATUS_MEMO_LOCK = threading.Lock()
 _STATUS_MEMO_TTL_SECONDS = 0.1
 # (timestamp, status, status-callable-identity) — the callable identity lets
 # tests monkeypatch ``native_runtime_status`` and always get a fresh probe,
 # while a production burst keeps sharing the real probe's snapshot.
 _status_memo: tuple[float, NativeRuntimeStatus, object] | None = None
+
+
+def _status_binary_unchanged(status: NativeRuntimeStatus) -> bool:
+    """True while the on-disk binary still matches the memoized identity.
+
+    ``stat()`` is cheap relative to re-hashing the whole binary, so checking
+    ``size``/``mtime_ns`` per memo read keeps the reused status honest against
+    a mid-window binary swap without paying the full re-validation cost.
+    """
+
+    identity = status.identity
+    if identity is None:
+        # No binary was validated (mode=off / unavailable).  There is nothing
+        # to keep fresh, so the snapshot is reusable for the TTL.
+        return True
+    try:
+        meta = Path(identity.path).stat()
+    except OSError:
+        return False
+    return meta.st_size == identity.size and meta.st_mtime_ns == identity.mtime_ns
 
 
 def _native_runtime_status_memo() -> NativeRuntimeStatus:
@@ -92,6 +114,7 @@ def _native_runtime_status_memo() -> NativeRuntimeStatus:
             _status_memo is not None
             and _status_memo[2] is probe
             and time.monotonic() - _status_memo[0] < _STATUS_MEMO_TTL_SECONDS
+            and _status_binary_unchanged(_status_memo[1])
         ):
             return _status_memo[1]
     status = probe()
