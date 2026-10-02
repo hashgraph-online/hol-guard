@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import json
 import os
 import shutil
 from dataclasses import dataclass
-from hashlib import sha256
 from pathlib import Path, PurePath
 
+from ..native_context import context_sha256_digest
 from .approval_context import build_configured_environment_hash
 
 
@@ -501,12 +500,14 @@ def _looks_like_runtime_path(value: str) -> bool:
 
 
 def _stable_digest(value: object) -> str:
-    payload = json.dumps(
-        _normalize_json_value(value),
-        sort_keys=True,
-        separators=(",", ":"),
-    )
-    return sha256(payload.encode()).hexdigest()
+    # Canonical-JSON SHA-256 (sort_keys + compact separators) — byte-identical
+    # to the prior local digest, now owned by the native canonical_sha256 op.
+    # Identity digest reused for exact-match against stored artifact metadata.
+    # Stored rows were produced by the same _stable_digest (baseline local
+    # hashlib), so strict=False degrades to the byte-identical local canonical
+    # hash when the resident is down — preserving reuse/identity, never touching
+    # the approval-equality path (those digests stay strict).
+    return context_sha256_digest(_normalize_json_value(value), unbound_label="mcp-stable-digest", strict=False)
 
 
 def _normalize_json_value(value: object) -> object:
