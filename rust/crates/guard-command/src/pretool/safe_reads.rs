@@ -122,7 +122,7 @@ pub(super) fn bounded_file_read_target(
         return safe_read_target(path);
     };
     if let Ok(canonical) = std::fs::canonicalize(&candidate) {
-        return resolved_file_read_allowed(&canonical, home_dir);
+        return resolved_file_read_allowed(&canonical, home_dir, cwd);
     }
     // An unresolvable absolute or `~` target cannot prove a bounded file;
     // a workspace-relative spelling keeps the pre-existing lexical floor.
@@ -134,7 +134,11 @@ pub(super) fn bounded_file_read_target(
 
 /// Location outside the workspace is not itself a risk. The resolved regular
 /// file must still clear every sensitive-path screen.
-fn resolved_file_read_allowed(canonical: &std::path::Path, home_dir: Option<&str>) -> bool {
+fn resolved_file_read_allowed(
+    canonical: &std::path::Path,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+) -> bool {
     if !canonical.is_file() {
         return false;
     }
@@ -152,6 +156,7 @@ fn resolved_file_read_allowed(canonical: &std::path::Path, home_dir: Option<&str
     if ROOTS
         .iter()
         .any(|prefix| lowered == *prefix || lowered.starts_with(&format!("{prefix}/")))
+        || foreign_user_home(canonical, home_dir, cwd)
         || super::sensitive_command(&rendered)
         || guard_secure_fs::sensitive_path_family(canonical).is_some()
         || guard_secure_fs::sensitive_external_filename(canonical)
@@ -162,7 +167,7 @@ fn resolved_file_read_allowed(canonical: &std::path::Path, home_dir: Option<&str
             })
         })
         || !(guard_secure_fs::hidden_read_parts_allowed(canonical)
-            || guard_safety_doc(canonical)
+            || guard_safety_doc(canonical, home_dir)
             || agent_skill_document(canonical, home_dir))
     {
         return false;
@@ -174,7 +179,10 @@ fn agent_skill_document(canonical: &std::path::Path, home_dir: Option<&str>) -> 
     let Some(home) = home_dir.and_then(|root| std::fs::canonicalize(root).ok()) else {
         return false;
     };
-    let Ok(relative) = canonical.strip_prefix(home.join(".agents/skills")) else {
+    let Ok(skills) = std::fs::canonicalize(home.join(".agents/skills")) else {
+        return false;
+    };
+    let Ok(relative) = canonical.strip_prefix(skills) else {
         return false;
     };
     canonical.extension().is_some_and(|extension| extension == "md")
@@ -187,14 +195,28 @@ fn agent_skill_document(canonical: &std::path::Path, home_dir: Option<&str>) -> 
 /// `~/.hol-support/SAFETY.md` is the harness-facing safety guide that agents
 /// are instructed to read before acting; it gets the same explicit allowance
 /// the Python source-path classifier grants.
-fn guard_safety_doc(canonical: &std::path::Path) -> bool {
-    canonical
-        .file_name()
-        .is_some_and(|name| name == "SAFETY.md")
-        && canonical
-            .parent()
-            .and_then(|dir| dir.file_name())
-            .is_some_and(|dir| dir == ".hol-support")
+fn guard_safety_doc(canonical: &std::path::Path, home_dir: Option<&str>) -> bool {
+    home_dir
+        .and_then(|root| std::fs::canonicalize(root).ok())
+        .is_some_and(|home| canonical == home.join(".hol-support/SAFETY.md"))
+}
+
+fn foreign_user_home(
+    canonical: &std::path::Path,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+) -> bool {
+    let user_root = ["/home", "/Users"].iter().find_map(|root| {
+        let relative = canonical.strip_prefix(root).ok()?;
+        let user = relative.components().next()?;
+        Some(std::path::Path::new(root).join(user.as_os_str()))
+    });
+    user_root.is_some_and(|user_root| {
+        ![home_dir, cwd]
+            .into_iter()
+            .flatten()
+            .any(|root| std::fs::canonicalize(root).is_ok_and(|root| root.starts_with(&user_root)))
+    })
 }
 
 fn expand_home_read_path(path: &str, home_dir: Option<&str>) -> Option<String> {
