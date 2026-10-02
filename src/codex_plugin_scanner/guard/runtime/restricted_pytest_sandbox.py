@@ -28,6 +28,7 @@ from .restricted_pytest_model import (
     _SAFE_ENV_KEYS,
     _SEALED_SYSTEM_EXECUTABLE_ROOTS,
     _SECRET_ENV_PATTERN,
+    PYTEST_READ_ONLY_PROFILE_VERSION,
     PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE,
     READ_ONLY_TEST_PROFILES,
     RestrictedPytestError,
@@ -166,7 +167,7 @@ def _macos_profile(plan: RestrictedPytestPlan, *, private_root: Path) -> str:
             # Collectors stat symlink targets while enumerating the workspace.
             # Metadata does not grant directory listing or file contents; those
             # stay bounded below, with credential denials taking precedence.
-            *(("(allow file-read-metadata)",) if read_only_workspace else ()),
+            *(("(allow file-read-metadata)",) if plan.profile_version == PYTEST_READ_ONLY_PROFILE_VERSION else ()),
             f"(allow file-read* {read_filters} {read_file_filters})",
             f"(allow file-write* {write_filters})",
             *(
