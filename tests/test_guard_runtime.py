@@ -11831,7 +11831,7 @@ def test_guard_hook_localizes_package_review_copy_with_local_approval_url(
     _build_guard_fixture(home_dir, workspace_dir)
     _write_text(
         home_dir / "config.toml",
-        '[risk_actions]\npackage_script = "require-reapproval"\napproval_wait_timeout_seconds = 0\n',
+        'approval_wait_timeout_seconds = 0\n[risk_actions]\npackage_script = "require-reapproval"\n',
     )
     _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
     monkeypatch.setattr(
@@ -11921,7 +11921,7 @@ def test_guard_hook_localizes_package_review_copy_with_daemon_client_approval_ur
     _build_guard_fixture(home_dir, workspace_dir)
     _write_text(
         home_dir / "config.toml",
-        '[risk_actions]\npackage_script = "require-reapproval"\napproval_wait_timeout_seconds = 0\n',
+        'approval_wait_timeout_seconds = 0\n[risk_actions]\npackage_script = "require-reapproval"\n',
     )
     _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
     monkeypatch.setattr(
@@ -15036,6 +15036,7 @@ def test_runtime_hook_approval_context_invalidates_one_changed_dimension(
     tmp_path,
     changed_dimension,
     expected_reason,
+    native_context_digest: Path,
 ):
     workspace = tmp_path / "workspace"
     artifact = GuardArtifact(
@@ -19150,7 +19151,7 @@ def _codex_browser_approval_context_token(*, current_action: str) -> str:
     )
 
 
-def test_codex_browser_approval_decision_updates_daemon_operation_status(tmp_path, monkeypatch):
+def test_codex_browser_approval_decision_updates_daemon_operation_status(tmp_path, monkeypatch, native_context_digest: Path):
     monkeypatch.setattr(interaction_module, "wait_for_approval_requests", wait_for_approval_requests)
     home_dir = tmp_path / "home"
     store = GuardStore(home_dir)
@@ -19216,7 +19217,7 @@ def test_codex_browser_approval_decision_updates_daemon_operation_status(tmp_pat
     assert payload["continuation"]["resolution_action"] == "allow"
 
 
-def test_codex_browser_block_decision_updates_daemon_operation_status(tmp_path, monkeypatch):
+def test_codex_browser_block_decision_updates_daemon_operation_status(tmp_path, monkeypatch, native_context_digest: Path):
     monkeypatch.setattr(interaction_module, "wait_for_approval_requests", wait_for_approval_requests)
     home_dir = tmp_path / "home"
     store = GuardStore(home_dir)

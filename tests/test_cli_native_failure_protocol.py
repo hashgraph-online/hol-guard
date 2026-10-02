@@ -12,6 +12,7 @@ from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import commands_hook_native_authority as cli
 from codex_plugin_scanner.guard.cli import commands_hook_native_pipeline as pipeline
 from codex_plugin_scanner.guard.daemon.hook_availability_policy import availability_harness_response
+from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -80,6 +81,9 @@ def test_pipeline_unavailable_preserves_codex_wire_response(
         context=context,
         event_name=event,
         reason_code="native_hook_event_unavailable",
+        worker=HookWorker(
+            store=GuardStore(context.guard_home), wait_for_native_policy=False, publish_native_policy=False
+        ),
     )
     assert result == 0
     response = json.loads(capsys.readouterr().out)

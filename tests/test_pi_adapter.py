@@ -9,6 +9,7 @@ from pathlib import Path
 from codex_plugin_scanner.guard.adapters import get_adapter, list_adapters
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.contracts import contract_for
+from codex_plugin_scanner.guard.adapters.pi_extension_previous_source import previous_managed_extension_source
 from codex_plugin_scanner.guard.adapters.pi_extension_source import (
     legacy_managed_extension_source,
     managed_extension_source,
@@ -289,7 +290,8 @@ class TestPiInstall:
         assert 'pi.on("tool_result"' in text
         assert 'pi.on("input"' in text
         assert 'hook_event_name: "PostToolUse"' in text
-        assert "    if (originalOutputProof) return undefined;\n" in text
+        assert "    if (originalOutputProof) {\n" in text
+        assert "before preserving the original result." in text
         assert (
             "return blockedToolResult(modelVisibleBlockedReason(reason, response.reason_code), event.details);" in text
         )
@@ -376,10 +378,9 @@ class TestPiInstall:
         assert "daemonResponseCanReturn(payload, daemonAttempt.response)" in text
         assert 'if (response.decision === "allow" || response.decision === "deny") return true;' in text
         assert "observe_mode?: boolean;" in text
-        assert "if (response.observe_mode === true) return undefined;" in text
-        assert text.index("if (response.observe_mode === true) return undefined;") < text.index(
-            "if (outputTruncated) {"
-        )
+        assert "if (response.observe_mode === true && structuredMediation === undefined) return undefined;" in text
+        watch_shortcut = "if (response.observe_mode === true && structuredMediation === undefined) return undefined;"
+        assert text.index(watch_shortcut) < text.index("if (outputTruncated) {")
         # digestOutputText must only hash text-bearing fields, not metadata
         # like {type: "text"} - otherwise structured source reads never match
         assert "record.type === 'text'" in text
@@ -388,7 +389,9 @@ class TestPiInstall:
         # guard_payload_ref fallback still present
         assert "guard_payload_ref" in text
         # Reviewed excerpt still returned when not proven safe
-        assert "return reviewedToolResult(reviewedContent, event.details, event.isError === true);" in text
+        assert (
+            "return reviewedToolResult(reviewedContent, event.details, event.isError === true, hookDeadlineAt);" in text
+        )
 
     def test_install_writes_managed_extension_that_denies_on_hook_errors(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
@@ -478,8 +481,10 @@ class TestPiInstall:
         assert "value.toString()" in text
         assert "new WeakSet<object>()" in text
         assert "[deep object omitted by HOL Guard]" in text
-        assert "const boundedContent = boundValue(event.content);" in text
-        assert "const boundedStdout = boundedOutputText(event.content);" in text
+        assert "const preprocessBudget = createTraversalBudget(hookDeadlineAt);" in text
+        assert "const digest = digestOutputText(event.content, hookDeadlineAt, preprocessBudget);" in text
+        assert "const boundedContent = boundValue(event.content, 0, new WeakSet(), preprocessBudget);" in text
+        assert "const boundedStdout = boundedOutputText(event.content, hookDeadlineAt, preprocessBudget);" in text
         assert (
             "const reviewedContent = outputTruncated ? [{ type: 'text', text: toolOutput }] : boundedContent.value;"
             in text
@@ -511,7 +516,9 @@ class TestPiInstall:
         # When truncated, the reviewed excerpt (not the full unreviewed output) is
         # returned to Pi so omitted content never reaches the model.
         assert "function reviewedToolResult(" in text
-        assert "return reviewedToolResult(reviewedContent, event.details, event.isError === true);" in text
+        assert (
+            "return reviewedToolResult(reviewedContent, event.details, event.isError === true, hookDeadlineAt);" in text
+        )
         assert "guardPayload.tool_response = event.content" in text
         assert "stdout: toolOutput" not in text
         assert "tool_response: toolOutput" in text
@@ -539,7 +546,9 @@ class TestPiInstall:
         # guard_payload_ref fallback still present
         assert "guard_payload_ref" in text
         # Reviewed excerpt still returned when not proven safe
-        assert "return reviewedToolResult(reviewedContent, event.details, event.isError === true);" in text
+        assert (
+            "return reviewedToolResult(reviewedContent, event.details, event.isError === true, hookDeadlineAt);" in text
+        )
 
     def test_omp_install_writes_only_omp_extension(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
@@ -618,6 +627,35 @@ class TestPiInstall:
         omp_extension_path.parent.mkdir(parents=True, exist_ok=True)
         omp_extension_path.write_text(
             managed_extension_source(
+                guard_home=ctx.guard_home,
+                home_dir=ctx.home_dir,
+                settings_path=omp_settings_path,
+                harness="pi",
+            ),
+            encoding="utf-8",
+        )
+        _write_json(omp_settings_path, {"extensions": [str(omp_extension_path)]})
+
+        get_adapter("pi").uninstall(ctx)
+
+        assert not omp_extension_path.exists()
+        assert json.loads(omp_settings_path.read_text(encoding="utf-8"))["extensions"] == []
+
+    def test_uninstall_removes_merge_base_previous_omp_extension(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+    ) -> None:
+        ctx = _ctx(tmp_path)
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.adapters.pi.remove_guard_shim",
+            lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-pi"), "notes": []},
+        )
+        omp_settings_path = ctx.home_dir / ".omp" / "agent" / "settings.json"
+        omp_extension_path = omp_settings_path.parent / "extensions" / "hol-guard.ts"
+        omp_extension_path.parent.mkdir(parents=True, exist_ok=True)
+        omp_extension_path.write_text(
+            previous_managed_extension_source(
                 guard_home=ctx.guard_home,
                 home_dir=ctx.home_dir,
                 settings_path=omp_settings_path,

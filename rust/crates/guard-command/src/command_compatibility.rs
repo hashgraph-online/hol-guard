@@ -108,7 +108,7 @@ pub(crate) fn compatibility_model_supported(command: &CanonicalCommandV1) -> boo
         && command
             .wrapper_chain
             .iter()
-            .all(|wrapper| wrapper == "sudo")
+            .all(|wrapper| matches!(wrapper.as_str(), "sudo" | "timeout"))
 }
 
 fn deadline_check(deadline: Option<Instant>) -> Result<(), &'static str> {
@@ -185,7 +185,7 @@ pub fn compatibility_observations(
             || segment
                 .wrapper_chain
                 .iter()
-                .any(|wrapper| wrapper != "sudo")
+                .any(|wrapper| !matches!(wrapper.as_str(), "sudo" | "timeout"))
             || !segment.environment_names.is_empty()
             || segment.text.contains('\0')
             || segment.arguments.iter().any(|value| value.contains('\0'))

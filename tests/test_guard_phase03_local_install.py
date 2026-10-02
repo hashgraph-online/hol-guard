@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import builtins
 import io
 import json
 import os
@@ -548,7 +549,7 @@ def test_daemon_refresh_script_retries_a_retirement_timeout(
     context.guard_home.mkdir(parents=True)
     (context.guard_home / "daemon-state.json").write_text('{"port":5474}', encoding="utf-8")
     retirement_checks = iter([False, True])
-    monotonic_values = iter([0.0, 6.0, 10.0])
+    monotonic_values = iter([0.0, 6.0, 10.0, 10.0])
     retire_calls: list[Path] = []
 
     def fake_retire(guard_home: Path) -> list[int]:
@@ -574,8 +575,15 @@ def test_daemon_refresh_script_retries_a_retirement_timeout(
     monkeypatch.setattr(manager, "publish_approval_center_locator", lambda _home, _url: None)
     monkeypatch.setattr(manager, "ensure_guard_daemon_after_update", fake_ensure)
     monkeypatch.setattr(manager, "load_guard_daemon_url", lambda _home: "http://127.0.0.1:5474")
-    monkeypatch.setattr(update_commands.time, "monotonic", lambda: next(monotonic_values))
-    monkeypatch.setattr(update_commands.time, "sleep", lambda _seconds: None)
+    clock = SimpleNamespace(monotonic=lambda: next(monotonic_values), sleep=lambda _seconds: None)
+    script_globals = {
+        "__builtins__": {
+            **vars(builtins),
+            "__import__": lambda name, *args, **kwargs: (
+                clock if name == "time" else builtins.__import__(name, *args, **kwargs)
+            ),
+        }
+    }
     monkeypatch.setattr(
         update_commands.sys,
         "stdin",
@@ -590,7 +598,7 @@ def test_daemon_refresh_script_retries_a_retirement_timeout(
     )
 
     with pytest.raises(SystemExit) as exit_info:
-        exec(update_commands._DAEMON_REFRESH_SCRIPT, {})
+        exec(update_commands._DAEMON_REFRESH_SCRIPT, script_globals)
 
     assert exit_info.value.code == 0
     payload = json.loads(capsys.readouterr().out)

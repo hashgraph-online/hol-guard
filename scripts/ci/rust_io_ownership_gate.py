@@ -85,6 +85,7 @@ _TRANSPORT_INTEGRITY_PATHS: Final = frozenset(
     {
         "src/codex_plugin_scanner/guard/native_decision_receipt.py",
         "src/codex_plugin_scanner/guard/native_command_observations.py",
+        "src/codex_plugin_scanner/guard/native_context.py",
         "src/codex_plugin_scanner/guard/daemon/hook_native_review_approval.py",
     }
 )
@@ -100,6 +101,14 @@ _TRANSPORT_DECODE_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_pretool.py",
         "src/codex_plugin_scanner/guard/native_resident_client.py",
         "src/codex_plugin_scanner/guard/native_runtime.py",
+        "src/codex_plugin_scanner/guard/native_context.py",
+    }
+)
+_STRUCTURED_OUTPUT_MEDIATION_PATHS: Final = frozenset(
+    {
+        "src/codex_plugin_scanner/guard/runtime/secret_sensitivity.py",
+        "src/codex_plugin_scanner/guard/runtime/structured_data_sensitivity.py",
+        "src/codex_plugin_scanner/guard/runtime/structured_output_mediation.py",
     }
 )
 _ASYNC_POLICY_PATHS: Final = frozenset(
@@ -428,6 +437,8 @@ def _calls(record: FunctionRecord) -> tuple[str, ...]:
 def _category(path: str, kind: str) -> str:
     if path in _COMPATIBILITY_PATHS:
         return "compatibility_only"
+    if path in _STRUCTURED_OUTPUT_MEDIATION_PATHS and kind in {"hash", "decode"}:
+        return "adapter_output_mediation"
     if path in _PERSISTENCE_ONLY_PATHS:
         return "persistence_only"
     if path in _TRANSPORT_IDENTITY_PATHS:

@@ -159,6 +159,12 @@ def run_guard_command(
     home_dir = Path(home_override).expanduser().resolve() if home_override else Path.home().resolve()
     home_override_explicit = bool(home_override)
     guard_home = resolve_guard_home(getattr(args, "guard_home", None) or home_override)
+    # Detection runs before the consumer/protect entry points that bind the
+    # digest home, so bind at the router: every enforcement subcommand below
+    # resolves its context-digest calls against this deployment's resident.
+    from ..native_context import bind_context_digest_home
+
+    bind_context_digest_home(guard_home)
     workspace = _resolve_guard_workspace(
         args,
         guard_home=guard_home,

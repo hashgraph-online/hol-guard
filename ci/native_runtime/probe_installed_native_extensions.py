@@ -46,7 +46,7 @@ from codex_plugin_scanner.guard.runtime.extension_control_proof import (
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_base import EncryptedFileSecretStore
 
-_RECEIPT_PERSISTENCE_TIMEOUT_SECONDS = 20.0
+_RECEIPT_PERSISTENCE_TIMEOUT_SECONDS = 60.0
 
 _ACTION_RANK = {
     "allow": 0,
@@ -81,6 +81,8 @@ receipt_processed_count = _support.receipt_processed_count
 await_persisted_native_receipt = _support.await_persisted_native_receipt
 receipt_binding_diagnostic = _support.receipt_binding_diagnostic
 policy_readiness_diagnostic = _support.policy_readiness_diagnostic
+policy_request_phase_diagnostic = _support.policy_request_phase_diagnostic
+require_native_http_admission = _support.require_native_http_admission
 
 
 def installed_client():
@@ -219,6 +221,13 @@ def exercise(root: Path) -> dict[str, object]:
         permission_id: str | None = None,
     ) -> dict:
         binding = ready(daemon, workspace, revision, previous_publisher=previous_publisher)
+        publisher = daemon._server.hook_worker.policy_snapshot_publisher
+
+        def emit_phase(phase: str) -> None:
+            diagnostic = {"case": label, **policy_request_phase_diagnostic(publisher, phase)}
+            print(json.dumps(diagnostic, sort_keys=True), flush=True)
+
+        emit_phase("before_raw")
         payload = tool_payload or {
             "hook_event_name": "PreToolUse",
             "tool_name": "Bash",
@@ -286,8 +295,11 @@ def exercise(root: Path) -> dict[str, object]:
         receipt_processed_value = receipt_processed_count(receipt_writer)
         require(receipt_processed_value is not None, f"{label}:receipt_writer_stats")
         receipt_processed_before = receipt_processed_value
+        emit_phase("before_http")
         response = request(daemon, home, workspace, "claude-code", "PreToolUse", payload)
         require(isinstance(response, dict), f"{label}:http_missing")
+        emit_phase("after_http")
+        require_native_http_admission(response)
         # Compatibility hooks execute in the isolated hook process. Its receipt
         # reaches the parent through the evidence writer, so the parent
         # worker's mutable last-receipt field cannot identify this request.
