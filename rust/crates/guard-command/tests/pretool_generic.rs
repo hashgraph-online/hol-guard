@@ -10,6 +10,33 @@ fn generic(payload: Value) -> PreToolResultV1 {
 }
 
 #[test]
+fn zcode_identical_argument_aliases_preserve_single_file_read() {
+    let result = evaluate_pre_tool_envelope(
+        "zcode",
+        "PreToolUse",
+        &json!({
+            "toolName": "Read", "tool_name": "Read",
+            "toolInput": {"file_path": "src/example.rs"},
+            "tool_input": {"file_path": "src/example.rs"}
+        }),
+    );
+    assert_eq!(result.minimum_action, "allow");
+    assert_eq!(result.reason_code, "native_exact_safe_file_read");
+    for other in ["src/other.rs", ".env", ".ssh/id_rsa"] {
+        let result = evaluate_pre_tool_envelope(
+            "zcode",
+            "PreToolUse",
+            &json!({
+                "toolName": "Read", "tool_name": "Read",
+                "toolInput": {"file_path": "src/example.rs"},
+                "tool_input": {"file_path": other}
+            }),
+        );
+        assert_ne!(result.minimum_action, "allow", "{other}");
+    }
+}
+
+#[test]
 fn allows_bounded_command_without_returning_raw_content() {
     let result = generic(json!({
         "hookName": "PreToolUse",
@@ -365,6 +392,11 @@ fn devin_home() -> std::path::PathBuf {
         "project/.env",
         ".ssh/id_rsa",
         ".hol-support/SAFETY.md",
+        ".agents/skills/example/SKILL.md",
+        ".agents/skills/example/reference/operate.md",
+        ".agents/skills/example/.hidden.md",
+        ".agents/skills/example/credentials.md",
+        ".agents/skills/example/run.py",
     ] {
         let path = root.join(file);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -408,6 +440,32 @@ fn devin_exec_uses_the_command_model() {
         &home,
     );
     assert_ne!(compound.minimum_action, "allow");
+}
+
+#[cfg(unix)]
+#[test]
+fn zcode_reads_skill_documents_but_not_hidden_or_sensitive_skill_files() {
+    let home = devin_home();
+    for (path, allowed) in [
+        ("~/.agents/skills/example/SKILL.md", true),
+        ("~/.agents/skills/example/reference/operate.md", true),
+        ("~/.agents/skills/example/.hidden.md", false),
+        ("~/.agents/skills/example/credentials.md", false),
+        ("~/.agents/skills/example/run.py", false),
+        ("~/.ssh/id_rsa", false),
+    ] {
+        let result = evaluate_pre_tool_envelope_with_context(
+            "zcode",
+            "PreToolUse",
+            &json!({"toolName": "Read", "tool_name": "Read",
+                "toolInput": {"file_path": path}, "tool_input": {"file_path": path}}),
+            None,
+            None,
+            home.to_str(),
+            home.to_str(),
+        );
+        assert_eq!(result.minimum_action == "allow", allowed, "{path}");
+    }
 }
 
 #[cfg(unix)]
@@ -537,6 +595,13 @@ fn devin_reads_allow_only_bounded_existing_files() {
     std::fs::create_dir_all(&workspace).unwrap();
     std::fs::write(workspace.join("lib.py"), "fixture").unwrap();
     let workspace = std::fs::canonicalize(&workspace).unwrap();
+    let outside_workspace = devin(
+        json!({"tool_name": "Read", "tool_input": {
+            "file_path": workspace.join("lib.py").to_string_lossy()
+        }}),
+        &home,
+    );
+    assert_eq!(outside_workspace.minimum_action, "allow");
     let workspace_only = evaluate_pre_tool_envelope_with_context(
         "devin",
         "PreToolUse",

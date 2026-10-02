@@ -85,8 +85,8 @@ pub(super) fn safe_read_target(argument: &str) -> bool {
 
 /// Structured file-tool read floor. `home_dir`/`cwd` are the envelope's
 /// verified roots; `~` expands against `home_dir`. Absolute and anchored
-/// candidates must canonicalize to an existing regular file inside a
-/// verified root — symlink escapes resolve to their real target — and stay
+/// candidates must canonicalize to an existing regular file — symlinks
+/// resolve to their real target — and stay
 /// outside the sensitive roots, credential families, sensitive filenames,
 /// and hidden directories. Workspace-relative paths keep the legacy
 /// lexical allowance, but when `cwd` is known and the file resolves, the
@@ -122,7 +122,7 @@ pub(super) fn bounded_file_read_target(
         return safe_read_target(path);
     };
     if let Ok(canonical) = std::fs::canonicalize(&candidate) {
-        return resolved_file_read_allowed(&canonical, home_dir, cwd);
+        return resolved_file_read_allowed(&canonical, home_dir);
     }
     // An unresolvable absolute or `~` target cannot prove a bounded file;
     // a workspace-relative spelling keeps the pre-existing lexical floor.
@@ -132,24 +132,10 @@ pub(super) fn bounded_file_read_target(
     safe_read_target(path)
 }
 
-/// The canonicalized target must be a regular file under a verified root
-/// and clear every sensitive-content screen.
-fn resolved_file_read_allowed(
-    canonical: &std::path::Path,
-    home_dir: Option<&str>,
-    cwd: Option<&str>,
-) -> bool {
+/// Location outside the workspace is not itself a risk. The resolved regular
+/// file must still clear every sensitive-path screen.
+fn resolved_file_read_allowed(canonical: &std::path::Path, home_dir: Option<&str>) -> bool {
     if !canonical.is_file() {
-        return false;
-    }
-    let under_root = [home_dir, cwd]
-        .into_iter()
-        .flatten()
-        .map(str::trim)
-        .filter(|root| root.starts_with('/'))
-        .filter_map(|root| std::fs::canonicalize(root).ok())
-        .any(|root| canonical.starts_with(root));
-    if !under_root {
         return false;
     }
     let rendered = canonical.to_string_lossy().replace('\\', "/");
@@ -175,11 +161,27 @@ fn resolved_file_read_allowed(
                 guard_secure_fs::EXTERNAL_SENSITIVE_PARTS.contains(&part.as_str())
             })
         })
-        || !(guard_secure_fs::hidden_read_parts_allowed(canonical) || guard_safety_doc(canonical))
+        || !(guard_secure_fs::hidden_read_parts_allowed(canonical)
+            || guard_safety_doc(canonical)
+            || agent_skill_document(canonical, home_dir))
     {
         return false;
     }
     true
+}
+
+fn agent_skill_document(canonical: &std::path::Path, home_dir: Option<&str>) -> bool {
+    let Some(home) = home_dir.and_then(|root| std::fs::canonicalize(root).ok()) else {
+        return false;
+    };
+    let Ok(relative) = canonical.strip_prefix(home.join(".agents/skills")) else {
+        return false;
+    };
+    canonical.extension().is_some_and(|extension| extension == "md")
+        && relative.components().count() >= 2
+        && relative.components().all(|component| {
+            matches!(component, std::path::Component::Normal(part) if !part.to_string_lossy().starts_with('.'))
+        })
 }
 
 /// `~/.hol-support/SAFETY.md` is the harness-facing safety guide that agents

@@ -634,7 +634,7 @@ pub(super) fn extract_generic_signals(
     }
     let command = collect_commands(&maps)?;
     let tool_name = collect_tool_names(payload)?;
-    let path_values = collect_key_strings(
+    let mut path_values = collect_key_strings(
         &maps,
         &[
             "path",
@@ -650,6 +650,10 @@ pub(super) fn extract_generic_signals(
             "targetDirectory",
         ],
     )?;
+    // Adapter aliases can repeat one target; distinct targets must still
+    // prevent the single-file benign proof.
+    path_values.sort();
+    path_values.dedup();
     let package_values = collect_key_strings(
         &maps,
         &[
