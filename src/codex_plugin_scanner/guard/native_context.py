@@ -78,17 +78,25 @@ _RESULT_CACHE_MAX = 256
 # a replaced binary is still re-detected within the TTL on the next batch.
 _STATUS_MEMO_LOCK = threading.Lock()
 _STATUS_MEMO_TTL_SECONDS = 0.1
-_status_memo: tuple[float, object] | None = None
+# (timestamp, status, status-callable-identity) — the callable identity lets
+# tests monkeypatch ``native_runtime_status`` and always get a fresh probe,
+# while a production burst keeps sharing the real probe's snapshot.
+_status_memo: tuple[float, object, object] | None = None
 
 
 def _native_runtime_status_memo() -> object:
     global _status_memo
+    probe = native_runtime_status
     with _STATUS_MEMO_LOCK:
-        if _status_memo is not None and time.monotonic() - _status_memo[0] < _STATUS_MEMO_TTL_SECONDS:
+        if (
+            _status_memo is not None
+            and _status_memo[2] is probe
+            and time.monotonic() - _status_memo[0] < _STATUS_MEMO_TTL_SECONDS
+        ):
             return _status_memo[1]
-    status = native_runtime_status()
+    status = probe()
     with _STATUS_MEMO_LOCK:
-        _status_memo = (time.monotonic(), status)
+        _status_memo = (time.monotonic(), status, probe)
     return status
 
 
