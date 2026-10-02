@@ -101,6 +101,7 @@ def _run_guard_pytest_contained_command(
             workspace=Path(str(args.workspace)),
             cwd=Path(str(args.cwd)) if getattr(args, "cwd", None) else Path.cwd(),
             timeout_seconds=int(args.timeout_seconds),
+            read_only_workspace=bool(getattr(args, "read_only_workspace", False)),
         )
     except RestrictedPytestError as error:
         print(f"{error.reason_code}: {error}", file=sys.stderr)

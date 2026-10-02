@@ -41,6 +41,7 @@ def _configure_guard_local_parsers(
     pytest_contained_parser.add_argument("--workspace", required=True)
     pytest_contained_parser.add_argument("--cwd")
     pytest_contained_parser.add_argument("--timeout-seconds", type=int, default=30 * 60)
+    pytest_contained_parser.add_argument("--read-only-workspace", action="store_true")
     pytest_contained_parser.add_argument("pytest_command", nargs=argparse.REMAINDER)
 
     start_parser = guard_subparsers.add_parser("start", help="Show the first Guard steps for a local harness")

@@ -28,6 +28,7 @@ from .restricted_pytest_model import (
     _SAFE_ENV_KEYS,
     _SEALED_SYSTEM_EXECUTABLE_ROOTS,
     _SECRET_ENV_PATTERN,
+    PYTEST_READ_ONLY_PROFILE_VERSION,
     PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE,
     RestrictedPytestError,
     RestrictedPytestPlan,
@@ -115,9 +116,10 @@ def _macos_profile(plan: RestrictedPytestPlan, *, private_root: Path) -> str:
     metadata_paths = (Path("/"), *_ancestor_paths((*read_roots, *plan.allowed_executables)))
     metadata_filters = " ".join(f"(literal {_seatbelt_string(path)})" for path in metadata_paths)
     executable_filters = " ".join(f"(literal {_seatbelt_string(path)})" for path in plan.allowed_executables)
+    read_only_workspace = plan.profile_version == PYTEST_READ_ONLY_PROFILE_VERSION
     write_filters = " ".join(
         (
-            f"(subpath {_seatbelt_string(plan.workspace)})",
+            *(() if read_only_workspace else (f"(subpath {_seatbelt_string(plan.workspace)})",)),
             f"(subpath {_seatbelt_string(private_root)})",
             '(literal "/dev/null")',
         )
@@ -134,14 +136,68 @@ def _macos_profile(plan: RestrictedPytestPlan, *, private_root: Path) -> str:
             f"(allow file-read-metadata {metadata_filters})",
             f"(allow file-read* {read_filters} {read_file_filters})",
             f"(allow file-write* {write_filters})",
+            *(_read_only_credential_denials() if read_only_workspace else ()),
         )
     )
 
 
-def _seatbelt_string(path: Path) -> str:
+def _seatbelt_string(path: Path | str) -> str:
     value = str(path)
     escaped = value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r")
     return f'"{escaped}"'
+
+
+def _read_only_credential_denials() -> tuple[str, ...]:
+    # Deny rules dominate workspace/runtime read grants, including paths reached
+    # through symlinks. Match case variants consistently with native path policy.
+    def literal(value: str) -> str:
+        return "".join(
+            f"[{character.lower()}{character.upper()}]"
+            if character.isascii() and character.isalpha()
+            else "\\" + character
+            if character in ".-"
+            else character
+            for character in value
+        )
+
+    names = (
+        ".npmrc",
+        ".pypirc",
+        ".netrc",
+        ".git-credentials",
+        "terraform.tfvars",
+        "private.key",
+        "wallet.key",
+    )
+    patterns = (
+        f"(^|/){literal('.env')}($|[./])",
+        "(^|/)(" + "|".join(literal(name) for name in names) + ")$",
+        "(^|/)[^/]*("
+        + "|".join(
+            literal(name)
+            for name in (
+                "private-key",
+                "private_key",
+                "wallet-key",
+                "wallet_key",
+            )
+        )
+        + ")[^/]*$",
+        "(^|/)("
+        + "|".join(
+            literal(name)
+            for name in (
+                ".ssh",
+                ".aws",
+                ".docker",
+                ".kube",
+                ".gnupg",
+                ".hol-guard",
+            )
+        )
+        + ")(/|$)",
+    )
+    return tuple(f"(deny file-read-data (regex {_seatbelt_string(pattern)}))" for pattern in patterns)
 
 
 def _bubblewrap_argv(plan: RestrictedPytestPlan, *, private_root: Path) -> list[str]:

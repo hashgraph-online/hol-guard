@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Literal
 
 PYTEST_RESTRICTED_PROFILE_VERSION = "pytest-restricted-v1"
+PYTEST_READ_ONLY_PROFILE_VERSION = "pytest-readonly-v2"
 PYTEST_RESTRICTED_REASON_CODE = "pytest_restricted_profile_required"
 PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE = "pytest_restricted_sandbox_unavailable"
 PYTEST_INVALID_COMMAND_REASON_CODE = "pytest_restricted_invalid_command"
@@ -232,5 +233,9 @@ class RestrictedPytestPlan:
             "denied_capabilities": list(self.denied_capabilities),
             "network": "denied",
             "host_home": "unmounted-or-denied",
-            "writes": ["workspace", "private-temporary-directory"],
+            "writes": (
+                ["private-temporary-directory"]
+                if self.profile_version == PYTEST_READ_ONLY_PROFILE_VERSION
+                else ["workspace", "private-temporary-directory"]
+            ),
         }
