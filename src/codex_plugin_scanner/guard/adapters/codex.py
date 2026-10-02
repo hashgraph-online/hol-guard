@@ -73,6 +73,7 @@ from ..models import GuardArtifact, HarnessDetection
 from ..shims import install_guard_shim, remove_guard_shim
 from ..stable_guard_cli import resolve_frozen_guard_cli
 from .base import HarnessAdapter, HarnessContext, _command_available
+from .codex_lifecycle_lock import serialized_codex_lifecycle
 from .codex_remote_control import (
     codex_remote_launch_environment,
     guarded_codex_launch_command,
@@ -1149,6 +1150,7 @@ class CodexHarnessAdapter(HarnessAdapter):
             workspace_dir=context.workspace_dir,
         )
 
+    @serialized_codex_lifecycle
     def install(self, context: HarnessContext) -> dict[str, object]:
         detection = self.detect(context)
         managed_servers = managed_stdio_servers(detection)
@@ -1314,6 +1316,7 @@ class CodexHarnessAdapter(HarnessAdapter):
             "source_config_paths": list(detection.config_paths),
         }
 
+    @serialized_codex_lifecycle
     def uninstall(self, context: HarnessContext) -> dict[str, object]:
         target_config_path = self._target_config_path(context)
         hook_config_path = self._hook_config_path(context)
