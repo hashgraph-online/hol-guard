@@ -1,17 +1,13 @@
-"""Generated-artifact freshness gates for contribution-only changes.
+"""Local contribution previews and always-on decision-evidence validation.
 
 Contributor PRs own the canonical source, portable fixture, and trust entry.
-Maintainer automation regenerates the catalog, native program, baselines, and
-digest vectors after scope review, so a source-only ref legitimately contains a
-contribution id that the checked-in projections do not cover yet. Tests that
-assert freshness of generated artifacts stand down while such a pending
-contribution exists; every other invariant still runs.
+Local source previews may not yet include regenerated projections. Required
+CI verifies native projections before starting pytest, so a pending source
+preview cannot pass the merge gate. Decision-evidence freshness is never
+deferred: maintainers review source and generated changes in the same PR.
 """
 
 from __future__ import annotations
-
-import os
-import subprocess
 
 import pytest
 
@@ -23,74 +19,17 @@ def pending_contribution_regen() -> bool:
         BUILT_IN_COMMAND_EXTENSION_REGISTRY,
     )
 
-    registry_ids = {
-        extension.extension_id for extension in BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions
-    }
+    registry_ids = {extension.extension_id for extension in BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions}
     return bool(contribution_ids() - registry_ids)
 
 
-def _git(*arguments: str) -> subprocess.CompletedProcess[str]:
-    try:
-        return subprocess.run(
-            ["git", *arguments], check=False, capture_output=True, text=True
-        )
-    except OSError:
-        return subprocess.CompletedProcess(["git", *arguments], 1, "", "")
-
-
-def _pr_diff_paths() -> list[str] | None:
-    """Paths this ref changes relative to the base branch, or None outside PR CI.
-
-    CI checkouts are shallow, so diff against a depth-1 fetch of the base ref —
-    tree-to-tree, no merge-base history required. Locally, fall back to the
-    merge-base against ``main`` when that ref exists.
-    """
-
-    base_ref = os.environ.get("GITHUB_BASE_REF")
-    if base_ref:
-        probe = _git("rev-parse", "--is-shallow-repository")
-        shallow = probe.returncode != 0 or probe.stdout.strip() == "true"
-        fetch = [
-            "fetch", "-q", *(["--depth=1"] if shallow else []), "origin",
-            f"+refs/heads/{base_ref}:refs/remotes/pending-diff/base",
-        ]
-        if _git(*fetch).returncode:
-            return None
-        result = _git("diff", "--name-only", "pending-diff/base", "HEAD")
-        return result.stdout.splitlines() if result.returncode == 0 else None
-    if _git("rev-parse", "--verify", "main").returncode == 0:
-        result = _git("diff", "--name-only", "main...HEAD")
-        return result.stdout.splitlines() if result.returncode == 0 else None
-    return None
-
-
 def pending_decision_diff_regen() -> bool:
-    """In a PR that does not carry the regen-owned decision-diff report.
+    """Never defer report freshness to a later commit or a different branch.
 
-    The report is maintainer-owned: generated-artifacts-guard rejects it in
-    ordinary PR diffs, so a branch can never refresh it, and drift may equally
-    be inherited from main (any merged bound-source change restales it until
-    the post-merge regen lands). Freshness is enforced where the report can
-    actually change — on main and on regen PRs, whose diff carries it — and
-    deferred for every other PR.
+    Retained for report-generator callers. Source PRs, repair PRs, main, and
+    local checks must all validate the evidence for the same source snapshot.
     """
-
-    if pending_contribution_regen():
-        return True
-    report = "tests/fixtures/guard-command-corpus/decision-diff-report.json"
-    try:
-        from tests.guard_command_decision_diff import REPO_ROOT, REPORT_PATH
-
-        report = str(REPORT_PATH.relative_to(REPO_ROOT))
-    except (ImportError, ValueError):
-        pass
-    in_pr = bool(os.environ.get("GITHUB_BASE_REF"))
-    diff = _pr_diff_paths()
-    if diff is None:
-        return in_pr
-    if not in_pr and not diff:
-        return False
-    return report not in diff
+    return False
 
 
 requires_fresh_projections = pytest.mark.skipif(
@@ -101,7 +40,6 @@ requires_fresh_projections = pytest.mark.skipif(
     ),
 )
 
-requires_fresh_decision_diff = pytest.mark.skipif(
-    pending_decision_diff_regen(),
-    reason="decision-diff report is regen-owned; enforced after maintainer regeneration",
-)
+# Preserve the public decorator without installing a skip condition. Full
+# reproducibility and environment-independence tests run on ordinary PRs too.
+requires_fresh_decision_diff = pytest.mark.usefixtures()

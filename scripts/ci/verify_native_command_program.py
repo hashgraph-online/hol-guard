@@ -1,13 +1,8 @@
-"""Verify the generated native command program, tolerating pending contributions.
+"""Verify committed native projections before either a PR or main can pass.
 
-Generated projections are maintainer-owned. A contribution PR that adds or
-edits canonical sources legitimately leaves the checked-in program stale, so a
-plain ``--check`` would reject an otherwise-valid contribution. This wrapper:
-
-- fresh tree: runs ``build_native_command_program.py --check`` as before
-- pending tree (new/edited contribution source): runs the generator without
-  ``--check``, retains the generated workspace projections, and rebuilds the
-  native binaries so subsequent proofs and packaging use the same program
+Source and generated outputs must merge together. Normal callers always run
+read-only freshness verification, even for source-only PRs. The explicit
+--prepare option is retained for local preview builds, not required CI gates.
 """
 
 from __future__ import annotations
@@ -19,15 +14,28 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 
+
 def _rebuild_command(compiler: str) -> list[str]:
     path = ROOT / compiler
     relative = path.resolve().relative_to((ROOT / "rust" / "target").resolve())
     parts = relative.parts
     if len(parts) not in (2, 3) or parts[-2] not in ("debug", "release"):
         raise ValueError("compiler must be in rust/target/[target/]debug or release")
-    command = ["cargo", "build", "--manifest-path", "rust/Cargo.toml", "--locked",
-               "-p", "hol-guard-runtime", "-p", "guard-command",
-               "--bin", "hol-guard-runtime", "--bin", "guard-command-source"]
+    command = [
+        "cargo",
+        "build",
+        "--manifest-path",
+        "rust/Cargo.toml",
+        "--locked",
+        "-p",
+        "hol-guard-runtime",
+        "-p",
+        "guard-command",
+        "--bin",
+        "hol-guard-runtime",
+        "--bin",
+        "guard-command-source",
+    ]
     if parts[-2] == "release":
         command.append("--release")
     if len(parts) == 3:
@@ -43,10 +51,15 @@ def _run(command: list[str]) -> None:
 
 
 def main() -> int:
-    """Choose strict or pending-source validation from a successful comparison."""
+    """Require committed freshness unless local preparation is explicitly requested."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--compiler", required=True)
     parser.add_argument("--changed-from")
+    parser.add_argument(
+        "--prepare",
+        action="store_true",
+        help="Prepare a local preview; never use this mode as a merge gate.",
+    )
     args = parser.parse_args()
 
     sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -69,7 +82,7 @@ def main() -> int:
         "--compiler",
         args.compiler,
     ]
-    if args.changed_from and (pending or changed):
+    if args.prepare and args.changed_from and (pending or changed):
         print(
             f"pending contribution regeneration (ids={pending}, changed={changed}); "
             "validating sources by generating instead of checking freshness",

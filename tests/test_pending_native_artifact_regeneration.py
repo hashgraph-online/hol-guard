@@ -21,12 +21,15 @@ def detector():
     return module
 
 
-@pytest.mark.parametrize("changed", [
-    "rust/crates/guard-command/src/parser_wrappers.rs",
-    "rust/crates/guard-runtime/src/edge.rs",
-    "rust/Cargo.lock",
-    "contributions/command-sources/command.example.json",
-])
+@pytest.mark.parametrize(
+    "changed",
+    [
+        "rust/crates/guard-command/src/parser_wrappers.rs",
+        "rust/crates/guard-runtime/src/edge.rs",
+        "rust/Cargo.lock",
+        "contributions/command-sources/command.example.json",
+    ],
+)
 def test_source_only_native_changes_report_pending(detector, monkeypatch, capsys, changed):
     def diff(command, **kwargs):
         assert command[-2:] == ["contributions/", "rust/"]
@@ -41,8 +44,9 @@ def test_source_only_native_changes_report_pending(detector, monkeypatch, capsys
 
 
 def test_unchanged_canonical_inputs_still_require_fresh_artifacts(detector, monkeypatch, capsys):
-    monkeypatch.setattr(subprocess, "run", lambda command, **kwargs:
-                        subprocess.CompletedProcess(command, 0, stdout="", stderr=""))
+    monkeypatch.setattr(
+        subprocess, "run", lambda command, **kwargs: subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+    )
     monkeypatch.setattr(detector, "contribution_ids", lambda: {"command.example"})
     monkeypatch.setattr(detector, "catalog_ids", lambda: {"command.example"})
     monkeypatch.setattr(sys, "argv", ["detector", "--changed-from", "a" * 40, "--flag"])
@@ -60,15 +64,16 @@ def verifier():
     return module
 
 
-@pytest.mark.parametrize("compiler,target,release", [
-    ("rust/target/release/guard-command-source", None, True),
-    ("rust/target/debug/guard-command-source", None, False),
-    ("rust/target/release/guard-command-source.exe", None, True),
-    ("rust/target/x86_64-unknown-linux-musl/release/guard-command-source",
-     "x86_64-unknown-linux-musl", True),
-    ("rust/target/x86_64-apple-darwin/release/guard-command-source",
-     "x86_64-apple-darwin", True),
-])
+@pytest.mark.parametrize(
+    "compiler,target,release",
+    [
+        ("rust/target/release/guard-command-source", None, True),
+        ("rust/target/debug/guard-command-source", None, False),
+        ("rust/target/release/guard-command-source.exe", None, True),
+        ("rust/target/x86_64-unknown-linux-musl/release/guard-command-source", "x86_64-unknown-linux-musl", True),
+        ("rust/target/x86_64-apple-darwin/release/guard-command-source", "x86_64-apple-darwin", True),
+    ],
+)
 def test_rebuild_uses_original_compiler_target(verifier, compiler, target, release):
     command = verifier._rebuild_command(compiler)
     assert ("--release" in command) is release
@@ -77,9 +82,7 @@ def test_rebuild_uses_original_compiler_target(verifier, compiler, target, relea
 
 
 @pytest.mark.parametrize("pending", [True, False])
-def test_preparation_retains_generated_outputs_and_checks_after_rebuild(
-    verifier, monkeypatch, pending
-):
+def test_preparation_retains_generated_outputs_and_checks_after_rebuild(verifier, monkeypatch, pending):
     import types
 
     detector = types.SimpleNamespace(
@@ -89,9 +92,11 @@ def test_preparation_retains_generated_outputs_and_checks_after_rebuild(
         contribution_ids=lambda: {"command.example"},
     )
     monkeypatch.setitem(sys.modules, "detect_pending_extension_regen", detector)
-    monkeypatch.setattr(sys, "argv", ["verify", "--compiler",
-                                    "rust/target/release/guard-command-source",
-                                    "--changed-from", "a" * 40])
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["verify", "--compiler", "rust/target/release/guard-command-source", "--changed-from", "a" * 40, "--prepare"],
+    )
     commands = []
     monkeypatch.setattr(verifier, "_run", commands.append)
     assert verifier.main() == 0
@@ -110,12 +115,10 @@ def test_wheel_rebuild_preserves_identity_and_precedes_packaging(job_name):
     root = Path(__file__).parents[1]
     workflow = yaml.safe_load((root / ".github/workflows/native-wheel-ci.yml").read_text())
     steps = workflow["jobs"][job_name]["steps"]
-    verification = next(step for step in steps
-                        if "scripts/ci/verify_native_command_program.py" in step.get("run", ""))
+    verification = next(step for step in steps if "scripts/ci/verify_native_command_program.py" in step.get("run", ""))
     assert verification["env"]["HOL_GUARD_BUILD_SHA"] == "${{ github.sha }}"
     run = verification["run"]
     assert run.index("HOL_GUARD_PACKAGE_VERSION") < run.index("verify_native_command_program.py")
-    assembly = next(step for step in steps
-                    if "scripts/build_native_hol_guard_wheel.py" in step.get("run", ""))
+    assembly = next(step for step in steps if "scripts/build_native_hol_guard_wheel.py" in step.get("run", ""))
     assert steps.index(verification) < steps.index(assembly)
     assert assembly["run"].index("uv build --wheel") < assembly["run"].index("build_native_hol_guard_wheel.py")
