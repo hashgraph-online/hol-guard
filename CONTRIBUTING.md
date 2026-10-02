@@ -177,7 +177,7 @@ checks authoring outside the checkout. Include the relevant CI results in the PR
    | PR diff contains | Gate behavior |
    |---|---|
    | regen-owned artifact paths | strict verification — carried artifacts must be exactly right |
-   | artifact inputs only (`contributions/`, `rust/`, generator sources) | additive validation — sources must compile; artifacts regenerate on `main` |
+   | artifact inputs only (`contributions/`, `rust/`, generator/builder sources, bound tests, fixtures — the canonical list is `REGEN_INPUT_PREFIXES` in `scripts/ci/detect_pending_extension_regen.py`) | additive validation — sources must compile; artifacts regenerate on `main` |
    | neither | deferred — any checked-in drift is inherited and regen-owned |
 
    The only legitimate responses to a freshness failure are: (a) your diff is wrong — remove the

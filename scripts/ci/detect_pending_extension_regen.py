@@ -94,8 +94,12 @@ def _contributions_changed(base_sha: str) -> list[str]:
         """Read source changes without exposing Git output in error messages."""
         # Ordinary PRs cannot commit regenerated projections, including Rust
         # identity updates; generated-artifacts-guard enforces that ownership.
+        pathspecs = [
+            prefix if prefix.endswith("/") else f"{prefix}*"
+            for prefix in REGEN_INPUT_PREFIXES
+        ]
         return subprocess.run(
-            ["git", "diff", "--name-only", normalized_sha, "HEAD", "--", *REGEN_INPUT_PREFIXES],
+            ["git", "diff", "--name-only", normalized_sha, "HEAD", "--", *pathspecs],
             cwd=ROOT,
             capture_output=True,
             text=True,
@@ -141,7 +145,7 @@ def _git(*arguments: str) -> subprocess.CompletedProcess[str]:
 def pr_diff_paths() -> list[str] | None:
     """Paths this PR changes relative to its base, or None outside PR context.
 
-    Prefers the merge-checkout's second parent — the exact base commit the
+    Prefers the merge-checkout's first parent — the exact base commit the
     build merged against — so artifact regeneration merged into main after the
     checkout was built is never attributed to the PR. Head checkouts fall back
     to a depth-1 fetch of the base ref tip. Locally, falls back to the
