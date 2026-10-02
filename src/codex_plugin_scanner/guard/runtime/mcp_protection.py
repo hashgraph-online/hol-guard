@@ -507,9 +507,7 @@ def _stable_digest(value: object) -> str:
     # hashlib), so strict=False degrades to the byte-identical local canonical
     # hash when the resident is down — preserving reuse/identity, never touching
     # the approval-equality path (those digests stay strict).
-    return context_sha256_digest(
-        _normalize_json_value(value), unbound_label="mcp-stable-digest", strict=False
-    )
+    return context_sha256_digest(_normalize_json_value(value), unbound_label="mcp-stable-digest", strict=False)
 
 
 def _normalize_json_value(value: object) -> object:
