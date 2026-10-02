@@ -71,6 +71,62 @@ _SENSITIVE_VALUE_RE: Final = re.compile(
     re.IGNORECASE,
 )
 SAFE_ROUTE_NAMES: Final = frozenset({"native_resident", "native_oneshot", "native_fail_safe", "python_semantic"})
+SAFE_HARNESS_NAMES: Final = frozenset(
+    {
+        "antigravity",
+        "claude-code",
+        "cline",
+        "codex",
+        "copilot",
+        "cursor",
+        "devin",
+        "gemini",
+        "grok",
+        "hermes",
+        "kimi",
+        "omp",
+        "openclaw",
+        "opencode",
+        "paseo",
+        "pi",
+        "zcode",
+    }
+)
+SAFE_EVENT_NAMES: Final = frozenset({"PreToolUse", "PostToolUse"})
+SAFE_SIZE_CLASS_NAMES: Final = frozenset({"1k", "250k", "1m", "5m"})
+SAFE_FAILURE_STAGE_NAMES: Final = frozenset(
+    {
+        "runtime",
+        "runtime_input",
+        "report",
+        "cleanup",
+        "routes",
+        "installed_corpus",
+        "installed_corpus_routes",
+        "cold",
+        "warm",
+        "warm_precondition",
+        "sizes",
+        "size_250k",
+        "size_1m",
+        "size_5m",
+        "recovery",
+        "recovery_precondition",
+        "recovery_stop",
+        "readiness",
+        "serialized_warmup",
+        "capacity_stabilization",
+        "capacity_prewarm",
+        "capacity_prewarm_ready",
+        "concurrent_16",
+        "rss_baseline",
+        "rss_baseline_requests",
+        "rss_peak",
+        "concurrent_64",
+        "unknown",
+    }
+)
+SAFE_FAILURE_WAVE_NAMES: Final = frozenset({"prewarm", "sixteen", "sixty_four"})
 
 # Keep the no-override proof independent from whichever test runner invoked it.
 # Prefixes cover newly introduced diagnostic/test spellings while the explicit
@@ -311,7 +367,12 @@ __all__ = [
     "MIN_RESIDENT_SHARE",
     "PROOF_ENV_KEYS",
     "PROOF_ENV_PREFIXES",
+    "SAFE_EVENT_NAMES",
+    "SAFE_FAILURE_STAGE_NAMES",
+    "SAFE_FAILURE_WAVE_NAMES",
+    "SAFE_HARNESS_NAMES",
     "SAFE_ROUTE_NAMES",
+    "SAFE_SIZE_CLASS_NAMES",
     "SIZE_CLASSES",
     "SLO_SCHEMA",
     "all_gates_pass",
