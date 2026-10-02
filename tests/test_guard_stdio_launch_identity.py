@@ -127,7 +127,7 @@ def test_stdio_sensitive_read_binds_pinned_executable_script_and_configured_env(
 
     _replace_file(script, b"print('server-v2')\n")
     script_changed = _pinned_token(proxy(secret_v1), artifact, config)
-    assert approval_context_tokens_validation_reason(baseline, script_changed) == ("approval_reuse_content_changed")
+    assert approval_context_tokens_validation_reason(baseline, script_changed) == ("approval_reuse_identity_changed")
 
     _replace_file(script, b"print('server-v1')\n")
     _replace_file(launcher, b"fake-python-v2\n", executable=True)
