@@ -174,12 +174,12 @@ jobs:
           python-version: ${{ env.CI_PYTHON_VERSION }}
           cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
       - name: Download pytest shard plan
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: pytest-shard-plan-3.12
           path: pytest-shards
       - name: Download native command evaluators
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: pytest-native-command-evaluators
           path: rust/target/release
@@ -241,7 +241,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Download pytest duration reports
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           pattern: pytest-durations-${{ github.run_attempt }}-*
           path: duration-reports
@@ -353,7 +353,7 @@ jobs:
       run: uv run --no-sync python scripts/ci/wait_for_pytest_shards.py --poll-seconds 1
       if: steps.token-presence.outputs.has-token == 'true'
     - name: Download pytest coverage data
-      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
       with:
         pattern: pytest-coverage-${{ github.run_attempt }}-*
         path: coverage-data
@@ -397,7 +397,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
       - name: Download native command evaluators
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: pytest-native-command-evaluators
           path: rust/target/release
@@ -511,7 +511,7 @@ jobs:
           secured_mode="$(stat -c '%a' "$(realpath "$interpreter")")"
           (( (8#$secured_mode & 2) == 0 ))
       - name: Download native command evaluators
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: pytest-native-command-evaluators
           path: rust/target/release
