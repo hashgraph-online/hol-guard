@@ -143,7 +143,11 @@ def harness_json_from_native_pre_tool(harness: str, response: Mapping[str, objec
         and response.get("authority") == "rust"
         and response.get("schema") == "guard-pre-tool-result.v1"
         and reason_code
-        in {"native_pytest_readonly_containment_required", "native_node_test_readonly_containment_required"}
+        in {
+            "native_pytest_readonly_containment_required",
+            "native_node_test_readonly_containment_required",
+            "native_vitest_readonly_containment_required",
+        }
     ):
         extensions = response.get("command_extensions")
         binding = extensions.get("binding") if isinstance(extensions, Mapping) else None
@@ -153,7 +157,20 @@ def harness_json_from_native_pre_tool(harness: str, response: Mapping[str, objec
             and binding["uncertainty_count"] == 0
             and extensions.get("evaluation_error") is None
             and extensions.get("observations") == []
-            and extensions.get("permission_observations") == []
+            and (
+                extensions.get("permission_observations") == []
+                or (
+                    reason_code == "native_vitest_readonly_containment_required"
+                    and isinstance(extensions.get("permission_observations"), list)
+                    and all(
+                        isinstance(item, Mapping)
+                        and item.get("extension_id") == "command.package.node"
+                        and item.get("permission_id") == "command.package.node.permission.package-protection"
+                        and item.get("uncertainty_reasons") == []
+                        for item in extensions["permission_observations"]
+                    )
+                )
+            )
         ):
             # This is not permission to execute the original input. New adapters
             # may route it to the protected sink; old adapters still see deny.
@@ -163,7 +180,9 @@ def harness_json_from_native_pre_tool(harness: str, response: Mapping[str, objec
                 "reason_code": reason_code,
                 "reason": reason,
                 "required_execution_profile": (
-                    "node-test-readonly-v1"
+                    "vitest-readonly-v1"
+                    if reason_code == "native_vitest_readonly_containment_required"
+                    else "node-test-readonly-v1"
                     if reason_code == "native_node_test_readonly_containment_required"
                     else "pytest-readonly-v2"
                 ),

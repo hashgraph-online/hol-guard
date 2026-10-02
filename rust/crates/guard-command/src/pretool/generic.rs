@@ -411,7 +411,9 @@ pub fn evaluate_pre_tool_envelope_with_context(
         && event == "PreToolUse"
         && matches!(harness, "omp" | "oh-my-pi")
         && cwd.is_some()
-        && result.action.action_type == PreToolActionTypeV1::Command
+        && (result.action.action_type == PreToolActionTypeV1::Command
+            || (contained_test_reason == Some("native_vitest_readonly_containment_required")
+                && result.action.action_type == PreToolActionTypeV1::Package))
         && !result.action.sensitive_target
         && result.reason_code == "native_command_review_required"
         && result.minimum_action == "review"
@@ -419,7 +421,16 @@ pub fn evaluate_pre_tool_envelope_with_context(
             extensions.binding.uncertainty_count == 0
                 && extensions.evaluation_error.is_none()
                 && extensions.observations.is_empty()
-                && extensions.permission_observations.is_empty()
+                && extensions
+                    .permission_observations
+                    .iter()
+                    .all(|observation| {
+                        contained_test_reason == Some("native_vitest_readonly_containment_required")
+                            && observation.extension_id == "command.package.node"
+                            && observation.permission_id
+                                == "command.package.node.permission.package-protection"
+                            && observation.uncertainty_reasons.is_empty()
+                    })
         })
         && contained_test_reason.is_some()
     {

@@ -42,6 +42,21 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
         return None;
     }
     let executable = segment.executable.as_deref()?;
+    let arguments = segment.arguments.as_slice();
+    let vitest = match super::executable_basename(executable) {
+        "bunx" | "npx" => {
+            matches!(arguments, [tool, run, ..] if tool == "vitest" && run == "run")
+                || matches!(arguments, [flag, tool, run, ..] if flag == "--no-install" && tool == "vitest" && run == "run")
+        }
+        "vitest" => arguments.first().is_some_and(|arg| arg == "run"),
+        "node" | "nodejs" => {
+            matches!(arguments, [entry, run, ..] if entry.replace('\\', "/").contains("/node_modules/vitest/") && entry.ends_with("/vitest.mjs") && run == "run")
+        }
+        _ => false,
+    };
+    if vitest {
+        return Some("native_vitest_readonly_containment_required");
+    }
     if matches!(super::executable_basename(executable), "node" | "nodejs")
         && segment
             .arguments

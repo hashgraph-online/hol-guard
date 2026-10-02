@@ -43,6 +43,24 @@ def test_node_profile_requirement_is_distinct_and_still_denied() -> None:
     assert "approval_request_id" not in response
 
 
+@pytest.mark.parametrize("permission", ["package-protection", "other"])
+def test_vitest_profile_accepts_only_known_package_control_evidence(permission: str) -> None:
+    native = result()
+    native["reason_code"] = "native_vitest_readonly_containment_required"
+    native["command_extensions"]["permission_observations"] = [
+        {
+            "extension_id": "command.package.node",
+            "permission_id": f"command.package.node.permission.{permission}",
+            "uncertainty_reasons": [],
+        }
+    ]
+    response = harness_json_from_native_pre_tool("omp", native)
+    if permission == "package-protection":
+        assert response["required_execution_profile"] == "vitest-readonly-v1"
+    else:
+        assert "required_execution_profile" not in response
+
+
 @pytest.mark.parametrize("action", ("block", "review", "require-reapproval", "allow", "warn"))
 def test_other_policy_actions_cannot_delegate_to_test_runner(action: str) -> None:
     native = result()

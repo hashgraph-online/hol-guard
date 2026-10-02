@@ -111,7 +111,7 @@ def _macos_profile(plan: RestrictedPytestPlan, *, private_root: Path) -> str:
     read_roots.extend(path for path in _MACOS_READ_ROOTS if path.exists())
     read_roots.extend(_runtime_read_roots(plan))
     read_files = [path for path in _MACOS_READ_FILES if path.exists()]
-    if plan.profile_version == "node-test-readonly-v1":
+    if plan.profile_version in {"node-test-readonly-v1", "vitest-readonly-v1"}:
         # Node initializes OpenSSL before collection; never grant the wider config tree.
         read_files.extend(
             path
@@ -140,13 +140,17 @@ def _macos_profile(plan: RestrictedPytestPlan, *, private_root: Path) -> str:
             "(deny default)",
             "(allow process-fork)",
             f"(allow process-exec {executable_filters})",
-            "(allow signal (target self))",
+            "(allow signal (target self) (target children))",
             "(allow sysctl-read)",
             '(allow file-read-data (literal "/"))',
             f"(allow file-read-metadata {metadata_filters})",
             f"(allow file-read* {read_filters} {read_file_filters})",
             f"(allow file-write* {write_filters})",
-            *(_read_only_credential_denials() if read_only_workspace else ()),
+            *(
+                _read_only_credential_denials(hide_metadata=plan.profile_version == "vitest-readonly-v1")
+                if read_only_workspace
+                else ()
+            ),
         )
     )
 
@@ -157,7 +161,7 @@ def _seatbelt_string(path: Path | str) -> str:
     return f'"{escaped}"'
 
 
-def _read_only_credential_denials() -> tuple[str, ...]:
+def _read_only_credential_denials(*, hide_metadata: bool = False) -> tuple[str, ...]:
     # Deny rules dominate workspace/runtime read grants, including paths reached
     # through symlinks. Match case variants consistently with native path policy.
     def literal(value: str) -> str:
@@ -207,7 +211,8 @@ def _read_only_credential_denials() -> tuple[str, ...]:
         )
         + ")(/|$)",
     )
-    return tuple(f"(deny file-read-data (regex {_seatbelt_string(pattern)}))" for pattern in patterns)
+    operation = "file-read*" if hide_metadata else "file-read-data"
+    return tuple(f"(deny {operation} (regex {_seatbelt_string(pattern)}))" for pattern in patterns)
 
 
 def _bubblewrap_argv(plan: RestrictedPytestPlan, *, private_root: Path) -> list[str]:
@@ -392,6 +397,10 @@ def _run_backend_process(
                     exit_code=124,
                 ) from error
         finally:
+            # The run owns this new session/group. Stop lingering workers even
+            # if the launcher exited successfully before all descendants did.
+            with contextlib.suppress(OSError):
+                os.killpg(process.pid, signal.SIGKILL)
             for signum, handler in previous_handlers.items():
                 _ = signal.signal(signum, handler)
             _replay_sandbox_output(stdout_file, sys.stdout)

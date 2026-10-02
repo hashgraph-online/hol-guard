@@ -11,7 +11,11 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 
 from .restricted_pytest import RestrictedPytestError, prepare_restricted_pytest, run_restricted_pytest
-from .restricted_pytest_model import NODE_TEST_READ_ONLY_PROFILE_VERSION, PYTEST_READ_ONLY_PROFILE_VERSION
+from .restricted_pytest_model import (
+    NODE_TEST_READ_ONLY_PROFILE_VERSION,
+    PYTEST_READ_ONLY_PROFILE_VERSION,
+    VITEST_READ_ONLY_PROFILE_VERSION,
+)
 
 _MAX_REQUEST_BYTES = 1_048_576
 _FAILURE = "contained_test_authorization_failed"
@@ -104,27 +108,61 @@ def run_authorized_contained_test(
         raise _reject() from error
     # Fail before the authority request if the backend cannot enforce the profile.
     node_test = len(command) > 1 and Path(command[0]).name in {"node", "nodejs"} and command[1] == "--test"
-    if node_test:
+    vitest = bool(command) and (
+        Path(command[0]).name in {"bunx", "npx", "vitest"}
+        or (
+            len(command) > 1
+            and Path(command[0]).name in {"node", "nodejs"}
+            and command[1].endswith("/node_modules/vitest/vitest.mjs")
+        )
+    )
+    if vitest:
+        from .restricted_vitest import prepare_restricted_vitest, run_restricted_vitest
+
+        vitest_plan = prepare_restricted_vitest(command, workspace=workspace, cwd=workspace)
+    elif node_test:
         from .restricted_node_test import prepare_restricted_node_test, run_restricted_node_test
 
         prepare_restricted_node_test(command, workspace=workspace, cwd=workspace)
     else:
         prepare_restricted_pytest(command, workspace=workspace, cwd=workspace, read_only_workspace=True)
     reason = (
-        "native_node_test_readonly_containment_required" if node_test else "native_pytest_readonly_containment_required"
+        "native_vitest_readonly_containment_required"
+        if vitest
+        else "native_node_test_readonly_containment_required"
+        if node_test
+        else "native_pytest_readonly_containment_required"
     )
-    profile = NODE_TEST_READ_ONLY_PROFILE_VERSION if node_test else PYTEST_READ_ONLY_PROFILE_VERSION
-    response = authorize(payload)
-    if not (
-        isinstance(response, Mapping)
-        and response.get("decision") == "deny"
-        and response.get("policy_action") == "sandbox-required"
-        and response.get("reason_code") == reason
-        and response.get("required_execution_profile") == profile
-        and response.get("observe_mode") is not True
-    ):
+    profile = (
+        VITEST_READ_ONLY_PROFILE_VERSION
+        if vitest
+        else NODE_TEST_READ_ONLY_PROFILE_VERSION
+        if node_test
+        else PYTEST_READ_ONLY_PROFILE_VERSION
+    )
+
+    def required(response: object) -> bool:
+        return (
+            isinstance(response, Mapping)
+            and response.get("decision") == "deny"
+            and response.get("policy_action") == "sandbox-required"
+            and response.get("reason_code") == reason
+            and response.get("required_execution_profile") == profile
+            and response.get("observe_mode") is not True
+        )
+
+    if not required(authorize(payload)):
         raise _reject()
     # No shell and no unsandboxed retry: the required profile is the actual sink.
+    if vitest:
+        # Check the resolved Node/script action too: wrapper consent must not
+        # override an extension deny for the underlying executable.
+        underlying = {**payload, "tool_input": {**tool_input, "command": shlex.join(vitest_plan.command)}}
+        if not required(authorize(underlying)):
+            raise _reject()
+        return run_restricted_vitest(
+            command, workspace=workspace, cwd=workspace, timeout_seconds=timeout_seconds, prepared_plan=vitest_plan
+        )
     if node_test:
         return run_restricted_node_test(command, workspace=workspace, cwd=workspace, timeout_seconds=timeout_seconds)
     return run_restricted_pytest(

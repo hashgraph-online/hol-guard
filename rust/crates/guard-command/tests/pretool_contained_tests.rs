@@ -119,3 +119,37 @@ fn direct_node_tests_require_containment_without_weakening_other_execution() {
         assert_ne!(result.decision, "allow", "{command}");
     }
 }
+
+#[test]
+fn vitest_wrapper_and_resolved_script_require_the_same_protected_profile() {
+    for command in [
+        "bunx vitest run tests/example.test.ts",
+        "npx --no-install vitest run",
+        "vitest run",
+        "node /home/tester/project/node_modules/vitest/vitest.mjs run tests/example.test.ts",
+    ] {
+        let result = classify("omp", command);
+        assert_eq!(result.decision, "deny", "{command}");
+        let expected = if cfg!(target_os = "macos") {
+            "native_vitest_readonly_containment_required"
+        } else {
+            "native_command_review_required"
+        };
+        assert_eq!(result.reason_code, expected, "{command}");
+    }
+    for command in [
+        "bunx vitest@evil run",
+        "bunx other run",
+        "vitest watch",
+        "bunx vitest run && rm -rf /",
+        "bunx vitest run $(cat .env)",
+        "bunx vitest run > .env",
+    ] {
+        let result = classify("omp", command);
+        assert_ne!(
+            result.reason_code, "native_vitest_readonly_containment_required",
+            "{command}"
+        );
+        assert_ne!(result.decision, "allow", "{command}");
+    }
+}
