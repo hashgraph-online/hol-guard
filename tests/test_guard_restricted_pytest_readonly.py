@@ -84,11 +84,14 @@ def blocked(operation):
     return False
 
 
-def test_normal_source_read_and_private_test_writes(tmp_path):
+def test_normal_source_read_and_private_test_writes(tmp_path, request):
     assert 'test_normal_source_read' in SOURCE.read_text()
     output = tmp_path / 'ordinary.txt'
     output.write_text('normal test data')
     assert output.read_text() == 'normal test data'
+    request.config.cache.set('guard/synthetic', 'private cache data')
+    assert request.config.cache.get('guard/synthetic', None) == 'private cache data'
+    assert not str(request.config.cache._cachedir).startswith(str(SOURCE.parent))
 
 
 def test_credential_and_destructive_operations_are_denied():
@@ -109,8 +112,6 @@ def test_credential_and_destructive_operations_are_denied():
                 str(project),
                 "-c",
                 str(configuration),
-                "-p",
-                "no:cacheprovider",
                 str(source),
                 "-q",
             ],

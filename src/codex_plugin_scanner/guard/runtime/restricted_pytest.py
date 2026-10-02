@@ -8,6 +8,7 @@ execution and intentionally has no unsandboxed fallback.
 from __future__ import annotations
 
 import os
+import shlex
 import sys
 import tempfile
 from collections.abc import Mapping, Sequence
@@ -145,6 +146,10 @@ def run_restricted_pytest(
             private_tmp=private_tmp,
             allowed_executables=plan.allowed_executables,
         )
+        if read_only_workspace:
+            # Normal pytest caches belong to this run, not the protected source tree.
+            launch_env["PYTHONDONTWRITEBYTECODE"] = "1"
+            launch_env["PYTEST_ADDOPTS"] = f"-o cache_dir={shlex.quote(str(private_tmp / 'pytest-cache'))}"
         backend_argv = _backend_argv(plan, private_root=private_root)
         return _run_backend_process(
             backend_argv,
