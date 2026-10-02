@@ -486,14 +486,6 @@ def test_native_runtime_status_memo_reprobes_when_binary_swapped(
         identity=identity,
         capabilities=capabilities,
     )
-    calls = []
-    monkeypatch.setattr(native_context, "native_runtime_status", lambda: (calls.append(1), first_status)[1])
-    native_context._status_memo = None
-    assert native_context._native_runtime_status_memo() is first_status
-
-    # Swap the binary: new bytes => different size + mtime_ns.
-    binary.write_bytes(b"replaced-binary-longer-content")
-    os.utime(binary, ns=(stat.st_atime_ns + 1_000_000, stat.st_mtime_ns + 1_000_000))
     second_status = NativeRuntimeStatus(
         mode="force",
         available=True,
@@ -502,7 +494,19 @@ def test_native_runtime_status_memo_reprobes_when_binary_swapped(
         identity=None,
         capabilities=None,
     )
-    monkeypatch.setattr(native_context, "native_runtime_status", lambda: (calls.append(1), second_status)[1])
-    out = native_context._native_runtime_status_memo()
-    assert out is second_status
+    statuses = iter([first_status, second_status])
+    calls = []
+
+    def _probe() -> NativeRuntimeStatus:
+        calls.append(1)
+        return next(statuses)
+
+    monkeypatch.setattr(native_context, "native_runtime_status", _probe)
+    native_context._status_memo = None
+    assert native_context._native_runtime_status_memo() is first_status
+
+    # Swap the binary: new bytes => different size + mtime_ns.
+    binary.write_bytes(b"replaced-binary-longer-content")
+    os.utime(binary, ns=(stat.st_atime_ns + 1_000_000, stat.st_mtime_ns + 1_000_000))
+    assert native_context._native_runtime_status_memo() is second_status
     assert len(calls) == 2
