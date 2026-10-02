@@ -19,6 +19,7 @@ from codex_plugin_scanner.guard.runtime.extension_control_limits import advertis
 from codex_plugin_scanner.guard.runtime.extension_control_runtime import ExtensionControlRuntime
 from codex_plugin_scanner.guard.runtime.mcp_server_contribution import catalog_id_for_mcp_id
 from codex_plugin_scanner.guard.store import GuardStore
+from scripts.ci.check_extension_fixture_isolation import command_source_paths
 
 _FIXTURE = Path(__file__).parent / "fixtures" / "extension-controls" / "catalog-baseline.v1.json"
 _API_SCHEMA = "guard.daemon.extension-controls.v1"
@@ -70,18 +71,18 @@ def test_catalog_identity_matches_authored_sources_and_stable_api_contract() -> 
     # Validate completeness against authored inputs, not another generated
     # copy of the catalog. Stable API shapes retain their reviewed fixture.
     root = Path(__file__).resolve().parents[1]
-    expected_ids = {
-        json.loads(path.read_bytes())["extension"]["extension_id"]
-        for path in (root / "contributions/command-sources").glob("*.json")
-    }
+    expected_ids = {json.loads(path.read_bytes())["extension"]["extension_id"] for path in command_source_paths(root)}
     for path in (root / "contributions/mcp-servers").glob("*.json"):
         source_id = json.loads(path.read_bytes())["id"]
         assert source_id.startswith("mcp.")
         expected_ids.add(catalog_id_for_mcp_id(source_id))
-    assert set(actual["extension_ids"]) == expected_ids
+    assert set(actual["extension_ids"]) == expected_ids, (
+        "Stage current projections before testing: python scripts/ci/verify_native_command_program.py "
+        "--compiler rust/target/release/guard-command-source"
+    )
     assert actual["extension_count"] == len(expected_ids)
     registry = {item.extension_id: item for item in BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions}
-    for path in (root / "contributions/command-sources").glob("*.json"):
+    for path in command_source_paths(root):
         source = json.loads(path.read_bytes())["extension"]
         extension = registry[source["extension_id"]]
         permissions = {item.permission_id: item for item in extension.permissions}

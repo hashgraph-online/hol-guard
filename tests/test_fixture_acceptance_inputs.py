@@ -18,7 +18,9 @@ def test_descriptor_inventory_uses_all_json_sources_and_authored_ids(tmp_path):
     for name, identity in (("command.demo.json", "command.demo"), ("another-name.json", "command.another")):
         (sources / name).write_text(json.dumps({"extension": {"extension_id": identity}}))
     (sources / "README.md").write_text("Not a contribution document")
+    (sources / "migration-manifest.json").write_text(json.dumps({"baseline_program_digest": "a" * 64, "files": []}))
     assert acceptance.command_descriptor_names(tmp_path) == {"command.demo.json", "command.another.json"}
+    assert acceptance.command_source_paths(tmp_path) == [sources / "another-name.json", sources / "command.demo.json"]
 
 
 def test_malformed_contribution_is_not_silently_excluded(tmp_path):

@@ -73,12 +73,18 @@ def portable_fixture_paths(root: Path) -> list[Path]:
     return [paths[0], root / "rust/crates/guard-command/tests/fixtures/command-source-example.v1.json"]
 
 
+def command_source_paths(root: Path) -> list[Path]:
+    """Match the native producer's inventory, excluding its migration metadata."""
+    return sorted(
+        path
+        for path in (root / "contributions/command-sources").glob("*.json")
+        if path.name != "migration-manifest.json"
+    )
+
+
 def command_descriptor_names(root: Path) -> set[str]:
     """Every authored JSON source contributes a descriptor identified by its ID."""
-    return {
-        json.loads(path.read_bytes())["extension"]["extension_id"] + ".json"
-        for path in (root / "contributions/command-sources").glob("*.json")
-    }
+    return {json.loads(path.read_bytes())["extension"]["extension_id"] + ".json" for path in command_source_paths(root)}
 
 
 def exercise(root: Path, target: Path, results: list[dict[str, object]]) -> None:
