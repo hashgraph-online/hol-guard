@@ -12,7 +12,7 @@ import ctypes
 import os
 import platform
 import stat
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 _EXECUTE = 1 << 0
@@ -46,6 +46,7 @@ def enforce_landlock(
     list_roots: Sequence[Path],
     write_roots: Sequence[Path],
     executables: Sequence[Path],
+    read_identities: Mapping[Path, tuple[int, int]] | None = None,
 ) -> None:
     """Irreversibly restrict this single-threaded launcher and future children.
 
@@ -70,12 +71,18 @@ def enforce_landlock(
     if descriptor < 0:
         raise LinuxContainmentUnavailableError("Could not create the Linux access boundary.")
 
-    def grant(path: Path, access: int, *, directory: bool | None = None) -> None:
+    def grant(path: Path, access: int, *, directory: bool | None = None, identity_required: bool = False) -> None:
         if not path.is_absolute():
             raise LinuxContainmentUnavailableError("Linux access plans require absolute paths.")
         fd = os.open(path, os.O_PATH | os.O_CLOEXEC | os.O_NOFOLLOW)
         try:
             metadata = os.fstat(fd)
+            if identity_required and (
+                read_identities is None
+                or read_identities.get(path) != (metadata.st_dev, metadata.st_ino)
+                or metadata.st_nlink != 1
+            ):
+                raise LinuxContainmentUnavailableError("Linux read target changed after discovery.")
             is_directory = stat.S_ISDIR(metadata.st_mode)
             if stat.S_ISLNK(metadata.st_mode) or (directory is not None and directory != is_directory):
                 raise LinuxContainmentUnavailableError("Linux access target changed or has an unexpected type.")
@@ -91,7 +98,7 @@ def enforce_landlock(
         for path in read_roots:
             grant(path, _READ_FILE | _READ_DIR, directory=True)
         for path in read_files:
-            grant(path, _READ_FILE, directory=False)
+            grant(path, _READ_FILE, directory=False, identity_required=read_identities is not None)
         for path in list_roots:
             grant(path, _READ_DIR, directory=True)
         for path in write_roots:

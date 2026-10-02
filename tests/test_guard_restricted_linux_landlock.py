@@ -111,3 +111,25 @@ def test_unsupported_architecture_never_guesses_syscall_numbers(monkeypatch):
     monkeypatch.setattr(boundary.platform, "machine", lambda: "unknown")
     with pytest.raises(boundary.LinuxContainmentUnavailableError, match="architecture"):
         boundary.enforce_landlock(**_plan())
+
+
+@pytest.mark.parametrize("identity, links", [(None, 1), ((1, 3), 1), ((1, 2), 2)])
+def test_indexed_read_target_must_keep_its_original_identity_and_link_count(monkeypatch, identity, links):
+    _kernel(monkeypatch)
+    monkeypatch.setattr(boundary.os, "open", lambda path, flags: 21)
+    monkeypatch.setattr(
+        boundary.os,
+        "fstat",
+        lambda fd: SimpleNamespace(st_mode=stat.S_IFREG | 0o600, st_dev=1, st_ino=2, st_nlink=links),
+    )
+    monkeypatch.setattr(boundary.os, "close", lambda fd: None)
+    path = Path("/source")
+    with pytest.raises(boundary.LinuxContainmentUnavailableError, match="changed"):
+        boundary.enforce_landlock(
+            read_roots=(),
+            read_files=(path,),
+            list_roots=(),
+            write_roots=(),
+            executables=(),
+            read_identities={} if identity is None else {path: identity},
+        )
