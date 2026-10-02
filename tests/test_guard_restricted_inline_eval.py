@@ -3,6 +3,7 @@
 import json
 import shutil
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -101,7 +102,21 @@ for action in [lambda: pathlib.Path(".env").read_text(), lambda: pathlib.Path("s
         raise AssertionError("restricted capability unexpectedly succeeded")
 print("guard-python-eval-boundary-verified")
 """
-        argv = [runtime, "-c", code]
+        # uv prepends the development venv to PATH; that venv is outside the
+        # isolated fixture workspace and must not become a trusted runtime.
+        system_python = next(
+            (
+                path
+                for path in (
+                    Path("/opt/homebrew/bin/python3"),
+                    Path("/usr/local/bin/python3"),
+                    Path("/usr/bin/python3"),
+                )
+                if path.is_file()
+            ),
+            None,
+        )
+        argv = [str(system_python) if system_python else runtime, "-c", code]
     else:
         code = """const fs=require('node:fs'), assert=require('node:assert'), cp=require('node:child_process');
 assert.equal(JSON.parse(fs.readFileSync('data.json')).values.reduce((a,b)=>a+b),6);
