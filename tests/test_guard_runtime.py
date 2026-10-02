@@ -11831,7 +11831,7 @@ def test_guard_hook_localizes_package_review_copy_with_local_approval_url(
     _build_guard_fixture(home_dir, workspace_dir)
     _write_text(
         home_dir / "config.toml",
-        '[risk_actions]\npackage_script = "require-reapproval"\napproval_wait_timeout_seconds = 0\n',
+        'approval_wait_timeout_seconds = 0\n[risk_actions]\npackage_script = "require-reapproval"\n',
     )
     _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
     monkeypatch.setattr(
@@ -11921,7 +11921,7 @@ def test_guard_hook_localizes_package_review_copy_with_daemon_client_approval_ur
     _build_guard_fixture(home_dir, workspace_dir)
     _write_text(
         home_dir / "config.toml",
-        '[risk_actions]\npackage_script = "require-reapproval"\napproval_wait_timeout_seconds = 0\n',
+        'approval_wait_timeout_seconds = 0\n[risk_actions]\npackage_script = "require-reapproval"\n',
     )
     _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
     monkeypatch.setattr(

@@ -236,6 +236,11 @@ jobs:
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: hol-guard-native-build-linux-x64
+      - name: Detect pending artifact regeneration
+        run: |
+          if [ "${GITHUB_BASE_REF:-}" != "" ] && [ "$(python3 scripts/ci/detect_pending_extension_regen.py --defer-freshness 2>/dev/null || echo true)" = "true" ]; then
+            echo "HOL_DEFER_ARTIFACT_FRESHNESS=1" >> "$GITHUB_ENV"
+          fi
       - name: Install this run's wheel and run installed proofs
         run: |
           chmod 0755 rust/target/x86_64-unknown-linux-musl/release/hol-guard-runtime rust/target/x86_64-unknown-linux-musl/release/guard-command-source
@@ -445,6 +450,15 @@ jobs:
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: hol-guard-native-build-windows-x64
+      - name: Detect pending artifact regeneration
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_BASE_REF) {
+            $defer = python scripts/ci/detect_pending_extension_regen.py --defer-freshness 2>$null
+            if ($LASTEXITCODE -ne 0 -or $defer -eq "true") {
+              "HOL_DEFER_ARTIFACT_FRESHNESS=1" | Out-File -FilePath $env:GITHUB_ENV -Append
+            }
+          }
       - name: Install this run's wheel and run installed proofs
         shell: pwsh
         run: |
@@ -582,6 +596,11 @@ jobs:
           name: hol-guard-native-wheel-${{ matrix.target }}
       - name: Install the platform wheel built by this run
         run: uv pip install --python .venv/bin/python --no-deps --force-reinstall native-dist/*.whl
+      - name: Detect pending artifact regeneration
+        run: |
+          if [ "${GITHUB_BASE_REF:-}" != "" ] && [ "$(python3 scripts/ci/detect_pending_extension_regen.py --defer-freshness 2>/dev/null || echo true)" = "true" ]; then
+            echo "HOL_DEFER_ARTIFACT_FRESHNESS=1" >> "$GITHUB_ENV"
+          fi
       - name: Prove installed native default routes
         if: matrix.proof == 'default'
         run: |
