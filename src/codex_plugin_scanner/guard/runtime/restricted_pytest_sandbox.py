@@ -163,6 +163,10 @@ def _macos_profile(plan: RestrictedPytestPlan, *, private_root: Path) -> str:
             "(allow sysctl-read)",
             '(allow file-read-data (literal "/"))',
             f"(allow file-read-metadata {metadata_filters})",
+            # Collectors stat symlink targets while enumerating the workspace.
+            # Metadata does not grant directory listing or file contents; those
+            # stay bounded below, with credential denials taking precedence.
+            *(("(allow file-read-metadata)",) if read_only_workspace else ()),
             f"(allow file-read* {read_filters} {read_file_filters})",
             f"(allow file-write* {write_filters})",
             *(
@@ -196,6 +200,8 @@ def _read_only_credential_denials(*, hide_metadata: bool = False) -> tuple[str, 
         )
 
     names = (
+        ".envrc",
+        ".authrc",
         ".npmrc",
         ".pypirc",
         ".netrc",
@@ -206,6 +212,8 @@ def _read_only_credential_denials(*, hide_metadata: bool = False) -> tuple[str, 
     )
     patterns = (
         f"(^|/){literal('.env')}($|[./])",
+        f"(^|/)[^/]*{literal('.key')}$",
+        f"(^|/){literal('krb5cc_')}[^/]*$",
         "(^|/)(" + "|".join(literal(name) for name in names) + ")$",
         "(^|/)[^/]*("
         + "|".join(

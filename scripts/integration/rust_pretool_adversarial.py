@@ -130,6 +130,7 @@ def main() -> int:
         "git status --short",
         "git rev-parse --show-toplevel",
         "git diff --no-ext-diff --no-textconv --check",
+        "python -c 'print(1)'",
         "rg -n authority src",
         "grep -n authority README.md",
         "stat README.md",

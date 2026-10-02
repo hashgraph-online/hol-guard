@@ -61,7 +61,10 @@ def test_linux_readonly_preparation_requires_the_filtered_profile() -> None:
 
 
 @pytest.mark.skipif(sys.platform != "darwin", reason="requires the macOS Seatbelt backend")
-@pytest.mark.parametrize("credential_name", (".env", ".ENV.local", ".aws/credentials", "private-key.pem"))
+@pytest.mark.parametrize(
+    "credential_name",
+    (".env", ".ENV.local", ".envrc", ".authrc", ".aws/credentials", "private-key.pem", "server.key", "krb5cc_1000"),
+)
 def test_real_readonly_runner_blocks_workspace_secrets_and_destruction(credential_name: str) -> None:
     workspace = Path.cwd().resolve()
     with tempfile.TemporaryDirectory(prefix=".guard-readonly-", dir=workspace) as project_text:
@@ -143,3 +146,46 @@ def test_private_output_cannot_be_a_source_hardlink(tmp_path):
         assert victim_file.read_text() == "keep"
         assert secret.read_text() == "synthetic-only-not-a-real-credential"
         assert "test_normal_source_read" in source.read_text()
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="requires the macOS Seatbelt backend")
+def test_collection_can_stat_external_symlink_without_reading_its_contents() -> None:
+    workspace = Path.cwd().resolve()
+    with (
+        tempfile.TemporaryDirectory(prefix=".guard-collection-", dir=workspace) as project_text,
+        tempfile.TemporaryDirectory(prefix=".guard-external-", dir=workspace.parent) as external_text,
+    ):
+        project = Path(project_text)
+        external = Path(external_text) / "notes.txt"
+        external.write_text("synthetic external data", encoding="utf-8")
+        alias = project / "workflow-guide.md"
+        alias.symlink_to(external)
+        configuration = project / "pytest.ini"
+        configuration.write_text("[pytest]\n", encoding="utf-8")
+        source = project / "test_collection.py"
+        source.write_text(
+            f"""
+from pathlib import Path
+
+def test_symlink_metadata_not_contents():
+    alias = Path({json.dumps(str(alias))})
+    assert alias.is_file()
+    try:
+        alias.read_text()
+    except OSError:
+        pass
+    else:
+        raise AssertionError('external contents must remain denied')
+""".lstrip(),
+            encoding="utf-8",
+        )
+        result = run_restricted_pytest(
+            [sys.executable, "-m", "pytest", "--confcutdir", str(project),
+             "-c", str(configuration), str(source), "-q"],
+            workspace=workspace,
+            cwd=project,
+            timeout_seconds=60,
+            read_only_workspace=True,
+        )
+        assert result == 0
+        assert external.read_text() == "synthetic external data"
