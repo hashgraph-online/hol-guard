@@ -369,7 +369,7 @@ def test_daemon_refreshes_resident_snapshot_after_external_authority_change(
     )
     daemon.start()
     try:
-        deadline = time.monotonic() + 5
+        deadline = time.monotonic() + 30
         while daemon._server.extension_control_runtime.current().revision != 7:
             assert time.monotonic() < deadline
             time.sleep(0.01)

@@ -416,7 +416,10 @@ def test_extend_detection_replaces_legacy_rules_collision_with_workspace_claude_
     assert artifacts["claude-code:project:instruction:claude-md"].metadata.get("instructionRole") == "claude_md"
 
 
-def test_extend_detection_does_not_replace_colliding_mcp_server_with_claude_md(tmp_path: Path) -> None:
+def test_extend_detection_does_not_replace_colliding_mcp_server_with_claude_md(
+    tmp_path: Path,
+    native_context_digest: Path,
+) -> None:
     workspace = tmp_path / "repo"
     workspace.mkdir()
     (workspace / "CLAUDE.md").write_text("# root instructions\n", encoding="utf-8")

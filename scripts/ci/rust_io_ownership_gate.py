@@ -71,6 +71,7 @@ _TRANSPORT_IDENTITY_PATHS: Final = frozenset(
         # bounded native worker invocation; all archive semantics are Rust.
         "src/codex_plugin_scanner/guard/native_archive_inspection.py",
         "src/codex_plugin_scanner/guard/native_runtime.py",
+        "src/codex_plugin_scanner/guard/native_context.py",
         "src/codex_plugin_scanner/guard/native_resident_client.py",
         "src/codex_plugin_scanner/guard/native_runtime_resilience.py",
         "src/codex_plugin_scanner/guard/codex_hook_launch_runtime.py",
@@ -85,7 +86,11 @@ _TRANSPORT_INTEGRITY_PATHS: Final = frozenset(
     {
         "src/codex_plugin_scanner/guard/native_decision_receipt.py",
         "src/codex_plugin_scanner/guard/native_command_observations.py",
+        "src/codex_plugin_scanner/guard/native_context.py",
         "src/codex_plugin_scanner/guard/daemon/hook_native_review_approval.py",
+        # Retry lineage is local diagnostic metadata. Its digests protect
+        # reattachment integrity but never authorize or evaluate an action.
+        "src/codex_plugin_scanner/guard/retry_lineage.py",
     }
 )
 _TRANSPORT_AUTHORITY_PATHS: Final = frozenset(
@@ -100,6 +105,7 @@ _TRANSPORT_DECODE_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_pretool.py",
         "src/codex_plugin_scanner/guard/native_resident_client.py",
         "src/codex_plugin_scanner/guard/native_runtime.py",
+        "src/codex_plugin_scanner/guard/native_context.py",
     }
 )
 _STRUCTURED_OUTPUT_MEDIATION_PATHS: Final = frozenset(
@@ -139,9 +145,11 @@ _PRESENTATION_PATHS: Final = frozenset(
         # continuation surfaces. These render or forward decisions; they
         # never compute them.
         "src/codex_plugin_scanner/guard/adapters/cursor_native_approval.py",
+        "src/codex_plugin_scanner/guard/adapters/zcode_contained_tests.py",
         "src/codex_plugin_scanner/guard/approval_scope_support.py",
         "src/codex_plugin_scanner/guard/approvals.py",
         "src/codex_plugin_scanner/guard/codex_app_server.py",
+        "src/codex_plugin_scanner/guard/daemon/hook_pretool_rendering.py",
         "src/codex_plugin_scanner/guard/continuation_runtime.py",
         "src/codex_plugin_scanner/guard/edge_events.py",
         "src/codex_plugin_scanner/guard/harness_usage.py",

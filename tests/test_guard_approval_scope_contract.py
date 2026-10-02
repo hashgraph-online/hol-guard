@@ -651,7 +651,7 @@ def test_v2_saved_artifact_allow_persists_only_the_exact_action(tmp_path: Path) 
     )
 
 
-def test_context_bound_saved_allow_requires_the_identical_context_token(tmp_path: Path) -> None:
+def test_context_bound_saved_allow_requires_the_identical_context_token(tmp_path: Path, native_context_digest: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     context_token = build_approval_context_token(
         identity={"harness": "codex", "tool": "Bash"},
@@ -716,7 +716,7 @@ def test_context_bound_saved_allow_requires_the_identical_context_token(tmp_path
     )
 
 
-def test_persisted_exact_action_does_not_resolve_sibling_command_request(tmp_path: Path) -> None:
+def test_persisted_exact_action_does_not_resolve_sibling_command_request(tmp_path: Path, native_context_digest: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     artifact_id = "codex:project:Bash"
 
@@ -789,7 +789,7 @@ def test_exact_action_persistence_accepts_envelope_raw_command_text(tmp_path: Pa
     assert request_scope_contract(row).exact_action_persistence_eligible is True
 
 
-def test_exact_action_persistence_accepts_context_bound_tool_call(tmp_path: Path) -> None:
+def test_exact_action_persistence_accepts_context_bound_tool_call(tmp_path: Path, native_context_digest: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     context_token = build_approval_context_token(
         identity={"server": "browser", "tool": "navigate"},
@@ -812,7 +812,7 @@ def test_exact_action_persistence_accepts_context_bound_tool_call(tmp_path: Path
     assert request_scope_contract(row).exact_action_persistence_eligible is True
 
 
-def test_v2_saved_tool_call_allow_remains_bound_to_exact_context(tmp_path: Path) -> None:
+def test_v2_saved_tool_call_allow_remains_bound_to_exact_context(tmp_path: Path, native_context_digest: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     context_token = build_approval_context_token(
         identity={"server": "browser", "tool": "navigate"},

@@ -39,15 +39,23 @@ def start_hook_worker_slot(
         slot = spawn(runner._guard_home)
         process = slot.process
         with runner._state_lock:
+            # A successfully created child belongs to this runner even if
+            # close superseded its generation while spawn was in progress.
+            # Register before any fallible isolation/retirement operation.
+            runner._all_slots[process.pid or id(slot)] = slot
             stale = runner._closed or generation != runner._generation
-            if not stale:
-                runner._all_slots[process.pid or id(slot)] = slot
         if stale:
-            _ = hook_worker_became_isolated(slot, isolation_timeout)
-            if not runner._retire_slot(slot):
-                with runner._state_lock:
-                    runner._all_slots[process.pid or id(slot)] = slot
+            try:
+                _ = hook_worker_became_isolated(slot, isolation_timeout)
+                if not runner._retire_slot(slot):
+                    runner._mark_containment_failed()
+            except BaseException:
+                # KeyboardInterrupt and SystemExit must retain child ownership
+                # just like ordinary cleanup failures.
+                # Retain the exact child for later containment; never turn a
+                # cleanup interruption into untracked worker capacity.
                 runner._mark_containment_failed()
+                raise
         return slot
 
 
@@ -194,6 +202,7 @@ def admit_hook_worker_batch(
         with runner._state_lock:
             cancelled = runner._closed or generation != runner._generation
             if not cancelled and not is_ready:
+                runner._remember_startup_failure(replacement)
                 runner._increment_metric("failures")
         if cancelled:
             return WorkerBatchResult(True, True, retry_after_batch)

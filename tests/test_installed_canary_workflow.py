@@ -93,7 +93,8 @@ def test_pr_native_wheel_checkout_cannot_write_release_compilation_cache() -> No
     checkout_ref = _text(_mapping(checkout["with"])["ref"])
     assert "github.event.pull_request.head.sha" in checkout_ref
     assert "needs.build.outputs.source_sha" in checkout_ref
-    assert not any(str(step.get("uses", "")).startswith("astral-sh/setup-uv") for step in steps)
+    setup_uv = _action_step(steps, "astral-sh/setup-uv")
+    assert "if" not in setup_uv
     assert steps.index(setup_python) < steps.index(checkout)
     caches = [step for step in steps if "cache" in str(step.get("uses", ""))]
     assert len(caches) == 1
@@ -114,6 +115,30 @@ def test_pr_native_wheel_checkout_cannot_write_release_compilation_cache() -> No
     assert "pip install" not in commands
     assert "uv sync" not in commands
 
+def test_verify_step_preserves_version_matched_runtime_fingerprint() -> None:
+    steps = _steps(_job("build-native-guard-wheels"))
+    build_step = _named_step(steps, "Build version-matched runtime")
+    verify = next(
+        step for step in steps
+        if "verify_native_command_program.py" in str(step.get("run", ""))
+    )
+    assemble = next(
+        step for step in steps
+        if "build_native_hol_guard_wheel.py" in str(step.get("run", ""))
+    )
+
+    build_env = _mapping(build_step["env"])
+    verify_env = _mapping(verify["env"])
+    for name in (
+        "HOL_GUARD_BUILD_SHA",
+        "HOL_GUARD_PACKAGE_VERSION",
+        "HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_HEX",
+        "HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_FINGERPRINT_HEX",
+        "RUSTFLAGS",
+    ):
+        assert verify_env[name] == build_env[name]
+    assert verify_env["HOL_GUARD_PACKAGE_VERSION"] == "${{ needs.build.outputs.version }}"
+    assert steps.index(build_step) < steps.index(verify) < steps.index(assemble)
 
 def test_matrix_proves_remote_bytes_install_origin_record_corpus_and_dashboard() -> None:
     steps = _steps(_job("pr-installed-canary"))

@@ -507,6 +507,9 @@ def _codex_browser_exact_resolution_failure(
     expected_artifact_hash: str | None,
     expected_artifact_id: str | None = None,
 ) -> str | None:
+    from ..native_context import bind_context_digest_home
+
+    bind_context_digest_home(getattr(store, "guard_home", None))
     resolved_by_id = {
         str(item.get("request_id")): item
         for item in resolved_items

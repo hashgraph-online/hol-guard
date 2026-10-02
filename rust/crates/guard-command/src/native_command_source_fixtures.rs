@@ -35,7 +35,7 @@ pub fn run_fixtures(bytes: &[u8]) -> Result<Value, &'static str> {
     {
         return Err("command_source_fixture_contract_invalid");
     }
-    let output = compile_build_request(
+    let output = compile_fixture_build_request(
         &serde_json::to_vec(&request.build).map_err(|_| "command_source_encoding_failed")?,
     )?;
     let program = Arc::new(NativeCommandProgram::from_packaged_bytes(

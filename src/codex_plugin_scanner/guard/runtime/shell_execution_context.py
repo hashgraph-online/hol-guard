@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 import shlex
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
 
+from ..native_context import context_sha256_digest
 from ._shell_execution_context_support import (
     MAX_DIRECTORY_STACK_DEPTH,
     SHELL_CWD_AMBIGUOUS_STACK,
@@ -446,8 +445,15 @@ def _segment_payload(segment: ShellExecutionSegment) -> dict[str, object]:
 
 
 def _sha256_payload(payload: Mapping[str, object]) -> str:
-    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    return f"sha256:{hashlib.sha256(encoded).hexdigest()}"
+    # Canonical-JSON SHA-256 owned by the native context_digest op.  The result
+    # is byte-identical to a local json.dumps+sha256 when the resident is up,
+    # and degrades to a guard-context-unbound digest (fails every equality and
+    # validation path) when it is not — preserving the prior infallibility.
+    return context_sha256_digest(
+        dict(payload),
+        prefix="sha256:",
+        unbound_label="shell-execution-payload",
+    )
 
 
 __all__ = [

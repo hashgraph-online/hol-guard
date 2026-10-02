@@ -1367,8 +1367,8 @@
       },
       "rust/crates/guard-command/src/command_compatibility/interpreter.rs": {
         "byte_identical": false,
-        "candidate_git_blob": "6a670366ba38be2818005dd820da8252f28043df",
-        "candidate_sha256": "fbef078baff4a8bf861a9f8014170c1001e2a41e5cfc954001e3821dc621590f",
+        "candidate_git_blob": "24a6effdc58bf80a1c6b8c0eef6b53f16aecd4bd",
+        "candidate_sha256": "edd32cb3f61333420ceccb3f99a3881b2e1732342a8b89808aaeff7dcd102f2d",
         "reviewed_change": "Closed interpreter literal/public-environment/Artisan forms avoid invented secret ownership; unmodeled programs retain uncertainty."
       },
       "rust/crates/guard-command/src/command_option_parsing.rs": {

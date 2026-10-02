@@ -30,6 +30,7 @@ from . import native_policy_snapshot_windows_io as _windows_io
 from . import native_policy_snapshot_windows_key as _windows_key
 from . import native_policy_snapshot_windows_state as _windows_state
 from . import native_policy_snapshot_windows_support as _windows_support
+from .fork_safety import forget_in_child
 from .native_policy_snapshot_publisher import NativePolicySnapshotPublisher
 
 globals().update({name: getattr(_constants, name) for name in _constants.__all__})
@@ -368,6 +369,7 @@ def native_policy_snapshot(
 
 _PUBLISHER_LOCK = threading.RLock()
 _PUBLISHERS: dict[str, set[NativePolicySnapshotPublisher]] = {}
+forget_in_child(_PUBLISHERS)
 
 
 def _publisher_key(guard_home: Path) -> str:

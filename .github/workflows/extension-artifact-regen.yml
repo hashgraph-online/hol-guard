@@ -1,8 +1,8 @@
 name: Extension artifact regen
 
 # Contributors own canonical contribution sources. The generated projections
-# derived from them (command catalog, native command program, trust map,
-# baselines, digest vectors, directory render) are maintainer-owned and
+# derived from them (command catalog, native command program, descriptors
+# and directory render) are maintainer-owned and
 # regenerated here after merges so contribution PRs never conflict on them.
 #
 # NOTE: the main-branch ruleset requires every change to arrive through a
@@ -19,56 +19,18 @@ on:
   push:
     branches: [main]
     paths:
+      # Product/catalog inputs only. Per-run reports and independent test
+      # fixtures do not schedule native compilation or publication.
       - contributions/**
       - rust/**
       - contracts/extensions/**
+      - contracts/mcp-servers/**
       - src/codex_plugin_scanner/guard/**
-      - docs/guard/native-command-corpus-contract.md
-      - docs/guard/declarative-authoring-adr.md
-      - tests/guard_command_*.py
-      - tests/test_guard_command_*.py
-      - tests/guard_test_invariants.py
-      - tests/native_command_test_support.py
-      - tests/test_native_command_test_support_batch.py
-      - tests/fixtures/guard-command-corpus/**
-      - tests/fixtures/command-source-*.v1.json
-      # The decision-diff report binds Python sources, its generator/tests,
-      # documentation, and immutable fixtures as well as the native program.
-      - src/codex_plugin_scanner/guard/runtime/*.py
-      - src/codex_plugin_scanner/guard/action_lattice.py
-      - src/codex_plugin_scanner/guard/models.py
-      - src/codex_plugin_scanner/guard/cli/commands_contained_write.py
-      - src/codex_plugin_scanner/guard/cli/commands_parser.py
-      - src/codex_plugin_scanner/guard/cli/commands_parser_local.py
-      - src/codex_plugin_scanner/guard/cli/commands_router.py
-      - src/codex_plugin_scanner/guard/cli/commands_support.py
-      - src/codex_plugin_scanner/guard/cli/commands_verified_read.py
-      - src/codex_plugin_scanner/guard/contained_package_script_execution.py
-      - src/codex_plugin_scanner/guard/contained_workspace_write_execution.py
-      - src/codex_plugin_scanner/guard/durable_harness_launcher.py
-      - src/codex_plugin_scanner/guard/package_shim_frozen.py
-      - src/codex_plugin_scanner/guard/package_shim_gate.py
-      - src/codex_plugin_scanner/guard/shims.py
-      - docs/guard/declarative-authoring-adr.md
-      - docs/guard/native-command-corpus-contract.md
-      - tests/guard_command_corpus*.py
-      - tests/guard_command_decision_diff*.py
-      - tests/guard_test_invariants.py
-      - tests/native_command_test_support.py
-      - tests/test_guard_command_corpus*.py
-      - tests/test_guard_command_decision_diff.py
-      - tests/test_guard_contained_package_script_execution.py
-      - tests/test_guard_contained_workspace_write*.py
-      - tests/test_guard_containment_external_executable.py
-      - tests/test_guard_native_classification_baseline.py
-      - tests/test_guard_package_shims.py
-      - tests/test_guard_verified_reads.py
-      - tests/test_native_command_test_support_batch.py
-      - tests/fixtures/guard-command-corpus/known-gaps.json
-      - tests/fixtures/guard-command-corpus/minimal-delta-pairs.json
-      - tests/fixtures/guard-command-corpus/native-contract.json
-      - tests/fixtures/guard-command-corpus/seed-manifest.json
       - scripts/refresh_extension_artifacts.py
+      - scripts/build_native_command_program.py
+      - scripts/prepare_extension_contribution.py
+      - scripts/export_extension_directory.py
+      - scripts/render_command_extension_directory.py
       - .github/workflows/extension-artifact-regen.yml
   workflow_dispatch:
 
@@ -130,14 +92,9 @@ jobs:
           git fetch origin main
           git reset --hard origin/main
           uv run --no-sync python scripts/refresh_extension_artifacts.py
-          git add -A contracts/extensions contracts/managed-controls docs/guard/extensions \
-            contributions/extensions \
-            src/codex_plugin_scanner/guard/contracts/data/extensions \
-            src/codex_plugin_scanner/guard/extension_builder tests/fixtures/extension-controls \
-            tests/fixtures/command-source-*.v1.json \
-            tests/fixtures/guard-command-corpus/decision-diff-report.json \
-            tests/fixtures/guard-command-corpus/decision-diff-report.framed-sha256 \
-            tests/test_guard_extension_trust.py tests/test_policy_bundle_delivery_runtime.py
+          # Test expectations and fixture trust are authored inputs, never outputs.
+          git add -A contracts/extensions docs/guard/extensions contributions/extensions \
+            src/codex_plugin_scanner/guard/contracts/data/extensions
           close_superseded() {
             stale_prs=$(gh pr list --repo "${GH_REPO}" --state open --limit 200 \
               --search "head:regen/artifacts-" \

@@ -7,6 +7,22 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def test_native_pr_base_wheel_rebuild_has_uv_available() -> None:
+    workflow = yaml.safe_load((ROOT / ".github/workflows/publish.yml").read_text(encoding="utf-8"))
+    steps = workflow["jobs"]["build-native-guard-wheels"]["steps"]
+    rebuild_index = next(
+        index
+        for index, step in enumerate(steps)
+        if step.get("name") == "Rebuild Guard base wheel after projection regeneration"
+    )
+    rebuild = steps[rebuild_index]
+    assert "if" not in rebuild
+    assert "uv build" in rebuild["run"]
+    setup = next(step for step in steps[:rebuild_index] if step.get("uses", "").startswith("astral-sh/setup-uv@"))
+    assert "if" not in setup
+    assert setup["with"]["version"] == "0.9.26"
+
+
 def test_pr_canary_requires_maintainer_opt_in_for_same_repository_prs() -> None:
     workflow_path = ROOT / ".github/workflows/publish.yml"
     workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))

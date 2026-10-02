@@ -20,6 +20,7 @@ from .codex_hook_launch_runtime import (
 from .codex_hook_launch_runtime import (
     run_isolated_hook_process as _legacy_run_isolated_hook_process,
 )
+from .fork_safety import forget_in_child
 from .native_approval_errors import NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES
 from .native_resident_stream import _PersistentNativeClient, _StreamFailure
 
@@ -38,6 +39,7 @@ _LAST_FAILURE_CODE: ContextVar[str | None] = ContextVar(
 )
 _RESIDENTS_LOCK = threading.Lock()
 _RESIDENTS: dict[tuple[Path, Path], Mapping[str, str]] = {}
+forget_in_child(_RESIDENTS)
 
 
 def native_resident_client_failure_code() -> str | None:
@@ -152,6 +154,7 @@ class _PersistentNativeClientPool:
 
 _CLIENTS_LOCK = threading.Lock()
 _CLIENT_POOLS: dict[tuple[str, str], _PersistentNativeClientPool] = {}
+forget_in_child(_CLIENT_POOLS)
 
 
 def _client_pool_for(executable: Path, state_dir: Path, environment: Mapping[str, str]) -> _PersistentNativeClientPool:

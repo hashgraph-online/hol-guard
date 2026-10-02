@@ -77,6 +77,7 @@ def _review_evaluation() -> PackageRequestEvaluation:
 
 def test_package_reuses_native_signed_policy_through_running_daemon(
     tmp_path: Path,
+    native_context_digest: Path,
 ) -> None:
     guard_home = tmp_path / "guard-home"
     workspace = tmp_path / "workspace"

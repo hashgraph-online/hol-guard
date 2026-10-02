@@ -57,3 +57,19 @@ def test_unavailable_inspection_has_nonzero_exit(monkeypatch, tmp_path, transpor
     assert emitted[0][1]["minimum_action"] == "review"
     if transport_failure:
         assert emitted[0][1]["classification"]["explicitly_benign"] is False
+
+
+def test_unavailable_inspection_reports_decision_specific_recovery() -> None:
+    from codex_plugin_scanner.guard.runtime.command_inspection import unavailable_command_inspection
+
+    unavailable = unavailable_command_inspection("git status")
+    classification = unavailable["classification"]
+    assert "native inspection is unavailable" in classification["reason"].lower()
+    assert classification["recovery"]
+    assert "retry" in classification["recovery"].lower()
+
+    failed = unavailable_command_inspection("git status", native_evaluation_failed=True)
+    failed_classification = failed["classification"]
+    assert "evaluation failed" in failed_classification["reason"].lower()
+    assert failed_classification["recovery"]
+    assert "blocked" in failed_classification["recovery"].lower()

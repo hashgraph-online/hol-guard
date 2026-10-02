@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 
 from ..review_contracts import GuardReviewContractError, guard_review_oauth_metadata
+from ..review_verification_keyring import review_verification_keyring_ready
 from ..store import GuardStore
 from .command_capability import AuthorizedCommandJob, CommandCapabilityError, authorize_command_job
 from .exact_cloud_review import (
@@ -12,6 +13,7 @@ from .exact_cloud_review import (
     authorize_exact_cloud_review_job,
 )
 from .exact_cloud_review_transport import uses_exact_transport
+from .native_workspace_review_queue import is_native_workspace_review_job
 from .runner import GuardSyncNotConfiguredError
 
 
@@ -50,6 +52,8 @@ def authorize_transport_command_queue_job(
         raise CommandCapabilityError("remote_exact_job_operation_invalid")
     if exact_operation and not exact_transport:
         raise CommandCapabilityError("remote_exact_transport_required")
+    if exact_operation and not is_native_workspace_review_job(job) and not review_verification_keyring_ready(store):
+        raise CommandCapabilityError("cloud_review_verification_unavailable")
     return authorize_command_queue_job(
         store,
         job,

@@ -258,8 +258,15 @@ jobs:
               if git rev-parse -q --verify "v${RELEASE_VERSION}^{commit}" >/dev/null; then
                 tag_sha=$(git rev-parse "v${RELEASE_VERSION}^{commit}")
                 if [[ "$tag_sha" != "$SOURCE_SHA" ]]; then
-                  echo "Stable tag does not target the dispatch source" >&2
-                  exit 1
+                  if ! git merge-base --is-ancestor "$tag_sha" HEAD; then
+                    echo "Stable tag does not target the dispatch source or one of its ancestors" >&2
+                    exit 1
+                  fi
+                  # Finish an already reserved canonical version with repaired
+                  # workflow code, without moving its immutable source tag.
+                  SOURCE_SHA="$tag_sha"
+                  echo "release_repair=true" >> "$GITHUB_OUTPUT"
+                  REPAIRING=true
                 fi
               fi
               VERSION="$RELEASE_VERSION"
@@ -367,6 +374,15 @@ jobs:
             exit 0
           fi
           uv run --no-sync python scripts/sync_repo_version.py --version "$VERSION"
+      - name: Generate projections for release source distributions
+        env:
+          HOL_GUARD_BUILD_SHA: ${{ steps.version.outputs.source_sha }}
+          HOL_GUARD_PACKAGE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          rustup toolchain install 1.88.0 --profile minimal
+          cargo +1.88.0 build --manifest-path rust/Cargo.toml --locked --release \
+            -p guard-command --bin guard-command-source
+          python scripts/build_native_command_program.py --compiler rust/target/release/guard-command-source
       - name: Build Guard package (hol-guard)
         run: |
           cp pyproject.toml pyproject.toml.bak
@@ -525,6 +541,10 @@ jobs:
         with:
           persist-credentials: false
           ref: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || needs.build.outputs.source_sha }}
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: distributions
@@ -577,8 +597,19 @@ jobs:
       - name: Verify native command program is current
         shell: bash
         env:
+          HOL_GUARD_BUILD_SHA: ${{ needs.build.outputs.source_sha }}
+          HOL_GUARD_PACKAGE_VERSION: ${{ needs.build.outputs.version }}
+          HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_HEX: ${{ vars.HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_HEX }}
+          HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_FINGERPRINT_HEX: ${{ vars.HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_FINGERPRINT_HEX }}
+          RUSTFLAGS: ${{ matrix.rustflags }}
           SOURCE_COMPILER: ${{ matrix.source_compiler }}
+          RUST_TARGET: ${{ matrix.target }}
         run: |
+          # Generated projections may lag their canonical tagged inputs.
+          # Bind both the binary and packaged JSON to this release build.
+          python scripts/build_native_command_program.py --compiler "$SOURCE_COMPILER"
+          cargo build --manifest-path rust/Cargo.toml --locked --release --target "$RUST_TARGET" \
+            -p hol-guard-runtime -p guard-command --bin hol-guard-runtime --bin guard-command-source
           arguments=(--compiler "$SOURCE_COMPILER")
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
             arguments+=(--changed-from "${{ github.event.pull_request.base.sha }}")
@@ -592,6 +623,37 @@ jobs:
           jq -n --slurpfile source rust/crates/guard-command/tests/fixtures/command-source-example.v1.json --slurpfile trust contracts/extensions/trust-class-map.v1.json \
             '{schema:"guard.command-extension-build.v1",sources:$source,mcp_sources:[],trust:$trust[0],base:"packaged"}' > source-build.json
           "$SOURCE_COMPILER" compile < source-build.json > source-compiled.json
+      - name: Rebuild Guard base wheel after projection regeneration
+        shell: bash
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          CURRENT_VERSION=$(uv run --no-project --with packaging==25.0 python scripts/sync_repo_version.py --check)
+          if [[ "$CURRENT_VERSION" != "$VERSION" ]]; then
+            uv run --no-project --with packaging==25.0 python scripts/sync_repo_version.py --version "$VERSION"
+          fi
+          BACKUP="$RUNNER_TEMP/hol-guard-pyproject.toml"
+          cp pyproject.toml "$BACKUP"
+          restore_pyproject() {
+            cp "$BACKUP" pyproject.toml
+          }
+          trap restore_pyproject EXIT
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("pyproject.toml")
+          text = path.read_text(encoding="utf-8")
+          start = text.index("[project.scripts]")
+          end = text.index("\n\n[project.urls]")
+          scripts = "[project.scripts]\n" \
+              'hol-guard = "codex_plugin_scanner.cli:main"\n' \
+              'plugin-guard = "codex_plugin_scanner.cli:main"\n' \
+              'hol-guard-eval = "codex_plugin_scanner.guard.evaluation_cli:main"'
+          path.write_text(text[:start] + scripts + text[end:], encoding="utf-8")
+          PY
+          uv build --wheel --out-dir "$RUNNER_TEMP/hol-guard-base-dist"
+          mv "$RUNNER_TEMP/hol-guard-base-dist/hol_guard-${VERSION}-py3-none-any.whl" \
+            "base-dist/hol_guard-${VERSION}-py3-none-any.whl"
       - name: Verify Linux runtime is static
         if: runner.os == 'Linux'
         shell: bash

