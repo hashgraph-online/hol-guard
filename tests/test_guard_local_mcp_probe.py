@@ -553,3 +553,142 @@ for line in sys.stdin:
     probed = probe_stdio_mcp_server(f"python3 {server}", cwd=tmp_path, home_dir=tmp_path)
     assert probed is not None
     assert any(tool.name == "list_pages" for tool in probed.tools)
+
+
+@pytest.mark.parametrize(
+    ("code", "reason"),
+    [(-32020, "discovery_rejected"), (-32021, "discovery_rejected"), (-32022, "unsupported_protocol")],
+)
+def test_modern_discovery_errors_are_not_downgraded(code: int, reason: str) -> None:
+    class Session:
+        catalog_generation = 0
+
+        def __init__(self) -> None:
+            self.messages: list[dict[str, object]] = []
+            self.responses = [{"jsonrpc": "2.0", "id": 0, "error": {"code": code}}]
+
+        def write(self, message: dict[str, object]) -> None:
+            self.messages.append(message)
+
+        def read(self, *, timeout: float) -> dict[str, object] | None:
+            return self.responses.pop(0) if self.responses else None
+
+    session = Session()
+    catalog = stdio_module._negotiate_catalog(session, stdio_module.time.monotonic() + 1)
+
+    assert catalog.reason == reason
+    assert [message["method"] for message in session.messages] == ["server/discover"]
+
+
+def test_modern_discovery_records_negotiated_server_details() -> None:
+    class Session:
+        catalog_generation = 0
+
+        def __init__(self) -> None:
+            self.messages: list[dict[str, object]] = []
+            self.responses = [
+                {
+                    "jsonrpc": "2.0",
+                    "id": 0,
+                    "result": {
+                        "resultType": "complete",
+                        "supportedVersions": ["2026-07-28"],
+                        "capabilities": {"tools": {}},
+                        "_meta": {"io.modelcontextprotocol/serverInfo": {"name": "modern"}},
+                    },
+                }
+            ]
+
+        def write(self, message: dict[str, object]) -> None:
+            self.messages.append(message)
+
+        def read(self, *, timeout: float) -> dict[str, object] | None:
+            return self.responses.pop(0) if self.responses else None
+
+    session = Session()
+    catalog = stdio_module._negotiate_catalog(session, stdio_module.time.monotonic() + 1)
+
+    assert catalog.protocol_version == "2026-07-28"
+    assert catalog.capabilities == {"tools": {}}
+    assert catalog.server_info == {"name": "modern"}
+    assert [message["method"] for message in session.messages] == ["server/discover"]
+
+
+def test_append_skill_metadata_requires_a_bound_origin(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(stdio_module, "mcp_skills_declared", lambda *_args, **_kwargs: True)
+    catalog = McpCatalogResult(complete=True, protocol_version="2026-07-28", capabilities={})
+
+    result = stdio_module._append_skill_metadata(
+        catalog,
+        object(),
+        stdio_module.time.monotonic() + 1,
+        connection_identity_hash=None,
+    )
+
+    assert result.skills_complete is False
+    assert result.skills_reason == "skill_origin_not_bound"
+
+
+def test_append_skill_metadata_enforces_public_metadata_size(monkeypatch: pytest.MonkeyPatch) -> None:
+    class Entry:
+        def public_metadata(self) -> dict[str, object]:
+            return {"description": "x" * 512_000}
+
+    class Client:
+        def __init__(self, **_kwargs: object) -> None:
+            pass
+
+        def list_metadata(self) -> tuple[tuple[Entry, ...], bool, None]:
+            return (Entry(),), True, None
+
+    class Session:
+        catalog_generation = 0
+
+    monkeypatch.setattr(stdio_module, "mcp_skills_declared", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(stdio_module, "McpSkillsClient", Client)
+    catalog = McpCatalogResult(complete=True, protocol_version="2026-07-28", capabilities={})
+
+    result = stdio_module._append_skill_metadata(
+        catalog,
+        Session(),
+        stdio_module.time.monotonic() + 1,
+        connection_identity_hash="a" * 64,
+    )
+
+    assert result.skills == ()
+    assert result.skills_complete is False
+    assert result.skills_reason == "skill_metadata_limit"
+
+
+def test_append_skill_metadata_marks_catalog_changes_incomplete(monkeypatch: pytest.MonkeyPatch) -> None:
+    class Entry:
+        def public_metadata(self) -> dict[str, object]:
+            return {"name": "skill"}
+
+    class Session:
+        catalog_generation = 0
+
+    session = Session()
+
+    class Client:
+        def __init__(self, **_kwargs: object) -> None:
+            pass
+
+        def list_metadata(self) -> tuple[tuple[Entry, ...], bool, None]:
+            session.catalog_generation += 1
+            return (Entry(),), True, None
+
+    monkeypatch.setattr(stdio_module, "mcp_skills_declared", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(stdio_module, "McpSkillsClient", Client)
+    catalog = McpCatalogResult(complete=True, protocol_version="2026-07-28", capabilities={})
+
+    result = stdio_module._append_skill_metadata(
+        catalog,
+        session,
+        stdio_module.time.monotonic() + 1,
+        connection_identity_hash="a" * 64,
+    )
+
+    assert result.skills == ({"name": "skill"},)
+    assert result.complete is False
+    assert result.reason == "catalog_changed"
