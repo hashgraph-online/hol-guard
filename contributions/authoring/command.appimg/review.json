@@ -1,0 +1,141 @@
+{
+  "discoveryDigest": "d85b67d05a6691833b2b955b42007dd22058a7f3be9c73f091f60148511e1ab3",
+  "entries": {
+    "op-1d8f2e3384b44038": {
+      "evidenceUrl": "https://github.com/MrGilfy/appimg#usage",
+      "rationale": "Prints a shell completion script to stdout and writes nothing.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [
+        [
+          "completions",
+          "bash"
+        ],
+        [
+          "completions",
+          "elvish"
+        ],
+        [
+          "completions",
+          "fish"
+        ],
+        [
+          "completions",
+          "zsh"
+        ]
+      ],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "review"
+    },
+    "op-227d251131facfdb": {
+      "evidenceUrl": "https://github.com/MrGilfy/appimg#updates",
+      "rationale": "Downloads newer versions and swaps them in place of installed AppImages. With --check it only reports and changes nothing.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [
+        [
+          "update",
+          "--all",
+          "--check"
+        ],
+        [
+          "update",
+          "--all",
+          "--check",
+          "--json"
+        ]
+      ],
+      "saferAlternative": "Run appimg update --all --check first to see what would change.",
+      "state": "review"
+    },
+    "op-28e623ce1c945c32": {
+      "evidenceUrl": "https://github.com/MrGilfy/appimg#usage",
+      "rationale": "Read-only listing of installed AppImages.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [
+        [
+          "list",
+          "--json"
+        ]
+      ],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "review"
+    },
+    "op-2e390f4b1131c34a": {
+      "evidenceUrl": "https://github.com/MrGilfy/appimg#usage",
+      "rationale": "Read-only environment check that reports leftovers without deleting anything.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "review"
+    },
+    "op-66ac10fbbea895e4": {
+      "evidenceUrl": "https://github.com/MrGilfy/appimg#usage",
+      "rationale": "Opens the desktop entry of an installed AppImage in $EDITOR and rewrites it.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the desktop entry in ~/.local/share/applications before editing it.",
+      "state": "review"
+    },
+    "op-6c69101a5444aed0": {
+      "evidenceUrl": "https://github.com/MrGilfy/appimg#usage",
+      "rationale": "Downloads or copies an AppImage into the user home and writes a desktop entry and icons.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Run appimg install with --dry-run first to see what would be written.",
+      "state": "review"
+    },
+    "op-75eb278d6a9fb4cf": {
+      "evidenceUrl": "https://github.com/MrGilfy/appimg#usage",
+      "rationale": "Without a subcommand appimg starts an interactive terminal interface that can install, update and remove AppImages. Help and version output are read-only.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [
+        [
+          "--help"
+        ],
+        [
+          "--version"
+        ],
+        [
+          "-V"
+        ],
+        [
+          "-h"
+        ]
+      ],
+      "saferAlternative": "Use the read-only subcommands list or doctor instead of the interactive interface.",
+      "state": "review"
+    },
+    "op-98ae7de9f4921295": {
+      "evidenceUrl": "https://github.com/MrGilfy/appimg#usage",
+      "rationale": "Deletes an installed AppImage together with its desktop entry and icons.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Run appimg list first to confirm the exact application name.",
+      "state": "review"
+    }
+  },
+  "schemaVersion": "guard.extension-review.v1"
+}

@@ -26,6 +26,8 @@ _ARTIFACTS = {
     "contributions/mcp-servers/mcp.instapods.json": "mcp_servers/contributions/mcp.instapods.json",
     "contributions/mcp-servers/mcp.pr-ui-compare.json": "mcp_servers/contributions/mcp.pr-ui-compare.json",
     "contributions/mcp-servers/mcp.reaper.json": "mcp_servers/contributions/mcp.reaper.json",
+    "contributions/extensions/command.appimg.json": "extensions/contributions/command.appimg.json",
+    "contributions/command-sources/command.appimg.json": "extensions/command-sources/command.appimg.json",
 }
 
 
