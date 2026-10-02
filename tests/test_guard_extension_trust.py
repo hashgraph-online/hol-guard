@@ -89,7 +89,6 @@ def test_trust_map_covers_every_builtin_extension() -> None:
         "command.cogext",
         "command.ctty",
         "command.digline",
-        "command.errand",
         "command.genclave",
         "command.gitsync",
         "command.mcp-filesystem",
@@ -103,7 +102,6 @@ def test_trust_map_covers_every_builtin_extension() -> None:
         "command.repo2nb",
         "command.skill-base",
         "command.skill-sunset",
-        "command.syngraphe",
         "command.uivoid",
     }
     assert trust_class_for("command.git") == "first-party"
