@@ -26,7 +26,7 @@ def canonical_guard_home_path(guard_home: Path | str) -> str:
     expanded = Path(guard_home).expanduser()
     try:
         candidate = os.path.realpath(os.fspath(expanded))
-    except (OSError, RuntimeError):
+    except OSError:
         candidate = os.fspath(expanded)
     return os.path.normpath(candidate)
 
