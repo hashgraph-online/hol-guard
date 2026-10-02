@@ -320,7 +320,7 @@ jobs:
     - run: uv sync --frozen --no-dev --group ci-test --python ${{ env.CI_PYTHON_VERSION }}
       if: steps.token-presence.outputs.has-token == 'true'
     - name: Cache Sonar analyzer downloads
-      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
       with:
         path: ${{ runner.temp }}/sonar/cache
         key: sonar-analyzers-${{ runner.os }}-${{ hashFiles('sonar-project.properties') }}
