@@ -242,7 +242,7 @@ console.log(JSON.stringify(result));
 
 
 def _run_generated_tool_result_fixture(source: str) -> dict[str, object]:
-    handler_start = source.index('  pi.on("tool_result"')
+    handler_start = source.index('  pi.on("tool_result", async (event, ctx) => {')
     handler_end = source.index("\n  });\n}", handler_start) + len("\n  });")
     handler = source[handler_start:handler_end]
     for old, new in {

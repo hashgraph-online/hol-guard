@@ -25,7 +25,7 @@ def _run_generated_callback_payload(
     guard_timeout_ms: int = 4250,
     use_generated_blocked_reason: bool = False,
 ) -> dict[str, object]:
-    handler_start = source.index('  pi.on("tool_result"')
+    handler_start = source.index('  pi.on("tool_result", async (event, ctx) => {')
     handler_end = source.index("\n  });\n}", handler_start) + len("\n  });")
     handler = source[handler_start:handler_end]
     for old, new in {

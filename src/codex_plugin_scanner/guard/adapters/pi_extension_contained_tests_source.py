@@ -4,6 +4,52 @@ from __future__ import annotations
 
 CONTAINED_TEST_HELPERS_SOURCE = r"""
   const containedTestRequests = new Map<string, string>();
+  const containedTestPresentations = new Map<string, { input: Record<string, unknown>; command: string }>();
+
+  pi.on("tool_result", (event) => {
+    const key = toolCallIdKey(event.toolCallId);
+    const presentation = key ? containedTestPresentations.get(key) : undefined;
+    if (!key || !presentation) return undefined;
+    const details = event.details && typeof event.details === "object" && !Array.isArray(event.details)
+      ? event.details : {};
+    return { details: { ...details, holGuardContainedTest: {
+      schema: "guard-contained-test-presentation.v1", toolCallId: key, ...presentation,
+    } } };
+  });
+
+  pi.on("context", (event) => {
+    // Only provider projection changes. The stored execution input remains an
+    // audit record of the protected sink; every new call still passes Guard.
+    const presentations = new Map(containedTestPresentations);
+    for (const message of event.messages) {
+      if (message.role !== "toolResult") continue;
+      const proof = message.details?.holGuardContainedTest;
+      if (proof?.schema !== "guard-contained-test-presentation.v1" ||
+          proof.toolCallId !== message.toolCallId || typeof proof.command !== "string" ||
+          !proof.input || typeof proof.input.command !== "string") continue;
+      try {
+        const serialized = JSON.stringify(proof);
+        if (serialized.length > 32_768) continue;
+        const clean = JSON.parse(serialized);
+        presentations.set(clean.toolCallId, { input: clean.input, command: clean.command });
+      } catch { continue; }
+    }
+    let changed = false;
+    const messages = event.messages.map((message) => {
+      if (message.role !== "assistant" || !Array.isArray(message.content)) return message;
+      const content = message.content.map((block) => {
+        if (block.type !== "toolCall" || block.name !== "bash") return block;
+        const presentation = presentations.get(block.id);
+        if (!presentation || block.arguments?.command !== presentation.command) return block;
+        changed = true;
+        return { ...block, arguments: { ...presentation.input } };
+      });
+      return { ...message, content };
+    });
+    return changed ? { messages } : undefined;
+  });
+
+  pi.on("session_shutdown", () => containedTestPresentations.clear());
 
   function cleanupContainedTestRequest(toolCallId: unknown): void {
     const key = toolCallIdKey(toolCallId);
@@ -55,6 +101,12 @@ CONTAINED_TEST_HELPERS_SOURCE = r"""
       const quote = (value: string) => "'" + value.replace(/'/g, "'\\''") + "'";
       const command = [GUARD_CLI_WRAPPER_COMMAND, ...args].map(quote).join(" ");
       containedTestRequests.set(key, directory);
+      containedTestPresentations.set(key, { input: { ...(input as Record<string, unknown>) }, command });
+      while (containedTestPresentations.size > 256) {
+        const oldest = containedTestPresentations.keys().next().value;
+        if (oldest === undefined) break;
+        containedTestPresentations.delete(oldest);
+      }
       return { ...(input as Record<string, unknown>), command };
     } catch {
       try { rmSync(directory, { recursive: true, force: true }); } catch {}

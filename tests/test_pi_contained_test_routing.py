@@ -76,6 +76,13 @@ const file = join(directory, 'request.json');
 const raw = readFileSync(file, 'utf8');
 const output = { rejected, duplicate, input, raw, snapshot,
   directoryMode: statSync(directory).mode & 0o777, fileMode: statSync(file).mode & 0o777 };
+const assistant = { role: 'assistant', content: [{type:'toolCall', id:'test-call', name:'bash', arguments:input}] };
+const details = handlers.tool_result({toolCallId:'test-call', details:{ordinary:true}}).details;
+output.projected = handlers.context({messages:[assistant]}).messages[0].content[0].arguments.command;
+output.storedTransportUnchanged = assistant.content[0].arguments.command === input.command;
+containedTestPresentations.clear();
+output.resumed = handlers.context({messages:[assistant, {role:'toolResult', toolCallId:'test-call', details}]}).messages[0].content[0].arguments.command;
+output.mismatched = handlers.context({messages:[assistant, {role:'toolResult', toolCallId:'different-call', details}]}) === undefined;
 handlers.session_stop();
 output.cleaned = containedTestRequests.size === 0;
 try { statSync(directory); output.cleaned = false; } catch {}
@@ -89,6 +96,10 @@ console.log(JSON.stringify(output));
     assert result["rejected"] == [None, None, None]
     assert result["duplicate"] is None
     assert result["cleaned"] is True
+    assert result["projected"] == "python3 -m pytest -q"
+    assert result["resumed"] == "python3 -m pytest -q"
+    assert result["storedTransportUnchanged"] is True
+    assert result["mismatched"] is True
     assert result["directoryMode"] == 0o700
     assert result["fileMode"] == 0o600
     assert result["input"]["timeout"] == 45
