@@ -86,7 +86,12 @@ def _rebuild_namespace_primitives(namespace: object, *, rebind: Callable[[str, o
         elif isinstance(namespace, ModuleType) and isinstance(value, type):
             # ClassVar primitives live on the class object, whose vars()
             # is a read-only mappingproxy — rebind through setattr instead.
-            _rebuild_namespace_primitives(value, rebind=lambda n, f, cls=value: setattr(cls, n, f))
+            # Guard per-class: a metaclass that forbids setattr must not
+            # stop the rest of the module's primitives from rebuilding.
+            try:
+                _rebuild_namespace_primitives(value, rebind=lambda n, f, cls=value: setattr(cls, n, f))
+            except (TypeError, AttributeError):
+                continue
 
 
 def _reset_after_fork() -> None:
