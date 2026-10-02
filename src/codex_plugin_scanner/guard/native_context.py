@@ -25,7 +25,7 @@ from .directory_path_authority import canonical_guard_home_path
 from .fork_safety import forget_in_child
 from .native_resident_client import native_resident_client_request
 from .native_response_decoder import native_error as _native_error
-from .native_runtime import _isolated_environment, native_runtime_status
+from .native_runtime import NativeRuntimeStatus, _isolated_environment, native_runtime_status
 from .native_runtime_resilience import (
     native_record_overload,
     native_record_resident_failure,
@@ -81,10 +81,10 @@ _STATUS_MEMO_TTL_SECONDS = 0.1
 # (timestamp, status, status-callable-identity) — the callable identity lets
 # tests monkeypatch ``native_runtime_status`` and always get a fresh probe,
 # while a production burst keeps sharing the real probe's snapshot.
-_status_memo: tuple[float, object, object] | None = None
+_status_memo: tuple[float, NativeRuntimeStatus, object] | None = None
 
 
-def _native_runtime_status_memo() -> object:
+def _native_runtime_status_memo() -> NativeRuntimeStatus:
     global _status_memo
     probe = native_runtime_status
     with _STATUS_MEMO_LOCK:
