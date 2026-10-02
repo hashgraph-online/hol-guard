@@ -1018,6 +1018,9 @@ def test_transient_initial_worker_failure_replenishes_capacity(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # The daemon initializes storage before starting isolated workers. Keep
+    # first-request schema migration outside this capacity-recovery contract.
+    _ = GuardStore(tmp_path)
     runner = HookProcessRunner(guard_home=tmp_path, process_limit=1)
     original_ready = hook_spawner_module.hook_worker_became_ready
     attempts = 0
@@ -1030,25 +1033,30 @@ def test_transient_initial_worker_failure_replenishes_capacity(
 
     monkeypatch.setattr(hook_runner_module, "hook_worker_became_ready", transient_ready)
     ready_workers = 0
-    review_payload: dict[str, object] | None = None
+    review_result: HookProcessReview | None = None
     try:
         runner.start()
         assert runner.wait_for_capacity(minimum_workers=1, timeout_seconds=10)
         ready_workers = runner.stats()["ready"]
-        review_payload = runner.review(
+        review_result = runner.review(
             payload={"hook_event_name": "SessionStart"},
             harness="pi",
             home_dir=tmp_path,
             guard_home=tmp_path,
             workspace=tmp_path,
             hook_env={},
-        ).payload
+        )
     finally:
         runner.close()
 
     assert attempts >= 2
     assert ready_workers == 1
-    assert review_payload is not None
+    assert review_result is not None
+    assert review_result.payload is not None, {
+        "reason_code": review_result.reason_code,
+        "runner_stats": runner.stats(),
+    }
+    assert review_result.reason_code is None
     assert runner.stats()["workers"] == 0
 
 

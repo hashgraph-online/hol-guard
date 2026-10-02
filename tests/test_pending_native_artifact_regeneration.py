@@ -29,12 +29,13 @@ def detector():
 ])
 def test_source_only_native_changes_report_pending(detector, monkeypatch, capsys, changed):
     def diff(command, **kwargs):
-        assert command[-2:] == ["contributions/", "rust/"]
+        assert command[-len(detector.REGEN_INPUT_PATHSPECS):] == list(detector.REGEN_INPUT_PATHSPECS)
         return subprocess.CompletedProcess(command, 0, stdout=changed + "\n", stderr="")
 
     monkeypatch.setattr(subprocess, "run", diff)
     monkeypatch.setattr(detector, "contribution_ids", lambda: {"command.example"})
     monkeypatch.setattr(detector, "catalog_ids", lambda: {"command.example"})
+    monkeypatch.setattr(detector, "regen_artifacts_absent_from_diff", lambda: False)
     monkeypatch.setattr(sys, "argv", ["detector", "--changed-from", "a" * 40, "--flag"])
     assert detector.main() == 0
     assert capsys.readouterr().out == "true\n"
@@ -83,10 +84,19 @@ def test_preparation_retains_generated_outputs_and_checks_after_rebuild(
     import types
 
     detector = types.SimpleNamespace(
+        REGEN_INPUT_PREFIXES=("rust/",),
         ContributionDiffError=RuntimeError,
         _contributions_changed=lambda base: ["rust/Cargo.lock"] if pending else [],
         catalog_ids=lambda: {"command.example"},
         contribution_ids=lambda: {"command.example"},
+        pr_diff_paths=lambda: (
+            ["rust/Cargo.lock"]
+            if pending
+            else ["tests/fixtures/guard-command-corpus/decision-diff-report.json"]
+        ),
+        regen_artifacts_absent_from_diff=lambda diff=None: not any(
+            path.endswith("decision-diff-report.json") for path in (diff or [])
+        ),
     )
     monkeypatch.setitem(sys.modules, "detect_pending_extension_regen", detector)
     monkeypatch.setattr(sys, "argv", ["verify", "--compiler",

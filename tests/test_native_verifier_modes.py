@@ -24,6 +24,11 @@ def test_shared_verifier_compiles_pending_pr_sources_and_keeps_other_runs_strict
     detector._contributions_changed = (
         lambda _sha: ["contributions/command-sources/command.fixture.json"] if changed else []
     )
+    detector.REGEN_INPUT_PREFIXES = real_detector.REGEN_INPUT_PREFIXES
+    detector.regen_artifacts_absent_from_diff = lambda _diff=None: True
+    detector.pr_diff_paths = lambda: (
+        ["contributions/command-sources/command.fixture.json"] if (pending or changed) else ["README.md"]
+    )
     monkeypatch.setitem(sys.modules, "detect_pending_extension_regen", detector)
     monkeypatch.setattr(sys, "path", list(sys.path))
     compiler = "rust/target/release/guard-command-source"
@@ -43,6 +48,9 @@ def test_shared_verifier_compiles_pending_pr_sources_and_keeps_other_runs_strict
             verifier._rebuild_command(compiler),
             [*generate, "--check"],
         ]
+    elif base_sha:
+        # Unrelated PR diff: freshness is regen-owned, so verification defers.
+        assert calls == []
     else:
         assert calls == [[*generate, "--check"]]
 
@@ -54,6 +62,9 @@ def test_invalid_pending_source_stays_a_failure(monkeypatch: pytest.MonkeyPatch)
     detector.contribution_ids = lambda: {"command.fixture"}
     detector.catalog_ids = set
     detector._contributions_changed = lambda _sha: []
+    detector.REGEN_INPUT_PREFIXES = real_detector.REGEN_INPUT_PREFIXES
+    detector.regen_artifacts_absent_from_diff = lambda _diff=None: True
+    detector.pr_diff_paths = lambda: ["contributions/command-sources/command.fixture.json"]
     monkeypatch.setitem(sys.modules, "detect_pending_extension_regen", detector)
     monkeypatch.setattr(sys, "path", list(sys.path))
     compiler = "rust/target/release/guard-command-source"
@@ -87,6 +98,9 @@ def test_unavailable_base_stops_before_generation_or_freshness_checks(
         raise real_detector.ContributionDiffError("Cannot compare contribution sources: fetching the PR base failed")
 
     detector._contributions_changed = unavailable
+    detector.REGEN_INPUT_PREFIXES = real_detector.REGEN_INPUT_PREFIXES
+    detector.regen_artifacts_absent_from_diff = lambda _diff=None: True
+    detector.pr_diff_paths = lambda: ["contributions/command-sources/command.fixture.json"]
     monkeypatch.setitem(sys.modules, "detect_pending_extension_regen", detector)
     monkeypatch.setattr(sys, "path", list(sys.path))
     monkeypatch.setattr(sys, "argv", ["verify", "--compiler", "fixture", "--changed-from", "a" * 40])

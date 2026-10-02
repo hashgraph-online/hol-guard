@@ -183,22 +183,33 @@ def test_real_interleaving_proves_resident_and_explicit_or_terminal_native_overl
     barrier = threading.Barrier(2, timeout=1)
     native_overloads = [0]
 
-    def request(_daemon: object, *, harness: str, **_kwargs: object) -> dict[str, str]:
-        # Both observations have taken their initial snapshots. Both route
-        # records must also exist before either observation takes its final one.
-        barrier.wait()
-        if harness == "codex":
-            metrics.record_route("native_resident")
-            response = {"decision": "allow"}
-        else:
-            metrics.record_route("native_fail_safe")
-            if explicit:
-                response = {"decision": "deny", "reason_code": "daemon_capacity"}
+    from codex_plugin_scanner.guard.daemon.hook_process_worker import HookProcessReview
+    from scripts.native_slo_route_provenance import RequestRouteTracker
+
+    class Runner:
+        def _record_route_metric(self, route: str) -> None:
+            metrics.record_route(route)
+
+        def review(self, *, payload: Mapping[str, object], harness: str) -> HookProcessReview:
+            barrier.wait()
+            if harness == "codex":
+                self._record_route_metric("native_resident")
+                response = {"decision": "allow"}
             else:
-                native_overloads[0] += 1
-                response = {"decision": "deny", "reason_code": "native_hook_edge_unavailable"}
-        barrier.wait()
-        return response
+                self._record_route_metric("native_fail_safe")
+                if explicit:
+                    response = {"decision": "deny", "reason_code": "daemon_capacity"}
+                else:
+                    native_overloads[0] += 1
+                    response = {"decision": "deny", "reason_code": "native_hook_edge_unavailable"}
+            barrier.wait()
+            return HookProcessReview(response, None)
+
+    runner = Runner()
+    tracker = RequestRouteTracker(runner)
+
+    def request(_daemon: object, *, harness: str, request_payload: Mapping[str, object], **_kwargs: object) -> object:
+        return runner.review(payload=request_payload, harness=harness).payload
 
     session = cast(
         AdapterSession,
@@ -210,6 +221,7 @@ def test_real_interleaving_proves_resident_and_explicit_or_terminal_native_overl
                 workspace=tmp_path,
                 _connection=None,
                 _owner_thread_id=threading.get_ident(),
+                _route_tracker=tracker,
                 native_overload_count=lambda: native_overloads[0],
             ),
         ),
@@ -226,18 +238,24 @@ def test_real_interleaving_proves_resident_and_explicit_or_terminal_native_overl
     session.observe = observe
     monkeypatch.setattr(session_module, "_request", request)
 
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        observations, errors = capacity._measure_classified_wave(
-            session, (("codex", "PreToolUse"), ("pi", "PreToolUse")), 2, executor
-        )
+    try:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            observations, errors = capacity._measure_classified_wave(
+                session, (("codex", "PreToolUse"), ("pi", "PreToolUse")), 2, executor
+            )
+    finally:
+        tracker.close()
 
     assert errors == 0
     assert observations[0].route == "native_resident"
     assert observations[0].allowed and not observations[0].overloaded
     assert observations[1].route == "native_fail_safe"
     assert not observations[1].allowed and observations[1].overloaded
+    for observation in observations:
+        assert observation.enclosing_latency_ms is not None
+        assert observation.enclosing_latency_ms >= observation.latency_ms
     diagnostic = json.loads(capsys.readouterr().err)
-    assert diagnostic["observed_routes"] == {"native_fail_safe": 2}
+    assert diagnostic["observed_routes"] == {"native_fail_safe": 1, "native_resident": 1}
     assert diagnostic["route_counters_after"] == {"native_fail_safe": 1, "native_resident": 1}
     assert diagnostic["reconciled_routes"] == {"native_fail_safe": 1, "native_resident": 1}
     assert diagnostic["native_overloads_before"] == 0
