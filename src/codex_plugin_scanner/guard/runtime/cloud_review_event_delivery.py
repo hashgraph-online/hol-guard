@@ -101,7 +101,12 @@ def _normalize_response(
         )
     results = response.get("results")
     acknowledged_through = response.get("acknowledgedThrough")
-    if not isinstance(results, list) or len(results) != len(events) or type(acknowledged_through) is not int:
+    if (
+        not isinstance(results, list)
+        or len(results) != len(events)
+        or type(acknowledged_through) is not int
+        or not 0 <= acknowledged_through <= 2**53 - 1
+    ):
         raise CloudReviewEventProtocolError(
             "Guard Cloud Review returned an invalid protocol 2 acknowledgement. Update HOL Guard before retrying."
         )
@@ -131,6 +136,8 @@ def _normalize_response(
                 "error": None if accepted else (item.get("code") or status),
             }
         )
+        if status == "rejected" and item.get("code") == "review_event_snapshot_sequence_collision":
+            normalized[-1]["eventId"] = expected_event_id
     accepted_count = sum(bool(item["accepted"]) for item in normalized)
     if response.get("accepted") != accepted_count or response.get("rejected") != len(events) - accepted_count:
         raise CloudReviewEventProtocolError(
