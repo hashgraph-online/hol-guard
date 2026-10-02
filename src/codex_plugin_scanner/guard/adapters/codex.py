@@ -51,6 +51,7 @@ from ..codex_hook_manifest import (
 from ..codex_hook_manifest import (
     manifest_bindings as _manifest_bindings,
 )
+from ..codex_hook_owner_preflight import require_codex_inventory_owners
 from ..codex_hook_registration import (
     exact_legacy_hook_bindings,
     finalize_codex_doctor_setup_status,
@@ -72,6 +73,7 @@ from ..models import GuardArtifact, HarnessDetection
 from ..shims import install_guard_shim, remove_guard_shim
 from ..stable_guard_cli import resolve_frozen_guard_cli
 from .base import HarnessAdapter, HarnessContext, _command_available
+from .codex_lifecycle_lock import serialized_codex_lifecycle
 from .codex_remote_control import (
     codex_remote_launch_environment,
     guarded_codex_launch_command,
@@ -1148,6 +1150,7 @@ class CodexHarnessAdapter(HarnessAdapter):
             workspace_dir=context.workspace_dir,
         )
 
+    @serialized_codex_lifecycle
     def install(self, context: HarnessContext) -> dict[str, object]:
         detection = self.detect(context)
         managed_servers = managed_stdio_servers(detection)
@@ -1201,6 +1204,7 @@ class CodexHarnessAdapter(HarnessAdapter):
             )
             _require_complete_preactivation_inventory(config_inventory)
             _require_complete_preactivation_inventory(json_inventory)
+            require_codex_inventory_owners((config_inventory, json_inventory))
         _require_hook_inventory_sources_unchanged(
             config_payloads=inventory_config_payloads,
             hook_payloads=inventory_hook_payloads,
@@ -1312,6 +1316,7 @@ class CodexHarnessAdapter(HarnessAdapter):
             "source_config_paths": list(detection.config_paths),
         }
 
+    @serialized_codex_lifecycle
     def uninstall(self, context: HarnessContext) -> dict[str, object]:
         target_config_path = self._target_config_path(context)
         hook_config_path = self._hook_config_path(context)

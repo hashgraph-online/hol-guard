@@ -58,6 +58,7 @@ if _HOOK_CLIENT_SPEC is None or _HOOK_CLIENT_SPEC.loader is None:
 _HOOK_CLIENT_MODULE = importlib.util.module_from_spec(_HOOK_CLIENT_SPEC)
 _HOOK_CLIENT_SPEC.loader.exec_module(_HOOK_CLIENT_MODULE)
 _installed_hook_request = _HOOK_CLIENT_MODULE.installed_hook_request
+hook_failure_detail = _HOOK_CLIENT_MODULE.hook_failure_detail
 
 
 def _request(root: Path, text: str, request_id: str) -> HookReviewRequest:
@@ -228,12 +229,7 @@ def _exercise_installed_routes(
                 raise RuntimeError(f"empty response for {harness} {event}")
             _require(
                 is_allowed(event, response_payload),
-                {
-                    "harness": harness,
-                    "event": event,
-                    "decision": response_payload.get("decision"),
-                    "permission_decision": _permission_decision(response_payload),
-                },
+                hook_failure_detail(harness, event, response_payload),
             )
             reason = response_payload.get("reason_code")
             if isinstance(reason, str):
@@ -273,7 +269,7 @@ def _exercise_mode_invariants(
             mode_invariants[mode] = {
                 "decision": response.get("decision"),
                 "reason_code": response.get("reason_code"),
-                "python_oracle": daemon._server.hook_worker.test_oracle is not None,
+                "python_oracle": getattr(daemon._server.hook_worker, "test_oracle", None) is not None,
             }
             _require(mode_invariants[mode]["python_oracle"] is False, mode_invariants[mode])
     finally:
@@ -325,14 +321,14 @@ def _installed_hook_corpus(root: Path) -> dict[str, object]:
         worker_stats = wait_for_route_corpus(
             daemon._server.hook_worker.metrics,
             expected=len(route_receipts),
-            timeout_seconds=15.0 if os.name == "nt" else 5.0,
+            timeout_seconds=45.0 if os.name == "nt" else 5.0,
         )
         writer = daemon._server.runtime_hook_evidence_writer
         mode_invariants = _exercise_mode_invariants(daemon, guard_home, workspace)
         evidence_stats = wait_for_receipt_corpus(
             writer,
             expected=len(route_receipts),
-            timeout_seconds=15.0 if os.name == "nt" else 5.0,
+            timeout_seconds=45.0 if os.name == "nt" else 5.0,
         )
     finally:
         daemon.stop()

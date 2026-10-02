@@ -8,6 +8,8 @@ from contextlib import redirect_stdout
 from io import StringIO
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.guard.cli.commands import add_guard_root_parser, run_guard_command
 
 
@@ -59,6 +61,7 @@ def _json_line(output: str) -> dict[str, object]:
     return payload
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_gr098_hook_failures_fail_safe_in_strict_and_explain_permissive(tmp_path: Path) -> None:
     strict_exit_code, strict_output = _run_hook(
         tmp_path,
@@ -98,6 +101,7 @@ def test_gr098_hook_failures_fail_safe_in_strict_and_explain_permissive(tmp_path
     assert "No daemon copy should be hidden" not in str(permissive_payload["hookSpecificOutput"])
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_gr098_permissive_hook_failure_preserves_existing_deny_decision(tmp_path: Path) -> None:
     exit_code, output = _run_hook(
         tmp_path,
@@ -119,6 +123,7 @@ def test_gr098_permissive_hook_failure_preserves_existing_deny_decision(tmp_path
     assert "HOL Guard" in str(payload["hookSpecificOutput"]["permissionDecisionReason"])
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_gr098_codex_strict_daemon_failure_points_to_daemon_recovery(
     tmp_path: Path,
     monkeypatch,

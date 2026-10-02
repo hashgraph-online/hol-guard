@@ -9,11 +9,47 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.adapters import codex as codex_adapter
 from codex_plugin_scanner.guard.adapters import codex_daemon_hook_bridge as bridge
 from codex_plugin_scanner.guard.adapters import codex_daemon_hook_bridge_flow as flow
+from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.codex_daemon_hook_auth import _DaemonResponseError
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
+from codex_plugin_scanner.guard.codex_hook_runtime_trust import TrustedCodexHookLaunch
 from tests.codex_daemon_hook_bridge_fixtures import _bridge_config
+
+
+def test_unavailable_prompt_warns_but_all_actions_require_review() -> None:
+    assert bridge._unavailable_response("UserPromptSubmit", "review failed") == {
+        "continue": True,
+        "systemMessage": "review failed",
+    }
+    pretool = bridge._unavailable_response("PreToolUse", "review failed")
+    assert pretool == {
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "deny",
+            "permissionDecisionReason": "review failed",
+        },
+    }
+    local_read = bridge._unavailable_response(
+        "PreToolUse",
+        "review failed",
+        json.dumps({"hook_event_name": "PreToolUse", "tool_name": "Read", "tool_input": {"file_path": "src/app.ts"}}),
+    )
+    assert local_read == pretool
+    recovery = bridge._unavailable_response(
+        "PreToolUse",
+        "review failed",
+        json.dumps(
+            {
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": "hol-guard daemon status --json"},
+            }
+        ),
+    )
+    assert recovery == pretool
 
 
 @pytest.mark.parametrize("event", ["PreToolUse", "PermissionRequest"])
@@ -69,6 +105,99 @@ def test_unusable_managed_launcher_reports_both_causes_without_running_children(
     ]
     assert secret not in captured.err
     assert str(tmp_path) not in captured.err
+
+
+@pytest.mark.parametrize("event", ["PreToolUse", "PermissionRequest", "permissionRequestV2"])
+@pytest.mark.parametrize(
+    "command",
+    [
+        "printf sensitive > output.txt",
+        "hol-guard daemon status --json && printf sensitive > output.txt",
+    ],
+)
+def test_total_outage_blocks_mutating_action_without_authenticated_fallback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    event: str,
+    command: str,
+) -> None:
+    context = HarnessContext(
+        home_dir=tmp_path / "home",
+        workspace_dir=None,
+        guard_home=tmp_path / "guard-home",
+        home_override_explicit=True,
+    )
+    codex_adapter.CodexHarnessAdapter().install(context)
+    config_json = codex_adapter._hook_command_parts(context)[3]
+    managed_config = json.loads(config_json)
+    config = {
+        key: managed_config[key]
+        for key in (
+            "state_path",
+            "fallback_command",
+            "start_command",
+            "query",
+            "hook_timeouts",
+            "manifest_path",
+        )
+    }
+    config["config_json"] = config_json
+    monkeypatch.setattr(
+        "sys.stdin",
+        io.StringIO(
+            json.dumps(
+                {
+                    "hook_event_name": event,
+                    "tool_name": "Bash",
+                    "tool_input": {"command": command},
+                }
+            )
+        ),
+    )
+
+    def unavailable(**_kwargs):
+        raise ConnectionRefusedError("private-daemon-endpoint")
+
+    def unexpected_child(*_args, **_kwargs):
+        pytest.fail("A managed launch must not use the unauthenticated child path")
+
+    validation_calls: list[object] = []
+    child_attempts: list[str] = []
+    validate = flow.trusted_hook_launch
+
+    def validate_real_launcher(**kwargs):
+        launcher = validate(**kwargs)
+        validation_calls.append(launcher)
+        return launcher
+
+    def failed_start(_self, *_args, **_kwargs):
+        child_attempts.append("start")
+        return False
+
+    def failed_fallback(_self, *_args, **_kwargs):
+        child_attempts.append("fallback")
+        return None
+
+    monkeypatch.setattr(flow, "_daemon_response", unavailable)
+    monkeypatch.setattr(flow, "trusted_hook_launch", validate_real_launcher)
+    monkeypatch.setattr(flow, "_run_daemon_start", unexpected_child)
+    monkeypatch.setattr(flow, "_run_local_fallback", unexpected_child)
+    monkeypatch.setattr(TrustedCodexHookLaunch, "run_start", failed_start)
+    monkeypatch.setattr(TrustedCodexHookLaunch, "run_fallback", failed_fallback)
+
+    assert bridge.main(**config) == 0
+    assert len(validation_calls) == 1
+    assert child_attempts == ["start", "fallback"]
+    captured = capsys.readouterr()
+    decision = json.loads(captured.out)["hookSpecificOutput"]
+    if event == "PreToolUse":
+        assert decision.get("permissionDecision") == "deny"
+    else:
+        assert decision.get("decision", {}).get("behavior") == "deny"
+        assert decision["hookEventName"] == "PermissionRequest"
+    assert "private-daemon-endpoint" not in captured.out + captured.err
+    assert command not in captured.out + captured.err
 
 
 @pytest.mark.parametrize(

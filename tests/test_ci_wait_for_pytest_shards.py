@@ -67,7 +67,7 @@ def _run(
 
 
 def test_waits_through_planning_queue_and_running_then_requires_last_page() -> None:
-    other_jobs = [dict(_job(index + 1000), name=f"quality-{index}") for index in range(20)]
+    other_jobs = [dict(_job(index + 1000), name=f"quality-{index}") for index in range(212 - barrier.SHARD_COUNT)]
     queued = [_job(index, status="queued", conclusion=None) for index in range(barrier.SHARD_COUNT)]
     running = deepcopy(queued)
     running[0].update(status="in_progress")
@@ -150,7 +150,7 @@ def test_other_python_coverage_cannot_supply_missing_python312_producer() -> Non
 
 @pytest.mark.parametrize("conclusion", ["failure", "cancelled", "skipped", "timed_out", "neutral", None, {}])
 def test_rejects_non_success_on_last_page(conclusion: object) -> None:
-    jobs = [dict(_job(index + 1000), name="other") for index in range(20)] + _jobs()
+    jobs = [dict(_job(index + 1000), name="other") for index in range(212 - barrier.SHARD_COUNT)] + _jobs()
     jobs[-1]["conclusion"] = conclusion
     with pytest.raises(barrier.ShardWaitError, match=f"Python coverage shard {barrier.SHARD_COUNT - 1} completed with"):
         _run([jobs])
@@ -180,10 +180,44 @@ def test_rejects_duplicate_index_with_distinct_job_id() -> None:
 
 
 def test_rejects_duplicate_job_id_across_pages() -> None:
-    jobs = [dict(_job(index + 1000), name="other") for index in range(20)] + _jobs()
+    jobs = [dict(_job(index + 1000), name="other") for index in range(212 - barrier.SHARD_COUNT)] + _jobs()
     jobs[-1]["id"] = jobs[0]["id"]
     with pytest.raises(barrier.ShardWaitError, match="duplicate job"):
         _run([jobs])
+
+
+def test_retries_pagination_race_before_coverage_matrix_exists() -> None:
+    other_jobs = [dict(_job(index + 1000), name=f"quality-{index}") for index in range(101)]
+    other_jobs[-1]["id"] = other_jobs[0]["id"]
+    calls, logs = _run([other_jobs, _jobs()], timeout_seconds=20)
+    assert len(calls) == 2 + (barrier.SHARD_COUNT + 99) // 100
+    assert logs[-1] == f"All {barrier.SHARD_COUNT} Python coverage shards succeeded in run {_RUN_ID}, attempt 2"
+
+
+def test_retries_pagination_race_after_coverage_matrix_exists() -> None:
+    jobs = _jobs()
+    calls, logs = _run([[*jobs, dict(jobs[0])], jobs], timeout_seconds=20)
+    assert len(calls) == 4
+    assert logs[-1] == f"All {barrier.SHARD_COUNT} Python coverage shards succeeded in run {_RUN_ID}, attempt 2"
+
+
+def test_duplicate_record_cannot_replace_a_missing_shard() -> None:
+    jobs = _jobs()[:-1]
+    with pytest.raises(barrier.ShardWaitError, match="Timed out"):
+        _run([[*jobs, dict(jobs[0])]], timeout_seconds=10)
+
+
+def test_rejects_conflicting_terminal_results_for_a_repeated_job() -> None:
+    jobs = _jobs()
+    with pytest.raises(barrier.ShardWaitError, match="conflicting duplicate job results"):
+        _run([[*jobs, dict(jobs[0], conclusion="failure")]])
+
+
+def test_retries_unexpanded_matrix_name_before_planning() -> None:
+    pending = [dict(_job(1000), name="coverage (3.12, ${{ matrix.shard }})")]
+    calls, logs = _run([pending, _jobs()], timeout_seconds=20)
+    assert len(calls) == 1 + (barrier.SHARD_COUNT + 99) // 100
+    assert logs[-1] == f"All {barrier.SHARD_COUNT} Python coverage shards succeeded in run {_RUN_ID}, attempt 2"
 
 
 @pytest.mark.parametrize("field,value", [("run_id", 99), ("run_id", True), ("run_attempt", 1)])
@@ -245,7 +279,7 @@ def test_stops_immediately_when_planning_failed(conclusion: str) -> None:
         _run([[plan]])
 
 
-@pytest.mark.parametrize("completed_shards", [0, 96, barrier.SHARD_COUNT - 1])
+@pytest.mark.parametrize("completed_shards", [0, barrier.SHARD_COUNT // 2, barrier.SHARD_COUNT - 1])
 def test_missing_shard_and_partial_reruns_expire_without_accepting_old_coverage(completed_shards: int) -> None:
     with pytest.raises(barrier.ShardWaitError, match="Timed out"):
         _run([_jobs()[:completed_shards]], timeout_seconds=10)
@@ -253,8 +287,41 @@ def test_missing_shard_and_partial_reruns_expire_without_accepting_old_coverage(
 
 @pytest.mark.parametrize("payload", [None, {}, {"total_count": True, "jobs": []}, {"total_count": 101, "jobs": []}])
 def test_rejects_malformed_or_incomplete_api_pages(payload: object) -> None:
-    with pytest.raises(barrier.ShardWaitError, match=r"invalid|incomplete"):
-        barrier.wait_for_shards("owner/repo", _RUN_ID, 2, fetch_json=lambda *_args: payload)
+    now = [0.0]
+    with pytest.raises(barrier.ShardWaitError, match=r"invalid|incomplete|three bounded retries"):
+        barrier.wait_for_shards(
+            "owner/repo",
+            _RUN_ID,
+            2,
+            fetch_json=lambda *_args: payload,
+            clock=lambda: now[0],
+            sleep=lambda delay: now.__setitem__(0, now[0] + delay),
+        )
+
+
+def test_incomplete_jobs_response_retries_without_accepting_partial_coverage() -> None:
+    now = [0.0]
+    calls = []
+
+    def fetch(path: str, _timeout: float) -> dict[str, object]:
+        calls.append(path)
+        if len(calls) == 1:
+            return {"total_count": barrier.SHARD_COUNT, "jobs": _jobs()[:99]}
+        page = int(path.rsplit("=", 1)[1])
+        return {"total_count": barrier.SHARD_COUNT, "jobs": _jobs()[(page - 1) * 100 : page * 100]}
+
+    barrier.wait_for_shards(
+        "owner/repo",
+        _RUN_ID,
+        2,
+        fetch_json=fetch,
+        clock=lambda: now[0],
+        sleep=lambda delay: now.__setitem__(0, now[0] + delay),
+    )
+    assert now[0] == 5
+    assert len(calls) == 3
+    assert calls[0] == calls[1]
+    assert calls[2].endswith("page=2")
 
 
 def test_success_received_after_deadline_cannot_pass() -> None:
@@ -264,7 +331,7 @@ def test_success_received_after_deadline_cannot_pass() -> None:
     def late_response(path: str, _timeout: float) -> object:
         calls.append(path)
         page = int(path.rsplit("=", 1)[1])
-        jobs = _jobs()
+        jobs = [dict(_job(index + 1000), name="other") for index in range(100)] + _jobs()
         if page == 2:
             now[0] = barrier._DEFAULT_TIMEOUT_SECONDS + 1
         return {"total_count": len(jobs), "jobs": jobs[(page - 1) * 100 : page * 100]}
@@ -345,7 +412,7 @@ def test_sonar_accepts_only_complete_coverage_from_successful_current_attempt() 
     root = Path(__file__).resolve().parents[1]
     workflow = yaml.safe_load((root / ".github/workflows/ci.yml").read_text())
     jobs = workflow["jobs"]
-    assert barrier.SHARD_COUNT == 192
+    assert barrier.SHARD_COUNT == 128
     assert jobs["coverage"]["name"] == "coverage (3.12, ${{ matrix.shard-index }})"
     assert jobs["coverage"]["strategy"]["matrix"]["shard-index"] == list(range(barrier.SHARD_COUNT))
     producer = next(
@@ -363,7 +430,7 @@ def test_sonar_accepts_only_complete_coverage_from_successful_current_attempt() 
     assert waiter["env"] == {"GITHUB_TOKEN": "${{ github.token }}"}
     assert waiter["run"].endswith("--poll-seconds 1")
     assert jobs["sonar"]["permissions"] == {"contents": "read", "actions": "read"}
-    assert 'test "${#reports[@]}" -eq 192' in (root / "scripts/ci/prepare_sonar_analysis.sh").read_text()
+    assert 'test "${#reports[@]}" -eq 128' in (root / "scripts/ci/prepare_sonar_analysis.sh").read_text()
 
 
 def test_sonar_installs_same_pinned_scanner_before_wait_without_analysis_credentials() -> None:
@@ -376,6 +443,6 @@ def test_sonar_installs_same_pinned_scanner_before_wait_without_analysis_credent
     assert installer["uses"] == analysis["uses"]
     assert installer["with"] == {"args": "--version"}
     assert installer["env"] == {"SONAR_USER_HOME": analysis["env"]["SONAR_USER_HOME"]}
-    assert "with" not in analysis
+    assert analysis["with"] == {"args": "-Dsonar.python.analysis.threads=4"}
     assert analysis["env"]["SONAR_TOKEN"] == "${{ secrets.SONAR_TOKEN }}"
     assert steps.index(installer) < steps.index(waiter) < steps.index(analysis)

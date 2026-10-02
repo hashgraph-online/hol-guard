@@ -29,6 +29,7 @@ _EVENT_ALIASES = {
     "pretooluse": "PreToolUse",
     "pretoolcall": "PreToolUse",
     "userpromptsubmit": "UserPromptSubmit",
+    "userpromptsubmitted": "UserPromptSubmit",
     "posttooluse": "PostToolUse",
 }
 _EVENT_NAME_KEYS = ("hook_event_name", "hookEventName", "event", "eventName", "hook_name", "hookName")
@@ -64,7 +65,7 @@ _APPROVAL_KEYS = (
     "guardApprovalUrl",
     "approval_requests",
 )
-_FAILURE_REASON = "HOL Guard could not complete this review before the hook deadline. Retry the action."
+_FAILURE_REASON = "HOL Guard could not complete a trusted hook decision. Retry or repair Guard from a terminal."
 _AUTHORITY_MARKER = "native command extension policy"
 _AUTHORITY_REMEDIATION = (
     " Run `hol-guard command controls acknowledge-degraded` after reviewing the "
@@ -209,13 +210,6 @@ def _toml_scalar(raw: str, key: str) -> str:
     return ""
 
 
-def _recording_only() -> bool:
-    raw = _read_private_text(Path(GUARD_HOME) / "config.toml", max_bytes=64 * 1024)
-    if raw is None:
-        return False
-    return _toml_scalar(raw, "protection_posture") == "watch" or _toml_scalar(raw, "mode") == "observe"
-
-
 def _approval_wait_seconds() -> float:
     raw = _read_private_text(Path(GUARD_HOME) / "config.toml", max_bytes=64 * 1024)
     configured = TIMEOUT_SECONDS
@@ -299,6 +293,8 @@ def _is_permission_event(event_name: str) -> bool:
 
 def _pauses_when_unavailable(event_name: str) -> bool:
     compact = _compact(event_name)
+    if compact in {"userpromptsubmit", "userpromptsubmitted"}:
+        return HARNESS != "grok"
     if compact in _LIFECYCLE_EVENTS or compact.startswith("after"):
         return False
     return compact not in {"posttooluse", "posttool"}
@@ -396,13 +392,27 @@ def _to_native(daemon_response: dict[str, object], event_name: str) -> tuple[str
 
 
 def _failure_payload(event_name: str, reason: str) -> tuple[dict[str, object], int]:
-    if _recording_only():
+    # Local configuration cannot authenticate the mode of an unavailable evaluator.
+    prompt_event = _compact(event_name) in {"userpromptsubmit", "userpromptsubmitted"}
+    if prompt_event:
+        if HARNESS == "grok":
+            return {}, 0
+        prompt_reason = "HOL Guard could not complete native prompt review safely."
         if HARNESS == "copilot":
-            return {"permissionDecision": "allow"}, 0
-        if HARNESS in _DECISION_HARNESSES:
-            return {"decision": "allow"}, 0
-        return {"hookSpecificOutput": {"hookEventName": event_name, "permissionDecision": "allow"}}, 0
+            return {"behavior": "deny", "message": prompt_reason, "interrupt": False}, 0
+        payload = {
+            "decision": "block",
+            "reason": prompt_reason,
+            "systemMessage": prompt_reason,
+            "hookSpecificOutput": {"hookEventName": "UserPromptSubmit"},
+        }
+        if HARNESS == "codex":
+            payload["continue"] = False
+            payload["stopReason"] = prompt_reason
+            payload["hookSpecificOutput"]["additionalContext"] = prompt_reason
+        return payload, 0
     if not _pauses_when_unavailable(event_name):
+        # Observations continue processing completed activity without authorizing a tool action.
         if HARNESS == "copilot":
             return {"permissionDecision": "allow"}, 0
         if HARNESS in _DECISION_HARNESSES:

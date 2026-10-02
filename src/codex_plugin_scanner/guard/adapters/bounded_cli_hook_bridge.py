@@ -27,7 +27,7 @@ from .desktop_hook_proxy import (
 )
 
 _MAX_HOOK_INPUT_BYTES = 1_000_000
-_FAILURE_REASON = "HOL Guard could not complete this review before the hook deadline. Retry the action."
+_FAILURE_REASON = "HOL Guard could not complete a trusted hook decision. Retry or repair Guard from a terminal."
 _FROZEN_BRIDGE_COMMAND = "__guard-bounded-hook"
 _FROZEN_OPTIONAL_PATH_FLAGS = frozenset({"--home", "--workspace"})
 _BOUNDED_HOOK_SCRIPT_DIR = ("managed", "bounded-hooks")
@@ -273,32 +273,20 @@ def _cli_args_with_json(cli_args: Sequence[str]) -> list[str]:
     return [*cli_args, "--json"]
 
 
-def _guard_home_is_recording_only(guard_home: Path) -> bool:
-    try:
-        from ..config import maybe_auto_revert_watch
-        from ..protection_posture import protection_is_off
-
-        config = maybe_auto_revert_watch(guard_home)
-    except (OSError, RuntimeError, ValueError):
-        return False
-    return protection_is_off(posture=config.protection_posture, mode=config.mode)
-
-
 def _emit_failure(
     *,
     harness: str,
     input_text: str,
     reason: str = _FAILURE_REASON,
     guard_home: Path | None = None,
-    continue_session: bool = False,
 ) -> int:
+    # Retain the legacy caller argument; a state-home path supplies no mode authority.
     payload, returncode = _failure_payload(
         harness=harness,
         event_name=_event_name(input_text),
         reason=reason,
-        payload=_json_object(input_text or "{}"),
-        recording_only=guard_home is not None and _guard_home_is_recording_only(guard_home),
-        continue_session=continue_session,
+        # Failed evaluation supplies no authenticated recording-only authority.
+        recording_only=False,
     )
     _ = sys.stdout.write(json.dumps(payload, ensure_ascii=True, separators=(",", ":")) + "\n")
     return returncode
@@ -436,7 +424,6 @@ def run_bounded_cli_hook(config: Mapping[str, object], *, input_text: str) -> in
             harness=harness,
             input_text=input_text,
             guard_home=guard_home,
-            continue_session=True,
         )
     if result.output_limit_exceeded:
         return _emit_failure(
@@ -450,7 +437,6 @@ def run_bounded_cli_hook(config: Mapping[str, object], *, input_text: str) -> in
             harness=harness,
             input_text=input_text,
             guard_home=guard_home,
-            continue_session=True,
         )
     compact_payload = _json_object(result.stdout.strip())
     if compact_payload is None and not _has_json_object_line(result.stdout):
@@ -458,7 +444,6 @@ def run_bounded_cli_hook(config: Mapping[str, object], *, input_text: str) -> in
             harness=harness,
             input_text=input_text,
             guard_home=guard_home,
-            continue_session=True,
         )
     if compact_payload is not None:
         _ = sys.stdout.write(json.dumps(compact_payload, ensure_ascii=True, separators=(",", ":")) + "\n")

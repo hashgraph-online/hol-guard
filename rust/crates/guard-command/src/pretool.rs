@@ -11,6 +11,7 @@ use search::safe_search_arguments;
 pub mod generic;
 
 pub use generic::evaluate_pre_tool_envelope;
+pub use generic::evaluate_pre_tool_envelope_with_context;
 pub use generic::evaluate_pre_tool_envelope_with_extensions;
 
 fn executable_basename(executable: &str) -> &str {
@@ -71,6 +72,8 @@ pub(super) fn sensitive_command(value: &str) -> bool {
         "~/.pypirc",
         "/.netrc",
         "~/.netrc",
+        ".authrc",
+        ".envrc",
         "/.env",
         "~/.env",
         "id_rsa",
@@ -91,6 +94,14 @@ pub(super) fn sensitive_command(value: &str) -> bool {
 }
 
 fn sensitive_path_argument(value: &str) -> bool {
+    sensitive_path_argument_with_credentials(value, false)
+}
+
+fn sensitive_read_path_argument(value: &str) -> bool {
+    sensitive_path_argument_with_credentials(value, true)
+}
+
+fn sensitive_path_argument_with_credentials(value: &str, include_credential_names: bool) -> bool {
     let normalized = normalized_haystack(value);
     let candidates = [
         normalized.as_str(),
@@ -100,6 +111,9 @@ fn sensitive_path_argument(value: &str) -> bool {
     candidates.iter().any(|candidate| {
         let relative = candidate.trim_start_matches("./");
         sensitive_path_family(Path::new(relative)).is_some()
+            || (include_credential_names
+                && (guard_secure_fs::credential_named_path(Path::new(relative))
+                    || search::glob_can_select_sensitive_path(relative)))
             || relative == ".git/config"
             || relative.ends_with("/.git/config")
     })
@@ -113,6 +127,13 @@ fn has_argument(arguments: &[String], exact: &[&str], prefixes: &[&str]) -> bool
 }
 
 fn safe_git_arguments(arguments: &[String], allow_helper_context: bool) -> bool {
+    // Git magic pathspec semantics are not proven by this classifier; retain review.
+    if arguments
+        .iter()
+        .any(|value| value.starts_with(':') || sensitive_read_path_argument(value))
+    {
+        return false;
+    }
     let Some(subcommand) = arguments.first().map(String::as_str) else {
         return false;
     };
@@ -227,6 +248,23 @@ fn safe_gh_arguments(arguments: &[String]) -> bool {
     }
 }
 
+fn safe_directory_target(target: &str) -> bool {
+    let tilde_head = target
+        .strip_prefix('~')
+        .map(|rest| rest.split('/').next().unwrap_or(""));
+    let directory_history = tilde_head.is_some_and(|head| {
+        head.starts_with(['+', '-'])
+            || (!head.is_empty() && head.bytes().all(|byte| byte.is_ascii_digit()))
+    });
+    crate::is_plain_cd_target(target)
+        && !directory_history
+        && !target.contains(['*', '?', '[', ']', '\\'])
+        && !sensitive_command(target)
+        && !normalized_haystack(target)
+            .split('/')
+            .any(|component| matches!(component, ".ssh" | ".aws" | ".kube" | ".gnupg" | ".docker"))
+}
+
 fn exact_safe_command(model: &CanonicalCommandV1, allow_git_helper_context: bool) -> bool {
     if model.confidence != "exact"
         || model.path_overridden
@@ -252,11 +290,18 @@ fn exact_safe_command(model: &CanonicalCommandV1, allow_git_helper_context: bool
             return false;
         }
         match basename {
+            "cd" => {
+                model.segments.len() == 1
+                    && matches!(segment.arguments.as_slice(), [target] if safe_directory_target(target))
+            }
             "pwd" | "true" | "echo" | "printf" | "which" | "whoami" | "uname" | "stat" => true,
             "date" => safe_reads::safe_date_arguments(&segment.arguments),
             "ls" => safe_reads::safe_listing_arguments(&segment.arguments),
             "cat" => safe_reads::safe_plain_file_arguments(&segment.arguments),
-            "head" | "tail" => safe_reads::safe_head_tail_arguments(&segment.arguments),
+            // Admit stdin only when every producer in the pipeline is also proven safe.
+            "head" | "tail" => {
+                safe_reads::safe_head_tail_arguments(&segment.arguments, segment.pipeline_index > 0)
+            }
             "git" => safe_git_arguments(&segment.arguments, allow_git_helper_context),
             "gh" => safe_gh_arguments(&segment.arguments),
             "rg" | "grep" => safe_search_arguments(basename, &segment.arguments),
@@ -311,7 +356,11 @@ pub fn evaluate_pre_tool(request: &CommandModelRequestV1) -> Result<PreToolDecis
             "HOL Guard blocked a command that combines sensitive data access with network transfer.",
         ));
     }
-    if !model.wrapper_chain.is_empty() {
+    if model
+        .wrapper_chain
+        .iter()
+        .any(|wrapper| wrapper != "timeout")
+    {
         return Ok(pretool_decision(
             model,
             "require-reapproval",

@@ -69,7 +69,6 @@ def test_mutation_gate_accepts_measured_parser_baseline_and_target_contracts(tmp
     assert set(TARGETS) == {
         "command-model",
         "secret-flow",
-        "hook-output",
         "approval-reuse",
         "package-intent",
         "package-policy",
@@ -98,6 +97,7 @@ def test_mutation_gate_accepts_measured_parser_baseline_and_target_contracts(tmp
     config_path = prepare_workspace(ROOT, TARGETS["secret-flow"], workspace)
     assert (workspace / "src").is_symlink()
     assert (workspace / "tests").is_symlink()
+    assert (workspace / "docs/guard/contracts/guard-cloud-review.md").is_file()
     assert config_path.read_text(encoding="utf-8") == render_mutmut_config(TARGETS["secret-flow"])
     runner_result = subprocess.run(
         [sys.executable, "scripts/ci/run_mutation_target.py", "--target", "secret-flow", "--dry-run"],

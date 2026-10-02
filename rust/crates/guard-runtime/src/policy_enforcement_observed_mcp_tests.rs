@@ -1,6 +1,101 @@
 use super::*;
 
 #[test]
+fn inner_action_deny_overrides_outer_allow_and_benign_classification() {
+    let tool = "mcp__codex_apps__composio__composio_multi_execute_tool";
+    let mut policy = policy("allow");
+    policy
+        .mcp_tool_actions
+        .insert(format!("codex:{tool}"), "allow".into());
+    policy.mcp_provider_actions.insert(
+        "codex:mcp__codex_apps__composio__:composio:all-accounts:SLACK_SEND_MESSAGE".into(),
+        "block".into(),
+    );
+    let mut result = generic_result("allow");
+    result.action.harness = "codex".into();
+    result.action.action_type = PreToolActionTypeV1::McpTool;
+    let output = apply_pre_tool_policy(
+        &snapshot(policy),
+        &json!({
+            "tool_name":tool, "tool_input":{"tools":[
+                {"tool_slug":"SLACK_SEARCH_MESSAGES","arguments":{}},
+                {"tool_slug":"SLACK_SEND_MESSAGE","arguments":{},"account":"other"}
+            ]}
+        }),
+        result,
+    )
+    .unwrap();
+    assert_eq!(output.minimum_action, "block");
+    assert_eq!(output.reason_code, "native_composio_denied_batch_member");
+    assert_eq!(output.decision, "deny");
+}
+
+#[test]
+fn explicit_mcp_review_is_a_floor_for_benign_calls() {
+    let tool = "mcp__codex_apps__composio__composio_search_tools";
+    for initial in ["allow", "warn", "review", "require-reapproval", "block"] {
+        let mut policy = policy("allow");
+        policy
+            .mcp_tool_actions
+            .insert(format!("codex:{tool}"), "review".into());
+        let mut result = generic_result(initial);
+        result.action.harness = "codex".into();
+        result.action.action_type = PreToolActionTypeV1::McpTool;
+        let output =
+            apply_pre_tool_policy(&snapshot(policy), &json!({"tool_name": tool}), result).unwrap();
+        assert_eq!(
+            output.minimum_action,
+            if matches!(initial, "allow" | "warn" | "review") {
+                "review"
+            } else {
+                initial
+            }
+        );
+    }
+}
+
+#[test]
+fn composio_wrappers_cannot_inherit_coarse_allow() {
+    for name in [
+        "composio_multi_execute_tool",
+        "composio_remote_workbench",
+        "composio_remote_bash_tool",
+        "composio_manage_connections",
+        "composio_future_executor",
+    ] {
+        for initial in ["allow", "review", "block"] {
+            for choice in ["allow", "block"] {
+                let tool = format!("mcp__codex_apps__composio__{name}");
+                let mut policy = policy("allow");
+                policy
+                    .mcp_tool_actions
+                    .insert(format!("codex:{tool}"), choice.into());
+                let mut result = generic_result(initial);
+                result.action.harness = "codex".into();
+                result.action.action_type = PreToolActionTypeV1::McpTool;
+                result.reason_code = "native_mcp_tool_review".into();
+                let output = apply_pre_tool_policy(
+                    &snapshot(policy),
+                    &json!({"tool_name": tool, "tool_input": {"tools": [{
+                        "tool_slug": "SLACK_SEND_MESSAGE", "arguments": {"channel": "test"}
+                    }]}}),
+                    result,
+                )
+                .unwrap();
+                assert_eq!(
+                    output.minimum_action,
+                    if initial == "block" || choice == "block" {
+                        "block"
+                    } else {
+                        "review"
+                    }
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn observed_mcp_root_operation_aliases_honor_saved_choices() {
     let tool = "mcp__codex_apps__composio__search";
     for alias in ["action", "operation"] {

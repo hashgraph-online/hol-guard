@@ -218,6 +218,25 @@ class NativePolicySnapshotPublisherInputs:
                     continue
                 merged[key] = _stricter_action(merged.get(key, "allow"), action)
             policy["mcp_tool_actions"] = bound_native_mcp_tool_actions(merged, required_blocks=required_blocks)
+        from .native_policy_snapshot_policy import _provider_action_map
+
+        provider_reader = getattr(self.store, "read_mcp_provider_choices", None)
+        if callable(provider_reader):
+            try:
+                provider_choices = _provider_action_map(provider_reader())
+            except sqlite3.Error as error:
+                raise NativePolicySnapshotError("native_policy_snapshot_policy_unavailable") from error
+            if provider_choices:
+                existing_provider = cast(dict[str, str], policy.get("mcp_provider_actions", {}))
+                merged_provider = dict(existing_provider)
+                for key, action in provider_choices.items():
+                    merged_provider[key] = _stricter_action(merged_provider.get(key, "review"), action)
+                policy["mcp_provider_actions"] = _provider_action_map(merged_provider)
+        provider_authority_reader = getattr(self.store, "read_mcp_provider_authority_hash", None)
+        if callable(provider_authority_reader):
+            provider_hash = provider_authority_reader()
+            if provider_hash is not None:
+                policy["mcp_provider_catalog_hash"] = provider_hash
         return policy
 
     def _compiled_command_extensions(self) -> dict[str, object]:

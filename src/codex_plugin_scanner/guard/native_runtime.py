@@ -6,7 +6,6 @@ to ``hol-guard-runtime``; it never downloads a binary or sends hook material.
 
 from __future__ import annotations
 
-import functools
 import hashlib
 import importlib.metadata
 import json
@@ -14,11 +13,10 @@ import math
 import os
 import stat
 import sys
+import threading
 import time
 from collections.abc import Mapping
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, cast
 
 from .codex_hook_launch_runtime import run_isolated_hook_process
 from .native_resident_client import native_resident_client_request
@@ -33,9 +31,25 @@ from .native_runtime_resilience import (
     native_record_resident_success,
     native_runtime_health_snapshot,
 )
+from .native_runtime_values import (
+    _INTEGRITY_FAILURE_REASONS,
+    NativeMode,
+    NativeRuntimeCapabilities,
+    NativeRuntimeIdentity,
+    NativeRuntimeManifest,
+    NativeRuntimeStatus,
+    _decode_capabilities,
+    _identity_key,
+    _is_lower_hex,
+    _python_package_version,
+    _resolve_native_mode,
+    decode_runtime_manifest,
+    native_output_sha256,  # noqa: F401
+    parity_signature,  # noqa: F401
+)
+from .native_runtime_values import _NATIVE_RUNTIME_EXPORTS as __all__  # noqa: F401, N811
 from .runtime.hook_review_types import HookReviewRequest, HookReviewResponse
 
-NativeMode = Literal["off", "shadow", "auto", "force"]
 _NATIVE_PROTOCOL_VERSION = 1
 _NATIVE_BINARY_ENV = "HOL_GUARD_NATIVE_BINARY"
 _NATIVE_MODE_ENV = "HOL_GUARD_NATIVE"
@@ -46,77 +60,10 @@ _MAX_MANIFEST_BYTES = 16 * 1024
 _MAX_REQUEST_BYTES = 6 * 1024 * 1024
 _MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 _RESIDENT_PROTOCOL_FEATURE = "resident-protocol-v2"
-_UNAVAILABLE_IDENTITY = "0" * 64
-_INTEGRITY_FAILURE_REASONS = frozenset(
-    {
-        "native_manifest_invalid",
-        "native_manifest_missing",
-        "native_manifest_runtime_mismatch",
-        "native_manifest_version_mismatch",
-        "native_manifest_protocol_mismatch",
-        "native_manifest_rule_mismatch",
-        "native_manifest_build_mismatch",
-    }
-)
-
-
-@dataclass(frozen=True, slots=True)
-class NativeRuntimeIdentity:
-    path: Path
-    size: int
-    mtime_ns: int
-    sha256: str
-
-
-@dataclass(frozen=True, slots=True)
-class NativeRuntimeCapabilities:
-    protocol_version: int
-    runtime_version: str
-    rule_digest: str
-    build_sha: str
-    target: str
-    features: tuple[str, ...]
-
-
-@dataclass(frozen=True, slots=True)
-class NativeRuntimeManifest:
-    schema: str
-    protocol_version: int
-    package_version: str
-    target: str
-    platform_tag: str
-    source_sha: str
-    rule_digest: str
-    runtime_sha256: str
-    runtime_size: int
-
-
-@dataclass(frozen=True, slots=True)
-class NativeRuntimeStatus:
-    mode: NativeMode
-    available: bool
-    compatible: bool
-    reason: str
-    identity: NativeRuntimeIdentity | None = None
-    capabilities: NativeRuntimeCapabilities | None = None
 
 
 def native_mode() -> NativeMode:
-    """Return the configured native mode, defaulting to bundled auto selection.
-
-    Explicit ``off`` is a fail-safe disablement, not a semantic Python fallback.
-    Invalid or empty values do not silently disable the native safety path; they
-    resolve to the product default. Supported PreToolUse and PostToolUse fail
-    closed when native is unavailable.
-    """
-
-    raw_value = os.environ.get(_NATIVE_MODE_ENV)
-    if raw_value is None:
-        return _DEFAULT_NATIVE_MODE
-    value = raw_value.strip().lower()
-    if value not in {"off", "shadow", "auto", "force"}:
-        return _DEFAULT_NATIVE_MODE
-    return cast(NativeMode, value)
+    return _resolve_native_mode(os.environ.get(_NATIVE_MODE_ENV), _DEFAULT_NATIVE_MODE)
 
 
 def _bundled_runtime_candidate() -> Path:
@@ -192,52 +139,12 @@ def _validate_binary(path: Path) -> NativeRuntimeIdentity | None:
         return None
 
 
-def _is_lower_hex(value: str, length: int) -> bool:
-    return len(value) == length and all(character in "0123456789abcdef" for character in value)
-
-
 def _decode_runtime_manifest(payload: object) -> NativeRuntimeManifest | None:
-    if not isinstance(payload, dict):
-        return None
-    schema = payload.get("schema")
-    protocol_version = payload.get("protocol_version")
-    package_version = payload.get("package_version")
-    target = payload.get("target")
-    platform_tag = payload.get("platform_tag")
-    source_sha = payload.get("source_sha")
-    rule_digest = payload.get("rule_digest")
-    runtime_sha256 = payload.get("runtime_sha256")
-    runtime_size = payload.get("runtime_size")
-    if (
-        schema != _NATIVE_MANIFEST_SCHEMA
-        or protocol_version != _NATIVE_PROTOCOL_VERSION
-        or not isinstance(package_version, str)
-        or not package_version.strip()
-        or not isinstance(target, str)
-        or not target.strip()
-        or not isinstance(platform_tag, str)
-        or not platform_tag.strip()
-        or not isinstance(source_sha, str)
-        or not _is_lower_hex(source_sha, 40)
-        or not isinstance(rule_digest, str)
-        or not _is_lower_hex(rule_digest, 64)
-        or not isinstance(runtime_sha256, str)
-        or not _is_lower_hex(runtime_sha256, 64)
-        or not isinstance(runtime_size, int)
-        or isinstance(runtime_size, bool)
-        or runtime_size <= 0
-    ):
-        return None
-    return NativeRuntimeManifest(
-        schema=schema,
-        protocol_version=protocol_version,
-        package_version=package_version,
-        target=target,
-        platform_tag=platform_tag,
-        source_sha=source_sha,
-        rule_digest=rule_digest,
-        runtime_sha256=runtime_sha256,
-        runtime_size=runtime_size,
+    return decode_runtime_manifest(
+        payload,
+        schema=_NATIVE_MANIFEST_SCHEMA,
+        protocol_version=_NATIVE_PROTOCOL_VERSION,
+        hex_validator=_is_lower_hex,
     )
 
 
@@ -377,66 +284,75 @@ def _run_native_process(
     return result.stdout
 
 
-def _decode_capabilities(payload: object) -> NativeRuntimeCapabilities | None:
-    if not isinstance(payload, dict):
-        return None
-    protocol_version = payload.get("protocol_version")
-    runtime_version = payload.get("runtime_version")
-    rule_digest = payload.get("rule_digest")
-    build_sha = payload.get("build_sha")
-    target = payload.get("target")
-    features = payload.get("features")
-    if (
-        not isinstance(protocol_version, int)
-        or not isinstance(runtime_version, str)
-        or not isinstance(rule_digest, str)
-        or not isinstance(build_sha, str)
-        or not isinstance(target, str)
-        or not isinstance(features, list)
-        or not all(isinstance(feature, str) for feature in features)
-    ):
-        return None
-    return NativeRuntimeCapabilities(
-        protocol_version=protocol_version,
-        runtime_version=runtime_version,
-        rule_digest=rule_digest,
-        build_sha=build_sha,
-        target=target,
-        features=tuple(features),
-    )
+# Successful probes are cached per binary identity. Failures are not cached:
+# they carry a short retry window so a transient cold-start miss cannot poison
+# every later native check in the process, and a caller-supplied deadline caps
+# how long the probe may run so a one-shot request never overspends its budget.
+_capabilities_probe_lock = threading.Lock()
+_capabilities_cache: dict[tuple[str, int, int, str], NativeRuntimeCapabilities] = {}
+_capabilities_retry_after: dict[tuple[str, int, int, str], float] = {}
+_CAPABILITIES_PROBE_TIMEOUT_SECONDS = 5.0
+_CAPABILITIES_RETRY_BACKOFF_SECONDS = 0.25
+_CAPABILITIES_CACHE_MAX = 16
 
 
-@functools.lru_cache(maxsize=16)
+def _clear_capabilities_probe_state() -> None:
+    """Reset the probe cache and retry windows; tests call this between
+    distinct fake binaries so a prior probe cannot leak into the next case."""
+    with _capabilities_probe_lock:
+        _capabilities_cache.clear()
+        _capabilities_retry_after.clear()
+
+
 def _capabilities_for_identity(
     path: str,
     size: int,
     mtime_ns: int,
     sha256: str,
+    *,
+    deadline_monotonic: float | None = None,
 ) -> NativeRuntimeCapabilities | None:
-    del size, mtime_ns, sha256
+    key = (path, size, mtime_ns, sha256)
+    now = time.monotonic()
+    with _capabilities_probe_lock:
+        cached = _capabilities_cache.get(key)
+        retry_after = _capabilities_retry_after.get(key)
+    if cached is not None:
+        return cached
+    if retry_after is not None and now < retry_after:
+        return None
+    timeout_seconds = _CAPABILITIES_PROBE_TIMEOUT_SECONDS
+    if deadline_monotonic is not None:
+        remaining = deadline_monotonic - now
+        if remaining <= 0:
+            # The caller's budget is already spent; starting a fresh probe
+            # would overshoot the request deadline.
+            return None
+        timeout_seconds = min(timeout_seconds, remaining)
     output = _run_native_process(
         Path(path),
         ("capabilities", "--json"),
         input_text="",
-        timeout_seconds=1.0,
+        timeout_seconds=timeout_seconds,
     )
-    if output is None:
-        return None
-    try:
-        payload = json.loads(output)
-    except json.JSONDecodeError:
-        return None
-    return _decode_capabilities(payload)
+    capabilities = None
+    if output is not None:
+        try:
+            capabilities = _decode_capabilities(json.loads(output))
+        except json.JSONDecodeError:
+            capabilities = None
+    with _capabilities_probe_lock:
+        if capabilities is not None:
+            if len(_capabilities_cache) >= _CAPABILITIES_CACHE_MAX:
+                _capabilities_cache.pop(next(iter(_capabilities_cache)))
+            _capabilities_cache[key] = capabilities
+            _capabilities_retry_after.pop(key, None)
+        else:
+            _capabilities_retry_after[key] = time.monotonic() + _CAPABILITIES_RETRY_BACKOFF_SECONDS
+    return capabilities
 
 
-def _python_package_version() -> str | None:
-    try:
-        return importlib.metadata.version("hol-guard")
-    except importlib.metadata.PackageNotFoundError:
-        return None
-
-
-def native_runtime_status() -> NativeRuntimeStatus:
+def native_runtime_status(*, deadline_monotonic: float | None = None) -> NativeRuntimeStatus:
     mode = native_mode()
     if mode == "off":
         return NativeRuntimeStatus(
@@ -446,6 +362,8 @@ def native_runtime_status() -> NativeRuntimeStatus:
             reason="native_disabled",
         )
     for candidate in _runtime_candidates():
+        if deadline_monotonic is not None and time.monotonic() >= deadline_monotonic:
+            break
         _restore_bundled_runtime_execute_bit(candidate)
         identity = _validate_binary(candidate)
         if identity is None:
@@ -466,6 +384,7 @@ def native_runtime_status() -> NativeRuntimeStatus:
             identity.size,
             identity.mtime_ns,
             identity.sha256,
+            deadline_monotonic=deadline_monotonic,
         )
         if capabilities is None:
             continue
@@ -477,6 +396,7 @@ def native_runtime_status() -> NativeRuntimeStatus:
                 reason="native_protocol_mismatch",
                 identity=identity,
                 capabilities=capabilities,
+                manifest=manifest,
             )
         if manifest is not None:
             if capabilities.protocol_version != manifest.protocol_version:
@@ -497,6 +417,7 @@ def native_runtime_status() -> NativeRuntimeStatus:
                     reason=reason,
                     identity=identity,
                     capabilities=capabilities,
+                    manifest=manifest,
                 )
         expected_version = _python_package_version()
         version_compatible = expected_version is None or capabilities.runtime_version == expected_version
@@ -508,6 +429,7 @@ def native_runtime_status() -> NativeRuntimeStatus:
             reason="native_ready" if compatible else "native_version_mismatch",
             identity=identity,
             capabilities=capabilities,
+            manifest=manifest,
         )
     return NativeRuntimeStatus(
         mode=mode,
@@ -529,10 +451,6 @@ def _capture_native_deadline(request: HookReviewRequest) -> tuple[float, int]:
 def _deadline_budget_ms(request: HookReviewRequest) -> int:
     """Return a bounded budget for compatibility with existing callers."""
     return _capture_native_deadline(request)[1]
-
-
-def _identity_key(status: NativeRuntimeStatus) -> str:
-    return status.identity.sha256 if status.identity is not None else _UNAVAILABLE_IDENTITY
 
 
 def native_runtime_health(guard_home: Path) -> NativeRuntimeHealthSnapshot:
@@ -631,38 +549,3 @@ def review_post_tool_native(
         reason=failure_reason,
     )
     return record_native_hook_result("native_fail_safe", None)
-
-
-def parity_signature(response: HookReviewResponse) -> tuple[object, ...]:
-    excerpt_hash = native_output_sha256(response.reviewed_excerpt) if response.reviewed_excerpt is not None else None
-    return (
-        response.decision,
-        response.model_output_action,
-        response.reason_code,
-        response.notice,
-        response.policy_action,
-        response.observed_policy_action,
-        response.reviewed_output_sha256,
-        excerpt_hash,
-    )
-
-
-def native_output_sha256(text: str) -> str:
-    """Hash bounded native-hook output for recording and parity evidence."""
-
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
-
-
-__all__ = [
-    "NativeRuntimeCapabilities",
-    "NativeRuntimeHealthSnapshot",
-    "NativeRuntimeIdentity",
-    "NativeRuntimeManifest",
-    "NativeRuntimeStatus",
-    "native_mode",
-    "native_output_sha256",
-    "native_runtime_health",
-    "native_runtime_status",
-    "parity_signature",
-    "review_post_tool_native",
-]

@@ -467,11 +467,25 @@ def _main() -> None:
     started = time.perf_counter()
     report, rss_mib = _generate_decision_diff_report()
     payload = canonical_json_bytes(report)
+    digest_path = REPORT_PATH.with_name("decision-diff-report.framed-sha256")
+    digest_payload = framed_sha256(payload) + "\n"
     if arguments == ("--write",):
         _ = REPORT_PATH.write_bytes(payload)
+        _ = digest_path.write_text(digest_payload, encoding="ascii")
     elif arguments == ("--check",):
+        try:
+            from tests.support.extension_freshness import pending_decision_diff_regen
+
+            pending = pending_decision_diff_regen()
+        except ImportError:
+            pending = False
+        if pending:
+            print("decision-diff report is regen-owned; branch defers to post-merge regen")
+            return
         if REPORT_PATH.read_bytes() != payload:
             raise SystemExit("decision-diff report fixture is stale")
+        if digest_path.read_text(encoding="ascii") != digest_payload:
+            raise SystemExit("decision-diff report framed digest is stale")
     elif arguments == ("--metrics",):
         print(
             json.dumps(

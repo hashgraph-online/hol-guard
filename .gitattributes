@@ -20,3 +20,23 @@
 /contracts/extensions/*.json text eol=lf
 /src/codex_plugin_scanner/guard/contracts/data/extensions/*.json text eol=lf
 /src/codex_plugin_scanner/guard/extension_builder/*.json text eol=lf
+
+/contracts/extensions/trust-class-map.v1.json text eol=lf
+
+
+# Regen-owned generated artifacts (extension-artifact-regen.yml); collapsed in
+# diffs and blocked from PRs by generated-artifacts-guard.
+/contracts/extensions/native-command-program.v1.json linguist-generated
+/contracts/extensions/command-catalog.v1.json linguist-generated
+/contracts/managed-controls/v1/extension-projection-digest-vector.json linguist-generated
+/contracts/managed-controls/v1/policy-bundle-v2-extension-signature-vector.json linguist-generated
+/docs/guard/extensions/README.md linguist-generated
+/docs/guard/extensions/catalog.v1.json linguist-generated
+/docs/guard/extensions/catalog.v2.json linguist-generated
+/src/codex_plugin_scanner/guard/contracts/data/extensions/** linguist-generated
+/src/codex_plugin_scanner/guard/contracts/data/mcp_servers/** linguist-generated
+/tests/fixtures/extension-controls/catalog-baseline.v1.json linguist-generated
+/tests/fixtures/guard-command-corpus/decision-diff-report.json linguist-generated
+/tests/fixtures/guard-command-corpus/decision-diff-report.framed-sha256 linguist-generated
+/tests/test_guard_extension_trust.py linguist-generated
+/tests/test_policy_bundle_delivery_runtime.py linguist-generated

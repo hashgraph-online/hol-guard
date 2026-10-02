@@ -45,8 +45,10 @@ not copy their registration pattern to add an extension.
    which enables automatic repair for mechanical schema, binding, and generated-projection issues.
 
 The canonical source, portable fixture, and external trust entry are the contributor-owned inputs.
-Generated projections are mechanical closure work: Gitar or maintainers may regenerate them after
-the capability boundary is accepted, so projection drift alone should not bounce a contributor.
+Generated projections (command catalog, native program, baselines, digest vectors, directory
+render) are maintainer-owned: keep them out of the contribution diff. CI validates sources
+additively while they are pending, and `extension-artifact-regen` regenerates the projections
+on `main` after merge, so projection drift alone never bounces a contribution.
 
 Gitar does not choose command semantics, trust, claim authority, or safe variants. Contributors
 can request analysis without changes at any time with `gitar auto-apply:off`.
@@ -57,6 +59,13 @@ if you want Gitar to commit a mechanical repair. GitHub requires the fork owner 
 permission; this repository cannot enable it for the contributor. If GitHub instead offers
 **Allow edits and access to secrets by maintainers**, leave it disabled and apply Gitar's
 suggestion yourself.
+
+PRs from organization-owned forks — or with maintainer edits disabled — cannot
+receive maintainer pushes at all. Maintainers land those through an upstream
+`intake/pr-NNNN` branch prepared by `scripts/intake_contribution_pr.py`, which
+keeps the contributor commits as ancestors so attribution and the original PR
+stay intact. Several contributions can also be batched onto one
+`intake/batch-...` branch so artifact regeneration runs once.
 
 ## Development setup
 
@@ -155,8 +164,26 @@ checks authoring outside the checkout. Include the relevant CI results in the PR
 2. For a new extension or material authority change, describe the capability boundary and stable
    IDs in a draft pull request using the **Command extension** template. Keep the PR draft until the
    scope is reviewable; maintainers can redirect overlapping IDs there before implementation is complete.
-3. Make one coherent change, with native behavior fixtures and generated outputs when applicable.
-4. Run the relevant validation and inspect the complete diff, including generated files.
+3. Make one coherent change, with native behavior fixtures when applicable. Never commit
+   regen-owned generated artifacts (catalogs, the native command program, packaged contract
+   copies, digest vectors, the decision-diff report, generated test snapshots): the
+   `generated-artifacts-guard` check rejects them, and `extension-artifact-regen` reproduces them
+   on `main` after merge. (`trust-class-map.v1.json` stays authored — contributions add their
+   `external` entry there; regen only appends unmapped ids.)
+
+   **Freshness semantics — what to do when a check says "artifacts are stale":** every
+   generated-artifact freshness gate follows the same rule, evaluated against the PR's diff:
+
+   | PR diff contains | Gate behavior |
+   |---|---|
+   | regen-owned artifact paths | strict verification — carried artifacts must be exactly right |
+   | artifact inputs only (`contributions/`, `rust/`, generator/builder sources, bound tests, fixtures — the canonical list is `REGEN_INPUT_PREFIXES` in `scripts/ci/detect_pending_extension_regen.py`) | additive validation — sources must compile; artifacts regenerate on `main` |
+   | neither | deferred — any checked-in drift is inherited and regen-owned |
+
+   The only legitimate responses to a freshness failure are: (a) your diff is wrong — remove the
+   generated paths or fix the source, or (b) your branch predates the deferral — merge `main` and
+   push. Never regenerate artifacts into an ordinary PR to chase a freshness gate.
+4. Run the relevant validation and inspect the complete diff.
 5. For a command extension, run `hol-guard extensions handoff` and use the **Command extension**
    PR template. Describe the problem, resulting behavior, exact validation commands, and any
    remaining limitations. Wait for the applicable CI checks and maintainer review.

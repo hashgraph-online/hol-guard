@@ -333,6 +333,36 @@ def _safe_json_output_text(command: str, payload: PayloadDict) -> str:
     return _render_redacted_json_payload(sanitized_payload)
 
 
+def _protect_guidance_lines(payload: PayloadDict) -> list[str]:
+    supply_chain_evaluation = payload.get("supply_chain_evaluation")
+    user_copy = supply_chain_evaluation.get("user_copy") if isinstance(supply_chain_evaluation, dict) else None
+    user_copy_map = _coerce_object_dict(user_copy)
+    lines: list[str] = []
+    harness_message = str(user_copy_map.get("harness_message") or "").strip()
+    if harness_message:
+        lines.append(harness_message)
+
+    next_step = str(user_copy_map.get("next_step") or "").strip()
+    if next_step and next_step not in harness_message:
+        lines.append(f"Next step: {next_step}")
+
+    signed_url = payload.get("_ephemeral_signed_approval_url")
+    if isinstance(signed_url, str) and signed_url.strip():
+        dashboard_url = signed_url.strip()
+    elif (
+        "dashboard_url" in user_copy_map
+        and user_copy_map.get("dashboard_url") is None
+        and not payload.get("primary_approval_url")
+    ):
+        dashboard_url = ""
+    else:
+        dashboard_url = str(payload.get("primary_approval_url") or user_copy_map.get("dashboard_url") or "").strip()
+    if dashboard_url and not any(dashboard_url in line for line in lines):
+        lines.append(f"Review: {dashboard_url}")
+
+    return lines
+
+
 def _plain_text_protect(payload: PayloadDict) -> str:
     if str(payload.get("mode") or "") == "status":
         lines = ["HOL Guard install protection is active."]
@@ -368,21 +398,7 @@ def _plain_text_protect(payload: PayloadDict) -> str:
     if reason:
         lines.append(f"Reason: {reason}")
 
-    supply_chain_evaluation = payload.get("supply_chain_evaluation")
-    user_copy = supply_chain_evaluation.get("user_copy") if isinstance(supply_chain_evaluation, dict) else None
-    user_copy_map = _coerce_object_dict(user_copy)
-    harness_message = str(user_copy_map.get("harness_message") or "").strip()
-    if harness_message:
-        lines.append(harness_message)
-
-    next_step = str(user_copy_map.get("next_step") or "").strip()
-    if next_step and next_step not in harness_message:
-        lines.append(f"Next step: {next_step}")
-
-    dashboard_url = str(user_copy_map.get("dashboard_url") or "").strip()
-    if dashboard_url and dashboard_url not in harness_message:
-        lines.append(f"Review: {dashboard_url}")
-
+    lines.extend(_protect_guidance_lines(payload))
     return "\n".join(lines)
 
 
@@ -834,9 +850,7 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
     elif "adapters" in payload:
         tables = _coerce_string_list(payload.get("tables"))
         name, protection_off = _protection_status_copy(payload, "protected")
-        protection_line = (
-            f"[bold red]protection mode: {name} (off)[/bold red]" if protection_off else f"protection mode: {name}"
-        )
+        protection_line = f"[bold red]protection: {name} (off)[/bold red]" if protection_off else f"protection: {name}"
         console.print(
             Panel.fit(
                 f"[bold]HOL Guard doctor[/bold]\n{protection_line}\n{len(tables)} local tables checked",
@@ -899,7 +913,7 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
         name, protection_off = _protection_status_copy(payload, "")
         if name:
             value = f"[bold red]{name} (off)[/bold red]" if protection_off else name
-            summary.add_row("Protection mode", value)
+            summary.add_row("Protection", value)
         console.print(Panel(summary, title="Guard doctor", border_style="cyan"))
         if warnings:
             warning_text = "\n".join(
@@ -2197,22 +2211,18 @@ def _render_protect(console: Console, payload: dict[str, object]) -> None:
         body.add_row("Executed", _bool_label(bool(payload.get("executed"))))
         body.add_row("Reason", str(verdict.get("reason") or "unknown"))
     console.print(Panel(body, title="Install protection", border_style="cyan"))
-    supply_chain_evaluation = payload.get("supply_chain_evaluation")
-    if isinstance(supply_chain_evaluation, dict):
-        user_copy = supply_chain_evaluation.get("user_copy")
-        if isinstance(user_copy, dict):
-            harness_message = str(user_copy.get("harness_message") or "").strip()
-            if harness_message:
-                harness_message, signed_approval_url = _protect_harness_message_for_render(payload, harness_message)
-                console.print(
-                    Panel(
-                        Text(harness_message, no_wrap=False, overflow="fold"),
-                        title="Guard guidance",
-                        border_style="magenta",
-                    )
-                )
-                if isinstance(signed_approval_url, str) and signed_approval_url:
-                    console.print(Text(signed_approval_url), soft_wrap=True)
+    guidance = _protect_guidance_lines(payload)
+    if guidance:
+        guidance_text, signed_approval_url = _protect_harness_message_for_render(payload, "\n".join(guidance))
+        console.print(
+            Panel(
+                Text(guidance_text, no_wrap=False, overflow="fold"),
+                title="Guard guidance",
+                border_style="magenta",
+            )
+        )
+        if isinstance(signed_approval_url, str) and signed_approval_url:
+            console.print(Text(signed_approval_url), soft_wrap=True)
     supply_chain = payload.get("supply_chain")
     if isinstance(supply_chain, dict):
         console.print(_build_supply_chain_posture_panel(supply_chain))
@@ -2761,8 +2771,7 @@ def _build_approval_table(items: list[dict[str, object]], *, title: str | None) 
 def _build_runtime_probe_panel(runtime_probe: dict[str, object]) -> Panel:
     body = Table.grid(padding=(0, 1))
     body.add_row("Command", _command_text(runtime_probe.get("command")))
-    body.add_row("Check succeeded", _bool_label(bool(runtime_probe.get("ok"))))
-    body.add_row("Scope", "Passive check; no Guard evaluation verified")
+    body.add_row("Succeeded", _bool_label(bool(runtime_probe.get("ok"))))
     if runtime_probe.get("return_code") is not None:
         body.add_row("Return code", str(runtime_probe.get("return_code")))
     if runtime_probe.get("reported_artifacts") is not None:
@@ -2773,7 +2782,7 @@ def _build_runtime_probe_panel(runtime_probe: dict[str, object]) -> Panel:
         stdout = _clean_terminal_output(str(runtime_probe.get("stdout")))
         preview = "\n".join(stdout.splitlines()[:6])
         body.add_row("stdout", preview)
-    return Panel(body, title="Passive probe", border_style="magenta")
+    return Panel(body, title="Runtime probe", border_style="magenta")
 
 
 def _build_cloud_summary_panel(payload: dict[str, object]) -> Panel:

@@ -159,7 +159,7 @@ def test_locked_storage_hook_burst_fails_safe_without_stranding_daemon(
         assert health["ok"] is True
         assert health_elapsed < 0.5
         assert max(elapsed for _payload, elapsed in results) < hook_timeout_seconds
-        assert all(payload.get("decision") == "allow" for payload, _elapsed in results)
+        assert all(payload.get("decision") == "deny" for payload, _elapsed in results)
         assert daemon._server.active_hook_requests == 0  # pyright: ignore[reportPrivateUsage]
     finally:
         blocker.rollback()
@@ -174,7 +174,9 @@ def test_locked_storage_hook_burst_fails_safe_without_stranding_daemon(
         resumed_payload, resumed_elapsed = review(100)
         assert worker_stats["timeouts"] == 0
         assert worker_stats["ready"] >= 1
-        assert resumed_payload.get("policy_action") in {"allow", "warn"}
+        # Storage recovery does not enable the explicitly disabled native authority.
+        assert resumed_payload.get("policy_action") == "block"
+        assert resumed_payload.get("reason_code") == "native_hook_disabled"
         assert resumed_elapsed < 1.0
     finally:
         daemon.stop()
@@ -193,6 +195,7 @@ def test_runtime_heartbeat_writer_coalesces_pending_updates() -> None:
             session_id: str,
             last_heartbeat_at: str,
             timeout_seconds: float,
+            registration: object = None,
         ) -> bool:
             assert session_id == "session"
             assert timeout_seconds == 0.01

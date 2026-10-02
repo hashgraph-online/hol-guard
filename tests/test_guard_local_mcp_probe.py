@@ -1,11 +1,20 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.guard.runtime import local_mcp_stdio as stdio_module
-from codex_plugin_scanner.guard.runtime.local_cli_commands import OTHER_COMMAND_ID, slug_local_cli_command_id
+from codex_plugin_scanner.guard.runtime.local_cli_commands import (
+    MAX_LOCAL_CLI_COMMANDS,
+    OTHER_COMMAND_ID,
+    slug_local_cli_command_id,
+)
 from codex_plugin_scanner.guard.runtime.local_mcp_probe import (
+    McpProbeError,
+    _tools_from_payload,
     is_package_mcp_launcher,
     is_strict_package_mcp_launcher,
     looks_like_mcp_launch,
@@ -13,11 +22,54 @@ from codex_plugin_scanner.guard.runtime.local_mcp_probe import (
     probe_stdio_mcp_server,
 )
 from codex_plugin_scanner.guard.runtime.local_mcp_stdio import (
+    MAX_MCP_PROBE_TOOLS,
     MCP_PACKAGE_PROBE_TIMEOUT_SECONDS,
     MCP_PROBE_OUTPUT_LIMIT,
+    McpCatalogResult,
     probe_env,
 )
 from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
+
+
+@pytest.mark.parametrize(
+    ("reason", "code"),
+    [
+        ("invalid_launch", "mcp_launch_failed"),
+        ("transport_failed", "mcp_transport_failed"),
+        ("initialize_failed", "mcp_initialize_failed"),
+        ("invalid_initialize", "mcp_initialize_failed"),
+        ("invalid_discovery", "mcp_initialize_failed"),
+        ("unsupported_protocol", "mcp_protocol_unsupported"),
+        ("discovery_rejected", "mcp_capability_rejected"),
+        ("PRIVATE_PROVIDER_OUTPUT", "discovery_failed"),
+        (None, "discovery_failed"),
+        ("", "discovery_failed"),
+    ],
+)
+def test_bound_probe_failure_is_finite_and_unbound_detection_stays_compatible(tmp_path, monkeypatch, reason, code):
+    from codex_plugin_scanner.guard.runtime import local_mcp_probe as probe_module
+
+    monkeypatch.setattr(probe_module, "run_mcp_catalog", lambda *_args, **_kwargs: McpCatalogResult(reason=reason))
+    command = f'{sys.executable} -c "pass"'
+    assert probe_stdio_mcp_server(command, cwd=tmp_path, home_dir=tmp_path) is None
+    with pytest.raises(McpProbeError) as caught:
+        probe_stdio_mcp_server(command, cwd=tmp_path, home_dir=tmp_path, report_failure=True)
+    assert caught.value.code == code
+    assert str(caught.value) == code
+
+
+def test_bound_probe_reports_missing_executable(tmp_path):
+    executable = tmp_path / "missing-mcp-server"
+    with pytest.raises(McpProbeError, match="mcp_launch_failed"):
+        probe_stdio_mcp_server(str(executable), cwd=tmp_path, home_dir=tmp_path, report_failure=True)
+
+
+def test_full_hundred_tool_catalog_keeps_every_tool_and_other_boundary() -> None:
+    raw = tuple({"name": f"tool_{index:03}"} for index in range(MAX_MCP_PROBE_TOOLS))
+    commands = _tools_from_payload(raw, server_name="fixture")
+    assert len(commands) == MAX_LOCAL_CLI_COMMANDS == MAX_MCP_PROBE_TOOLS + 1
+    assert [command.name for command in commands[:-1]] == [tool["name"] for tool in raw]
+    assert commands[-1].command_id == OTHER_COMMAND_ID
 
 
 def test_package_launcher_detection() -> None:
@@ -247,12 +299,18 @@ def test_live_stdio_probe_lists_tools_from_large_payload(tmp_path: Path) -> None
     assert "Other tools" in names
 
 
-def test_legacy_output_limit_drops_large_tools_list(tmp_path: Path, monkeypatch) -> None:
+def test_legacy_output_limit_reports_failed_inventory(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(stdio_module, "MCP_PROBE_OUTPUT_LIMIT", 64_000)
     server = tmp_path / "fat-mcp.py"
     _write_framed_server(server, tools=_large_tools())
     probed = probe_stdio_mcp_server(f"python3 {server}", cwd=tmp_path, home_dir=tmp_path, timeout=2.0)
-    assert probed is None
+    assert probed is not None
+    assert probed.status == "failed"
+    assert probed.catalog is not None
+    assert not probed.catalog.complete
+    assert probed.catalog.reason == "list_failed"
+    assert probed.catalog.tools == ()
+    assert [tool.command_id for tool in probed.tools] == [OTHER_COMMAND_ID]
 
 
 def test_live_stdio_probe_answers_roots_list(tmp_path: Path) -> None:
@@ -336,12 +394,16 @@ def test_probe_timeout_returns_none(tmp_path: Path) -> None:
 def test_package_launcher_uses_longer_probe_timeout(tmp_path: Path, monkeypatch) -> None:
     captured: dict[str, float] = {}
 
-    def fake_run(_argv: list[str], *, timeout: float, **_kwargs: object) -> list[dict[str, object]]:
+    def fake_run(_argv: list[str], *, timeout: float, **_kwargs: object) -> McpCatalogResult:
         captured["timeout"] = timeout
-        return [{"name": "list_pages", "description": "List pages"}]
+        return McpCatalogResult(
+            ({"name": "list_pages", "description": "List pages"},),
+            complete=True,
+            protocol_version="2024-11-05",
+        )
 
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.runtime.local_mcp_probe.run_mcp_tools_list",
+        "codex_plugin_scanner.guard.runtime.local_mcp_probe.run_mcp_catalog",
         fake_run,
     )
     probed = probe_stdio_mcp_server(
@@ -383,7 +445,7 @@ def test_probe_env_resolves_relative_npm_cache(tmp_path: Path, monkeypatch) -> N
     assert Path(env["npm_config_cache"]).is_absolute()
 
 
-def test_incomplete_pagination_does_not_persist_partial_tools(tmp_path: Path) -> None:
+def test_incomplete_pagination_retains_explicit_partial_inventory(tmp_path: Path) -> None:
     server = tmp_path / "paged-mcp.py"
     server.write_text(
         """
@@ -417,7 +479,14 @@ for line in sys.stdin:
         encoding="utf-8",
     )
     probed = probe_stdio_mcp_server(f"python3 {server}", cwd=tmp_path, home_dir=tmp_path, timeout=0.4)
-    assert probed is None
+    assert probed is not None
+    assert probed.status == "ok"
+    assert probed.catalog is not None
+    assert not probed.catalog.complete
+    assert probed.catalog.reason == "list_failed"
+    assert probed.catalog.pages == 1
+    assert [tool["name"] for tool in probed.catalog.tools] == ["tool_1"]
+    assert [tool.name for tool in probed.tools] == ["tool_1", "Other tools"]
 
 
 def test_live_stdio_probe_reads_utf8_tool_names(tmp_path: Path) -> None:

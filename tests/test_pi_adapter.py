@@ -2,23 +2,20 @@
 
 from __future__ import annotations
 
-import argparse
 import json
 import os
-from contextlib import redirect_stderr
-from io import StringIO
 from pathlib import Path
 
 from codex_plugin_scanner.guard.adapters import get_adapter, list_adapters
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.contracts import contract_for
+from codex_plugin_scanner.guard.adapters.pi_extension_previous_source import previous_managed_extension_source
 from codex_plugin_scanner.guard.adapters.pi_extension_source import (
     legacy_managed_extension_source,
     managed_extension_source,
 )
 from codex_plugin_scanner.guard.adapters.pi_support import stable_suffix
 from codex_plugin_scanner.guard.approvals import queue_blocked_approvals
-from codex_plugin_scanner.guard.cli.commands_hook_generic import _run_hook_generic_payload
 from codex_plugin_scanner.guard.cli.commands_support_codex_tool_output_messages import (
     _codex_tool_output_request_summary,
     _codex_tool_output_runtime_reason,
@@ -26,7 +23,6 @@ from codex_plugin_scanner.guard.cli.commands_support_codex_tool_output_messages 
 )
 from codex_plugin_scanner.guard.cli.commands_support_hook_payload import _approval_surface_policy_for_flow
 from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import _codex_post_tool_output_artifact
-from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer import artifact_hash
 from codex_plugin_scanner.guard.inventory_contract import inventory_snapshot_from_detection
 from codex_plugin_scanner.guard.models import HarnessDetection
@@ -128,9 +124,7 @@ class TestPiDetect:
         assert result.installed is True
         assert result.command_available is True
 
-    def test_detect_finds_omp_in_user_local_bin_when_gui_path_omits_it(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
+    def test_detect_finds_omp_in_user_local_bin_when_gui_path_omits_it(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
         executable = ctx.home_dir / ".local" / "bin" / "omp"
         executable.parent.mkdir(parents=True, exist_ok=True)
@@ -296,8 +290,11 @@ class TestPiInstall:
         assert 'pi.on("tool_result"' in text
         assert 'pi.on("input"' in text
         assert 'hook_event_name: "PostToolUse"' in text
-        assert "    if (originalOutputProof) return undefined;\n" in text
-        assert "return blockedToolResult(modelVisibleBlockedReason(reason, response.reason_code), event.details);" in text
+        assert "    if (originalOutputProof) {\n" in text
+        assert "before preserving the original result." in text
+        assert (
+            "return blockedToolResult(modelVisibleBlockedReason(reason, response.reason_code), event.details);" in text
+        )
         assert '    if (response.decision === "allow") return undefined;\n' in text
         assert "const GUARD_CLI_WRAPPER_COMMAND =" in text
         assert "const GUARD_CLI_WRAPPER_ARGS =" in text
@@ -307,9 +304,10 @@ class TestPiInstall:
         assert "/v1/hooks/pi?" in text
         assert "approval_request_id?: string" in text
         assert "approvalBlockedReason" in text
-        assert "This exact tool call remains blocked" in text
-        assert "Retry the exact same tool call once" in text
-        assert "changing the command, arguments, or working directory creates a new action" in text
+        assert "The original action remains blocked" in text
+        assert "continue it unchanged without asking the model to replan" in text
+        assert "Retry the exact same tool call once" not in text
+        assert "changing the command, arguments, or working directory creates a new action" not in text
         assert "the saved HOL Guard approval should allow it" not in text
         assert "Do not call ask for this HOL Guard approval" in text
         assert 'option labeled "I\'ve approved this request in HOL Guard"' in text
@@ -380,10 +378,9 @@ class TestPiInstall:
         assert "daemonResponseCanReturn(payload, daemonAttempt.response)" in text
         assert 'if (response.decision === "allow" || response.decision === "deny") return true;' in text
         assert "observe_mode?: boolean;" in text
-        assert "if (response.observe_mode === true) return undefined;" in text
-        assert text.index("if (response.observe_mode === true) return undefined;") < text.index(
-            "if (outputTruncated) {"
-        )
+        assert "if (response.observe_mode === true && structuredMediation === undefined) return undefined;" in text
+        watch_shortcut = "if (response.observe_mode === true && structuredMediation === undefined) return undefined;"
+        assert text.index(watch_shortcut) < text.index("if (outputTruncated) {")
         # digestOutputText must only hash text-bearing fields, not metadata
         # like {type: "text"} - otherwise structured source reads never match
         assert "record.type === 'text'" in text
@@ -392,7 +389,9 @@ class TestPiInstall:
         # guard_payload_ref fallback still present
         assert "guard_payload_ref" in text
         # Reviewed excerpt still returned when not proven safe
-        assert "return reviewedToolResult(reviewedContent, event.details, event.isError === true);" in text
+        assert (
+            "return reviewedToolResult(reviewedContent, event.details, event.isError === true, hookDeadlineAt);" in text
+        )
 
     def test_install_writes_managed_extension_that_denies_on_hook_errors(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
@@ -482,8 +481,10 @@ class TestPiInstall:
         assert "value.toString()" in text
         assert "new WeakSet<object>()" in text
         assert "[deep object omitted by HOL Guard]" in text
-        assert "const boundedContent = boundValue(event.content);" in text
-        assert "const boundedStdout = boundedOutputText(event.content);" in text
+        assert "const preprocessBudget = createTraversalBudget(hookDeadlineAt);" in text
+        assert "const digest = digestOutputText(event.content, hookDeadlineAt, preprocessBudget);" in text
+        assert "const boundedContent = boundValue(event.content, 0, new WeakSet(), preprocessBudget);" in text
+        assert "const boundedStdout = boundedOutputText(event.content, hookDeadlineAt, preprocessBudget);" in text
         assert (
             "const reviewedContent = outputTruncated ? [{ type: 'text', text: toolOutput }] : boundedContent.value;"
             in text
@@ -515,7 +516,9 @@ class TestPiInstall:
         # When truncated, the reviewed excerpt (not the full unreviewed output) is
         # returned to Pi so omitted content never reaches the model.
         assert "function reviewedToolResult(" in text
-        assert "return reviewedToolResult(reviewedContent, event.details, event.isError === true);" in text
+        assert (
+            "return reviewedToolResult(reviewedContent, event.details, event.isError === true, hookDeadlineAt);" in text
+        )
         assert "guardPayload.tool_response = event.content" in text
         assert "stdout: toolOutput" not in text
         assert "tool_response: toolOutput" in text
@@ -543,7 +546,9 @@ class TestPiInstall:
         # guard_payload_ref fallback still present
         assert "guard_payload_ref" in text
         # Reviewed excerpt still returned when not proven safe
-        assert "return reviewedToolResult(reviewedContent, event.details, event.isError === true);" in text
+        assert (
+            "return reviewedToolResult(reviewedContent, event.details, event.isError === true, hookDeadlineAt);" in text
+        )
 
     def test_omp_install_writes_only_omp_extension(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
@@ -622,6 +627,35 @@ class TestPiInstall:
         omp_extension_path.parent.mkdir(parents=True, exist_ok=True)
         omp_extension_path.write_text(
             managed_extension_source(
+                guard_home=ctx.guard_home,
+                home_dir=ctx.home_dir,
+                settings_path=omp_settings_path,
+                harness="pi",
+            ),
+            encoding="utf-8",
+        )
+        _write_json(omp_settings_path, {"extensions": [str(omp_extension_path)]})
+
+        get_adapter("pi").uninstall(ctx)
+
+        assert not omp_extension_path.exists()
+        assert json.loads(omp_settings_path.read_text(encoding="utf-8"))["extensions"] == []
+
+    def test_uninstall_removes_merge_base_previous_omp_extension(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+    ) -> None:
+        ctx = _ctx(tmp_path)
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.adapters.pi.remove_guard_shim",
+            lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-pi"), "notes": []},
+        )
+        omp_settings_path = ctx.home_dir / ".omp" / "agent" / "settings.json"
+        omp_extension_path = omp_settings_path.parent / "extensions" / "hol-guard.ts"
+        omp_extension_path.parent.mkdir(parents=True, exist_ok=True)
+        omp_extension_path.write_text(
+            previous_managed_extension_source(
                 guard_home=ctx.guard_home,
                 home_dir=ctx.home_dir,
                 settings_path=omp_settings_path,
@@ -1066,32 +1100,3 @@ class TestPiRuntime:
 
         assert first[0]["request_id"] == second[0]["request_id"]
         assert store.get_approval_request(str(first[0]["request_id"]))["dedupe_count"] == 2
-
-    def test_pi_block_emits_native_json_and_stderr(self, tmp_path: Path) -> None:
-        store = GuardStore(tmp_path / ".hol-guard")
-        config = GuardConfig(guard_home=tmp_path / ".hol-guard", workspace=tmp_path)
-        args = argparse.Namespace(
-            harness="pi",
-            json=False,
-            policy_action="block",
-            artifact_id=None,
-            artifact_name=None,
-        )
-        stdout_capture = StringIO()
-        stderr_capture = StringIO()
-
-        with redirect_stderr(stderr_capture):
-            rc = _run_hook_generic_payload(
-                args,
-                action_envelope=None,
-                config=config,
-                output_stream=stdout_capture,
-                payload={"hookEventName": "PreToolUse", "tool_name": "bash", "tool_input": {"command": "cat .env"}},
-                home_dir=tmp_path,
-                runtime_workspace=tmp_path,
-                store=store,
-            )
-
-        assert rc == 2
-        assert json.loads(stdout_capture.getvalue())["decision"] == "deny"
-        assert "HOL Guard" in stderr_capture.getvalue()

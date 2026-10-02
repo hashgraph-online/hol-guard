@@ -111,18 +111,19 @@ def test_cleanup_contract_covers_every_scoped_hook_capability() -> None:
 
     assert payload["schema"] == "hol-guard.python-capability-cleanup.v1"
     assert payload["status"] == "passed"
-    # hook_launcher_recovery.py matches the existing hook control-plane scope glob.
-    assert payload["scope_files"] == 100
+    # The combined hook and native modules remain covered by the existing scope globs.
+    assert payload["scope_files"] == 96
     assert "legacy_python_resident_transport" not in payload["capabilities"]
     assert payload["candidate_evidence"] == []
+    contract = GATE._read_json(ROOT / GATE.CONTRACT)
     assert payload["retired_evidence"] == [
         {
-            "path": f"src/codex_plugin_scanner/guard/{name}.py",
-            "module": f"codex_plugin_scanner.guard.{name}",
+            "path": record["path"],
+            "module": record["module"],
             "source_present": False,
             "source_importers": [],
         }
-        for name in ("native_runtime_resident", "native_runtime_resident_transport")
+        for record in contract["retired_modules"]
     ]
     assert payload["dynamic_import_destinations_checked"] is True
     assert payload["dynamic_import_unbounded"] == []
@@ -335,17 +336,76 @@ def test_cleanup_contract_requires_exclusion_or_physical_retirement_record() -> 
         GATE._run_inputs(ROOT, contract)
 
 
-def test_retained_python_oracle_is_loaded_only_by_explicit_test_surface(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("HOL_GUARD_NATIVE", "off")
-    monkeypatch.setenv("HOL_GUARD_TEST_MODE", "1")
-    monkeypatch.setenv("HOL_GUARD_PYTHON_ORACLE", "1")
+def test_retired_python_oracle_compat_loader_is_absent() -> None:
+    retired = (
+        ROOT
+        / "src"
+        / "codex_plugin_scanner"
+        / "guard"
+        / "cli"
+        / "commands_hook_compat_loader.py"
+    )
+    assert not retired.exists()
 
-    from codex_plugin_scanner.guard.cli.commands_hook_compat_loader import load_hook_compatibility_surface
 
-    surface = load_hook_compatibility_surface()
-    assert surface is not None
-    assert callable(surface["_run_hook_generic_payload"])
-    assert callable(surface["hydrate_hook_payload_reference"])
+def _retired_oracle_repository(tmp_path: Path) -> tuple[Path, dict[str, object]]:
+    """A minimal repository with the retired hook oracle contract entries."""
+
+    (tmp_path / "src").mkdir()
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "rust/crates/guard-hook-core/src").mkdir(parents=True)
+    (tmp_path / "rust/crates/guard-hook-core/src/lib.rs").write_text("", encoding="utf-8")
+    contract: dict[str, object] = {
+        "retired_modules": [
+            {
+                "path": "src/codex_plugin_scanner/guard/runtime/hook_review_engine.py",
+                "module": "codex_plugin_scanner.guard.runtime.hook_review_engine",
+                "source_sha256": "0" * 64,
+                "forbidden_symbols": ["HookReviewEngine"],
+                "native_replacements": ["rust/crates/guard-hook-core/src/lib.rs"],
+            }
+        ],
+        "dependency_delta": {"removed_runtime_flags": ["HOL_GUARD_PYTHON_ORACLE"]},
+    }
+    return tmp_path, contract
+
+
+def test_retired_module_rejects_renamed_test_copy(tmp_path: Path) -> None:
+    root, contract = _retired_oracle_repository(tmp_path)
+    (root / "tests/oracle_copy.py").write_text("class HookReviewEngine:\n    pass\n", encoding="utf-8")
+    analysis = GATE._analyze_import_graph(root)
+
+    with pytest.raises(RuntimeError, match="retired implementation symbol HookReviewEngine"):
+        GATE.validate_retired_modules(root, contract, analysis=analysis)
+
+    (root / "tests/oracle_copy.py").write_text("value = 1\n", encoding="utf-8")
+    (root / "tests/hook_review_engine.py").write_text("value = 1\n", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="retired module name reappeared"):
+        GATE.validate_retired_modules(root, contract, analysis=analysis)
+
+
+def test_retired_module_rejects_dynamic_import_destination(tmp_path: Path) -> None:
+    root, contract = _retired_oracle_repository(tmp_path)
+    (root / "tests/loader.py").write_text(
+        "import importlib\nimportlib.import_module('codex_plugin_scanner.guard.runtime.hook_review_engine')\n",
+        encoding="utf-8",
+    )
+    analysis = GATE._analyze_import_graph(root)
+
+    with pytest.raises(RuntimeError, match="dynamically imports retired module"):
+        GATE.validate_retired_modules(root, contract, analysis=analysis)
+
+
+def test_retired_module_rejects_reintroduced_oracle_flag_read(tmp_path: Path) -> None:
+    root, contract = _retired_oracle_repository(tmp_path)
+    (root / "tests/reader.py").write_text(
+        "import os\nvalue = os.environ.get('HOL_GUARD_PYTHON_ORACLE')\n",
+        encoding="utf-8",
+    )
+    analysis = GATE._analyze_import_graph(root)
+
+    with pytest.raises(RuntimeError, match="reads retired runtime flag HOL_GUARD_PYTHON_ORACLE"):
+        GATE.validate_retired_modules(root, contract, analysis=analysis)
 
 
 def test_retired_module_cannot_enter_a_package_artifact(tmp_path: Path) -> None:
