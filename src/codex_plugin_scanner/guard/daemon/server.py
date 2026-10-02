@@ -119,6 +119,7 @@ from ..directory_path_authority import (
     validate_guard_directory_path,
     validated_owned_temporary_workspace,
 )
+from ..fork_safety import forget_in_child
 from ..harness_disconnect_gate import require_harness_disconnect_gate
 from ..insights_share import publish_insights_share
 from ..json_transport import escape_json_for_html
@@ -9324,3 +9325,6 @@ def _int_query_value(query: str, key: str) -> int:
         return int(str(raw_value))
     except ValueError:
         return 0
+
+
+forget_in_child(GuardDaemonServer._quarantined_services)

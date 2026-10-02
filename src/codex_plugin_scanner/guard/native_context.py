@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import threading
 import time
 import uuid
@@ -23,6 +22,7 @@ from pathlib import Path
 from typing import Any
 
 from .directory_path_authority import canonical_guard_home_path
+from .fork_safety import forget_in_child
 from .native_resident_client import native_resident_client_request
 from .native_response_decoder import native_error as _native_error
 from .native_runtime import _isolated_environment, native_runtime_status
@@ -71,20 +71,7 @@ _RESULT_CACHE: OrderedDict[tuple[str, str], dict[str, Any]] = OrderedDict()
 _RESULT_CACHE_MAX = 256
 
 
-def _reset_context_state_after_fork() -> None:
-    # A forked child inherits these locks in whatever state the parent's
-    # threads left them; a lock held by a thread that does not exist in the
-    # child can never be released, so digest calls would deadlock.  Rebuild
-    # the locks and drop parent-owned cache entries (their payloads are pure
-    # functions of request content, so correctness only needs the locks).
-    global _LAST_BOUND_LOCK, _RESULT_CACHE_LOCK
-    _LAST_BOUND_LOCK = threading.Lock()  # pyright: ignore[reportConstantRedefinition]
-    _RESULT_CACHE_LOCK = threading.Lock()  # pyright: ignore[reportConstantRedefinition]
-    _RESULT_CACHE.clear()
-
-
-if hasattr(os, "register_at_fork"):
-    os.register_at_fork(after_in_child=_reset_context_state_after_fork)
+forget_in_child(_RESULT_CACHE)
 
 
 def bind_context_digest_home(guard_home: Path | None, *, remember: bool = True) -> Any:
