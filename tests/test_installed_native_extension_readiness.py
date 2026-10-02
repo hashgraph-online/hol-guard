@@ -138,3 +138,26 @@ def test_readiness_diagnostic_rejects_arbitrary_error_text_and_lifecycle_values(
     }
     assert "private" not in json.dumps(diagnostic)
     assert "secret" not in json.dumps(diagnostic)
+
+
+def test_request_phase_diagnostic_does_not_serialize_the_policy_binding() -> None:
+    private = "private-policy-path-or-secret"
+    publisher = SimpleNamespace(
+        last_error=private,
+        closed=False,
+        current_snapshot_binding=lambda: {"policy_digest": private, "runtime_identity": private},
+    )
+    diagnostic = probe.policy_request_phase_diagnostic(publisher, private)
+    assert diagnostic["binding_available"] is True
+    assert diagnostic["phase"] == "unknown"
+    assert private not in json.dumps(diagnostic)
+
+
+@pytest.mark.parametrize("reason", ["native_policy_not_ready", "daemon_hook_deadline_exhausted"])
+def test_late_receipt_cannot_accept_failed_production_http_admission(reason: str) -> None:
+    with pytest.raises(RuntimeError, match="http_native_admission_failed"):
+        probe.require_native_http_admission({"decision": "deny", "reason_code": reason})
+
+
+def test_native_policy_denial_remains_a_valid_production_response() -> None:
+    probe.require_native_http_admission({"decision": "deny", "reason_code": "native_policy_deny"})
