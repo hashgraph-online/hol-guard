@@ -391,7 +391,7 @@ pub(crate) fn supervise_managed_for_owner(
     {
         let executable = std::env::current_exe()
             .map_err(|_| "native_resident_runtime_path_failed".to_owned())?;
-        let mut child = Command::new(executable);
+        let mut child = Command::new(&executable);
         child
             .arg("serve-managed")
             .arg("--state-dir")
@@ -429,6 +429,9 @@ pub(crate) fn supervise_managed_for_owner(
             let mut no_lease_since = None;
             loop {
                 if watcher_done.load(Ordering::Acquire) {
+                    break;
+                }
+                if crate::resident_process_identity::executable_missing(&executable) {
                     break;
                 }
                 let owner_alive = owner_start_marker.as_deref().is_some_and(|expected| {

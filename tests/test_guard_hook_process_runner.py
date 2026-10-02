@@ -39,6 +39,7 @@ from codex_plugin_scanner.guard.daemon import hook_process_worker as hook_worker
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
 from codex_plugin_scanner.guard.daemon.hook_process_protocol import capture_hook_command
 from codex_plugin_scanner.guard.daemon.hook_process_runner import HookProcessRunner
+from codex_plugin_scanner.guard.daemon.hook_process_runner_lifecycle import hook_worker_ready_timeout
 from codex_plugin_scanner.guard.daemon.hook_process_worker import HookProcessReview, HookWorkerSlot
 from codex_plugin_scanner.guard.daemon.runtime_hook_scheduler import RuntimeHookScheduler
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
@@ -94,6 +95,78 @@ def test_daemon_start_budget_contains_initial_worker_readiness() -> None:
         hook_runner_module._HOOK_PROCESS_READY_TIMEOUT_SECONDS  # pyright: ignore[reportPrivateUsage]
         > hook_entrypoint_module._HOOK_EVALUATOR_READY_TIMEOUT_SECONDS  # pyright: ignore[reportPrivateUsage]
     )
+
+
+def test_daemon_start_timeout_scales_with_worker_ready_floor(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("HOL_GUARD_HOOK_WORKER_READY_TIMEOUT_SECONDS", raising=False)
+    monkeypatch.delenv("HOL_GUARD_DESKTOP", raising=False)
+    margin = daemon_manager_module.GUARD_DAEMON_START_TIMEOUT_MARGIN_SECONDS
+    # The client deadline always carries a margin over the worker floor so the
+    # daemon can finish binding and writing state before the poll gives up.
+    assert daemon_manager_module._default_guard_daemon_start_timeout() == max(  # pyright: ignore[reportPrivateUsage]
+        daemon_manager_module.GUARD_DAEMON_START_TIMEOUT_SECONDS,
+        14.0 + margin,
+    )
+
+    # Raised worker floor (QEMU / cold host): the client poll must outlast it
+    # or the nested budget just fails one level higher.
+    monkeypatch.setenv("HOL_GUARD_HOOK_WORKER_READY_TIMEOUT_SECONDS", "45")
+    scaled = daemon_manager_module._default_guard_daemon_start_timeout()  # pyright: ignore[reportPrivateUsage]
+    assert scaled > 45.0
+    assert scaled == 45.0 + margin
+
+
+def test_hook_worker_ready_timeout_honors_environment_floor(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("HOL_GUARD_HOOK_WORKER_READY_TIMEOUT_SECONDS", raising=False)
+    assert hook_worker_ready_timeout(14.0) == 14.0
+
+    monkeypatch.setenv("HOL_GUARD_HOOK_WORKER_READY_TIMEOUT_SECONDS", "45")
+    assert hook_worker_ready_timeout(14.0) == 45.0
+    # An operator override larger than the start ceiling raises the ceiling with it.
+    assert hook_worker_ready_timeout(200.0) == 45.0
+
+    monkeypatch.setenv("HOL_GUARD_HOOK_WORKER_READY_TIMEOUT_SECONDS", "2")
+    assert hook_worker_ready_timeout(14.0) == 14.0
+
+    monkeypatch.setenv("HOL_GUARD_HOOK_WORKER_READY_TIMEOUT_SECONDS", "not-a-number")
+    assert hook_worker_ready_timeout(14.0) == 14.0
+
+
+def test_hook_evaluator_ready_timeout_honors_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("HOL_GUARD_HOOK_EVALUATOR_READY_TIMEOUT_SECONDS", raising=False)
+    monkeypatch.delenv("HOL_GUARD_HOOK_WORKER_READY_TIMEOUT_SECONDS", raising=False)
+    assert hook_entrypoint_module._hook_evaluator_ready_timeout_seconds() == 12.0  # pyright: ignore[reportPrivateUsage]
+
+    monkeypatch.setenv("HOL_GUARD_HOOK_EVALUATOR_READY_TIMEOUT_SECONDS", "60")
+    assert hook_entrypoint_module._hook_evaluator_ready_timeout_seconds() == 60.0  # pyright: ignore[reportPrivateUsage]
+
+    # A sub-floor value cannot deadlock the nested handshake budget.
+    monkeypatch.setenv("HOL_GUARD_HOOK_EVALUATOR_READY_TIMEOUT_SECONDS", "3")
+    assert hook_entrypoint_module._hook_evaluator_ready_timeout_seconds() == 12.0  # pyright: ignore[reportPrivateUsage]
+
+
+def test_hook_evaluator_ready_timeout_derives_from_outer_worker_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+    # One operator knob raises the whole nested chain: the worker inherits the
+    # daemon's env via "spawn", so the inner evaluator poll stays below the
+    # outer daemon->worker deadline with enough slack for the "ready" reply.
+    monkeypatch.delenv("HOL_GUARD_HOOK_EVALUATOR_READY_TIMEOUT_SECONDS", raising=False)
+    monkeypatch.setenv("HOL_GUARD_HOOK_WORKER_READY_TIMEOUT_SECONDS", "45")
+    derived = hook_entrypoint_module._hook_evaluator_ready_timeout_seconds()  # pyright: ignore[reportPrivateUsage]
+    assert derived == 45.0 - hook_entrypoint_module._EVALUATOR_TO_WORKER_READY_MARGIN_SECONDS  # pyright: ignore[reportPrivateUsage]
+    assert derived < 45.0
+
+    # An explicit inner override still wins over the derived floor.
+    monkeypatch.setenv("HOL_GUARD_HOOK_EVALUATOR_READY_TIMEOUT_SECONDS", "30")
+    assert hook_entrypoint_module._hook_evaluator_ready_timeout_seconds() == 30.0  # pyright: ignore[reportPrivateUsage]
+
+
+def test_timeout_env_keys_reach_detached_daemon() -> None:
+    # The detached daemon is launched with a minimal allowlisted environment.
+    # If the readiness knobs are not in that allowlist the operator override is
+    # silently dropped before the daemon spawns and the fix is inert.
+    allowlist = daemon_manager_module._GUARD_DAEMON_ENV_KEYS  # pyright: ignore[reportPrivateUsage]
+    assert "HOL_GUARD_HOOK_WORKER_READY_TIMEOUT_SECONDS" in allowlist
+    assert "HOL_GUARD_HOOK_EVALUATOR_READY_TIMEOUT_SECONDS" in allowlist
 
 
 def test_evaluator_becomes_ready_when_store_prewarm_fails(

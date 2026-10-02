@@ -42,6 +42,7 @@ from ..local_supply_chain import (
     compose_current_package_policy_action,
     package_request_policy_hash,
 )
+from ..mcp_fresh_approval import fresh_claim_allows_reapproval
 from ..mcp_tool_calls import (
     ApprovalReuseClaimDisposition,
     ToolCallDecision,
@@ -573,6 +574,9 @@ class RuntimeMcpGuardProxy:
         self.command = command
         self.context = context
         self.store = store
+        from ..native_context import bind_context_digest_home
+
+        bind_context_digest_home(context.guard_home)
         self.config = config
         self.source_scope = source_scope
         self.config_path = config_path
@@ -787,34 +791,37 @@ class RuntimeMcpGuardProxy:
         child_env = dict(launch_env)
         child_env.update(origin_harness_env(self.harness))
         configured_env = _configured_server_environment(launch_env, self.server_env_keys)
-        self._active_runtime_launch_identity = build_runtime_launch_identity(
-            self.command[0] if self.command else "",
-            args=self.command[1:],
-            structured_command=True,
-            search_path=launch_env.get("PATH"),
-            cwd=self.context.workspace_dir or Path.cwd(),
-            launch_env=launch_env,
-        )
-        self._active_executable_identity = _resolved_executable_identity(
-            self.command[0] if self.command else "",
-            launch_cwd=self.context.workspace_dir,
-            launch_env=launch_env,
-            launch_args=self.command[1:],
-        )
-        self._active_server_env_values_hash = build_configured_environment_hash(
-            launch_env,
-            configured_keys=self.server_env_keys,
-        )
-        self._active_server_identity = build_mcp_server_identity(
-            config_path=self.config_path,
-            command=self.command[0] if self.command else "",
-            args=tuple(self.command[1:]),
-            transport=self.transport,
-            env=configured_env,
-            env_keys=self.server_env_keys,
-        )
         process: subprocess.Popen[str] | None = None
         try:
+            # Identity and digest calls raise when the native resident is
+            # unreachable; keep them inside the failure boundary so partial
+            # state is unwound.
+            self._active_runtime_launch_identity = build_runtime_launch_identity(
+                self.command[0] if self.command else "",
+                args=self.command[1:],
+                structured_command=True,
+                search_path=launch_env.get("PATH"),
+                cwd=self.context.workspace_dir or Path.cwd(),
+                launch_env=launch_env,
+            )
+            self._active_executable_identity = _resolved_executable_identity(
+                self.command[0] if self.command else "",
+                launch_cwd=self.context.workspace_dir,
+                launch_env=launch_env,
+                launch_args=self.command[1:],
+            )
+            self._active_server_env_values_hash = build_configured_environment_hash(
+                launch_env,
+                configured_keys=self.server_env_keys,
+            )
+            self._active_server_identity = build_mcp_server_identity(
+                config_path=self.config_path,
+                command=self.command[0] if self.command else "",
+                args=tuple(self.command[1:]),
+                transport=self.transport,
+                env=configured_env,
+                env_keys=self.server_env_keys,
+            )
             process = subprocess.Popen(
                 self.command,
                 stdin=subprocess.PIPE,
@@ -2889,7 +2896,16 @@ class RuntimeMcpGuardProxy:
                 )
             if (
                 not context_matches
-                or fresh_action == "require-reapproval"
+                or (
+                    fresh_action == "require-reapproval"
+                    and not fresh_claim_allows_reapproval(
+                        claim_disposition=claim_disposition,
+                        reason_code=fresh_decision.approval_reuse_reason_code,
+                        decision=pending,
+                        artifact=fresh_authority.artifact,
+                        artifact_hash=fresh_authority.artifact_hash,
+                    )
+                )
                 or (fresh_action == "review" and not claim_authorizes_review)
             ):
                 return self._queue_approval_center_response(

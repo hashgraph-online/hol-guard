@@ -25,7 +25,7 @@ def _run_generated_callback_payload(
     guard_timeout_ms: int = 4250,
     use_generated_blocked_reason: bool = False,
 ) -> dict[str, object]:
-    handler_start = source.index('  pi.on("tool_result"')
+    handler_start = source.index('  pi.on("tool_result", async (event, ctx) => {')
     handler_end = source.index("\n  });\n}", handler_start) + len("\n  });")
     handler = source[handler_start:handler_end]
     for old, new in {
@@ -85,6 +85,8 @@ Date.now = () => forceExpiredDeadline ? realDateNow() + 60_000 : realDateNow();
 {_generated_structured_helper(source)}
 
 function sourceFileRefForPostToolUse() {{ return null; }}
+// This fixture executes output mediation only, without a session request map.
+function cleanupContainedTestRequest() {{}}
 function toolCallIdKey(value) {{ return typeof value === "string" && value.trim() ? value.trim() : null; }}
 {blocked_reason}
 function blockedToolResult(reason, details) {{

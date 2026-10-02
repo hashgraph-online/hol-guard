@@ -178,8 +178,17 @@ class HookWorker(HookWorkerNativeMixin):
     def close(self) -> None:
         """Stop the publisher only when this worker started publication."""
 
+        _ = self.close_contained()
+
+    def close_contained(self) -> bool:
+        """Confirm this worker's publisher has stopped before releasing ownership."""
+
         if self._owns_policy_snapshot_publisher:
+            close_contained = getattr(self.policy_snapshot_publisher, "close_contained", None)
+            if callable(close_contained):
+                return close_contained() is not False
             self.policy_snapshot_publisher.close()
+        return True
 
     def prepare_workspace_policy(
         self,

@@ -308,19 +308,23 @@ class TestDevinWindowsPaths:
 
         ctx = _ctx(tmp_path)
         appdata = tmp_path / "AppData" / "Roaming"
-        monkeypatch.setattr(os, "name", "nt")
-        monkeypatch.setenv("APPDATA", str(appdata))
-        monkeypatch.setattr("codex_plugin_scanner.guard.adapters.devin.Path", PureWindowsPath)
-        adapter = DevinHarnessAdapter()
+        with monkeypatch.context() as platform_patch:
+            platform_patch.setattr(os, "name", "nt")
+            platform_patch.setenv("APPDATA", str(appdata))
+            platform_patch.setattr("codex_plugin_scanner.guard.adapters.devin.Path", PureWindowsPath)
+            adapter = DevinHarnessAdapter()
+            actual = adapter._user_config_path(ctx)
         expected = PureWindowsPath(str(appdata)) / "devin" / "config.json"
-        assert adapter._user_config_path(ctx) == expected
+        assert actual == expected
 
     def test_unix_config_dir_ignores_appdata(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
-        monkeypatch.setattr(os, "name", "posix")
-        monkeypatch.setenv("APPDATA", str(tmp_path / "unused"))
-        adapter = DevinHarnessAdapter()
-        assert adapter._user_config_path(ctx) == ctx.home_dir / ".config" / "devin" / "config.json"
+        with monkeypatch.context() as platform_patch:
+            platform_patch.setattr(os, "name", "posix")
+            platform_patch.setenv("APPDATA", str(tmp_path / "unused"))
+            adapter = DevinHarnessAdapter()
+            actual = adapter._user_config_path(ctx)
+        assert actual == ctx.home_dir / ".config" / "devin" / "config.json"
 
     def test_utf16_config_warns_and_install_refuses(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)

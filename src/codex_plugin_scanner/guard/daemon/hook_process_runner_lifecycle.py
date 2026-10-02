@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import math
 import os
 import queue
 import threading
@@ -12,14 +13,51 @@ from contextlib import suppress
 
 from .hook_process_capacity import AdaptiveHookProcessCapacity, process_tree_rss_bytes
 from .hook_process_metrics import increment_bounded_metric
-from .hook_process_worker import HookProcessReview, HookWorkerSlot, retire_worker_slot, worker_retirement_thread
+from .hook_process_worker import (
+    HookProcessReview,
+    HookWorkerSlot,
+    allowlisted_startup_failure_code,
+    retire_worker_slot,
+    worker_retirement_thread,
+)
 
+_HOOK_WORKER_READY_TIMEOUT_ENV = "HOL_GUARD_HOOK_WORKER_READY_TIMEOUT_SECONDS"
 _HOOK_PROCESS_READY_TIMEOUT_SECONDS = 14.0
 _HOOK_PROCESS_START_TIMEOUT_SECONDS = 30.0
+# Hard cap for an operator-raised readiness budget.  Bounded so a stray
+# environment value cannot make the daemon wait indefinitely on a dead worker.
+_HOOK_PROCESS_READY_TIMEOUT_MAX_SECONDS = 120.0
+
+
+def _hook_process_ready_timeout_seconds() -> float:
+    """Return the daemon-side worker-ready budget.
+
+    The worker's own handshake (spawn -> ``isolated`` -> its isolated evaluator
+    reporting ``ready``) must complete inside this window before the daemon
+    declares the worker dead.  The isolated evaluator alone can take ~11 s to
+    import its module graph on a slow host (QEMU guests, cold CI), so a nested
+    budget smaller than the worker's internal evaluator poll deadlocks startup:
+    the daemon kills a healthy worker while it is still waiting on its
+    evaluator.  Operators on slow hosts can raise this via
+    ``HOL_GUARD_HOOK_WORKER_READY_TIMEOUT_SECONDS``; it is clamped to a sane
+    range so it cannot be driven to zero or to an unbounded wait.
+    """
+    raw = os.environ.get(_HOOK_WORKER_READY_TIMEOUT_ENV)
+    if raw is None:
+        return _HOOK_PROCESS_READY_TIMEOUT_SECONDS
+    try:
+        parsed = float(raw.strip())
+    except ValueError:
+        return _HOOK_PROCESS_READY_TIMEOUT_SECONDS
+    if not math.isfinite(parsed) or parsed <= 0:
+        return _HOOK_PROCESS_READY_TIMEOUT_SECONDS
+    return min(_HOOK_PROCESS_READY_TIMEOUT_MAX_SECONDS, max(_HOOK_PROCESS_READY_TIMEOUT_SECONDS, parsed))
 
 
 def hook_worker_ready_timeout(configured_timeout: float) -> float:
-    return min(_HOOK_PROCESS_START_TIMEOUT_SECONDS, max(_HOOK_PROCESS_READY_TIMEOUT_SECONDS, configured_timeout))
+    floor = _hook_process_ready_timeout_seconds()
+    ceiling = max(_HOOK_PROCESS_START_TIMEOUT_SECONDS, floor)
+    return min(ceiling, max(floor, configured_timeout))
 
 
 class HookProcessRunnerLifecycleMixin:
@@ -49,13 +87,26 @@ class HookProcessRunnerLifecycleMixin:
     _decisions: dict[str, int]
     _reason_codes: dict[str, int]
     _routes: dict[str, int]
+    _last_startup_failure_code: str | None
     wait_for_capacity: Callable[..., bool]
 
     def require_initial_capacity(self) -> None:
         """Refuse readiness until one isolated worker completes its handshake."""
 
-        if not self.wait_for_capacity(minimum_workers=1, timeout_seconds=_HOOK_PROCESS_READY_TIMEOUT_SECONDS):
-            raise RuntimeError("initial isolated hook worker did not become ready")
+        if self.wait_for_capacity(minimum_workers=1, timeout_seconds=_hook_process_ready_timeout_seconds()):
+            return
+        with self._metrics_lock:
+            failure_code = allowlisted_startup_failure_code(self._last_startup_failure_code)
+        detail = f": {failure_code}" if failure_code is not None else ""
+        raise RuntimeError(f"initial isolated hook worker did not become ready{detail}")
+
+    def _remember_startup_failure(self, slot: HookWorkerSlot) -> None:
+        with slot.startup_failure_lock:
+            failure_code = allowlisted_startup_failure_code(slot.startup_failure_code)
+        if failure_code is None:
+            return
+        with self._metrics_lock:
+            self._last_startup_failure_code = failure_code
 
     def _withdraw_slot_capacity(self, slot: HookWorkerSlot) -> None:
         with self._state_lock:

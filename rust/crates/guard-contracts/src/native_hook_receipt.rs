@@ -23,6 +23,10 @@ pub struct NativeHookDecisionReceiptV1 {
     pub decision_id: String,
     pub request_id: String,
     pub request_digest: String,
+    /// Policy-independent native evidence for the exact action/source input.
+    /// This is integrity evidence only, never an approval or execution grant.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution_intent_digest: Option<String>,
     pub harness: String,
     pub event_name: String,
     pub payload_kind: GuardHookPayloadKindV2,
@@ -42,6 +46,10 @@ pub struct NativeHookDecisionReceiptV1 {
     pub deadline_budget_ms: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub command_extensions: Option<super::NativeCommandReceiptBindingV1>,
+    /// Resident-authenticated origin evidence, not an approval or execution grant.
+    /// Omitted by legacy and isolated evaluation paths that have no trusted store.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin_authentication: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub prompt_risk_classes: Vec<super::NativePromptRiskClassV1>,
 }

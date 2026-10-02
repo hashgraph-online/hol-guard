@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
+from .native_context import context_opaque_digest
 from .runtime.approval_context import build_runtime_launch_identity, runtime_launch_identity_is_reusable
 from .runtime.workspace_path_guard import resolve_path_within_workspace
 
@@ -250,7 +251,10 @@ def executable_material(
         "requested": Path(requested).name,
     }
     if not ("/" in requested or "\\" in requested):
-        material["search_path_digest"] = hashlib.sha256((environment.get("PATH") or "").encode("utf-8")).hexdigest()
+        material["search_path_digest"] = context_opaque_digest(
+            environment.get("PATH") or "",
+            unbound_label="search-path",
+        )
     if not runtime_launch_identity_is_reusable(launch_identity):
         material["status"] = "package_manager_launch_identity_unavailable"
         return material, "package_manager_launch_identity_unavailable"

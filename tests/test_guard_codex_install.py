@@ -613,12 +613,12 @@ def test_guard_codex_authenticated_hook_transaction_rolls_back_after_partial_con
     original_atomic_write = codex_adapter.atomic_write_text
     failed_once = False
 
-    def fail_first_config_write(path: Path, text: str, *, mode: int = 0o600) -> None:
+    def fail_first_config_write(path: Path, text: str, *, mode: int = 0o600, on_publish=None) -> None:
         nonlocal failed_once
         if path == config_path and not failed_once:
             failed_once = True
             raise OSError("injected config write failure")
-        original_atomic_write(path, text, mode=mode)
+        original_atomic_write(path, text, mode=mode, on_publish=on_publish)
 
     monkeypatch.setattr(codex_adapter, "atomic_write_text", fail_first_config_write)
 
@@ -653,12 +653,12 @@ def test_guard_codex_first_install_failure_rolls_back_new_hook_secret(
     original_atomic_write = codex_adapter.atomic_write_text
     failed_once = False
 
-    def fail_first_config_write(path: Path, text: str, *, mode: int = 0o600) -> None:
+    def fail_first_config_write(path: Path, text: str, *, mode: int = 0o600, on_publish=None) -> None:
         nonlocal failed_once
         if path == config_path and not failed_once:
             failed_once = True
             raise OSError("injected first-install config failure")
-        original_atomic_write(path, text, mode=mode)
+        original_atomic_write(path, text, mode=mode, on_publish=on_publish)
 
     monkeypatch.setattr(codex_adapter, "atomic_write_text", fail_first_config_write)
 
@@ -714,7 +714,7 @@ def test_guard_codex_launch_uses_remote_control_for_dashboard_continuation(tmp_p
 def test_guard_install_codex_rewrites_workspace_config_with_proxy_entries(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
-    source_root = str(Path(__file__).resolve().parents[1] / "src")
+    source_root = str(Path(codex_adapter.__file__).resolve().parents[3])
     monkeypatch.setenv("PYTHONPATH", str(tmp_path / "stale-site-packages"))
     _build_guard_fixture(home_dir, workspace_dir)
 

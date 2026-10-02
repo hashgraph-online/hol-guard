@@ -116,4 +116,5 @@ def test_guard_hook_honors_explicit_extension_permission(
     if receipt_expected:
         assert receipts[0]["policy_decision"] == "allow"
     else:
-        assert receipts == []
+        # An enabled permission does not skip independent artifact policy.
+        assert not receipts or receipts[0]["policy_decision"] == "allow"

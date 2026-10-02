@@ -65,10 +65,19 @@ def _detection(artifact: GuardArtifact) -> HarnessDetection:
 
 
 def _config(tmp_path: Path, artifact_id: str) -> GuardConfig:
+    from codex_plugin_scanner.guard.native_policy_snapshot import provision_native_policy_verifier_key
+
     workspace = tmp_path / "workspace"
     workspace.mkdir(parents=True, exist_ok=True)
+    guard_home = tmp_path / "guard-home"
+    store = GuardStore(guard_home)
+    store.ensure_policy_integrity_ready_for_write(
+        harness="gemini",
+        now="2026-07-19T00:00:00Z",
+    )
+    provision_native_policy_verifier_key(guard_home, b"\x07" * 32)
     return GuardConfig(
-        guard_home=tmp_path / "guard-home",
+        guard_home=guard_home,
         workspace=workspace,
         artifact_actions={artifact_id: "review"},
     )
@@ -96,7 +105,10 @@ def _save_allow(
     assert approval_id is not None
 
 
-def test_complete_unchanged_directory_identity_reuses_exact_saved_approval(tmp_path: Path) -> None:
+def test_complete_unchanged_directory_identity_reuses_exact_saved_approval(
+    tmp_path: Path,
+    native_context_digest: Path,
+) -> None:
     artifact = _artifact(tmp_path, _identity_metadata(_digest("directory-v1")))
     detection = _detection(artifact)
     config = _config(tmp_path, artifact.artifact_id)
@@ -128,7 +140,10 @@ def test_complete_unchanged_directory_identity_reuses_exact_saved_approval(tmp_p
     assert len(pending_claims) == 1
 
 
-def test_directory_identity_change_invalidates_prior_saved_approval(tmp_path: Path) -> None:
+def test_directory_identity_change_invalidates_prior_saved_approval(
+    tmp_path: Path,
+    native_context_digest: Path,
+) -> None:
     original = _artifact(tmp_path, _identity_metadata(_digest("directory-v1")))
     config = _config(tmp_path, original.artifact_id)
     store = GuardStore(config.guard_home)
@@ -172,6 +187,7 @@ def test_directory_identity_change_invalidates_prior_saved_approval(tmp_path: Pa
 )
 def test_incomplete_or_malformed_identity_blocks_saved_approval_reuse(
     tmp_path: Path,
+    native_context_digest: Path,
     marker: object,
 ) -> None:
     metadata = _identity_metadata(_digest("partial"), status="incomplete")
@@ -222,7 +238,10 @@ def test_incomplete_or_malformed_identity_blocks_saved_approval_reuse(
     )
 
 
-def test_removed_incomplete_skill_also_uses_reapproval_floor(tmp_path: Path) -> None:
+def test_removed_incomplete_skill_also_uses_reapproval_floor(
+    tmp_path: Path,
+    native_context_digest: Path,
+) -> None:
     artifact = _artifact(
         tmp_path,
         _identity_metadata(_digest("removed-partial"), status="incomplete"),

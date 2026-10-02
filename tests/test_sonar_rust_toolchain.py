@@ -10,13 +10,16 @@ from pathlib import Path
 import pytest
 import yaml
 
+from tests.support.ci_workflow import expand_ci_job_actions
+
 ROOT = Path(__file__).resolve().parents[1]
 PREPARE_SCRIPT = ROOT / "scripts/ci/prepare_sonar_analysis.sh"
 SETUP_SCRIPT = ROOT / "scripts/ci/setup_sonar_rust.sh"
 
 
 def test_sonar_preparation_precedes_analysis_and_fails_closed() -> None:
-    workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
+    """Verify sonar preparation precedes analysis and fails closed."""
+    workflow = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")))
     job = workflow["jobs"]["sonar"]
     steps = job["steps"]
     download_index = next(i for i, step in enumerate(steps) if step.get("name") == "Download pytest coverage data")
@@ -123,7 +126,8 @@ def test_preparation_combines_all_shards_before_creating_coverage_xml(tmp_path: 
 
 @pytest.mark.parametrize("fail_command", ["", "cargo clippy"])
 def test_early_clippy_runs_without_coverage_and_propagates_failure(tmp_path: Path, fail_command: str) -> None:
-    workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
+    """Verify early clippy runs without coverage and propagates failure."""
+    workflow = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")))
     step = next(
         step
         for step in workflow["jobs"]["sonar"]["steps"]
