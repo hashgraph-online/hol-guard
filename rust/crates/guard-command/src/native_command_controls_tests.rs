@@ -45,6 +45,45 @@ fn test_containment_requirement_cannot_override_lockdown() {
 }
 
 #[test]
+fn git_containment_preserves_disabled_execution_permission() {
+    let program = packaged_command_program().unwrap();
+    let permission = program
+        .rules
+        .iter()
+        .find(|rule| rule.rule_id == "command.git.diff")
+        .unwrap()
+        .permission_id
+        .clone();
+    let mut binding: NativeCommandControlBindingV1 = serde_json::from_value(serde_json::json!({
+        "schema": "guard.native-command-control-binding.v1",
+        "program_digest": program.program_digest, "catalog_digest": program.catalog_digest,
+        "trust_digest": program.trust_digest, "health": "protected",
+        "revision": 1, "managed_revision": 0, "effective_digest": "", "layers": [{
+            "schema_version": "1.0.0", "kind": "local-admin", "catalog_digest": program.catalog_digest,
+            "global_lockdown": false, "controls": [{
+                "target_kind": "permission", "target_id": permission, "state": "disabled"
+            }]
+        }]
+    })).unwrap();
+    binding.effective_digest = binding.compute_effective_digest().unwrap();
+    let controls = CompiledNativeCommandControls::new(&binding).unwrap();
+    let result = crate::pretool::evaluate_pre_tool_envelope_with_context(
+        "omp",
+        "PreToolUse",
+        &serde_json::json!({"tool_name":"bash", "tool_input":{"command":"git diff --stat"}}),
+        Some(&controls),
+        None,
+        Some("/home/tester"),
+        Some("/home/tester/project"),
+    );
+    assert_eq!(result.minimum_action, "block");
+    assert_ne!(
+        result.reason_code,
+        "native_git_readonly_containment_required"
+    );
+}
+
+#[test]
 fn vitest_containment_never_overrides_disabled_package_permission() {
     let program = packaged_command_program().unwrap();
     let mut binding: NativeCommandControlBindingV1 = serde_json::from_value(serde_json::json!({

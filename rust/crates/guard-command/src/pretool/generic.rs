@@ -415,12 +415,22 @@ pub fn evaluate_pre_tool_envelope_with_context(
             || (contained_test_reason == Some("native_vitest_readonly_containment_required")
                 && result.action.action_type == PreToolActionTypeV1::Package))
         && !result.action.sensitive_target
-        && result.reason_code == "native_command_review_required"
+        && (result.reason_code == "native_command_review_required"
+            || (contained_test_reason == Some("native_git_readonly_containment_required")
+                && result.reason_code == "native_git_helper_context_review"))
         && result.minimum_action == "review"
         && result.command_extensions.as_ref().is_none_or(|extensions| {
             extensions.binding.uncertainty_count == 0
                 && extensions.evaluation_error.is_none()
-                && extensions.observations.is_empty()
+                && extensions.observations.iter().all(|observation| {
+                    contained_test_reason == Some("native_git_readonly_containment_required")
+                        && matches!(
+                            observation.rule_id.as_str(),
+                            "command.git.diff" | "command.git.log" | "command.git.show"
+                        )
+                        && observation.uncertainty_reasons.is_empty()
+                        && observation.effective_segment_indexes == [0]
+                })
                 && extensions
                     .permission_observations
                     .iter()
@@ -440,7 +450,7 @@ pub fn evaluate_pre_tool_envelope_with_context(
             .expect("checked required test profile")
             .into();
         result.reason = concat!(
-            "HOL Guard requires the read-only test runner for this repository execution. ",
+            "HOL Guard requires protected read-only execution for this repository action. ",
             "Direct execution remains blocked.",
         )
         .into();

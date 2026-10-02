@@ -12,6 +12,7 @@ from pathlib import Path
 
 from .restricted_pytest import RestrictedPytestError, prepare_restricted_pytest, run_restricted_pytest
 from .restricted_pytest_model import (
+    GIT_READ_ONLY_PROFILE_VERSION,
     NODE_TEST_READ_ONLY_PROFILE_VERSION,
     PYTEST_READ_ONLY_PROFILE_VERSION,
     VITEST_READ_ONLY_PROFILE_VERSION,
@@ -116,7 +117,12 @@ def run_authorized_contained_test(
             and command[1].endswith("/node_modules/vitest/vitest.mjs")
         )
     )
-    if vitest:
+    git = bool(command) and Path(command[0]).name == "git"
+    if git:
+        from .restricted_git import prepare_restricted_git, run_restricted_git
+
+        git_plan = prepare_restricted_git(command, workspace=workspace, cwd=workspace)
+    elif vitest:
         from .restricted_vitest import prepare_restricted_vitest, run_restricted_vitest
 
         vitest_plan = prepare_restricted_vitest(command, workspace=workspace, cwd=workspace)
@@ -127,14 +133,18 @@ def run_authorized_contained_test(
     else:
         prepare_restricted_pytest(command, workspace=workspace, cwd=workspace, read_only_workspace=True)
     reason = (
-        "native_vitest_readonly_containment_required"
+        "native_git_readonly_containment_required"
+        if git
+        else "native_vitest_readonly_containment_required"
         if vitest
         else "native_node_test_readonly_containment_required"
         if node_test
         else "native_pytest_readonly_containment_required"
     )
     profile = (
-        VITEST_READ_ONLY_PROFILE_VERSION
+        GIT_READ_ONLY_PROFILE_VERSION
+        if git
+        else VITEST_READ_ONLY_PROFILE_VERSION
         if vitest
         else NODE_TEST_READ_ONLY_PROFILE_VERSION
         if node_test
@@ -154,6 +164,8 @@ def run_authorized_contained_test(
     if not required(authorize(payload)):
         raise _reject()
     # No shell and no unsandboxed retry: the required profile is the actual sink.
+    if git:
+        return run_restricted_git(git_plan, timeout_seconds=timeout_seconds)
     if vitest:
         # Check the resolved Node/script action too: wrapper consent must not
         # override an extension deny for the underlying executable.

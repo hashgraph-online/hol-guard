@@ -43,6 +43,10 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
     }
     let executable = segment.executable.as_deref()?;
     let arguments = segment.arguments.as_slice();
+    if super::executable_basename(executable) == "git" && super::git_helper_context_required(model)
+    {
+        return Some("native_git_readonly_containment_required");
+    }
     let vitest = match super::executable_basename(executable) {
         "bunx" | "npx" => {
             matches!(arguments, [tool, run, ..] if tool == "vitest" && run == "run")

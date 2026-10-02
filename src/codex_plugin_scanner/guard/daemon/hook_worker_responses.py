@@ -147,6 +147,7 @@ def harness_json_from_native_pre_tool(harness: str, response: Mapping[str, objec
             "native_pytest_readonly_containment_required",
             "native_node_test_readonly_containment_required",
             "native_vitest_readonly_containment_required",
+            "native_git_readonly_containment_required",
         }
     ):
         extensions = response.get("command_extensions")
@@ -156,7 +157,20 @@ def harness_json_from_native_pre_tool(harness: str, response: Mapping[str, objec
             and type(binding.get("uncertainty_count")) is int
             and binding["uncertainty_count"] == 0
             and extensions.get("evaluation_error") is None
-            and extensions.get("observations") == []
+            and (
+                extensions.get("observations") == []
+                or (
+                    reason_code == "native_git_readonly_containment_required"
+                    and isinstance(extensions.get("observations"), list)
+                    and all(
+                        isinstance(item, Mapping)
+                        and item.get("rule_id") in {"command.git.diff", "command.git.log", "command.git.show"}
+                        and item.get("uncertainty_reasons") == []
+                        and item.get("effective_segment_indexes") == [0]
+                        for item in extensions["observations"]
+                    )
+                )
+            )
             and (
                 extensions.get("permission_observations") == []
                 or (
@@ -180,7 +194,9 @@ def harness_json_from_native_pre_tool(harness: str, response: Mapping[str, objec
                 "reason_code": reason_code,
                 "reason": reason,
                 "required_execution_profile": (
-                    "vitest-readonly-v1"
+                    "git-readonly-v1"
+                    if reason_code == "native_git_readonly_containment_required"
+                    else "vitest-readonly-v1"
                     if reason_code == "native_vitest_readonly_containment_required"
                     else "node-test-readonly-v1"
                     if reason_code == "native_node_test_readonly_containment_required"

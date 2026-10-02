@@ -153,3 +153,40 @@ fn vitest_wrapper_and_resolved_script_require_the_same_protected_profile() {
         assert_ne!(result.decision, "allow", "{command}");
     }
 }
+
+#[test]
+fn git_inspections_require_protected_execution_not_helper_consent() {
+    for command in [
+        "git diff --stat",
+        "git diff --check",
+        "git log --oneline -1",
+        "git show HEAD",
+    ] {
+        let result = classify("omp", command);
+        assert_eq!(result.decision, "deny");
+        assert_eq!(
+            result.reason_code,
+            if cfg!(target_os = "macos") {
+                "native_git_readonly_containment_required"
+            } else {
+                "native_git_helper_context_review"
+            },
+            "{command}"
+        );
+    }
+    for command in [
+        "git diff --ext-diff",
+        "git diff --textconv",
+        "git diff --output=out.txt",
+        "git show HEAD:.env",
+        "git diff; rm -rf /",
+        "git diff | sh",
+        "git reset --hard",
+    ] {
+        assert_ne!(
+            classify("omp", command).reason_code,
+            "native_git_readonly_containment_required",
+            "{command}"
+        );
+    }
+}

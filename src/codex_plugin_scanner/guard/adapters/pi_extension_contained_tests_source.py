@@ -71,6 +71,7 @@ CONTAINED_TEST_HELPERS_SOURCE = r"""
     const input = snapshot.payload.tool_input;
     const key = toolCallIdKey(snapshot.payload.tool_call_id);
     const profileMatches = (
+      (profile === "git-readonly-v1" && response.reason_code === "native_git_readonly_containment_required") ||
       (profile === "pytest-readonly-v2" && response.reason_code === "native_pytest_readonly_containment_required") ||
       (profile === "vitest-readonly-v1" && response.reason_code === "native_vitest_readonly_containment_required") ||
       (profile === "node-test-readonly-v1" && response.reason_code === "native_node_test_readonly_containment_required")
