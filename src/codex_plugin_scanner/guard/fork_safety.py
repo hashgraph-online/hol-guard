@@ -61,13 +61,15 @@ def forget_in_child(container: MutableMapping[Any, Any] | MutableSet[Any]) -> No
         _CONTAINERS.append(container)
 
 
-def _fresh_primitive(value: object) -> object | None:
+def _fresh_primitive(value: object, _seen: set[int] | None = None) -> object | None:
     """Return a fresh primitive matching ``value``, or None if not one.
 
     Mutable containers (dict/list/set) are rebuilt in place so shared
     references keep working; the same object is left in the namespace and
     None is returned because no rebinding is needed.
     """
+
+    seen = _seen if _seen is not None else set()
 
     if isinstance(value, threading.Condition):
         return threading.Condition()
@@ -100,7 +102,7 @@ def _fresh_primitive(value: object) -> object | None:
         changed = False
         items: list[object] = []
         for item in value:
-            fresh_item = _fresh_primitive(item)
+            fresh_item = _fresh_primitive(item, seen)
             if fresh_item is None:
                 items.append(item)
             else:
@@ -108,28 +110,35 @@ def _fresh_primitive(value: object) -> object | None:
                 changed = True
         return tuple(items) if changed else None
     if isinstance(value, (dict, set, list)):
-        _rebuild_mutable_container(value)
+        _rebuild_mutable_container(value, seen)
         return None
     return None
 
 
-def _rebuild_mutable_container(container: MutableMapping[Any, Any] | set[Any] | list[Any]) -> None:
+def _rebuild_mutable_container(
+    container: MutableMapping[Any, Any] | set[Any] | list[Any], _seen: set[int] | None = None
+) -> None:
     """Rebuild synchronization primitives inside ``container`` in place."""
+
+    seen = _seen if _seen is not None else set()
+    if id(container) in seen:
+        return
+    seen.add(id(container))
 
     if isinstance(container, dict):
         for key, item in list(container.items()):
-            fresh = _fresh_primitive(item)
+            fresh = _fresh_primitive(item, seen)
             if fresh is not None:
                 container[key] = fresh
     elif isinstance(container, set):
         for item in tuple(container):
-            fresh = _fresh_primitive(item)
+            fresh = _fresh_primitive(item, seen)
             if fresh is not None:
                 container.discard(item)
                 container.add(fresh)
     elif isinstance(container, list):
         for index, item in enumerate(container):
-            fresh = _fresh_primitive(item)
+            fresh = _fresh_primitive(item, seen)
             if fresh is not None:
                 container[index] = fresh
 
