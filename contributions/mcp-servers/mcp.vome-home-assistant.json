@@ -1,0 +1,225 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.vome-home-assistant",
+  "version": "1.0.0",
+  "name": "Home Assistant MCP (Vome)",
+  "description": "Reviews Home Assistant, ESPHome and Node-RED tools that control devices, change configuration, install third-party code, manage users, read cameras, flash firmware or switch a hosted home's failover. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.vortitron",
+    "displayName": "Vome",
+    "url": "https://vome.io"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniBolt",
+    "background": "#0F172A"
+  },
+  "homepage": "https://github.com/Vortitron/home-assistant-mcp",
+  "license": "MIT",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "npx",
+    "package": "@vortitron/home-assistant-mcp"
+  },
+  "riskClasses": [
+    "external-device-control",
+    "external-config-write",
+    "external-config-deletion",
+    "external-third-party-code-install",
+    "external-user-credential-change",
+    "external-camera-access",
+    "external-firmware-flash",
+    "external-flow-code-execution",
+    "external-access-grant",
+    "external-hosted-instance-change",
+    "external-failover-switch"
+  ],
+  "tools": [
+    {
+      "name": "ha_call_service",
+      "state": "review"
+    },
+    {
+      "name": "ha_fire_event",
+      "state": "review"
+    },
+    {
+      "name": "ha_set_automation",
+      "state": "review"
+    },
+    {
+      "name": "ha_trigger_automation",
+      "state": "review"
+    },
+    {
+      "name": "ha_delete_automation",
+      "state": "review"
+    },
+    {
+      "name": "ha_write_config_file",
+      "state": "review"
+    },
+    {
+      "name": "ha_supervisor_api",
+      "state": "review"
+    },
+    {
+      "name": "ha_config_flow",
+      "state": "review"
+    },
+    {
+      "name": "ha_config_entry_options",
+      "state": "review"
+    },
+    {
+      "name": "ha_delete_config_entry",
+      "state": "review"
+    },
+    {
+      "name": "ha_delete_dashboard",
+      "state": "review"
+    },
+    {
+      "name": "ha_delete_helper",
+      "state": "review"
+    },
+    {
+      "name": "ha_integration_setup_vome",
+      "state": "review"
+    },
+    {
+      "name": "ha_addon_install_vome",
+      "state": "review"
+    },
+    {
+      "name": "ha_hacs_add_repository",
+      "state": "review"
+    },
+    {
+      "name": "ha_hacs_download_repository",
+      "state": "review"
+    },
+    {
+      "name": "ha_hacs_remove_repository",
+      "state": "review"
+    },
+    {
+      "name": "ha_create_user",
+      "state": "review"
+    },
+    {
+      "name": "ha_update_user",
+      "state": "review"
+    },
+    {
+      "name": "ha_delete_user",
+      "state": "review"
+    },
+    {
+      "name": "ha_change_user_password",
+      "state": "review"
+    },
+    {
+      "name": "ha_set_user_credentials",
+      "state": "review"
+    },
+    {
+      "name": "ha_remove_user_credentials",
+      "state": "review"
+    },
+    {
+      "name": "ha_camera_image",
+      "state": "review"
+    },
+    {
+      "name": "esphome_save_config",
+      "state": "review"
+    },
+    {
+      "name": "esphome_edit_config",
+      "state": "review"
+    },
+    {
+      "name": "esphome_upload",
+      "state": "review"
+    },
+    {
+      "name": "nodered_create_flow",
+      "state": "review"
+    },
+    {
+      "name": "nodered_update_flow",
+      "state": "review"
+    },
+    {
+      "name": "nodered_set_flows",
+      "state": "review"
+    },
+    {
+      "name": "nodered_delete_flow",
+      "state": "review"
+    },
+    {
+      "name": "vomehome_create_instance",
+      "state": "review"
+    },
+    {
+      "name": "vomehome_reboot_instance",
+      "state": "review"
+    },
+    {
+      "name": "vomehome_get_login_url",
+      "state": "review"
+    },
+    {
+      "name": "vomehome_create_guest_link",
+      "state": "review"
+    },
+    {
+      "name": "vomehome_chap_enrol",
+      "state": "review"
+    },
+    {
+      "name": "vomehome_chap_pair",
+      "state": "review"
+    },
+    {
+      "name": "vomehome_chap_link_standby",
+      "state": "review"
+    },
+    {
+      "name": "vomehome_chap_unlink_standby",
+      "state": "review"
+    },
+    {
+      "name": "vomehome_chap_switch",
+      "state": "review"
+    },
+    {
+      "name": "vomehome_chap_switch_back",
+      "state": "review"
+    },
+    {
+      "name": "vomehome_chap_set_home_address",
+      "state": "review"
+    },
+    {
+      "name": "other",
+      "state": "inherit"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/Vortitron/home-assistant-mcp",
+    "https://github.com/Vortitron/home-assistant-mcp#safety",
+    "https://www.npmjs.com/package/@vortitron/home-assistant-mcp"
+  ],
+  "saferAlternatives": [
+    "The server is read-only unless HA_ALLOW_WRITE=true; leave it unset when the agent only needs to inspect state, history, logs and automations.",
+    "Use HA_DENY_DOMAINS (for example lock, alarm_control_panel, cover) or HA_ALLOW_DOMAINS to fence ha_call_service away from doors, alarms and garage openers.",
+    "Config editing needs HA_ALLOW_CONFIG_WRITE=true as well; keep it off and use ha_check_config and ha_render_template to test changes before applying them.",
+    "Use esphome_validate and esphome_compile before esphome_upload; flashing replaces a device's firmware over the air.",
+    "Prefer read tools (ha_get_state, ha_get_history, ha_get_system_log, ha_list_automations) for diagnosis; they stay on Guard's usual handling."
+  ]
+}
