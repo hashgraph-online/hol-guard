@@ -68,3 +68,20 @@ def test_failed_seccomp_installation_never_returns_success(monkeypatch, failure)
 def test_unknown_socket_architecture_is_not_guessed():
     with pytest.raises(boundary.LinuxContainmentUnavailableError, match="architecture"):
         boundary._socket_filter("unknown")
+
+
+@pytest.mark.parametrize(
+    "machine,arch,clone,denied",
+    [
+        ("x86_64", 0xC000003E, 56, (319, 272, 308, 165, 166, 155)),
+        ("aarch64", 0xC00000B7, 220, (279, 97, 268, 40, 39, 41)),
+    ],
+)
+def test_namespace_and_memory_file_escape_paths_are_denied_without_breaking_threads(machine, arch, clone, denied):
+    for number in (*denied, 428, 429, 430, 431, 432, 433, 442):
+        assert _evaluate(machine, arch=arch, number=number) == 0x50001
+    assert _evaluate(machine, arch=arch, number=435) == 0x50026
+    for flags in (17, 0x3D0F00):
+        assert _evaluate(machine, arch=arch, number=clone, domain=flags) == 0x7FFF0000
+    for flag in (0x10000000, 0x20000, 0x8000000, 0x4000000, 0x20000000, 0x40000000, 0x2000000, 0x80):
+        assert _evaluate(machine, arch=arch, number=clone, domain=0x3D0F00 | flag) == 0x50001

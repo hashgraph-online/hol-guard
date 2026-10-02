@@ -59,12 +59,12 @@ def _socket_filter(machine: str) -> list[tuple[int, int, int, int]]:
     See https://docs.kernel.org/userspace-api/seccomp_filter.html.
     """
     architectures = {
-        "x86_64": (0xC000003E, 53, (41, 42, 101, 311, 425, 426, 427)),
-        "aarch64": (0xC00000B7, 199, (198, 203, 117, 271, 425, 426, 427)),
+        "x86_64": (0xC000003E, 53, 56, (41, 42, 101, 311, 319, 272, 308, 165, 166, 155)),
+        "aarch64": (0xC00000B7, 199, 220, (198, 203, 117, 271, 279, 97, 268, 40, 39, 41)),
     }
     if machine not in architectures:
         raise LinuxContainmentUnavailableError("Unsupported Linux socket-filter architecture.")
-    arch, pair, denied = architectures[machine]
+    arch, pair, clone, denied = architectures[machine]
     allow, kill, deny = 0x7FFF0000, 0x80000000, 0x00050000 | errno.EPERM
     instructions = [
         (0x20, 0, 0, 4),
@@ -74,8 +74,21 @@ def _socket_filter(machine: str) -> list[tuple[int, int, int, int]]:
         (0x35, 0, 1, 0x40000000),
         (0x06, 0, 0, kill),
     ]
-    for number in denied:
+    for number in (*denied, 425, 426, 427, 428, 429, 430, 431, 432, 433, 442):
         instructions.extend(((0x15, 0, 1, number), (0x06, 0, 0, deny)))
+    # glibc falls back to clone for ordinary threads when clone3 is unavailable.
+    instructions.extend(((0x15, 0, 1, 435), (0x06, 0, 0, 0x00050000 | 38)))  # Linux ENOSYS on both architectures.
+    # No child may recreate a namespace and regain mount capabilities.
+    instructions.extend(
+        (
+            (0x15, 0, 4, clone),
+            (0x20, 0, 0, 16),
+            (0x54, 0, 0, 0x7E020080),
+            (0x15, 1, 0, 0),
+            (0x06, 0, 0, deny),
+            (0x20, 0, 0, 0),
+        )
+    )
     instructions.extend(((0x15, 1, 0, pair), (0x06, 0, 0, allow)))
     instructions.extend(((0x20, 0, 0, 16), (0x15, 1, 0, 1), (0x06, 0, 0, deny)))
     # SOCK_CLOEXEC and SOCK_NONBLOCK are harmless flags, not socket types.
