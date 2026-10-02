@@ -13,6 +13,7 @@ members = [
     "crates/guard-runtime",
     "crates/guard-runtime-windows-process",
 ]
+exclude = ["crates/guard-command-build"]
 resolver = "2"
 
 [workspace.package]

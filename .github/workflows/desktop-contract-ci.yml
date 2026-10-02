@@ -13,7 +13,7 @@ on:
       - src/codex_plugin_scanner/guard/store_approval_facade.py
       - src/codex_plugin_scanner/guard/store_receipts.py
       - tests/test_guard_desktop_contract.py
-      - tests/fixtures/guard-command-corpus/decision-diff-report.json
+      - tests/guard_command_decision_diff.py
       - docs/guard/desktop-bootstrap-contract.md
       - .github/workflows/desktop-contract-ci.yml
   push:
@@ -30,7 +30,7 @@ on:
       - src/codex_plugin_scanner/guard/store_approval_facade.py
       - src/codex_plugin_scanner/guard/store_receipts.py
       - tests/test_guard_desktop_contract.py
-      - tests/fixtures/guard-command-corpus/decision-diff-report.json
+      - tests/guard_command_decision_diff.py
       - docs/guard/desktop-bootstrap-contract.md
       - .github/workflows/desktop-contract-ci.yml
 
@@ -109,17 +109,8 @@ jobs:
 
       - name: Validate source-bound decision evidence
         run: |
-          pending="false"
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            pending=$(uv run --no-sync python scripts/ci/detect_pending_extension_regen.py --flag --changed-from "${{ github.event.pull_request.base.sha }}")
-          fi
-          if [[ "$pending" == "true" ]]; then
-            # Bound sources changed; the checked-in report is legitimately one
-            # regen behind — validate the pipeline runs, freshness lands on main.
-            uv run --no-sync python tests/guard_command_decision_diff.py --metrics > /dev/null
-          else
-            uv run --no-sync python tests/guard_command_decision_diff.py --check
-          fi
+          uv run --no-sync python tests/guard_command_decision_diff.py --write
+          uv run --no-sync python tests/guard_command_decision_diff.py --check
 
       - name: Smoke test CLI projection
         run: |

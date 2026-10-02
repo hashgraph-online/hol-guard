@@ -59,7 +59,22 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
     assert payload["env"]["CI_PYTHON_VERSION"] == "3.12.14"
     assert "test-plan" not in jobs
     assert "tests" not in jobs
-    assert "needs" not in jobs["coverage-plan"]
+    assert jobs["coverage-plan"]["needs"] == "native-command-evaluators"
+    plan_steps = jobs["coverage-plan"]["steps"]
+    resource_index = next(
+        index
+        for index, step in enumerate(plan_steps)
+        if step.get("with", {}).get("name") == "pytest-native-command-projections"
+    )
+    collection_index = next(
+        index for index, step in enumerate(plan_steps) if step.get("uses") == "./.github/actions/plan-pytest"
+    )
+    assert resource_index < collection_index
+    for name in ("compatibility", "cisco-full", "cross-platform", "windows-updater"):
+        assert jobs[name]["needs"] == "native-command-evaluators"
+        assert any(
+            step.get("with", {}).get("name") == "pytest-native-command-projections" for step in jobs[name]["steps"]
+        )
     native_steps = jobs["native-command-evaluators"]["steps"]
     verify_index = next(
         index for index, step in enumerate(native_steps) if "verify_native_command_program.py" in step.get("run", "")
@@ -150,6 +165,7 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
         "coverage",
         "compatibility",
         "scheduling-sensitive",
+        "public-directory",
     }
 
     cache_consumers = (

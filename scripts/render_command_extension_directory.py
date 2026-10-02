@@ -14,7 +14,8 @@ from codex_plugin_scanner.guard.runtime.command_extensions import (
 from codex_plugin_scanner.guard.runtime.extension_trust import trust_class_for
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-DIRECTORY_PATH = REPO_ROOT / "docs" / "guard" / "extensions" / "README.md"
+TEMPLATE_PATH = REPO_ROOT / "docs" / "guard" / "extensions" / "README.md"
+DIRECTORY_PATH = REPO_ROOT / "build" / "guard-directory" / "README.md"
 START_MARKER = "<!-- BEGIN GENERATED EXTENSION DIRECTORY -->"
 END_MARKER = "<!-- END GENERATED EXTENSION DIRECTORY -->"
 
@@ -103,18 +104,19 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--check",
         action="store_true",
-        help="Fail when the committed directory does not match the runtime registry.",
+        help="Fail when this build's directory does not match the runtime registry.",
     )
     args = parser.parse_args(argv)
 
-    current = DIRECTORY_PATH.read_text(encoding="utf-8")
-    rendered = render_document(current)
+    template = TEMPLATE_PATH.read_text(encoding="utf-8")
+    rendered = render_document(template)
     if args.check:
-        if current != rendered:
+        if not DIRECTORY_PATH.is_file() or DIRECTORY_PATH.read_text(encoding="utf-8") != rendered:
             parser.error(
                 "extension directory is stale; run `uv run python scripts/render_command_extension_directory.py`"
             )
         return 0
+    DIRECTORY_PATH.parent.mkdir(parents=True, exist_ok=True)
     DIRECTORY_PATH.write_text(rendered, encoding="utf-8")
     return 0
 

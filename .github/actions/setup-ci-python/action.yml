@@ -40,6 +40,7 @@ runs:
       shell: bash
       env:
         CI_SETUP_PYTHON_VERSION: ${{ inputs.python-version }}
+        HOL_GUARD_CI_DEFER_RESOURCE_BUILD: "1"
       run: |
         for attempt in 1 2; do
           if uv sync --frozen --no-dev --group ci-test --python "$CI_SETUP_PYTHON_VERSION"; then

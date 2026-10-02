@@ -260,7 +260,10 @@ def test_slice_manifest_binds_the_release_correction_chain_and_repo_relative_own
                 ownership[path] = _text(item["id"])
             ownership_counts[cast(int, item["pull_request"])] += 1
     assert observed_overlaps == overlap_exceptions.keys()
-    assert ownership_counts == {1761: 38, 1763: 36}
+    # Generated report snapshots are no longer tracked deliverables. The
+    # independently asserted corpus/report tests remain required evidence.
+    assert ownership_counts == {1761: 37, 1763: 35}
+    assert "tests/test_guard_command_decision_diff.py" in slices[3]["evidence_paths"]
 
     gates = _mapping(manifest["gates"])
     review = _mapping(gates["review"])

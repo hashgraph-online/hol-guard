@@ -112,12 +112,6 @@
       "original_slice": "CDX-063",
       "final_slice": "CDX-068",
       "reason": "the installed evidence slice normalizes persisted approval timestamps before issuing exact workflow capabilities"
-    },
-    {
-      "path": "tests/fixtures/guard-command-corpus/decision-diff-report.json",
-      "original_slice": "CDX-066",
-      "final_slice": "CDX-068",
-      "reason": "the installed evidence runtime fix regenerates the exact source-bound decision report"
     }
   ],
   "slices": [
@@ -182,7 +176,6 @@
       "id": "CDX-066",
       "pull_request": 1761,
       "deliverables": [
-        "tests/fixtures/guard-command-corpus/decision-diff-report.json",
         "tests/fixtures/guard-command-corpus/known-gaps.json",
         "tests/fixtures/guard-command-corpus/seed-manifest.json",
         "tests/guard_command_corpus.py",
@@ -195,7 +188,7 @@
       ],
       "acceptance": "credential, Guard-control, privilege, and catastrophic operations retain exact block or reapproval floors across all 51000 cases",
       "evidence_paths": [
-        "tests/fixtures/guard-command-corpus/decision-diff-report.json",
+        "tests/test_guard_command_decision_diff.py",
         "tests/fixtures/guard-command-corpus/known-gaps.json",
         "tests/fixtures/guard-command-corpus/seed-manifest.json"
       ]
@@ -226,7 +219,6 @@
         "src/codex_plugin_scanner/guard/runtime/command_activity_contract.py",
         "src/codex_plugin_scanner/guard/runtime/command_activity_lifecycle.py",
         "src/codex_plugin_scanner/guard/runtime/github_workflow_runtime.py",
-        "tests/fixtures/guard-command-corpus/decision-diff-report.json",
         "tests/dockerlabs/command-extension-analytics/Dockerfile",
         "tests/dockerlabs/command-extension-analytics/Dockerfile.dockerignore",
         "tests/dockerlabs/command-extension-analytics/bun-test-types.d.ts",

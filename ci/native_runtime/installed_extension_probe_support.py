@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 import threading
 import time
 from collections.abc import Mapping
@@ -168,21 +167,14 @@ def prove_installed_data_only_authoring(package: Path) -> dict[str, object]:
     tested = run_source_compiler("test", fixtures)
     base_program = BUILT_IN_COMMAND_EXTENSION_REGISTRY.program_digest
     implementation = BUILT_IN_COMMAND_EXTENSION_REGISTRY.implementation_digest
-    # Generated projections are regen-owned: a PR that cannot carry them may
-    # legitimately ship compiler/input changes while the checked-in manifests
-    # still reflect main. HOL_DEFER_ARTIFACT_FRESHNESS=1 is set by CI when the
-    # PR diff carries no regen-owned artifacts, standing down the
-    # manifest-vs-recomputed bindings; the post-merge regen on main re-asserts
-    # them. Fresh-compile internal equality still runs.
-    defer = os.environ.get("HOL_DEFER_ARTIFACT_FRESHNESS") == "1"
-    _require(defer or source_manifest["source_sha"] == runtime_manifest["source_sha"], "authoring_source_identity")
-    _require(defer or source_manifest["base_program_digest"] == base_program, "authoring_catalog_program")
-    _require(defer or source_manifest["implementation_digest"] == implementation, "authoring_implementation")
+    _require(source_manifest["source_sha"] == runtime_manifest["source_sha"], "authoring_source_identity")
+    _require(source_manifest["base_program_digest"] == base_program, "authoring_catalog_program")
+    _require(source_manifest["implementation_digest"] == implementation, "authoring_implementation")
     _require(validated.get("program_digest") == program.get("program_digest"), "authoring_validate_compile")
     _require(validated.get("source_digest") == compiled.get("source_digest"), "authoring_validate_source")
-    _require(defer or validated.get("implementation_digest") == implementation, "authoring_validate_implementation")
-    _require(defer or compiled.get("base_program_digest") == base_program, "authoring_compile_base")
-    _require(defer or compiled.get("implementation_digest") == implementation, "authoring_compile_implementation")
+    _require(validated.get("implementation_digest") == implementation, "authoring_validate_implementation")
+    _require(compiled.get("base_program_digest") == base_program, "authoring_compile_base")
+    _require(compiled.get("implementation_digest") == implementation, "authoring_compile_implementation")
     _require(compiled.get("catalog_projection_kind") == "addition-only-not-release-catalog", "authoring_projection")
     _require(tested.get("ok") is True and tested.get("target_commands_executed") == 0, "authoring_fixtures")
     _require(tested.get("scope") == "offline-simulation-not-authenticated-receipts", "authoring_fixture_scope")

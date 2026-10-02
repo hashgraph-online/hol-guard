@@ -127,7 +127,7 @@ finally:
 
 REPORT_SCHEMA_VERSION: Final = "guard.command-decision-diff.v2"
 BASE_RELEASE_SHA: Final = "21a81a6d5ca55e262bac837eb7a2ac8d530c6d28"
-REPORT_PATH: Final = REPO_ROOT / "tests" / "fixtures" / "guard-command-corpus" / "decision-diff-report.json"
+REPORT_PATH: Final = REPO_ROOT / "build" / "guard-evidence" / "decision-diff-report.json"
 _EVIDENCE_SOURCE_PATHS: Final = (
     REPO_ROOT / "contracts" / "extensions" / "command-catalog.v1.json",
     REPO_ROOT / "contracts" / "extensions" / "native-command-program.v1.json",
@@ -404,7 +404,14 @@ def _expected_known_gaps(payload: Mapping[str, object]) -> dict[str, tuple[int, 
 
 
 def _source_bindings() -> dict[str, str]:
-    paths = sorted({path.resolve() for path in _EVIDENCE_SOURCE_PATHS})
+    # Bind current native implementation bytes separately from the historical
+    # provenance retained by the immutable behavioral expectation document.
+    contract = _load_object(NATIVE_CONTRACT_PATH)
+    native_paths = contract["inherited_source_identities"]["sources"]
+    paths = sorted(
+        {path.resolve() for path in _EVIDENCE_SOURCE_PATHS}
+        | {(REPO_ROOT / relative).resolve() for relative in native_paths}
+    )
     return {source_binding_id(str(path.relative_to(REPO_ROOT))): _sha256(path) for path in paths}
 
 
@@ -470,20 +477,12 @@ def _main() -> None:
     digest_path = REPORT_PATH.with_name("decision-diff-report.framed-sha256")
     digest_payload = framed_sha256(payload) + "\n"
     if arguments == ("--write",):
+        REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
         _ = REPORT_PATH.write_bytes(payload)
         _ = digest_path.write_text(digest_payload, encoding="ascii")
     elif arguments == ("--check",):
-        try:
-            from tests.support.extension_freshness import pending_decision_diff_regen
-
-            pending = pending_decision_diff_regen()
-        except ImportError:
-            pending = False
-        if pending:
-            print("decision-diff report is regen-owned; branch defers to post-merge regen")
-            return
         if REPORT_PATH.read_bytes() != payload:
-            raise SystemExit("decision-diff report fixture is stale")
+            raise SystemExit("decision-diff build report is stale")
         if digest_path.read_text(encoding="ascii") != digest_payload:
             raise SystemExit("decision-diff report framed digest is stale")
     elif arguments == ("--metrics",):

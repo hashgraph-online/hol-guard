@@ -154,7 +154,7 @@
           "sourcePath": {
             "type": "string",
             "maxLength": 288,
-            "pattern": "^(contributions/(extensions|mcp-servers)/(command|mcp)\\.[a-z0-9.-]+\\.json|src/codex_plugin_scanner/guard/runtime/command_builtin_extension_registry\\.py)$"
+            "pattern": "^(contributions/(extensions|mcp-servers|command-sources)/(command|mcp)\\.[a-z0-9.-]+\\.json|src/codex_plugin_scanner/guard/runtime/command_builtin_extension_registry\\.py)$"
           },
           "contributionDigest": {
             "anyOf": [

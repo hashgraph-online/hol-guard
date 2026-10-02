@@ -13,6 +13,7 @@ permissions:
   contents: read
 
 env:
+  HOL_GUARD_CI_DEFER_RESOURCE_BUILD: "1"
   CI_PYTHON_VERSION: "3.12.14"
   UV_HTTP_TIMEOUT: "300"
   CI_UV_CACHE_DEPENDENCY_GLOB: |
@@ -129,10 +130,13 @@ jobs:
             contracts/extensions/
             contributions/extensions/
             src/codex_plugin_scanner/guard/contracts/data/extensions/
+            src/codex_plugin_scanner/guard/contracts/data/mcp_servers/
+            build/guard-resources/manifest.json
           if-no-files-found: error
           retention-days: 1
 
   coverage-plan:
+    needs: native-command-evaluators
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -144,12 +148,52 @@ jobs:
           python-version: ${{ env.CI_PYTHON_VERSION }}
           cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
           save-cache: "true"
+      - name: Download current build resources before collection
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: pytest-native-command-projections
       - uses: ./.github/actions/plan-pytest
         with:
           python-version: "3.12"
           shard-count: "128"
           telemetry-branch: ${{ github.event.pull_request.base.ref || github.ref_name }}
           github-token: ${{ github.token }}
+
+
+  public-directory:
+    needs: native-command-evaluators
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-ci-python
+        with:
+          python-version: ${{ env.CI_PYTHON_VERSION }}
+          cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
+      - name: Download this run's compiled resources
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: pytest-native-command-projections
+      - name: Build the source-bound public directory
+        env:
+          DIRECTORY_SOURCE_SHA: ${{ github.sha }}
+          DIRECTORY_RUN_ID: ${{ github.run_id }}
+          DIRECTORY_RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          uv run --no-sync python scripts/ci/build_public_directory.py \
+            --source-sha "$DIRECTORY_SOURCE_SHA" --run-id "$DIRECTORY_RUN_ID" \
+            --run-attempt "$DIRECTORY_RUN_ATTEMPT"
+      - name: Publish directory build output
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: guard-extension-directory.json
+          path: build/public-directory/guard-extension-directory.json
+          archive: false
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 90
 
   coverage:
     name: coverage (3.12, ${{ matrix.shard-index }})
@@ -201,7 +245,7 @@ jobs:
           test -s "$shard_file"
           # Timing contracts run untraced in scheduling-sensitive with their original deadlines.
           PYTHONPATH=scripts/ci GUARD_PYTEST_DURATION_OUTPUT=pytest-durations.json GUARD_PYTEST_UNDER_COVERAGE=1 \
-            uv run --no-sync python scripts/ci/run_projection_shard.py "$shard_file" -- \
+            uv run --no-sync python -m pytest \
             -p pytest_duration_report "@$shard_file" --tb=short --durations=10 \
             --deselect tests/test_guard_hook_process_runner.py::test_scheduler_and_runner_complete_48_routine_reviews_without_capacity_denial \
             --deselect tests/test_guard_daemon_storage_liveness.py::test_locked_storage_hook_burst_fails_safe_without_stranding_daemon \
@@ -430,6 +474,7 @@ jobs:
           --tb=short
 
   compatibility:
+    needs: native-command-evaluators
     runs-on: ubuntu-latest
     timeout-minutes: 5
     strategy:
@@ -440,6 +485,11 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
+      - name: Download current build resources before source tests
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: pytest-native-command-projections
+          path: .
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: ${{ matrix.python-version }}
@@ -583,18 +633,20 @@ jobs:
   ci-python-312:
     name: ci (3.12)
     if: always()
-    needs: [quality, coverage-plan, coverage, compatibility, scheduling-sensitive]
+    needs: [quality, coverage-plan, coverage, compatibility, scheduling-sensitive, public-directory]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
       - name: Verify Python CI dependencies
         env:
+          PUBLIC_DIRECTORY_RESULT: ${{ needs.public-directory.result }}
           QUALITY_RESULT: ${{ needs.quality.result }}
           COVERAGE_PLAN_RESULT: ${{ needs.coverage-plan.result }}
           COVERAGE_RESULT: ${{ needs.coverage.result }}
           COMPATIBILITY_RESULT: ${{ needs.compatibility.result }}
           SCHEDULING_SENSITIVE_RESULT: ${{ needs.scheduling-sensitive.result }}
         run: |
+          test "$PUBLIC_DIRECTORY_RESULT" = "success"
           test "$QUALITY_RESULT" = "success"
           test "$COVERAGE_PLAN_RESULT" = "success"
           test "$COVERAGE_RESULT" = "success"
@@ -674,11 +726,17 @@ jobs:
           echo "Bundle JS: ${js_size:-unknown}, CSS: ${css_size:-unknown}"
 
   cisco-full:
+    needs: native-command-evaluators
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
+      - name: Download current build resources before source tests
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: pytest-native-command-projections
+          path: .
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: "3.13"
@@ -704,6 +762,7 @@ jobs:
       - run: uv run --no-sync pytest tests/test_cisco_install_surfaces.py tests/test_mcp_security.py tests/test_cli.py tests/test_action_runner.py tests/test_live_cisco_smoke.py --tb=short
 
   cross-platform:
+    needs: native-command-evaluators
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -713,6 +772,11 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
+      - name: Download current build resources before source tests
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: pytest-native-command-projections
+          path: .
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: ${{ matrix.python-version }}
@@ -795,6 +859,7 @@ jobs:
           uv run --no-sync pytest tests/test_frozen_windows_daemon_bootstrap.py --tb=short
 
   windows-updater:
+    needs: native-command-evaluators
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
     timeout-minutes: 15
@@ -806,6 +871,11 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
+      - name: Download current build resources before source tests
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: pytest-native-command-projections
+          path: .
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: ${{ matrix.python-version }}

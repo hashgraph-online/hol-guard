@@ -18,6 +18,11 @@ SRC_PATH = Path(__file__).resolve().parents[1] / "src"
 SUPPORT_PATH = Path(__file__).resolve().parent / "support"
 
 use_installed_package = os.environ.get("HOL_GUARD_TEST_USE_INSTALLED") == "1"
+if not use_installed_package:
+    from scripts.build_guard_resources import prepare as _prepare_build_resources
+
+    _prepare_build_resources(Path(__file__).resolve().parents[1])
+
 if not use_installed_package and str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
 if str(SUPPORT_PATH) not in sys.path:

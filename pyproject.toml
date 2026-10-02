@@ -92,6 +92,18 @@ dev = [
 ]
 
 [tool.uv]
+cache-keys = [
+  { env = "HOL_GUARD_CI_DEFER_RESOURCE_BUILD" },
+  { file = "pyproject.toml" }, { file = "hatch_build.py" },
+  { file = "scripts/build_guard_resources.py" }, { file = "scripts/build_native_command_program.py" },
+  { file = "contributions/command-sources/*.json" }, { file = "contributions/mcp-servers/*.json" },
+  { file = "contracts/extensions/trust-class-map.v1.json" }, { file = "contracts/extensions/*.schema.json" },
+  { file = "contracts/mcp-servers/*.schema.json" },
+  { file = "rust/Cargo.toml" }, { file = "rust/Cargo.lock" },
+  { file = "rust/crates/*/Cargo.toml" }, { file = "rust/crates/*/build.rs" },
+  { file = "rust/crates/*/src/**/*.rs" }, { file = "rust/crates/*/src/**/*.json" },
+  { file = "rust/build_support/*.rs" },
+]
 override-dependencies = [
     "aiohttp==3.14.3",
     "anyio==4.14.2",
@@ -133,32 +145,17 @@ Dataset = "https://huggingface.co/datasets/HashgraphOnline/hol-plugin-security"
 target-version = "py310"
 line-length = 120
 
+[tool.hatch.build.hooks.custom]
+path = "hatch_build.py"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/codex_plugin_scanner"]
 
 [tool.hatch.build.targets.wheel.force-include]
-"contracts/extensions/native-command-program.v1.json" = "codex_plugin_scanner/guard/contracts/data/extensions/native-command-program.v1.json"
-"contracts/extensions/command-catalog.v1.json" = "codex_plugin_scanner/guard/contracts/data/extensions/command-catalog.v1.json"
 "contracts/guard-cloud-review/v2/contract.json" = "codex_plugin_scanner/guard/contracts/data/guard-cloud-review/v2/contract.json"
 "contracts/guard-cloud-review/v2/command-result.json" = "codex_plugin_scanner/guard/contracts/data/guard-cloud-review/v2/command-result.json"
 "contracts/guard-cloud-review/v2/fixtures.json" = "codex_plugin_scanner/guard/contracts/data/guard-cloud-review/v2/fixtures.json"
 "docs/guard/contracts/guard-cloud-review.md" = "codex_plugin_scanner/guard/contracts/data/guard-cloud-review/guard-cloud-review.md"
-"contracts/extensions/trust-class-map.v1.json" = "codex_plugin_scanner/guard/contracts/data/extensions/trust-class-map.v1.json"
-"contracts/extensions/contribution.v1.schema.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contribution.v1.schema.json"
-"contracts/extensions/contribution.v2.schema.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contribution.v2.schema.json"
-"contributions/extensions/command.blitcp.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contributions/command.blitcp.json"
-"contributions/extensions/command.noodle.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contributions/command.noodle.json"
-"contributions/extensions/command.ollama.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contributions/command.ollama.json"
-"contributions/extensions/command.probe.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contributions/command.probe.json"
-"contributions/extensions/command.remote.essh.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contributions/command.remote.essh.json"
-"contributions/extensions/command.repo2nb.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contributions/command.repo2nb.json"
-"contributions/extensions/command.skill-sunset.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contributions/command.skill-sunset.json"
-"contributions/extensions/command.uivoid.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contributions/command.uivoid.json"
-"contracts/mcp-servers/contribution.v1.schema.json" = "codex_plugin_scanner/guard/contracts/data/mcp_servers/contribution.v1.schema.json"
-"contributions/mcp-servers/mcp.filesystem.json" = "codex_plugin_scanner/guard/contracts/data/mcp_servers/contributions/mcp.filesystem.json"
-"contributions/mcp-servers/mcp.instapods.json" = "codex_plugin_scanner/guard/contracts/data/mcp_servers/contributions/mcp.instapods.json"
-"contributions/mcp-servers/mcp.pr-ui-compare.json" = "codex_plugin_scanner/guard/contracts/data/mcp_servers/contributions/mcp.pr-ui-compare.json"
-"contributions/mcp-servers/mcp.reaper.json" = "codex_plugin_scanner/guard/contracts/data/mcp_servers/contributions/mcp.reaper.json"
 
 [tool.hatch.build]
 artifacts = [

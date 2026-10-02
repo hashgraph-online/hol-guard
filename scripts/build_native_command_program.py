@@ -1,4 +1,4 @@
-"""Build/check native program and catalog projections from canonical JSON sources.
+"""Stage/check build-owned program and catalog outputs from canonical JSON sources.
 
 Python only orchestrates file I/O. Rust owns source validation, lowering, and
 identities. This development command is never called on the hook hot path.
@@ -7,9 +7,10 @@ identities. This development command is never called on the hook hot path.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import subprocess
-from pathlib import Path
+from pathlib import Path, PurePath
 
 ROOT = Path(__file__).resolve().parents[1]
 ARTIFACT = ROOT / "contracts/extensions/native-command-program.v1.json"
@@ -65,9 +66,38 @@ def build_request() -> dict:
     }
 
 
+def implementation_path_key(path: PurePath, workspace: PurePath) -> str:
+    """Match native UTF-8 relative-name order, including on case-folding Windows paths."""
+    return path.relative_to(workspace).as_posix()
+
+
+def implementation_digest() -> str:
+    """Mirror the Rust build fingerprint, not its compilation or admission logic."""
+    workspace = ROOT / "rust"
+    paths = {workspace / "Cargo.lock", workspace / "Cargo.toml"}
+    for crate in (workspace / "crates").iterdir():
+        for name in ("Cargo.toml", "build.rs"):
+            if (crate / name).is_file():
+                paths.add(crate / name)
+        if (crate / "src").is_dir():
+            paths.update(path for path in (crate / "src").rglob("*") if path.suffix in (".rs", ".json"))
+    paths.update((workspace / "build_support").glob("*.rs"))
+    digest = hashlib.sha256(b"hol-guard.native-source-implementation.v1\0")
+    for path in sorted(paths, key=lambda item: implementation_path_key(item, workspace)):
+        if path.is_symlink() or not path.is_file():
+            raise ValueError("invalid native implementation input")
+        name = path.relative_to(workspace).as_posix().encode()
+        content = path.read_bytes().replace(b"\r\n", b"\n")
+        digest.update(len(name).to_bytes(8, "big"))
+        digest.update(name)
+        digest.update(len(content).to_bytes(8, "big"))
+        digest.update(content)
+    return digest.hexdigest()
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--check", action="store_true", help="Reject a missing or stale checked-in artifact.")
+    parser.add_argument("--check", action="store_true", help="Reject a missing or stale generated workspace output.")
     parser.add_argument("--compiler", type=Path, help="Explicit already-built native source compiler.")
     args = parser.parse_args()
     command = (
@@ -98,6 +128,8 @@ def main() -> int:
     compiled = json.loads(completed.stdout)
     if compiled["catalog_projection_kind"] != "complete":
         raise ValueError("release generation requires a complete catalog")
+    if compiled["implementation_digest"] != implementation_digest():
+        raise ValueError("source compiler does not match the current native implementation; rebuild it")
     program = compiled["program"]
     catalog = {
         "schema": "guard.command-catalog.v1",
@@ -169,8 +201,7 @@ def main() -> int:
         for path in unexpected_descriptors:
             path.unlink()
         for path, content in outputs.items():
-            if path.parent == package_directory:
-                package_directory.mkdir(parents=True, exist_ok=True)
+            path.parent.mkdir(parents=True, exist_ok=True)
             if not path.is_file() or path.read_bytes() != content:
                 path.write_bytes(content)
     print(

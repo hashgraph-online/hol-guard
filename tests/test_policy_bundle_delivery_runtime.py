@@ -24,7 +24,6 @@ from codex_plugin_scanner.guard.runtime.extension_catalog_sync import (
 from codex_plugin_scanner.guard.runtime.extension_control_runtime import ExtensionControlRuntime
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.managed_controls_activation_support import CAPABILITIES, parse_managed_bundle
-from tests.support.extension_freshness import requires_fresh_projections
 from tests.support.network import stub_authenticated_urlopen
 from tests.test_guard_runtime import _seed_guard_cloud
 
@@ -66,20 +65,14 @@ def _bundle() -> dict[str, object]:
     return value
 
 
-@requires_fresh_projections
 def test_signed_cloud_extension_projection_matches_shared_vector() -> None:
     vector_path = _VECTOR_PATH.with_name("extension-projection-digest-vector.json")
     vector = json.loads(vector_path.read_text())
 
     assert vector["catalogDigest"] == _GUARD_RELEASE_CATALOG_DIGEST
     assert vector["expectedExtensionProjectionDigest"] == _GUARD_RELEASE_PROJECTION_DIGEST
-    assert (
-        vector["catalogDigest"]
-        == runner.build_builtin_extension_catalog_wire(
-            guard_version="test",
-            generated_at="2026-08-25T12:00:00Z",
-        )["catalogDigest"]
-    )
+    # This is a fixed cross-language cryptographic vector, not a snapshot of
+    # the live extension inventory. New extensions must not rewrite it.
     assert (
         signed_cloud_extension_projection_json(
             parse_managed_bundle(_bundle()),
@@ -94,6 +87,17 @@ def test_signed_cloud_extension_projection_matches_shared_vector() -> None:
         )
         == _GUARD_RELEASE_PROJECTION_DIGEST
     )
+
+
+def test_live_catalog_projection_is_bound_to_the_current_catalog() -> None:
+    """A current projection cannot be replayed against a different catalog."""
+    catalog = runner.build_builtin_extension_catalog_wire(guard_version="test", generated_at="2026-08-25T12:00:00Z")
+    digest = str(catalog["catalogDigest"])
+    bundle = parse_managed_bundle(_bundle())
+    actual = signed_cloud_extension_projection_digest(bundle, catalog_digest=digest)
+    different = ("0" if digest[0] != "0" else "1") + digest[1:]
+    assert actual == signed_cloud_extension_projection_digest(bundle, catalog_digest=digest)
+    assert actual != signed_cloud_extension_projection_digest(bundle, catalog_digest=different)
 
 
 def _stub_sync(monkeypatch: pytest.MonkeyPatch, response: dict[str, object]) -> None:

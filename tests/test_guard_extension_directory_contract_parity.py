@@ -22,7 +22,6 @@ from codex_plugin_scanner.guard.extension_builder.listing import (
 )
 from codex_plugin_scanner.guard.runtime.mcp_server_contribution import catalog_id_for_mcp_id
 from tests.extension_builder_support import REPOSITORY, metadata
-from tests.support.extension_freshness import requires_fresh_projections
 
 
 def directory_schema() -> dict[str, object]:
@@ -46,7 +45,9 @@ def test_listing_and_directory_preserve_native_schema_bounds(kind: Literal["cli"
     native_schema = json.loads((REPOSITORY / "contracts" / directory / schema_version).read_text())
     Draft202012Validator(native_schema).validate(payload)
 
-    catalog = json.loads((REPOSITORY / "docs/guard/extensions/catalog.v1.json").read_text())
+    from scripts.export_extension_directory import export_directory
+
+    catalog = export_directory()
     entry = next(row for row in catalog["entries"] if row["id"] == example)
     entry.update(
         {
@@ -67,7 +68,9 @@ def test_listing_rejects_identity_beyond_native_bound(prefix: str) -> None:
 
 
 def test_directory_rejects_unbounded_dependent_fields() -> None:
-    catalog = json.loads((REPOSITORY / "docs/guard/extensions/catalog.v1.json").read_text())
+    from scripts.export_extension_directory import export_directory
+
+    catalog = export_directory()
     entry = next(row for row in catalog["entries"] if row["id"] == "mcp.filesystem")
     for field, value in [
         ("id", "mcp." + "x" * 253),
@@ -101,7 +104,6 @@ def test_listing_contract_distinguishes_presentation_from_claim_authority() -> N
         assert packaged == public
 
 
-@requires_fresh_projections
 def test_exporter_never_infers_claim_authority_when_ids_are_omitted(tmp_path: Path) -> None:
     specification = importlib.util.spec_from_file_location(
         "publisher_contract_export", REPOSITORY / "scripts/export_extension_directory.py"
@@ -109,7 +111,7 @@ def test_exporter_never_infers_claim_authority_when_ids_are_omitted(tmp_path: Pa
     assert specification and specification.loader
     exporter = importlib.util.module_from_spec(specification)
     specification.loader.exec_module(exporter)
-    for directory in ("extensions", "mcp-servers"):
+    for directory in ("extensions", "mcp-servers", "command-sources"):
         shutil.copytree(REPOSITORY / "contributions" / directory, tmp_path / "contributions" / directory)
     listings = tmp_path / "contributions/extension-listings"
     listings.mkdir()

@@ -18,9 +18,8 @@ from codex_plugin_scanner.guard.runtime.extension_control_contract import CONTRO
 from codex_plugin_scanner.guard.runtime.extension_control_limits import advertised_extension_control_limits
 from codex_plugin_scanner.guard.runtime.extension_control_runtime import ExtensionControlRuntime
 from codex_plugin_scanner.guard.store import GuardStore
-from tests.support.extension_freshness import requires_fresh_projections
 
-_FIXTURE = Path(__file__).parent / "fixtures" / "extension-controls" / "catalog-baseline.v1.json"
+_FIXTURE = Path(__file__).parent / "fixtures" / "extension-controls" / "api-contract.v1.json"
 _API_SCHEMA = "guard.daemon.extension-controls.v1"
 
 
@@ -64,12 +63,28 @@ def _identity_snapshot() -> dict[str, object]:
     }
 
 
-@requires_fresh_projections
-def test_catalog_identity_matches_generated_baseline_fixture() -> None:
-    baseline = json.loads(_FIXTURE.read_text(encoding="utf-8"))
+def test_catalog_identity_covers_exact_authored_source_inventory() -> None:
+    """Detect omissions or duplicate IDs independently of the native generator."""
+    root = Path(__file__).resolve().parents[1]
+    commands = [
+        json.loads(path.read_text()) for path in sorted((root / "contributions/command-sources").glob("command.*.json"))
+    ]
+    mcp_sources = [json.loads(path.read_text()) for path in sorted((root / "contributions/mcp-servers").glob("*.json"))]
+    expected = {source["extension"]["extension_id"] for source in commands}
+    from codex_plugin_scanner.guard.runtime.mcp_server_contribution import catalog_id_for_mcp_id
+
+    expected.update(catalog_id_for_mcp_id(source["id"]) for source in mcp_sources)
     actual = _identity_snapshot()
-    for key, value in actual.items():
-        assert baseline[key] == value, f"canonical extension-control baseline changed at {key}"
+    assert set(actual["extension_ids"]) == expected
+    assert actual["extension_count"] == len(commands) + len(mcp_sources)
+    registry = {item.extension_id: item for item in BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions}
+    for source in commands:
+        extension = registry[source["extension"]["extension_id"]]
+        assert {item.permission_id for item in extension.permissions} == {
+            item["permission_id"] for item in source["extension"]["permissions"]
+        }
+        assert {item.rule_id for item in extension.rules} == {item["rule_id"] for item in source["extension"]["rules"]}
+    baseline = json.loads(_FIXTURE.read_text(encoding="utf-8"))
     assert baseline["daemon_api_schema"] == _API_SCHEMA
     assert baseline["extension_schema_version"] == COMMAND_EXTENSION_SCHEMA_VERSION
     assert baseline["control_schema_version"] == CONTROL_SCHEMA_VERSION

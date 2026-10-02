@@ -497,7 +497,8 @@
    "paths": [
     "rust/Cargo.lock",
     "rust/Cargo.toml",
-    "rust/rust-toolchain.toml"
+    "rust/rust-toolchain.toml",
+    "rust/build_support/**"
    ],
    "current": "pinned native dependency graph, shared fixtures, and fuzz targets",
    "target": "same"
@@ -513,7 +514,8 @@
     "rust/crates/guard-rule-contract/**",
     "rust/crates/guard-rules/**",
     "rust/crates/guard-runtime/**",
-    "rust/crates/guard-scanner/**"
+    "rust/crates/guard-scanner/**",
+    "rust/crates/guard-command-build/**"
    ],
    "current": "strict raw hook-envelope v2 parsing, harness/event normalization, bounded generic PreToolUse action classification, command parser floors, authenticated effective-policy floor joins for PreToolUse and PostToolUse, external-Ed25519 V3 and root-authenticated WebAuthn V4 native approval challenge/validation/consume with resident-memory replay fencing, supported PostToolUse authority, native resident framing/authentication, OS-bound process identity, and bounded lifecycle supervision",
    "target": "all supported hook parsing, classification, policy, approval validation, and final decisions"

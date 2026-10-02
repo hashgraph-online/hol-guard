@@ -111,7 +111,7 @@ jobs:
         with:
           version: 0.9.26
           enable-cache: true
-      - run: uv sync --frozen --no-dev --group ci-test --python 3.12
+      - run: uv sync --frozen --no-dev --group ci-test --no-install-project --python 3.12
       - name: Run wheel-builder contracts
         run: uv run --no-sync pytest ci/native_runtime/test_native_hol_guard_wheel.py tests/test_native_source_compiler.py
           --tb=short
@@ -132,7 +132,7 @@ jobs:
         with:
           version: 0.9.26
           enable-cache: true
-      - run: uv sync --frozen --no-dev --group ci-test --python 3.12
+      - run: uv sync --frozen --no-dev --group ci-test --no-install-project --python 3.12
       - uses: ./.github/actions/setup-rust
         with:
           targets: x86_64-unknown-linux-musl
@@ -202,7 +202,6 @@ jobs:
             --source-compiler rust/target/x86_64-unknown-linux-musl/release/guard-command-source \
             --implementation-digest "$(jq -r '.implementation_digest' source-compiled.json)" \
             --base-program-digest "$(jq -r '.base_program_digest' source-compiled.json)"
-          uv pip uninstall --python .venv/bin/python hol-guard
           uv pip install --python .venv/bin/python --no-deps --force-reinstall native-dist/*.whl
       - name: Upload this run's native build
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -232,19 +231,13 @@ jobs:
         with:
           version: 0.9.26
           enable-cache: true
-      - run: uv sync --frozen --no-dev --group ci-test --python 3.12
+      - run: uv sync --frozen --no-dev --group ci-test --no-install-project --python 3.12
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: hol-guard-native-build-linux-x64
-      - name: Detect pending artifact regeneration
-        run: |
-          if [ "${GITHUB_BASE_REF:-}" != "" ] && [ "$(python3 scripts/ci/detect_pending_extension_regen.py --defer-freshness 2>/dev/null || echo true)" = "true" ]; then
-            echo "HOL_DEFER_ARTIFACT_FRESHNESS=1" >> "$GITHUB_ENV"
-          fi
       - name: Install this run's wheel and run installed proofs
         run: |
           chmod 0755 rust/target/x86_64-unknown-linux-musl/release/hol-guard-runtime rust/target/x86_64-unknown-linux-musl/release/guard-command-source
-          uv pip uninstall --python .venv/bin/python hol-guard
           uv pip install --python .venv/bin/python --no-deps --force-reinstall native-dist/*.whl
           source scripts/ci/native-proof-environment.sh
           .venv/bin/python ci/native_runtime/probe_native_default_auto.py --json native-default-auto.json
@@ -346,7 +339,7 @@ jobs:
         with:
           version: 0.9.26
           enable-cache: true
-      - run: uv sync --frozen --no-dev --group ci-test --python 3.12
+      - run: uv sync --frozen --no-dev --group ci-test --no-install-project --python 3.12
       - uses: ./.github/actions/setup-rust
       - name: Build native runtime
         shell: pwsh
@@ -417,8 +410,6 @@ jobs:
             --base-program-digest $baseProgram
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $wheel = (Get-ChildItem native-dist\*.whl).FullName
-          uv pip uninstall --python .venv\Scripts\python.exe hol-guard
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           uv pip install --python .venv\Scripts\python.exe --no-deps --force-reinstall $wheel
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Upload this run's native build
@@ -446,25 +437,14 @@ jobs:
         with:
           version: 0.9.26
           enable-cache: true
-      - run: uv sync --frozen --no-dev --group ci-test --python 3.12
+      - run: uv sync --frozen --no-dev --group ci-test --no-install-project --python 3.12
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: hol-guard-native-build-windows-x64
-      - name: Detect pending artifact regeneration
-        shell: pwsh
-        run: |
-          if ($env:GITHUB_BASE_REF) {
-            $defer = python scripts/ci/detect_pending_extension_regen.py --defer-freshness 2>$null
-            if ($LASTEXITCODE -ne 0 -or $defer -eq "true") {
-              "HOL_DEFER_ARTIFACT_FRESHNESS=1" | Out-File -FilePath $env:GITHUB_ENV -Append
-            }
-          }
       - name: Install this run's wheel and run installed proofs
         shell: pwsh
         run: |
           $wheel = (Get-ChildItem native-dist\*.whl).FullName
-          uv pip uninstall --python .venv\Scripts\python.exe hol-guard
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           uv pip install --python .venv\Scripts\python.exe --no-deps --force-reinstall $wheel
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Remove-Item Env:HOL_GUARD_NATIVE -ErrorAction SilentlyContinue
@@ -596,11 +576,6 @@ jobs:
           name: hol-guard-native-wheel-${{ matrix.target }}
       - name: Install the platform wheel built by this run
         run: uv pip install --python .venv/bin/python --no-deps --force-reinstall native-dist/*.whl
-      - name: Detect pending artifact regeneration
-        run: |
-          if [ "${GITHUB_BASE_REF:-}" != "" ] && [ "$(python3 scripts/ci/detect_pending_extension_regen.py --defer-freshness 2>/dev/null || echo true)" = "true" ]; then
-            echo "HOL_DEFER_ARTIFACT_FRESHNESS=1" >> "$GITHUB_ENV"
-          fi
       - name: Prove installed native default routes
         if: matrix.proof == 'default'
         run: |

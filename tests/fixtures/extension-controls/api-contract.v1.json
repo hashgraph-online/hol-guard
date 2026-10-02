@@ -1,0 +1,36 @@
+{
+  "apply_shape": [
+    "schema_version",
+    "revision",
+    "catalog_digest",
+    "canonical_diff_digest",
+    "effective"
+  ],
+  "control_schema_version": "1.0.0",
+  "daemon_api_schema": "guard.daemon.extension-controls.v1",
+  "effective_shape": [
+    "schema_version",
+    "health",
+    "revision",
+    "catalog_digest",
+    "global_lockdown",
+    "controls",
+    "layers",
+    "failures",
+    "projection"
+  ],
+  "extension_schema_version": 2,
+  "installed_browser_config": "dashboard/playwright.installed.config.ts",
+  "overview_route": "/extensions",
+  "preview_shape": [
+    "schema_version",
+    "previous_revision",
+    "next_revision",
+    "catalog_digest",
+    "canonical_diff_digest",
+    "global_lockdown",
+    "controls",
+    "semantic_preview"
+  ],
+  "schema_version": "guard.extension-control-center.baseline.v1"
+}

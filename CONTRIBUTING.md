@@ -44,11 +44,13 @@ not copy their registration pattern to add an extension.
 3. Open a PR using the **Command extension** template. Ready PRs receive Gitar's managed label,
    which enables automatic repair for mechanical schema, binding, and generated-projection issues.
 
-The canonical source, portable fixture, and external trust entry are the contributor-owned inputs.
-Generated projections (command catalog, native program, baselines, digest vectors, directory
-render) are maintainer-owned: keep them out of the contribution diff. CI validates sources
-additively while they are pending, and `extension-artifact-regen` regenerates the projections
-on `main` after merge, so projection drift alone never bounces a contribution.
+The canonical source, portable fixture, and external trust entry are contributor-owned inputs.
+Programs, catalogs, descriptors, directory renders and package resource copies are build outputs.
+Do not commit them. Normal source installs and Cargo builds generate what they need automatically;
+PRs and main use the same compilation, validation and behavioral tests. No later regeneration PR
+or generated-file merge conflict is part of the contribution process. Fixed cryptographic vectors,
+security expectations, schemas and trust assignments remain reviewed source, not generated data.
+See [build-owned resources](docs/guard/ci-artifact-lifecycle.md).
 
 Gitar does not choose command semantics, trust, claim authority, or safe variants. Contributors
 can request analysis without changes at any time with `gitar auto-apply:off`.
@@ -60,12 +62,10 @@ permission; this repository cannot enable it for the contributor. If GitHub inst
 **Allow edits and access to secrets by maintainers**, leave it disabled and apply Gitar's
 suggestion yourself.
 
-PRs from organization-owned forks — or with maintainer edits disabled — cannot
-receive maintainer pushes at all. Maintainers land those through an upstream
-`intake/pr-NNNN` branch prepared by `scripts/intake_contribution_pr.py`, which
-keeps the contributor commits as ancestors so attribution and the original PR
-stay intact. Several contributions can also be batched onto one
-`intake/batch-...` branch so artifact regeneration runs once.
+A source-only PR works from either a personal or organization-owned fork without maintainer
+write access. Keep authored changes and their tests together. Maintainers may integrate several
+reviewed sources through a normal branch, but no artifact-repair branch is required. Preserve
+original contributor commits and attribution when integrating their work.
 
 ## Development setup
 
@@ -75,8 +75,9 @@ Install Git, [uv](https://docs.astral.sh/uv/getting-started/installation/), and
 ```bash
 git clone https://github.com/hashgraph-online/hol-guard.git
 cd hol-guard
-uv sync --extra dev --frozen --python 3.12
 rustup toolchain install 1.88.0 --profile minimal --component rustfmt --component clippy
+rustup override set 1.88.0
+uv sync --extra dev --frozen --python 3.12
 ```
 
 The Rust version is pinned in [`rust/rust-toolchain.toml`](rust/rust-toolchain.toml). Use the
@@ -124,9 +125,10 @@ cargo +1.88.0 clippy --locked --manifest-path rust/Cargo.toml --workspace --all-
 cargo +1.88.0 test --locked --manifest-path rust/Cargo.toml --workspace --all-targets
 ```
 
-Command source changes need native fixture evaluation and generated-artifact checks. Contributors
-submit the source, its portable fixture, and the reviewed trust-map entry; maintainers run the
-documented preparation command to synchronize descriptors and public catalogs. Follow the
+Command source changes need native fixture evaluation and build-output checks. Contributors
+submit the source, its portable fixture, and the reviewed trust-map entry. The build owns derived
+descriptors and catalogs. Optional preparation validates fixtures and writes ignored previews,
+not tracked expectations. Follow the
 [extension validation steps](docs/guard/extensions/contributing.md#local-validation); a passing
 Python reference test alone does not establish native behavior.
 
@@ -164,25 +166,14 @@ checks authoring outside the checkout. Include the relevant CI results in the PR
 2. For a new extension or material authority change, describe the capability boundary and stable
    IDs in a draft pull request using the **Command extension** template. Keep the PR draft until the
    scope is reviewable; maintainers can redirect overlapping IDs there before implementation is complete.
-3. Make one coherent change, with native behavior fixtures when applicable. Never commit
-   regen-owned generated artifacts (catalogs, the native command program, packaged contract
-   copies, digest vectors, the decision-diff report, generated test snapshots): the
-   `generated-artifacts-guard` check rejects them, and `extension-artifact-regen` reproduces them
-   on `main` after merge. (`trust-class-map.v1.json` stays authored — contributions add their
-   `external` entry there; regen only appends unmapped ids.)
+3. Make one coherent change, with native behavior fixtures when applicable. Keep generated
+   programs, catalogs, descriptors, package copies and per-build decision reports out of Git.
+   The artifact guard checks the resulting tree without author or branch exemptions. Authored
+   trust, schemas, independent behavioral oracles and fixed cryptographic vectors are reviewed
+   normally. Builds never rewrite those expectations.
 
-   **Freshness semantics — what to do when a check says "artifacts are stale":** every
-   generated-artifact freshness gate follows the same rule, evaluated against the PR's diff:
-
-   | PR diff contains | Gate behavior |
-   |---|---|
-   | regen-owned artifact paths | strict verification — carried artifacts must be exactly right |
-   | artifact inputs only (`contributions/`, `rust/`, generator/builder sources, bound tests, fixtures — the canonical list is `REGEN_INPUT_PREFIXES` in `scripts/ci/detect_pending_extension_regen.py`) | additive validation — sources must compile; artifacts regenerate on `main` |
-   | neither | deferred — any checked-in drift is inherited and regen-owned |
-
-   The only legitimate responses to a freshness failure are: (a) your diff is wrong — remove the
-   generated paths or fix the source, or (b) your branch predates the deferral — merge `main` and
-   push. Never regenerate artifacts into an ordinary PR to chase a freshness gate.
+   A source revision must build and validate on both PRs and main. A compiler or behavioral
+   failure needs a source fix, not a freshness bypass, committed digest update or repair PR.
 4. Run the relevant validation and inspect the complete diff.
 5. For a command extension, run `hol-guard extensions handoff` and use the **Command extension**
    PR template. Describe the problem, resulting behavior, exact validation commands, and any

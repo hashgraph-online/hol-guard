@@ -29,8 +29,8 @@ from codex_plugin_scanner.guard.runtime.mcp_server_contribution import (
 )
 
 ROOT = Path(__file__).resolve().parents[1]
-OUTPUT_V1 = ROOT / "docs/guard/extensions/catalog.v1.json"
-OUTPUT_V2 = ROOT / "docs/guard/extensions/catalog.v2.json"
+OUTPUT_V1 = ROOT / "build/guard-directory/catalog.v1.json"
+OUTPUT_V2 = ROOT / "build/guard-directory/catalog.v2.json"
 # Retained for existing callers that intentionally address the v1 artifact.
 OUTPUT = OUTPUT_V1
 MAX_ENTRIES = 512
@@ -232,7 +232,7 @@ def _export_directory_v2(
     listings: dict[str, tuple[str, dict[str, object], str]],
     command_sources: dict[str, bytes],
 ) -> dict[str, object]:
-    """Project v2 public metadata without changing the v1 claim source binding."""
+    """Keep stable directory identities while adding authored-source evidence."""
 
     entries: list[dict[str, object]] = []
     for v1_entry in v1["entries"]:
@@ -378,6 +378,7 @@ def main(argv: list[str] | None = None) -> int:
                 parser.error("Extension catalog is stale; run python scripts/export_extension_directory.py")
         else:
             for path, content in rendered.items():
+                checked_path(path.parent).mkdir(parents=True, exist_ok=True)
                 write_catalog(path, content)
     except (BuilderError, OSError, ValueError) as error:
         parser.error(str(error))
