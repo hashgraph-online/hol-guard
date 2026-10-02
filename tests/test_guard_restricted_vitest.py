@@ -30,6 +30,14 @@ def test_invalid_manifest_cannot_enable_config_loader(tmp_path: Path) -> None:
         assert vitest._readonly_config_arguments(("run",), manifest) == ("run",)
 
 
+def test_manifest_symlink_is_not_read_for_config_capability(tmp_path: Path) -> None:
+    target = tmp_path / "other.json"
+    target.write_text(json.dumps({"name": "vitest", "version": "4.1.8"}))
+    manifest = tmp_path / "package.json"
+    manifest.symlink_to(target)
+    assert vitest._readonly_config_arguments(("run",), manifest) == ("run",)
+
+
 @pytest.mark.parametrize(
     "command",
     [

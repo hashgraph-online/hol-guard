@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import stat
 import tempfile
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
@@ -70,17 +71,22 @@ def _readonly_config_arguments(args: tuple[str, ...], manifest: Path) -> tuple[s
     if any(value == "--configLoader" or value.startswith("--configLoader=") for value in args):
         return args
     try:
-        with manifest.open("rb") as handle:
+        descriptor = os.open(manifest, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        with os.fdopen(descriptor, "rb") as handle:
+            if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
+                return args
             raw = handle.read(65537)
         if len(raw) > 65536:
             return args
         package = json.loads(raw)
-        version = package.get("version", "") if isinstance(package, dict) else ""
+        if not isinstance(package, dict):
+            return args
+        version = package.get("version", "")
         major = version.split(".", 1)[0] if isinstance(version, str) else ""
         # Older releases are not assumed to support this CLI/Vite capability.
         if package.get("name") == "vitest" and major.isascii() and major.isdigit() and int(major) >= 4:
             return (*args, "--configLoader", "runner")
-    except (OSError, ValueError, AttributeError):
+    except (OSError, ValueError):
         pass
     return args
 
