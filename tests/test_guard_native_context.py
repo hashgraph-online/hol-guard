@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import multiprocessing
 from pathlib import Path
 
 import pytest
@@ -138,12 +139,8 @@ def test_native_context_digest_cache_hit_rebinds_request_identity(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     captured = _prime(monkeypatch)
-    first = native_context.native_context_digest(
-        "launch_argv_digest", {"argv": ["hol-guard"]}, guard_home=tmp_path
-    )
-    second = native_context.native_context_digest(
-        "launch_argv_digest", {"argv": ["hol-guard"]}, guard_home=tmp_path
-    )
+    first = native_context.native_context_digest("launch_argv_digest", {"argv": ["hol-guard"]}, guard_home=tmp_path)
+    second = native_context.native_context_digest("launch_argv_digest", {"argv": ["hol-guard"]}, guard_home=tmp_path)
     assert first is not None and second is not None
     # The second call must hit the cache — no second resident round trip.
     assert len(captured) == 1
@@ -168,12 +165,8 @@ def test_native_context_digest_symlinked_home_shares_cache_entry(
     real_home.mkdir()
     linked_home = tmp_path / "linked-home"
     linked_home.symlink_to(real_home, target_is_directory=True)
-    first = native_context.native_context_digest(
-        "launch_argv_digest", {"argv": ["hol-guard"]}, guard_home=real_home
-    )
-    second = native_context.native_context_digest(
-        "launch_argv_digest", {"argv": ["hol-guard"]}, guard_home=linked_home
-    )
+    first = native_context.native_context_digest("launch_argv_digest", {"argv": ["hol-guard"]}, guard_home=real_home)
+    second = native_context.native_context_digest("launch_argv_digest", {"argv": ["hol-guard"]}, guard_home=linked_home)
     assert first is not None and second is not None
     assert len(captured) == 1
 
@@ -258,12 +251,11 @@ def test_native_context_digest_surrogate_component_returns_typed_error(
     assert calls == []
 
 
-def test_native_context_digest_ok_result_requires_output_field(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_native_context_digest_ok_result_requires_output_field(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     # An `ok` result without the kind's output field is an incomplete result —
     # reject it instead of letting callers index a missing key.
     _prime(monkeypatch)
+
     def _client(*_args: object, **kwargs: object) -> bytes:
         request = json.loads(kwargs["payload"])["request"]
         return json.dumps(
@@ -286,6 +278,7 @@ def test_native_context_digest_validate_kind_requires_reason_field(
     # Validation callers read `validation_reason`; an `ok` result that omits
     # the field entirely would silently decode to "unchanged" — reject it.
     _prime(monkeypatch)
+
     def _client(*_args: object, **kwargs: object) -> bytes:
         request = json.loads(kwargs["payload"])["request"]
         return json.dumps(
@@ -300,9 +293,7 @@ def test_native_context_digest_validate_kind_requires_reason_field(
 
     monkeypatch.setattr(native_context, "native_resident_client_request", _client)
     fields = {"saved_token": "guard-approval-context:v1:AAAA", "current_token": "guard-approval-context:v1:AAAA"}
-    assert (
-        native_context.native_context_digest("validate_approval_context_tokens", fields, guard_home=tmp_path) is None
-    )
+    assert native_context.native_context_digest("validate_approval_context_tokens", fields, guard_home=tmp_path) is None
 
 
 def test_native_context_digest_validate_kind_accepts_null_reason(
@@ -311,6 +302,7 @@ def test_native_context_digest_validate_kind_accepts_null_reason(
     # `validation_reason: null` is the legitimate "unchanged" verdict — the
     # key must be present, but null must not be rejected as missing output.
     _prime(monkeypatch)
+
     def _client(*_args: object, **kwargs: object) -> bytes:
         request = json.loads(kwargs["payload"])["request"]
         return json.dumps(
@@ -376,3 +368,33 @@ def test_bound_context_digest_home_round_trip(
     finally:
         native_context.reset_context_digest_home(token)
     assert native_context.context_digest_guard_home() is None
+
+
+def _forked_bind_probe(guard_home: str, queue: multiprocessing.queues.Queue) -> None:
+    native_context.bind_context_digest_home(Path(guard_home))
+    queue.put("bound")
+
+
+def test_bind_context_digest_home_does_not_inherit_held_lock_across_fork(tmp_path: Path) -> None:
+    # Forked enforcement children (e.g. the guard protect subprocess spawned
+    # while a publisher thread is mid-bind) inherit module locks in whatever
+    # state the parent's threads left them.  A lock held by a thread that does
+    # not exist in the child can never be released; the at-fork reset must
+    # rebuild it so the child's bind completes instead of deadlocking.
+    fork = multiprocessing.get_context("fork") if "fork" in multiprocessing.get_all_start_methods() else None
+    if fork is None:
+        pytest.skip("fork start method unavailable on this platform")
+
+    results: multiprocessing.queues.Queue = fork.Queue()
+    child = fork.Process(target=_forked_bind_probe, args=(str(tmp_path), results))
+    native_context._LAST_BOUND_LOCK.acquire()
+    try:
+        child.start()
+    finally:
+        native_context._LAST_BOUND_LOCK.release()
+    child.join(timeout=15)
+    if child.exitcode is None:
+        child.terminate()
+        child.join(timeout=5)
+    assert child.exitcode == 0
+    assert results.get(timeout=1) == "bound"
