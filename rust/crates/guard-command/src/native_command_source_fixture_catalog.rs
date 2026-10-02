@@ -119,7 +119,7 @@ mod tests {
                  "expected_effective_segments":[0]},
                 {"id":"help-is-read-only", "command":"noodle request run users/get --help",
                  "enabled_extensions":["command.noodle"], "disabled_permissions":[],
-                 "expected_action":"allow", "rule_id":"command.noodle.run",
+                 "expected_action":"review", "rule_id":"command.noodle.run",
                  "expected_effective_segments":[]}
             ]
         });

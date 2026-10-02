@@ -203,7 +203,7 @@ def exercise(root: Path, target: Path, results: list[dict[str, object]]) -> None
                 "command": "hol-ci-fixture request run demo --help",
                 "enabled_extensions": [EXTENSION_ID],
                 "disabled_permissions": [],
-                "expected_action": "allow",
+                "expected_action": "review",
                 "rule_id": EXTENSION_ID + ".run",
                 "expected_effective_segments": [],
             },
