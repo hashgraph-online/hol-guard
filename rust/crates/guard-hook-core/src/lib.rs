@@ -8,7 +8,7 @@ use guard_rules::{
     OUTPUT_TEXT_KEYS, PAYLOAD_OUTPUT_KEYS, REVIEWED_EXCERPT_CHARS,
 };
 use guard_scanner::scan_text;
-use guard_secure_fs::{classify_source_path, read_bounded, sensitive_path_family};
+use guard_secure_fs::{classify_scannable_source_path, read_bounded, sensitive_path_family};
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
@@ -379,11 +379,12 @@ fn review_source(
     }
     let allow_external =
         matches!(request.harness.as_str(), "pi" | "omp") && request.source_ref_external_allowed;
-    let candidate_decision = classify_source_path(candidate, cwd, Some(home), allow_external);
+    let candidate_decision =
+        classify_scannable_source_path(candidate, cwd, Some(home), allow_external);
     if !candidate_decision.allowed {
         return inconclusive_source();
     }
-    let target_decision = classify_source_path(&target, cwd, Some(home), allow_external);
+    let target_decision = classify_scannable_source_path(&target, cwd, Some(home), allow_external);
     if !target_decision.allowed {
         return inconclusive_source();
     }

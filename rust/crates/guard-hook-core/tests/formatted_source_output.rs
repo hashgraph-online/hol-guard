@@ -88,3 +88,53 @@ fn formatted_reads_require_complete_scanned_output_and_clean_source() {
     std::fs::write(&source, format!("token = '{token}'\n")).unwrap();
     assert_eq!(review_post_tool(&base).reason_code, "source_secret_match");
 }
+
+#[cfg(unix)]
+#[test]
+fn external_and_linked_plaintext_is_scanned_without_checkout_location_allowlists() {
+    let root = TestRoot::new();
+    let workspace = root.path().join("workspace");
+    std::fs::create_dir(&workspace).unwrap();
+    let outside = root.path().join("ordinary.txt");
+    std::fs::write(&outside, "ordinary fixture\n").unwrap();
+    let link = workspace.join("guide.txt");
+    std::os::unix::fs::symlink(&outside, &link).unwrap();
+
+    for target in [
+        outside.to_string_lossy().as_ref(),
+        "guide.txt",
+        "../ordinary.txt",
+    ] {
+        let mut input = request(&workspace, "ordinary fixture");
+        input.payload["tool_input"]["path"] = json!(target);
+        input.payload["guard_source_ref"]["path"] = json!(target);
+        input.payload["guard_source_ref"]["tool_input_path"] = json!(target);
+        let result = review_post_tool(&input);
+        assert_eq!(
+            result.model_output_action, "allow_original",
+            "{target}: {result:?}"
+        );
+        input.source_ref_external_allowed = false;
+        assert_ne!(
+            review_post_tool(&input).model_output_action,
+            "allow_original",
+            "{target}"
+        );
+    }
+    let token = format!("{}{}", ["gh", "p_"].concat(), "b".repeat(30));
+    std::fs::write(&outside, format!("{token}\n")).unwrap();
+    let mut secret = request(&workspace, "ordinary fixture");
+    for field in ["path", "tool_input_path"] {
+        secret.payload["guard_source_ref"][field] = json!("guide.txt");
+    }
+    secret.payload["tool_input"]["path"] = json!("guide.txt");
+    assert_eq!(review_post_tool(&secret).reason_code, "source_secret_match");
+    let dotenv = root.path().join(".env");
+    std::fs::write(&dotenv, "synthetic fixture only\n").unwrap();
+    std::fs::remove_file(&link).unwrap();
+    std::os::unix::fs::symlink(&dotenv, &link).unwrap();
+    assert_ne!(
+        review_post_tool(&secret).model_output_action,
+        "allow_original"
+    );
+}
