@@ -44,4 +44,6 @@ tests/test_guard_shell_secret_read_floors.py
 tests/test_hermes_runtime_hooks.py
 tests/test_environment_secret_dump.py
 tests/test_native_command_test_support_paths.py
+tests/test_guard_mcp_fresh_approval.py
+tests/test_guard_approval_context.py::test_windows_executable_hash_keeps_descriptor_race_checks
 --tb=short

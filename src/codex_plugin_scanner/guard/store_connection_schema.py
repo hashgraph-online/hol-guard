@@ -952,7 +952,8 @@ class StoreConnectionSchemaMixin:
               payload_hash text,
               payload_mac text,
               integrity_key_id text,
-              signed_at text
+              signed_at text,
+              authority_kind text
             )
             """,
             """
@@ -1205,6 +1206,13 @@ class StoreConnectionSchemaMixin:
             self._ensure_column(connection, "guard_local_once_approvals", "payload_mac", "text")
             self._ensure_column(connection, "guard_local_once_approvals", "integrity_key_id", "text")
             self._ensure_column(connection, "guard_local_once_approvals", "signed_at", "text")
+            self._ensure_column(connection, "guard_local_once_approvals", "authority_kind", "text")
+            connection.execute(
+                """
+                create index if not exists idx_guard_exact_cloud_local_once_lookup
+                on guard_local_once_approvals (authority_kind, request_id, claimed_at, expires_at)
+                """
+            )
             self._ensure_runtime_receipts_column(connection, "capabilities_summary", "text not null default ''")
             self._ensure_runtime_receipts_column(connection, "scanner_evidence_json", "text not null default '[]'")
             self._ensure_runtime_receipts_column(connection, "diff_summary", "text")

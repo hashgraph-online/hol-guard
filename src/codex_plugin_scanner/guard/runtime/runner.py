@@ -265,6 +265,7 @@ _APPROVAL_METADATA_KEYS = (
     "approval_queue_unavailable",
     "approval_requests",
     "approval_wait",
+    "daemon_queue_unavailable",
     "review_hint",
 )
 

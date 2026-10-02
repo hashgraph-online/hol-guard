@@ -54,6 +54,7 @@ from .discovery import (
 )
 from .file_locking import lock_daemon_file as _lock_daemon_start_file
 from .file_locking import try_lock_daemon_file as _try_lock_daemon_file
+from .hook_process_runner_lifecycle import hook_worker_ready_timeout
 from .lifecycle_journal import record_daemon_lifecycle_event
 from .pipx_import_paths import pipx_shared_import_paths
 from .start_classification import (
@@ -73,6 +74,10 @@ GUARD_DAEMON_START_TIMEOUT_SECONDS = 15.0
 GUARD_DAEMON_POST_UPDATE_START_TIMEOUT_SECONDS = 30.0
 GUARD_DAEMON_POLL_INTERVAL_SECONDS = 0.1
 GUARD_DAEMON_HOOK_RECOVERY_COOLDOWN_SECONDS = 30.0
+# Head-room the client adds on top of the worker-ready budget so the daemon can
+# finish binding its socket and writing its state file after the worker reports
+# ready, without the startup poll timing out first.
+GUARD_DAEMON_START_TIMEOUT_MARGIN_SECONDS = 5.0
 _EPHEMERAL_GUARD_DAEMON_REAP_INTERVAL_SECONDS = 30.0
 _EPHEMERAL_GUARD_DAEMON_STALE_SECONDS = 30.0
 _EPHEMERAL_GUARD_DAEMON_MAX_STATES = 512
@@ -126,6 +131,8 @@ _GUARD_DAEMON_ENV_KEYS = frozenset(
         "HOL_GUARD_DESKTOP",
         "HOL_GUARD_DESKTOP_RUNTIME_OWNER",
         "HOL_GUARD_DESKTOP_VERSION",
+        "HOL_GUARD_HOOK_EVALUATOR_READY_TIMEOUT_SECONDS",
+        "HOL_GUARD_HOOK_WORKER_READY_TIMEOUT_SECONDS",
         "LANG",
         "LC_ALL",
         "LC_CTYPE",
@@ -378,9 +385,27 @@ def desktop_preflight_requested() -> bool:
 
 
 def _default_guard_daemon_start_timeout() -> float:
-    if os.environ.get("HOL_GUARD_DESKTOP", "").strip() == "1":
-        return GUARD_DAEMON_POST_UPDATE_START_TIMEOUT_SECONDS
-    return GUARD_DAEMON_START_TIMEOUT_SECONDS
+    base = (
+        GUARD_DAEMON_POST_UPDATE_START_TIMEOUT_SECONDS
+        if os.environ.get("HOL_GUARD_DESKTOP", "").strip() == "1"
+        else GUARD_DAEMON_START_TIMEOUT_SECONDS
+    )
+    # The client's startup poll must outlast the worker's own readiness budget.
+    # When an operator raises HOL_GUARD_HOOK_WORKER_READY_TIMEOUT_SECONDS for a
+    # slow host (QEMU guests, cold CI), the daemon needs that full window plus a
+    # margin to finish its isolated handshake before the client gives up. A
+    # fixed client deadline would otherwise re-create the nested-budget deadlock
+    # one level higher: a healthy daemon killed while still waiting on a healthy
+    # worker.
+    worker_ready_floor = hook_worker_ready_timeout(0.0)
+    return max(base, worker_ready_floor + GUARD_DAEMON_START_TIMEOUT_MARGIN_SECONDS)
+
+
+def _post_update_guard_daemon_start_timeout() -> float:
+    return max(
+        GUARD_DAEMON_POST_UPDATE_START_TIMEOUT_SECONDS,
+        hook_worker_ready_timeout(0.0) + GUARD_DAEMON_START_TIMEOUT_MARGIN_SECONDS,
+    )
 
 
 def ensure_guard_daemon(
@@ -623,14 +648,14 @@ def ensure_guard_daemon_after_update(
         return ensure_guard_daemon(
             guard_home,
             home_dir=home_dir,
-            start_timeout=GUARD_DAEMON_POST_UPDATE_START_TIMEOUT_SECONDS,
+            start_timeout=_post_update_guard_daemon_start_timeout(),
             preferred_port=preferred_port,
             allow_windows_job_breakaway=allow_windows_job_breakaway,
         )
     return ensure_guard_daemon(
         guard_home,
         home_dir=home_dir,
-        start_timeout=GUARD_DAEMON_POST_UPDATE_START_TIMEOUT_SECONDS,
+        start_timeout=_post_update_guard_daemon_start_timeout(),
         preferred_port=preferred_port,
         allow_windows_job_breakaway=allow_windows_job_breakaway,
         executable=executable,
@@ -2114,7 +2139,7 @@ def _guard_daemon_start_progress_is_live(guard_home: Path, record: GuardDaemonSt
     ):
         return False
     age_ns = time.time_ns() - recorded_at_ns
-    if age_ns < 0 or age_ns >= int(GUARD_DAEMON_POST_UPDATE_START_TIMEOUT_SECONDS * 1_000_000_000):
+    if age_ns < 0 or age_ns >= int(_post_update_guard_daemon_start_timeout() * 1_000_000_000):
         return False
     if not _guard_daemon_pid_is_running(pid):
         return False

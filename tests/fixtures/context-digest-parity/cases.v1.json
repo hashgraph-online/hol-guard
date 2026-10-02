@@ -690,5 +690,121 @@
       ]
     }
   ],
-  "version": 1
+  "version": 1,
+  "canonical_sha256_cases": [
+    {
+      "id": "empty_dict",
+      "material": {},
+      "prefix": null,
+      "digest": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+    },
+    {
+      "id": "simple",
+      "material": {
+        "b": 1,
+        "a": "x"
+      },
+      "prefix": null,
+      "digest": "cdab067e9f3beb32d1252cfd63e492592fecbf591b0d08cadb24bb17f3864246"
+    },
+    {
+      "id": "nested_sorted",
+      "material": {
+        "z": {
+          "y": 2,
+          "a": 1
+        },
+        "m": [
+          3,
+          1
+        ]
+      },
+      "prefix": null,
+      "digest": "477d5136d3b65aff15174af04171cdd542428cf2839facc396d4aaa42f64c0c5"
+    },
+    {
+      "id": "sha256_prefix",
+      "material": {
+        "command": "git status",
+        "cwd": "/repo"
+      },
+      "prefix": "sha256:",
+      "digest": "sha256:38a4ca3bb66934412090d68f60a07373cdeedbe93900132b67a31aa04888960b"
+    },
+    {
+      "id": "unicode",
+      "material": {
+        "k": "caf\u00e9 \ud83d\ude00"
+      },
+      "prefix": null,
+      "digest": "293e70c8a9a55c8cd35433a9420db93000a7cea5027e206213ae4fb5abb2c524"
+    },
+    {
+      "id": "float",
+      "material": {
+        "f": 1.5,
+        "n": -0.0,
+        "big": 1e+300
+      },
+      "prefix": null,
+      "digest": "e15bb4c2409ab4fe78f199f920d3fca99100648578774a8130368a1495c151ad"
+    },
+    {
+      "id": "bool_null",
+      "material": {
+        "t": true,
+        "f": false,
+        "n": null
+      },
+      "prefix": null,
+      "digest": "22e00dc2f7b01420f940fbdbfbdf34fa0667cc6500186495023ba37722cbd05e"
+    },
+    {
+      "id": "array",
+      "material": [
+        1,
+        "two",
+        {
+          "x": 3
+        }
+      ],
+      "prefix": null,
+      "digest": "ca98e7ad01b0670b336825da89735b825dca3167740a38a40e12e3c495eabe44"
+    },
+    {
+      "id": "escapes",
+      "material": {
+        "s": "a\\b\n\"q\""
+      },
+      "prefix": null,
+      "digest": "70d2ae4af0e5db8409fc8aecb61e63878c2f336605c39053b5659f2e4ba64dbb"
+    }
+  ],
+  "opaque_material_cases": [
+    {
+      "id": "empty",
+      "material": "",
+      "digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "id": "simple",
+      "material": "host:server:tool",
+      "digest": "f11ffdc260847a728d9821f795ff05473777b512d7800cb838d413015e671840"
+    },
+    {
+      "id": "module",
+      "material": "package.module:func",
+      "digest": "ef8ce09bc0b647c7b2555ba4dd3bd36b9e3792aa2dd082a77cb46214667d6f22"
+    },
+    {
+      "id": "unicode",
+      "material": "caf\u00e9 \ud83d\ude00",
+      "digest": "043764df773ac7ceea6175e1498893e6ee33e79885288417cc1d75cba6094827"
+    },
+    {
+      "id": "shebang",
+      "material": "#!/usr/bin/env python3",
+      "digest": "381f9bfc69d49d39040a7d5fc3197ce385019a2ba2de649622f841a8c658ed37"
+    }
+  ]
 }

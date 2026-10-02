@@ -94,6 +94,30 @@ class _GuardCommandsProxy:
 guard_commands_module = _GuardCommandsProxy()
 
 
+def _resolve_native_hook_runtime() -> Path:
+    """Resolve the caller-pinned runtime path used by native hook tests.
+
+    A source-tree ``target/release`` or ``target/debug`` binary may belong to
+    another checkout revision. Requiring the explicit CI/local override keeps
+    stale native artifacts from being selected silently. The caller remains
+    responsible for building and provenance-verifying the selected runtime.
+    """
+
+    binary = os.environ.get("HOL_GUARD_NATIVE_BINARY")
+    if not binary:
+        pytest.fail(
+            "HOL_GUARD_NATIVE_BINARY must explicitly name the compiled Rust runtime; "
+            "native retirement proof cannot select a source-tree fallback"
+        )
+    runtime = Path(binary).expanduser()
+    if not runtime.is_file():
+        pytest.fail(f"HOL_GUARD_NATIVE_BINARY does not name an existing runtime file: {runtime}")
+    try:
+        return runtime.resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        pytest.fail(f"HOL_GUARD_NATIVE_BINARY could not be resolved: {runtime} ({exc})")
+
+
 @pytest.fixture
 def native_hook_force(monkeypatch: pytest.MonkeyPatch) -> Path:
     """Drive hook entrypoints through the compiled native runtime.
@@ -104,17 +128,7 @@ def native_hook_force(monkeypatch: pytest.MonkeyPatch) -> Path:
     There is no Python fallback, so the runtime is required, not skipped.
     """
 
-    binary = os.environ.get("HOL_GUARD_NATIVE_BINARY")
-    if binary:
-        runtime = Path(binary).expanduser()
-    else:
-        root = Path(__file__).resolve().parents[1]
-        runtime = root / "rust" / "target" / "release" / "hol-guard-runtime"
-        if not runtime.is_file():
-            runtime = root / "rust" / "target" / "debug" / "hol-guard-runtime"
-    if not runtime.is_file():
-        pytest.fail("HOL_GUARD_NATIVE_BINARY must name the compiled Rust runtime; native retirement proof cannot skip")
-    runtime = runtime.resolve(strict=True)
+    runtime = _resolve_native_hook_runtime()
     monkeypatch.setenv("HOL_GUARD_NATIVE", "force")
     monkeypatch.setenv("HOL_GUARD_NATIVE_BINARY", str(runtime))
     return runtime
@@ -336,6 +350,42 @@ def pytest_runtest_teardown(item: pytest.Item, nextitem: pytest.Item | None) -> 
 
 
 @pytest.fixture(autouse=True)
+def _close_native_policy_publishers_before_monkeypatch_restore(
+    monkeypatch: pytest.MonkeyPatch,
+) -> Iterator[None]:
+    """Join native snapshot publishers created by test-owned workers."""
+    del monkeypatch
+    from codex_plugin_scanner.guard import native_policy_snapshot
+
+    with native_policy_snapshot._PUBLISHER_LOCK:
+        existing_publishers = {
+            id(publisher) for registered in native_policy_snapshot._PUBLISHERS.values() for publisher in registered
+        }
+    yield
+
+    with native_policy_snapshot._PUBLISHER_LOCK:
+        publishers = tuple(
+            publisher
+            for registered in native_policy_snapshot._PUBLISHERS.values()
+            for publisher in registered
+            if id(publisher) not in existing_publishers
+        )
+    live_publishers: list[str] = []
+    for publisher in publishers:
+        publisher.close(timeout_seconds=5.0)
+        thread = getattr(publisher, "_thread", None)
+        if isinstance(thread, threading.Thread) and thread.is_alive():
+            with native_policy_snapshot._PUBLISHER_LOCK:
+                native_policy_snapshot._PUBLISHERS.setdefault(
+                    native_policy_snapshot._publisher_key(Path(publisher.guard_home)),
+                    set(),
+                ).add(publisher)
+            live_publishers.append(f"{publisher.guard_home}:{thread.name}")
+    if live_publishers:
+        raise AssertionError("native policy publisher thread(s) survived test teardown: " + ", ".join(live_publishers))
+
+
+@pytest.fixture(autouse=True)
 def _reset_guard_sync_resolver_override(monkeypatch: pytest.MonkeyPatch) -> None:
     """Undo any _resolve_guard_sync_auth_context override leaked by _seed_guard_cloud."""
     from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
@@ -401,7 +451,11 @@ def _isolate_daemon_background_refresh_workers(
         )
     if request.node.get_closest_marker("daemon_service_workers") is None:
         monkeypatch.setattr(daemon_server, "start_command_queue_worker", lambda _store, existing: existing)
-        monkeypatch.setattr(daemon_server, "start_cloud_sync_sync_worker", lambda _store, existing: existing)
+        monkeypatch.setattr(
+            daemon_server,
+            "start_cloud_sync_sync_worker",
+            lambda _store, existing, *, on_authority_changed=None: existing,
+        )
 
 
 class _FakeSystemKeyringModule:

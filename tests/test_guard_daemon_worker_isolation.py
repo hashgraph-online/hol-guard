@@ -58,6 +58,8 @@ def test_daemon_start_composes_all_background_workers(
     def _start_cloud_review_sync(
         _store: GuardStore,
         existing: threading.Thread | None,
+        *,
+        on_authority_changed: object = None,
     ) -> threading.Thread | None:
         started.append("cloud-review-sync")
         return existing

@@ -6,6 +6,7 @@ import logging
 import os
 import random
 import threading
+from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -14,6 +15,7 @@ from ..mdm.user_health import run_user_health_cadence, user_health_report_due
 from ..review_event_wake import ReviewEventWake, ReviewEventWakeSignal, review_event_wake_signal
 from ..store import GuardStore
 from .cloud_review_retry_recovery import prepare_retry_identity_replay
+from .native_workspace_review_replay import prepare_native_workspace_review_replay
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -35,6 +37,7 @@ def start_cloud_sync_sync_worker(
     store: GuardStore,
     existing: CloudReviewSyncWorker | None = None,
     *,
+    on_authority_changed: Callable[[], bool] | None = None,
     poll_interval: float | None = None,
     error_backoff: float | None = None,
 ) -> CloudReviewSyncWorker | None:
@@ -67,6 +70,7 @@ def start_cloud_sync_sync_worker(
             "poll_interval": safety_poll,
             "error_backoff": maximum_backoff,
             "error_backoff_base": initial_backoff,
+            "on_authority_changed": on_authority_changed,
         },
         daemon=True,
         name="hol-guard-cloud-review-sync",
@@ -88,11 +92,15 @@ def stop_cloud_sync_sync_worker(
 
 
 def refresh_cloud_review_sync_worker(
-    store: GuardStore, worker: CloudReviewSyncWorker | None, *, shutting_down: bool
+    store: GuardStore,
+    worker: CloudReviewSyncWorker | None,
+    *,
+    shutting_down: bool,
+    on_authority_changed: Callable[[], bool] | None = None,
 ) -> tuple[CloudReviewSyncWorker | None, bool]:
     if shutting_down:
         return worker, False
-    worker = start_cloud_sync_sync_worker(store, worker)
+    worker = start_cloud_sync_sync_worker(store, worker, on_authority_changed=on_authority_changed)
     if worker is None:
         return None, False
     worker.wake_signal.notify()
@@ -124,13 +132,16 @@ def _cloud_sync_sync_loop(
     poll_interval: float,
     error_backoff: float,
     error_backoff_base: float = DEFAULT_ERROR_BACKOFF_BASE_SECONDS,
+    on_authority_changed: Callable[[], bool] | None = None,
 ) -> None:
     """Drain immediately after commits and poll durably if a hint is lost."""
     from . import cloud_review_sync as sync
+    from .native_workspace_review_enrollment import refresh_native_workspace_review_authority
     from .runner import GuardSyncAuthorizationExpiredError, GuardSyncNotConfiguredError
 
     error_streak = 0
     prepared_binding: dict[str, str] | None = None
+    queue_refresh_pending = False
     while not stop_event.is_set():
         observed_generation = wake_signal.generation()
         result: dict[str, object] = {}
@@ -143,10 +154,19 @@ def _cloud_sync_sync_loop(
                 wake_signal.wait(observed_generation, poll_interval)
                 continue
             auth_context = sync._resolve_cloud_review_sync_auth_context(store)
+            authority_changed = refresh_native_workspace_review_authority(store, auth_context)
+            queue_refresh_pending = queue_refresh_pending or authority_changed
+            if queue_refresh_pending and on_authority_changed is not None:
+                queue_refresh_pending = not on_authority_changed()
             binding = store.get_review_event_oauth_binding()
+            binding_changed = isinstance(binding, dict) and binding != prepared_binding
             if isinstance(binding, dict) and binding != prepared_binding:
                 _ = prepare_retry_identity_replay(store, binding=binding)
                 prepared_binding = binding
+            if isinstance(binding, dict):
+                _ = prepare_native_workspace_review_replay(
+                    store, binding=binding, force_probe=binding_changed or authority_changed
+                )
             result = sync.sync_cloud_review_events_once(store, auth_context)
             error_streak = 0
             with suppress(OSError, PermissionError, RuntimeError, ValueError):

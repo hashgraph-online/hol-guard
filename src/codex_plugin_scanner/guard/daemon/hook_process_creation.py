@@ -202,6 +202,7 @@ def admit_hook_worker_batch(
         with runner._state_lock:
             cancelled = runner._closed or generation != runner._generation
             if not cancelled and not is_ready:
+                runner._remember_startup_failure(replacement)
                 runner._increment_metric("failures")
         if cancelled:
             return WorkerBatchResult(True, True, retry_after_batch)

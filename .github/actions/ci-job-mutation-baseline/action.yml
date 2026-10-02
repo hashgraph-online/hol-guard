@@ -1,0 +1,44 @@
+name: CI mutation-baseline
+description: Run the mutation-baseline checks inside the existing CI job.
+runs:
+  using: composite
+  steps:
+  - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+    with:
+      python-version: '3.12'
+  - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+    with:
+      version: 0.9.26
+      enable-cache: true
+      cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
+      save-cache: false
+  - run: uv sync --frozen --extra dev --python 3.12
+    shell: bash
+  - name: Download native command evaluators
+    uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+    with:
+      name: pytest-native-command-evaluators
+      path: rust/target/release
+  - name: Download matching native command projections
+    uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+    with:
+      name: pytest-native-command-projections
+      path: .
+  - run: |
+      chmod 0755 rust/target/release/guard-command-source rust/target/release/hol-guard-runtime
+      echo "HOL_GUARD_NATIVE_SOURCE_COMPILER=$GITHUB_WORKSPACE/rust/target/release/guard-command-source" >> "$GITHUB_ENV"
+      echo "HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER=$GITHUB_WORKSPACE/rust/target/release/guard-command-source" >> "$GITHUB_ENV"
+      echo "HOL_GUARD_NATIVE_BINARY=$GITHUB_WORKSPACE/rust/target/release/hol-guard-runtime" >> "$GITHUB_ENV"
+      echo "HOL_GUARD_NATIVE_REGRESSION=1" >> "$GITHUB_ENV"
+    shell: bash
+  - name: Prepare mutation artifact directories
+    run: mkdir -p mutants/docs/guard/contracts
+    shell: bash
+  - name: Run command parser mutation baseline
+    run: uv run --no-sync mutmut run --max-children 4
+    shell: bash
+  - name: Validate mutation baseline
+    run: |
+      uv run --no-sync mutmut export-cicd-stats
+      uv run --no-sync python scripts/ci/mutation_gate.py --target command-model
+    shell: bash

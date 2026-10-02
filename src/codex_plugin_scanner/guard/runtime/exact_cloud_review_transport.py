@@ -9,6 +9,7 @@ from urllib.error import HTTPError
 
 from ..contracts.guard_cloud_review import COMMAND_RESULT_CONTRACT_VERSION, validate_exact_command_result
 from .exact_cloud_review import EXACT_CLOUD_REVIEW_OPERATION, EXACT_CLOUD_REVIEW_PROTOCOL_VERSION
+from .native_workspace_review_queue import native_workspace_review_payload
 
 EXACT_CLOUD_REVIEW_COMMAND_API_BASE = "/api/guard/review/v2/commands"
 EXACT_CLOUD_REVIEW_TRANSPORT = "cloud_review"
@@ -34,16 +35,23 @@ def exact_result(job: dict[str, object], execution: dict[str, object]) -> dict[s
     """Convert a successful exact executor response to the versioned result contract."""
 
     correlation_id = _required_text(job.get("id"), "exact_result_correlation_missing")
-    signed_decision = _mapping(_mapping(job.get("payload")).get("remoteApproval"))
+    payload = _mapping(job.get("payload"))
+    native_command = native_workspace_review_payload(payload)
+    signed_decision = _mapping(payload.get("remoteApproval")) if native_command is None else {}
     bound_request_id = _required_text(
         _mapping(job.get("serverResolvedBinding")).get("localRequestId"),
         "exact_result_local_request_binding_missing",
     )
-    decision_request_id = _required_text(
-        signed_decision.get("localRequestId"),
-        "exact_result_local_request_missing",
+    decision_request_id = (
+        native_command.local_request_id
+        if native_command is not None
+        else _required_text(signed_decision.get("localRequestId"), "exact_result_local_request_missing")
     )
-    receipt_id = _required_text(signed_decision.get("receiptId"), "exact_result_receipt_missing")
+    receipt_id = (
+        native_command.receipt_id
+        if native_command is not None
+        else _required_text(signed_decision.get("receiptId"), "exact_result_receipt_missing")
+    )
     if bound_request_id != decision_request_id:
         raise ValueError("exact_result_local_request_binding_mismatch")
     data = _mapping(execution.get("data"))

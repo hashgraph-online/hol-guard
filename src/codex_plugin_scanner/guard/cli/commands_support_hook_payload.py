@@ -632,6 +632,14 @@ def _mapping_list(value: object | None) -> list[Mapping[str, object]]:
         return []
     return [item for item in value if isinstance(item, Mapping)]
 
+
+def _daemon_failure_reason(error: RuntimeError) -> str:
+    """Preserve the daemon-failure category and, when present, its message."""
+    message = str(error)
+    if message:
+        return f"{type(error).__name__}: {message}"
+    return type(error).__name__
+
 def _headless_approval_resolver(
     *,
     args: argparse.Namespace,
@@ -727,7 +735,11 @@ def _headless_approval_resolver(
 
         try:
             daemon_client = load_guard_surface_daemon_client(context.guard_home)
-        except RuntimeError:
+        except RuntimeError as daemon_load_error:
+            # Preserve the daemon-failure category and message through the
+            # local-queue fallback so the unresolved launch-validation reason
+            # is evidence, not a silently absorbed error.
+            payload["daemon_queue_unavailable"] = _daemon_failure_reason(daemon_load_error)
             return resolve_from_local_queue()
         try:
             session = daemon_client.start_session(
@@ -754,7 +766,8 @@ def _headless_approval_resolver(
                 open_key=None,
                 redaction_level=config.receipt_redaction_level,
             )
-        except RuntimeError:
+        except RuntimeError as daemon_operation_error:
+            payload["daemon_queue_unavailable"] = _daemon_failure_reason(daemon_operation_error)
             return resolve_from_local_queue()
         operation = blocked_operation["operation"] if isinstance(blocked_operation.get("operation"), dict) else {}
         queued = (
