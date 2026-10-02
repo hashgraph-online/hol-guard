@@ -106,6 +106,9 @@ fn vitest_containment_never_overrides_disabled_package_permission() {
         "bun run lint",
         "bunx tsc --noEmit",
         "bun run build",
+        "npm test",
+        "npm run test",
+        "bun run test",
     ] {
         let result = crate::pretool::evaluate_pre_tool_envelope_with_context(
             "omp",
