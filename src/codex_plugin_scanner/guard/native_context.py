@@ -69,6 +69,30 @@ _last_bound_home: Path | None = None
 _RESULT_CACHE_LOCK = threading.Lock()
 _RESULT_CACHE: OrderedDict[tuple[str, str], dict[str, Any]] = OrderedDict()
 _RESULT_CACHE_MAX = 256
+# ``native_runtime_status()`` re-reads and SHA-256-hashes the whole runtime
+# binary per call.  Batch digest sites (``environment_material`` hashes one
+# value per env var, launch verification re-hashes argv/shebang/search-path)
+# would otherwise re-validate the binary once per digest — tens of MB of
+# rehashing and per-call resident probes inside a single launch.  Memoize the
+# status snapshot for a short window so a burst of digests shares one probe;
+# a replaced binary is still re-detected within the TTL on the next batch.
+_STATUS_MEMO_LOCK = threading.Lock()
+_STATUS_MEMO_TTL_SECONDS = 0.1
+_status_memo: tuple[float, object] | None = None
+
+
+def _native_runtime_status_memo() -> object:
+    global _status_memo
+    now = time.monotonic()
+    with _STATUS_MEMO_LOCK:
+        if _status_memo is not None and now - _status_memo[0] < _STATUS_MEMO_TTL_SECONDS:
+            return _status_memo[1]
+    status = native_runtime_status()
+    with _STATUS_MEMO_LOCK:
+        _status_memo = (now, status)
+    return status
+
+
 
 
 forget_in_child(_RESULT_CACHE)
@@ -207,7 +231,7 @@ def native_context_digest(
     carries ``status``/``code`` plus the kind-specific output field.
     """
 
-    status = native_runtime_status()
+    status = _native_runtime_status_memo()
     if (
         status.mode == "off"
         or not status.available
