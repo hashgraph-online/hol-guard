@@ -13,8 +13,8 @@ from pathlib import Path
 from .restricted_pytest import RestrictedPytestError, prepare_restricted_pytest, run_restricted_pytest
 from .restricted_pytest_model import (
     GIT_READ_ONLY_PROFILE_VERSION,
+    NODE_BUILD_OUTPUT_PROFILE_VERSION,
     NODE_TEST_READ_ONLY_PROFILE_VERSION,
-    NODE_TOOL_READ_ONLY_PROFILE_VERSION,
     PYTEST_READ_ONLY_PROFILE_VERSION,
     VITEST_READ_ONLY_PROFILE_VERSION,
 )
@@ -120,12 +120,18 @@ def run_authorized_contained_test(
     )
     git = bool(command) and Path(command[0]).name == "git"
     node_tool = bool(command) and (
-        Path(command[0]).name in {"eslint", "tsc", "bun", "npm", "pnpm"}
-        or (Path(command[0]).name in {"bunx", "npx"} and any(arg in {"eslint", "tsc"} for arg in command[1:3]))
+        Path(command[0]).name in {"eslint", "tsc", "vite", "bun", "npm", "pnpm"}
+        or (Path(command[0]).name in {"bunx", "npx"} and any(arg in {"eslint", "tsc", "vite"} for arg in command[1:3]))
         or (
             len(command) > 1
             and Path(command[0]).name in {"node", "nodejs"}
-            and command[1].endswith(("/node_modules/eslint/bin/eslint.js", "/node_modules/typescript/bin/tsc"))
+            and command[1].endswith(
+                (
+                    "/node_modules/eslint/bin/eslint.js",
+                    "/node_modules/typescript/bin/tsc",
+                    "/node_modules/vite/bin/vite.js",
+                )
+            )
         )
     )
     if node_tool:
@@ -147,7 +153,9 @@ def run_authorized_contained_test(
     else:
         prepare_restricted_pytest(command, workspace=workspace, cwd=workspace, read_only_workspace=True)
     reason = (
-        "native_node_tool_readonly_containment_required"
+        "native_node_build_output_containment_required"
+        if node_tool and node_tool_plan.profile_version == NODE_BUILD_OUTPUT_PROFILE_VERSION
+        else "native_node_tool_readonly_containment_required"
         if node_tool
         else "native_git_readonly_containment_required"
         if git
@@ -158,7 +166,7 @@ def run_authorized_contained_test(
         else "native_pytest_readonly_containment_required"
     )
     profile = (
-        NODE_TOOL_READ_ONLY_PROFILE_VERSION
+        node_tool_plan.profile_version
         if node_tool
         else GIT_READ_ONLY_PROFILE_VERSION
         if git

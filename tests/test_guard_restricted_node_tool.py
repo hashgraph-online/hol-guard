@@ -34,7 +34,10 @@ def test_manifest_script_is_not_shell_consent(script, tmp_path):
 
 @pytest.mark.parametrize("denied", [False, True])
 def test_underlying_native_policy_is_rechecked(monkeypatch, tmp_path, denied):
-    plan = SimpleNamespace(command=("/usr/bin/node", str(tmp_path / "node_modules/eslint/bin/eslint.js"), "src"))
+    plan = SimpleNamespace(
+        profile_version="node-tool-readonly-v1",
+        command=("/usr/bin/node", str(tmp_path / "node_modules/eslint/bin/eslint.js"), "src"),
+    )
     executed, authorized = [], []
     monkeypatch.setattr(tool, "prepare_restricted_node_tool", lambda *args, **kwargs: plan)
     monkeypatch.setattr(tool, "run_restricted_node_tool", lambda *args, **kwargs: executed.append(True) or 0)
@@ -69,3 +72,26 @@ def test_lifecycle_actions_are_not_silently_skipped(tmp_path, phase):
     (tmp_path / "package.json").write_text(json.dumps({"scripts": {"lint": "eslint src", phase: "node lifecycle.mjs"}}))
     with pytest.raises(RestrictedPytestError, match="lifecycle actions"):
         tool.prepare_restricted_node_tool(["npm", "run", "lint"], workspace=tmp_path)
+
+
+@pytest.mark.parametrize("name", ["src", ".git", ".env", "../outside", "."])
+def test_build_outputs_cannot_grant_source_or_host_writes(tmp_path, name):
+    with pytest.raises(RestrictedPytestError):
+        tool.validate_build_output_root(tmp_path / name, workspace=tmp_path)
+
+
+@pytest.mark.parametrize("kind", ["symlink", "hardlink", "credential"])
+def test_existing_output_links_and_protected_files_are_rejected(tmp_path, kind):
+    output = tmp_path / "dist"
+    output.mkdir()
+    source = tmp_path / "ordinary.txt"
+    source.write_text("source")
+    if kind == "symlink":
+        (output / "alias").symlink_to(source)
+    elif kind == "hardlink":
+        (output / "alias").hardlink_to(source)
+    else:
+        (output / ".env").write_text("synthetic fixture")
+    with pytest.raises(RestrictedPytestError):
+        tool.validate_build_output_root(output, workspace=tmp_path)
+    assert source.read_text() == "source"

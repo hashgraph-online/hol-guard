@@ -226,3 +226,34 @@ fn local_lint_typecheck_requires_actual_protected_execution() {
         );
     }
 }
+
+#[test]
+fn build_requires_bounded_outputs_and_never_direct_execution() {
+    for command in [
+        "bun run build",
+        "vite build",
+        "bunx vite build",
+        "node /home/tester/project/node_modules/vite/bin/vite.js build --configLoader runner",
+    ] {
+        let result = classify("omp", command);
+        assert_eq!(result.decision, "deny", "{command}");
+        if cfg!(target_os = "macos") {
+            assert_eq!(
+                result.reason_code, "native_node_build_output_containment_required",
+                "{command}"
+            );
+        }
+    }
+    for command in [
+        "vite dev",
+        "vite build && rm -rf /",
+        "vite build --outDir .env",
+        "PATH=/tmp vite build",
+    ] {
+        assert_ne!(
+            classify("omp", command).reason_code,
+            "native_node_build_output_containment_required",
+            "{command}"
+        );
+    }
+}

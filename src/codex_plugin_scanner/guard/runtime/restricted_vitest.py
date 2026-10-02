@@ -10,6 +10,7 @@ from pathlib import Path
 
 from .restricted_node_test import prepare_restricted_node_test
 from .restricted_pytest_model import (
+    NODE_BUILD_OUTPUT_PROFILE_VERSION,
     NODE_TOOL_READ_ONLY_PROFILE_VERSION,
     VITEST_READ_ONLY_PROFILE_VERSION,
     RestrictedPytestError,
@@ -84,7 +85,12 @@ def run_restricted_node_plan(
 ) -> int:
     if (
         not 0 < timeout_seconds <= 86400
-        or plan.profile_version not in {VITEST_READ_ONLY_PROFILE_VERSION, NODE_TOOL_READ_ONLY_PROFILE_VERSION}
+        or plan.profile_version
+        not in {
+            VITEST_READ_ONLY_PROFILE_VERSION,
+            NODE_TOOL_READ_ONLY_PROFILE_VERSION,
+            NODE_BUILD_OUTPUT_PROFILE_VERSION,
+        }
         or plan.backend != "macos-seatbelt"
     ):
         raise RestrictedPytestError(

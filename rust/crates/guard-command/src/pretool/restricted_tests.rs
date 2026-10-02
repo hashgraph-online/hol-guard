@@ -43,6 +43,22 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
     }
     let executable = segment.executable.as_deref()?;
     let arguments = segment.arguments.as_slice();
+    let build = match super::executable_basename(executable) {
+        "bun" | "npm" | "pnpm" => {
+            matches!(arguments, [run, task] if run == "run" && task == "build")
+        }
+        "bunx" | "npx" => {
+            matches!(arguments, [tool, task, ..] if tool == "vite" && task == "build")
+        }
+        "vite" => arguments.first().is_some_and(|arg| arg == "build"),
+        "node" | "nodejs" => {
+            matches!(arguments, [entry, task, ..] if entry.ends_with("/node_modules/vite/bin/vite.js") && task == "build")
+        }
+        _ => false,
+    };
+    if build {
+        return Some("native_node_build_output_containment_required");
+    }
     let read_only_node_tool = match super::executable_basename(executable) {
         "bun" | "npm" | "pnpm" => {
             matches!(arguments, [run, task] if run == "run" && matches!(task.as_str(), "lint" | "typecheck"))

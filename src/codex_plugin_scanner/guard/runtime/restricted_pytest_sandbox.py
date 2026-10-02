@@ -100,6 +100,13 @@ def _restricted_environment(
 
 
 def _backend_argv(plan: RestrictedPytestPlan, *, private_root: Path) -> list[str]:
+    if plan.output_roots:
+        if plan.profile_version != "node-build-output-v1":
+            raise RestrictedPytestError(PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE, "Unexpected output grants.")
+        from .restricted_node_tool import validate_build_output_root
+
+        for path in plan.output_roots:
+            validate_build_output_root(path, workspace=plan.workspace)
     if plan.read_only_roots and plan.profile_version != "git-readonly-v1":
         raise RestrictedPytestError(PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE, "Unexpected extra read grants.")
     if plan.backend == "macos-seatbelt":
@@ -114,7 +121,12 @@ def _macos_profile(plan: RestrictedPytestPlan, *, private_root: Path) -> str:
     read_roots.extend(path for path in _MACOS_READ_ROOTS if path.exists())
     read_roots.extend(_runtime_read_roots(plan))
     read_files = [path for path in _MACOS_READ_FILES if path.exists()]
-    if plan.profile_version in {"node-test-readonly-v1", "vitest-readonly-v1", "node-tool-readonly-v1"}:
+    if plan.profile_version in {
+        "node-test-readonly-v1",
+        "vitest-readonly-v1",
+        "node-tool-readonly-v1",
+        "node-build-output-v1",
+    }:
         # Node initializes OpenSSL before collection; never grant the wider config tree.
         read_files.extend(
             path
@@ -133,6 +145,7 @@ def _macos_profile(plan: RestrictedPytestPlan, *, private_root: Path) -> str:
     write_filters = " ".join(
         (
             *(() if read_only_workspace else (f"(subpath {_seatbelt_string(plan.workspace)})",)),
+            *(f"(subpath {_seatbelt_string(path)})" for path in plan.output_roots),
             f"(subpath {_seatbelt_string(private_root)})",
             '(literal "/dev/null")',
         )
@@ -141,6 +154,7 @@ def _macos_profile(plan: RestrictedPytestPlan, *, private_root: Path) -> str:
         (
             "(version 1)",
             "(deny default)",
+            "(deny file-link)",
             "(allow process-fork)",
             f"(allow process-exec {executable_filters})",
             "(allow signal (target self) (target children))",
@@ -150,7 +164,9 @@ def _macos_profile(plan: RestrictedPytestPlan, *, private_root: Path) -> str:
             f"(allow file-read* {read_filters} {read_file_filters})",
             f"(allow file-write* {write_filters})",
             *(
-                _read_only_credential_denials(hide_metadata=plan.profile_version == "vitest-readonly-v1")
+                _read_only_credential_denials(
+                    hide_metadata=plan.profile_version in {"vitest-readonly-v1", "node-build-output-v1"}
+                )
                 if read_only_workspace
                 else ()
             ),

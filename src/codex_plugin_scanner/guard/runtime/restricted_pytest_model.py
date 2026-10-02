@@ -13,6 +13,7 @@ NODE_TEST_READ_ONLY_PROFILE_VERSION = "node-test-readonly-v1"
 VITEST_READ_ONLY_PROFILE_VERSION = "vitest-readonly-v1"
 GIT_READ_ONLY_PROFILE_VERSION = "git-readonly-v1"
 NODE_TOOL_READ_ONLY_PROFILE_VERSION = "node-tool-readonly-v1"
+NODE_BUILD_OUTPUT_PROFILE_VERSION = "node-build-output-v1"
 READ_ONLY_TEST_PROFILES = frozenset(
     {
         PYTEST_READ_ONLY_PROFILE_VERSION,
@@ -20,6 +21,7 @@ READ_ONLY_TEST_PROFILES = frozenset(
         VITEST_READ_ONLY_PROFILE_VERSION,
         GIT_READ_ONLY_PROFILE_VERSION,
         NODE_TOOL_READ_ONLY_PROFILE_VERSION,
+        NODE_BUILD_OUTPUT_PROFILE_VERSION,
     }
 )
 PYTEST_RESTRICTED_REASON_CODE = "pytest_restricted_profile_required"
@@ -235,6 +237,7 @@ class RestrictedPytestPlan:
     allowed_executables: tuple[Path, ...]
     denied_capabilities: tuple[str, ...]
     read_only_roots: tuple[Path, ...] = ()
+    output_roots: tuple[Path, ...] = ()
 
     def to_evidence(self) -> dict[str, object]:
         return {
@@ -249,7 +252,7 @@ class RestrictedPytestPlan:
             "network": "denied",
             "host_home": "unmounted-or-denied",
             "writes": (
-                ["private-temporary-directory"]
+                ["private-temporary-directory", *(str(path) for path in self.output_roots)]
                 if self.profile_version in READ_ONLY_TEST_PROFILES
                 else ["workspace", "private-temporary-directory"]
             ),
