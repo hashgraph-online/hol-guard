@@ -153,5 +153,9 @@ def run_restricted_node_plan(
             authorize_capability=authorize_capability,
         )
         return _run_backend_process(
-            _backend_argv(plan, private_root=root), env=launch_env, timeout_seconds=timeout_seconds, cwd=plan.cwd
+            _backend_argv(plan, private_root=root),
+            env=launch_env,
+            timeout_seconds=timeout_seconds,
+            cwd=plan.cwd,
+            node_virtual_address_space=plan.backend == "linux-bubblewrap",
         )

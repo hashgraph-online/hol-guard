@@ -43,6 +43,7 @@ from .restricted_pytest_validation import (
 
 _RESOURCE_AVAILABLE = os.name == "posix"
 _MAX_REPLAY_BYTES = 1_048_576
+_NODE_VIRTUAL_ADDRESS_BYTES = 16 * 1024 * 1024 * 1024
 if _RESOURCE_AVAILABLE:
     import resource as _resource
 else:
@@ -368,7 +369,15 @@ def _run_backend_process(
     timeout_seconds: int,
     cwd: Path | None = None,
     stdout_capture: bytearray | None = None,
+    node_virtual_address_space: bool = False,
 ) -> int:
+    if node_virtual_address_space and sys.platform == "linux" and (
+        not _RESOURCE_AVAILABLE or _resource is None or not hasattr(_resource, "RLIMIT_DATA")
+    ):
+        raise RestrictedPytestError(
+            PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE,
+            "Linux Node memory limits are unavailable; execution was not started.",
+        )
     # RLIMIT_NPROC counts the whole user, not this run. A static 64-process
     # ceiling prevents Node from spawning even one test worker on busy desktops.
     process_ceiling = _current_user_process_ceiling() if _RESOURCE_AVAILABLE else _DEFAULT_PROCESSES
@@ -378,7 +387,16 @@ def _run_backend_process(
         if resource_module is None:
             return
         _set_resource_limit(resource_module.RLIMIT_CPU, _DEFAULT_CPU_SECONDS)
-        _set_resource_limit(resource_module.RLIMIT_AS, _DEFAULT_MEMORY_BYTES)
+        if node_virtual_address_space and sys.platform == "linux":
+            # V8/Wasm reserves inaccessible cages larger than its working heap.
+            # DATA bounds heap/private writable maps on the required Linux kernel;
+            # it is not an aggregate RSS/cgroup limit. Never widen AS without it.
+            if not hasattr(resource_module, "RLIMIT_DATA"):
+                raise RuntimeError("Linux Node data limits are unavailable.")
+            _set_resource_limit(resource_module.RLIMIT_DATA, _DEFAULT_MEMORY_BYTES, required=True)
+            _set_resource_limit(resource_module.RLIMIT_AS, _NODE_VIRTUAL_ADDRESS_BYTES, required=True)
+        else:
+            _set_resource_limit(resource_module.RLIMIT_AS, _DEFAULT_MEMORY_BYTES)
         _set_resource_limit(resource_module.RLIMIT_FSIZE, _DEFAULT_FILE_BYTES)
         _set_resource_limit(resource_module.RLIMIT_NOFILE, _DEFAULT_OPEN_FILES)
         if hasattr(resource_module, "RLIMIT_NPROC"):
@@ -397,7 +415,7 @@ def _run_backend_process(
                 start_new_session=True,
                 preexec_fn=apply_limits if _RESOURCE_AVAILABLE else None,
             )
-        except OSError as error:
+        except (OSError, subprocess.SubprocessError) as error:
             raise RestrictedPytestError(
                 PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE,
                 f"Restricted pytest sandbox could not start; execution was not started: {error}",
@@ -452,14 +470,20 @@ def _replay_sandbox_output(source: BinaryIO, destination: TextIO) -> None:
     destination.flush()
 
 
-def _set_resource_limit(resource_name: int, requested: int) -> None:
+def _set_resource_limit(resource_name: int, requested: int, *, required: bool = False) -> None:
     resource_module = _resource
     if resource_module is None:
+        if required:
+            raise RuntimeError("Required resource limits are unavailable.")
         return
     try:
         current_soft, current_hard = resource_module.getrlimit(resource_name)
         hard = requested if current_hard < 0 else min(requested, current_hard)
         soft = hard if current_soft < 0 else min(requested, current_soft, hard)
         resource_module.setrlimit(resource_name, (soft, hard))
-    except (OSError, ValueError):
+        if required and any(value < 0 or value > requested for value in resource_module.getrlimit(resource_name)):
+            raise RuntimeError("Required resource limits were not enforced.")
+    except (OSError, ValueError) as error:
+        if required:
+            raise RuntimeError("Required resource limits could not be enforced.") from error
         return
