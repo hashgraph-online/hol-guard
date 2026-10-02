@@ -1,6 +1,97 @@
 use super::*;
 
 #[test]
+fn explicit_command_permission_settles_only_its_covered_generic_review() {
+    let program = packaged_command_program().unwrap();
+    let mut binding: NativeCommandControlBindingV1 = serde_json::from_value(serde_json::json!({
+        "schema": "guard.native-command-control-binding.v1",
+        "program_digest": program.program_digest, "catalog_digest": program.catalog_digest,
+        "trust_digest": program.trust_digest, "health": "protected",
+        "revision": 1, "managed_revision": 0, "effective_digest": "", "layers": []
+    }))
+    .unwrap();
+    binding.effective_digest = binding.compute_effective_digest().unwrap();
+    let controls = CompiledNativeCommandControls::new(&binding).unwrap();
+    let evaluate = |controls: &CompiledNativeCommandControls, command: &str| {
+        crate::pretool::evaluate_pre_tool_envelope_with_extensions(
+            "omp",
+            "PreToolUse",
+            &serde_json::json!({
+                "tool_name": "bash", "tool_input": {"command": command}
+            }),
+            Some(controls),
+            None,
+        )
+    };
+    let baseline = evaluate(&controls, "git push origin main");
+    assert_eq!(baseline.minimum_action, "review");
+    let observation = baseline
+        .command_extensions
+        .as_ref()
+        .unwrap()
+        .observations
+        .iter()
+        .find(|item| !item.effective_segment_indexes.is_empty())
+        .unwrap();
+    let permission =
+        &program.rules[*controls.rule_indices.get(&observation.rule_id).unwrap()].permission_id;
+    binding.layers = serde_json::from_value(serde_json::json!([{
+        "schema_version": "1.0.0", "kind": "local-admin", "catalog_digest": program.catalog_digest,
+        "global_lockdown": false, "controls": [
+            {"target_kind": "permission", "target_id": permission, "state": "enabled"}
+        ]
+    }]))
+    .unwrap();
+    binding.effective_digest = binding.compute_effective_digest().unwrap();
+    let controls = CompiledNativeCommandControls::new(&binding).unwrap();
+    let allowed = evaluate(&controls, "git push origin main");
+    assert_eq!(allowed.minimum_action, "allow", "{}", allowed.reason_code);
+    assert_eq!(
+        allowed.reason_code,
+        "native_command_explicit_permission_allow"
+    );
+    for command in [
+        "git push origin main; python3 project.py",
+        "git push origin main; rm -rf /",
+        "git push origin main; cat .env",
+        "git push origin main; echo $(whoami)",
+    ] {
+        assert_ne!(
+            evaluate(&controls, command).minimum_action,
+            "allow",
+            "{command}"
+        );
+    }
+    let mut disabled = binding.clone();
+    disabled.layers[0].controls[0].state = "disabled".into();
+    disabled.effective_digest = disabled.compute_effective_digest().unwrap();
+    let controls = CompiledNativeCommandControls::new(&disabled).unwrap();
+    assert_eq!(
+        evaluate(&controls, "git push origin main").minimum_action,
+        "block"
+    );
+
+    let mut delegated = binding.clone();
+    delegated.layers[0].controls[0].target_id =
+        "command.package.node.permission.package-protection".into();
+    delegated.effective_digest = delegated.compute_effective_digest().unwrap();
+    let controls = CompiledNativeCommandControls::new(&delegated).unwrap();
+    assert_eq!(
+        evaluate(&controls, "bunx vitest run tests/example.test.ts").minimum_action,
+        "review",
+        "enabling a protection owner is not consent to execute arbitrary package code"
+    );
+
+    binding.layers[0].global_lockdown = true;
+    binding.effective_digest = binding.compute_effective_digest().unwrap();
+    let controls = CompiledNativeCommandControls::new(&binding).unwrap();
+    assert_eq!(
+        evaluate(&controls, "git push origin main").minimum_action,
+        "block"
+    );
+}
+
+#[test]
 fn timeout_wrapper_parsing_is_bounded_and_preserves_inner_commands() {
     for command in [
         "timeout 120 pwd",
