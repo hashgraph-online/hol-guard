@@ -53,6 +53,7 @@ fn request(root: &std::path::Path, output: &str) -> NativeHookRequestV1 {
     }
 }
 
+#[cfg(unix)]
 #[test]
 fn formatted_reads_require_complete_scanned_output_and_clean_source() {
     let root = TestRoot::new();
@@ -87,6 +88,17 @@ fn formatted_reads_require_complete_scanned_output_and_clean_source() {
 
     std::fs::write(&source, format!("token = '{token}'\n")).unwrap();
     assert_eq!(review_post_tool(&base).reason_code, "source_secret_match");
+}
+
+#[cfg(not(unix))]
+#[test]
+fn formatted_reads_fail_closed_without_descriptor_verified_source_reads() {
+    let root = TestRoot::new();
+    let source = root.path().join("example.py");
+    std::fs::write(&source, "print(1 + 1)\n").unwrap();
+    let result = review_post_tool(&request(root.path(), "[example.py#ABCD]\n1: print(1 + 1)"));
+    assert_eq!(result.reason_code, "no_output_to_review");
+    assert_eq!(result.model_output_action, "block");
 }
 
 #[cfg(unix)]
