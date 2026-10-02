@@ -100,6 +100,12 @@ def test_credential_and_destructive_operations_are_denied():
     assert blocked(lambda: (VICTIM / 'keep.txt').unlink())
     assert blocked(lambda: shutil.rmtree(VICTIM))
     assert blocked(lambda: SOURCE.write_text('overwritten'))
+
+
+def test_private_output_cannot_be_a_source_hardlink(tmp_path):
+    import os
+    assert blocked(lambda: os.link(SOURCE, tmp_path / 'source-alias.py'))
+    assert blocked(lambda: os.link(SECRET, tmp_path / 'credential-alias'))
 """.lstrip(),
             encoding="utf-8",
         )

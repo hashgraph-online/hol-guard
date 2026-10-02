@@ -62,3 +62,10 @@ def test_underlying_native_policy_is_rechecked(monkeypatch, tmp_path, denied):
         )
         assert executed == [True]
     assert authorized[0] == "bun run lint" and authorized[1].startswith("/usr/bin/node ")
+
+
+@pytest.mark.parametrize("phase", ["prelint", "postlint"])
+def test_lifecycle_actions_are_not_silently_skipped(tmp_path, phase):
+    (tmp_path / "package.json").write_text(json.dumps({"scripts": {"lint": "eslint src", phase: "node lifecycle.mjs"}}))
+    with pytest.raises(RestrictedPytestError, match="lifecycle actions"):
+        tool.prepare_restricted_node_tool(["npm", "run", "lint"], workspace=tmp_path)

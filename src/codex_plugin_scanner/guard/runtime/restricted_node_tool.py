@@ -29,6 +29,10 @@ def prepare_restricted_node_tool(
             )
         manifest, _digest = read_json_with_integrity(workspace / "package.json")
         scripts = manifest.get("scripts") if isinstance(manifest, dict) else None
+        if isinstance(scripts, dict) and any(scripts.get(phase + args[1]) for phase in ("pre", "post")):
+            raise RestrictedPytestError(
+                "node_tool_invalid_command", "This script has lifecycle actions that need separate evaluation."
+            )
         script = scripts.get(args[1]) if isinstance(scripts, dict) else None
         if not isinstance(script, str):
             raise RestrictedPytestError("node_tool_invalid_command", "The requested local script is unavailable.")
