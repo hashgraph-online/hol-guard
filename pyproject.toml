@@ -137,8 +137,6 @@ line-length = 120
 packages = ["src/codex_plugin_scanner"]
 
 [tool.hatch.build.targets.wheel.force-include]
-"contributions/extensions/command.appimg.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contributions/command.appimg.json"
-"contributions/command-sources/command.appimg.json" = "codex_plugin_scanner/guard/contracts/data/extensions/command-sources/command.appimg.json"
 "contracts/extensions/native-command-program.v1.json" = "codex_plugin_scanner/guard/contracts/data/extensions/native-command-program.v1.json"
 "contracts/extensions/command-catalog.v1.json" = "codex_plugin_scanner/guard/contracts/data/extensions/command-catalog.v1.json"
 "contracts/guard-cloud-review/v2/contract.json" = "codex_plugin_scanner/guard/contracts/data/guard-cloud-review/v2/contract.json"
