@@ -142,7 +142,8 @@ def harness_json_from_native_pre_tool(harness: str, response: Mapping[str, objec
         and response.get("decision") == "deny"
         and response.get("authority") == "rust"
         and response.get("schema") == "guard-pre-tool-result.v1"
-        and reason_code == "native_pytest_readonly_containment_required"
+        and reason_code
+        in {"native_pytest_readonly_containment_required", "native_node_test_readonly_containment_required"}
     ):
         extensions = response.get("command_extensions")
         binding = extensions.get("binding") if isinstance(extensions, Mapping) else None
@@ -161,7 +162,11 @@ def harness_json_from_native_pre_tool(harness: str, response: Mapping[str, objec
                 "policy_action": "sandbox-required",
                 "reason_code": reason_code,
                 "reason": reason,
-                "required_execution_profile": "pytest-readonly-v2",
+                "required_execution_profile": (
+                    "node-test-readonly-v1"
+                    if reason_code == "native_node_test_readonly_containment_required"
+                    else "pytest-readonly-v2"
+                ),
             }
     if action in {"allow", "warn"} and response.get("decision") == "allow":
         if canonical in {"pi", "omp"}:

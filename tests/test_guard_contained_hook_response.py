@@ -34,6 +34,15 @@ def test_profile_requirement_remains_denied_for_original_input() -> None:
     assert "approval_request_id" not in response
 
 
+def test_node_profile_requirement_is_distinct_and_still_denied() -> None:
+    native = result()
+    native["reason_code"] = "native_node_test_readonly_containment_required"
+    response = harness_json_from_native_pre_tool("omp", native)
+    assert response["decision"] == "deny"
+    assert response["required_execution_profile"] == "node-test-readonly-v1"
+    assert "approval_request_id" not in response
+
+
 @pytest.mark.parametrize("action", ("block", "review", "require-reapproval", "allow", "warn"))
 def test_other_policy_actions_cannot_delegate_to_test_runner(action: str) -> None:
     native = result()

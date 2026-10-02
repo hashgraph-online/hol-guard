@@ -103,3 +103,33 @@ def test_authorized_original_input_runs_only_with_readonly_profile(
         sink.run_authorized_contained_test(payload(), workspace=tmp_path, timeout_seconds=20, authorize=authorize) == 0
     )
     assert [call[0] for call in calls] == ["prepare", "authorize", "execute"]
+
+
+@pytest.mark.parametrize("fresh_profile", ["node-test-readonly-v1", "pytest-readonly-v2", "wrong"])
+def test_node_requires_its_own_fresh_profile(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, fresh_profile: str
+) -> None:
+    from codex_plugin_scanner.guard.runtime import restricted_node_test as node
+
+    executed = []
+    monkeypatch.setattr(node, "prepare_restricted_node_test", lambda *args, **kwargs: None)
+    monkeypatch.setattr(node, "run_restricted_node_test", lambda *args, **kwargs: executed.append(args) or 0)
+    original = payload()
+    original["tool_input"] = {"command": "node --test tests/test.mjs"}
+    response = required_profile()
+    response["reason_code"] = "native_node_test_readonly_containment_required"
+    response["required_execution_profile"] = fresh_profile
+    if fresh_profile == "node-test-readonly-v1":
+        assert (
+            sink.run_authorized_contained_test(
+                original, workspace=tmp_path, timeout_seconds=20, authorize=lambda value: response
+            )
+            == 0
+        )
+        assert executed == [(["node", "--test", "tests/test.mjs"],)]
+    else:
+        with pytest.raises(RestrictedPytestError):
+            sink.run_authorized_contained_test(
+                original, workspace=tmp_path, timeout_seconds=20, authorize=lambda value: response
+            )
+        assert executed == []

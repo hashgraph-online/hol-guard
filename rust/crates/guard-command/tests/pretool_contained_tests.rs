@@ -84,3 +84,38 @@ fn unrelated_execution_and_shell_effects_do_not_inherit_test_delegation() {
         "native_pytest_readonly_containment_required"
     );
 }
+
+#[test]
+fn direct_node_tests_require_containment_without_weakening_other_execution() {
+    for command in [
+        "node --test",
+        "node --test tests/test.mjs",
+        "nodejs --test -q",
+        "/usr/bin/node --test test.mjs",
+    ] {
+        let result = classify("omp", command);
+        assert_eq!(result.decision, "deny", "{command}");
+        let expected = if cfg!(target_os = "macos") {
+            "native_node_test_readonly_containment_required"
+        } else {
+            "native_command_review_required"
+        };
+        assert_eq!(result.reason_code, expected, "{command}");
+    }
+    for command in [
+        "node script.mjs",
+        "node --test-other",
+        "node --test > .env",
+        "node --test && rm -rf /",
+        "node --test $(cat .env)",
+        "node --test &",
+        "NODE_OPTIONS=--require=x node --test",
+    ] {
+        let result = classify("omp", command);
+        assert_ne!(
+            result.reason_code, "native_node_test_readonly_containment_required",
+            "{command}"
+        );
+        assert_ne!(result.decision, "allow", "{command}");
+    }
+}

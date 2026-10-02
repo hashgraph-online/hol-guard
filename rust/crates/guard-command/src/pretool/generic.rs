@@ -403,6 +403,8 @@ pub fn evaluate_pre_tool_envelope_with_context(
         ),
         _ => result,
     };
+    let contained_test_reason =
+        command_model.and_then(super::restricted_tests::readonly_test_reason);
     // The read-only credential-filtering backend currently exists on macOS.
     // Other platforms retain review until they can enforce the same profile.
     if cfg!(target_os = "macos")
@@ -419,11 +421,13 @@ pub fn evaluate_pre_tool_envelope_with_context(
                 && extensions.observations.is_empty()
                 && extensions.permission_observations.is_empty()
         })
-        && command_model.is_some_and(super::restricted_tests::requires_pytest_containment)
+        && contained_test_reason.is_some()
     {
         result.minimum_action = "sandbox-required".into();
         result.policy_action = "sandbox-required".into();
-        result.reason_code = "native_pytest_readonly_containment_required".into();
+        result.reason_code = contained_test_reason
+            .expect("checked required test profile")
+            .into();
         result.reason = concat!(
             "HOL Guard requires the read-only test runner for this repository execution. ",
             "Direct execution remains blocked.",

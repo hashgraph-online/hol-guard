@@ -155,6 +155,7 @@ def run_restricted_pytest(
             backend_argv,
             env=launch_env,
             timeout_seconds=timeout_seconds,
+            cwd=plan.cwd,
         )
 
 

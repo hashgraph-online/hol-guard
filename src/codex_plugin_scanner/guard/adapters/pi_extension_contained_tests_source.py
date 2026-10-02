@@ -24,10 +24,13 @@ CONTAINED_TEST_HELPERS_SOURCE = r"""
     const profile = Reflect.get(response, "required_execution_profile");
     const input = snapshot.payload.tool_input;
     const key = toolCallIdKey(snapshot.payload.tool_call_id);
+    const profileMatches = (
+      (profile === "pytest-readonly-v2" && response.reason_code === "native_pytest_readonly_containment_required") ||
+      (profile === "node-test-readonly-v1" && response.reason_code === "native_node_test_readonly_containment_required")
+    );
     if (
       response.decision !== "deny" || response.policy_action !== "sandbox-required" ||
-      response.reason_code !== "native_pytest_readonly_containment_required" ||
-      profile !== "pytest-readonly-v2" || response.observe_mode === true ||
+      !profileMatches || response.observe_mode === true ||
       process.platform !== "darwin" || GUARD_CLI_WRAPPER_ACCEPTS_JSON_ARGS ||
       !GUARD_CLI_WRAPPER_COMMAND.startsWith("/") ||
       snapshot.payload.tool_name !== "bash" || !key || containedTestRequests.has(key) ||

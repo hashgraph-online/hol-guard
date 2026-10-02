@@ -28,8 +28,8 @@ from .restricted_pytest_model import (
     _SAFE_ENV_KEYS,
     _SEALED_SYSTEM_EXECUTABLE_ROOTS,
     _SECRET_ENV_PATTERN,
-    PYTEST_READ_ONLY_PROFILE_VERSION,
     PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE,
+    READ_ONLY_TEST_PROFILES,
     RestrictedPytestError,
     RestrictedPytestPlan,
 )
@@ -111,12 +111,22 @@ def _macos_profile(plan: RestrictedPytestPlan, *, private_root: Path) -> str:
     read_roots.extend(path for path in _MACOS_READ_ROOTS if path.exists())
     read_roots.extend(_runtime_read_roots(plan))
     read_files = [path for path in _MACOS_READ_FILES if path.exists()]
+    if plan.profile_version == "node-test-readonly-v1":
+        # Node initializes OpenSSL before collection; never grant the wider config tree.
+        read_files.extend(
+            path
+            for path in (
+                Path("/opt/homebrew/etc/openssl@3/openssl.cnf"),
+                Path("/usr/local/etc/openssl@3/openssl.cnf"),
+            )
+            if path.is_file()
+        )
     read_filters = " ".join(f"(subpath {_seatbelt_string(path)})" for path in read_roots)
     read_file_filters = " ".join(f"(literal {_seatbelt_string(path)})" for path in read_files)
     metadata_paths = (Path("/"), *_ancestor_paths((*read_roots, *plan.allowed_executables)))
     metadata_filters = " ".join(f"(literal {_seatbelt_string(path)})" for path in metadata_paths)
     executable_filters = " ".join(f"(literal {_seatbelt_string(path)})" for path in plan.allowed_executables)
-    read_only_workspace = plan.profile_version == PYTEST_READ_ONLY_PROFILE_VERSION
+    read_only_workspace = plan.profile_version in READ_ONLY_TEST_PROFILES
     write_filters = " ".join(
         (
             *(() if read_only_workspace else (f"(subpath {_seatbelt_string(plan.workspace)})",)),
@@ -292,7 +302,44 @@ def _symlink_runtime_roots(executable: Path) -> tuple[Path, ...]:
     return tuple(roots)
 
 
-def _run_backend_process(argv: Sequence[str], *, env: Mapping[str, str], timeout_seconds: int) -> int:
+def _current_user_process_ceiling() -> int:
+    if sys.platform != "darwin":
+        return _DEFAULT_PROCESSES
+    try:
+        with tempfile.TemporaryFile(mode="w+b") as output:
+            result = subprocess.run(
+                ["/bin/ps", "-U", str(os.getuid()), "-o", "pid="],
+                stdin=subprocess.DEVNULL,
+                stdout=output,
+                stderr=subprocess.DEVNULL,
+                env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"},
+                timeout=3,
+                check=False,
+            )
+            output.seek(0)
+            raw = output.read(1_048_577)
+        rows = raw.splitlines()
+        if result.returncode != 0 or len(raw) > 1_048_576 or not rows or any(not row.strip().isdigit() for row in rows):
+            raise ValueError("invalid bounded process count")
+        return len(rows) + _DEFAULT_PROCESSES
+    except (OSError, ValueError, subprocess.TimeoutExpired) as error:
+        raise RestrictedPytestError(
+            PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE,
+            "The desktop process budget could not be measured; protected execution was not started.",
+        ) from error
+
+
+def _run_backend_process(
+    argv: Sequence[str],
+    *,
+    env: Mapping[str, str],
+    timeout_seconds: int,
+    cwd: Path | None = None,
+) -> int:
+    # RLIMIT_NPROC counts the whole user, not this run. A static 64-process
+    # ceiling prevents Node from spawning even one test worker on busy desktops.
+    process_ceiling = _current_user_process_ceiling() if _RESOURCE_AVAILABLE else _DEFAULT_PROCESSES
+
     def apply_limits() -> None:
         resource_module = _resource
         if resource_module is None:
@@ -302,13 +349,14 @@ def _run_backend_process(argv: Sequence[str], *, env: Mapping[str, str], timeout
         _set_resource_limit(resource_module.RLIMIT_FSIZE, _DEFAULT_FILE_BYTES)
         _set_resource_limit(resource_module.RLIMIT_NOFILE, _DEFAULT_OPEN_FILES)
         if hasattr(resource_module, "RLIMIT_NPROC"):
-            _set_resource_limit(resource_module.RLIMIT_NPROC, _DEFAULT_PROCESSES)
+            _set_resource_limit(resource_module.RLIMIT_NPROC, process_ceiling)
 
     with tempfile.TemporaryFile(mode="w+b") as stdout_file, tempfile.TemporaryFile(mode="w+b") as stderr_file:
         try:
             process = subprocess.Popen(
                 list(argv),
                 env=dict(env),
+                cwd=cwd,
                 stdin=subprocess.DEVNULL,
                 stdout=stdout_file,
                 stderr=stderr_file,

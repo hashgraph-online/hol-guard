@@ -9,6 +9,8 @@ from typing import Literal
 
 PYTEST_RESTRICTED_PROFILE_VERSION = "pytest-restricted-v1"
 PYTEST_READ_ONLY_PROFILE_VERSION = "pytest-readonly-v2"
+NODE_TEST_READ_ONLY_PROFILE_VERSION = "node-test-readonly-v1"
+READ_ONLY_TEST_PROFILES = frozenset({PYTEST_READ_ONLY_PROFILE_VERSION, NODE_TEST_READ_ONLY_PROFILE_VERSION})
 PYTEST_RESTRICTED_REASON_CODE = "pytest_restricted_profile_required"
 PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE = "pytest_restricted_sandbox_unavailable"
 PYTEST_INVALID_COMMAND_REASON_CODE = "pytest_restricted_invalid_command"
@@ -35,6 +37,7 @@ _PROJECT_WORKSPACE_MARKERS = (
     "setup.cfg",
     "setup.py",
     "tox.ini",
+    "package.json",
 )
 _SENSITIVE_HOME_ROOT_NAMES = frozenset(
     {
@@ -235,7 +238,7 @@ class RestrictedPytestPlan:
             "host_home": "unmounted-or-denied",
             "writes": (
                 ["private-temporary-directory"]
-                if self.profile_version == PYTEST_READ_ONLY_PROFILE_VERSION
+                if self.profile_version in READ_ONLY_TEST_PROFILES
                 else ["workspace", "private-temporary-directory"]
             ),
         }

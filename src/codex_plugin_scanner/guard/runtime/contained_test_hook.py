@@ -11,7 +11,7 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 
 from .restricted_pytest import RestrictedPytestError, prepare_restricted_pytest, run_restricted_pytest
-from .restricted_pytest_model import PYTEST_READ_ONLY_PROFILE_VERSION
+from .restricted_pytest_model import NODE_TEST_READ_ONLY_PROFILE_VERSION, PYTEST_READ_ONLY_PROFILE_VERSION
 
 _MAX_REQUEST_BYTES = 1_048_576
 _FAILURE = "contained_test_authorization_failed"
@@ -103,18 +103,30 @@ def run_authorized_contained_test(
     except ValueError as error:
         raise _reject() from error
     # Fail before the authority request if the backend cannot enforce the profile.
-    prepare_restricted_pytest(command, workspace=workspace, cwd=workspace, read_only_workspace=True)
+    node_test = len(command) > 1 and Path(command[0]).name in {"node", "nodejs"} and command[1] == "--test"
+    if node_test:
+        from .restricted_node_test import prepare_restricted_node_test, run_restricted_node_test
+
+        prepare_restricted_node_test(command, workspace=workspace, cwd=workspace)
+    else:
+        prepare_restricted_pytest(command, workspace=workspace, cwd=workspace, read_only_workspace=True)
+    reason = (
+        "native_node_test_readonly_containment_required" if node_test else "native_pytest_readonly_containment_required"
+    )
+    profile = NODE_TEST_READ_ONLY_PROFILE_VERSION if node_test else PYTEST_READ_ONLY_PROFILE_VERSION
     response = authorize(payload)
     if not (
         isinstance(response, Mapping)
         and response.get("decision") == "deny"
         and response.get("policy_action") == "sandbox-required"
-        and response.get("reason_code") == "native_pytest_readonly_containment_required"
-        and response.get("required_execution_profile") == PYTEST_READ_ONLY_PROFILE_VERSION
+        and response.get("reason_code") == reason
+        and response.get("required_execution_profile") == profile
         and response.get("observe_mode") is not True
     ):
         raise _reject()
     # No shell and no unsandboxed retry: the required profile is the actual sink.
+    if node_test:
+        return run_restricted_node_test(command, workspace=workspace, cwd=workspace, timeout_seconds=timeout_seconds)
     return run_restricted_pytest(
         command,
         workspace=workspace,
