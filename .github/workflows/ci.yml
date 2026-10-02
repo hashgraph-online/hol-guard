@@ -103,8 +103,7 @@ jobs:
           cache-key: pytest-native-command
       - name: Build native command evaluators once for pytest shards
         run: |
-          cargo build --manifest-path rust/Cargo.toml --locked --release -p guard-command --bin guard-command-source
-          cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime
+          cargo build --manifest-path rust/Cargo.toml --locked --release -p guard-command -p hol-guard-runtime --bin guard-command-source --bin hol-guard-runtime
       - name: Verify generated native command catalogs before pytest fan-out
         run: |
           arguments=(--compiler rust/target/release/guard-command-source)
@@ -112,6 +111,16 @@ jobs:
             arguments+=(--changed-from "${{ github.event.pull_request.base.sha }}")
           fi
           python3 scripts/ci/verify_native_command_program.py "${arguments[@]}"
+      - uses: ./.github/actions/setup-ci-python
+        with:
+          python-version: ${{ env.CI_PYTHON_VERSION }}
+          cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
+      - name: Prepare current public directory before pytest collection
+        run: |
+          uv run --no-sync python scripts/export_extension_directory.py
+          uv run --no-sync python scripts/render_command_extension_directory.py
+          uv run --no-sync python scripts/export_extension_directory.py --check
+          uv run --no-sync python scripts/render_command_extension_directory.py --check
       - name: Upload native command evaluators
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
@@ -128,17 +137,24 @@ jobs:
           path: |
             contracts/extensions/
             contributions/extensions/
+            docs/guard/extensions/
             src/codex_plugin_scanner/guard/contracts/data/extensions/
           if-no-files-found: error
           retention-days: 1
 
   coverage-plan:
+    needs: native-command-evaluators
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
+      - name: Download this run's current command projections
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: pytest-native-command-projections
+          path: .
       - uses: ./.github/actions/setup-ci-python
         with:
           python-version: ${{ env.CI_PYTHON_VERSION }}
@@ -430,6 +446,7 @@ jobs:
           --tb=short
 
   compatibility:
+    needs: native-command-evaluators
     runs-on: ubuntu-latest
     timeout-minutes: 5
     strategy:
@@ -440,6 +457,11 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
+      - name: Download this run's current command projections
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: pytest-native-command-projections
+          path: .
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: ${{ matrix.python-version }}
@@ -674,11 +696,17 @@ jobs:
           echo "Bundle JS: ${js_size:-unknown}, CSS: ${css_size:-unknown}"
 
   cisco-full:
+    needs: native-command-evaluators
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
+      - name: Download this run's current command projections
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: pytest-native-command-projections
+          path: .
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: "3.13"
@@ -704,6 +732,7 @@ jobs:
       - run: uv run --no-sync pytest tests/test_cisco_install_surfaces.py tests/test_mcp_security.py tests/test_cli.py tests/test_action_runner.py tests/test_live_cisco_smoke.py --tb=short
 
   cross-platform:
+    needs: native-command-evaluators
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -713,6 +742,11 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
+      - name: Download this run's current command projections
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: pytest-native-command-projections
+          path: .
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: ${{ matrix.python-version }}
@@ -795,6 +829,7 @@ jobs:
           uv run --no-sync pytest tests/test_frozen_windows_daemon_bootstrap.py --tb=short
 
   windows-updater:
+    needs: native-command-evaluators
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
     timeout-minutes: 15
@@ -806,6 +841,11 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
+      - name: Download this run's current command projections
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: pytest-native-command-projections
+          path: .
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: ${{ matrix.python-version }}

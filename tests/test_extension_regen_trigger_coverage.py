@@ -1,8 +1,7 @@
-"""Every input hashed into maintained evidence must schedule its regeneration."""
+"""Publish changed product inputs, not independently reviewed test expectations."""
 
 from __future__ import annotations
 
-import json
 import re
 from pathlib import Path
 
@@ -11,8 +10,6 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github/workflows/extension-artifact-regen.yml"
-# Same lower bound as the evidence report contract; the exact count grows.
-MIN_REPORT_INPUTS = 40
 
 
 def _triggers(workflow: dict) -> dict:
@@ -53,32 +50,33 @@ def test_trigger_matcher_preserves_path_boundaries(path: str, pattern: str, expe
     assert _matches(path, pattern) is expected
 
 
-def test_regen_trigger_covers_every_decision_diff_input() -> None:
-    """Require every bound report input to schedule regeneration."""
-    from tests.guard_command_decision_diff import (
-        _EVIDENCE_SOURCE_PATHS,
-        KNOWN_GAPS_PATH,
-        MANIFEST_PATH,
-        NATIVE_CONTRACT_PATH,
-        PAIRS_PATH,
-        REPO_ROOT,
-    )
-
+def test_regen_trigger_covers_product_inputs_not_per_run_evidence() -> None:
     workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
-    # PyYAML's YAML 1.1 parser reads the Actions "on" key as True.
     patterns = _triggers(workflow)["push"]["paths"]
     inputs = {
-        path.relative_to(REPO_ROOT).as_posix()
-        for path in (*_EVIDENCE_SOURCE_PATHS, KNOWN_GAPS_PATH, MANIFEST_PATH, PAIRS_PATH, NATIVE_CONTRACT_PATH)
+        "rust/Cargo.toml",
+        "rust/Cargo.lock",
+        "rust/build_support/command_identity.rs",
+        "rust/crates/guard-command/build.rs",
+        "contracts/extensions/trust-class-map.v1.json",
+        "contributions/command-sources/command.future.json",
+        "contributions/mcp-servers/mcp.future.json",
+        "contributions/extension-listings/command.future.json",
+        "contracts/mcp-servers/contribution.v1.schema.json",
+        "scripts/build_native_command_program.py",
+        "scripts/export_extension_directory.py",
+        "scripts/render_command_extension_directory.py",
+        "scripts/prepare_extension_contribution.py",
     }
-    # Native-contract inputs affect the report indirectly and must be watched
-    # independently of whether the broad rust/** pattern remains in place.
-    native_contract = json.loads(NATIVE_CONTRACT_PATH.read_text(encoding="utf-8"))
-    inputs.update(native_contract["inherited_source_identities"]["sources"])
-    inputs.update(native_contract["immutable_input_sha256"])
-    assert len(inputs) >= MIN_REPORT_INPUTS
-    missing = sorted(path for path in inputs if not any(_matches(path, pattern) for pattern in patterns))
-    assert not missing, "Report inputs missing from the regeneration trigger:\n" + "\n".join(missing)
+    assert all(any(_matches(path, pattern) for pattern in patterns) for path in inputs)
+    for evidence in (
+        "tests/fixtures/command-source-demo.v1.json",
+        "tests/fixtures/extension-controls/catalog-baseline.v1.json",
+        "tests/fixtures/guard-command-corpus/decision-diff-report.json",
+        "tests/guard_command_decision_diff.py",
+        "build/guard-evidence/decision-diff-report.json",
+    ):
+        assert not any(_matches(evidence, pattern) for pattern in patterns), evidence
 
 
 def test_regen_keeps_main_scope_and_reviewed_publication() -> None:

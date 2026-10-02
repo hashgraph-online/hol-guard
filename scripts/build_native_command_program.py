@@ -7,6 +7,7 @@ identities. This development command is never called on the hook hot path.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import subprocess
 from pathlib import Path
@@ -65,6 +66,30 @@ def build_request() -> dict:
     }
 
 
+def implementation_digest() -> str:
+    """Mirror the Rust build fingerprint, not its compilation or admission logic."""
+    workspace = ROOT / "rust"
+    paths = {workspace / "Cargo.lock", workspace / "Cargo.toml"}
+    for crate in (workspace / "crates").iterdir():
+        for name in ("Cargo.toml", "build.rs"):
+            if (crate / name).is_file():
+                paths.add(crate / name)
+        if (crate / "src").is_dir():
+            paths.update(path for path in (crate / "src").rglob("*") if path.suffix in (".rs", ".json"))
+    paths.update(path for path in (workspace / "build_support").rglob("*") if path.suffix in (".rs", ".json"))
+    digest = hashlib.sha256(b"hol-guard.native-source-implementation.v1\0")
+    for path in sorted(paths, key=lambda item: item.relative_to(workspace).as_posix()):
+        if path.is_symlink() or not path.is_file():
+            raise ValueError("invalid native implementation input")
+        name = path.relative_to(workspace).as_posix().encode()
+        content = path.read_bytes().replace(b"\r\n", b"\n")
+        digest.update(len(name).to_bytes(8, "big"))
+        digest.update(name)
+        digest.update(len(content).to_bytes(8, "big"))
+        digest.update(content)
+    return digest.hexdigest()
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="Reject a missing or stale checked-in artifact.")
@@ -98,6 +123,11 @@ def main() -> int:
     compiled = json.loads(completed.stdout)
     if compiled["catalog_projection_kind"] != "complete":
         raise ValueError("release generation requires a complete catalog")
+    if compiled["implementation_digest"] != implementation_digest():
+        raise ValueError("source compiler does not match the current native implementation; rebuild it")
+    built = subprocess.run([*command[:-1], "export-built"], stdout=subprocess.PIPE, cwd=ROOT, timeout=60, check=False)
+    if built.returncode or json.loads(built.stdout) != compiled:
+        raise ValueError("source compiler does not embed the current authored sources; rebuild it before staging")
     program = compiled["program"]
     catalog = {
         "schema": "guard.command-catalog.v1",

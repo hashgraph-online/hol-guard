@@ -59,7 +59,16 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
     assert payload["env"]["CI_PYTHON_VERSION"] == "3.12.14"
     assert "test-plan" not in jobs
     assert "tests" not in jobs
-    assert "needs" not in jobs["coverage-plan"]
+    assert jobs["coverage-plan"]["needs"] == "native-command-evaluators"
+    for name in ("coverage-plan", "compatibility", "cisco-full", "cross-platform", "windows-updater"):
+        assert jobs[name]["needs"] == "native-command-evaluators"
+        resources = [
+            step
+            for step in jobs[name]["steps"]
+            if step.get("with", {}).get("name") == "pytest-native-command-projections"
+        ]
+        assert len(resources) == 1
+        assert "if" not in resources[0]
     native_steps = jobs["native-command-evaluators"]["steps"]
     verify_index = next(
         index for index, step in enumerate(native_steps) if "verify_native_command_program.py" in step.get("run", "")

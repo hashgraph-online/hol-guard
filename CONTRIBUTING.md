@@ -44,11 +44,12 @@ not copy their registration pattern to add an extension.
 3. Open a PR using the **Command extension** template. Ready PRs receive Gitar's managed label,
    which enables automatic repair for mechanical schema, binding, and generated-projection issues.
 
-The canonical source, portable fixture, and external trust entry are the contributor-owned inputs.
-Generated projections (command catalog, native program, baselines, digest vectors, directory
-render) are maintainer-owned: keep them out of the contribution diff. CI validates sources
-additively while they are pending, and `extension-artifact-regen` regenerates the projections
-on `main` after merge, so projection drift alone never bounces a contribution.
+The canonical source, portable fixture, and external trust entry are contributor-owned inputs.
+The command catalog, native program, descriptors and public directory remain maintainer-published
+at their existing paths. Keep their generated changes out of contribution PRs. CI compiles the
+current sources and validates matching projections on both PRs and main; the publication workflow
+updates Git afterward. It never rewrites portable fixtures, crypto vectors or test assertions.
+See [extension fixture isolation](docs/guard/extension-fixture-isolation.md).
 
 Gitar does not choose command semantics, trust, claim authority, or safe variants. Contributors
 can request analysis without changes at any time with `gitar auto-apply:off`.
@@ -164,25 +165,15 @@ checks authoring outside the checkout. Include the relevant CI results in the PR
 2. For a new extension or material authority change, describe the capability boundary and stable
    IDs in a draft pull request using the **Command extension** template. Keep the PR draft until the
    scope is reviewable; maintainers can redirect overlapping IDs there before implementation is complete.
-3. Make one coherent change, with native behavior fixtures when applicable. Never commit
-   regen-owned generated artifacts (catalogs, the native command program, packaged contract
-   copies, digest vectors, the decision-diff report, generated test snapshots): the
-   `generated-artifacts-guard` check rejects them, and `extension-artifact-regen` reproduces them
-   on `main` after merge. (`trust-class-map.v1.json` stays authored — contributions add their
-   `external` entry there; regen only appends unmapped ids.)
+3. Make one coherent change, with native behavior fixtures when applicable. Keep maintainer-owned
+   catalogs, the native command program, packaged contract copies and directory renders out of
+   the contribution diff. Keep meaningful security expectations and portable fixtures under review.
+   Fixed cryptographic vectors do not need to follow changes to the production catalog.
 
-   **Freshness semantics — what to do when a check says "artifacts are stale":** every
-   generated-artifact freshness gate follows the same rule, evaluated against the PR's diff:
-
-   | PR diff contains | Gate behavior |
-   |---|---|
-   | regen-owned artifact paths | strict verification — carried artifacts must be exactly right |
-   | artifact inputs only (`contributions/`, `rust/`, generator/builder sources, bound tests, fixtures — the canonical list is `REGEN_INPUT_PREFIXES` in `scripts/ci/detect_pending_extension_regen.py`) | additive validation — sources must compile; artifacts regenerate on `main` |
-   | neither | deferred — any checked-in drift is inherited and regen-owned |
-
-   The only legitimate responses to a freshness failure are: (a) your diff is wrong — remove the
-   generated paths or fix the source, or (b) your branch predates the deferral — merge `main` and
-   push. Never regenerate artifacts into an ordinary PR to chase a freshness gate.
+   CI stages matching product projections before testing and packaging, without rewriting test
+   expectations or relying on a later regeneration commit. A source-only PR and its merged main
+   revision receive the same native verification. Invalid source or behavior still fails the build;
+   unrelated fixture edits do not require generated hash updates or native recompilation.
 4. Run the relevant validation and inspect the complete diff.
 5. For a command extension, run `hol-guard extensions handoff` and use the **Command extension**
    PR template. Describe the problem, resulting behavior, exact validation commands, and any

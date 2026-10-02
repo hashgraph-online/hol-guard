@@ -68,8 +68,8 @@ fn packaged_program_is_admitted_once_and_exposes_explicit_coverage() {
     let first = packaged_command_program().unwrap();
     assert!(Arc::ptr_eq(&first, &packaged_command_program().unwrap()));
     let catalog: serde_json::Value = serde_json::from_slice(include_bytes!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../../../contracts/extensions/command-catalog.v1.json"
+        env!("OUT_DIR"),
+        "/command-catalog.v1.json"
     )))
     .unwrap();
     let entries = catalog["catalog"].as_array().unwrap();
