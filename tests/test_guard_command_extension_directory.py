@@ -24,6 +24,10 @@ def _load_renderer() -> ModuleType:
 
 @requires_fresh_projections
 def test_extension_directory_matches_canonical_registry() -> None:
+    """Check the committed snapshot when projections are fresh.
+
+    Pending source rendering is covered unconditionally in test_native_source_program.
+    """
     renderer = _load_renderer()
     current = DIRECTORY_PATH.read_text(encoding="utf-8")
 
