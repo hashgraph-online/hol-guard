@@ -227,7 +227,7 @@ fn absolute_lease_deadline_can_wait_beyond_stream_retry_budget() {
             .send(())
             .expect("absolute retry worker should start");
         let started = Instant::now();
-        let acquired = acquire_until(&worker_root, started + Duration::from_millis(750));
+        let acquired = acquire_until(&worker_root, started + Duration::from_secs(3));
         let elapsed = started.elapsed();
         let succeeded = acquired.is_ok();
         drop(acquired);

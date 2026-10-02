@@ -92,7 +92,15 @@ _NATIVE_PROJECTION_PATHS: tuple[str, ...] = (
 
 
 def pending_decision_diff_regen() -> bool:
-    """In a PR that does not carry the regen-owned decision-diff report."""
+    """In a PR that does not carry the regen-owned decision-diff report.
+
+    The report is maintainer-owned: generated-artifacts-guard rejects it in
+    ordinary PR diffs, so a branch can never refresh it, and drift may equally
+    be inherited from main (any merged bound-source change restales it until
+    the post-merge regen lands). Freshness is enforced where the report can
+    actually change — on main and on regen PRs, whose diff carries it — and
+    deferred for every other PR.
+    """
 
     if pending_contribution_regen():
         return True
@@ -107,7 +115,12 @@ def pending_decision_diff_regen() -> bool:
 
 
 def pending_native_projection_regen() -> bool:
-    """In a PR that does not carry the regen-owned native projections."""
+    """In a PR that does not carry the regen-owned native projections.
+
+    Same regen-ownership reasoning as the decision-diff report: ordinary PRs
+    cannot commit these projections, so freshness belongs to main and regen
+    PRs; every other PR defers.
+    """
 
     if pending_contribution_regen():
         return True
