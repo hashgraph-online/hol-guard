@@ -9,13 +9,31 @@ pub(super) fn unwrap_sudo(
     let mut wrappers = Vec::new();
     while tokens
         .get(index)
-        .is_some_and(|token| executable_basename(token) == "sudo")
+        .is_some_and(|token| matches!(executable_basename(token), "sudo" | "timeout"))
     {
         if wrappers.len() == 4 {
             return Err("command_wrapper_limit_exceeded");
         }
-        wrappers.push("sudo".to_owned());
+        let wrapper = executable_basename(&tokens[index]);
+        wrappers.push(wrapper.to_owned());
         index += 1;
+        if wrapper == "timeout" {
+            if tokens.get(index).is_some_and(|value| value == "--") {
+                index += 1;
+            }
+            if !tokens.get(index).is_some_and(|value| timeout(value)) {
+                return Err("transparent_wrapper_not_yet_supported");
+            }
+            index += 1;
+            let Some(command) = tokens.get(index) else {
+                return Err("transparent_wrapper_not_yet_supported");
+            };
+            if command.is_empty() || command.starts_with('-') || assignment_name(command).is_some()
+            {
+                return Err("transparent_wrapper_not_yet_supported");
+            }
+            continue;
+        }
         while let Some(option) = tokens.get(index) {
             match option.as_str() {
                 "--" => {

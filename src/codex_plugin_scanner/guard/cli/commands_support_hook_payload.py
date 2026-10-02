@@ -251,6 +251,13 @@ def _apply_native_edge_envelope_fields(
         response_payload["native_edge_decision"] = edge_decision
         if project_decision:
             response_payload["decision"] = "block" if edge_decision == "deny" else "allow"
+    structured_content_mediation = native_edge_result.get("structured_content_mediation")
+    if isinstance(structured_content_mediation, Mapping):
+        # The worker already produced the validated mediation contract. Keep
+        # it as an opaque adapter projection so the receiver can validate its
+        # exact schema, action, and fail-closed fields without inventing
+        # native authority here.
+        response_payload["structured_content_mediation"] = dict(structured_content_mediation)
     for source_key, target_key in (
         ("reason", "native_edge_reason"),
         ("reason_code", "native_edge_reason_code"),

@@ -35,6 +35,7 @@ from ..cli.commands_support_command_activity import (
     hook_post_succeeded,
     record_post_hook_command_activity_best_effort,
 )
+from ..codex_binding_capture_writer import CodexBindingCaptureWriter
 from ..config import load_guard_config
 from ..native_hook_edge import review_raw_hook_native
 from ..native_policy_snapshot import get_native_policy_snapshot_publisher
@@ -55,6 +56,7 @@ from .hook_worker_responses import (
 )
 
 if TYPE_CHECKING:
+    from ..config import GuardConfig
     from ..store import GuardStore
 
 
@@ -111,12 +113,14 @@ class HookWorker(HookWorkerNativeMixin):
         *,
         store: GuardStore,
         activity_writer: CommandActivityWriter | None = None,
+        capture_writer: CodexBindingCaptureWriter | None = None,
         wait_for_native_policy: bool = True,
         publish_native_policy: bool = True,
     ):
         self.store = store
         self.guard_home = store.guard_home
         self.activity_writer = activity_writer
+        self.capture_writer = capture_writer
         self._publish_native_policy = publish_native_policy
         self._last_native_decision_receipt: dict[str, object] | None = None
         from .hook_metrics import HookMetricsRecorder
@@ -138,7 +142,7 @@ class HookWorker(HookWorkerNativeMixin):
 
         return self._last_native_decision_receipt
 
-    def _load_config(self, guard_home: Path, workspace: Path | None):
+    def _load_config(self, guard_home: Path, workspace: Path | None) -> GuardConfig:
         return load_guard_config(guard_home, workspace=workspace)
 
     def _review_raw_hook_native(
@@ -276,6 +280,8 @@ class HookWorker(HookWorkerNativeMixin):
             # Send even unknown or malformed event labels to Rust. The edge
             # returns no semantic result for unsupported events, which this
             # method turns into a deterministic deny/fail-safe response.
+            # The concrete worker supplies the mixin host protocol, so bind
+            # these methods through the worker rather than the mixin class.
             return self._review_native_edge(
                 payload=payload,
                 harness=harness,
@@ -299,7 +305,13 @@ class HookWorker(HookWorkerNativeMixin):
             guard_home=guard_home,
         )
         if mode_response is not None:
-            return mode_response
+            return self._apply_structured_unavailable_overlay(
+                mode_response,
+                harness=harness,
+                event_name=event_name,
+                guard_home=guard_home,
+                workspace=workspace,
+            )
         if event_name == "PreToolUse":
             return self._review_pre_tool_http(
                 payload,
@@ -308,7 +320,7 @@ class HookWorker(HookWorkerNativeMixin):
                 guard_home=guard_home,
                 workspace=workspace,
             )
-        return self._review_post_tool_http(
+        post_response = self._review_post_tool_http(
             payload,
             harness=harness,
             default_harness=default_harness,
@@ -316,6 +328,13 @@ class HookWorker(HookWorkerNativeMixin):
             guard_home=guard_home,
             workspace=workspace,
             deadline=deadline,
+        )
+        return self._apply_structured_unavailable_overlay(
+            post_response,
+            harness=harness,
+            event_name=event_name,
+            guard_home=guard_home,
+            workspace=workspace,
         )
 
     def _claude_permission_prompt_notification_response(

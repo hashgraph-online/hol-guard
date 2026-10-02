@@ -14,20 +14,23 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard.adapters import pi_extension_source
+from codex_plugin_scanner.guard.adapters import pi_extension_previous_source, pi_extension_source
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.adapters.pi_extension_previous_source import previous_managed_extension_source
 from codex_plugin_scanner.guard.adapters.pi_extension_runtime_ownership import PiExtensionRuntimeOwnership
 from codex_plugin_scanner.guard.adapters.pi_extension_source import legacy_managed_extension_source
-from codex_plugin_scanner.guard.cli import update_commands
+from codex_plugin_scanner.guard.cli import commands_support_workspace, update_commands
 from codex_plugin_scanner.guard.cli.commands import (
     _resolve_default_install_workspace,
     _resolve_guard_workspace,
 )
 from codex_plugin_scanner.guard.config import resolve_guard_home
 from codex_plugin_scanner.guard.launcher import merge_guard_launcher_env
+from codex_plugin_scanner.guard.models import HarnessDetection
 from codex_plugin_scanner.guard.store import GuardStore
 
 LEGACY_OMP_BASE_SOURCE_SHA256 = "fbd87651af3850ea8bf0772bc0649c91f791b9fa01dbb493934209eb139e2bce"
+PREVIOUS_OMP_BASE_SOURCE_SHA256 = "778b4830857695f9c9d1c5682f77e71c2d86baf3e0b2fb814ae7589f9f600eb2"
 
 
 def _legacy_omp_base_source_sha256(source: str) -> str:
@@ -46,6 +49,80 @@ def _install_args(*, harness: str = "cursor", workspace: str | None = None) -> a
         harness=harness,
         all=False,
     )
+
+
+def test_workspace_detection_uses_selected_home_and_explicit_marker(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cwd = tmp_path / "project"
+    cwd.mkdir()
+    selected_home = tmp_path / "selected-home"
+    selected_home.mkdir()
+    guard_home = tmp_path / "guard-home"
+    seen: list[HarnessContext] = []
+
+    class _Adapter:
+        def detect(self, context: HarnessContext) -> HarnessDetection:
+            seen.append(context)
+            return HarnessDetection(
+                harness="codex",
+                installed=True,
+                command_available=False,
+                config_paths=(str(cwd / ".codex" / "config.toml"),),
+                artifacts=(),
+            )
+
+    monkeypatch.setattr(commands_support_workspace, "get_adapter", lambda _harness: _Adapter())
+    monkeypatch.chdir(cwd)
+    monkeypatch.delenv("CURSOR_PROJECT_DIR", raising=False)
+
+    resolved = commands_support_workspace._resolve_default_install_workspace(
+        _install_args(harness="codex"),
+        guard_home=guard_home,
+        home_dir=selected_home,
+        home_override_explicit=True,
+    )
+
+    assert resolved == cwd.resolve()
+    assert seen and seen[0].home_dir == selected_home.resolve()
+    assert seen[0].home_override_explicit is True
+
+
+@pytest.mark.parametrize("home_name", ["default-home", "foreign-home"])
+def test_workspace_detection_rejects_config_paths_outside_current_project(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    home_name: str,
+) -> None:
+    cwd = tmp_path / "project"
+    cwd.mkdir()
+    candidate_home = tmp_path / home_name
+    candidate_home.mkdir()
+    guard_home = tmp_path / "guard-home"
+
+    class _Adapter:
+        def detect(self, context: HarnessContext) -> HarnessDetection:
+            return HarnessDetection(
+                harness="codex",
+                installed=True,
+                command_available=False,
+                config_paths=(str(context.home_dir / ".codex" / "config.toml"),),
+                artifacts=(),
+            )
+
+    monkeypatch.setattr(commands_support_workspace, "get_adapter", lambda _harness: _Adapter())
+    monkeypatch.chdir(cwd)
+    monkeypatch.delenv("CURSOR_PROJECT_DIR", raising=False)
+
+    resolved = commands_support_workspace._resolve_default_install_workspace(
+        _install_args(harness="codex"),
+        guard_home=guard_home,
+        home_dir=candidate_home,
+        home_override_explicit=home_name == "foreign-home",
+    )
+
+    assert resolved is None
 
 
 def test_resolve_default_install_workspace_prefers_cwd_markers_over_git_root(
@@ -183,6 +260,50 @@ def test_legacy_omp_source_matches_pre_response_contract_snapshot(monkeypatch: p
     )
 
     assert _legacy_omp_base_source_sha256(source) == LEGACY_OMP_BASE_SOURCE_SHA256
+
+
+def test_previous_omp_source_matches_merge_base_snapshot(monkeypatch: pytest.MonkeyPatch) -> None:
+    guard_home = Path("/omp-snapshot/guard-home")
+    home_dir = Path("/omp-snapshot/home")
+    monkeypatch.setattr(
+        pi_extension_previous_source,
+        "resolve_pi_extension_runtime_ownership",
+        lambda **_: PiExtensionRuntimeOwnership(
+            guard_args=("hook", "--json", "--guard-home", str(guard_home), "--harness", "pi", "--home", str(home_dir)),
+            cli_command="/snapshot/bin/hol-guard",
+            cli_args=(
+                "hook",
+                "--json",
+                "--guard-home",
+                str(guard_home),
+                "--harness",
+                "pi",
+                "--home",
+                str(home_dir),
+            ),
+            cli_accepts_json_args=False,
+            recovery_command="/snapshot/bin/hol-guard",
+            recovery_args=(
+                "daemon",
+                "recover",
+                "--guard-home",
+                str(guard_home),
+                "--home",
+                str(home_dir),
+            ),
+            recovery_accepts_failure_kind=True,
+        ),
+    )
+    monkeypatch.setattr(pi_extension_previous_source, "windows_system_executable_path", lambda _: None)
+    source = previous_managed_extension_source(
+        guard_home=guard_home,
+        home_dir=home_dir,
+        settings_path=Path("/omp-snapshot/home/.omp/agent/settings.json"),
+        harness="pi",
+    )
+
+    assert hashlib.sha256(source.encode()).hexdigest() == PREVIOUS_OMP_BASE_SOURCE_SHA256
+    assert "chars += Array.from(text).length" in source
 
 
 def test_update_migrates_verified_legacy_omp_extension_to_its_own_record(tmp_path: Path) -> None:

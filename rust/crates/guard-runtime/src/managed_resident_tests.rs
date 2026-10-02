@@ -3,6 +3,7 @@ use super::*;
 use std::fs;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[test]
 fn generation_parser_rejects_zero_and_non_numeric() {
@@ -60,6 +61,49 @@ fn startup_wait_honors_remaining_caller_budget() {
         elapsed < caller_budget + scheduling_allowance,
         "startup exceeded the caller deadline: {elapsed:?}"
     );
+}
+
+#[test]
+fn zero_client_timeout_rejects_before_state_mutation() {
+    let root = std::env::temp_dir().join(format!(
+        "hol-guard-managed-zero-timeout-{}-{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock must be after the Unix epoch")
+            .as_nanos()
+    ));
+
+    assert_eq!(
+        client_request(&root, br"{}", Duration::ZERO),
+        Err("native_client_deadline_exceeded".to_owned())
+    );
+    assert!(!root.exists());
+}
+
+#[test]
+fn expired_client_deadline_rejects_before_request_setup() {
+    let root = std::env::temp_dir().join(format!(
+        "hol-guard-managed-expired-deadline-{}-{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock must be after the Unix epoch")
+            .as_nanos()
+    ));
+    fs::create_dir(&root).expect("test state directory should be created");
+    let client_lease = lease::acquire(&root).expect("test lease should be acquired");
+
+    let result = client_request_with_deadline(
+        &root,
+        br"{}",
+        Instant::now() - Duration::from_millis(1),
+        &client_lease,
+    );
+    assert_eq!(result, Err("native_client_deadline_exceeded".to_owned()));
+
+    drop(client_lease);
+    fs::remove_dir_all(root).expect("test state directory should be removable");
 }
 
 #[test]

@@ -135,7 +135,7 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
     candidate = jobs["duration-manifest-candidate"]
     assert candidate["needs"] == "coverage"
     assert candidate["if"] == "needs.coverage.result == 'success'"
-    assert 'test "${#reports[@]}" -eq 128' in "\n".join(step.get("run", "") for step in candidate["steps"])
+    assert 'if [ "${#reports[@]}" -ne 128 ];' in "\n".join(step.get("run", "") for step in candidate["steps"])
     sonar_job = _workflow_job(workflow, "sonar", "scheduling-sensitive")
     assert "bash scripts/ci/prepare_sonar_analysis.sh" in sonar_job
     sonar_setup = (ROOT / "scripts/ci/prepare_sonar_analysis.sh").read_text(encoding="utf-8")

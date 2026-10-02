@@ -443,6 +443,6 @@ def test_sonar_installs_same_pinned_scanner_before_wait_without_analysis_credent
     assert installer["uses"] == analysis["uses"]
     assert installer["with"] == {"args": "--version"}
     assert installer["env"] == {"SONAR_USER_HOME": analysis["env"]["SONAR_USER_HOME"]}
-    assert "with" not in analysis
+    assert analysis["with"] == {"args": "-Dsonar.python.analysis.threads=4"}
     assert analysis["env"]["SONAR_TOKEN"] == "${{ secrets.SONAR_TOKEN }}"
     assert steps.index(installer) < steps.index(waiter) < steps.index(analysis)
