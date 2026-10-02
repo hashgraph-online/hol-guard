@@ -1737,10 +1737,8 @@ class CodexHarnessAdapter(HarnessAdapter):
                 )
             return state
         except BaseException as transaction_error:
-            # Never overwrite a config changed by another writer. Manifest and
-            # secret are still restored so the unknown config fails closed
-            # against the pre-transaction authentication state.
-            rollback_conflict: BaseException | None = None
+            # An unknown config cannot safely be paired with the old manifest.
+            # Preserve participant files and report the unresolved transaction.
             try:
                 require_unchanged_config_for_rollback(
                     config_path,
@@ -1750,26 +1748,28 @@ class CodexHarnessAdapter(HarnessAdapter):
                     written_identity=written_config_identity,
                 )
             except BaseException as conflict:
-                rollback_conflict = conflict
+                raise conflict from transaction_error
             rollback_error: BaseException | None = None
             try:
-                if rollback_conflict is None:
-                    if original_config is None:
-                        if config_path.is_symlink():
-                            raise RuntimeError("Guard refused to unlink a symlink while rolling back Codex config.")
-                        config_path.unlink(missing_ok=True)
-                    else:
-                        atomic_write_text(config_path, original_config.decode("utf-8"), mode=0o600)
+                if original_config is None:
+                    if config_path.is_symlink():
+                        raise RuntimeError("Guard refused to unlink a symlink while rolling back Codex config.")
+                    config_path.unlink(missing_ok=True)
+                else:
+                    atomic_write_text(config_path, original_config.decode("utf-8"), mode=0o600)
                 restore_private_file(manifest_path, original_manifest)
                 restore_private_file(secret_path, original_secret)
             except BaseException as exc:  # pragma: no cover - catastrophic local I/O failure
                 rollback_error = exc
             if rollback_error is not None:
-                raise RuntimeError(
-                    "Codex hook transaction failed and rollback could not be completed."
-                ) from rollback_error
-            if rollback_conflict is not None:
-                raise rollback_conflict from transaction_error
+                failure = RuntimeError(
+                    "Codex hook transaction failed and rollback could not be completed: "
+                    f"{type(rollback_error).__name__}: {rollback_error}"
+                )
+                add_note = getattr(failure, "add_note", None)
+                if callable(add_note):
+                    add_note(f"rollback error: {rollback_error!r}")
+                raise failure from transaction_error
             raise
 
     @staticmethod
