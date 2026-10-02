@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import shlex
 import stat
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import replace
 from pathlib import Path
 
@@ -146,5 +146,10 @@ def prepare_restricted_node_tool(
     )
 
 
-def run_restricted_node_tool(plan: RestrictedPytestPlan, *, timeout_seconds: int) -> int:
-    return run_restricted_node_plan(plan, timeout_seconds=timeout_seconds)
+def run_restricted_node_tool(
+    plan: RestrictedPytestPlan,
+    *,
+    timeout_seconds: int,
+    authorize_capability: Callable[[tuple[str, ...]], None] | None = None,
+) -> int:
+    return run_restricted_node_plan(plan, timeout_seconds=timeout_seconds, authorize_capability=authorize_capability)

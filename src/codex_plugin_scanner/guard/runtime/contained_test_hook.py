@@ -189,12 +189,26 @@ def run_authorized_contained_test(
 
     if not required(authorize(payload)):
         raise _reject()
+
+    def authorize_capability(argv: tuple[str, ...]) -> None:
+        capability = {**payload, "tool_input": {**tool_input, "command": shlex.join(argv)}}
+        response = authorize(capability)
+        if (
+            not isinstance(response, Mapping)
+            or response.get("decision") != "allow"
+            or response.get("policy_action") != "allow"
+            or response.get("observe_mode") is True
+        ):
+            raise _reject()
+
     # No shell and no unsandboxed retry: the required profile is the actual sink.
     if node_tool:
         underlying = {**payload, "tool_input": {**tool_input, "command": shlex.join(node_tool_plan.command)}}
         if not required(authorize(underlying)):
             raise _reject()
-        return run_restricted_node_tool(node_tool_plan, timeout_seconds=timeout_seconds)
+        return run_restricted_node_tool(
+            node_tool_plan, timeout_seconds=timeout_seconds, authorize_capability=authorize_capability
+        )
     if git:
         return run_restricted_git(git_plan, timeout_seconds=timeout_seconds)
     if vitest:
@@ -204,10 +218,21 @@ def run_authorized_contained_test(
         if not required(authorize(underlying)):
             raise _reject()
         return run_restricted_vitest(
-            command, workspace=workspace, cwd=workspace, timeout_seconds=timeout_seconds, prepared_plan=vitest_plan
+            command,
+            workspace=workspace,
+            cwd=workspace,
+            timeout_seconds=timeout_seconds,
+            prepared_plan=vitest_plan,
+            authorize_capability=authorize_capability,
         )
     if node_test:
-        return run_restricted_node_test(command, workspace=workspace, cwd=workspace, timeout_seconds=timeout_seconds)
+        return run_restricted_node_test(
+            command,
+            workspace=workspace,
+            cwd=workspace,
+            timeout_seconds=timeout_seconds,
+            authorize_capability=authorize_capability,
+        )
     return run_restricted_pytest(
         command,
         workspace=workspace,

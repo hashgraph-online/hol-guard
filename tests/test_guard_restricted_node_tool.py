@@ -67,6 +67,52 @@ def test_underlying_native_policy_is_rechecked(monkeypatch, tmp_path, denied):
     assert authorized[0] == "bun run lint" and authorized[1].startswith("/usr/bin/node ")
 
 
+@pytest.mark.parametrize(
+    "response, allowed",
+    [
+        ({"decision": "allow", "policy_action": "allow"}, True),
+        ({"decision": "deny", "policy_action": "block"}, False),
+        ({"decision": "allow", "policy_action": "block"}, False),
+        ({"decision": "allow", "policy_action": "allow", "observe_mode": True}, False),
+    ],
+)
+def test_native_capability_gate_does_not_override_extension_denial(monkeypatch, tmp_path, response, allowed):
+    plan = SimpleNamespace(profile_version="node-tool-readonly-v1", command=("/usr/bin/node", "eslint.js"))
+    calls, executed = [], []
+    monkeypatch.setattr(tool, "prepare_restricted_node_tool", lambda *args, **kwargs: plan)
+
+    def run(plan, *, timeout_seconds, authorize_capability):
+        authorize_capability(("/usr/bin/node", "--help"))
+        executed.append(True)
+        return 0
+
+    monkeypatch.setattr(tool, "run_restricted_node_tool", run)
+
+    def authorize(payload):
+        command = payload["tool_input"]["command"]
+        calls.append(command)
+        if command == "/usr/bin/node --help":
+            return response
+        return {
+            "decision": "deny",
+            "policy_action": "sandbox-required",
+            "reason_code": "native_node_tool_readonly_containment_required",
+            "required_execution_profile": "node-tool-readonly-v1",
+        }
+
+    payload = {"tool_input": {"command": "npm run lint"}}
+    if allowed:
+        assert (
+            sink.run_authorized_contained_test(payload, workspace=tmp_path, authorize=authorize, timeout_seconds=20)
+            == 0
+        )
+    else:
+        with pytest.raises(RestrictedPytestError):
+            sink.run_authorized_contained_test(payload, workspace=tmp_path, authorize=authorize, timeout_seconds=20)
+    assert executed == ([True] if allowed else [])
+    assert calls == ["npm run lint", "/usr/bin/node eslint.js", "/usr/bin/node --help"]
+
+
 @pytest.mark.parametrize("phase", ["prelint", "postlint"])
 def test_lifecycle_actions_are_not_silently_skipped(tmp_path, phase):
     (tmp_path / "package.json").write_text(json.dumps({"scripts": {"lint": "eslint src", phase: "node lifecycle.mjs"}}))

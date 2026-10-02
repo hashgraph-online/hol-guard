@@ -367,6 +367,7 @@ def _run_backend_process(
     env: Mapping[str, str],
     timeout_seconds: int,
     cwd: Path | None = None,
+    stdout_capture: bytearray | None = None,
 ) -> int:
     # RLIMIT_NPROC counts the whole user, not this run. A static 64-process
     # ceiling prevents Node from spawning even one test worker on busy desktops.
@@ -430,7 +431,11 @@ def _run_backend_process(
                 os.killpg(process.pid, signal.SIGKILL)
             for signum, handler in previous_handlers.items():
                 _ = signal.signal(signum, handler)
-            _replay_sandbox_output(stdout_file, sys.stdout)
+            if stdout_capture is None:
+                _replay_sandbox_output(stdout_file, sys.stdout)
+            else:
+                stdout_file.seek(0)
+                stdout_capture.extend(stdout_file.read(_MAX_REPLAY_BYTES))
             _replay_sandbox_output(stderr_file, sys.stderr)
         return return_code if return_code >= 0 else 128 + abs(return_code)
 

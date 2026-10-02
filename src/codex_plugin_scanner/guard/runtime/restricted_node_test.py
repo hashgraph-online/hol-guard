@@ -7,7 +7,7 @@ import re
 import stat
 import sys
 import tempfile
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 
 from .restricted_pytest_model import NODE_TEST_READ_ONLY_PROFILE_VERSION, RestrictedPytestError, RestrictedPytestPlan
@@ -110,6 +110,7 @@ def run_restricted_node_test(
     cwd: Path | None = None,
     env: Mapping[str, str] | None = None,
     timeout_seconds: int = 1800,
+    authorize_capability: Callable[[tuple[str, ...]], None] | None = None,
 ) -> int:
     if timeout_seconds <= 0 or timeout_seconds > 86400:
         raise RestrictedPytestError(_INVALID, "Protected Node timeout must be between 1 second and 24 hours.")
@@ -130,6 +131,15 @@ def run_restricted_node_test(
         # Node preloads and search paths from the host are not repository test input.
         launch_env.pop("NODE_OPTIONS", None)
         launch_env.pop("NODE_PATH", None)
+        from .restricted_node_capabilities import linux_node_environment
+
+        launch_env = linux_node_environment(
+            plan,
+            private_root=root,
+            environment=launch_env,
+            timeout_seconds=timeout_seconds,
+            authorize_capability=authorize_capability,
+        )
         return _run_backend_process(
             _backend_argv(plan, private_root=root), env=launch_env, timeout_seconds=timeout_seconds, cwd=plan.cwd
         )

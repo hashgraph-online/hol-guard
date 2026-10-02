@@ -6,10 +6,11 @@ import json
 import os
 import stat
 import tempfile
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import replace
 from pathlib import Path
 
+from .restricted_node_capabilities import linux_node_environment
 from .restricted_node_test import prepare_restricted_node_test
 from .restricted_pytest_model import (
     NODE_BUILD_OUTPUT_PROFILE_VERSION,
@@ -99,17 +100,24 @@ def run_restricted_vitest(
     env: Mapping[str, str] | None = None,
     timeout_seconds: int = 1800,
     prepared_plan: RestrictedPytestPlan | None = None,
+    authorize_capability: Callable[[tuple[str, ...]], None] | None = None,
 ) -> int:
     if timeout_seconds <= 0 or timeout_seconds > 86400:
         raise RestrictedPytestError("vitest_restricted_invalid_command", "Protected Vitest timeout is out of bounds.")
     plan = prepared_plan or prepare_restricted_vitest(command, workspace=workspace, cwd=cwd)
     if plan.profile_version != VITEST_READ_ONLY_PROFILE_VERSION:
         raise RestrictedPytestError("vitest_restricted_invalid_command", "Unexpected Vitest profile.")
-    return run_restricted_node_plan(plan, env=env, timeout_seconds=timeout_seconds)
+    return run_restricted_node_plan(
+        plan, env=env, timeout_seconds=timeout_seconds, authorize_capability=authorize_capability
+    )
 
 
 def run_restricted_node_plan(
-    plan: RestrictedPytestPlan, *, env: Mapping[str, str] | None = None, timeout_seconds: int = 1800
+    plan: RestrictedPytestPlan,
+    *,
+    env: Mapping[str, str] | None = None,
+    timeout_seconds: int = 1800,
+    authorize_capability: Callable[[tuple[str, ...]], None] | None = None,
 ) -> int:
     if (
         not 0 < timeout_seconds <= 86400
@@ -136,6 +144,13 @@ def run_restricted_node_plan(
             private_home=home,
             private_tmp=tmp,
             allowed_executables=plan.allowed_executables,
+        )
+        launch_env = linux_node_environment(
+            plan,
+            private_root=root,
+            environment=launch_env,
+            timeout_seconds=timeout_seconds,
+            authorize_capability=authorize_capability,
         )
         return _run_backend_process(
             _backend_argv(plan, private_root=root), env=launch_env, timeout_seconds=timeout_seconds, cwd=plan.cwd
