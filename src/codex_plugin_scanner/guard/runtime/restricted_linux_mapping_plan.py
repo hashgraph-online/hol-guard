@@ -140,7 +140,10 @@ def collect_mapping_evidence(
                 raise ValueError("Invalid executable mapping file.")
             prefix = stream.read(4)
             if prefix == b"\x7fELF":
-                system_library = any(path.is_relative_to(root) for root in (Path("/usr/lib"), Path("/lib")))
+                system_library = any(
+                    path.is_relative_to(root)
+                    for root in (Path("/usr/lib"), Path("/usr/lib64"), Path("/lib"), Path("/lib64"))
+                )
                 try:
                     _soname, dependencies = _elf(stream, before, library=library, system_library=system_library)
                 except (ValueError, struct.error, UnicodeError) as error:

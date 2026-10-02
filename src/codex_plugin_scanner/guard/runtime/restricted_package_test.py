@@ -19,7 +19,7 @@ def is_package_test(command: Sequence[str]) -> bool:
         bool(command)
         and Path(command[0]).name in {"npm", "pnpm", "bun"}
         and (
-            (len(command) >= 2 and command[1] == "test")
+            (len(command) >= 2 and command[1] == "test" and Path(command[0]).name != "bun")
             or (len(command) >= 3 and tuple(command[1:3]) == ("run", "test"))
         )
     )

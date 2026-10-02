@@ -94,10 +94,25 @@ def test_noexec_remounts_preserve_devices_and_readonly_mounts():
         b"4 1 0:4 / /space\\040name rw,nodev - bind bind rw\n"
     )
     targets = dict(mapping.mount_targets(raw))
-    assert targets[Path("/")] == 2 | 8
-    assert targets[Path("/dev")] == 2 | 8  # NODEV would break private null/random devices.
-    assert targets[Path("/lib")] == 1 | 2 | 4 | 8
+    assert targets[Path("/")] == 2 | 8 | (1 << 24)
+    assert targets[Path("/dev")] == 2 | 8 | (1 << 24)  # NODEV would break private null/random devices.
+    assert targets[Path("/lib")] == 1 | 2 | 4 | 8 | (1 << 24)
     assert Path("/space name") in targets
+
+
+@pytest.mark.parametrize(
+    "options, flags",
+    [
+        (b"noatime", 1024),
+        (b"noatime,nodiratime", 1024 | 2048),
+        (b"relatime", 1 << 21),
+        (b"strictatime", 1 << 24),
+        (b"nodiratime", (1 << 24) | 2048),
+    ],
+)
+def test_noexec_remount_preserves_locked_atime_flags(options, flags):
+    raw = b"1 0 0:1 / / rw," + options + b" - tmpfs tmpfs rw\n"
+    assert dict(mapping.mount_targets(raw))[Path("/")] == 2 | 8 | flags
 
 
 @pytest.mark.parametrize("raw", [b"", b"broken", b"1 0 0:1 / / ro,rw - tmpfs tmpfs rw\n"])

@@ -38,6 +38,9 @@ fn sed_risky_programs_never_inherit_read_allowance() {
         "cat .env | sed 's/^/MATCH /'",
         "sed 's/^/MATCH /'",
         "sed -n '0p' src/example.py",
+        "sed -n 1p '--expression=1e id'",
+        "sed 's/a/b/' -fprog.sed",
+        "sed -n 1p -i",
     ] {
         assert_ne!(action(command), "allow", "{command}");
     }

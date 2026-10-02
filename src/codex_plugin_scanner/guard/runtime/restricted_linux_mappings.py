@@ -24,6 +24,10 @@ _RDONLY = 1
 _NOSUID = 2
 _NODEV = 4
 _NOEXEC = 8
+_NOATIME = 1024
+_NODIRATIME = 2048
+_RELATIME = 1 << 21
+_STRICTATIME = 1 << 24
 _STORE = Path("/guard-approved-mappings")
 
 
@@ -86,6 +90,15 @@ def mount_targets(raw):
         if not ({b"ro", b"rw"} & options) or {b"ro", b"rw"} <= options:
             raise ValueError("Ambiguous namespace mount permissions.")
         flags = _NOSUID | _NOEXEC | (_RDONLY if b"ro" in options else 0) | (_NODEV if b"nodev" in options else 0)
+        # Bind mounts inherit locked atime flags from the host mount.
+        if b"noatime" in options:
+            flags |= _NOATIME
+        elif b"relatime" in options:
+            flags |= _RELATIME
+        else:
+            flags |= _STRICTATIME
+        if b"nodiratime" in options:
+            flags |= _NODIRATIME
         targets[target] = flags
     return sorted(targets.items(), key=lambda item: len(item[0].parts), reverse=True)
 

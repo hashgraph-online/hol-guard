@@ -7,7 +7,7 @@ import pytest
 
 from codex_plugin_scanner.guard.runtime import contained_test_hook as sink
 from codex_plugin_scanner.guard.runtime import restricted_node_test as node
-from codex_plugin_scanner.guard.runtime.restricted_package_test import resolve_package_test
+from codex_plugin_scanner.guard.runtime.restricted_package_test import is_package_test, resolve_package_test
 from codex_plugin_scanner.guard.runtime.restricted_pytest_model import RestrictedPytestError
 
 
@@ -16,6 +16,11 @@ from codex_plugin_scanner.guard.runtime.restricted_pytest_model import Restricte
 @pytest.mark.parametrize("script", ["node --test", "vitest run"])
 def test_local_alias_resolves_arguments_without_downloading(tmp_path, manager, task, script):
     (tmp_path / "package.json").write_text(json.dumps({"scripts": {"test": script}}))
+    if manager == "bun" and task == ["test"]:
+        assert not is_package_test([manager, *task])
+        with pytest.raises(RestrictedPytestError):
+            resolve_package_test([manager, *task], workspace=tmp_path)
+        return
     assert resolve_package_test([manager, *task, "--", "test/sample.test.js"], workspace=tmp_path) == (
         *script.split(),
         "test/sample.test.js",

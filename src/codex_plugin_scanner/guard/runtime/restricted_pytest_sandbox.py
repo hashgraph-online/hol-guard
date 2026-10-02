@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import contextlib
 import os
+import re
 import signal
 import subprocess
 import sys
 import tempfile
 from collections.abc import Callable, Mapping, Sequence
+from itertools import islice
 from pathlib import Path
 from types import FrameType
 from typing import BinaryIO, TextIO
@@ -141,7 +143,14 @@ def _macos_profile(plan: RestrictedPytestPlan, *, private_root: Path) -> str:
         )
     read_filters = " ".join(f"(subpath {_seatbelt_string(path)})" for path in read_roots)
     read_file_filters = " ".join(f"(literal {_seatbelt_string(path)})" for path in read_files)
-    metadata_paths = (Path("/"), *_ancestor_paths((*read_roots, *plan.allowed_executables)))
+    collection_targets = ()
+    if plan.profile_version == PYTEST_READ_ONLY_PROFILE_VERSION:
+        collection_targets = _collection_link_metadata(plan)
+    metadata_paths = (
+        Path("/"),
+        *collection_targets,
+        *_ancestor_paths((*read_roots, *plan.allowed_executables, *collection_targets)),
+    )
     metadata_filters = " ".join(f"(literal {_seatbelt_string(path)})" for path in metadata_paths)
     executable_filters = " ".join(f"(literal {_seatbelt_string(path)})" for path in plan.allowed_executables)
     read_only_workspace = plan.profile_version in READ_ONLY_TEST_PROFILES
@@ -164,10 +173,8 @@ def _macos_profile(plan: RestrictedPytestPlan, *, private_root: Path) -> str:
             "(allow sysctl-read)",
             '(allow file-read-data (literal "/"))',
             f"(allow file-read-metadata {metadata_filters})",
-            # Collectors stat symlink targets while enumerating the workspace.
-            # Metadata does not grant directory listing or file contents; those
-            # stay bounded below, with credential denials taking precedence.
-            *(("(allow file-read-metadata)",) if plan.profile_version == PYTEST_READ_ONLY_PROFILE_VERSION else ()),
+            # Collection may stat the ordinary symlink targets snapshotted above;
+            # their contents and unrelated external metadata remain unavailable.
             f"(allow file-read* {read_filters} {read_file_filters})",
             f"(allow file-write* {write_filters})",
             *(
@@ -187,7 +194,7 @@ def _seatbelt_string(path: Path | str) -> str:
     return f'"{escaped}"'
 
 
-def _read_only_credential_denials(*, hide_metadata: bool = False) -> tuple[str, ...]:
+def _read_only_credential_patterns() -> tuple[str, ...]:
     # Deny rules dominate workspace/runtime read grants, including paths reached
     # through symlinks. Match case variants consistently with native path policy.
     def literal(value: str) -> str:
@@ -211,7 +218,7 @@ def _read_only_credential_denials(*, hide_metadata: bool = False) -> tuple[str, 
         "private.key",
         "wallet.key",
     )
-    patterns = (
+    return (
         f"(^|/){literal('.env')}($|[./])",
         f"(^|/)[^/]*{literal('.key')}$",
         f"(^|/){literal('krb5cc_')}[^/]*$",
@@ -241,8 +248,31 @@ def _read_only_credential_denials(*, hide_metadata: bool = False) -> tuple[str, 
         )
         + ")(/|$)",
     )
+
+
+def _read_only_credential_denials(*, hide_metadata: bool = False) -> tuple[str, ...]:
     operation = "file-read*" if hide_metadata else "file-read-data"
-    return tuple(f"(deny {operation} (regex {_seatbelt_string(pattern)}))" for pattern in patterns)
+    return tuple(
+        f"(deny {operation} (regex {_seatbelt_string(pattern)}))" for pattern in _read_only_credential_patterns()
+    )
+
+
+def _collection_link_metadata(plan: RestrictedPytestPlan) -> tuple[Path, ...]:
+    targets: set[Path] = set()
+    patterns = _read_only_credential_patterns()
+    # Only the collector's immediate roots need extra target metadata. Do not
+    # recurse into dependencies or follow directory links into external trees.
+    for directory in {plan.workspace, plan.cwd}:
+        with os.scandir(directory) as entries:
+            for entry in islice(entries, 4096):
+                if entry.is_symlink():
+                    try:
+                        target = Path(entry.path).resolve(strict=True)
+                    except (OSError, RuntimeError):
+                        continue
+                    if not any(re.search(pattern, str(target)) for pattern in patterns):
+                        targets.add(target)
+    return tuple(sorted(targets))
 
 
 def _bubblewrap_argv(plan: RestrictedPytestPlan, *, private_root: Path) -> list[str]:
@@ -381,8 +411,10 @@ def _run_backend_process(
     stdout_capture: bytearray | None = None,
     node_virtual_address_space: bool = False,
 ) -> int:
-    if node_virtual_address_space and sys.platform == "linux" and (
-        not _RESOURCE_AVAILABLE or _resource is None or not hasattr(_resource, "RLIMIT_DATA")
+    if (
+        node_virtual_address_space
+        and sys.platform == "linux"
+        and (not _RESOURCE_AVAILABLE or _resource is None or not hasattr(_resource, "RLIMIT_DATA"))
     ):
         raise RestrictedPytestError(
             PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE,

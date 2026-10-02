@@ -158,6 +158,10 @@ def test_collection_can_stat_external_symlink_without_reading_its_contents() -> 
         project = Path(project_text)
         external = Path(external_text) / "notes.txt"
         external.write_text("synthetic external data", encoding="utf-8")
+        unlinked = Path(external_text) / "unlinked.txt"
+        unlinked.write_text("unlinked synthetic data", encoding="utf-8")
+        credential = Path(external_text) / "server.key"
+        credential.write_text("synthetic-only-not-a-real-credential", encoding="utf-8")
         alias = project / "workflow-guide.md"
         alias.symlink_to(external)
         configuration = project / "pytest.ini"
@@ -176,6 +180,13 @@ def test_symlink_metadata_not_contents():
         pass
     else:
         raise AssertionError('external contents must remain denied')
+    for external_path in {json.dumps([str(unlinked), str(credential)])}:
+        try:
+            Path(external_path).stat()
+        except OSError:
+            pass
+        else:
+            raise AssertionError('unrelated external metadata must remain denied')
 """.lstrip(),
             encoding="utf-8",
         )

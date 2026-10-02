@@ -376,7 +376,7 @@ pub(super) fn safe_sed_arguments(arguments: &[String], piped_input: bool) -> boo
             parts.len() == 3 && matches!(parts[2], "" | "g")
         });
     (bounded_print || substitution)
-        && (matches!(targets, [target] if safe_read_target(target))
+        && (matches!(targets, [target] if !target.starts_with('-') && safe_read_target(target))
             || (targets.is_empty() && piped_input))
 }
 
