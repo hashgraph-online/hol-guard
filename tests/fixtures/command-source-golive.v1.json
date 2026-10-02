@@ -10091,30 +10091,31 @@
       {
         "extension": {
           "action_classes": [
-            "CloudG asset collection command",
-            "CloudG pipeline execution command",
-            "CloudG scanner execution command"
+            "GoLive confirmed resource deletion",
+            "GoLive confirmed live write",
+            "GoLive confirmed DNS change"
           ],
           "aliases": [],
           "conflicts": [],
-          "delegated_protection": null,
           "dependencies": [],
-          "description": "Reviews cloud credential use, security scanner execution, and Terraform file generation through the CloudG CLI.",
+          "description": "Reviews the GoLive plan executions that carry an explicit destructive or live confirmation flag. GoLive already refuses account writes without an approved plan id, recomputes that plan's identity before running, and deletes only resources it recorded as its own; the confirmation flags themselves are passed by the caller on the human's behalf, so `golive apply` with --confirm-destroy, --confirm-live or --confirm-dns is where an independent review adds something. The read-only surface (`golive help`, `version`, `update-check`, `detect`, `menu`, `doctor`, `plan`, `teardown`, `verify`, `status`, `handoff`) is outside these rules: `teardown` is the inverse plan and deletes nothing, and `plan` is what prints the plan id a human approves.",
           "ecosystem_ids": [],
-          "executables": [],
-          "extension_id": "command.cloudg",
-          "homepage": "https://github.com/morpheuslord/cloudg",
+          "executables": [
+            "golive",
+            "golive.cmd",
+            "golive.exe"
+          ],
+          "extension_id": "command.golive",
+          "homepage": "https://github.com/mikehasa/golive-skill",
           "icon": {
-            "background": "#0E7490",
-            "kind": "react-icon",
-            "name": "HiMiniCloud"
+            "kind": "none"
           },
           "license": "MIT",
-          "name": "CloudG command protection",
+          "name": "GoLive deployment CLI protection",
           "permissions": [
             {
               "action_classes": [
-                "CloudG asset collection command"
+                "GoLive confirmed resource deletion"
               ],
               "baseline_floor": "review",
               "configurable": true,
@@ -10122,25 +10123,25 @@
               "default_enabled": true,
               "dependencies": [],
               "deprecated": false,
-              "description": "Identifies asset collection runs that resolve cloud credentials and enumerate resources through provider APIs.",
-              "example_command": "cloudg collect -p aws --profile prod --region us-east-1",
+              "description": "Identifies `golive apply` with --confirm-destroy, the only invocation that deletes resources GoLive recorded as its own (a host project it created, DNS records it wrote, webhook endpoints and sending keys it issued). GoLive refuses those deletions without an approved teardown plan id and this flag, and reports every resource it cannot prove it created as a manual handoff instead of deleting it.",
+              "example_command": "golive apply --plan 8f3c1d2a4b5e --yes --confirm-destroy",
               "family": null,
               "fixed_reason": null,
               "implementation_version": "1.0.0",
               "implied_permissions": [],
-              "introduced_version": "3.9.0",
-              "label": "CloudG asset collection",
-              "permission_id": "command.cloudg.permission.collect",
+              "introduced_version": "1.0.0",
+              "label": "GoLive teardown execution",
+              "permission_id": "command.golive.permission.apply-confirm-destroy",
               "replacement_permission_id": null,
-              "risk_tier": "high",
+              "risk_tier": "critical",
               "safer_guidance": [
-                "Confirm the provider, profile, and region flags point at the account you intend to inventory."
+                "Pause for the human before the deletion: show the teardown plan (`golive teardown`) and the exact plan id, and let them say whether this deletion happens now."
               ],
               "typed_capabilities": []
             },
             {
               "action_classes": [
-                "CloudG pipeline execution command"
+                "GoLive confirmed live write"
               ],
               "baseline_floor": "review",
               "configurable": true,
@@ -10148,26 +10149,25 @@
               "default_enabled": true,
               "dependencies": [],
               "deprecated": false,
-              "description": "Identifies full pipeline runs that resolve cloud credentials, enumerate assets across accounts and regions, execute security scanners, and write Terraform recreation files when --terraform is set.",
-              "example_command": "cloudg run -p aws --profile prod --terraform",
+              "description": "Identifies `golive apply` with --confirm-live: live-mode payments, production data, a real account (a seeded test user or a signup probe), a password rotation, or a project's first production deploy. GoLive keeps this separate from plan approval on purpose, so plan approval alone never authorizes the first write to a live destination.",
+              "example_command": "golive apply --plan 8f3c1d2a4b5e --yes --confirm-live",
               "family": null,
               "fixed_reason": null,
               "implementation_version": "1.0.0",
               "implied_permissions": [],
-              "introduced_version": "3.9.0",
-              "label": "CloudG full pipeline",
-              "permission_id": "command.cloudg.permission.run",
+              "introduced_version": "1.0.0",
+              "label": "GoLive live write execution",
+              "permission_id": "command.golive.permission.apply-confirm-live",
               "replacement_permission_id": null,
               "risk_tier": "high",
               "safer_guidance": [
-                "Check the selected providers, credential flags, regions, and scanner list before running.",
-                "Leave --terraform off unless you want .tf.json recreation files written to the output directory."
+                "Pause for the human: name the live-mode destination the step preview lists (payments, production data, the first production deploy) and let them approve that specific write."
               ],
               "typed_capabilities": []
             },
             {
               "action_classes": [
-                "CloudG scanner execution command"
+                "GoLive confirmed DNS change"
               ],
               "baseline_floor": "review",
               "configurable": true,
@@ -10175,433 +10175,366 @@
               "default_enabled": true,
               "dependencies": [],
               "deprecated": false,
-              "description": "Identifies scanner runs that execute external security tools such as Prowler, ScoutSuite, Checkov, and Trivy against cloud accounts, IaC directories, and container images.",
-              "example_command": "cloudg scan -p aws --scanners prowler,checkov",
+              "description": "Identifies `golive apply` with --confirm-dns: creating or changing DNS records at an automated DNS provider, including records that make a domain resolve to the new deployment. GoLive refuses these writes without the flag and shows every record in the step preview first.",
+              "example_command": "golive apply --plan 8f3c1d2a4b5e --yes --confirm-dns",
               "family": null,
               "fixed_reason": null,
               "implementation_version": "1.0.0",
               "implied_permissions": [],
-              "introduced_version": "3.9.0",
-              "label": "CloudG scanner execution",
-              "permission_id": "command.cloudg.permission.scan",
+              "introduced_version": "1.0.0",
+              "label": "GoLive DNS change execution",
+              "permission_id": "command.golive.permission.apply-confirm-dns",
               "replacement_permission_id": null,
-              "risk_tier": "high",
+              "risk_tier": "critical",
               "safer_guidance": [
-                "Review the scanner list, IaC directory, and image list before running; scanners inherit the resolved cloud credentials."
+                "Pause for the human: show the records the plan prints, including any record it would replace, and confirm the zone and domain before they answer."
               ],
               "typed_capabilities": []
             }
           ],
-          "project_markers": [],
+          "project_markers": [
+            "golive.yaml"
+          ],
           "publisher": {
-            "display_name": "Community",
-            "id": "community.morpheuslord",
-            "url": "https://github.com/morpheuslord/cloudg"
+            "display_name": "mikehasa",
+            "id": "community.mikehasa",
+            "url": "https://github.com/mikehasa/golive-skill"
           },
           "reference_urls": [
-            "https://github.com/morpheuslord/cloudg"
+            "https://github.com/mikehasa/golive-skill/blob/main/docs/TRUST.md",
+            "https://github.com/mikehasa/golive-skill/blob/main/docs/ARCHITECTURE.md",
+            "https://github.com/mikehasa/golive-skill/blob/main/skills/golive/SKILL.md",
+            "https://github.com/mikehasa/golive-skill/blob/main/src/cli.ts"
           ],
           "required": false,
           "risk_classes": [
-            "execution",
+            "destructive_shell",
             "network_egress"
           ],
           "rules": [
             {
               "action_classes": [
-                "CloudG asset collection command"
+                "GoLive confirmed resource deletion"
               ],
               "default_mode": "review",
-              "description": "Identifies asset collection runs that resolve cloud credentials and enumerate resources through provider APIs.",
+              "description": "Matches `golive apply` carrying --confirm-destroy: the deletion of resources GoLive recorded as its own, after an approved teardown plan.",
               "family": null,
               "matcher": {
-                "config": {
-                  "allow_leading_options": true,
-                  "executables": [
-                    "cloudg",
-                    "cloudg.cmd",
-                    "cloudg.exe"
-                  ],
-                  "fail_secure_unknown_options": true,
-                  "forbidden_flags": [],
-                  "interspersed_flags": [
-                    "--verbose",
-                    "-v"
-                  ],
-                  "interspersed_options_with_values": [
-                    "--config",
-                    "--log-file",
-                    "--output",
-                    "--profile",
-                    "--project-id",
-                    "--provider",
-                    "--region",
-                    "--subscription-id",
-                    "-c",
-                    "-o",
-                    "-p"
-                  ],
-                  "inverse_flag_pairs": [],
-                  "leading_options_with_values": [
-                    "--config",
-                    "--log-file",
-                    "-c"
-                  ],
-                  "options_with_values": [],
-                  "required_flags": [],
-                  "required_flags_in_all_arguments": false,
-                  "required_option_values": [],
-                  "subcommands": [
-                    "collect"
-                  ]
-                },
-                "op": "executable.v1"
-              },
-              "native_capability": null,
-              "permission_id": "command.cloudg.permission.collect",
-              "risk_classes": [
-                "network_egress"
-              ],
-              "rule_id": "command.cloudg.collect",
-              "rule_version": "1.0.0",
-              "safe_variants": [
-                {
-                  "matcher": {
+                "config": {},
+                "matchers": [
+                  {
                     "config": {
-                      "allow_leading_options": true,
+                      "allow_leading_options": false,
                       "executables": [
-                        "cloudg",
-                        "cloudg.cmd",
-                        "cloudg.exe"
+                        "golive",
+                        "golive.cmd",
+                        "golive.exe"
                       ],
                       "fail_secure_unknown_options": true,
                       "forbidden_flags": [],
                       "interspersed_flags": [
-                        "--verbose",
-                        "-v"
+                        "--yes",
+                        "--force",
+                        "--json"
                       ],
                       "interspersed_options_with_values": [
-                        "--config",
-                        "--log-file",
-                        "--output",
-                        "--profile",
-                        "--project-id",
-                        "--provider",
-                        "--region",
-                        "--subscription-id",
-                        "-c",
-                        "-o",
-                        "-p"
+                        "--plan",
+                        "--only",
+                        "--cwd"
                       ],
                       "inverse_flag_pairs": [],
-                      "leading_options_with_values": [
-                        "--config",
-                        "--log-file",
-                        "-c"
-                      ],
+                      "leading_options_with_values": [],
                       "options_with_values": [],
                       "required_flags": [
-                        "--help"
+                        "--confirm-destroy"
                       ],
-                      "required_flags_in_all_arguments": true,
+                      "required_flags_in_all_arguments": false,
                       "required_option_values": [],
                       "subcommands": [
-                        "collect"
+                        "apply"
                       ]
                     },
                     "op": "executable.v1"
+                  }
+                ],
+                "op": "any.v1"
+              },
+              "native_capability": null,
+              "permission_id": "command.golive.permission.apply-confirm-destroy",
+              "risk_classes": [
+                "destructive_shell",
+                "network_egress"
+              ],
+              "rule_id": "command.golive.apply-confirm-destroy",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "golive",
+                            "golive.cmd",
+                            "golive.exe"
+                          ],
+                          "fail_secure_unknown_options": false,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--yes",
+                            "--force",
+                            "--json"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--plan",
+                            "--only",
+                            "--cwd"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": false,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "apply"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      }
+                    ],
+                    "op": "any.v1"
                   },
-                  "title": "Command help",
-                  "variant_id": "help"
+                  "title": "GoLive help output",
+                  "variant_id": "apply-help"
                 }
               ],
               "safer_alternatives": [
-                "Confirm the provider, profile, and region flags point at the account you intend to inventory."
+                "Review the intent first: `golive teardown` prints the inverse plan of the resources golive itself created and deletes nothing, `golive plan` prints the plan id to approve and is read-only, and `golive status`, `golive handoff`, `golive verify` and `golive doctor` only read state and providers. Ask the human to approve the plan id, then run `golive apply --plan <id> --yes` with the confirmation flag only when they gave that specific approval."
               ],
-              "severity": "high",
-              "title": "CloudG asset collection"
+              "severity": "critical",
+              "title": "GoLive teardown execution"
             },
             {
               "action_classes": [
-                "CloudG pipeline execution command"
+                "GoLive confirmed live write"
               ],
               "default_mode": "review",
-              "description": "Identifies full pipeline runs that resolve cloud credentials, enumerate assets, execute security scanners, and write Terraform recreation files when --terraform is set.",
+              "description": "Matches `golive apply` carrying --confirm-live: live-mode payments, production data, a real account, or a project's first production deploy.",
               "family": null,
               "matcher": {
-                "config": {
-                  "allow_leading_options": true,
-                  "executables": [
-                    "cloudg",
-                    "cloudg.cmd",
-                    "cloudg.exe"
-                  ],
-                  "fail_secure_unknown_options": true,
-                  "forbidden_flags": [],
-                  "interspersed_flags": [
-                    "--azure-managed-identity",
-                    "--no-ontology",
-                    "--no-rag-export",
-                    "--no-terraform",
-                    "--ontology",
-                    "--rag-export",
-                    "--terraform",
-                    "--verbose",
-                    "-v"
-                  ],
-                  "interspersed_options_with_values": [
-                    "--aws-external-id",
-                    "--aws-key",
-                    "--aws-role-arn",
-                    "--aws-secret",
-                    "--aws-session-token",
-                    "--aws-web-identity-token-file",
-                    "--azure-cert-path",
-                    "--azure-client-id",
-                    "--azure-client-secret",
-                    "--azure-federated-token-file",
-                    "--azure-tenant-id",
-                    "--config",
-                    "--gcp-credentials-file",
-                    "--gcp-impersonate-sa",
-                    "--iac-dir",
-                    "--images",
-                    "--log-file",
-                    "--output",
-                    "--profile",
-                    "--project-id",
-                    "--provider",
-                    "--region",
-                    "--regions",
-                    "--scanners",
-                    "--subscription-id",
-                    "-c",
-                    "-o",
-                    "-p"
-                  ],
-                  "inverse_flag_pairs": [],
-                  "leading_options_with_values": [
-                    "--config",
-                    "--log-file",
-                    "-c"
-                  ],
-                  "options_with_values": [],
-                  "required_flags": [],
-                  "required_flags_in_all_arguments": false,
-                  "required_option_values": [],
-                  "subcommands": [
-                    "run"
-                  ]
-                },
-                "op": "executable.v1"
-              },
-              "native_capability": null,
-              "permission_id": "command.cloudg.permission.run",
-              "risk_classes": [
-                "execution",
-                "network_egress"
-              ],
-              "rule_id": "command.cloudg.run",
-              "rule_version": "1.0.0",
-              "safe_variants": [
-                {
-                  "matcher": {
+                "config": {},
+                "matchers": [
+                  {
                     "config": {
-                      "allow_leading_options": true,
+                      "allow_leading_options": false,
                       "executables": [
-                        "cloudg",
-                        "cloudg.cmd",
-                        "cloudg.exe"
+                        "golive",
+                        "golive.cmd",
+                        "golive.exe"
                       ],
                       "fail_secure_unknown_options": true,
                       "forbidden_flags": [],
                       "interspersed_flags": [
-                        "--azure-managed-identity",
-                        "--no-ontology",
-                        "--no-rag-export",
-                        "--no-terraform",
-                        "--ontology",
-                        "--rag-export",
-                        "--terraform",
-                        "--verbose",
-                        "-v"
+                        "--yes",
+                        "--force",
+                        "--json"
                       ],
                       "interspersed_options_with_values": [
-                        "--aws-external-id",
-                        "--aws-key",
-                        "--aws-role-arn",
-                        "--aws-secret",
-                        "--aws-session-token",
-                        "--aws-web-identity-token-file",
-                        "--azure-cert-path",
-                        "--azure-client-id",
-                        "--azure-client-secret",
-                        "--azure-federated-token-file",
-                        "--azure-tenant-id",
-                        "--config",
-                        "--gcp-credentials-file",
-                        "--gcp-impersonate-sa",
-                        "--iac-dir",
-                        "--images",
-                        "--log-file",
-                        "--output",
-                        "--profile",
-                        "--project-id",
-                        "--provider",
-                        "--region",
-                        "--regions",
-                        "--scanners",
-                        "--subscription-id",
-                        "-c",
-                        "-o",
-                        "-p"
+                        "--plan",
+                        "--only",
+                        "--cwd"
                       ],
                       "inverse_flag_pairs": [],
-                      "leading_options_with_values": [
-                        "--config",
-                        "--log-file",
-                        "-c"
-                      ],
+                      "leading_options_with_values": [],
                       "options_with_values": [],
                       "required_flags": [
-                        "--help"
+                        "--confirm-live"
                       ],
-                      "required_flags_in_all_arguments": true,
+                      "required_flags_in_all_arguments": false,
                       "required_option_values": [],
                       "subcommands": [
-                        "run"
+                        "apply"
                       ]
                     },
                     "op": "executable.v1"
+                  }
+                ],
+                "op": "any.v1"
+              },
+              "native_capability": null,
+              "permission_id": "command.golive.permission.apply-confirm-live",
+              "risk_classes": [
+                "network_egress"
+              ],
+              "rule_id": "command.golive.apply-confirm-live",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "golive",
+                            "golive.cmd",
+                            "golive.exe"
+                          ],
+                          "fail_secure_unknown_options": false,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--yes",
+                            "--force",
+                            "--json"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--plan",
+                            "--only",
+                            "--cwd"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": false,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "apply"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      }
+                    ],
+                    "op": "any.v1"
                   },
-                  "title": "Command help",
-                  "variant_id": "help"
+                  "title": "GoLive help output",
+                  "variant_id": "apply-help"
                 }
               ],
               "safer_alternatives": [
-                "Check the selected providers, credential flags, regions, and scanner list before running."
+                "Review the intent first: `golive teardown` prints the inverse plan of the resources golive itself created and deletes nothing, `golive plan` prints the plan id to approve and is read-only, and `golive status`, `golive handoff`, `golive verify` and `golive doctor` only read state and providers. Ask the human to approve the plan id, then run `golive apply --plan <id> --yes` with the confirmation flag only when they gave that specific approval."
               ],
               "severity": "high",
-              "title": "CloudG full pipeline"
+              "title": "GoLive live write execution"
             },
             {
               "action_classes": [
-                "CloudG scanner execution command"
+                "GoLive confirmed DNS change"
               ],
               "default_mode": "review",
-              "description": "Identifies scanner runs that execute external security tools such as Prowler, ScoutSuite, Checkov, and Trivy.",
+              "description": "Matches `golive apply` carrying --confirm-dns: creating or changing DNS records at an automated provider.",
               "family": null,
               "matcher": {
-                "config": {
-                  "allow_leading_options": true,
-                  "executables": [
-                    "cloudg",
-                    "cloudg.cmd",
-                    "cloudg.exe"
-                  ],
-                  "fail_secure_unknown_options": true,
-                  "forbidden_flags": [],
-                  "interspersed_flags": [
-                    "--verbose",
-                    "-v"
-                  ],
-                  "interspersed_options_with_values": [
-                    "--config",
-                    "--iac-dir",
-                    "--images",
-                    "--log-file",
-                    "--output",
-                    "--profile",
-                    "--provider",
-                    "--scanners",
-                    "-c",
-                    "-o",
-                    "-p"
-                  ],
-                  "inverse_flag_pairs": [],
-                  "leading_options_with_values": [
-                    "--config",
-                    "--log-file",
-                    "-c"
-                  ],
-                  "options_with_values": [],
-                  "required_flags": [],
-                  "required_flags_in_all_arguments": false,
-                  "required_option_values": [],
-                  "subcommands": [
-                    "scan"
-                  ]
-                },
-                "op": "executable.v1"
-              },
-              "native_capability": null,
-              "permission_id": "command.cloudg.permission.scan",
-              "risk_classes": [
-                "execution",
-                "network_egress"
-              ],
-              "rule_id": "command.cloudg.scan",
-              "rule_version": "1.0.0",
-              "safe_variants": [
-                {
-                  "matcher": {
+                "config": {},
+                "matchers": [
+                  {
                     "config": {
-                      "allow_leading_options": true,
+                      "allow_leading_options": false,
                       "executables": [
-                        "cloudg",
-                        "cloudg.cmd",
-                        "cloudg.exe"
+                        "golive",
+                        "golive.cmd",
+                        "golive.exe"
                       ],
                       "fail_secure_unknown_options": true,
                       "forbidden_flags": [],
                       "interspersed_flags": [
-                        "--verbose",
-                        "-v"
+                        "--yes",
+                        "--force",
+                        "--json"
                       ],
                       "interspersed_options_with_values": [
-                        "--config",
-                        "--iac-dir",
-                        "--images",
-                        "--log-file",
-                        "--output",
-                        "--profile",
-                        "--provider",
-                        "--scanners",
-                        "-c",
-                        "-o",
-                        "-p"
+                        "--plan",
+                        "--only",
+                        "--cwd"
                       ],
                       "inverse_flag_pairs": [],
-                      "leading_options_with_values": [
-                        "--config",
-                        "--log-file",
-                        "-c"
-                      ],
+                      "leading_options_with_values": [],
                       "options_with_values": [],
                       "required_flags": [
-                        "--help"
+                        "--confirm-dns"
                       ],
-                      "required_flags_in_all_arguments": true,
+                      "required_flags_in_all_arguments": false,
                       "required_option_values": [],
                       "subcommands": [
-                        "scan"
+                        "apply"
                       ]
                     },
                     "op": "executable.v1"
+                  }
+                ],
+                "op": "any.v1"
+              },
+              "native_capability": null,
+              "permission_id": "command.golive.permission.apply-confirm-dns",
+              "risk_classes": [
+                "destructive_shell",
+                "network_egress"
+              ],
+              "rule_id": "command.golive.apply-confirm-dns",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "golive",
+                            "golive.cmd",
+                            "golive.exe"
+                          ],
+                          "fail_secure_unknown_options": false,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--yes",
+                            "--force",
+                            "--json"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--plan",
+                            "--only",
+                            "--cwd"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": false,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "apply"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      }
+                    ],
+                    "op": "any.v1"
                   },
-                  "title": "Command help",
-                  "variant_id": "help"
+                  "title": "GoLive help output",
+                  "variant_id": "apply-help"
                 }
               ],
               "safer_alternatives": [
-                "Review the scanner list, IaC directory, and image list before running; scanners inherit the resolved cloud credentials."
+                "Review the intent first: `golive teardown` prints the inverse plan of the resources golive itself created and deletes nothing, `golive plan` prints the plan id to approve and is read-only, and `golive status`, `golive handoff`, `golive verify` and `golive doctor` only read state and providers. Ask the human to approve the plan id, then run `golive apply --plan <id> --yes` with the confirmation flag only when they gave that specific approval."
               ],
-              "severity": "high",
-              "title": "CloudG scanner execution"
+              "severity": "critical",
+              "title": "GoLive DNS change execution"
             }
           ],
           "safer_alternatives": [
-            "Generate reports from existing scan data with `cloudg report -i findings.json`, which reads a local file and does not touch cloud credentials or scanners."
+            "Review the intent first: `golive teardown` prints the inverse plan of the resources golive itself created and deletes nothing, `golive plan` prints the plan id to approve and is read-only, and `golive status`, `golive handoff`, `golive verify` and `golive doctor` only read state and providers. Ask the human to approve the plan id, then run `golive apply --plan <id> --yes` with the confirmation flag only when they gave that specific approval."
           ],
           "source": "built-in",
           "version": "1.0.0"
@@ -10715,232 +10648,394 @@
   },
   "cases": [
     {
-      "command": "cloudg collect -p aws --profile prod --region us-east-1",
+      "command": "golive apply --plan 8f3c1d2a4b5e --yes --confirm-destroy",
       "disabled_permissions": [],
       "enabled_extensions": [
-        "command.cloudg"
+        "command.golive"
       ],
       "expected_action": "review",
       "expected_effective_segments": [
         0
       ],
-      "id": "collect-aws",
-      "rule_id": "command.cloudg.collect"
+      "id": "destroy-basic",
+      "rule_id": "command.golive.apply-confirm-destroy"
     },
     {
-      "command": "cloudg collect -p azure --subscription-id 00000000-0000-0000-0000-000000000000",
+      "command": "golive apply --confirm-destroy --plan 8f3c1d2a4b5e --yes",
       "disabled_permissions": [],
       "enabled_extensions": [
-        "command.cloudg"
+        "command.golive"
       ],
       "expected_action": "review",
       "expected_effective_segments": [
         0
       ],
-      "id": "collect-azure",
-      "rule_id": "command.cloudg.collect"
+      "id": "destroy-flag-first",
+      "rule_id": "command.golive.apply-confirm-destroy"
     },
     {
-      "command": "cloudg collect -p gcp --project-id my-project",
+      "command": "golive apply --plan \"release plan\" --yes --confirm-destroy",
       "disabled_permissions": [],
       "enabled_extensions": [
-        "command.cloudg"
+        "command.golive"
       ],
       "expected_action": "review",
       "expected_effective_segments": [
         0
       ],
-      "id": "collect-gcp",
-      "rule_id": "command.cloudg.collect"
+      "id": "destroy-quoted-plan",
+      "rule_id": "command.golive.apply-confirm-destroy"
     },
     {
-      "command": "cloudg collect -p aws -o ./reports",
+      "command": "golive apply --plan 8f3c1d2a4b5e --yes --confirm-destroy --only deploy:production --force --json",
       "disabled_permissions": [],
       "enabled_extensions": [
-        "command.cloudg"
+        "command.golive"
       ],
       "expected_action": "review",
       "expected_effective_segments": [
         0
       ],
-      "id": "collect-output-dir",
-      "rule_id": "command.cloudg.collect"
+      "id": "destroy-extra-options",
+      "rule_id": "command.golive.apply-confirm-destroy"
     },
     {
-      "command": "cloudg run -p aws --profile prod",
+      "command": "golive apply --plan 8f3c1d2a4b5e --yes --confirm-destroy --future-flag",
       "disabled_permissions": [],
       "enabled_extensions": [
-        "command.cloudg"
+        "command.golive"
       ],
       "expected_action": "review",
       "expected_effective_segments": [
         0
       ],
-      "id": "run-basic",
-      "rule_id": "command.cloudg.run"
+      "id": "destroy-unknown-flag",
+      "rule_id": "command.golive.apply-confirm-destroy"
     },
     {
-      "command": "cloudg run -p aws --profile prod --terraform",
+      "command": "golive apply --plan=8f3c1d2a4b5e --yes --confirm-destroy",
       "disabled_permissions": [],
       "enabled_extensions": [
-        "command.cloudg"
+        "command.golive"
       ],
       "expected_action": "review",
       "expected_effective_segments": [
         0
       ],
-      "id": "run-terraform",
-      "rule_id": "command.cloudg.run"
+      "id": "destroy-plan-equals",
+      "rule_id": "command.golive.apply-confirm-destroy"
     },
     {
-      "command": "cloudg run -p aws -p azure --subscription-id 00000000-0000-0000-0000-000000000000",
+      "command": "golive apply --plan 8f3c1d2a4b5e --yes --confirm-destroy | tee deploy.log",
       "disabled_permissions": [],
       "enabled_extensions": [
-        "command.cloudg"
+        "command.golive"
       ],
       "expected_action": "review",
       "expected_effective_segments": [
         0
       ],
-      "id": "run-multi-provider",
-      "rule_id": "command.cloudg.run"
+      "id": "destroy-pipeline",
+      "rule_id": "command.golive.apply-confirm-destroy"
     },
     {
-      "command": "cloudg run -p aws --aws-role-arn arn:aws:iam::123456789012:role/scan-readonly",
+      "command": "GOLIVE_UPDATE_CHECK=0 golive apply --plan 8f3c1d2a4b5e --yes --confirm-destroy",
       "disabled_permissions": [],
       "enabled_extensions": [
-        "command.cloudg"
+        "command.golive"
       ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "run-role-arn",
-      "rule_id": "command.cloudg.run"
+      "expected_action": "block",
+      "expected_effective_segments": [],
+      "id": "destroy-env-prefix",
+      "rule_id": "command.golive.apply-confirm-destroy"
     },
     {
-      "command": "cloudg run -p aws --regions all",
+      "command": "bash -lc 'golive apply --plan 8f3c1d2a4b5e --yes --confirm-destroy'",
       "disabled_permissions": [],
       "enabled_extensions": [
-        "command.cloudg"
+        "command.golive"
       ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "run-all-regions",
-      "rule_id": "command.cloudg.run"
+      "expected_action": "block",
+      "expected_effective_segments": [],
+      "id": "destroy-shell-wrapper",
+      "rule_id": "command.golive.apply-confirm-destroy"
     },
     {
-      "command": "cloudg -v run -p gcp --project-id my-project",
+      "command": "npx golive apply --plan 8f3c1d2a4b5e --yes --confirm-destroy",
       "disabled_permissions": [],
       "enabled_extensions": [
-        "command.cloudg"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "run-leading-verbose",
-      "rule_id": "command.cloudg.run"
-    },
-    {
-      "command": "cloudg -c ./config.yaml run -p aws",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.cloudg"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "run-leading-config",
-      "rule_id": "command.cloudg.run"
-    },
-    {
-      "command": "cloudg scan",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.cloudg"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "scan-default",
-      "rule_id": "command.cloudg.scan"
-    },
-    {
-      "command": "cloudg scan -p aws --scanners prowler,checkov",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.cloudg"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "scan-scanner-list",
-      "rule_id": "command.cloudg.scan"
-    },
-    {
-      "command": "cloudg scan --scanners checkov --iac-dir ./infra",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.cloudg"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "scan-iac-dir",
-      "rule_id": "command.cloudg.scan"
-    },
-    {
-      "command": "cloudg scan --scanners trivy --images nginx:latest,alpine:3.20",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.cloudg"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "scan-images",
-      "rule_id": "command.cloudg.scan"
-    },
-    {
-      "command": "cloudg collect --help",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.cloudg"
+        "command.golive"
       ],
       "expected_action": "review",
       "expected_effective_segments": [],
-      "id": "collect-help",
-      "rule_id": "command.cloudg.collect"
+      "id": "destroy-npx-launcher",
+      "rule_id": "command.golive.apply-confirm-destroy"
     },
     {
-      "command": "cloudg run --help",
+      "command": "golive apply --plan 8f3c1d2a4b5e --yes --confirm-destroy --confirm-live",
       "disabled_permissions": [],
       "enabled_extensions": [
-        "command.cloudg"
+        "command.golive"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "destroy-and-live",
+      "rule_id": "command.golive.apply-confirm-destroy"
+    },
+    {
+      "command": "golive apply --plan 8f3c1d2a4b5e --yes --confirm-destroy --confirm-live",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.golive"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "live-and-destroy",
+      "rule_id": "command.golive.apply-confirm-live"
+    },
+    {
+      "command": "golive apply --plan 8f3c1d2a4b5e --yes --confirm-live",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.golive"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "live-basic",
+      "rule_id": "command.golive.apply-confirm-live"
+    },
+    {
+      "command": "golive apply --confirm-live --plan 8f3c1d2a4b5e --yes",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.golive"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "live-flag-first",
+      "rule_id": "command.golive.apply-confirm-live"
+    },
+    {
+      "command": "golive apply --json --confirm-live --only auth:test-user --plan 8f3c1d2a4b5e --yes",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.golive"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "live-reordered",
+      "rule_id": "command.golive.apply-confirm-live"
+    },
+    {
+      "command": "golive apply --plan 8f3c1d2a4b5e --yes --confirm-live",
+      "disabled_permissions": [
+        "command.golive.permission.apply-confirm-live"
+      ],
+      "enabled_extensions": [
+        "command.golive"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "live-permission-disabled",
+      "rule_id": "command.golive.apply-confirm-live"
+    },
+    {
+      "command": "golive apply --plan 8f3c1d2a4b5e --yes --confirm-dns",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.golive"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "dns-basic",
+      "rule_id": "command.golive.apply-confirm-dns"
+    },
+    {
+      "command": "golive apply --plan 8f3c1d2a4b5e --yes --confirm-dns --confirm-live",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.golive"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "dns-with-live",
+      "rule_id": "command.golive.apply-confirm-dns"
+    },
+    {
+      "command": "golive apply --plan 8f3c1d2a4b5e --yes --confirm-dns --json",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.golive"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "dns-json",
+      "rule_id": "command.golive.apply-confirm-dns"
+    },
+    {
+      "command": "golive apply --plan 8f3c1d2a4b5e --cwd /tmp/app --yes --confirm-dns",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.golive"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "dns-cwd-option",
+      "rule_id": "command.golive.apply-confirm-dns"
+    },
+    {
+      "command": "golive apply --plan 8f3c1d2a4b5e --yes",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.golive"
       ],
       "expected_action": "review",
       "expected_effective_segments": [],
-      "id": "run-help",
-      "rule_id": "command.cloudg.run"
+      "id": "plan-only-no-flag",
+      "rule_id": "command.golive.apply-confirm-destroy"
     },
     {
-      "command": "cloudg scan --help",
+      "command": "golive apply --plan 8f3c1d2a4b5e --yes",
       "disabled_permissions": [],
       "enabled_extensions": [
-        "command.cloudg"
+        "command.golive"
       ],
       "expected_action": "review",
       "expected_effective_segments": [],
-      "id": "scan-help",
-      "rule_id": "command.cloudg.scan"
+      "id": "plan-only-no-flag-live",
+      "rule_id": "command.golive.apply-confirm-live"
+    },
+    {
+      "command": "golive apply --plan 8f3c1d2a4b5e --yes",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.golive"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "plan-only-no-flag-dns",
+      "rule_id": "command.golive.apply-confirm-dns"
+    },
+    {
+      "command": "golive apply --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.golive"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "apply-help",
+      "rule_id": "command.golive.apply-confirm-destroy"
+    },
+    {
+      "command": "golive apply --plan 8f3c1d2a4b5e --yes --confirm-destroy --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.golive"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "apply-help-with-flag",
+      "rule_id": "command.golive.apply-confirm-destroy"
+    },
+    {
+      "command": "golive apply --plan 8f3c1d2a4b5e --yes --confirm-live --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.golive"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "apply-help-with-live-flag",
+      "rule_id": "command.golive.apply-confirm-live"
+    },
+    {
+      "command": "golive teardown",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.golive"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "teardown-read-only",
+      "rule_id": "command.golive.apply-confirm-destroy"
+    },
+    {
+      "command": "golive plan",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.golive"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "plan-read-only",
+      "rule_id": "command.golive.apply-confirm-destroy"
+    },
+    {
+      "command": "golive status --json",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.golive"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "status-read-only",
+      "rule_id": "command.golive.apply-confirm-live"
+    },
+    {
+      "command": "golive handoff --write",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.golive"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "handoff-read-only",
+      "rule_id": "command.golive.apply-confirm-dns"
+    },
+    {
+      "command": "golive apply --plan 8f3c1d2a4b5e --yes --confirm-destroy",
+      "disabled_permissions": [],
+      "enabled_extensions": [],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "extension-disabled",
+      "rule_id": "command.golive.apply-confirm-destroy"
+    },
+    {
+      "command": "golive apply --plan 8f3c1d2a4b5e --yes --confirm-destroy",
+      "disabled_permissions": [
+        "command.golive.permission.apply-confirm-destroy"
+      ],
+      "enabled_extensions": [
+        "command.golive"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "permission-disabled",
+      "rule_id": "command.golive.apply-confirm-destroy"
     }
   ],
   "schema": "guard.command-extension-fixtures.v1"
