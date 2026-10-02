@@ -12,6 +12,7 @@ from scripts.ci import verify_native_command_program as verifier
 @pytest.mark.parametrize("event", ["pull_request", "push", "schedule", "workflow_dispatch"])
 @pytest.mark.parametrize("base", [None, "a" * 40])
 def test_every_event_stages_then_strictly_verifies_current_sources(monkeypatch, event, base):
+    """Verify every event stages then strictly verifies current sources."""
     compiler = "rust/target/release/guard-command-source"
     arguments = ["verify", "--compiler", compiler]
     if base:
@@ -28,10 +29,12 @@ def test_every_event_stages_then_strictly_verifies_current_sources(monkeypatch, 
 
 @pytest.mark.parametrize("failed_stage", [0, 1])
 def test_compilation_or_verification_failure_is_not_retried_or_ignored(monkeypatch, failed_stage):
+    """Verify compilation or verification failure is not retried or ignored."""
     monkeypatch.setattr(sys, "argv", ["verify", "--compiler", "compiler"])
     calls = []
 
     def execute(command):
+        """Capture invoked commands and simulate the subprocess outcome required by this case."""
         calls.append(command)
         if len(calls) - 1 == failed_stage:
             raise SystemExit(37)
@@ -46,6 +49,7 @@ def test_compilation_or_verification_failure_is_not_retried_or_ignored(monkeypat
 def test_unavailable_pr_base_cannot_change_full_source_validation(monkeypatch):
     # Full-tree compilation has no Git-diff selection. Missing history cannot
     # make any source disappear from validation or select a permissive mode.
+    """Verify unavailable pr base cannot change full source validation."""
     monkeypatch.setattr(sys, "argv", ["verify", "--compiler", "compiler", "--changed-from", "b" * 40])
     calls = []
     monkeypatch.setattr(verifier, "_run", calls.append)

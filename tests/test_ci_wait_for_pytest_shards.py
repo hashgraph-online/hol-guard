@@ -84,6 +84,7 @@ def test_waits_through_planning_queue_and_running_then_requires_last_page() -> N
 
 
 def test_default_wait_covers_existing_producer_limits(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify default wait covers existing producer limits."""
     root = Path(__file__).resolve().parents[1]
     jobs = expand_ci_job_actions(yaml.safe_load((root / ".github/workflows/ci.yml").read_text()))["jobs"]
     producer_limit = 60 * (jobs["coverage-plan"]["timeout-minutes"] + jobs["coverage"]["timeout-minutes"])
@@ -410,6 +411,7 @@ def test_api_redirect_is_rejected() -> None:
 
 
 def test_sonar_accepts_only_complete_coverage_from_successful_current_attempt() -> None:
+    """Verify sonar accepts only complete coverage from successful current attempt."""
     root = Path(__file__).resolve().parents[1]
     workflow = expand_ci_job_actions(yaml.safe_load((root / ".github/workflows/ci.yml").read_text()))
     jobs = workflow["jobs"]
@@ -435,6 +437,7 @@ def test_sonar_accepts_only_complete_coverage_from_successful_current_attempt() 
 
 
 def test_sonar_installs_same_pinned_scanner_before_wait_without_analysis_credentials() -> None:
+    """Verify sonar installs same pinned scanner before wait without analysis credentials."""
     root = Path(__file__).resolve().parents[1]
     workflow = expand_ci_job_actions(yaml.safe_load((root / ".github/workflows/ci.yml").read_text()))
     steps = workflow["jobs"]["sonar"]["steps"]

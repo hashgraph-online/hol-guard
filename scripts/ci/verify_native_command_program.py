@@ -24,6 +24,7 @@ def _run(command: list[str]) -> None:
 
 
 def main() -> int:
+    """Stage current projections, then reject any source, compiler or embedded-program mismatch."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--compiler", required=True)
     parser.add_argument(

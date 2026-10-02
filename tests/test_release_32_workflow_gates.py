@@ -25,6 +25,7 @@ PR_GATE_WORKFLOWS = (
 
 
 def _triggers(relative_path: str) -> dict[str, object]:
+    """Read workflow triggers using the YAML loader handling of the Actions on key."""
     workflow = cast(
         dict[object, object],
         expand_ci_job_actions(yaml.safe_load((ROOT / relative_path).read_text(encoding="utf-8"))),

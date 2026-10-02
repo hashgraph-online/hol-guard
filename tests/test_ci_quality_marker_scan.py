@@ -15,6 +15,7 @@ pytestmark = pytest.mark.skipif(shutil.which("bash") is None, reason="quality jo
 
 
 def _scan(root: Path, content: str | None) -> subprocess.CompletedProcess[str]:
+    """Run the actual quality action with its Bash flags against the supplied fixture tree."""
     if content is not None:
         sources = root / "src/codex_plugin_scanner/guard"
         sources.mkdir(parents=True)
@@ -35,6 +36,7 @@ def _scan(root: Path, content: str | None) -> subprocess.CompletedProcess[str]:
 
 @pytest.mark.parametrize("content", ["def example(): pass\n", "# TODO: annotation # type: ignore\n"])
 def test_clean_or_ignored_markers_do_not_fail_the_quality_job(tmp_path: Path, content: str) -> None:
+    """Verify clean or ignored markers do not fail the quality job."""
     result = _scan(tmp_path, content)
     assert result.returncode == 0, result.stderr
     assert "Guard TODO/FIXME count: 0" in result.stdout
@@ -42,6 +44,7 @@ def test_clean_or_ignored_markers_do_not_fail_the_quality_job(tmp_path: Path, co
 
 @pytest.mark.parametrize("marker", ["TODO", "FIXME", "HACK", "XXX"])
 def test_real_markers_still_fail_the_quality_job(tmp_path: Path, marker: str) -> None:
+    """Verify real markers still fail the quality job."""
     result = _scan(tmp_path, f"# TODO: annotation # type: ignore\n# {marker}: unfinished\n")
     assert result.returncode != 0
     assert "Guard TODO/FIXME count: 1" in result.stdout
@@ -50,6 +53,7 @@ def test_real_markers_still_fail_the_quality_job(tmp_path: Path, marker: str) ->
 
 
 def test_scan_errors_still_fail_the_quality_job(tmp_path: Path) -> None:
+    """Verify scan errors still fail the quality job."""
     result = _scan(tmp_path, None)
     assert result.returncode != 0
 
@@ -57,6 +61,7 @@ def test_scan_errors_still_fail_the_quality_job(tmp_path: Path) -> None:
 def test_unexpected_scanner_errors_are_not_accepted_as_no_matches(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Verify unexpected scanner errors are not accepted as no matches."""
     scanner = tmp_path / "grep"
     scanner.write_text("#!/bin/sh\nprintf 'simulated scan failure\\n' >&2\nexit 2\n")
     scanner.chmod(0o755)

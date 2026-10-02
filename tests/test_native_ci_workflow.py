@@ -16,10 +16,12 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def _workflow(name: str) -> dict:
+    """Load expanded workflow definitions for CI contract assertions."""
     return expand_ci_job_actions(yaml.safe_load((ROOT / ".github" / "workflows" / name).read_text(encoding="utf-8")))
 
 
 def test_ci_rust_cache_can_only_be_written_by_main_pushes() -> None:
+    """Verify CI Rust cache can only be written by main pushes."""
     action = expand_ci_job_actions(
         yaml.safe_load((ROOT / ".github/actions/setup-rust/action.yml").read_text(encoding="utf-8"))
     )

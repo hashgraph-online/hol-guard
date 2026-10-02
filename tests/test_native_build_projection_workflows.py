@@ -33,6 +33,7 @@ WORKFLOWS = (
 
 @pytest.mark.parametrize("name", WORKFLOWS)
 def test_native_python_proofs_stage_matching_resources(name: str) -> None:
+    """Verify native Python proofs stage matching resources."""
     workflow = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows" / name).read_text()))
     observed = 0
     for job in workflow["jobs"].values():
@@ -57,6 +58,7 @@ def test_native_python_proofs_stage_matching_resources(name: str) -> None:
 
 @pytest.mark.parametrize("argument", ["rust/target/release/guard-command-source", "compiler.exe"])
 def test_windows_verifier_resolves_the_existing_compiler_suffix(monkeypatch, argument: str) -> None:
+    """Verify windows verifier resolves the existing compiler suffix."""
     monkeypatch.setattr(sys, "platform", "win32")
     monkeypatch.setattr(sys, "argv", ["verify", "--compiler", argument])
     calls = []
@@ -68,6 +70,7 @@ def test_windows_verifier_resolves_the_existing_compiler_suffix(monkeypatch, arg
 
 
 def test_native_identity_watches_production_inputs_not_the_whole_test_tree() -> None:
+    """Verify native identity watches production inputs not the whole test tree."""
     identity = (ROOT / "rust/build_support/command_identity.rs").read_text()
     assert 'root.join("crates").display()' not in identity
     assert 'collect(&directory.join("src"), &mut files)' in identity
@@ -77,6 +80,7 @@ def test_native_identity_watches_production_inputs_not_the_whole_test_tree() -> 
 
 
 def test_source_only_acceptance_runs_on_main_and_pull_requests() -> None:
+    """Verify source only acceptance runs on main and pull requests."""
     workflow = expand_ci_job_actions(
         yaml.safe_load((ROOT / ".github/workflows/extension-fixture-isolation.yml").read_text())
     )

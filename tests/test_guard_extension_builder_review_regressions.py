@@ -64,6 +64,7 @@ def test_oclif_keeps_valid_prefixed_aliases_and_one_character_short_options() ->
     ],
 )
 def test_direct_authoring_validation_inputs_trigger_the_workflow(changed_path: str) -> None:
+    """Verify direct authoring validation inputs trigger the workflow."""
     root = Path(__file__).resolve().parents[1]
     document = expand_ci_job_actions(
         yaml.safe_load((root / ".github/workflows/extension-builder-ci.yml").read_text(encoding="utf-8"))

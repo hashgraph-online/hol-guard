@@ -13,6 +13,7 @@ from codex_plugin_scanner.guard.runtime.restricted_linux_entry import load_plan
 
 @pytest.fixture(autouse=True)
 def fixed_namespace_plan_directory(monkeypatch, tmp_path):
+    """Provide a private namespace plan directory inside the temporary test root."""
     monkeypatch.setattr(entry, "PLAN_DIRECTORY", tmp_path)
 
 
@@ -35,6 +36,7 @@ def _payload(root):
 
 
 def _write(root, payload):
+    """Write a private namespace plan fixture and return its expected byte digest."""
     path = root / entry.PLAN_FILENAME
     path.write_text(json.dumps(payload))
     path.chmod(0o600)
@@ -42,6 +44,7 @@ def _write(root, payload):
 
 
 def test_valid_private_plan_preserves_command_and_identity(tmp_path):
+    """Verify valid private plan preserves command and identity."""
     _path, digest = _write(tmp_path, _payload(tmp_path))
     plan = load_plan(digest)
     assert plan["command"] == [str(Path(sys.executable).resolve()), "-V"]
@@ -52,6 +55,7 @@ def test_valid_private_plan_preserves_command_and_identity(tmp_path):
     "mutation", ["schema", "extra", "missing-inode", "wrong-image", "relative-path", "bad-argv", "boolean-inode"]
 )
 def test_malformed_or_unbound_plan_is_not_execution_consent(tmp_path, mutation):
+    """Verify malformed or unbound plan is not execution consent."""
     payload = _payload(tmp_path)
     if mutation == "schema":
         payload["schema"] = "unknown"
@@ -73,6 +77,7 @@ def test_malformed_or_unbound_plan_is_not_execution_consent(tmp_path, mutation):
 
 
 def test_changed_private_bytes_do_not_keep_old_execution_hash(tmp_path):
+    """Verify changed private bytes do not keep old execution hash."""
     path, digest = _write(tmp_path, _payload(tmp_path))
     path.write_text("{}")
     with pytest.raises(ValueError, match="changed"):
@@ -80,6 +85,7 @@ def test_changed_private_bytes_do_not_keep_old_execution_hash(tmp_path):
 
 
 def test_legacy_plan_cannot_skip_executable_mapping_boundary(tmp_path):
+    """Verify legacy plan cannot skip executable mapping boundary."""
     payload = _payload(tmp_path)
     payload["schema"] = "guard-linux-readonly-plan.v1"
     payload.pop("mapping_records")
@@ -90,6 +96,7 @@ def test_legacy_plan_cannot_skip_executable_mapping_boundary(tmp_path):
 
 @pytest.mark.parametrize("kind", ["symlink", "hardlink", "readable"])
 def test_untrusted_snapshot_file_cannot_be_loaded(tmp_path, kind):
+    """Verify untrusted snapshot file cannot be loaded."""
     path, digest = _write(tmp_path, _payload(tmp_path))
     if kind == "symlink":
         alias = tmp_path / "alias.json"
@@ -104,6 +111,7 @@ def test_untrusted_snapshot_file_cannot_be_loaded(tmp_path, kind):
 
 
 def test_duplicate_json_fields_are_rejected_even_with_matching_hash(tmp_path):
+    """Verify duplicate JSON fields are rejected even with matching hash."""
     path, _ = _write(tmp_path, _payload(tmp_path))
     path.write_text('{"schema":"one","schema":"two"}')
     digest = hashlib.sha256(path.read_bytes()).hexdigest()
@@ -113,7 +121,10 @@ def test_duplicate_json_fields_are_rejected_even_with_matching_hash(tmp_path):
 
 @pytest.mark.parametrize("argument", ["../plan.json", "/etc/passwd", "A" * 64, "f" * 63, "f" * 65, "f" * 63 + "\x00"])
 def test_cli_cannot_use_a_path_as_the_plan_hash(monkeypatch, argument):
+    """Verify CLI cannot use a path as the plan hash."""
+
     def unexpected_open(*args, **kwargs):
+        """Fail if validation opens a plan inside an untrusted parent directory."""
         pytest.fail("invalid plan locator reached filesystem I/O")
 
     monkeypatch.setattr(entry.os, "open", unexpected_open)
@@ -122,7 +133,10 @@ def test_cli_cannot_use_a_path_as_the_plan_hash(monkeypatch, argument):
 
 
 def test_old_path_and_hash_cli_cannot_open_an_arbitrary_file(monkeypatch):
+    """Verify old path and hash CLI cannot open an arbitrary file."""
+
     def unexpected_open(*args, **kwargs):
+        """Fail if validation opens a plan inside an untrusted parent directory."""
         pytest.fail("the removed plan-path argument reached filesystem I/O")
 
     monkeypatch.setattr(entry.os, "open", unexpected_open)
@@ -132,6 +146,7 @@ def test_old_path_and_hash_cli_cannot_open_an_arbitrary_file(monkeypatch):
 
 @pytest.mark.parametrize("kind", ["readable", "symlink"])
 def test_fixed_plan_parent_must_be_private_and_not_an_alias(monkeypatch, tmp_path, kind):
+    """Verify fixed plan parent must be private and not an alias."""
     _path, digest = _write(tmp_path, _payload(tmp_path))
     if kind == "readable":
         tmp_path.chmod(0o755)

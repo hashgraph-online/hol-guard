@@ -241,6 +241,7 @@ def test_printf_format_requires_a_printf_command() -> None:
 
 
 def test_live_coverage_matrix_opens_every_generated_response_file(tmp_path: Path) -> None:
+    """Verify live coverage matrix opens every generated response file."""
     import yaml
 
     root = Path(__file__).resolve().parents[1]

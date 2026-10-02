@@ -44,6 +44,7 @@ def _authoritative_report_digest() -> str:
     # Compute once from the current source/native evaluator and share it
     # across the environment variants; the checked-in projection may lag
     # while maintainer regeneration is pending.
+    """Return the framed digest of the current source-bound decision report."""
     return report_framed_sha256(_fixture())
 
 
@@ -90,6 +91,7 @@ def test_report_cli_strict_check_does_not_defer_regen_owned_report(tmp_path: Pat
 
 def test_checked_in_report_and_framed_digest_are_an_exact_pair() -> None:
     # Historical evidence remains readable without freezing today's build.
+    """Verify checked in report and framed digest are an exact pair."""
     report = json.loads(_ARCHIVED_REPORT.read_bytes())
     assert _ARCHIVED_REPORT.read_bytes() == canonical_json_bytes(report)
     digest_path = _ARCHIVED_REPORT.with_name("decision-diff-report.framed-sha256")
@@ -97,6 +99,7 @@ def test_checked_in_report_and_framed_digest_are_an_exact_pair() -> None:
 
 
 def teardown_module() -> None:
+    """Clear cached evidence and restore scanner CLI namespace bindings after this module."""
     _fixture.cache_clear()
     from codex_plugin_scanner.guard.cli.commands_support import _sync_namespace
 
@@ -186,6 +189,7 @@ def test_decision_diff_import_restores_preloaded_package_bindings() -> None:
 
 
 def test_report_is_exactly_reproducible_and_source_bound() -> None:
+    """Verify report is exactly reproducible and source bound."""
     report = _fixture()
     # Compare separate evaluations of the same inputs, not a prior Git snapshot.
     assert canonical_json_bytes(generate_decision_diff_report()) == canonical_json_bytes(report)
@@ -314,6 +318,7 @@ def _group_signatures(value: object) -> dict[str, tuple[int, str]]:
 
 
 def test_report_contains_only_privacy_safe_deterministic_evidence() -> None:
+    """Verify report contains only privacy safe deterministic evidence."""
     report = _fixture()
     payload = canonical_json_bytes(report).decode("utf-8")
     privacy = cast(dict[str, object], report["privacy"])

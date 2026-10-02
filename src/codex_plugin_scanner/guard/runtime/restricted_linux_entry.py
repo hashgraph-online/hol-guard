@@ -48,6 +48,7 @@ def _unique(pairs):
 
 
 def load_plan(digest: str) -> dict[str, Any]:
+    """Load the fixed private namespace plan only after validating its digest, ownership and bounded schema."""
     if len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest):
         raise ValueError("Invalid private Linux plan locator.")
     parent = os.open(PLAN_DIRECTORY, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
@@ -119,6 +120,7 @@ def load_plan(digest: str) -> dict[str, Any]:
 
 
 def main() -> int:
+    """Validate the private namespace plan before entering its restricted execution boundary."""
     try:
         if len(sys.argv) != 2:
             raise ValueError("The private Linux plan requires its hash.")

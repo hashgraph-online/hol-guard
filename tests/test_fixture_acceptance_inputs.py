@@ -13,6 +13,7 @@ from scripts.ci import check_extension_fixture_isolation as acceptance
 
 
 def test_descriptor_inventory_uses_all_json_sources_and_authored_ids(tmp_path):
+    """Verify descriptor inventory uses all JSON sources and authored ids."""
     sources = tmp_path / "contributions/command-sources"
     sources.mkdir(parents=True)
     for name, identity in (("command.demo.json", "command.demo"), ("another-name.json", "command.another")):
@@ -24,6 +25,7 @@ def test_descriptor_inventory_uses_all_json_sources_and_authored_ids(tmp_path):
 
 
 def test_malformed_contribution_is_not_silently_excluded(tmp_path):
+    """Verify malformed contribution is not silently excluded."""
     sources = tmp_path / "contributions/command-sources"
     sources.mkdir(parents=True)
     (sources / "malformed.json").write_text("{}")
@@ -32,11 +34,13 @@ def test_malformed_contribution_is_not_silently_excluded(tmp_path):
 
 
 def test_missing_portable_fixtures_has_an_explicit_error(tmp_path):
+    """Verify missing portable fixtures has an explicit error."""
     with pytest.raises(RuntimeError, match="no portable command fixtures found"):
         acceptance.portable_fixture_paths(tmp_path)
 
 
 def test_portable_fixture_selection_is_deterministic_and_preserves_rust_fixture(tmp_path):
+    """Verify portable fixture selection is deterministic and preserves Rust fixture."""
     fixtures = tmp_path / "tests/fixtures"
     fixtures.mkdir(parents=True)
     for name in ("b", "a"):
@@ -48,6 +52,7 @@ def test_portable_fixture_selection_is_deterministic_and_preserves_rust_fixture(
 
 
 def test_console_entry_point_comes_from_the_active_environment(tmp_path, monkeypatch):
+    """Verify console entry point comes from the active environment."""
     python = tmp_path / "python"
     expected = python.with_name("hol-guard.exe" if os.name == "nt" else "hol-guard")
     monkeypatch.setattr(sys, "executable", str(python))
@@ -58,6 +63,7 @@ def test_console_entry_point_comes_from_the_active_environment(tmp_path, monkeyp
 
 
 def test_real_contributor_handoff_help_is_reachable_without_executing_commands():
+    """Verify real contributor handoff help is reachable without executing commands."""
     result = subprocess.run(
         [str(acceptance.contributor_cli()), "extensions", "handoff", "--help"],
         capture_output=True,

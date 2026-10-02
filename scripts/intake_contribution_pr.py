@@ -71,6 +71,7 @@ def is_machine_managed(path: str) -> bool:
 
 
 def main() -> int:
+    """Prepare a contributor intake branch while preserving reviewed expectations and ancestry."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--pr", type=int, nargs="+", required=True)
     parser.add_argument("--repo", default="hashgraph-online/hol-guard")

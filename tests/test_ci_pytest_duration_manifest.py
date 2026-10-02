@@ -44,6 +44,7 @@ def test_manifest_merges_reports_deterministically_and_rejects_duplicate_nodes(t
 
 
 def test_ci_duration_artifacts_cannot_mix_rerun_attempts(tmp_path: Path) -> None:
+    """Verify CI duration artifacts cannot mix rerun attempts."""
     workflow = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")))
     upload = next(
         step
@@ -75,6 +76,7 @@ def test_ci_duration_artifacts_cannot_mix_rerun_attempts(tmp_path: Path) -> None
 
 
 def test_partial_rerun_retains_previous_manifest_without_publishing(tmp_path: Path) -> None:
+    """Verify partial rerun retains previous manifest without publishing."""
     workflow = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")))
     steps = workflow["jobs"]["duration-manifest-candidate"]["steps"]
     build = next(step for step in steps if step.get("name") == "Build duration manifest candidate")

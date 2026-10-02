@@ -98,6 +98,7 @@ def _split_file_nodes(
     estimates: Mapping[str, float],
     target_seconds: float,
 ) -> list[tuple[str, int, list[str], float]]:
+    """Keep report tests in one process while splitting other large modules."""
     total = sum(estimates[node_id] for node_id in node_ids)
     if file_path in SINGLE_PROCESS_FILES:
         return [(file_path, 0, sorted(node_ids), total)]

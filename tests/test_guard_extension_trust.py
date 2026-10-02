@@ -80,6 +80,7 @@ def _disable_layer(extension_id: str) -> ExtensionControlLayer:
 
 
 def test_trust_map_covers_every_builtin_extension() -> None:
+    """Verify trust map covers every builtin extension."""
     registry_ids = {extension.extension_id for extension in BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions}
     assert mapped_ids() == registry_ids
     # Expected membership comes from authored policy, never generated Python.

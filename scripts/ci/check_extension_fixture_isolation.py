@@ -22,17 +22,20 @@ EXTENSION_ID = "command.hol-ci-fixture"
 
 
 def require(condition: bool, message: str) -> None:
+    """Reject a failed acceptance condition with the supplied diagnostic."""
     if not condition:
         raise RuntimeError(message)
 
 
 def digest(path: Path) -> str:
+    """Hash file bytes to detect unexpected changes during acceptance."""
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def run(
     arguments: list[str], root: Path, env: dict[str, str], *, payload: object | None = None, check: bool = True
 ) -> subprocess.CompletedProcess[str]:
+    """Run a bounded acceptance subprocess and retain its failure diagnostics."""
     completed = subprocess.run(
         arguments,
         cwd=root,
@@ -68,6 +71,7 @@ def contributor_cli() -> Path:
 
 
 def portable_fixture_paths(root: Path) -> list[Path]:
+    """Select a deterministic portable fixture and the Rust example, rejecting an empty inventory."""
     paths = sorted((root / "tests/fixtures").glob("command-source-*.v1.json"))
     require(bool(paths), "no portable command fixtures found")
     return [paths[0], root / "rust/crates/guard-command/tests/fixtures/command-source-example.v1.json"]
@@ -88,6 +92,7 @@ def command_descriptor_names(root: Path) -> set[str]:
 
 
 def exercise(root: Path, target: Path, results: list[dict[str, object]]) -> None:
+    """Check source changes, fixture isolation, handoff, packaging and restoration with the real compiler."""
     env = dict(os.environ)
     env.update(
         PYTHONPATH=os.pathsep.join((str(root / "src"), str(root))),
@@ -112,19 +117,24 @@ def exercise(root: Path, target: Path, results: list[dict[str, object]]) -> None
     ]
 
     def record(name: str, **details: object) -> None:
+        """Record a successful acceptance case and emit its JSON evidence."""
         results.append({"case": name, "passed": True, **details})
         print(json.dumps(results[-1], sort_keys=True), flush=True)
 
     def build() -> subprocess.CompletedProcess[str]:
+        """Compile current command sources with the pinned native toolchain."""
         return run(build_command, root, env)
 
     def export() -> dict:
+        """Read the complete program and catalog embedded by the source compiler."""
         return json.loads(run([str(compiler), "export-built"], root, env).stdout)
 
     def verify() -> None:
+        """Stage and strictly verify projections from the current compiler."""
         run([sys.executable, "scripts/ci/verify_native_command_program.py", "--compiler", str(compiler)], root, env)
 
     def prepare(source: Path, fixture: Path) -> None:
+        """Exercise source preparation and installed contributor handoff without executing target commands."""
         result = run(
             [
                 sys.executable,
@@ -318,6 +328,7 @@ def exercise(root: Path, target: Path, results: list[dict[str, object]]) -> None
 
 
 def main() -> int:
+    """Run acceptance in an isolated checkout and write its case evidence."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--target-dir", type=Path, required=True)

@@ -36,6 +36,7 @@ def test_ci_group_preserves_dev_tools_except_the_type_checker() -> None:
 
 
 def test_test_workers_select_the_frozen_group_without_default_dev_dependencies() -> None:
+    """Verify test workers select the frozen group without default dev dependencies."""
     for filename in ("setup-ci-python", "native-regression"):
         action = expand_ci_job_actions(yaml.safe_load((ROOT / f".github/actions/{filename}/action.yml").read_text()))
         commands = "\n".join(step.get("run", "") for step in action["runs"]["steps"])
@@ -52,6 +53,7 @@ def test_test_workers_select_the_frozen_group_without_default_dev_dependencies()
 
 @pytest.mark.parametrize("job", ["compatibility", "deep-compatibility", "cross-platform", "windows-updater"])
 def test_compatibility_workers_select_the_frozen_test_group(job: str) -> None:
+    """Verify compatibility workers select the frozen test group."""
     workflow = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text()))
     commands = "\n".join(step.get("run", "") for step in workflow["jobs"][job]["steps"])
     assert "uv sync --frozen --no-dev --group ci-test --python ${{ matrix.python-version }}" in commands
@@ -60,6 +62,7 @@ def test_compatibility_workers_select_the_frozen_test_group(job: str) -> None:
 
 
 def test_reporting_and_optional_workers_preserve_their_dependency_boundaries() -> None:
+    """Verify reporting and optional workers preserve their dependency boundaries."""
     jobs = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text()))["jobs"]
     commands = {name: "\n".join(step.get("run", "") for step in job["steps"]) for name, job in jobs.items()}
     assert "uv sync --frozen --no-dev --group ci-test --python ${{ env.CI_PYTHON_VERSION }}" in commands["sonar"]
@@ -73,6 +76,7 @@ def test_reporting_and_optional_workers_preserve_their_dependency_boundaries() -
 
 
 def test_staged_evaluator_wheel_selects_test_tools_without_installing_the_source_project() -> None:
+    """Verify staged evaluator wheel selects test tools without installing the source project."""
     workflow = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/evaluation-wheel-ci.yml").read_text()))
     commands = "\n".join(step.get("run", "") for step in workflow["jobs"]["staged-evaluator-wheel"]["steps"])
     assert "uv sync --frozen --no-dev --group ci-test --no-install-project --python 3.12" in commands
@@ -82,6 +86,7 @@ def test_staged_evaluator_wheel_selects_test_tools_without_installing_the_source
 
 
 def test_coverage_cache_keeps_prebuilt_wheels_for_read_only_workers() -> None:
+    """Verify coverage cache keeps prebuilt wheels for read only workers."""
     action = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/actions/setup-ci-python/action.yml").read_text()))
     uv_steps = [step for step in action["runs"]["steps"] if step.get("uses", "").startswith("astral-sh/setup-uv@")]
     assert len(uv_steps) == 2

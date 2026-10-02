@@ -45,12 +45,14 @@ def test_uivoid_source_is_present_and_declares_its_action_classes() -> None:
 
 
 def _trust_classes(trust: dict, extension_id: str) -> tuple[str, ...]:
+    """Read the authored trust classes used to validate this portable fixture."""
     classes = tuple(name for name, ids in trust["classes"].items() if extension_id in ids)
     assert len(classes) == 1, "each fixture source needs exactly one reviewed trust class"
     return classes
 
 
 def test_uivoid_portable_fixture_binds_canonical_sources() -> None:
+    """Verify uivoid portable fixture binds canonical sources."""
     fixture = json.loads(_FIXTURE_PATH.read_text())
     assert fixture["schema"] == "guard.command-extension-fixtures.v1"
     assert _FIXTURE_PATH.stat().st_size <= 1_048_576
@@ -87,6 +89,7 @@ def test_uivoid_behavior_fixtures_pass_against_the_native_evaluator() -> None:
 
 @pytest.mark.parametrize("change", ["missing", "duplicate", "promoted"])
 def test_uivoid_fixture_trust_rejects_missing_ambiguous_or_promoted_identity(change: str) -> None:
+    """Verify uivoid fixture trust rejects missing ambiguous or promoted identity."""
     fixture_trust = json.loads(_FIXTURE_PATH.read_text())["build"]["trust"]
     canonical = json.loads((ROOT / "contracts/extensions/trust-class-map.v1.json").read_text())
     identity = "command.uivoid"

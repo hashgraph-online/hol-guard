@@ -18,6 +18,7 @@ SETUP_SCRIPT = ROOT / "scripts/ci/setup_sonar_rust.sh"
 
 
 def test_sonar_preparation_precedes_analysis_and_fails_closed() -> None:
+    """Verify sonar preparation precedes analysis and fails closed."""
     workflow = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")))
     job = workflow["jobs"]["sonar"]
     steps = job["steps"]
@@ -125,6 +126,7 @@ def test_preparation_combines_all_shards_before_creating_coverage_xml(tmp_path: 
 
 @pytest.mark.parametrize("fail_command", ["", "cargo clippy"])
 def test_early_clippy_runs_without_coverage_and_propagates_failure(tmp_path: Path, fail_command: str) -> None:
+    """Verify early clippy runs without coverage and propagates failure."""
     workflow = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")))
     step = next(
         step

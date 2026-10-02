@@ -17,6 +17,7 @@ FRESHNESS_NODE = "tests/test_guard_command_decision_diff.py::test_report_is_exac
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    """Run the assigned tests once while preserving independent fixture bytes."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("shard_file", type=Path)
     parser.add_argument("pytest_args", nargs=argparse.REMAINDER)

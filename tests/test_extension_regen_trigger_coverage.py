@@ -51,6 +51,7 @@ def test_trigger_matcher_preserves_path_boundaries(path: str, pattern: str, expe
 
 
 def test_regen_trigger_covers_product_inputs_not_per_run_evidence() -> None:
+    """Verify regen trigger covers product inputs not per run evidence."""
     workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
     patterns = _triggers(workflow)["push"]["paths"]
     inputs = {

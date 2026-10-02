@@ -37,6 +37,7 @@ def test_ci_shards_cover_every_test_file_once_and_deterministically() -> None:
 
 
 def _workflow_job(workflow: str, job_name: str, next_job_name: str | None) -> str:
+    """Inspect the expanded steps of the requested CI job."""
     document = yaml.safe_load(workflow)
     if any(
         step.get("uses", "").startswith("./.github/actions/ci-job-") for step in document["jobs"][job_name]["steps"]
@@ -49,6 +50,7 @@ def _workflow_job(workflow: str, job_name: str, next_job_name: str | None) -> st
 
 
 def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -> None:
+    """Verify CI workflow cancels stale runs and uses precomputed affinity shards."""
     workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
     payload = expand_ci_job_actions(yaml.safe_load(workflow))
     jobs = payload["jobs"]
@@ -184,6 +186,7 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
 )
 @pytest.mark.parametrize("result", ["failure", "skipped", "cancelled"])
 def test_required_python_gate_rejects_incomplete_coverage_or_timing_proofs(failed_dependency: str, result: str) -> None:
+    """Verify required Python gate rejects incomplete coverage or timing proofs."""
     workflow = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text()))
     step = workflow["jobs"]["ci-python-312"]["steps"][0]
     env = dict(os.environ, **dict.fromkeys(step["env"], "success"))

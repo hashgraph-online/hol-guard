@@ -131,6 +131,7 @@ def _contributions_changed(base_sha: str) -> list[str]:
 
 
 def _git(*arguments: str) -> subprocess.CompletedProcess[str]:
+    """Read Git state for projection ownership without modifying the checkout."""
     try:
         return subprocess.run(["git", *arguments], cwd=ROOT, check=False, capture_output=True, text=True, timeout=30)
     except (OSError, subprocess.TimeoutExpired):
@@ -196,6 +197,7 @@ def pr_diff_paths() -> list[str] | None:
 
 
 def _owned_path(path: str) -> bool:
+    """Recognize product projection paths owned by native artifact generation."""
     if path.endswith(".schema.json"):
         return False
     return any(path == owned or path.startswith(owned.rstrip("/") + "/") for owned in REGEN_OWNED_PATHS)

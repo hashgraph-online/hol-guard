@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_catalog_publication_does_not_rewrite_tests_or_rebuild_runtime(tmp_path, monkeypatch):
+    """Verify catalog publication does not rewrite tests or rebuild runtime."""
     trust = tmp_path / "contracts/extensions/trust-class-map.v1.json"
     trust.parent.mkdir(parents=True)
     trust.write_text(json.dumps({"classes": {"external": ["command.demo"]}}))
@@ -59,10 +60,12 @@ def test_catalog_publication_does_not_rewrite_tests_or_rebuild_runtime(tmp_path,
     ],
 )
 def test_independent_expectations_are_not_regeneration_owned(name):
+    """Verify independent expectations are not regeneration owned."""
     assert name not in REGEN_OWNED_PATHS
 
 
 def test_native_identity_changes_for_code_but_not_portable_fixture_snapshots(tmp_path, monkeypatch):
+    """Verify native identity changes for code but not portable fixture snapshots."""
     inputs = {
         "rust/Cargo.toml": "[workspace]\n",
         "rust/Cargo.lock": "version = 4\n",
@@ -84,6 +87,7 @@ def test_native_identity_changes_for_code_but_not_portable_fixture_snapshots(tmp
 
 
 def test_catalog_and_contributor_interfaces_remain_in_the_repository():
+    """Verify catalog and contributor interfaces remain in the repository."""
     for name in (
         "contributions/command-sources/command.noodle.json",
         "contributions/extensions/command.noodle.json",
@@ -105,6 +109,7 @@ def test_catalog_and_contributor_interfaces_remain_in_the_repository():
 
 
 def test_authoring_checks_current_resources_before_tests_and_installed_wheel():
+    """Verify authoring checks current resources before tests and installed wheel."""
     workflow = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/extension-builder-ci.yml").read_text()))
     steps = workflow["jobs"]["authoring"]["steps"]
     prepare = next(
@@ -123,6 +128,7 @@ def test_authoring_checks_current_resources_before_tests_and_installed_wheel():
 
 
 def test_historical_implementation_changes_do_not_replace_independent_corpus_inputs(tmp_path, monkeypatch):
+    """Verify historical implementation changes do not replace independent corpus inputs."""
     import hashlib
 
     from tests import guard_command_corpus_native_contract as contract

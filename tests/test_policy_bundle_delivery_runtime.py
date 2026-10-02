@@ -66,6 +66,7 @@ def _bundle() -> dict[str, object]:
 
 
 def test_signed_cloud_extension_projection_matches_shared_vector() -> None:
+    """Verify signed cloud extension projection matches shared vector."""
     vector_path = _VECTOR_PATH.with_name("extension-projection-digest-vector.json")
     vector = json.loads(vector_path.read_text())
 

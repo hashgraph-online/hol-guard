@@ -149,6 +149,7 @@ def _compiler(path: Path | None) -> Path:
 
 
 def _run(command: list[str], *, input_bytes: bytes | None = None) -> bytes:
+    """Run an authoring subprocess and preserve its diagnostics when it fails."""
     completed = subprocess.run(
         command,
         input=input_bytes,

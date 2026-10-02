@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def _configuration() -> tuple[dict, dict]:
+    """Load the cache action and expanded native workflow for dependency contract assertions."""
     action = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/actions/native-regression/action.yml").read_text()))
     workflow = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/native-wheel-ci.yml").read_text()))
     return action, workflow

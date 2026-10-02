@@ -38,6 +38,7 @@ def expand_ci_job_actions(workflow: dict, root: Path = ROOT) -> dict:
                 raise ValueError("CI job action inputs must be explicit and complete")
 
             def substitute(value, bindings=supplied):
+                """Resolve declared action inputs while leaving other GitHub expressions symbolic."""
                 if isinstance(value, dict):
                     return {key: substitute(item) for key, item in value.items()}
                 if isinstance(value, list):

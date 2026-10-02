@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def _workflow(name: str) -> dict[str | bool, Any]:
+    """Load expanded workflow definitions for CI contract assertions."""
     return expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows" / name).read_text()))
 
 
@@ -108,6 +109,7 @@ def test_native_wheel_build_keeps_all_platforms_and_integrity_checks() -> None:
 
 
 def test_duration_telemetry_uses_successful_push_on_target_branch() -> None:
+    """Verify duration telemetry uses successful push on target branch."""
     workflow = _workflow("ci.yml")
     assert set(workflow[True]["pull_request"]["branches"]) <= set(workflow[True]["push"]["branches"])
     job = workflow["jobs"]["coverage-plan"]

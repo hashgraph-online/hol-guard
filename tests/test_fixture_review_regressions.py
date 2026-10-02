@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 @pytest.mark.parametrize("name", ["nested.rs", "nested.json", "nested"])
 def test_source_suffix_directories_are_traversed_not_hashed_as_files(tmp_path, name):
+    """Verify source suffix directories are traversed not hashed as files."""
     directory = tmp_path / name
     directory.mkdir()
     code = directory / "lib.rs"
@@ -31,6 +32,7 @@ def test_source_suffix_directories_are_traversed_not_hashed_as_files(tmp_path, n
 @pytest.mark.parametrize("target_kind", ["missing", "directory", "file"])
 @pytest.mark.parametrize("link_name", ["entry.rs", "entry"])
 def test_native_fingerprint_rejects_all_symlinks_before_filtering(tmp_path, target_kind, link_name):
+    """Verify native fingerprint rejects all symlinks before filtering."""
     root = tmp_path / "src"
     root.mkdir()
     target = tmp_path / "target"
@@ -55,6 +57,7 @@ def test_native_fingerprint_rejects_all_symlinks_before_filtering(tmp_path, targ
     ],
 )
 def test_intake_does_not_silently_reset_independent_expectations(path):
+    """Verify intake does not silently reset independent expectations."""
     assert not intake.is_machine_managed(path)
 
 
@@ -67,10 +70,12 @@ def test_intake_does_not_silently_reset_independent_expectations(path):
     ],
 )
 def test_intake_still_sanitizes_generated_outputs_and_credential_sensitive_tooling(path):
+    """Verify intake still sanitizes generated outputs and credential sensitive tooling."""
     assert intake.is_machine_managed(path)
 
 
 def test_publication_staging_works_without_a_nonexistent_mcp_resource_directory(tmp_path):
+    """Verify publication staging works without a nonexistent MCP resource directory."""
     workflow = yaml.safe_load((ROOT / ".github/workflows/extension-artifact-regen.yml").read_text())
     step = next(
         item
@@ -97,6 +102,7 @@ def test_publication_staging_works_without_a_nonexistent_mcp_resource_directory(
 
 @pytest.mark.parametrize("measured", [False, True])
 def test_full_report_evaluation_has_one_process_owner_without_losing_tests(measured):
+    """Verify full report evaluation has one process owner without losing tests."""
     report = "tests/test_guard_command_decision_diff.py"
     nodes = [f"{report}::test_case_{i}" for i in range(37)]
     others = [f"tests/test_other_{i}.py::test_case" for i in range(100)]
@@ -109,6 +115,7 @@ def test_full_report_evaluation_has_one_process_owner_without_losing_tests(measu
 
 
 def test_ci_entry_point_and_extracted_actions_keep_bounded_reviewable_files():
+    """Verify CI entry point and extracted actions keep bounded reviewable files."""
     path = ROOT / ".github/workflows/ci.yml"
     assert len(path.read_text().splitlines()) <= 500
     workflow = yaml.safe_load(path.read_text())
@@ -131,6 +138,7 @@ def test_ci_entry_point_and_extracted_actions_keep_bounded_reviewable_files():
 
 
 def test_expansion_preserves_literal_input_values_and_rejects_missing_bindings(tmp_path):
+    """Verify expansion preserves literal input values and rejects missing bindings."""
     folder = tmp_path / ".github/actions/ci-job-example"
     folder.mkdir(parents=True)
     (folder / "action.yml").write_text(
@@ -156,11 +164,13 @@ def test_expansion_preserves_literal_input_values_and_rejects_missing_bindings(t
 
 
 def test_validation_guide_generates_evidence_before_comparing_current_report():
+    """Verify validation guide generates evidence before comparing current report."""
     guide = (ROOT / "docs/guard/extension-builder/VALIDATION.md").read_text()
     assert guide.index("guard_command_decision_diff.py --write") < guide.index("guard_command_decision_diff.py --check")
 
 
 def test_synthetic_contribution_does_not_reuse_a_real_extension_action_class():
+    """Verify synthetic contribution does not reuse a real extension action class."""
     import json
 
     from scripts.ci.check_extension_fixture_isolation import EXTENSION_ID, acceptance_source
@@ -180,6 +190,7 @@ def test_synthetic_contribution_does_not_reuse_a_real_extension_action_class():
 
 
 def test_actual_intake_keeps_reviewed_expectations_and_contributor_ancestry(tmp_path, monkeypatch):
+    """Verify actual intake keeps reviewed expectations and contributor ancestry."""
     import json
     import sys
 
@@ -189,6 +200,7 @@ def test_actual_intake_keeps_reviewed_expectations_and_contributor_ancestry(tmp_
     subprocess.run(["git", "init", "-q", "-b", "main", str(checkout)], check=True)
 
     def git(*args):
+        """Run a Git command against the temporary intake repository."""
         return subprocess.check_output(["git", *args], cwd=checkout, text=True).strip()
 
     git("config", "user.name", "Intake test")
@@ -233,6 +245,7 @@ def test_actual_intake_keeps_reviewed_expectations_and_contributor_ancestry(tmp_
     execute = intake._run
 
     def local_only(command, **kwargs):
+        """Fetch from the local fixture remote while retaining the real intake operations."""
         if command[:2] == ["git", "fetch"] and command[2].startswith("https://github.com/"):
             command = [*command[:2], str(remote), *command[3:]]
         return execute(command, **kwargs)

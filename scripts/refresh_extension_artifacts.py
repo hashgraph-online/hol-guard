@@ -129,6 +129,7 @@ def verify() -> None:
 
 
 def main() -> int:
+    """Refresh maintainer-owned product artifacts without replacing independent test expectations."""
     pending = pending_contribution_ids()
     sync_trust_map()
     regenerate_projections()

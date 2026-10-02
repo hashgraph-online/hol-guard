@@ -18,6 +18,7 @@ from .restricted_pytest_model import READ_ONLY_TEST_PROFILES, RestrictedPytestPl
 
 
 def linux_readonly_argv(plan: RestrictedPytestPlan, *, private_root: Path) -> list[str]:
+    """Build namespace arguments that preserve the declared read, write and executable boundaries."""
     from .restricted_pytest_model import _LINUX_READ_FILES, _LINUX_READ_ROOTS
     from .restricted_pytest_sandbox import _runtime_read_roots
 

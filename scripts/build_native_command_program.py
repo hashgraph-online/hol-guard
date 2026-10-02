@@ -106,6 +106,7 @@ def implementation_digest() -> str:
 
 
 def main() -> int:
+    """Build or strictly check projections bound to current native implementation and authored sources."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="Reject a missing or stale checked-in artifact.")
     parser.add_argument("--compiler", type=Path, help="Explicit already-built native source compiler.")

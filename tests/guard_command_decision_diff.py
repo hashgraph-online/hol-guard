@@ -226,6 +226,7 @@ def _evaluate_native_diff() -> tuple[str, str, int, tuple[DecisionDiffShard, ...
 
 
 def _generate_decision_diff_report() -> tuple[dict[str, object], float]:
+    """Evaluate the fixed corpus and assemble deterministic, source-bound decision evidence."""
     manifest = load_seed_manifest()
     known_gaps = _load_object(KNOWN_GAPS_PATH)
     transition_ids: defaultdict[str, list[str]] = defaultdict(list)
@@ -461,6 +462,7 @@ def _integer(value: object, label: str) -> int:
 
 
 def _main() -> None:
+    """Generate or check decision evidence without rewriting corpus inputs."""
     arguments = tuple(sys.argv[1:])
     if arguments not in {(), ("--write",), ("--check",), ("--metrics",)}:
         raise SystemExit("usage: guard_command_decision_diff.py [--write|--check|--metrics]")

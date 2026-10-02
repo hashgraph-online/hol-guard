@@ -83,6 +83,7 @@ def _unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
 
 @lru_cache(maxsize=1)
 def _contract_data() -> dict[str, object]:
+    """Load the historical corpus contract and verify its independently authored input hashes."""
     encoded = NATIVE_CONTRACT_PATH.read_bytes()
     if len(encoded) > 1_048_576:
         raise ValueError("native corpus contract exceeds its size bound")

@@ -66,6 +66,7 @@ def _identity_snapshot() -> dict[str, object]:
 
 
 def test_catalog_identity_matches_authored_sources_and_stable_api_contract() -> None:
+    """Verify catalog identity matches authored sources and stable API contract."""
     baseline = json.loads(_FIXTURE.read_text(encoding="utf-8"))
     actual = _identity_snapshot()
     # Validate completeness against authored inputs, not another generated

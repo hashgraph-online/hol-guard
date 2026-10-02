@@ -15,6 +15,7 @@ from codex_plugin_scanner.guard.runtime import restricted_pytest_sandbox as sand
 def test_linked_metadata_has_listing_without_parent_checkout_or_secret_read_grants(
     monkeypatch, tmp_path, with_system_library
 ):
+    """Verify linked metadata has listing without parent checkout or secret read grants."""
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     (workspace / "ordinary.txt").write_text("ordinary")
