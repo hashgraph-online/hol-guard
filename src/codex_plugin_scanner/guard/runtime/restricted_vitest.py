@@ -9,7 +9,12 @@ from dataclasses import replace
 from pathlib import Path
 
 from .restricted_node_test import prepare_restricted_node_test
-from .restricted_pytest_model import VITEST_READ_ONLY_PROFILE_VERSION, RestrictedPytestError, RestrictedPytestPlan
+from .restricted_pytest_model import (
+    NODE_TOOL_READ_ONLY_PROFILE_VERSION,
+    VITEST_READ_ONLY_PROFILE_VERSION,
+    RestrictedPytestError,
+    RestrictedPytestPlan,
+)
 from .restricted_pytest_sandbox import _backend_argv, _restricted_environment, _run_backend_process
 from .restricted_pytest_validation import _normalized_command, _path_is_within
 
@@ -69,7 +74,19 @@ def run_restricted_vitest(
     if timeout_seconds <= 0 or timeout_seconds > 86400:
         raise RestrictedPytestError("vitest_restricted_invalid_command", "Protected Vitest timeout is out of bounds.")
     plan = prepared_plan or prepare_restricted_vitest(command, workspace=workspace, cwd=cwd)
-    if plan.profile_version != VITEST_READ_ONLY_PROFILE_VERSION or plan.backend != "macos-seatbelt":
+    if plan.profile_version != VITEST_READ_ONLY_PROFILE_VERSION:
+        raise RestrictedPytestError("vitest_restricted_invalid_command", "Unexpected Vitest profile.")
+    return run_restricted_node_plan(plan, env=env, timeout_seconds=timeout_seconds)
+
+
+def run_restricted_node_plan(
+    plan: RestrictedPytestPlan, *, env: Mapping[str, str] | None = None, timeout_seconds: int = 1800
+) -> int:
+    if (
+        not 0 < timeout_seconds <= 86400
+        or plan.profile_version not in {VITEST_READ_ONLY_PROFILE_VERSION, NODE_TOOL_READ_ONLY_PROFILE_VERSION}
+        or plan.backend != "macos-seatbelt"
+    ):
         raise RestrictedPytestError(
             "vitest_restricted_invalid_command", "Protected Vitest requires its validated OS plan."
         )

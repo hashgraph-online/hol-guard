@@ -190,3 +190,39 @@ fn git_inspections_require_protected_execution_not_helper_consent() {
         );
     }
 }
+
+#[test]
+fn local_lint_typecheck_requires_actual_protected_execution() {
+    for command in [
+        "bun run lint",
+        "npm run typecheck",
+        "bunx tsc --noEmit",
+        "eslint src",
+        "node /home/tester/project/node_modules/eslint/bin/eslint.js src",
+        "node /home/tester/project/node_modules/typescript/bin/tsc --noEmit",
+    ] {
+        let result = classify("omp", command);
+        assert_eq!(result.decision, "deny", "{command}");
+        if cfg!(target_os = "macos") {
+            assert_eq!(
+                result.reason_code, "native_node_tool_readonly_containment_required",
+                "{command}"
+            );
+        }
+    }
+    for command in [
+        "bun run arbitrary",
+        "bunx eslint@evil src",
+        "tsc",
+        "eslint --fix src",
+        "eslint --output-file=.env src",
+        "bunx tsc --noEmit && rm -rf /",
+        "NODE_OPTIONS=--require=x eslint src",
+    ] {
+        assert_ne!(
+            classify("omp", command).reason_code,
+            "native_node_tool_readonly_containment_required",
+            "{command}"
+        );
+    }
+}

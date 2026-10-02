@@ -14,6 +14,7 @@ from .restricted_pytest import RestrictedPytestError, prepare_restricted_pytest,
 from .restricted_pytest_model import (
     GIT_READ_ONLY_PROFILE_VERSION,
     NODE_TEST_READ_ONLY_PROFILE_VERSION,
+    NODE_TOOL_READ_ONLY_PROFILE_VERSION,
     PYTEST_READ_ONLY_PROFILE_VERSION,
     VITEST_READ_ONLY_PROFILE_VERSION,
 )
@@ -118,7 +119,20 @@ def run_authorized_contained_test(
         )
     )
     git = bool(command) and Path(command[0]).name == "git"
-    if git:
+    node_tool = bool(command) and (
+        Path(command[0]).name in {"eslint", "tsc", "bun", "npm", "pnpm"}
+        or (Path(command[0]).name in {"bunx", "npx"} and any(arg in {"eslint", "tsc"} for arg in command[1:3]))
+        or (
+            len(command) > 1
+            and Path(command[0]).name in {"node", "nodejs"}
+            and command[1].endswith(("/node_modules/eslint/bin/eslint.js", "/node_modules/typescript/bin/tsc"))
+        )
+    )
+    if node_tool:
+        from .restricted_node_tool import prepare_restricted_node_tool, run_restricted_node_tool
+
+        node_tool_plan = prepare_restricted_node_tool(command, workspace=workspace, cwd=workspace)
+    elif git:
         from .restricted_git import prepare_restricted_git, run_restricted_git
 
         git_plan = prepare_restricted_git(command, workspace=workspace, cwd=workspace)
@@ -133,7 +147,9 @@ def run_authorized_contained_test(
     else:
         prepare_restricted_pytest(command, workspace=workspace, cwd=workspace, read_only_workspace=True)
     reason = (
-        "native_git_readonly_containment_required"
+        "native_node_tool_readonly_containment_required"
+        if node_tool
+        else "native_git_readonly_containment_required"
         if git
         else "native_vitest_readonly_containment_required"
         if vitest
@@ -142,7 +158,9 @@ def run_authorized_contained_test(
         else "native_pytest_readonly_containment_required"
     )
     profile = (
-        GIT_READ_ONLY_PROFILE_VERSION
+        NODE_TOOL_READ_ONLY_PROFILE_VERSION
+        if node_tool
+        else GIT_READ_ONLY_PROFILE_VERSION
         if git
         else VITEST_READ_ONLY_PROFILE_VERSION
         if vitest
@@ -164,6 +182,11 @@ def run_authorized_contained_test(
     if not required(authorize(payload)):
         raise _reject()
     # No shell and no unsandboxed retry: the required profile is the actual sink.
+    if node_tool:
+        underlying = {**payload, "tool_input": {**tool_input, "command": shlex.join(node_tool_plan.command)}}
+        if not required(authorize(underlying)):
+            raise _reject()
+        return run_restricted_node_tool(node_tool_plan, timeout_seconds=timeout_seconds)
     if git:
         return run_restricted_git(git_plan, timeout_seconds=timeout_seconds)
     if vitest:

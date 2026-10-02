@@ -148,6 +148,7 @@ def harness_json_from_native_pre_tool(harness: str, response: Mapping[str, objec
             "native_node_test_readonly_containment_required",
             "native_vitest_readonly_containment_required",
             "native_git_readonly_containment_required",
+            "native_node_tool_readonly_containment_required",
         }
     ):
         extensions = response.get("command_extensions")
@@ -174,7 +175,8 @@ def harness_json_from_native_pre_tool(harness: str, response: Mapping[str, objec
             and (
                 extensions.get("permission_observations") == []
                 or (
-                    reason_code == "native_vitest_readonly_containment_required"
+                    reason_code
+                    in {"native_vitest_readonly_containment_required", "native_node_tool_readonly_containment_required"}
                     and isinstance(extensions.get("permission_observations"), list)
                     and all(
                         isinstance(item, Mapping)
@@ -194,7 +196,9 @@ def harness_json_from_native_pre_tool(harness: str, response: Mapping[str, objec
                 "reason_code": reason_code,
                 "reason": reason,
                 "required_execution_profile": (
-                    "git-readonly-v1"
+                    "node-tool-readonly-v1"
+                    if reason_code == "native_node_tool_readonly_containment_required"
+                    else "git-readonly-v1"
                     if reason_code == "native_git_readonly_containment_required"
                     else "vitest-readonly-v1"
                     if reason_code == "native_vitest_readonly_containment_required"

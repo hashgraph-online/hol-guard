@@ -43,6 +43,31 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
     }
     let executable = segment.executable.as_deref()?;
     let arguments = segment.arguments.as_slice();
+    let read_only_node_tool = match super::executable_basename(executable) {
+        "bun" | "npm" | "pnpm" => {
+            matches!(arguments, [run, task] if run == "run" && matches!(task.as_str(), "lint" | "typecheck"))
+        }
+        "bunx" | "npx" => {
+            matches!(arguments, [tool, rest @ ..] if tool == "eslint" || (tool == "tsc" && rest.iter().any(|arg| arg == "--noEmit")))
+        }
+        "eslint" => true,
+        "tsc" => arguments.iter().any(|arg| arg == "--noEmit"),
+        "node" | "nodejs" => {
+            matches!(arguments, [entry, rest @ ..] if entry.ends_with("/node_modules/eslint/bin/eslint.js") || (entry.ends_with("/node_modules/typescript/bin/tsc") && rest.iter().any(|arg| arg == "--noEmit")))
+        }
+        _ => false,
+    };
+    if read_only_node_tool
+        && !arguments.iter().any(|arg| {
+            matches!(
+                arg.as_str(),
+                "--fix" | "--fix-dry-run" | "--output-file" | "-o" | "--emitDeclarationOnly"
+            ) || arg.starts_with("--output-file=")
+                || arg.starts_with("--fix=")
+        })
+    {
+        return Some("native_node_tool_readonly_containment_required");
+    }
     if super::executable_basename(executable) == "git" && super::git_helper_context_required(model)
     {
         return Some("native_git_readonly_containment_required");

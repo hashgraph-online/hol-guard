@@ -114,7 +114,7 @@ def _macos_profile(plan: RestrictedPytestPlan, *, private_root: Path) -> str:
     read_roots.extend(path for path in _MACOS_READ_ROOTS if path.exists())
     read_roots.extend(_runtime_read_roots(plan))
     read_files = [path for path in _MACOS_READ_FILES if path.exists()]
-    if plan.profile_version in {"node-test-readonly-v1", "vitest-readonly-v1"}:
+    if plan.profile_version in {"node-test-readonly-v1", "vitest-readonly-v1", "node-tool-readonly-v1"}:
         # Node initializes OpenSSL before collection; never grant the wider config tree.
         read_files.extend(
             path

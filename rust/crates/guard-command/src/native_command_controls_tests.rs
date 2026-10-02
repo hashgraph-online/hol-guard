@@ -101,20 +101,28 @@ fn vitest_containment_never_overrides_disabled_package_permission() {
     })).unwrap();
     binding.effective_digest = binding.compute_effective_digest().unwrap();
     let controls = CompiledNativeCommandControls::new(&binding).unwrap();
-    let result = crate::pretool::evaluate_pre_tool_envelope_with_context(
-        "omp",
-        "PreToolUse",
-        &serde_json::json!({"tool_name":"bash", "tool_input":{"command":"bunx vitest run tests/example.test.ts"}}),
-        Some(&controls),
-        None,
-        Some("/home/tester"),
-        Some("/home/tester/project"),
-    );
-    assert_eq!(result.minimum_action, "block");
-    assert_ne!(
-        result.reason_code,
-        "native_vitest_readonly_containment_required"
-    );
+    for command in [
+        "bunx vitest run tests/example.test.ts",
+        "bun run lint",
+        "bunx tsc --noEmit",
+    ] {
+        let result = crate::pretool::evaluate_pre_tool_envelope_with_context(
+            "omp",
+            "PreToolUse",
+            &serde_json::json!({"tool_name":"bash", "tool_input":{"command":command}}),
+            Some(&controls),
+            None,
+            Some("/home/tester"),
+            Some("/home/tester/project"),
+        );
+        assert_eq!(result.minimum_action, "block", "{command}");
+        assert!(
+            !result
+                .reason_code
+                .ends_with("readonly_containment_required"),
+            "{command}"
+        );
+    }
 }
 
 #[test]

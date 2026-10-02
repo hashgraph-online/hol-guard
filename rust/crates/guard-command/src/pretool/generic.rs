@@ -412,12 +412,19 @@ pub fn evaluate_pre_tool_envelope_with_context(
         && matches!(harness, "omp" | "oh-my-pi")
         && cwd.is_some()
         && (result.action.action_type == PreToolActionTypeV1::Command
-            || (contained_test_reason == Some("native_vitest_readonly_containment_required")
-                && result.action.action_type == PreToolActionTypeV1::Package))
+            || (matches!(
+                contained_test_reason,
+                Some(
+                    "native_vitest_readonly_containment_required"
+                        | "native_node_tool_readonly_containment_required"
+                )
+            ) && result.action.action_type == PreToolActionTypeV1::Package))
         && !result.action.sensitive_target
         && (result.reason_code == "native_command_review_required"
             || (contained_test_reason == Some("native_git_readonly_containment_required")
-                && result.reason_code == "native_git_helper_context_review"))
+                && result.reason_code == "native_git_helper_context_review")
+            || (contained_test_reason == Some("native_node_tool_readonly_containment_required")
+                && result.reason_code == "native_package_review"))
         && result.minimum_action == "review"
         && result.command_extensions.as_ref().is_none_or(|extensions| {
             extensions.binding.uncertainty_count == 0
@@ -435,8 +442,13 @@ pub fn evaluate_pre_tool_envelope_with_context(
                     .permission_observations
                     .iter()
                     .all(|observation| {
-                        contained_test_reason == Some("native_vitest_readonly_containment_required")
-                            && observation.extension_id == "command.package.node"
+                        matches!(
+                            contained_test_reason,
+                            Some(
+                                "native_vitest_readonly_containment_required"
+                                    | "native_node_tool_readonly_containment_required"
+                            )
+                        ) && observation.extension_id == "command.package.node"
                             && observation.permission_id
                                 == "command.package.node.permission.package-protection"
                             && observation.uncertainty_reasons.is_empty()
