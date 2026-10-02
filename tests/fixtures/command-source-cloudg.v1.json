@@ -10623,7 +10623,6 @@
           "command.mcp-instapods",
           "command.mcp-pr-ui-compare",
           "command.mcp-reaper",
-          "command.mcp-x-reader",
           "command.noodle",
           "command.ollama",
           "command.probe",

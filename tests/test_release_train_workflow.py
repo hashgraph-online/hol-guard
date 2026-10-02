@@ -30,6 +30,32 @@ def test_release_codeowners_are_the_named_maintainers() -> None:
     assert len(owners) == len(RELEASE_MAINTAINERS)
 
 
+def test_release_native_binary_and_base_wheel_use_the_same_regenerated_program() -> None:
+    jobs = _workflow(PUBLISH_WORKFLOW)["jobs"]
+    build_steps = jobs["build"]["steps"]
+    source_generation = next(
+        step for step in build_steps if step.get("name") == "Generate projections for release source distributions"
+    )
+    assert "if" not in source_generation
+    assert "cargo +1.88.0 build" in source_generation["run"]
+    assert build_steps.index(source_generation) < next(
+        index for index, step in enumerate(build_steps) if step.get("name") == "Build Guard package (hol-guard)"
+    )
+    steps = jobs["build-native-guard-wheels"]["steps"]
+    verify = next(step for step in steps if step.get("name") == "Verify native command program is current")
+    run = verify["run"]
+    generate = 'python scripts/build_native_command_program.py --compiler "$SOURCE_COMPILER"'
+    assert '[[ "${{ github.event_name }}" == "pull_request" ]]' in run
+    assert run.index(generate) < run.index("cargo build") < run.index("verify_native_command_program.py")
+    assert verify["env"]["RUST_TARGET"] == "${{ matrix.target }}"
+    rebuild = next(
+        step for step in steps if step.get("name") == "Rebuild Guard base wheel after projection regeneration"
+    )
+    assert "if" not in rebuild
+    setup_uv = next(step for step in steps if str(step.get("uses", "")).startswith("astral-sh/setup-uv@"))
+    assert "if" not in setup_uv
+
+
 def test_release_branches_run_ci_and_pr_canaries() -> None:
     ci = _workflow(CI_WORKFLOW)
     publish = _workflow(PUBLISH_WORKFLOW)
@@ -133,6 +159,8 @@ def test_stable_dispatch_computes_and_requires_the_registry_derived_version() ->
     assert "'$pypi + $testpypi + ($tags | map(select(. != $candidate))) | unique'" in compute_run
     assert '--arg candidate "$RELEASE_VERSION"' in compute_run
     assert "compute_main_release_version.py" in compute_run
+    assert 'git merge-base --is-ancestor "$tag_sha" HEAD' in compute_run
+    assert 'SOURCE_SHA="$tag_sha"' in compute_run
     assert 'if [[ "$RELEASE_VERSION" != "$EXPECTED_VERSION" ]]' in compute_run
     assert 'VERSION="$RELEASE_VERSION"' in compute_run
     assert 'elif [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == "refs/heads/main" ]]' not in compute_run

@@ -221,6 +221,7 @@ class HookProcessStats(TypedDict):
     timeouts: int
     failures: int
     restarts: int
+    last_startup_failure: str | None
     decisions: dict[str, int]
     reason_codes: dict[str, int]
     routes: dict[str, int]

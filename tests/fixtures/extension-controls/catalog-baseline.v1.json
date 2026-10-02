@@ -6,7 +6,7 @@
     "canonical_diff_digest",
     "effective"
   ],
-  "catalog_digest": "ad2ebd12de6fd14b200a2f4d803b3f4511253c970fb4c665bee96700aa947278",
+  "catalog_digest": "417712a82f1799d268ab0ae3fb2ad22a839fbf93cc9768ec4d63f472d738398d",
   "control_schema_version": "1.0.0",
   "daemon_api_schema": "guard.daemon.extension-controls.v1",
   "effective_shape": [
@@ -20,7 +20,7 @@
     "failures",
     "projection"
   ],
-  "extension_count": 82,
+  "extension_count": 81,
   "extension_ids": [
     "command.api-gateway",
     "command.backup.borg",
@@ -68,7 +68,6 @@
     "command.mcp-instapods",
     "command.mcp-pr-ui-compare",
     "command.mcp-reaper",
-    "command.mcp-x-reader",
     "command.messaging.kafka",
     "command.messaging.nats",
     "command.messaging.rabbitmq",
@@ -108,7 +107,7 @@
   "extension_schema_version": 2,
   "installed_browser_config": "dashboard/playwright.installed.config.ts",
   "overview_route": "/extensions",
-  "permission_count": 281,
+  "permission_count": 280,
   "permission_examples": {
     "command.api-gateway.permission.delete": "aws apigateway delete-rest-api",
     "command.backup.borg.permission.mutation": "borg delete",
@@ -302,7 +301,6 @@
     "command.mcp-instapods.permission.mcp-instapods-tool": "https://app.instapods.com/api/mcp",
     "command.mcp-pr-ui-compare.permission.mcp-prxhuixhcompare-tool": "npx -y pr-ui-compare",
     "command.mcp-reaper.permission.mcp-reaper-tool": "uvx -y xdarkzx-reaper-mcp",
-    "command.mcp-x-reader.permission.mcp-xxxhreader-tool": "uvx -y git+https://github.com/runesleo/x-reader.git",
     "command.messaging.kafka.permission.delete": "kafka-topics --delete",
     "command.messaging.nats.permission.delete": "nats str rm ORDERS",
     "command.messaging.rabbitmq.permission.delete": "rabbitmqctl delete_queue jobs",
@@ -681,7 +679,6 @@
     "command.mcp-instapods.permission.mcp-instapods-tool",
     "command.mcp-pr-ui-compare.permission.mcp-prxhuixhcompare-tool",
     "command.mcp-reaper.permission.mcp-reaper-tool",
-    "command.mcp-x-reader.permission.mcp-xxxhreader-tool",
     "command.messaging.kafka.permission.delete",
     "command.messaging.nats.permission.delete",
     "command.messaging.rabbitmq.permission.delete",

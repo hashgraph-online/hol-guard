@@ -28,7 +28,7 @@ from tests.guard_command_decision_diff import (
     report_framed_sha256,
     source_binding_id,
 )
-from tests.support.extension_freshness import requires_fresh_decision_diff
+from tests.support.extension_freshness import requires_fresh_decision_diff, requires_fresh_projections
 
 _OPAQUE_ID = re.compile(r"c-[0-9a-f]{24}")
 _REPORT_FRAMED_DIGEST_PATH = REPORT_PATH.with_name("decision-diff-report.framed-sha256")
@@ -68,6 +68,26 @@ def test_report_cli_writes_and_checks_framed_digest(tmp_path: Path, monkeypatch)
     module._main()
     assert path.read_bytes() == canonical_json_bytes(report)
     assert digest_path.read_text(encoding="ascii") == report_framed_sha256(report) + "\n"
+    monkeypatch.setattr(sys, "argv", ["guard_command_decision_diff.py", "--check"])
+    module._main()
+    digest_path.write_text("0" * 64 + "\n", encoding="ascii")
+    with pytest.raises(SystemExit, match="framed digest is stale"):
+        module._main()
+
+
+def test_report_cli_strict_check_does_not_defer_regen_owned_report(tmp_path: Path, monkeypatch) -> None:
+    from tests import guard_command_decision_diff as module
+    from tests.support import extension_freshness
+
+    monkeypatch.setattr(extension_freshness, "pending_decision_diff_regen", lambda: True)
+    monkeypatch.setenv("HOL_GUARD_STRICT_DECISION_REPORT", "1")
+    report = {"schema": "strict-synthetic-report"}
+    path = tmp_path / "decision-diff-report.json"
+    digest_path = path.with_name("decision-diff-report.framed-sha256")
+    monkeypatch.setattr(module, "REPORT_PATH", path)
+    monkeypatch.setattr(module, "_generate_decision_diff_report", lambda: (report, 1.0))
+    monkeypatch.setattr(sys, "argv", ["guard_command_decision_diff.py", "--write"])
+    module._main()
     monkeypatch.setattr(sys, "argv", ["guard_command_decision_diff.py", "--check"])
     module._main()
     digest_path.write_text("0" * 64 + "\n", encoding="ascii")
@@ -312,6 +332,7 @@ def test_report_contains_only_privacy_safe_deterministic_evidence() -> None:
     assert not _OPAQUE_ID.search(payload)
 
 
+@requires_fresh_projections
 @pytest.mark.parametrize(
     ("hash_seed", "timezone", "locale"),
     [("1", "UTC", "C"), ("8731", "US/Pacific", "C.UTF-8")],

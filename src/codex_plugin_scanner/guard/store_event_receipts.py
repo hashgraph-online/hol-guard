@@ -9,7 +9,11 @@ from .policy_integrity import PolicyIntegrityVerificationResult
 
 # ruff: noqa: F403,F405
 from .store_base import *
-from .store_local_once_authority import LOCAL_ONCE_INTEGRITY_PURPOSE, persist_local_once_approval
+from .store_local_once_authority import (
+    LOCAL_ONCE_LEGACY_AUTHORITY_KIND,
+    local_once_integrity_purpose,
+    persist_local_once_approval,
+)
 
 
 def _list_events_query(limit: int, event_name: str | None) -> tuple[str, tuple[object, ...]]:
@@ -82,7 +86,7 @@ class StoreEventReceiptsMixin:
             """
             select approval_id, request_id, harness, artifact_id, artifact_hash, workspace, publisher, action,
                    created_at, expires_at, claimed_at, integrity_version, payload_hash, payload_mac,
-                   integrity_key_id, signed_at
+                   integrity_key_id, signed_at, authority_kind
             from guard_local_once_approvals
             where claimed_at is null
               and harness = ?
@@ -91,10 +95,11 @@ class StoreEventReceiptsMixin:
               and julianday(expires_at) > julianday(?)
               and (workspace is null or workspace = ?)
               and (publisher is null or publisher = ?)
+              and (authority_kind is null or authority_kind = ?)
             order by created_at desc
             limit 1
             """,
-            (harness, artifact_id, artifact_hash, now, workspace_key, publisher),
+            (harness, artifact_id, artifact_hash, now, workspace_key, publisher, LOCAL_ONCE_LEGACY_AUTHORITY_KIND),
         ).fetchone()
         if row is None:
             return None, None
@@ -105,6 +110,13 @@ class StoreEventReceiptsMixin:
         )
         if integrity_result.status != "valid":
             return None, _local_once_approval_integrity_failure(row, integrity_result=integrity_result)
+        if _row_value(row, "authority_kind") is None:
+            failure = _local_once_approval_integrity_failure(row, integrity_result=integrity_result)
+            failure.update(
+                integrity_status="ambiguous_legacy",
+                integrity_message="legacy_local_once_provenance_unknown",
+            )
+            return None, failure
         return _local_once_approval_payload(row), None
 
     @staticmethod
@@ -143,13 +155,14 @@ class StoreEventReceiptsMixin:
         integrity_key: bytes | None = None,
         integrity_key_id: str | None = None,
         consume: bool = True,
+        authority_kind: str = LOCAL_ONCE_LEGACY_AUTHORITY_KIND,
     ) -> dict[str, object] | None:
         now = _canonical_utc_timestamp(now)
         row = connection.execute(
             """
             select approval_id, request_id, harness, artifact_id, artifact_hash, workspace, publisher, action,
                    created_at, expires_at, claimed_at, integrity_version, payload_hash, payload_mac,
-                   integrity_key_id, signed_at
+                   integrity_key_id, signed_at, authority_kind
             from guard_local_once_approvals
             where approval_id = ? and claimed_at is null
               and julianday(expires_at) > julianday(?)
@@ -157,6 +170,8 @@ class StoreEventReceiptsMixin:
             (approval_id, now),
         ).fetchone()
         if row is None:
+            return None
+        if _row_value(row, "authority_kind") != authority_kind:
             return None
         integrity_result = _verify_local_once_approval(
             row,
@@ -182,6 +197,7 @@ class StoreEventReceiptsMixin:
             "signed_at",
             "updated_at",
             "workspace",
+            "authority_kind",
         )
         if expected_decision is not None and any(
             decision.get(key) != expected_decision.get(key) for key in identity_keys
@@ -194,7 +210,7 @@ class StoreEventReceiptsMixin:
             claimed_row,
             key=integrity_key,
             key_id=integrity_key_id,
-            purpose=LOCAL_ONCE_INTEGRITY_PURPOSE,
+            purpose=local_once_integrity_purpose(_row_value(row, "authority_kind")),
             signed_at=now,
         )
         claim_cursor = connection.execute(
@@ -383,7 +399,7 @@ class StoreEventReceiptsMixin:
 
 
 def _local_once_approval_signed_payload(row: Mapping[str, object]) -> dict[str, object]:
-    return {
+    payload = {
         "approval_id": _row_value(row, "approval_id"),
         "request_id": _row_value(row, "request_id"),
         "harness": _row_value(row, "harness"),
@@ -396,6 +412,10 @@ def _local_once_approval_signed_payload(row: Mapping[str, object]) -> dict[str, 
         "expires_at": _row_value(row, "expires_at"),
         "claimed_at": _row_value(row, "claimed_at"),
     }
+    authority_kind = _row_value(row, "authority_kind")
+    if authority_kind is not None:
+        payload["authority_kind"] = authority_kind
+    return payload
 
 
 def _local_once_approval_integrity(row: Mapping[str, object]) -> dict[str, object]:
@@ -414,12 +434,13 @@ def _verify_local_once_approval(
     key: bytes | None,
     key_id: str | None,
 ) -> PolicyIntegrityVerificationResult:
+    authority_kind = _row_value(row, "authority_kind")
     return verify_local_authority_payload(
         _local_once_approval_signed_payload(row),
         _local_once_approval_integrity(row),
         key=key,
         key_id=key_id,
-        purpose=LOCAL_ONCE_INTEGRITY_PURPOSE,
+        purpose=local_once_integrity_purpose(authority_kind),
     )
 
 
@@ -441,7 +462,7 @@ def _local_once_approval_integrity_failure(
 
 
 def _local_once_approval_payload(row: Mapping[str, object]) -> dict[str, object]:
-    return {
+    payload = {
         "action": str(row["action"]),
         "approval_id": str(row["approval_id"]),
         "artifact_hash": row["artifact_hash"],
@@ -462,6 +483,10 @@ def _local_once_approval_payload(row: Mapping[str, object]) -> dict[str, object]
         "updated_at": str(row["created_at"]),
         "workspace": row["workspace"],
     }
+    authority_kind = _row_value(row, "authority_kind")
+    if authority_kind is not None:
+        payload["authority_kind"] = authority_kind
+    return payload
 
 
 def _row_value(row: Mapping[str, object], key: str) -> object:

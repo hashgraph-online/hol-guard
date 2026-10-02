@@ -54,6 +54,12 @@ def unavailable_command_inspection(
                 if native_evaluation_failed
                 else "Native inspection is unavailable. Check native runtime and command-control status."
             ),
+            "recovery": (
+                "Re-run the Guard scan or repair the native runtime; the command stays blocked "
+                "until evaluation succeeds."
+                if native_evaluation_failed
+                else "Verify the native runtime is installed and command control is healthy, then retry."
+            ),
             "normalized_command": normalized_command,
             "wrapper_chain": wrapper_chain,
         },

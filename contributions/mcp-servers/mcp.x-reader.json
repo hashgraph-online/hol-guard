@@ -17,7 +17,7 @@
   "launch": {
     "kind": "package-launcher",
     "command": "uvx",
-    "package": "git+https://github.com/runesleo/x-reader.git"
+    "package": "git+https://github.com/runesleo/x-reader.git@8a5bcdaf36f23ac6d3b5f23583003f54bb610c31"
   },
   "riskClasses": ["external-content-ingestion", "local-content-read"],
   "tools": [

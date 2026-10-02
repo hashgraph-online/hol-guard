@@ -80,6 +80,7 @@ def test_main_runtime_context_rejects_saved_identity_after_only_interpreted_entr
     launcher_name: str,
     launch_args: tuple[str, ...],
     entrypoint_relative: str,
+    native_context_digest: Path,
 ) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()

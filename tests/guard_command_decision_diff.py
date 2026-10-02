@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import os
 import sys
 import time
 import types
@@ -479,7 +480,7 @@ def _main() -> None:
             pending = pending_decision_diff_regen()
         except ImportError:
             pending = False
-        if pending:
+        if pending and os.environ.get("HOL_GUARD_STRICT_DECISION_REPORT") != "1":
             print("decision-diff report is regen-owned; branch defers to post-merge regen")
             return
         if REPORT_PATH.read_bytes() != payload:

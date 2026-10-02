@@ -36,8 +36,9 @@ SIGNATURE_VECTOR = ROOT / "contracts/managed-controls/v1/policy-bundle-v2-extens
 BUNDLE_TEST = ROOT / "tests/test_policy_bundle_delivery_runtime.py"
 TRUST_TEST = ROOT / "tests/test_guard_extension_trust.py"
 DECISION_DIFF = ROOT / "tests/fixtures/guard-command-corpus/decision-diff-report.json"
-COMPILER = ROOT / "rust/target/release/guard-command-source"
-RUNTIME = ROOT / "rust/target/release/hol-guard-runtime"
+TARGET_DIR = ROOT / "rust/target"
+COMPILER = TARGET_DIR / "release/guard-command-source"
+RUNTIME = TARGET_DIR / "release/hol-guard-runtime"
 TOOLCHAIN = "1.88.0"
 
 
@@ -119,6 +120,8 @@ def build_native_binaries() -> None:
                 "build",
                 "--locked",
                 "--release",
+                "--target-dir",
+                str(TARGET_DIR),
                 "--manifest-path",
                 str(ROOT / "rust/Cargo.toml"),
                 "-p",

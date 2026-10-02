@@ -1462,15 +1462,20 @@ def test_runtime_fingerprint_reuses_content_hash_when_tree_signature_matches(tmp
 
 
 def test_desktop_ensure_uses_post_update_timeout(monkeypatch):
+    monkeypatch.delenv("HOL_GUARD_HOOK_WORKER_READY_TIMEOUT_SECONDS", raising=False)
+    margin = daemon_manager_module.GUARD_DAEMON_START_TIMEOUT_MARGIN_SECONDS
+    worker_floor = daemon_manager_module.hook_worker_ready_timeout(0.0)
+    # The start deadline is the larger of the base constant and the worker
+    # ready floor plus margin, so the client always outlasts a healthy worker.
     monkeypatch.setenv("HOL_GUARD_DESKTOP", "1")
-    assert (
-        daemon_manager_module._default_guard_daemon_start_timeout()
-        == daemon_manager_module.GUARD_DAEMON_POST_UPDATE_START_TIMEOUT_SECONDS
+    assert daemon_manager_module._default_guard_daemon_start_timeout() == max(
+        daemon_manager_module.GUARD_DAEMON_POST_UPDATE_START_TIMEOUT_SECONDS,
+        worker_floor + margin,
     )
     monkeypatch.delenv("HOL_GUARD_DESKTOP")
-    assert (
-        daemon_manager_module._default_guard_daemon_start_timeout()
-        == daemon_manager_module.GUARD_DAEMON_START_TIMEOUT_SECONDS
+    assert daemon_manager_module._default_guard_daemon_start_timeout() == max(
+        daemon_manager_module.GUARD_DAEMON_START_TIMEOUT_SECONDS,
+        worker_floor + margin,
     )
 
 

@@ -78,6 +78,7 @@ class TestStdioProxyScrubbing:
                 captured_env.update(kwargs.get("env", {}))
                 self.stdin = None
                 self.stdout = None
+                self.stderr = None
                 self.returncode = 0
 
             def poll(self) -> int:
@@ -89,6 +90,12 @@ class TestStdioProxyScrubbing:
             def terminate(self) -> None:
                 pass
 
+        # The Popen fake also intercepts the native digest client's spawn;
+        # stub the env-hash seam — scrubbing, not hashing, is under test.
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.proxy.stdio.build_configured_environment_hash",
+            lambda *_args, **_kwargs: "0" * 64,
+        )
         with mock.patch("codex_plugin_scanner.guard.proxy.stdio.subprocess.Popen", FakePopen):
             proxy = StdioGuardProxy(
                 command=["echo", "hello"],
@@ -118,6 +125,7 @@ class TestRuntimeMcpProxyScrubbing:
                 captured_env.update(kwargs.get("env", {}))
                 self.stdin = None
                 self.stdout = None
+                self.stderr = None
                 self.returncode = 0
 
             def poll(self) -> int:
@@ -139,6 +147,12 @@ class TestRuntimeMcpProxyScrubbing:
         store = type("MockStore", (), {"get_managed_install": lambda self, h: None})()
         config = type("MockConfig", (), {})()
 
+        # See the stdio variant: the Popen fake would also intercept the
+        # native digest client's spawn, so the hash seam is stubbed.
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.proxy.runtime_mcp.build_configured_environment_hash",
+            lambda *_args, **_kwargs: "0" * 64,
+        )
         with mock.patch("codex_plugin_scanner.guard.proxy.runtime_mcp.subprocess.Popen", FakePopen):
             proxy = RuntimeMcpGuardProxy(
                 harness="codex",

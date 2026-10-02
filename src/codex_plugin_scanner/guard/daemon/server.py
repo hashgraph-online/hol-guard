@@ -119,6 +119,7 @@ from ..directory_path_authority import (
     validate_guard_directory_path,
     validated_owned_temporary_workspace,
 )
+from ..fork_safety import forget_in_child
 from ..harness_disconnect_gate import require_harness_disconnect_gate
 from ..insights_share import publish_insights_share
 from ..json_transport import escape_json_for_html
@@ -8499,6 +8500,7 @@ class GuardDaemonServer:
             self._cloud_review_sync_worker = start_cloud_sync_sync_worker(
                 self._server.store,
                 self._cloud_review_sync_worker,
+                on_authority_changed=self._start_command_queue_after_authority,
             )
             self._start_command_activity_maintenance()
             self._start_onefile_extraction_reclaim()
@@ -8561,7 +8563,10 @@ class GuardDaemonServer:
             from ..runtime.cloud_review_sync_worker import refresh_cloud_review_sync_worker
 
             self._cloud_review_sync_worker, sync_running = refresh_cloud_review_sync_worker(
-                self._server.store, self._cloud_review_sync_worker, shutting_down=self._shutdown_started.is_set()
+                self._server.store,
+                self._cloud_review_sync_worker,
+                shutting_down=self._shutdown_started.is_set(),
+                on_authority_changed=self._start_command_queue_after_authority,
             )
         finally:
             self._finish_service_lock.release()
@@ -8570,6 +8575,17 @@ class GuardDaemonServer:
             "running": running,
             "sync_running": sync_running,
         }
+
+    def _start_command_queue_after_authority(self) -> bool:
+        if self._shutdown_started.is_set() or not self._finish_service_lock.acquire(blocking=False):
+            return False
+        try:
+            if not self._owned_service_ready or self._shutdown_started.is_set():
+                return False
+            self._command_queue_worker = start_command_queue_worker(self._server.store, self._command_queue_worker)
+            return True
+        finally:
+            self._finish_service_lock.release()
 
     def _reconcile_runtime_artifacts_best_effort(self) -> None:
         """Align existing Guard-owned artifacts before reporting daemon_ready."""
@@ -8831,6 +8847,16 @@ class GuardDaemonServer:
                 contained = runtime_hook_evidence_writer.stop(timeout_seconds=1.0) is not False and contained
             except Exception:
                 contained = False
+        hook_worker = getattr(self._server, "hook_worker", None)
+        if hook_worker is not None:
+            try:
+                close_contained = getattr(hook_worker, "close_contained", None)
+                if callable(close_contained):
+                    contained = close_contained() is not False and contained
+                else:
+                    contained = hook_worker.close() is not False and contained
+            except Exception:
+                contained = False
         hook_process_runner = getattr(self._server, "hook_process_runner", None)
         if hook_process_runner is not None:
             try:
@@ -8850,7 +8876,7 @@ class GuardDaemonServer:
             )
         with suppress(Exception):
             self._server.store.clear_runtime_state(session_id=self._server.runtime_session_id)
-        if contained and self._is_quarantined():
+        if contained and (self._thread is None or self._is_quarantined()):
             try:
                 self._server.server_close()
             except Exception:
@@ -9324,3 +9350,6 @@ def _int_query_value(query: str, key: str) -> int:
         return int(str(raw_value))
     except ValueError:
         return 0
+
+
+forget_in_child(GuardDaemonServer._quarantined_services)

@@ -105,7 +105,7 @@ fn canonical_digest<T: Serialize>(value: &T, maximum: usize, code: &str) -> Resu
     Ok(digest_bytes(&bytes))
 }
 
-fn binding_digest(label: &str, values: &[&str]) -> Result<String, String> {
+pub(super) fn binding_digest(label: &str, values: &[&str]) -> Result<String, String> {
     let mut normalized = values
         .iter()
         .map(|value| value.trim())

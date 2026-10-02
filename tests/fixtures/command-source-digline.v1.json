@@ -16552,7 +16552,6 @@
           "command.mcp-instapods",
           "command.mcp-pr-ui-compare",
           "command.mcp-reaper",
-          "command.mcp-x-reader",
           "command.noodle",
           "command.ollama",
           "command.probe",
@@ -16803,11 +16802,11 @@
       "enabled_extensions": [
         "command.digline"
       ],
-      "expected_action": "block",
+      "expected_action": "review",
       "expected_effective_segments": [
         0
       ],
-      "id": "module-promote-blocked",
+      "id": "module-promote-reviewed",
       "rule_id": "command.digline.promote"
     },
     {
@@ -16816,11 +16815,11 @@
       "enabled_extensions": [
         "command.digline"
       ],
-      "expected_action": "block",
+      "expected_action": "review",
       "expected_effective_segments": [
         0
       ],
-      "id": "module-run-blocked",
+      "id": "module-run-reviewed",
       "rule_id": "command.digline.run"
     },
     {

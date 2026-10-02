@@ -10,7 +10,11 @@ import pytest
 
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.review_event_wake import review_event_wake_signal
-from codex_plugin_scanner.guard.runtime import cloud_review_event_delivery, cloud_review_sync, cloud_review_sync_worker
+from codex_plugin_scanner.guard.runtime import (
+    cloud_review_event_delivery,
+    cloud_review_sync,
+    cloud_review_sync_worker,
+)
 from codex_plugin_scanner.guard.runtime.cloud_review_batching import (
     CLOUD_REVIEW_DEFAULT_BATCH_EVENTS,
     CLOUD_REVIEW_MAX_BATCH_BYTES,

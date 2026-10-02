@@ -88,7 +88,7 @@ def _runtime_hook_token(
     )
 
 
-def test_runtime_hook_permission_mode_changes_sandbox_identity(tmp_path: Path) -> None:
+def test_runtime_hook_permission_mode_changes_sandbox_identity(tmp_path: Path, native_context_digest: Path) -> None:
     config = _config(tmp_path)
     artifact = GuardArtifact(
         artifact_id="codex:project:runtime-permission-mode",
@@ -130,6 +130,7 @@ def test_runtime_hook_permission_mode_changes_sandbox_identity(tmp_path: Path) -
 def test_runtime_hook_evaluator_policy_version_is_the_only_changed_component(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    native_context_digest: Path,
 ) -> None:
     config = _config(tmp_path)
     artifact = GuardArtifact(
@@ -176,6 +177,7 @@ def _tool_call_token(*, artifact: GuardArtifact, config: GuardConfig) -> str:
 def test_mcp_tool_call_evaluator_policy_version_is_the_only_changed_component(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    native_context_digest: Path,
 ) -> None:
     config = _config(tmp_path)
     artifact = mcp_tool_calls_module.build_tool_call_artifact(
@@ -221,6 +223,7 @@ def _sensitive_read_token(*, artifact: GuardArtifact, config: GuardConfig) -> st
 def test_stdio_sensitive_read_evaluator_policy_version_is_the_only_changed_component(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    native_context_digest: Path,
 ) -> None:
     config = _config(tmp_path)
     artifact = GuardArtifact(
