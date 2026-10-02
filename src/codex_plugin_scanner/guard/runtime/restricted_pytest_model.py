@@ -232,6 +232,7 @@ class RestrictedPytestPlan:
     executable: Path
     allowed_executables: tuple[Path, ...]
     denied_capabilities: tuple[str, ...]
+    read_only_roots: tuple[Path, ...] = ()
 
     def to_evidence(self) -> dict[str, object]:
         return {

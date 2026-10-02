@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import stat
 import sys
 import tempfile
 from collections.abc import Mapping, Sequence
@@ -18,6 +19,55 @@ from .restricted_pytest_validation import (
     _resolve_workspace,
     _select_backend,
 )
+
+
+def _metadata_pointer(path: Path) -> str:
+    if path.is_symlink():
+        raise ValueError("symlinked Git metadata pointer")
+    with path.open("rb") as stream:
+        data = stream.read(4097)
+    if len(data) > 4096 or b"\x00" in data:
+        raise ValueError("invalid Git metadata pointer")
+    return data.decode("utf-8").strip()
+
+
+def _repository_read_roots(workspace: Path, cwd: Path) -> tuple[Path, ...]:
+    """Resolve only Git's linked metadata, never grant its parent checkout."""
+    try:
+        directory = cwd
+        while not (directory / ".git").exists():
+            if directory == workspace:
+                return ()
+            directory = directory.parent
+        pointer = directory / ".git"
+        if pointer.is_dir() and not pointer.is_symlink():
+            return ()
+        text = _metadata_pointer(pointer)
+        if not text.startswith("gitdir: ") or "\n" in text:
+            raise ValueError("invalid Git directory pointer")
+        target = Path(text.removeprefix("gitdir: "))
+        gitdir = (target if target.is_absolute() else directory / target).resolve(strict=True)
+        if not gitdir.is_dir():
+            raise ValueError("missing Git metadata")
+        common_pointer = gitdir / "commondir"
+        if common_pointer.exists():
+            common = (gitdir / _metadata_pointer(common_pointer)).resolve(strict=True)
+            relative = gitdir.relative_to(common)
+            if len(relative.parts) != 2 or relative.parts[0] != "worktrees":
+                raise ValueError("invalid linked worktree metadata")
+        else:
+            common = gitdir
+        if not common.name.endswith(".git") or not (common / "objects").is_dir() or not (common / "refs").is_dir():
+            raise ValueError("invalid common repository metadata")
+        for root in (gitdir, common):
+            metadata = root.stat()
+            if metadata.st_uid not in {0, os.getuid()} or metadata.st_mode & (stat.S_IWGRP | stat.S_IWOTH):
+                raise ValueError("untrusted repository metadata")
+        return tuple(dict.fromkeys((gitdir, common)))
+    except (OSError, ValueError, RuntimeError) as error:
+        raise RestrictedPytestError(
+            "git_restricted_invalid_metadata", "Git metadata could not be safely resolved."
+        ) from error
 
 
 def prepare_restricted_git(command: Sequence[str], *, workspace: Path, cwd: Path | None = None) -> RestrictedPytestPlan:
@@ -64,6 +114,7 @@ def prepare_restricted_git(command: Sequence[str], *, workspace: Path, cwd: Path
         command=transformed,
         executable=executable,
         allowed_executables=(executable,),
+        read_only_roots=_repository_read_roots(root, directory),
         denied_capabilities=(
             "workspace-write",
             "workspace-credential-read",

@@ -40,7 +40,8 @@ def test_fresh_native_deny_prevents_execution(monkeypatch, tmp_path):
 
 
 @pytest.mark.skipif(sys.platform != "darwin" or not shutil.which("sandbox-exec"), reason="macOS OS boundary")
-def test_actual_git_inspection_does_not_invoke_helpers(tmp_path, capfd):
+@pytest.mark.parametrize("linked", [False, True])
+def test_actual_git_inspection_does_not_invoke_helpers(tmp_path, capfd, linked):
     workspace = tmp_path / "project"
     workspace.mkdir()
     executable = shutil.which("git")
@@ -65,6 +66,12 @@ def test_actual_git_inspection_does_not_invoke_helpers(tmp_path, capfd):
         "-m",
         "fixture",
     )
+    repository = workspace
+    if linked:
+        linked_workspace = tmp_path / "linked"
+        invoke("worktree", "add", "-b", "fixture-linked", str(linked_workspace))
+        workspace = linked_workspace
+        source = workspace / "example.txt"
     source.write_text("new\n")
     marker = workspace / "unexpected-helper"
     helper = workspace / "helper.sh"
@@ -74,8 +81,26 @@ def test_actual_git_inspection_does_not_invoke_helpers(tmp_path, capfd):
     invoke("config", "core.fsmonitor", str(helper))
     for operation in (("diff", "--stat"), ("diff", "--check"), ("log", "--oneline", "-1")):
         plan = git.prepare_restricted_git(["git", *operation], workspace=workspace)
+        if linked:
+            assert repository not in plan.read_only_roots
+            assert (repository / ".git").resolve() in plan.read_only_roots
         assert git.run_restricted_git(plan, timeout_seconds=20) == 0
     output = capfd.readouterr().out
     assert "example.txt" in output and "fixture" in output
     assert source.read_text() == "new\n"
     assert not marker.exists()
+
+
+@pytest.mark.parametrize("pointer", ["gitdir: /\n", "gitdir: /tmp\n", "not a git pointer\n"])
+def test_metadata_pointer_cannot_grant_arbitrary_host_root(tmp_path, pointer):
+    (tmp_path / ".git").write_text(pointer)
+    with pytest.raises(RestrictedPytestError):
+        git._repository_read_roots(tmp_path, tmp_path)
+
+
+def test_symlinked_metadata_pointer_is_not_a_read_grant(tmp_path):
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (tmp_path / ".git").symlink_to(outside, target_is_directory=True)
+    with pytest.raises(RestrictedPytestError):
+        git._repository_read_roots(tmp_path, tmp_path)

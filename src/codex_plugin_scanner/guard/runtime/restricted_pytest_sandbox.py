@@ -100,6 +100,8 @@ def _restricted_environment(
 
 
 def _backend_argv(plan: RestrictedPytestPlan, *, private_root: Path) -> list[str]:
+    if plan.read_only_roots and plan.profile_version != "git-readonly-v1":
+        raise RestrictedPytestError(PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE, "Unexpected extra read grants.")
     if plan.backend == "macos-seatbelt":
         profile = _macos_profile(plan, private_root=private_root)
         return [str(plan.backend_executable), "-p", profile, "--", *plan.command]
@@ -108,6 +110,7 @@ def _backend_argv(plan: RestrictedPytestPlan, *, private_root: Path) -> list[str
 
 def _macos_profile(plan: RestrictedPytestPlan, *, private_root: Path) -> str:
     read_roots = [plan.workspace, private_root]
+    read_roots.extend(plan.read_only_roots)
     read_roots.extend(path for path in _MACOS_READ_ROOTS if path.exists())
     read_roots.extend(_runtime_read_roots(plan))
     read_files = [path for path in _MACOS_READ_FILES if path.exists()]
