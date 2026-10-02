@@ -179,7 +179,8 @@ def _macos_profile(plan: RestrictedPytestPlan, *, private_root: Path) -> str:
             f"(allow file-write* {write_filters})",
             *(
                 _read_only_credential_denials(
-                    hide_metadata=plan.profile_version in {"vitest-readonly-v1", "node-build-output-v1"}
+                    hide_metadata=plan.profile_version
+                    in {"vitest-readonly-v1", "node-build-output-v1", PYTEST_READ_ONLY_PROFILE_VERSION}
                 )
                 if read_only_workspace
                 else ()
