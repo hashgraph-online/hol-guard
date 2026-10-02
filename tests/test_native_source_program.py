@@ -12,6 +12,7 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.runtime.generated_command_catalog_loader import load_generated_command_catalog_bytes
 from tests.support.extension_freshness import requires_fresh_decision_diff, requires_fresh_projections
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -72,6 +73,37 @@ def build() -> dict:
 @pytest.fixture(scope="module")
 def compiled(compiler: Path, build: dict) -> dict:
     return compile_request(compiler, build)
+
+
+def test_extension_directory_renders_all_canonical_sources(
+    build: dict, compiled: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Pending sources must render even when the committed directory awaits regeneration."""
+    program = compiled["program"]
+    catalog = {
+        "schema": "guard.command-catalog.v1",
+        "catalog": compiled["catalog"],
+        "catalog_digest": program["catalog_digest"],
+        "program_digest": program["program_digest"],
+        "source_digest": compiled["source_digest"],
+        "implementation_digest": compiled["implementation_digest"],
+    }
+    registry = load_generated_command_catalog_bytes(canonical(catalog), canonical(program))
+    renderer = runpy.run_path(str(ROOT / "scripts/render_command_extension_directory.py"))
+    monkeypatch.setitem(renderer["render_catalog"].__globals__, "BUILT_IN_COMMAND_EXTENSION_REGISTRY", registry)
+    current = (ROOT / "docs/guard/extensions/README.md").read_text(encoding="utf-8")
+    rendered = renderer["render_document"](current)
+    assert renderer["render_document"](rendered) == rendered
+    for source in build["sources"]:
+        extension = source["extension"]
+        identity = extension["extension_id"]
+        description = " ".join(extension["description"].split()).replace("|", "\\|")
+        assert rendered.count(f"`{identity}`") == 1
+        assert f"| `{identity}` | {description} | {len(extension['rules'])} |" in rendered
+        if identity in build["trust"]["classes"]["external"]:
+            assert f"| `{identity}` | {description} | {len(extension['rules'])} | External opt-in |" in rendered
+    assert rendered.split(renderer["START_MARKER"], 1)[0] == current.split(renderer["START_MARKER"], 1)[0]
+    assert rendered.split(renderer["END_MARKER"], 1)[1] == current.split(renderer["END_MARKER"], 1)[1]
 
 
 @pytest.fixture
