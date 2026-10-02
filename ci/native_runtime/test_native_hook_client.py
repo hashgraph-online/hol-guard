@@ -139,6 +139,7 @@ def test_native_hook_client_recovers_after_supervisor_exit(
     owner_process_id = state["owner_process_id"]
     assert isinstance(owner_process_id, int) and owner_process_id > 0
     _terminate_process(owner_process_id)
+    time.sleep(0.01)
     recovered = _invoke(runtime, state_dir, request)
     assert _result(recovered)["minimum_action"] == "allow"
     assert len(_state_files(state_dir)) == 1

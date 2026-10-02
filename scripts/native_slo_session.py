@@ -26,8 +26,9 @@ from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.native_resident_client import close_native_resident_clients
 from codex_plugin_scanner.guard.native_runtime import native_runtime_health
 from codex_plugin_scanner.guard.store import GuardStore
-from scripts.native_slo_adapter import Observation, is_allowed, payload, route_counts, route_delta
+from scripts.native_slo_adapter import Observation, is_allowed, payload
 from scripts.native_slo_contract import MAX_READINESS_P95_MS
+from scripts.native_slo_route_provenance import RequestRouteTracker
 
 _MAX_HTTP_RESPONSE_BYTES = 2 * 1024 * 1024
 _CAPACITY_FAIL_SAFE = {
@@ -324,6 +325,9 @@ class AdapterSession:
         self.workspace.mkdir(mode=0o700)
         self.store = GuardStore(self.guard_home)
         self.daemon = GuardDaemonServer(self.store, host="127.0.0.1", port=0)
+        self._route_tracker = RequestRouteTracker(
+            self.daemon._server.hook_process_runner, self.daemon._server.hook_worker
+        )
         self.runtime = runtime
         self.readiness_ms = 0.0
         self._connection: HTTPConnection | None = None
@@ -390,41 +394,51 @@ class AdapterSession:
         size_class: str,
         request_payload: Mapping[str, object] | None = None,
     ) -> Observation:
-        request = request_payload or payload(event, size_class)
-        before = route_counts(self.daemon._server.hook_worker.metrics.snapshot())
+        enclosing_started = time.perf_counter()
+        request, token = self._route_tracker.begin(request_payload or payload(event, size_class))
         started = time.perf_counter()
-        response = _request(
-            self.daemon,
-            guard_home=self.guard_home,
-            workspace=self.workspace,
-            harness=harness,
-            request_payload=request,
-            connection=self._connection if threading.get_ident() == self._owner_thread_id else None,
-        )
-        elapsed_ms = (time.perf_counter() - started) * 1_000.0
-        after = route_counts(self.daemon._server.hook_worker.metrics.snapshot())
+        try:
+            response = _request(
+                self.daemon,
+                guard_home=self.guard_home,
+                workspace=self.workspace,
+                harness=harness,
+                request_payload=request,
+                connection=self._connection if threading.get_ident() == self._owner_thread_id else None,
+            )
+            elapsed_ms = (time.perf_counter() - started) * 1_000.0
+        finally:
+            route = self._route_tracker.finish(token)
+        allowed = is_allowed(event, response)
+        overloaded = _is_explicit_capacity_response(response)
+        enclosing_ms = (time.perf_counter() - enclosing_started) * 1_000.0
         return Observation(
             harness,
             event,
             size_class,
             elapsed_ms,
-            route_delta(before, after),
-            is_allowed(event, response),
-            _is_explicit_capacity_response(response),
+            route,
+            allowed,
+            overloaded,
+            enclosing_latency_ms=enclosing_ms,
         )
 
     def native_overload_count(self) -> int:
-        """Return the process-local native overload counter for this session."""
-
         return native_runtime_health(self.guard_home).overloads
 
     def close(self) -> None:
         try:
+            self._close()
+        finally:
+            if (tracker := getattr(self, "_route_tracker", None)) is not None:
+                tracker.close()
+
+    def _close(self) -> None:
+        try:
             if self._connection is not None:
                 self._connection.close()
         finally:
-            # Stop the native resident while worker-owned persistent clients
-            # still exist so their supervisor reapers can verify containment.
+            # Stop the resident before worker clients disappear, preserving containment evidence.
             with suppress(Exception):
                 self.stop_resident()
             try:

@@ -98,6 +98,25 @@ fn normalizes_harness_event_and_extracts_pretool_command() {
 }
 
 #[test]
+fn directory_change_allow_reaches_host_hook_receipts() {
+    for harness in ["zcode", "claude-code"] {
+        let mut request = envelope(
+            "PreToolUse",
+            serde_json::json!({
+                "tool_name": "Bash",
+                "tool_input": {"command": "cd ~/CascadeProjects/project"}
+            }),
+        );
+        request.harness = harness.to_owned();
+        let bytes = evaluate_isolated(request).unwrap();
+        let result: GuardHookEdgeResultV2 = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(result.result["minimum_action"], "allow", "{harness}");
+        assert_eq!(result.receipt.decision, "allow", "{harness}");
+        assert_eq!(result.receipt.authority, "rust");
+    }
+}
+
+#[test]
 fn user_prompt_bypass_requires_a_native_block_and_bound_receipt() {
     let bytes = evaluate_isolated(envelope(
         "UserPromptSubmit",
