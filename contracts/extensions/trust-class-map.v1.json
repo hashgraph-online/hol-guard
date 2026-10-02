@@ -83,6 +83,7 @@
       "command.cogext",
       "command.ctty",
       "command.digline",
+      "command.faf-cli",
       "command.genclave",
       "command.gitsync",
       "command.mcp-filesystem",
