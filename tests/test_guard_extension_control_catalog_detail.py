@@ -17,6 +17,7 @@ from codex_plugin_scanner.guard.runtime.extension_control_authority import (
 from codex_plugin_scanner.guard.runtime.extension_control_contract import CONTROL_SCHEMA_VERSION
 from codex_plugin_scanner.guard.runtime.extension_control_limits import advertised_extension_control_limits
 from codex_plugin_scanner.guard.runtime.extension_control_runtime import ExtensionControlRuntime
+from codex_plugin_scanner.guard.runtime.mcp_server_contribution import catalog_id_for_mcp_id
 from codex_plugin_scanner.guard.store import GuardStore
 
 _FIXTURE = Path(__file__).parent / "fixtures" / "extension-controls" / "catalog-baseline.v1.json"
@@ -71,16 +72,16 @@ def test_catalog_identity_matches_authored_sources_and_stable_api_contract() -> 
     root = Path(__file__).resolve().parents[1]
     expected_ids = {
         json.loads(path.read_bytes())["extension"]["extension_id"]
-        for path in (root / "contributions/command-sources").glob("command.*.json")
+        for path in (root / "contributions/command-sources").glob("*.json")
     }
     for path in (root / "contributions/mcp-servers").glob("*.json"):
         source_id = json.loads(path.read_bytes())["id"]
         assert source_id.startswith("mcp.")
-        expected_ids.add("command.mcp-" + source_id.removeprefix("mcp."))
+        expected_ids.add(catalog_id_for_mcp_id(source_id))
     assert set(actual["extension_ids"]) == expected_ids
     assert actual["extension_count"] == len(expected_ids)
     registry = {item.extension_id: item for item in BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions}
-    for path in (root / "contributions/command-sources").glob("command.*.json"):
+    for path in (root / "contributions/command-sources").glob("*.json"):
         source = json.loads(path.read_bytes())["extension"]
         extension = registry[source["extension_id"]]
         permissions = {item.permission_id: item for item in extension.permissions}

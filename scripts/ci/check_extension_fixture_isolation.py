@@ -60,6 +60,27 @@ def acceptance_source(root: Path) -> dict:
     return source
 
 
+def contributor_cli() -> Path:
+    """Exercise the installed console entry point used by contributors."""
+    binary = Path(sys.executable).with_name("hol-guard.exe" if os.name == "nt" else "hol-guard")
+    require(binary.is_file(), "the active Python environment has no hol-guard console entry point")
+    return binary
+
+
+def portable_fixture_paths(root: Path) -> list[Path]:
+    paths = sorted((root / "tests/fixtures").glob("command-source-*.v1.json"))
+    require(bool(paths), "no portable command fixtures found")
+    return [paths[0], root / "rust/crates/guard-command/tests/fixtures/command-source-example.v1.json"]
+
+
+def command_descriptor_names(root: Path) -> set[str]:
+    """Every authored JSON source contributes a descriptor identified by its ID."""
+    return {
+        json.loads(path.read_bytes())["extension"]["extension_id"] + ".json"
+        for path in (root / "contributions/command-sources").glob("*.json")
+    }
+
+
 def exercise(root: Path, target: Path, results: list[dict[str, object]]) -> None:
     env = dict(os.environ)
     env.update(
@@ -116,9 +137,7 @@ def exercise(root: Path, target: Path, results: list[dict[str, object]]) -> None
         require(payload.get("ok") is True and payload.get("targetCommandsExecuted") == 0, "unsafe preparation")
         result = run(
             [
-                sys.executable,
-                "-m",
-                "codex_plugin_scanner",
+                str(contributor_cli()),
                 "extensions",
                 "handoff",
                 "--repo",
@@ -156,10 +175,7 @@ def exercise(root: Path, target: Path, results: list[dict[str, object]]) -> None
         seconds=round(time.monotonic() - started, 2),
     )
 
-    fixture_paths = [
-        sorted((root / "tests/fixtures").glob("command-source-*.v1.json"))[0],
-        root / "rust/crates/guard-command/tests/fixtures/command-source-example.v1.json",
-    ]
+    fixture_paths = portable_fixture_paths(root)
     for path in fixture_paths:
         original = path.read_bytes()
         try:
@@ -251,7 +267,7 @@ def exercise(root: Path, target: Path, results: list[dict[str, object]]) -> None
     run(["uv", "build", "--wheel", "--out-dir", str(dist)], root, env)
     wheels = list(dist.glob("*.whl"))
     require(len(wheels) == 1, "ambiguous wheel output")
-    expected_commands = {path.name for path in (root / "contributions/command-sources").glob("command.*.json")}
+    expected_commands = command_descriptor_names(root)
     expected_mcp = {path.name for path in (root / "contributions/mcp-servers").glob("*.json")}
     with zipfile.ZipFile(wheels[0]) as wheel:
         for suffix, expected in (("extensions", expected_commands), ("mcp_servers", expected_mcp)):
