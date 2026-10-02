@@ -337,14 +337,7 @@ def test_cleanup_contract_requires_exclusion_or_physical_retirement_record() -> 
 
 
 def test_retired_python_oracle_compat_loader_is_absent() -> None:
-    retired = (
-        ROOT
-        / "src"
-        / "codex_plugin_scanner"
-        / "guard"
-        / "cli"
-        / "commands_hook_compat_loader.py"
-    )
+    retired = ROOT / "src" / "codex_plugin_scanner" / "guard" / "cli" / "commands_hook_compat_loader.py"
     assert not retired.exists()
 
 

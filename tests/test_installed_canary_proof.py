@@ -73,21 +73,22 @@ def test_installed_corpus_reports_malformed_json_clearly(tmp_path: Path, monkeyp
         _run_corpus(tmp_path)
 
 
-@pytest.mark.usefixtures("native_hook_force")
-def test_unavailable_native_harness_records_prevention(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Exercise the installed native route in the child process; the unit-test
-    # oracle callbacks do not cross the subprocess boundary with their env vars.
+def test_disabled_native_harness_records_prevention(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The runner must establish its outage even when the parent uses auto and
+    # diagnostic shortcuts; none of these settings may leak into the child.
     monkeypatch.setenv("HOL_GUARD_NATIVE", "auto")
-    monkeypatch.delenv("HOL_GUARD_PYTHON_ORACLE", raising=False)
-    monkeypatch.delenv("HOL_GUARD_NATIVE_DIAGNOSTIC", raising=False)
+    monkeypatch.setenv("HOL_GUARD_PYTHON_ORACLE", "1")
+    monkeypatch.setenv("HOL_GUARD_NATIVE_DIAGNOSTIC", "1")
     run = subprocess.run
     hook_responses: list[dict[str, object]] = []
 
     def capture_native_hook(command: list[str], **kwargs):
         is_hook = command[:3] == [sys.executable, "-m", "codex_plugin_scanner.cli"]
         if is_hook:
-            guard_home = Path(command[command.index("--guard-home") + 1])
-            assert (guard_home / "native-runtime").is_file()
+            assert kwargs["env"]["HOL_GUARD_NATIVE"] == "off"
+            assert kwargs["env"]["PYTHONPATH"] == ""
+            assert "HOL_GUARD_PYTHON_ORACLE" not in kwargs["env"]
+            assert "HOL_GUARD_NATIVE_DIAGNOSTIC" not in kwargs["env"]
         completed = run(command, **kwargs)
         if is_hook:
             assert completed.returncode == 0, (completed.stdout, completed.stderr)
@@ -104,9 +105,8 @@ def test_unavailable_native_harness_records_prevention(monkeypatch: pytest.Monke
         "decision_reason_code": "policy",
     }
     assert len(hook_responses) == 1
-    # The blocked resident state directory makes unavailability deterministic;
-    # this unavailable request does not establish healthy enforcement proof.
-    assert hook_responses[0]["reason_code"] == "native_pre_tool_unavailable"
+    # Outage prevention is not evidence of healthy enforcement or execution.
+    assert hook_responses[0]["reason_code"] == "native_hook_disabled"
     assert hook_responses[0]["policy_action"] == "block"
 
 

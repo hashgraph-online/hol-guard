@@ -8500,6 +8500,7 @@ class GuardDaemonServer:
             self._cloud_review_sync_worker = start_cloud_sync_sync_worker(
                 self._server.store,
                 self._cloud_review_sync_worker,
+                on_authority_changed=self._start_command_queue_after_authority,
             )
             self._start_command_activity_maintenance()
             self._start_onefile_extraction_reclaim()
@@ -8562,7 +8563,10 @@ class GuardDaemonServer:
             from ..runtime.cloud_review_sync_worker import refresh_cloud_review_sync_worker
 
             self._cloud_review_sync_worker, sync_running = refresh_cloud_review_sync_worker(
-                self._server.store, self._cloud_review_sync_worker, shutting_down=self._shutdown_started.is_set()
+                self._server.store,
+                self._cloud_review_sync_worker,
+                shutting_down=self._shutdown_started.is_set(),
+                on_authority_changed=self._start_command_queue_after_authority,
             )
         finally:
             self._finish_service_lock.release()
@@ -8571,6 +8575,17 @@ class GuardDaemonServer:
             "running": running,
             "sync_running": sync_running,
         }
+
+    def _start_command_queue_after_authority(self) -> bool:
+        if self._shutdown_started.is_set() or not self._finish_service_lock.acquire(blocking=False):
+            return False
+        try:
+            if not self._owned_service_ready or self._shutdown_started.is_set():
+                return False
+            self._command_queue_worker = start_command_queue_worker(self._server.store, self._command_queue_worker)
+            return True
+        finally:
+            self._finish_service_lock.release()
 
     def _reconcile_runtime_artifacts_best_effort(self) -> None:
         """Align existing Guard-owned artifacts before reporting daemon_ready."""

@@ -88,6 +88,9 @@ _TRANSPORT_INTEGRITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_command_observations.py",
         "src/codex_plugin_scanner/guard/native_context.py",
         "src/codex_plugin_scanner/guard/daemon/hook_native_review_approval.py",
+        # Retry lineage is local diagnostic metadata. Its digests protect
+        # reattachment integrity but never authorize or evaluate an action.
+        "src/codex_plugin_scanner/guard/retry_lineage.py",
     }
 )
 _TRANSPORT_AUTHORITY_PATHS: Final = frozenset(

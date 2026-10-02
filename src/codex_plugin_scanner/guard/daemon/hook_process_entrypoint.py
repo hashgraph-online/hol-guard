@@ -53,13 +53,13 @@ def hook_worker_main(connection: Connection, configured_guard_home: str | None) 
     if os.name == "nt":
         windows_job = assign_current_process_to_windows_hook_job()
         if windows_job is None:
-            connection.send(("isolation_failed", None))
+            connection.send(("isolation_failed", {"reason_code": "hook_process_isolation_failed"}))
             return
     else:
         try:
             os.setsid()
         except OSError:
-            connection.send(("isolation_failed", None))
+            connection.send(("isolation_failed", {"reason_code": "hook_process_isolation_failed"}))
             return
     connection.send(
         (
@@ -83,15 +83,20 @@ def hook_worker_main(connection: Connection, configured_guard_home: str | None) 
     except BaseException:
         guardian_connection.close()
         evaluator_connection.close()
-        connection.send(("worker_failed", None))
+        connection.send(("worker_failed", {"reason_code": "hook_process_evaluator_spawn_failed"}))
         _hold_containment_anchor()
     evaluator_connection.close()
     try:
-        if not guardian_connection.poll(_HOOK_EVALUATOR_READY_TIMEOUT_SECONDS) or guardian_connection.recv() != (
-            "ready",
-            None,
-        ):
-            connection.send(("worker_failed", None))
+        if not guardian_connection.poll(_HOOK_EVALUATOR_READY_TIMEOUT_SECONDS):
+            connection.send(("worker_failed", {"reason_code": "hook_process_evaluator_ready_timeout"}))
+            _hold_containment_anchor()
+        try:
+            evaluator_ready = guardian_connection.recv()
+        except (EOFError, OSError):
+            connection.send(("worker_failed", {"reason_code": "hook_process_evaluator_pipe_failed"}))
+            _hold_containment_anchor()
+        if evaluator_ready != ("ready", None):
+            connection.send(("worker_failed", {"reason_code": "hook_process_evaluator_ready_protocol"}))
             _hold_containment_anchor()
         connection.send(("ready", None))
         while True:
@@ -109,7 +114,7 @@ def hook_worker_main(connection: Connection, configured_guard_home: str | None) 
                 guardian_connection.send(raw_message)
                 response = guardian_connection.recv()
             except (BrokenPipeError, EOFError, OSError):
-                connection.send(("worker_failed", None))
+                connection.send(("worker_failed", {"reason_code": "hook_process_evaluator_pipe_failed"}))
                 _hold_containment_anchor()
             connection.send(response)
     finally:

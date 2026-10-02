@@ -10,12 +10,22 @@ from unittest.mock import patch
 
 import pytest
 
+from codex_plugin_scanner.guard.daemon.hook_native_review_approval import _native_review_action_envelope
 from codex_plugin_scanner.guard.daemon.runtime_hook_evidence_writer import (
     RuntimeHookEvidenceWriter,
     _NativeDecisionReceiptRecord,
 )
-from codex_plugin_scanner.guard.native_decision_receipt import receipt_matches_edge, validate_native_decision_receipt
+from codex_plugin_scanner.guard.native_decision_receipt import (
+    canonical_receipt_bytes,
+    receipt_matches_edge,
+    validate_native_decision_receipt,
+)
 from codex_plugin_scanner.guard.native_response_decoder import response_from_payload
+from codex_plugin_scanner.guard.runtime.actions import (
+    GuardActionEnvelope,
+    normalize_harness_payload,
+    stable_action_hash,
+)
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_native_decision_receipts import native_decision_receipt_schema_statement
 
@@ -50,7 +60,19 @@ def _receipt(**overrides: object) -> dict[str, object]:
     identity = {
         "schema": "guard-native-hook-decision-identity.v1",
         "version": 1,
-        **{key: value[key] for key in value if key not in {"schema", "version", "authority", "decision_id"}},
+        **{
+            key: value[key]
+            for key in value
+            if key
+            not in {
+                "schema",
+                "version",
+                "authority",
+                "decision_id",
+                "origin_authentication",
+                "execution_intent_digest",
+            }
+        },
     }
     value["decision_id"] = hashlib.sha256(
         json.dumps(identity, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode("utf-8")
@@ -70,6 +92,92 @@ def test_receipt_is_strictly_redacted_and_identity_bound() -> None:
     with_mutated_identity = dict(receipt)
     with_mutated_identity["reason_code"] = "native_other_reason"
     assert validate_native_decision_receipt(with_mutated_identity) is None
+
+
+def test_origin_authentication_is_optional_and_not_decision_identity() -> None:
+    legacy = _receipt()
+    sealed = _receipt(origin_authentication="e" * 64)
+    assert validate_native_decision_receipt(sealed) == sealed
+    assert sealed["decision_id"] == legacy["decision_id"]
+    assert canonical_receipt_bytes(sealed) == canonical_receipt_bytes(legacy)
+
+    malformed = dict(sealed)
+    malformed["origin_authentication"] = "E" * 64
+    assert validate_native_decision_receipt(malformed) is None
+    for field in _receipt():
+        missing_required = dict(sealed)
+        _ = missing_required.pop(field)
+        assert validate_native_decision_receipt(missing_required) is None
+    unknown = dict(sealed)
+    unknown["unexpected"] = True
+    assert validate_native_decision_receipt(unknown) is None
+
+
+def test_execution_intent_evidence_is_optional_and_not_decision_identity() -> None:
+    legacy = _receipt()
+    evidence = _receipt(execution_intent_digest="f" * 64)
+    assert validate_native_decision_receipt(evidence) == evidence
+    assert evidence["decision_id"] == legacy["decision_id"]
+    assert canonical_receipt_bytes(evidence) == canonical_receipt_bytes(legacy)
+    for invalid in (None, 1, "", "f" * 63, "F" * 64, "f" * 65):
+        malformed = dict(evidence)
+        malformed["execution_intent_digest"] = invalid
+        assert validate_native_decision_receipt(malformed) is None
+
+
+def test_sealed_receipt_is_detached_without_raw_input_leakage(tmp_path: Path) -> None:
+    receipt = _receipt(origin_authentication="f" * 64)
+    tool_input = {"command": "cat .env", "token": "private-token-value"}
+    payload = {
+        "tool_name": "Shell",
+        "tool_input": tool_input,
+    }
+    envelope = _native_review_action_envelope(
+        harness="cursor",
+        payload=payload,
+        workspace=tmp_path,
+        home_dir=tmp_path,
+        native_receipt=receipt,
+    )
+    assert envelope is not None
+    detached = envelope.get("native_origin_receipt")
+    assert isinstance(detached, dict)
+    assert detached == receipt
+    receipt["origin_authentication"] = "a" * 64
+    assert detached["origin_authentication"] == "f" * 64
+    assert "private-token-value" not in json.dumps(envelope, sort_keys=True)
+    tool_input["token"] = "changed-after-normalization"
+    assert "changed-after-normalization" not in json.dumps(envelope, sort_keys=True)
+
+    stored = GuardActionEnvelope.from_dict(envelope)
+    fresh = (
+        normalize_harness_payload("cursor", "PreToolUse", payload, workspace=tmp_path, home_dir=tmp_path)
+        .with_pre_execution_result("review")
+        .to_dict()
+    )
+    assert stored.action_id == fresh["action_id"]
+    assert stable_action_hash(stored) == stable_action_hash(GuardActionEnvelope.from_dict(fresh))
+
+    legacy = _native_review_action_envelope(
+        harness="cursor",
+        payload={"tool_name": "Shell", "tool_input": {"command": "cat .env"}},
+        workspace=tmp_path,
+        home_dir=tmp_path,
+        native_receipt=_receipt(),
+    )
+    assert legacy is not None
+    assert "native_origin_receipt" not in legacy
+
+    malformed = _receipt(origin_authentication="b" * 63)
+    malformed_envelope = _native_review_action_envelope(
+        harness="cursor",
+        payload={"tool_name": "Shell", "tool_input": {"command": "cat .env"}},
+        workspace=tmp_path,
+        home_dir=tmp_path,
+        native_receipt=malformed,
+    )
+    assert malformed_envelope is not None
+    assert "native_origin_receipt" not in malformed_envelope
 
 
 def test_prompt_receipt_requires_matching_native_prompt_result() -> None:
@@ -274,8 +382,10 @@ def test_prompt_receipt_persists_without_rewriting_tool_receipt_schema(tmp_path:
     assert store.record_native_decision_receipt(tool)
     assert store.record_native_decision_receipt(prompt)
     assert store.native_decision_receipt_count() == 2
-    assert store.get_native_decision_receipt(tool["decision_id"]) == tool
-    assert store.get_native_decision_receipt(prompt["decision_id"]) == prompt
+    tool_id, prompt_id = tool["decision_id"], prompt["decision_id"]
+    assert isinstance(tool_id, str) and isinstance(prompt_id, str)
+    assert store.get_native_decision_receipt(tool_id) == tool
+    assert store.get_native_decision_receipt(prompt_id) == prompt
     with store._connect() as connection:
         legacy = connection.execute(
             "select sql from sqlite_schema where type = 'table' and name = 'native_hook_decision_receipts'"
@@ -286,8 +396,8 @@ def test_prompt_receipt_persists_without_rewriting_tool_receipt_schema(tmp_path:
             "update native_prompt_decision_receipts set prompt_risk_classes_json = ? where decision_id = ?",
             ('["guard_bypass_intent"]', prompt["decision_id"]),
         )
-    assert store.get_native_decision_receipt(prompt["decision_id"]) is None
-    assert store.get_native_decision_receipt(tool["decision_id"]) == tool
+    assert store.get_native_decision_receipt(prompt_id) is None
+    assert store.get_native_decision_receipt(tool_id) == tool
 
 
 def test_existing_tool_receipt_schema_gains_prompt_storage_additively(tmp_path: Path) -> None:
@@ -308,8 +418,10 @@ def test_existing_tool_receipt_schema_gains_prompt_storage_additively(tmp_path: 
     )
     assert store.record_native_decision_receipt(existing)
     assert store.record_native_decision_receipt(prompt)
-    assert store.get_native_decision_receipt(existing["decision_id"]) == existing
-    assert store.get_native_decision_receipt(prompt["decision_id"]) == prompt
+    existing_id, prompt_id = existing["decision_id"], prompt["decision_id"]
+    assert isinstance(existing_id, str) and isinstance(prompt_id, str)
+    assert store.get_native_decision_receipt(existing_id) == existing
+    assert store.get_native_decision_receipt(prompt_id) == prompt
     with store._connect() as connection:
         legacy = connection.execute(
             "select sql from sqlite_schema where type = 'table' and name = 'native_hook_decision_receipts'"

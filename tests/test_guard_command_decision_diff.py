@@ -75,6 +75,26 @@ def test_report_cli_writes_and_checks_framed_digest(tmp_path: Path, monkeypatch)
         module._main()
 
 
+def test_report_cli_strict_check_does_not_defer_regen_owned_report(tmp_path: Path, monkeypatch) -> None:
+    from tests import guard_command_decision_diff as module
+    from tests.support import extension_freshness
+
+    monkeypatch.setattr(extension_freshness, "pending_decision_diff_regen", lambda: True)
+    monkeypatch.setenv("HOL_GUARD_STRICT_DECISION_REPORT", "1")
+    report = {"schema": "strict-synthetic-report"}
+    path = tmp_path / "decision-diff-report.json"
+    digest_path = path.with_name("decision-diff-report.framed-sha256")
+    monkeypatch.setattr(module, "REPORT_PATH", path)
+    monkeypatch.setattr(module, "_generate_decision_diff_report", lambda: (report, 1.0))
+    monkeypatch.setattr(sys, "argv", ["guard_command_decision_diff.py", "--write"])
+    module._main()
+    monkeypatch.setattr(sys, "argv", ["guard_command_decision_diff.py", "--check"])
+    module._main()
+    digest_path.write_text("0" * 64 + "\n", encoding="ascii")
+    with pytest.raises(SystemExit, match="framed digest is stale"):
+        module._main()
+
+
 def test_checked_in_report_and_framed_digest_are_an_exact_pair() -> None:
     report = _fixture()
     assert REPORT_PATH.read_bytes() == canonical_json_bytes(report)

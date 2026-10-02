@@ -151,13 +151,19 @@ def _push_snapshot(runtime: Path, state_dir: Path, request: bytes) -> None:
     assert isinstance(value, dict)
     snapshot = value["policy_snapshot"]
     assert isinstance(snapshot, dict)
-    result = subprocess.run(
-        (str(runtime), "resident-client", "--stdin", str(state_dir)),
-        input=_policy_snapshot_push_bytes_v3(snapshot),
-        check=False,
-        capture_output=True,
-        timeout=8,
-    )
+    try:
+        result = subprocess.run(
+            (str(runtime), "resident-client", "--stdin", str(state_dir)),
+            input=_policy_snapshot_push_bytes_v3(snapshot),
+            check=False,
+            capture_output=True,
+            timeout=8,
+        )
+    except subprocess.TimeoutExpired:
+        raise AssertionError(
+            "native policy push failed: native_policy_snapshot_push_timed_out; "
+            f"direct startup: {_startup_diagnostic(runtime, state_dir)}"
+        ) from None
     if result.returncode != 0:
         raise AssertionError(
             f"native policy push failed: {_native_diagnostic(result.stderr)}; "

@@ -525,6 +525,11 @@ jobs:
         with:
           persist-credentials: false
           ref: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || needs.build.outputs.source_sha }}
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        if: github.event_name == 'pull_request'
+        with:
+          version: "0.9.26"
+          enable-cache: true
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: distributions
@@ -577,6 +582,11 @@ jobs:
       - name: Verify native command program is current
         shell: bash
         env:
+          HOL_GUARD_BUILD_SHA: ${{ needs.build.outputs.source_sha }}
+          HOL_GUARD_PACKAGE_VERSION: ${{ needs.build.outputs.version }}
+          HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_HEX: ${{ vars.HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_HEX }}
+          HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_FINGERPRINT_HEX: ${{ vars.HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_FINGERPRINT_HEX }}
+          RUSTFLAGS: ${{ matrix.rustflags }}
           SOURCE_COMPILER: ${{ matrix.source_compiler }}
         run: |
           arguments=(--compiler "$SOURCE_COMPILER")
@@ -592,6 +602,38 @@ jobs:
           jq -n --slurpfile source rust/crates/guard-command/tests/fixtures/command-source-example.v1.json --slurpfile trust contracts/extensions/trust-class-map.v1.json \
             '{schema:"guard.command-extension-build.v1",sources:$source,mcp_sources:[],trust:$trust[0],base:"packaged"}' > source-build.json
           "$SOURCE_COMPILER" compile < source-build.json > source-compiled.json
+      - name: Rebuild Guard base wheel after projection regeneration
+        if: github.event_name == 'pull_request'
+        shell: bash
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          CURRENT_VERSION=$(uv run --no-project --with packaging==25.0 python scripts/sync_repo_version.py --check)
+          if [[ "$CURRENT_VERSION" != "$VERSION" ]]; then
+            uv run --no-project --with packaging==25.0 python scripts/sync_repo_version.py --version "$VERSION"
+          fi
+          BACKUP="$RUNNER_TEMP/hol-guard-pyproject.toml"
+          cp pyproject.toml "$BACKUP"
+          restore_pyproject() {
+            cp "$BACKUP" pyproject.toml
+          }
+          trap restore_pyproject EXIT
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("pyproject.toml")
+          text = path.read_text(encoding="utf-8")
+          start = text.index("[project.scripts]")
+          end = text.index("\n\n[project.urls]")
+          scripts = "[project.scripts]\n" \
+              'hol-guard = "codex_plugin_scanner.cli:main"\n' \
+              'plugin-guard = "codex_plugin_scanner.cli:main"\n' \
+              'hol-guard-eval = "codex_plugin_scanner.guard.evaluation_cli:main"'
+          path.write_text(text[:start] + scripts + text[end:], encoding="utf-8")
+          PY
+          uv build --wheel --out-dir "$RUNNER_TEMP/hol-guard-base-dist"
+          mv "$RUNNER_TEMP/hol-guard-base-dist/hol_guard-${VERSION}-py3-none-any.whl" \
+            "base-dist/hol_guard-${VERSION}-py3-none-any.whl"
       - name: Verify Linux runtime is static
         if: runner.os == 'Linux'
         shell: bash

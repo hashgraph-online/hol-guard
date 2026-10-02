@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -16,6 +18,9 @@ from codex_plugin_scanner.guard.runtime.exact_cloud_review import (
     exact_cloud_review_status,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from codex_plugin_scanner.guard.store_native_workspace_review import (
+    NATIVE_WORKSPACE_REVIEW_RECEIPT_STATE_PREFIX,
+)
 from tests.guard_exact_cloud_review_support import (
     add_review_request,
     connected_exact_review_store,
@@ -34,6 +39,32 @@ def _prepare(tmp_path: Path) -> GuardStore:
             ("consumed-receipt", "resolved-request", datetime.now(timezone.utc).isoformat()),
         )
     return store
+
+
+def _native_receipt(request_id: str) -> dict[str, object]:
+    fields = (
+        "claim_id",
+        "workspace_binding",
+        "device_binding",
+        "installation_binding",
+        "scope_binding",
+        "request_binding",
+        "action_binding",
+        "intent_binding",
+        "revision_binding",
+        "policy_binding",
+        "retry_scope_binding",
+        "request_snapshot_digest",
+        "authority_record_digest",
+        "envelope_digest",
+    )
+    return {
+        **{field: hashlib.sha256(field.encode()).hexdigest() for field in fields},
+        "request_id": request_id,
+        "decision": "allow",
+        "status": "verified",
+        "replayed": False,
+    }
 
 
 def _recover(store: GuardStore, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -66,6 +97,74 @@ def test_recovery_preserves_identity_consent_pending_events_and_replay_barrier(
     proof = remote_approval(restarted, "recover-pending", receipt_id="after-recovery")
     result = apply_exact_cloud_review(restarted, remote_approval=proof, expected_harness="codex")
     assert result.resolved_request["status"] == "resolved"
+
+
+def test_recovery_preserves_bound_native_receipt_for_lost_ack_and_skips_corrupt_rows(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = _prepare(tmp_path)
+    request = store.get_approval_request("recover-pending")
+    assert request is not None
+    receipt = _native_receipt("recover-pending")
+    assert (
+        store.resolve_native_workspace_review_request(
+            "recover-pending",
+            resolution_action="allow",
+            expected_request=request,
+            resolved_at="2026-09-27T00:00:00+00:00",
+            native_replayed=False,
+            native_receipt=receipt,
+        )["resolved"]
+        is True
+    )
+    for request_id in ("cross-request", "corrupt-request"):
+        add_review_request(store, review_request(request_id))
+        other = store.get_approval_request(request_id)
+        assert other is not None
+        assert (
+            store.resolve_native_workspace_review_request(
+                request_id,
+                resolution_action="allow",
+                expected_request=other,
+                resolved_at="2026-09-27T00:00:00+00:00",
+                native_replayed=False,
+                native_receipt=_native_receipt(request_id),
+            )["resolved"]
+            is True
+        )
+    with sqlite3.connect(store.path) as connection:
+        connection.execute(
+            "update sync_state set payload_json = ? where state_key = ?",
+            (
+                json.dumps({**receipt, "request_id": "recover-pending"}),
+                NATIVE_WORKSPACE_REVIEW_RECEIPT_STATE_PREFIX + "cross-request",
+            ),
+        )
+        connection.execute(
+            "update sync_state set payload_json = ? where state_key = ?",
+            (
+                "{malformed",
+                NATIVE_WORKSPACE_REVIEW_RECEIPT_STATE_PREFIX + "corrupt-request",
+            ),
+        )
+    _recover(store, monkeypatch)
+    restarted = GuardStore(store.guard_home)
+    assert restarted.get_sync_payload(NATIVE_WORKSPACE_REVIEW_RECEIPT_STATE_PREFIX + "recover-pending") == receipt
+    assert restarted.get_sync_payload(NATIVE_WORKSPACE_REVIEW_RECEIPT_STATE_PREFIX + "cross-request") is None
+    assert restarted.get_sync_payload(NATIVE_WORKSPACE_REVIEW_RECEIPT_STATE_PREFIX + "corrupt-request") is None
+
+    replay = {**receipt, "status": "replayed", "replayed": True}
+    resolved = restarted.get_approval_request("recover-pending")
+    assert resolved is not None
+    result = restarted.resolve_native_workspace_review_request(
+        "recover-pending",
+        resolution_action="allow",
+        expected_request=resolved,
+        resolved_at="2026-09-27T00:01:00+00:00",
+        native_replayed=True,
+        native_receipt=replay,
+    )
+    assert result["resolved"] is True and result["replayed"] is True
 
 
 def test_recovery_does_not_resurrect_revoked_consent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

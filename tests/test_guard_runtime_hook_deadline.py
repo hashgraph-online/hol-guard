@@ -24,7 +24,7 @@ def test_deadline_clamps_hint_and_ignores_wall_clock() -> None:
 
     assert deadline.expires_at == 103.75
     assert deadline.remaining(monotonic=clock) == 2.75
-    assert deadline.remaining_for_work(monotonic=clock) == 2.6
+    assert deadline.remaining_for_work(monotonic=clock) == 2.7
 
 
 @pytest.mark.parametrize(

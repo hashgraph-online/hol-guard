@@ -521,7 +521,7 @@ class TestHookWorkerOutputScanning:
             "tool_response": [
                 {
                     "type": "text",
-                    "text": 'destinationRole=tool_authentication\ncredential = \'prod-live-value\'\n',
+                    "text": "destinationRole=tool_authentication\ncredential = 'prod-live-value'\n",
                 }
             ],
         }

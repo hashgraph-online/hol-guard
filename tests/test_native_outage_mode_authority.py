@@ -19,6 +19,40 @@ from .native_policy_snapshot_test_fixtures import _config
 from .test_native_policy_snapshot_cache_binding import _write_resident_authority
 
 
+@pytest.mark.parametrize("failure", ["start", "submit", "stop"])
+def test_disabled_cli_evidence_failure_never_changes_denial(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure: str
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    store = GuardStore(guard_home, prime_policy_integrity=False)
+    writer = Mock()
+    if failure != "start":
+        getattr(writer, "submit_command_activity" if failure == "submit" else "stop").side_effect = RuntimeError(
+            "injected evidence failure"
+        )
+    factory = (
+        Mock(side_effect=RuntimeError("injected evidence failure")) if failure == "start" else Mock(return_value=writer)
+    )
+    monkeypatch.setattr(cli, "RuntimeHookEvidenceWriter", factory)
+    monkeypatch.setattr(cli, "_native_mode_requires_rust", lambda: False)
+    monkeypatch.setattr(cli, "native_mode_is_fail_safe_disabled", lambda: True)
+    responses = []
+    monkeypatch.setattr(cli, "_emit", lambda _name, value, _json: responses.append(value))
+    status = cli.route_native_hook(
+        Mock(harness="opencode", json=True),
+        config=None,
+        context=HarnessContext(home_dir=tmp_path, guard_home=guard_home, workspace_dir=None),
+        payload={"hook_event_name": "PreToolUse", "tool_input": {"command": "git diff --stat"}},
+        runtime_workspace=None,
+        store=store,
+    )
+    assert status == 0
+    assert responses[0]["policy_action"] == "block"
+    assert responses[0]["hookSpecificOutput"]["permissionDecision"] == "deny"
+    if failure != "start":
+        writer.stop.assert_called_once_with(timeout_seconds=0.25)
+
+
 @pytest.mark.parametrize("state", ["observe", "enforce", "missing", "expired", "tampered"])
 @pytest.mark.parametrize(
     "failure", ["worker_exception", "worker_none", "capacity", "disabled_legacy_path", "cli_disabled"]
@@ -50,7 +84,10 @@ def test_outage_mode_requires_authenticated_unexpired_snapshot(
         if state == "tampered":
             snapshot["mode"] = "observe"
         _write_resident_authority(guard_home, snapshot, master)
-    payload = {"hook_event_name": "PreToolUse", "tool_input": {"command": "printf fixture > output.txt"}}
+    payload: dict[str, object] = {
+        "hook_event_name": "PreToolUse",
+        "tool_input": {"command": "printf fixture > output.txt"},
+    }
     if failure == "disabled_legacy_path":
         worker = HookWorker(store=store, wait_for_native_policy=False, publish_native_policy=False)
         monkeypatch.setattr("codex_plugin_scanner.guard.daemon.hook_worker_native.native_mode", lambda: "off")
@@ -106,6 +143,8 @@ def test_outage_mode_requires_authenticated_unexpired_snapshot(
         assert status == 0
         assert len(responses) == 1
         response = responses[0]
-    assert response["hookSpecificOutput"]["permissionDecision"] == (
+    hook_output = response["hookSpecificOutput"]
+    assert isinstance(hook_output, dict)
+    assert hook_output["permissionDecision"] == (
         "allow" if state == "observe" and failure not in {"disabled_legacy_path", "cli_disabled"} else "deny"
     )
