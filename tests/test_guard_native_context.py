@@ -336,7 +336,7 @@ def test_native_context_digest_propagates_worker_error(tmp_path: Path, monkeypat
             }
         ).encode("utf-8")
 
-    monkeypatch.setattr(native_context, "native_runtime_status", lambda: _status())
+    monkeypatch.setattr(native_context, "_native_runtime_status_memo", lambda: _status())
     monkeypatch.setattr(native_context, "native_resident_client_request", _client)
     monkeypatch.setattr(native_context, "_isolated_environment", lambda: {})
     result = native_context.native_context_digest("launch_argv_digest", {"argv": [42]}, guard_home=tmp_path)

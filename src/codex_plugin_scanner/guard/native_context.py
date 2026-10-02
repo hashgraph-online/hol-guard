@@ -92,8 +92,6 @@ def _native_runtime_status_memo() -> object:
     return status
 
 
-
-
 forget_in_child(_RESULT_CACHE)
 
 
@@ -420,6 +418,7 @@ def context_opaque_digest(
     if strict:
         return f"{_UNBOUND_PREFIX}{unbound_label}:{_unbound_material_digest(material)}"
     return hashlib.sha256(material.encode("utf-8")).hexdigest()
+
 
 __all__ = [
     "bind_context_digest_home",
