@@ -11,11 +11,18 @@ impl TestRoot {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let root = std::env::temp_dir().join(format!(
-            "guard-formatted-source-{}-{nonce}",
-            std::process::id()
-        ));
-        std::fs::create_dir(&root).unwrap();
+        let mut attempt = 0;
+        let root = loop {
+            let root = std::env::temp_dir().join(format!(
+                "guard-formatted-source-{}-{nonce}-{attempt}",
+                std::process::id()
+            ));
+            match std::fs::create_dir(&root) {
+                Ok(()) => break root,
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => attempt += 1,
+                Err(error) => panic!("failed to create test root: {error}"),
+            }
+        };
         Self(root.canonicalize().unwrap())
     }
 

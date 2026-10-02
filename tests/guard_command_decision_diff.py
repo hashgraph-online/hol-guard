@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
-import os
 import sys
 import time
 import types
@@ -128,7 +127,7 @@ finally:
 
 REPORT_SCHEMA_VERSION: Final = "guard.command-decision-diff.v2"
 BASE_RELEASE_SHA: Final = "21a81a6d5ca55e262bac837eb7a2ac8d530c6d28"
-REPORT_PATH: Final = REPO_ROOT / "tests" / "fixtures" / "guard-command-corpus" / "decision-diff-report.json"
+REPORT_PATH: Final = REPO_ROOT / "build" / "guard-evidence" / "decision-diff-report.json"
 _EVIDENCE_SOURCE_PATHS: Final = (
     REPO_ROOT / "contracts" / "extensions" / "command-catalog.v1.json",
     REPO_ROOT / "contracts" / "extensions" / "native-command-program.v1.json",
@@ -190,7 +189,7 @@ def source_binding_id(repo_relative_path: str) -> str:
 
 
 def report_framed_sha256(report: Mapping[str, object] | None = None) -> str:
-    """Return the digest placed in the signed commit trailer."""
+    """Return the digest of the source-bound CI evidence payload."""
 
     return framed_sha256(canonical_json_bytes(generate_decision_diff_report() if report is None else report))
 
@@ -227,6 +226,7 @@ def _evaluate_native_diff() -> tuple[str, str, int, tuple[DecisionDiffShard, ...
 
 
 def _generate_decision_diff_report() -> tuple[dict[str, object], float]:
+    """Evaluate the fixed corpus and assemble deterministic, source-bound decision evidence."""
     manifest = load_seed_manifest()
     known_gaps = _load_object(KNOWN_GAPS_PATH)
     transition_ids: defaultdict[str, list[str]] = defaultdict(list)
@@ -283,8 +283,8 @@ def _generate_decision_diff_report() -> tuple[dict[str, object], float]:
         "evaluator_schema_version": evaluator_schema_version,
         "proposal_version": proposal_version,
         "attestation": {
-            "mechanism": "gpg-signed-commit-trailer",
-            "trailer": "Decision-Diff-Framed-SHA256",
+            "mechanism": "source-bound-ci-evidence",
+            "digest": "length-framed-sha256",
         },
         "corpus": {
             "benign_count": benign_count,
@@ -462,6 +462,7 @@ def _integer(value: object, label: str) -> int:
 
 
 def _main() -> None:
+    """Generate or check decision evidence without rewriting corpus inputs."""
     arguments = tuple(sys.argv[1:])
     if arguments not in {(), ("--write",), ("--check",), ("--metrics",)}:
         raise SystemExit("usage: guard_command_decision_diff.py [--write|--check|--metrics]")
@@ -471,20 +472,12 @@ def _main() -> None:
     digest_path = REPORT_PATH.with_name("decision-diff-report.framed-sha256")
     digest_payload = framed_sha256(payload) + "\n"
     if arguments == ("--write",):
+        REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
         _ = REPORT_PATH.write_bytes(payload)
         _ = digest_path.write_text(digest_payload, encoding="ascii")
     elif arguments == ("--check",):
-        try:
-            from tests.support.extension_freshness import pending_decision_diff_regen
-
-            pending = pending_decision_diff_regen()
-        except ImportError:
-            pending = False
-        if pending and os.environ.get("HOL_GUARD_STRICT_DECISION_REPORT") != "1":
-            print("decision-diff report is regen-owned; branch defers to post-merge regen")
-            return
         if REPORT_PATH.read_bytes() != payload:
-            raise SystemExit("decision-diff report fixture is stale")
+            raise SystemExit("decision-diff report does not match the current source-bound evaluation")
         if digest_path.read_text(encoding="ascii") != digest_payload:
             raise SystemExit("decision-diff report framed digest is stale")
     elif arguments == ("--metrics",):

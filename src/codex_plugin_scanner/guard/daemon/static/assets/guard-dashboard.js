@@ -13100,6 +13100,8 @@ function detectCategory(receipt) {
   if (SECRET_PATTERNS.some((p) => p.test(text))) return "secret";
   if (DESTRUCTIVE_PATTERNS.some((p) => p.test(text))) return "destructive";
   if (HIDDEN_PATTERNS.some((p) => p.test(text))) return "hidden";
+  if (receipt.action_envelope_json?.action_type === "file_write") return "file-write";
+  if (receipt.action_envelope_json?.action_type === "file_read") return "other";
   if (artifactType === "mcp_tool" || MCP_PATTERNS.some((p) => p.test(text))) return "mcp";
   if (SKILL_PATTERNS.some((p) => p.test(text))) return "skill";
   if (artifactType === "package_script" || SUPPLY_CHAIN_PATTERNS.some((p) => p.test(text))) return "supply-chain";
@@ -14588,7 +14590,7 @@ function whyPaused(request) {
     case "hidden":
       return "This code is hidden or encoded. Guard stops this by default.";
     case "file-write":
-      return "This writes to a file on your computer. Guard stops this by default.";
+      return "Guard could not verify this file change as routine under the current policy. Review the target and changes before approving.";
     case "tool-call":
       if ((request.artifact_name ?? "").startsWith("chrome-devtools:") || (request.changed_fields ?? []).some((field) => field.toLowerCase().includes("browser"))) {
         return "This uses the browser. Confirm it if you meant to.";

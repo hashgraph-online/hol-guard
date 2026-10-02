@@ -94,8 +94,7 @@ jobs:
 
       - name: Build native command evaluators
         run: |
-          cargo build --manifest-path rust/Cargo.toml --locked --release -p guard-command --bin guard-command-source
-          cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime
+          cargo build --manifest-path rust/Cargo.toml --locked --release -p guard-command -p hol-guard-runtime --bin guard-command-source --bin hol-guard-runtime
           echo "HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER=$GITHUB_WORKSPACE/rust/target/release/guard-command-source" >> "$GITHUB_ENV"
           echo "HOL_GUARD_NATIVE_BINARY=$GITHUB_WORKSPACE/rust/target/release/hol-guard-runtime" >> "$GITHUB_ENV"
 
@@ -109,17 +108,14 @@ jobs:
 
       - name: Validate source-bound decision evidence
         run: |
-          pending="false"
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            pending=$(uv run --no-sync python scripts/ci/detect_pending_extension_regen.py --flag --changed-from "${{ github.event.pull_request.base.sha }}")
-          fi
-          if [[ "$pending" == "true" ]]; then
-            # Bound sources changed; the checked-in report is legitimately one
-            # regen behind — validate the pipeline runs, freshness lands on main.
-            uv run --no-sync python tests/guard_command_decision_diff.py --metrics > /dev/null
-          else
-            uv run --no-sync python tests/guard_command_decision_diff.py --check
-          fi
+          uv run --no-sync python tests/guard_command_decision_diff.py --write
+
+      - name: Preserve current source-bound decision evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: desktop-decision-evidence
+          path: build/guard-evidence/
+          if-no-files-found: error
 
       - name: Smoke test CLI projection
         run: |

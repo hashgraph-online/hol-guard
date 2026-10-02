@@ -129,26 +129,12 @@ _NATIVE_PROJECTION_PATHS: tuple[str, ...] = (
 
 
 def pending_decision_diff_regen() -> bool:
-    """In a PR that does not carry the regen-owned decision-diff report.
+    """Current decision evidence is evaluated per run and must never be skipped.
 
-    The report is maintainer-owned: generated-artifacts-guard rejects it in
-    ordinary PR diffs, so a branch can never refresh it, and drift may equally
-    be inherited from main (any merged bound-source change restales it until
-    the post-merge regen lands). Freshness is enforced where the report can
-    actually change — on main and on regen PRs, whose diff carries it — and
-    deferred for every other PR.
+    Retained for callers of the former fixture-freshness marker. Source-only
+    changes and unavailable Git history do not exempt behavioral evaluation.
     """
-
-    if pending_contribution_regen():
-        return True
-    report = "tests/fixtures/guard-command-corpus/decision-diff-report.json"
-    try:
-        from tests.guard_command_decision_diff import REPO_ROOT, REPORT_PATH
-
-        report = str(REPORT_PATH.relative_to(REPO_ROOT))
-    except (ImportError, ValueError):
-        pass
-    return _regen_paths_absent(report)
+    return False
 
 
 def pending_native_projection_regen() -> bool:
@@ -171,5 +157,5 @@ requires_fresh_projections = pytest.mark.skipif(
 
 requires_fresh_decision_diff = pytest.mark.skipif(
     pending_decision_diff_regen(),
-    reason="decision-diff report is regen-owned; enforced after maintainer regeneration",
+    reason="current decision evidence has no regeneration exemption",
 )

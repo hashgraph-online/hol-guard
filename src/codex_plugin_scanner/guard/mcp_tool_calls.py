@@ -16,6 +16,7 @@ from .approval_gate import ApprovalGateGrant
 from .collections_support import dedupe_preserving_order
 from .config import DEFAULT_SECURITY_LEVEL, GuardConfig, resolve_risk_action
 from .local_cli_trust import apply_local_mcp_extension_decision
+from .mcp_fresh_approval import fresh_local_tool_approval_matches, fresh_lookup_preserves_claim
 from .models import GuardAction, GuardArtifact, GuardReceipt, PolicyDecision
 from .native_context import context_opaque_digest, context_sha256_digest
 from .receipts import build_receipt
@@ -50,7 +51,7 @@ from .runtime.mcp_skill_firewall import enrich_artifact_with_mcp_skill_firewall,
 from .store import GuardStore, browser_mcp_exact_match_context
 from .temporary_mcp_approvals import runtime_grant_selectors
 
-_MCP_TOOL_CALL_EVALUATOR_POLICY_VERSION = "mcp-tool-call-evaluation-v4"  # bump with risk/action semantics
+_MCP_TOOL_CALL_EVALUATOR_POLICY_VERSION = "mcp-tool-call-evaluation-v5"  # bump with risk/action semantics
 
 _NON_EXECUTED_TOOL_CALL_TAXONOMY: Mapping[GuardAction, tuple[str, str]] = {
     "review": ("runtime_tool_call_review_required", "runtime tool call awaiting review"),
@@ -627,6 +628,10 @@ def _revalidate_claimed_tool_call_approval(
         validation_reason = APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM if context_changed is not None else None
     if fresh_decision.approval_reuse_reason_code == "approval_reuse_integrity_failure":
         validation_reason = "approval_reuse_integrity_failure"
+    elif fresh_decision.approval_reuse_status == "rejected" and not fresh_lookup_preserves_claim(
+        fresh_decision.approval_reuse_reason_code
+    ):
+        validation_reason = APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM
 
     # A fresh unclaimed allow is not launch authority. Reuse the freshly
     # computed current action, while preserving a newly observed saved block or
@@ -659,6 +664,12 @@ def _revalidate_claimed_tool_call_approval(
         "allow",
         saved_decision_present=True,
         validation_reason=validation_reason,
+        fresh_local_approval=(
+            claim_disposition == "consumed"
+            and fresh_local_tool_approval_matches(
+                claimed_decision, artifact=fresh_artifact, artifact_hash=fresh_artifact_hash
+            )
+        ),
     )
     return replace(
         _tool_call_decision_with_reuse(post_claim_current, reuse),

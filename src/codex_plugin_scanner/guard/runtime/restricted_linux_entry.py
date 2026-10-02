@@ -32,6 +32,10 @@ _FIELDS = frozenset(
     }
 )
 _MAX_BYTES = 64 * 1024 * 1024
+# The launcher mounts the owner-created plan here inside the new namespace.
+# CLI arguments may supply its expected digest, never a filesystem locator.
+PLAN_DIRECTORY = Path("/guard-linux-plan")
+PLAN_FILENAME = "linux-plan.json"
 
 
 def _unique(pairs):
@@ -43,15 +47,16 @@ def _unique(pairs):
     return result
 
 
-def load_plan(path: Path, digest: str) -> dict[str, Any]:
-    if not path.is_absolute() or len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest):
+def load_plan(digest: str) -> dict[str, Any]:
+    """Load the fixed private namespace plan only after validating its digest, ownership and bounded schema."""
+    if len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest):
         raise ValueError("Invalid private Linux plan locator.")
-    parent = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    parent = os.open(PLAN_DIRECTORY, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     try:
         metadata = os.fstat(parent)
         if metadata.st_uid != os.getuid() or metadata.st_mode & 0o077:
             raise ValueError("Unsafe Linux plan directory.")
-        descriptor = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=parent)
+        descriptor = os.open(PLAN_FILENAME, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=parent)
         with os.fdopen(descriptor, "rb") as stream:
             metadata = os.fstat(stream.fileno())
             if (
@@ -115,10 +120,11 @@ def load_plan(path: Path, digest: str) -> dict[str, Any]:
 
 
 def main() -> int:
+    """Validate the private namespace plan before entering its restricted execution boundary."""
     try:
-        if len(sys.argv) != 3:
+        if len(sys.argv) != 2:
             raise ValueError("The private Linux plan requires its hash.")
-        plan = load_plan(Path(sys.argv[1]), sys.argv[2])
+        plan = load_plan(sys.argv[1])
         for path, identity in plan["write_identities"].items():
             metadata = path.lstat()
             if not stat.S_ISDIR(metadata.st_mode) or (metadata.st_dev, metadata.st_ino) != identity:
