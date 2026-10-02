@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Final
 
 from .models import GuardArtifact
+from .native_context import context_sha256_digest
 from .package_execution_context_configuration import configuration_material, environment_material
 from .package_execution_context_inputs import (
     ContextFiles,
@@ -278,7 +279,10 @@ def _component(name: str, material: object) -> PackageExecutionContextComponent:
 
 
 def _digest_json(value: object) -> str:
-    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+    # Canonical-JSON component digest — owned by the native canonical_sha256 op.
+    # Identity/dedup digest whose stored values share this producer: strict=False
+    # degrades to the byte-identical local canonical hash when resident is absent.
+    return context_sha256_digest(value, unbound_label="package-context-component", strict=False)
 
 
 def _string_value(value: object) -> str | None:

@@ -46,6 +46,7 @@ from .runtime.mcp_protection import (
     mcp_tool_identity_metadata,
 )
 from .runtime.mcp_skill_firewall import enrich_artifact_with_mcp_skill_firewall, scanner_evidence_for_mcp_skill_firewall
+from .native_context import context_opaque_digest, context_sha256_digest
 from .store import GuardStore, browser_mcp_exact_match_context
 from .temporary_mcp_approvals import runtime_grant_selectors
 
@@ -266,7 +267,9 @@ def build_tool_call_artifact(
     elif server_identity is not None:
         server_hash = server_identity.identity_hash
     else:
-        server_hash = server_id or sha256(f"{harness}:{source_scope}:{server_name}".encode()).hexdigest()
+        server_hash = server_id or context_opaque_digest(
+            f"{harness}:{source_scope}:{server_name}", unbound_label="mcp-server", strict=False  # identity hash; stored rows share this producer
+        )
     tool_identity = build_mcp_tool_identity(
         server_hash=server_hash,
         tool_name=tool_name,
@@ -326,18 +329,18 @@ def build_tool_call_hash(
             exact_arguments = {
                 key: value for key, value in arguments.items() if key not in browser_intent.volatile_fields_dropped
             }
-        content_arguments["exact_arguments_hash"] = sha256(
-            json.dumps(exact_arguments, sort_keys=True, separators=(",", ":")).encode()
-        ).hexdigest()
+        content_arguments["exact_arguments_hash"] = context_sha256_digest(
+            exact_arguments, unbound_label="mcp-exact-arguments"
+        )
         if browser_intent.sensitive_surface_flags:
             sensitive_arguments = arguments
             if isinstance(arguments, Mapping):
                 sensitive_arguments = {
                     key: value for key, value in arguments.items() if key not in browser_intent.volatile_fields_dropped
                 }
-            content_arguments["sensitive_arguments_hash"] = sha256(
-                json.dumps(sensitive_arguments, sort_keys=True, separators=(",", ":")).encode()
-            ).hexdigest()
+            content_arguments["sensitive_arguments_hash"] = context_sha256_digest(
+                sensitive_arguments, unbound_label="mcp-sensitive-arguments"
+            )
     legacy_material: dict[str, object] = {
         "artifact_id": artifact.artifact_id,
         "config_path": artifact.config_path,
@@ -359,6 +362,9 @@ def build_tool_call_hash(
     # so the digest itself must carry this part of the security identity.
     if workspace is not None:
         legacy_material["workspace"] = _normalized_tool_call_workspace(workspace)
+    # Persisted approval key — uses default separators (", ", ": "), NOT the
+    # canonical compact writer.  Moving this to canonical_sha256 would change
+    # the digest bytes and orphan existing saved MCP approvals.  Keep local.
     legacy_payload = json.dumps(legacy_material, sort_keys=True)
     legacy_hash = sha256(legacy_payload.encode()).hexdigest()
     if config is None:
@@ -371,6 +377,8 @@ def build_tool_call_hash(
     tool_catalog_fingerprint = (
         server_fingerprint.get("tool_catalog_fingerprint") if isinstance(server_fingerprint, Mapping) else None
     )
+    # Persisted/legacy content key — default separators like legacy_hash above.
+    # Keep local for byte-stability of existing MCP approval rows.
     content_hash = sha256(
         json.dumps(
             {

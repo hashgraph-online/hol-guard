@@ -143,6 +143,45 @@ fn argv_cases_match_python_digests() {
         );
     }
 }
+#[test]
+fn canonical_sha256_cases_match_python_digests() {
+    for case in corpus()["canonical_sha256_cases"].as_array().unwrap() {
+        let material = case["material"].clone();
+        let prefix = case
+            .get("prefix")
+            .and_then(Value::as_str)
+            .map(str::to_owned);
+        let result = evaluate(request_for(ContextDigestKindV1::CanonicalSha256 {
+            material,
+            prefix,
+        }));
+        assert_eq!(result.status, "ok", "case {}", case["id"]);
+        assert_eq!(
+            result.digest.as_deref(),
+            case["digest"].as_str(),
+            "case {}",
+            case["id"]
+        );
+    }
+}
+
+#[test]
+fn opaque_material_cases_match_python_digests() {
+    for case in corpus()["opaque_material_cases"].as_array().unwrap() {
+        let material = case["material"].as_str().unwrap().to_owned();
+        let result = evaluate(request_for(ContextDigestKindV1::OpaqueMaterialDigest {
+            material,
+        }));
+        assert_eq!(result.status, "ok", "case {}", case["id"]);
+        assert_eq!(
+            result.digest.as_deref(),
+            case["digest"].as_str(),
+            "case {}",
+            case["id"]
+        );
+    }
+}
+
 
 #[test]
 fn token_cases_match_python_parse() {

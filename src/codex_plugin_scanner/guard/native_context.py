@@ -137,6 +137,8 @@ _OK_OUTPUT_FIELD: dict[str, str] = {
     "configured_environment_hash": "digest",
     "configured_headers_hash": "digest",
     "launch_argv_digest": "digest",
+    "canonical_sha256": "digest",
+    "opaque_material_digest": "digest",
 }
 _OK_NULLABLE_OUTPUT_FIELD: dict[str, str] = {
     "validate_approval_context": "validation_reason",
@@ -301,10 +303,114 @@ def native_context_digest(
     return decoded
 
 
+_UNBOUND_PREFIX = "guard-context-unbound:"
+
+
+def is_unbound_context_digest(value: object) -> bool:
+    """``True`` for degraded digests emitted when the resident is unavailable."""
+    return isinstance(value, str) and value.startswith(_UNBOUND_PREFIX)
+
+
+def _unbound_material_digest(material: object) -> str:
+    canonical = json.dumps(
+        material,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+        allow_nan=False,
+        default=str,
+    ).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
+
+
+def _canonical_material_bytes(material: object) -> bytes:
+    return json.dumps(
+        material,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+        allow_nan=False,
+        default=str,
+    ).encode("utf-8")
+
+
+def context_sha256_digest(
+    material: object,
+    *,
+    prefix: str | None = None,
+    guard_home: Path | None = None,
+    unbound_label: str = "canonical-sha256",
+    strict: bool = True,
+) -> str:
+    """Canonical-JSON SHA-256 via the resident op.
+
+    ``strict=True`` (default, for enforcement digests that gate equality):
+    degrade to a ``guard-context-unbound:`` digest that fails every
+    equality/validation check against a worker-issued value.
+
+    ``strict=False`` (for identity/dedup digests that always produced a hex
+    digest before this migration): degrade to the byte-identical local
+    canonical hash so callers keep working when the resident is absent.  The
+    value is byte-for-byte the same output the worker returns.
+    """
+
+    home = guard_home if guard_home is not None else context_digest_guard_home()
+    result = (
+        native_context_digest(
+            "canonical_sha256",
+            {"material": material, "prefix": prefix},
+            guard_home=home,
+        )
+        if home is not None
+        else None
+    )
+    digest = result.get("digest") if isinstance(result, dict) else None
+    if isinstance(digest, str) and digest:
+        return digest
+    if strict:
+        return f"{_UNBOUND_PREFIX}{unbound_label}:{_unbound_material_digest(material)}"
+    local = hashlib.sha256(_canonical_material_bytes(material)).hexdigest()
+    return f"{prefix or ''}{local}"
+
+
+def context_opaque_digest(
+    material: str,
+    *,
+    guard_home: Path | None = None,
+    unbound_label: str = "opaque-material",
+    strict: bool = True,
+) -> str:
+    """UTF-8-string SHA-256 via the resident op.
+
+    For raw string material (module specifiers, source text, ``h:s:n`` keys,
+    shebang lines) — the bytes hashed are exactly ``material.encode("utf-8")``.
+    ``strict`` semantics match :func:`context_sha256_digest`.
+    """
+
+    home = guard_home if guard_home is not None else context_digest_guard_home()
+    result = (
+        native_context_digest(
+            "opaque_material_digest",
+            {"material": material},
+            guard_home=home,
+        )
+        if home is not None
+        else None
+    )
+    digest = result.get("digest") if isinstance(result, dict) else None
+    if isinstance(digest, str) and digest:
+        return digest
+    if strict:
+        return f"{_UNBOUND_PREFIX}{unbound_label}:{_unbound_material_digest(material)}"
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()
+
 __all__ = [
     "bind_context_digest_home",
     "bound_context_digest_home",
     "context_digest_guard_home",
+    "context_opaque_digest",
+    "context_sha256_digest",
+    "is_unbound_context_digest",
     "native_context_digest",
     "reset_context_digest_home",
 ]
