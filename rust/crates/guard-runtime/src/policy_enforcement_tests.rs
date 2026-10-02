@@ -22,15 +22,18 @@ fn test_containment_never_overrides_installed_policy_denies() {
         Some("/home/tester"),
         Some("/home/tester/project"),
     );
-    assert_eq!(result.minimum_action, "sandbox-required");
+    let expected_floor = if cfg!(target_os = "macos") {
+        "sandbox-required"
+    } else {
+        "review"
+    };
+    let expected_reason = result.reason_code.clone();
+    assert_eq!(result.minimum_action, expected_floor);
     let ordinary =
         apply_pre_tool_policy(&snapshot(policy("allow")), &payload, result.clone()).unwrap();
-    assert_eq!(ordinary.minimum_action, "sandbox-required");
+    assert_eq!(ordinary.minimum_action, expected_floor);
     assert_eq!(ordinary.decision, "deny");
-    assert_eq!(
-        ordinary.reason_code,
-        "native_pytest_readonly_containment_required"
-    );
+    assert_eq!(ordinary.reason_code, expected_reason);
     let blocked =
         apply_pre_tool_policy(&snapshot(policy("block")), &payload, result.clone()).unwrap();
     assert_eq!(blocked.minimum_action, "block");

@@ -119,7 +119,9 @@ pub(crate) fn extract_generic_signals(
         || sensitive_text(&url_values)
         || sensitive_text(&prompt_values)
         || sensitive_text(&text_values)
-        || command.as_deref().is_some_and(sensitive_command);
+        || command
+            .as_deref()
+            .is_some_and(super::super::super::sensitive_command_input);
     let sensitive_target = guard_bypass_intent || content_sensitive;
     Ok(GenericSignals {
         command,

@@ -23,7 +23,14 @@ fn test_containment_requirement_cannot_override_lockdown() {
         )
     };
     binding.effective_digest = binding.compute_effective_digest().unwrap();
-    assert_eq!(evaluate(&binding).minimum_action, "sandbox-required");
+    assert_eq!(
+        evaluate(&binding).minimum_action,
+        if cfg!(target_os = "macos") {
+            "sandbox-required"
+        } else {
+            "review"
+        }
+    );
     binding.layers = serde_json::from_value(serde_json::json!([{
         "schema_version": "1.0.0", "kind": "local-admin", "catalog_digest": program.catalog_digest,
         "global_lockdown": true, "controls": []

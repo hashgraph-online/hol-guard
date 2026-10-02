@@ -280,7 +280,13 @@ fn exact_safe_command(model: &CanonicalCommandV1, allow_git_helper_context: bool
             return false;
         };
         let basename = executable_basename(executable);
-        if sensitive_command(&segment.text)
+        let inert_search = matches!(basename, "rg" | "grep")
+            && safe_search_arguments(basename, &segment.arguments)
+            && segment.arguments.iter().all(|argument| {
+                let value = argument.split_once('=').map_or(argument.as_str(), |(_, value)| value);
+                !value.starts_with(['/', '~'])
+            });
+        if (!inert_search && sensitive_command(&segment.text))
             || (!matches!(basename, "rg" | "grep")
                 && segment
                     .arguments
@@ -315,6 +321,31 @@ fn exact_safe_command(model: &CanonicalCommandV1, allow_git_helper_context: bool
     })
 }
 
+fn exact_safe_search_command(model: &CanonicalCommandV1) -> bool {
+    exact_safe_command(model, false)
+        && model.segments.iter().all(|segment| {
+            segment
+                .executable
+                .as_deref()
+                .is_some_and(|executable| matches!(executable_basename(executable), "rg" | "grep"))
+        })
+}
+
+pub(super) fn sensitive_command_input(value: &str) -> bool {
+    if !sensitive_command(value) {
+        return false;
+    }
+    let request = CommandModelRequestV1 {
+        command: value.to_owned(),
+        dialect: "posix".to_owned(),
+        transport: "shell_string".to_owned(),
+        extraction_provenance: "guard-shell".to_owned(),
+    };
+    // Only parsed, bounded search data may shed the raw keyword signal.
+    // Structured paths, prompts, URLs and arbitrary executable text keep it.
+    !parse_command(&request).is_ok_and(|model| exact_safe_search_command(&model))
+}
+
 fn exact_destructive_tool_introspection(model: &CanonicalCommandV1) -> bool {
     if model.confidence != "exact"
         || model.path_overridden
@@ -337,6 +368,14 @@ fn exact_destructive_tool_introspection(model: &CanonicalCommandV1) -> bool {
 pub fn evaluate_pre_tool(request: &CommandModelRequestV1) -> Result<PreToolDecisionV1, String> {
     let model = parse_command(request)?;
     let normalized = model.normalized_text.as_str();
+    if exact_safe_search_command(&model) {
+        return Ok(pretool_decision(
+            model,
+            "allow",
+            "native_exact_safe_command",
+            "The Rust command authority proved this bounded source search explicitly benign.",
+        ));
+    }
     if exact_destructive_tool_introspection(&model) {
         return Ok(pretool_decision(
             model,

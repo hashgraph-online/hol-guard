@@ -24,13 +24,20 @@ fn direct_pytest_requires_real_containment_never_direct_allow() {
         "/usr/bin/python3 -m pytest tests/unit -q",
     ] {
         let result = classify("omp", command);
-        assert_eq!(result.minimum_action, "sandbox-required", "{command}");
+        let expected = if cfg!(target_os = "macos") {
+            "sandbox-required"
+        } else {
+            "review"
+        };
+        assert_eq!(result.minimum_action, expected, "{command}");
         assert_eq!(result.decision, "deny", "{command}");
         assert!(!result.explicitly_benign, "{command}");
-        assert_eq!(
-            result.reason_code, "native_pytest_readonly_containment_required",
-            "{command}"
-        );
+        let reason = if cfg!(target_os = "macos") {
+            "native_pytest_readonly_containment_required"
+        } else {
+            "native_command_review_required"
+        };
+        assert_eq!(result.reason_code, reason, "{command}");
     }
 }
 

@@ -227,6 +227,9 @@ fn reviews_date_mutations_and_unbounded_file_reads() {
 
 #[test]
 fn reviews_only_materially_risky_variants_of_safe_commands() {
+    let inert_pattern = evaluate_pre_tool(&request("rg -e '.env.local' src")).unwrap();
+    assert_eq!(inert_pattern.decision, "allow");
+    assert_eq!(inert_pattern.minimum_action, "allow");
     for command in [
             "rg --pre /opt/guard-test/payload authority src",
             "rg --hostname-bin=/opt/guard-test/payload --hyperlink-format='file://{host}{path}' TOKEN src",
@@ -241,7 +244,6 @@ fn reviews_only_materially_risky_variants_of_safe_commands() {
             r"rg --glob 'nested/[\.]env' TOKEN .",
             "rg --glob 'nested/{safe,.env}' TOKEN .",
             "rg TOKEN .env.local",
-            "rg -e '.env.local' src",
             "grep -r password .",
             "rg id_rsa /home",
             "rg --glob 'nested/[.]env.local' TOKEN .",
