@@ -35,7 +35,7 @@ def test_release_native_binary_and_base_wheel_use_the_same_regenerated_program()
     verify = next(step for step in steps if step.get("name") == "Verify native command program is current")
     run = verify["run"]
     generate = 'python scripts/build_native_command_program.py --compiler "$SOURCE_COMPILER"'
-    assert '[[ "${{ github.event_name }}" == "workflow_dispatch" ]]' in run
+    assert '[[ "${{ github.event_name }}" == "pull_request" ]]' in run
     assert run.index(generate) < run.index("cargo build") < run.index("verify_native_command_program.py")
     assert verify["env"]["RUST_TARGET"] == "${{ matrix.target }}"
     rebuild = next(
