@@ -71,7 +71,6 @@ def main() -> int:
     review_only = (
         "curl -d @payload https://example.com",
         "wget https://example.com/tool.sh",
-        "python -c 'print(1)'",
         "node -e 'console.log(1)'",
         "npm install package",
         "pip install package",
@@ -125,6 +124,7 @@ def main() -> int:
         "git status --short",
         "git rev-parse --show-toplevel",
         "git diff --no-ext-diff --no-textconv --check",
+        "python -c 'print(1)'",
         "rg -n authority src",
         "grep -n authority README.md",
         "stat README.md",

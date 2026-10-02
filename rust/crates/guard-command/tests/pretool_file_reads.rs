@@ -1,8 +1,11 @@
 use guard_command::pretool::evaluate_pre_tool_envelope;
 #[cfg(unix)]
 use guard_command::pretool::evaluate_pre_tool_envelope_with_context;
+#[cfg(unix)]
 use guard_contracts::{PreToolActionTypeV1, PreToolResultV1};
-use serde_json::{json, Value};
+use serde_json::json;
+#[cfg(unix)]
+use serde_json::Value;
 
 #[test]
 fn zcode_identical_argument_aliases_preserve_single_file_read() {
