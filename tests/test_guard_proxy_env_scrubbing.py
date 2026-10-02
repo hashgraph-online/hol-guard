@@ -78,6 +78,7 @@ class TestStdioProxyScrubbing:
                 captured_env.update(kwargs.get("env", {}))
                 self.stdin = None
                 self.stdout = None
+                self.stderr = None
                 self.returncode = 0
 
             def poll(self) -> int:
@@ -124,6 +125,7 @@ class TestRuntimeMcpProxyScrubbing:
                 captured_env.update(kwargs.get("env", {}))
                 self.stdin = None
                 self.stdout = None
+                self.stderr = None
                 self.returncode = 0
 
             def poll(self) -> int:
