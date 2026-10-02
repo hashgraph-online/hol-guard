@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import subprocess
 import sys
 from pathlib import Path
@@ -30,6 +31,9 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import (
 class _FakeProcess:
     def __init__(self) -> None:
         self.returncode: int | None = None
+        self.stdin = io.BytesIO()
+        self.stdout = io.BytesIO()
+        self.stderr = io.BytesIO()
         self.terminated = False
         self.killed = False
 
@@ -88,6 +92,7 @@ def _pinned_token(proxy: StdioGuardProxy, artifact: GuardArtifact, config: Guard
 def test_stdio_sensitive_read_binds_pinned_executable_script_and_configured_env(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    native_context_digest: Path,
 ) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()

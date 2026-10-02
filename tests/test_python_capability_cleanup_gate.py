@@ -111,8 +111,8 @@ def test_cleanup_contract_covers_every_scoped_hook_capability() -> None:
 
     assert payload["schema"] == "hol-guard.python-capability-cleanup.v1"
     assert payload["status"] == "passed"
-    # The MCP evidence record has its own module under the existing hook scope glob.
-    assert payload["scope_files"] == 94
+    # The combined hook and native modules remain covered by the existing scope globs.
+    assert payload["scope_files"] == 96
     assert "legacy_python_resident_transport" not in payload["capabilities"]
     assert payload["candidate_evidence"] == []
     contract = GATE._read_json(ROOT / GATE.CONTRACT)

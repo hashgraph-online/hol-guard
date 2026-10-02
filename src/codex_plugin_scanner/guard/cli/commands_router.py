@@ -156,18 +156,31 @@ def run_guard_command(
         )
 
     home_override = getattr(args, "home", None)
+    home_dir = Path(home_override).expanduser().resolve() if home_override else Path.home().resolve()
+    home_override_explicit = bool(home_override)
     guard_home = resolve_guard_home(getattr(args, "guard_home", None) or home_override)
-    workspace = _resolve_guard_workspace(args, guard_home=guard_home)
+    # Detection runs before the consumer/protect entry points that bind the
+    # digest home, so bind at the router: every enforcement subcommand below
+    # resolves its context-digest calls against this deployment's resident.
+    from ..native_context import bind_context_digest_home
+
+    bind_context_digest_home(guard_home)
+    workspace = _resolve_guard_workspace(
+        args,
+        guard_home=guard_home,
+        home_dir=home_dir,
+        home_override_explicit=home_override_explicit,
+    )
     executable_overrides: dict[str, str] = {}
     grok_executable = getattr(args, "grok_executable", None)
     if isinstance(grok_executable, str) and grok_executable.strip():
         executable_overrides["grok"] = grok_executable.strip()
     context = HarnessContext(
-        home_dir=Path(home_override).expanduser().resolve() if home_override else Path.home().resolve(),
+        home_dir=home_dir,
         workspace_dir=workspace,
         guard_home=guard_home,
         executable_overrides=executable_overrides,
-        home_override_explicit=bool(home_override),
+        home_override_explicit=home_override_explicit,
         workspace_override_explicit=bool(getattr(args, "workspace", None)),
     )
     if args.guard_command == "doctor" and bool(getattr(args, "incident", False)):

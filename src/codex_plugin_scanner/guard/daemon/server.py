@@ -95,6 +95,7 @@ from ..cloud_exception_requests import (
     fetch_cloud_exception_requests,
     submit_cloud_exception_request,
 )
+from ..codex_binding_capture_writer import start_codex_binding_capture_writer
 from ..codex_live_decision import complete_codex_live_decision, resolve_codex_live_allow_authority
 from ..codex_live_decision_revalidation import revalidate_codex_live_allow
 from ..codex_resume import get_request_resume_status, retry_request_resume
@@ -118,6 +119,7 @@ from ..directory_path_authority import (
     validate_guard_directory_path,
     validated_owned_temporary_workspace,
 )
+from ..fork_safety import forget_in_child
 from ..harness_disconnect_gate import require_harness_disconnect_gate
 from ..insights_share import publish_insights_share
 from ..json_transport import escape_json_for_html
@@ -601,6 +603,9 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         writer = getattr(self, "runtime_hook_evidence_writer", None)
         if writer is not None:
             _ = writer.stop(timeout_seconds=1.0)
+        capture_writer = getattr(self, "codex_binding_capture_writer", None)
+        if capture_writer is not None:
+            capture_writer.stop_capture()
         super().server_close()
 
     def __init__(
@@ -699,6 +704,7 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         )
         self.store.set_policy_integrity_state_listener(self.publish_trust_state)
         self.runtime_hook_evidence_writer = RuntimeHookEvidenceWriter(store=store)
+        self.codex_binding_capture_writer = start_codex_binding_capture_writer()
         self._initialize_request_services()
         self.request_executors_stopped = False
         super().__init__(server_address, handler_class)
@@ -707,7 +713,11 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         from .hook_worker import HookWorker
 
         try:
-            self.hook_worker = HookWorker(store=self.store, activity_writer=self.runtime_hook_evidence_writer)
+            self.hook_worker = HookWorker(
+                store=self.store,
+                activity_writer=self.runtime_hook_evidence_writer,
+                capture_writer=self.codex_binding_capture_writer,
+            )
             self.extension_control_runtime = ExtensionControlRuntime(
                 self.store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
             )
@@ -742,6 +752,8 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
                 if executor is not None:
                     _ = executor.shutdown(timeout_seconds=1.0)
             _ = self.runtime_hook_evidence_writer.stop(timeout_seconds=1.0)
+            if self.codex_binding_capture_writer is not None:
+                self.codex_binding_capture_writer.stop_capture()
             _ = self.hook_process_runner.close_contained()
             raise
 
@@ -910,10 +922,16 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
             with self.unclassified_connections_lock:
                 expired = [request for request, deadline in self.unclassified_connections.values() if deadline <= now]
             for request in expired:
-                if self._buffered_request_headers_complete(request):
-                    self.classify_connection(request)
-                else:
-                    self._close_unclassified_socket(request)
+                headers_complete = self._buffered_request_headers_complete(request)
+                # The handler can classify a request after the expiry snapshot.
+                # Recheck ownership and close under the classification lock.
+                with self.unclassified_connections_lock:
+                    current = self.unclassified_connections.get(id(request))
+                    if current is None or current[0] is not request or current[1] > now:
+                        continue
+                    self.unclassified_connections.pop(id(request))
+                    if not headers_complete:
+                        self._close_unclassified_socket(request)
 
     @staticmethod
     def _buffered_request_headers_complete(request: socket.socket) -> bool:
@@ -8814,6 +8832,16 @@ class GuardDaemonServer:
                 contained = runtime_hook_evidence_writer.stop(timeout_seconds=1.0) is not False and contained
             except Exception:
                 contained = False
+        hook_worker = getattr(self._server, "hook_worker", None)
+        if hook_worker is not None:
+            try:
+                close_contained = getattr(hook_worker, "close_contained", None)
+                if callable(close_contained):
+                    contained = close_contained() is not False and contained
+                else:
+                    contained = hook_worker.close() is not False and contained
+            except Exception:
+                contained = False
         hook_process_runner = getattr(self._server, "hook_process_runner", None)
         if hook_process_runner is not None:
             try:
@@ -8833,7 +8861,7 @@ class GuardDaemonServer:
             )
         with suppress(Exception):
             self._server.store.clear_runtime_state(session_id=self._server.runtime_session_id)
-        if contained and self._is_quarantined():
+        if contained and (self._thread is None or self._is_quarantined()):
             try:
                 self._server.server_close()
             except Exception:
@@ -9307,3 +9335,6 @@ def _int_query_value(query: str, key: str) -> int:
         return int(str(raw_value))
     except ValueError:
         return 0
+
+
+forget_in_child(GuardDaemonServer._quarantined_services)

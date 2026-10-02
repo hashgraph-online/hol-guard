@@ -6,6 +6,7 @@ import json
 import sys
 from hashlib import sha256
 from pathlib import Path
+from typing import cast
 
 from ..aibom_detection import enrich_mcp_server_metadata, extend_detection_with_workspace_aibom
 from ..launcher import merge_guard_launcher_env
@@ -24,6 +25,7 @@ from .mcp_servers import (
     ManagedMcpServer,
     is_guard_proxy_command,
     managed_stdio_servers,
+    observable_stdio_servers_with_proxy,
     proxy_cli_args,
     proxy_process_env,
     skipped_stdio_server_names,
@@ -86,6 +88,7 @@ class CursorHarnessAdapter(HarnessAdapter):
             for name, server_config in mcp_servers.items():
                 if not isinstance(name, str) or not isinstance(server_config, dict):
                     continue
+                managed_origin = self._managed_mcp_origin(context, config_path, scope, name)
                 args = tuple(str(value) for value in server_config.get("args", []) if isinstance(value, str))
                 command = server_config.get("command")
                 env_payload = server_config.get("env")
@@ -142,6 +145,7 @@ class CursorHarnessAdapter(HarnessAdapter):
                             url=url if isinstance(url, str) else None,
                             transport="http" if isinstance(url, str) else "stdio",
                             metadata=metadata,
+                            runtime_private_metadata=dict(managed_origin),
                         )
                     )
                 )
@@ -251,17 +255,26 @@ class CursorHarnessAdapter(HarnessAdapter):
         _ensure_path_within_root(context.guard_home, state_path, label="Cursor state")
         state_path.parent.mkdir(parents=True, exist_ok=True)
         workspace_dir = str(context.workspace_dir.resolve()) if context.workspace_dir is not None else None
+        previous = _json_payload(state_path)
+        previous_origins = previous.get("managed_origins")
+        origins = dict(cast(dict[str, list[str]], previous_origins)) if isinstance(previous_origins, dict) else {}
+        for server in observable_stdio_servers_with_proxy(detection):
+            if server.source_scope == "project":
+                origins[server.name] = [server.source_scope, server.config_path]
+        for server in managed_servers:
+            if server.source_scope == "project":
+                origins[server.name] = [server.source_scope, server.config_path]
+            else:
+                origins.pop(server.name, None)
+        state = {
+            "managed_config_path": str(target_path),
+            "backup_path": str(backup_path),
+            "surface": "editor",
+            "workspace_dir": workspace_dir,
+            "managed_origins": origins,
+        }
         state_path.write_text(
-            json.dumps(
-                {
-                    "managed_config_path": str(target_path),
-                    "backup_path": str(backup_path),
-                    "surface": "editor",
-                    "workspace_dir": workspace_dir,
-                },
-                indent=2,
-            )
-            + "\n",
+            json.dumps(state, indent=2) + "\n",
             encoding="utf-8",
         )
         payload = self._strict_json_object(target_path, label="Cursor editor config", recover_missing=True)
@@ -489,5 +502,38 @@ class CursorHarnessAdapter(HarnessAdapter):
         target = str(target_path.resolve())
         digest = sha256(target.encode("utf-8")).hexdigest()[:12]
         return context.guard_home / "managed" / "cursor" / f"{digest}.state.json"
+
+    def _managed_mcp_origin(
+        self,
+        context: HarnessContext,
+        config_path: Path,
+        scope: str,
+        server_name: str,
+    ) -> dict[str, object]:
+        if scope != "global" or config_path != self._target_editor_config_path(context):
+            return {}
+        state = _json_payload(self._state_path(config_path, context))
+        managed_origins = state.get("managed_origins")
+        origin = managed_origins.get(server_name) if isinstance(managed_origins, dict) else None
+        if "managed_origins" not in state:
+            # Older installs recorded only the active workspace. Resolve that
+            # bounded legacy origin before a reinstall rewrites the state.
+            workspace = state.get("workspace_dir")
+            if isinstance(workspace, str) and Path(workspace).is_absolute():
+                origin = ["project", str(Path(workspace) / ".cursor" / "mcp.json")]
+        if (
+            state.get("managed_config_path") != str(config_path)
+            or state.get("surface") != "editor"
+            or not isinstance(origin, list)
+            or len(origin) != 2
+            or not all(isinstance(value, str) for value in origin)
+            or origin[0] != "project"
+            or not Path(origin[1]).is_absolute()
+        ):
+            return {}
+        return {
+            "managed_mcp_origin": tuple(origin),
+            "managed_guard_home": str(context.guard_home),
+        }
 
     _backup_payload = staticmethod(load_backup_payload)

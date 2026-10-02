@@ -1175,7 +1175,7 @@ wheels = [
 
 [[package]]
 name = "hol-guard"
-version = "3.16.0"  # x-release-please-version
+version = "3.16.5"  # x-release-please-version
 source = { editable = "." }
 dependencies = [
     { name = "cryptography" },
@@ -1189,6 +1189,7 @@ dependencies = [
     { name = "requests" },
     { name = "rich" },
     { name = "tomli", marker = "python_full_version < '3.11'" },
+    { name = "typing-extensions" },
 ]
 
 [package.optional-dependencies]
@@ -1246,6 +1247,7 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.15.15" },
     { name = "tomli", marker = "python_full_version < '3.11'", specifier = ">=2.0" },
     { name = "twine", marker = "extra == 'publish'", specifier = ">=6.2.0" },
+    { name = "typing-extensions", specifier = ">=4.15.0" },
 ]
 provides-extras = ["cisco", "dev", "mdm-build", "publish"]
 
