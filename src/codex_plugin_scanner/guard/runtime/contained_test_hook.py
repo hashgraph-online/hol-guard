@@ -165,36 +165,26 @@ def run_authorized_contained_test(
         node_test_plan = prepare_restricted_node_test(command, workspace=workspace, cwd=workspace)
     else:
         prepare_restricted_pytest(command, workspace=workspace, cwd=workspace, read_only_workspace=True)
-    reason = (
-        "native_node_eval_readonly_containment_required"
-        if inline_eval and inline_plan.profile_version == "node-eval-readonly-v1"
-        else "native_python_eval_readonly_containment_required"
-        if inline_eval
-        else "native_node_build_output_containment_required"
-        if node_tool and node_tool_plan.profile_version == NODE_BUILD_OUTPUT_PROFILE_VERSION
-        else "native_node_tool_readonly_containment_required"
-        if node_tool
-        else "native_git_readonly_containment_required"
-        if git
-        else "native_vitest_readonly_containment_required"
-        if vitest
-        else "native_node_test_readonly_containment_required"
-        if node_test
-        else "native_pytest_readonly_containment_required"
-    )
-    profile = (
-        inline_plan.profile_version
-        if inline_eval
-        else node_tool_plan.profile_version
-        if node_tool
-        else GIT_READ_ONLY_PROFILE_VERSION
-        if git
-        else VITEST_READ_ONLY_PROFILE_VERSION
-        if vitest
-        else NODE_TEST_READ_ONLY_PROFILE_VERSION
-        if node_test
-        else PYTEST_READ_ONLY_PROFILE_VERSION
-    )
+    if inline_eval:
+        profile = inline_plan.profile_version
+        if profile == "node-eval-readonly-v1":
+            reason = "native_node_eval_readonly_containment_required"
+        else:
+            reason = "native_python_eval_readonly_containment_required"
+    elif node_tool:
+        profile = node_tool_plan.profile_version
+        if profile == NODE_BUILD_OUTPUT_PROFILE_VERSION:
+            reason = "native_node_build_output_containment_required"
+        else:
+            reason = "native_node_tool_readonly_containment_required"
+    elif git:
+        reason, profile = "native_git_readonly_containment_required", GIT_READ_ONLY_PROFILE_VERSION
+    elif vitest:
+        reason, profile = "native_vitest_readonly_containment_required", VITEST_READ_ONLY_PROFILE_VERSION
+    elif node_test:
+        reason, profile = "native_node_test_readonly_containment_required", NODE_TEST_READ_ONLY_PROFILE_VERSION
+    else:
+        reason, profile = "native_pytest_readonly_containment_required", PYTEST_READ_ONLY_PROFILE_VERSION
 
     def required(response: object, *, expected_reason: str = reason, expected_profile: str = profile) -> bool:
         return (

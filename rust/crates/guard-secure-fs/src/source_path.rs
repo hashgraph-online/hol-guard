@@ -1,3 +1,7 @@
+#[path = "scannable_source_path.rs"]
+mod scannable;
+pub use scannable::classify_scannable_source_path;
+
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 
@@ -402,122 +406,9 @@ pub fn classify_source_path(
     SourcePathDecision::allow(reason, candidate)
 }
 
-/// Admit an explicit file to independent bounded content review, not execution.
-/// Pi-family reads may name ordinary files outside a checkout or through a
-/// link. Location and suffix do not establish a content risk. The caller must
-/// still descriptor-read the canonical leaf and scan both source and output.
-pub fn classify_scannable_source_path(
-    target: &str,
-    cwd: &Path,
-    home: Option<&Path>,
-    allow_external: bool,
-) -> SourcePathDecision {
-    let strict = classify_source_path(target, cwd, home, allow_external);
-    if strict.allowed || !allow_external {
-        return strict;
-    }
-    let stripped = target.trim().trim_matches(['\'', '"']);
-    if stripped.is_empty()
-        || stripped
-            .chars()
-            .any(|character| matches!(character, '*' | '?' | '{' | '}' | '\0'))
-    {
-        return SourcePathDecision::deny("invalid_explicit_source_path");
-    }
-    let Ok(lexical) = resolve_candidate(stripped, Some(cwd), home.unwrap_or_else(|| Path::new("")))
-    else {
-        return SourcePathDecision::deny("unresolved_path");
-    };
-    let Ok(candidate) = fs::canonicalize(&lexical) else {
-        return SourcePathDecision::deny("external_target_not_readable");
-    };
-    for path in [&lexical, &candidate] {
-        let parts = lowered_parts(path);
-        if sensitive_path_family(path).is_some()
-            || sensitive_external_filename(path)
-            || parts
-                .iter()
-                .any(|part| EXTERNAL_SENSITIVE_PARTS.contains(&part.as_str()))
-        {
-            return SourcePathDecision::deny("sensitive_basename");
-        }
-        if !hidden_parts_allowed(&parts) {
-            return SourcePathDecision::deny("unsafe_hidden_dir");
-        }
-    }
-    if !candidate.is_file() {
-        return SourcePathDecision::deny("not_regular_file");
-    }
-    SourcePathDecision::allow("scannable_explicit_source_path", candidate)
-}
-
-pub fn sensitive_path_family(path: &Path) -> Option<(&'static str, &'static str)> {
-    let normalized = path
-        .to_string_lossy()
-        .replace('\\', "/")
-        .to_ascii_lowercase();
-    let parts: Vec<&str> = normalized
-        .split('/')
-        .filter(|part| !part.is_empty())
-        .collect();
-    let basename = parts.last().copied().unwrap_or_default();
-    if basename == ".env" || basename.starts_with(".env.") {
-        return Some(("local .env file", "critical"));
-    }
-    let direct = [
-        (".npmrc", "npm registry credentials", "high"),
-        (".pypirc", "Python package credentials", "high"),
-        (".netrc", "netrc credentials", "high"),
-        (".git-credentials", "Git credential store", "high"),
-        ("terraform.tfvars", "Terraform variable secrets", "high"),
-        ("private-key.pem", "wallet/private-key file", "critical"),
-        ("private.key", "wallet/private-key file", "critical"),
-        ("wallet.key", "wallet/private-key file", "critical"),
-    ];
-    if let Some((_, family, sensitivity)) = direct.iter().find(|(name, _, _)| *name == basename) {
-        return Some((*family, *sensitivity));
-    }
-    if basename.contains("private-key")
-        || basename.contains("private_key")
-        || basename.contains("wallet-key")
-        || basename.contains("wallet_key")
-    {
-        return Some(("wallet/private-key file", "critical"));
-    }
-    if parts
-        .windows(2)
-        .any(|window| window == [".aws", "credentials"])
-    {
-        return Some(("AWS shared credentials file", "high"));
-    }
-    if parts.windows(2).any(|window| window == [".aws", "config"]) {
-        return Some(("AWS shared config file", "high"));
-    }
-    if parts
-        .windows(2)
-        .any(|window| window == [".docker", "config.json"])
-    {
-        return Some(("Docker client config", "high"));
-    }
-    if parts.windows(2).any(|window| window == [".kube", "config"]) {
-        return Some(("Kubernetes config", "high"));
-    }
-    if parts.contains(&".gnupg") {
-        return Some(("GnuPG key material", "high"));
-    }
-    if let Some(index) = parts.iter().position(|part| *part == ".ssh") {
-        if parts
-            .get(index + 1)
-            .is_some_and(|name| matches!(*name, "id_rsa" | "id_ed25519" | "id_ecdsa"))
-        {
-            return Some(("SSH private key", "critical"));
-        }
-        if parts.get(index + 1).is_some_and(|name| *name == "config") {
-            return Some(("SSH client config", "high"));
-        }
-    }
-    None
-}
+#[path = "sensitive_path_family.rs"]
+mod sensitive;
+pub use sensitive::sensitive_path_family;
 
 /// True when every hidden (`.`-prefixed) path component is on the benign
 /// dotfile list or the `.github/workflows` prefix. Used by the native

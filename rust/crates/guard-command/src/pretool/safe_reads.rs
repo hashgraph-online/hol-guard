@@ -223,7 +223,31 @@ pub(super) fn bounded_file_write_target(value: &str, cwd: Option<&str>) -> bool 
             parent.join(name)
         }
     };
-    canonical.starts_with(&workspace) && resolved_path_allowed(&canonical, None, cwd)
+    canonical.starts_with(&workspace)
+        && resolved_path_allowed(&canonical, None, cwd)
+        && !autostart_write_target(&canonical)
+}
+
+fn autostart_write_target(path: &std::path::Path) -> bool {
+    let rendered = path
+        .to_string_lossy()
+        .replace('\\', "/")
+        .to_ascii_lowercase();
+    let parts: Vec<&str> = rendered
+        .split('/')
+        .filter(|part| !part.is_empty())
+        .collect();
+    parts.windows(2).any(|pair| {
+        matches!(
+            pair,
+            ["library", "launchagents"]
+                | ["library", "launchdaemons"]
+                | [".config", "autostart"]
+                | [".config", "systemd"]
+        )
+    }) || parts
+        .windows(3)
+        .any(|parts| parts == ["start menu", "programs", "startup"])
 }
 
 fn agent_skill_document(canonical: &std::path::Path, home_dir: Option<&str>) -> bool {

@@ -1,8 +1,11 @@
 use guard_command::pretool::evaluate_pre_tool_envelope;
 #[cfg(unix)]
 use guard_command::pretool::evaluate_pre_tool_envelope_with_context;
+#[cfg(unix)]
 use guard_contracts::{PreToolActionTypeV1, PreToolResultV1};
-use serde_json::{json, Value};
+use serde_json::json;
+#[cfg(unix)]
+use serde_json::Value;
 
 #[test]
 fn zcode_identical_argument_aliases_preserve_single_file_read() {
@@ -59,6 +62,8 @@ fn devin_home() -> std::path::PathBuf {
         "project/pyproject.toml",
         "project/scripts/notes.txt",
         "project/credentials.txt",
+        "project/tls/server.key",
+        "project/krb5cc_1000",
         "project/.env",
         ".ssh/id_rsa",
         ".hol-support/SAFETY.md",
@@ -123,6 +128,8 @@ fn zcode_reads_skill_documents_but_not_hidden_or_sensitive_skill_files() {
         ("~/.agents/skills/example/credentials.md", false),
         ("~/.agents/skills/example/run.py", false),
         ("~/.ssh/id_rsa", false),
+        ("~/project/tls/server.key", false),
+        ("~/project/krb5cc_1000", false),
     ] {
         let result = evaluate_pre_tool_envelope_with_context(
             "zcode",

@@ -154,6 +154,9 @@ def main() -> int:
             },
         )
         boundary.enforce_socket_boundary()
+        # The owner hashes this exact native-authorized argv; load_plan verifies
+        # it and the kernel boundaries above confine execution before dispatch.
+        # nosemgrep: python.lang.security.audit.dangerous-os-exec-tainted-env-args.dangerous-os-exec-tainted-env-args
         os.execv(plan["command"][0], plan["command"])
     except Exception:
         # Do not expose private plan paths/data or pretend the protected command ran.

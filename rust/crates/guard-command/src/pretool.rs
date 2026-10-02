@@ -111,7 +111,7 @@ fn sensitive_path_argument_with_credentials(value: &str, include_credential_name
         normalized.rsplit_once(':').map_or("", |(_, tail)| tail),
     ];
     candidates.iter().any(|candidate| {
-        let relative = candidate.trim_start_matches("./");
+        let relative = candidate.strip_prefix("./").unwrap_or(candidate);
         sensitive_path_family(Path::new(relative)).is_some()
             || (include_credential_names
                 && (guard_secure_fs::credential_named_path(Path::new(relative))
@@ -281,13 +281,7 @@ fn exact_safe_command(model: &CanonicalCommandV1, allow_git_helper_context: bool
         };
         let basename = executable_basename(executable);
         let inert_search = matches!(basename, "rg" | "grep")
-            && safe_search_arguments(basename, &segment.arguments)
-            && segment.arguments.iter().all(|argument| {
-                let value = argument.split_once('=').map_or(argument.as_str(), |(_, value)| value);
-                !value.starts_with(['/', '~'])
-                    && !value.split(['/', '\\']).any(|part| part == "..")
-                    && !sensitive_read_path_argument(value)
-            });
+            && safe_search_arguments(basename, &segment.arguments);
         if (!inert_search && sensitive_command(&segment.text))
             || (!matches!(basename, "rg" | "grep")
                 && segment
@@ -386,7 +380,15 @@ pub fn evaluate_pre_tool(request: &CommandModelRequestV1) -> Result<PreToolDecis
             "The Rust command authority proved this command only inspects tool metadata.",
         ));
     }
-    if destructive_command(normalized) {
+    let destructive_remote_sync = model.segments.iter().any(|segment| {
+        segment.executable.as_deref().is_some_and(|executable| {
+            matches!(executable_basename(executable), "gh" | "gh.exe")
+        }) && matches!(segment.arguments.as_slice(), [repo, sync, ..] if repo == "repo" && sync == "sync")
+            && segment.arguments.iter().take_while(|arg| arg.as_str() != "--")
+                .any(|arg| arg == "--force")
+            && !segment.arguments.iter().any(|arg| matches!(arg.as_str(), "--help" | "-h"))
+    });
+    if destructive_command(normalized) || destructive_remote_sync {
         return Ok(pretool_decision(
             model,
             "block",

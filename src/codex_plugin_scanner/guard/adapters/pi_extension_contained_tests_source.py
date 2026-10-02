@@ -71,11 +71,16 @@ CONTAINED_TEST_HELPERS_SOURCE = r"""
     const input = snapshot.payload.tool_input;
     const key = toolCallIdKey(snapshot.payload.tool_call_id);
     const profileMatches = (
-      (profile === "python-eval-readonly-v1" && response.reason_code === "native_python_eval_readonly_containment_required") ||
-      (profile === "node-eval-readonly-v1" && response.reason_code === "native_node_eval_readonly_containment_required") ||
-      (profile === "package-test-readonly-v1" && response.reason_code === "native_package_test_readonly_containment_required") ||
-      (profile === "node-build-output-v1" && response.reason_code === "native_node_build_output_containment_required") ||
-      (profile === "node-tool-readonly-v1" && response.reason_code === "native_node_tool_readonly_containment_required") ||
+      (profile === "python-eval-readonly-v1" &&
+        response.reason_code === "native_python_eval_readonly_containment_required") ||
+      (profile === "node-eval-readonly-v1" &&
+        response.reason_code === "native_node_eval_readonly_containment_required") ||
+      (profile === "package-test-readonly-v1" &&
+        response.reason_code === "native_package_test_readonly_containment_required") ||
+      (profile === "node-build-output-v1" &&
+        response.reason_code === "native_node_build_output_containment_required") ||
+      (profile === "node-tool-readonly-v1" &&
+        response.reason_code === "native_node_tool_readonly_containment_required") ||
       (profile === "git-readonly-v1" && response.reason_code === "native_git_readonly_containment_required") ||
       (profile === "pytest-readonly-v2" && response.reason_code === "native_pytest_readonly_containment_required") ||
       (profile === "vitest-readonly-v1" && response.reason_code === "native_vitest_readonly_containment_required") ||

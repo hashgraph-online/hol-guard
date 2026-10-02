@@ -122,6 +122,23 @@ def test_missing_optional_library_dependency_stays_noexec_without_blocking_runne
     assert [record["path"] for record in records] == [str(program)]
 
 
+@pytest.mark.parametrize("content", [b"library placeholder", b"\x7fELFtruncated"])
+def test_invalid_optional_module_stays_noexec_without_blocking_runner(tmp_path, content):
+    program = _image(tmp_path / "runner")
+    optional = tmp_path / "unused.node"
+    optional.write_bytes(content)
+    records = _collect(tmp_path, [program], [optional])
+    assert [record["path"] for record in records] == [str(program)]
+
+
+def test_invalid_required_module_still_blocks_execution(tmp_path):
+    program = _image(tmp_path / "runner", needed=("required.so",))
+    required = tmp_path / "required.so"
+    required.write_text("library placeholder")
+    with pytest.raises(LinuxContainmentUnavailableError):
+        _collect(tmp_path, [program], [required])
+
+
 def test_unresolved_symlink_cannot_be_admitted_as_a_program(tmp_path):
     actual = _image(tmp_path / "runner")
     alias = tmp_path / "alias"

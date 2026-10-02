@@ -107,6 +107,9 @@ pub(crate) fn classify_tool_name(tool: &str) -> PreToolActionTypeV1 {
         tool,
         &["write", "edit", "patch", "replace", "delete", "mkdir"],
     ) {
+        // Routine code edits and clean output are not persistence behavior.
+        // Autostart/config targets cannot obtain the bounded-write proof;
+        // they keep the independent persistence floor below.
         PreToolActionTypeV1::FileWrite
     } else if tool_matches(
         tool,

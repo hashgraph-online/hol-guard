@@ -9,6 +9,7 @@ fn routine_workspace_writes_keep_sensitive_and_destructive_boundaries() {
     let workspace = root.join("project");
     std::fs::create_dir_all(workspace.join("src")).unwrap();
     std::fs::create_dir_all(workspace.join(".ssh")).unwrap();
+    std::fs::create_dir_all(workspace.join("Library/LaunchAgents")).unwrap();
     std::fs::write(workspace.join("src/example.py"), "fixture").unwrap();
     std::fs::write(root.join("outside.py"), "fixture").unwrap();
     let workspace = std::fs::canonicalize(workspace).unwrap();
@@ -18,6 +19,13 @@ fn routine_workspace_writes_keep_sensitive_and_destructive_boundaries() {
         ("write", ".env".to_owned(), false),
         ("write", ".ssh/id_rsa".to_owned(), false),
         ("write", ".git/config".to_owned(), false),
+        (
+            "write",
+            "Library/LaunchAgents/background.plist".to_owned(),
+            false,
+        ),
+        ("write", "src/server.key".to_owned(), false),
+        ("write", "src/krb5cc_1000".to_owned(), false),
         ("write", "../outside.py".to_owned(), false),
         (
             "write",

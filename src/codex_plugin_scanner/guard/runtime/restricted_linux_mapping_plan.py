@@ -123,6 +123,9 @@ def collect_mapping_evidence(
     class MissingDependencyError(ValueError):
         pass
 
+    class InvalidImageError(ValueError):
+        pass
+
     def inspect(path):
         nonlocal total
         if path in cache:
@@ -138,11 +141,14 @@ def collect_mapping_evidence(
             prefix = stream.read(4)
             if prefix == b"\x7fELF":
                 system_library = any(path.is_relative_to(root) for root in (Path("/usr/lib"), Path("/lib")))
-                _soname, dependencies = _elf(stream, before, library=library, system_library=system_library)
+                try:
+                    _soname, dependencies = _elf(stream, before, library=library, system_library=system_library)
+                except (ValueError, struct.error, UnicodeError) as error:
+                    raise InvalidImageError("Unverified executable mapping.") from error
             elif not library and prefix.startswith(b"#!"):
                 dependencies = ()
             else:
-                raise ValueError("Unverified executable mapping.")
+                raise InvalidImageError("Unverified executable mapping.")
             total += before.st_size
             if total > _MAX_MAPPING_BYTES:
                 raise ValueError("Executable mapping memory budget exceeded.")
@@ -181,8 +187,8 @@ def collect_mapping_evidence(
         for module in optional:
             try:
                 component = closure([module])
-            except MissingDependencyError:
-                # Unused optional modules with missing dependencies stay noexec;
+            except (MissingDependencyError, InvalidImageError):
+                # Unused invalid modules or missing dependencies stay noexec;
                 # they must not prevent unrelated ordinary work from starting.
                 continue
             records.update(component)
