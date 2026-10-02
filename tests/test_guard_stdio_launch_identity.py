@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import subprocess
 import sys
 from pathlib import Path
@@ -30,6 +31,9 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import (
 class _FakeProcess:
     def __init__(self) -> None:
         self.returncode: int | None = None
+        self.stdin = io.BytesIO()
+        self.stdout = io.BytesIO()
+        self.stderr = io.BytesIO()
         self.terminated = False
         self.killed = False
 
@@ -123,7 +127,7 @@ def test_stdio_sensitive_read_binds_pinned_executable_script_and_configured_env(
 
     _replace_file(script, b"print('server-v2')\n")
     script_changed = _pinned_token(proxy(secret_v1), artifact, config)
-    assert approval_context_tokens_validation_reason(baseline, script_changed) == ("approval_reuse_identity_changed")
+    assert approval_context_tokens_validation_reason(baseline, script_changed) == ("approval_reuse_content_changed")
 
     _replace_file(script, b"print('server-v1')\n")
     _replace_file(launcher, b"fake-python-v2\n", executable=True)
