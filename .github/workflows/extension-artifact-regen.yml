@@ -29,8 +29,20 @@ on:
       - rust/**
       - contracts/extensions/**
       - src/codex_plugin_scanner/guard/**
-      - tests/**
-      - docs/guard/**
+      - docs/guard/native-command-corpus-contract.md
+      - docs/guard/declarative-authoring-adr.md
+      - tests/guard_command_*.py
+      - tests/test_guard_command_*.py
+      - tests/guard_test_invariants.py
+      - tests/native_command_test_support.py
+      - tests/test_native_command_test_support_batch.py
+      - tests/test_guard_native_classification_baseline.py
+      - tests/test_guard_contained_*.py
+      - tests/test_guard_containment_external_executable.py
+      - tests/test_guard_package_shims.py
+      - tests/test_guard_verified_reads.py
+      - tests/fixtures/guard-command-corpus/**
+      - tests/fixtures/command-source-*.v1.json
       - scripts/refresh_extension_artifacts.py
       - scripts/build_native_command_program.py
       - scripts/render_command_extension_directory.py

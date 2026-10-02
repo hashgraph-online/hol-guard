@@ -201,7 +201,8 @@ jobs:
           test -s "$shard_file"
           # Timing contracts run untraced in scheduling-sensitive with their original deadlines.
           PYTHONPATH=scripts/ci GUARD_PYTEST_DURATION_OUTPUT=pytest-durations.json GUARD_PYTEST_UNDER_COVERAGE=1 \
-            uv run --no-sync pytest -p pytest_duration_report "@$shard_file" --tb=short --durations=10 \
+            uv run --no-sync python scripts/ci/run_projection_shard.py "$shard_file" -- \
+            -p pytest_duration_report "@$shard_file" --tb=short --durations=10 \
             --deselect tests/test_guard_hook_process_runner.py::test_scheduler_and_runner_complete_48_routine_reviews_without_capacity_denial \
             --deselect tests/test_guard_daemon_storage_liveness.py::test_locked_storage_hook_burst_fails_safe_without_stranding_daemon \
             --deselect tests/test_guard_approval_store_scale.py::TestQueueScaleTargets::test_listing_first_queue_page_with_100k_rows_stays_under_100ms \

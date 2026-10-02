@@ -65,46 +65,32 @@ def _pr_diff_paths() -> list[str] | None:
 
 
 def pending_decision_diff_regen() -> bool:
-    """The branch changes report-bound inputs but leaves the report to regen.
+    """In a PR that does not carry the regen-owned decision-diff report.
 
-    The decision-diff report is regen-owned: generated-artifacts-guard rejects
-    it in PR diffs, so a branch that changes any bound input cannot also update
-    the report. Freshness is enforced on main and on regen PRs — whose diff
-    does carry the report — and deferred here.
+    The report is maintainer-owned: generated-artifacts-guard rejects it in
+    ordinary PR diffs, so a branch can never refresh it, and drift may equally
+    be inherited from main (any merged bound-source change restales it until
+    the post-merge regen lands). Freshness is enforced where the report can
+    actually change — on main and on regen PRs, whose diff carries it — and
+    deferred for every other PR.
     """
 
     if pending_contribution_regen():
         return True
-    prefixes = (
-        "contributions/",
-        "contracts/extensions/",
-        "rust/crates/guard-command/",
-        "src/codex_plugin_scanner/guard/",
-        "tests/fixtures/guard-command-corpus/",
-    )
-    report = prefixes[-1] + "decision-diff-report.json"
-    bound: set[str] = set()
+    report = "tests/fixtures/guard-command-corpus/decision-diff-report.json"
     try:
-        from tests.guard_command_decision_diff import (
-            _EVIDENCE_SOURCE_PATHS,
-            REPO_ROOT,
-            REPORT_PATH,
-        )
+        from tests.guard_command_decision_diff import REPO_ROOT, REPORT_PATH
 
-        bound = {str(path.relative_to(REPO_ROOT)) for path in _EVIDENCE_SOURCE_PATHS}
         report = str(REPORT_PATH.relative_to(REPO_ROOT))
     except (ImportError, ValueError):
         pass
+    in_pr = bool(os.environ.get("GITHUB_BASE_REF"))
     diff = _pr_diff_paths()
     if diff is None:
-        # PR context but the base fetch/diff failed (infra flake): the report
-        # cannot be committed in-PR regardless, so deferring cannot mask real
-        # drift — the post-merge regen check on main still enforces it. Outside
-        # PR context with no local main, enforce strictly.
-        return bool(os.environ.get("GITHUB_BASE_REF"))
-    if report in diff:
+        return in_pr
+    if not in_pr and not diff:
         return False
-    return any(path in bound or path.startswith(prefixes) for path in diff)
+    return report not in diff
 
 
 requires_fresh_projections = pytest.mark.skipif(
