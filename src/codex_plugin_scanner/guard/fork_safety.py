@@ -57,7 +57,10 @@ def _fresh_primitive(value: object) -> object | None:
     if isinstance(value, threading.Condition):
         return threading.Condition()
     if isinstance(value, threading.Event):
-        return threading.Event()
+        fresh_event = threading.Event()
+        if value.is_set():
+            fresh_event.set()
+        return fresh_event
     if type(value) is _RLOCK_TYPE:
         return threading.RLock()
     if type(value) is _LOCK_TYPE:
