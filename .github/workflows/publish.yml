@@ -259,7 +259,7 @@ jobs:
                 tag_sha=$(git rev-parse "v${RELEASE_VERSION}^{commit}")
                 if [[ "$tag_sha" != "$SOURCE_SHA" ]]; then
                   if ! git merge-base --is-ancestor "$tag_sha" HEAD; then
-                    echo "Stable tag does not target an ancestor of the dispatch source" >&2
+                    echo "Stable tag does not target the dispatch source or one of its ancestors" >&2
                     exit 1
                   fi
                   # Finish an already reserved canonical version with repaired
