@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import Literal, TypeGuard, cast
 
 from ..file_identity import content_stat_identity
-from ..native_context import context_opaque_digest, context_sha256_digest
+from ..native_context import _UNBOUND_PREFIX, context_opaque_digest, context_sha256_digest
 from .env_wrapper import parse_env_wrapper
 from .extension_control_runtime import current_extension_control_binding_digest
 
@@ -64,13 +64,6 @@ class ApprovalContextToken:
 
 class NativeContextDigestUnavailableError(RuntimeError):
     """The native context-digest authority is required but unreachable."""
-
-
-_UNBOUND_PREFIX = "guard-context-unbound:"
-
-
-def is_unbound_context_digest(value: object) -> bool:
-    return isinstance(value, str) and value.startswith(_UNBOUND_PREFIX)
 
 
 def _unbound_context_digest(label: str, *, material: object) -> str:
