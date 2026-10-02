@@ -17,12 +17,32 @@ def test_fresh_primitive_rebuilds_each_supported_type() -> None:
         (threading.RLock(), _RLOCK_TYPE),
         (threading.Condition(), threading.Condition),
         (threading.Event(), threading.Event),
+        (threading.Semaphore(3), threading.Semaphore),
+        (threading.BoundedSemaphore(2), threading.BoundedSemaphore),
+        (threading.Barrier(2), threading.Barrier),
     )
     for original, expected_type in cases:
         fresh = fork_safety._fresh_primitive(original)
         assert fresh is not None
         assert type(fresh) is expected_type
         assert fresh is not original
+
+
+def test_fresh_primitive_preserves_bounded_semaphore_capacity() -> None:
+    semaphore = threading.BoundedSemaphore(2)
+    semaphore.acquire()
+    fresh = fork_safety._fresh_primitive(semaphore)
+    assert isinstance(fresh, threading.BoundedSemaphore)
+    assert fresh.acquire(blocking=False)
+    assert fresh.acquire(blocking=False)
+
+
+def test_fresh_primitive_rebuilds_exhausted_semaphore_usable() -> None:
+    semaphore = threading.Semaphore(1)
+    semaphore.acquire()
+    fresh = fork_safety._fresh_primitive(semaphore)
+    assert isinstance(fresh, threading.Semaphore)
+    assert fresh.acquire(blocking=False)
 
 
 def test_fresh_primitive_preserves_set_event_state() -> None:
@@ -42,6 +62,23 @@ def test_fresh_primitive_rebuilds_tuple_members_only() -> None:
     assert fresh[1] == "keep"
     assert fresh[2] == 7
     assert fork_safety._fresh_primitive(("no", "primitives")) is None
+
+
+def test_fresh_primitive_rebuilds_mutable_containers_in_place() -> None:
+    lock = threading.Lock()
+    mapping: dict[str, object] = {"lock": lock, "keep": 1}
+    sequence: list[object] = [lock, "keep"]
+    members: set[object] = {lock, "keep"}
+
+    for container in (mapping, sequence, members):
+        assert fork_safety._fresh_primitive(container) is None
+
+    assert type(mapping["lock"]) is _LOCK_TYPE
+    assert mapping["lock"] is not lock
+    assert type(sequence[0]) is _LOCK_TYPE
+    assert sequence[0] is not lock
+    assert len(members) == 2
+    assert lock not in members
 
 
 def test_fresh_primitive_ignores_plain_values() -> None:
@@ -85,8 +122,7 @@ def test_rebuild_namespace_reaches_class_level_locks() -> None:
     assert _Holder._inner_lock is not original
 
 
-def test_forget_in_child_registers_and_scan_clears_container() -> None:
+def test_forget_in_child_registers_container() -> None:
     container: dict[str, object] = {"inherited": object()}
     fork_safety.forget_in_child(container)
     assert container in fork_safety._CONTAINERS
-    container.clear()
