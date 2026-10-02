@@ -6,8 +6,10 @@ import hashlib
 import json
 import os
 import shlex
+import stat
 import sys
 import tempfile
+import time
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
@@ -24,6 +26,47 @@ _PROFILES = {
     "native_node_tool_readonly_containment_required": "node-tool-readonly-v1",
     "native_node_build_output_containment_required": "node-build-output-v1",
 }
+
+
+def cleanup_stale_zcode_requests() -> None:
+    """Reclaim abandoned private snapshots after a full day, never follow links."""
+    if os.name != "posix":
+        return
+    cutoff = time.time() - 86_400
+    try:
+        with os.scandir(tempfile.gettempdir()) as entries:
+            for index, entry in enumerate(entries):
+                if index >= 4096:
+                    break
+                if not entry.name.startswith("hol-guard-contained-test-"):
+                    continue
+                try:
+                    descriptor = os.open(entry.path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+                    try:
+                        parent = os.fstat(descriptor)
+                        if (
+                            parent.st_uid != os.getuid()
+                            or stat.S_IMODE(parent.st_mode) != 0o700
+                            or parent.st_mtime > cutoff
+                        ):
+                            continue
+                        request = os.stat("request.json", dir_fd=descriptor, follow_symlinks=False)
+                        if (
+                            not stat.S_ISREG(request.st_mode)
+                            or request.st_uid != os.getuid()
+                            or stat.S_IMODE(request.st_mode) != 0o600
+                            or request.st_nlink != 1
+                            or request.st_mtime > cutoff
+                        ):
+                            continue
+                        os.unlink("request.json", dir_fd=descriptor)
+                    finally:
+                        os.close(descriptor)
+                    os.rmdir(entry.path)
+                except OSError:
+                    continue
+    except OSError:
+        pass
 
 
 def route_zcode_containment(
@@ -117,6 +160,7 @@ def contained_zcode_response(
         ).encode()
         if len(serialized) > 1_048_576:
             return None
+        cleanup_stale_zcode_requests()
         directory = Path(tempfile.mkdtemp(prefix="hol-guard-contained-test-"))
         # mkdtemp creates an owner-only directory; do not widen its permissions.
         request = directory / "request.json"
