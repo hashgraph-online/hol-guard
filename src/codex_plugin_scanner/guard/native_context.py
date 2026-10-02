@@ -352,7 +352,10 @@ def is_unbound_context_digest(value: object) -> bool:
 
 
 def _unbound_material_digest(material: object) -> str:
-    return hashlib.sha256(_canonical_material_bytes(material)).hexdigest()
+    # Integrity digest over guard material (env values / launch identity / PATH), not a
+    # password hash — parity-pinned to the pre-migration hashlib baseline for byte-identical
+    # persisted approval rows. codeql[py/weak-sensitive-data-hashing] false positive.
+    return hashlib.sha256(_canonical_material_bytes(material)).hexdigest()  # codeql[py/weak-sensitive-data-hashing]
 
 
 def _canonical_material_bytes(material: object) -> bytes:
@@ -425,7 +428,7 @@ def context_opaque_digest(
         return digest
     if strict:
         return f"{_UNBOUND_PREFIX}{unbound_label}:{_unbound_material_digest(material)}"
-    return hashlib.sha256(material.encode("utf-8")).hexdigest()
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()  # codeql[py/weak-sensitive-data-hashing]
 
 
 __all__ = [
