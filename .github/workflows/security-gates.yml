@@ -75,6 +75,7 @@ jobs:
           fs
           --scanners vuln,misconfig,secret
           --severity HIGH,CRITICAL
+          --ignorefile /workdir/.trivyignore
           --skip-dirs /workdir/tests/fixtures
           --skip-files /workdir/.clusterfuzzlite/Dockerfile
           --exit-code 1
