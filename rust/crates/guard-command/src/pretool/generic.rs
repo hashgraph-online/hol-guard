@@ -10,7 +10,7 @@ use guard_contracts::{
 };
 use serde_json::Value;
 
-use super::{evaluate_pre_tool, PreToolDecisionV1};
+use super::{evaluate_pre_tool_with_context, PreToolDecisionV1};
 use extract::{extract_generic_signals, GenericSignals};
 use result::{generic_action, generic_error_result, generic_result, review_reason};
 use std::time::Instant;
@@ -48,18 +48,31 @@ pub fn evaluate_pre_tool_envelope_with_context(
     home_dir: Option<&str>,
     cwd: Option<&str>,
 ) -> PreToolResultV1 {
-    let signals = match extract_generic_signals(payload) {
+    let mut signals = match extract_generic_signals(payload) {
         Ok(value) => value,
         Err(error) => return generic_error_result(harness, event, error),
     };
     let command_decision = signals.command.as_deref().map(|command| {
-        evaluate_pre_tool(&CommandModelRequestV1 {
-            command: command.to_owned(),
-            dialect: "posix".to_owned(),
-            transport: "shell_string".to_owned(),
-            extraction_provenance: "pre-tool-generic".to_owned(),
-        })
+        evaluate_pre_tool_with_context(
+            &CommandModelRequestV1 {
+                command: command.to_owned(),
+                dialect: "posix".to_owned(),
+                transport: "shell_string".to_owned(),
+                extraction_provenance: "pre-tool-generic".to_owned(),
+            },
+            home_dir,
+            cwd,
+        )
     });
+    // Parsed benign commands may contain credential words as search patterns.
+    // Preserve independent structured-path/content risk, not the raw-text hint.
+    if command_decision.as_ref().is_some_and(|decision| {
+        decision
+            .as_ref()
+            .is_ok_and(|decision| decision.explicitly_benign)
+    }) {
+        signals.sensitive_target = signals.independent_sensitive_target;
+    }
     let mut result = evaluate_signals(
         harness,
         event,
@@ -121,7 +134,7 @@ pub fn evaluate_pre_tool_envelope_with_context(
     // Other platforms retain review until they can enforce the same profile.
     if cfg!(target_os = "macos")
         && event == "PreToolUse"
-        && matches!(harness, "omp" | "oh-my-pi")
+        && matches!(harness, "omp" | "oh-my-pi" | "zcode")
         && cwd.is_some()
         && (result.action.action_type == PreToolActionTypeV1::Command
             || (matches!(
@@ -386,13 +399,13 @@ fn evaluate_signals(
         && signals.url_values.is_empty()
         && signals.command.is_none()
         && signals.path_values.len() == 1
-        && super::safe_reads::bounded_file_write_target(&signals.path_values[0], cwd)
+        && super::safe_reads::bounded_file_write_target(&signals.path_values[0], home_dir, cwd)
     {
         return generic_result(
             action,
             "allow",
             "native_exact_safe_file_write",
-            "The Rust authority proved this ordinary file write stays inside the verified workspace.",
+            "The Rust authority proved this ordinary file write stays inside the verified workspace or a registered worktree of the same repository.",
         );
     }
     let (reason_code, reason) = review_reason(action_type);

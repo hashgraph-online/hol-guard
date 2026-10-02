@@ -10,6 +10,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+from tests.support.ci_workflow import expand_ci_job_actions
+
 
 @pytest.fixture
 def detector():
@@ -121,7 +123,7 @@ def test_preparation_retains_generated_outputs_and_checks_without_rebuild(verifi
 @pytest.mark.parametrize("job_name", ["linux-build", "windows-build"])
 def test_wheel_rebuild_preserves_identity_and_precedes_packaging(job_name):
     root = Path(__file__).parents[1]
-    workflow = yaml.safe_load((root / ".github/workflows/native-wheel-ci.yml").read_text())
+    workflow = expand_ci_job_actions(yaml.safe_load((root / ".github/workflows/native-wheel-ci.yml").read_text()))
     steps = workflow["jobs"][job_name]["steps"]
     verification = next(step for step in steps if "scripts/ci/verify_native_command_program.py" in step.get("run", ""))
     assert verification["env"]["HOL_GUARD_BUILD_SHA"] == "${{ github.sha }}"

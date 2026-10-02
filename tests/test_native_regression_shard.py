@@ -10,6 +10,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+from tests.support.ci_workflow import expand_ci_job_actions
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -103,7 +105,7 @@ def test_duplicate_test_cannot_replace_a_missing_test() -> None:
 
 
 def test_platform_gates_require_complete_inventory_and_all_native_proofs() -> None:
-    jobs = yaml.safe_load((ROOT / ".github/workflows/native-wheel-ci.yml").read_text())["jobs"]
+    jobs = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/native-wheel-ci.yml").read_text()))["jobs"]
     for name in ["linux-x64", "windows-x64", "macos"]:
         job = jobs[name]
         assert job["if"] == "always()"
@@ -127,7 +129,7 @@ def test_platform_gates_require_complete_inventory_and_all_native_proofs() -> No
 
 
 def test_sonar_starts_independently_and_keeps_coverage_and_quality_gates() -> None:
-    job = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())["jobs"]["sonar"]
+    job = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text()))["jobs"]["sonar"]
     assert "needs" not in job
     assert job["steps"][0]["id"] == "token-presence"
     assert job["if"] == "vars.SONAR_CI_ENABLED == 'true'"
@@ -139,7 +141,7 @@ def test_sonar_starts_independently_and_keeps_coverage_and_quality_gates() -> No
 
 
 def test_regression_action_installs_only_the_same_run_wheel() -> None:
-    action = yaml.safe_load((ROOT / ".github/actions/native-regression/action.yml").read_text())
+    action = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/actions/native-regression/action.yml").read_text()))
     steps = action["runs"]["steps"]
     download = next(step for step in steps if step.get("uses", "").startswith("actions/download-artifact@"))
     assert download["with"] == {"name": "${{ inputs.artifact-name }}"}
@@ -159,7 +161,7 @@ def test_required_status_aggregators_run_after_cancellation() -> None:
         "ci.yml": ["ci-python-312"],
         "native-wheel-ci.yml": ["linux-x64", "windows-x64", "macos", "native-regression-complete"],
     }.items():
-        workflow = yaml.safe_load((ROOT / ".github/workflows" / filename).read_text())
+        workflow = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows" / filename).read_text()))
         assert workflow["concurrency"]["cancel-in-progress"] is True
         for name in names:
             gate = workflow["jobs"][name]
@@ -169,7 +171,7 @@ def test_required_status_aggregators_run_after_cancellation() -> None:
 
 
 def test_every_native_runner_and_reconciler_use_the_same_shard_count() -> None:
-    jobs = yaml.safe_load((ROOT / ".github/workflows/native-wheel-ci.yml").read_text())["jobs"]
+    jobs = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/native-wheel-ci.yml").read_text()))["jobs"]
     for platform in ("linux", "windows", "macos"):
         job = jobs[f"{platform}-regression"]
         count = len(job["strategy"]["matrix"]["shard"])
@@ -219,8 +221,8 @@ def test_missing_report_error_identifies_expected_and_actual_counts() -> None:
 
 
 def test_windows_native_build_keeps_the_warm_main_only_cache() -> None:
-    action = yaml.safe_load((ROOT / ".github/actions/setup-rust/action.yml").read_text())
-    jobs = yaml.safe_load((ROOT / ".github/workflows/native-wheel-ci.yml").read_text())["jobs"]
+    action = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/actions/setup-rust/action.yml").read_text()))
+    jobs = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/native-wheel-ci.yml").read_text()))["jobs"]
     setup = next(step for step in jobs["windows-build"]["steps"] if step.get("uses") == "./.github/actions/setup-rust")
     default_key = action["inputs"]["cache-key"]["default"]
     assert setup.get("with", {}).get("cache-key", default_key) == default_key == "native-wheel"

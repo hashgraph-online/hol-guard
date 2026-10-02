@@ -94,8 +94,7 @@ jobs:
           uv run --no-sync python scripts/refresh_extension_artifacts.py
           # Test expectations and fixture trust are authored inputs, never outputs.
           git add -A contracts/extensions docs/guard/extensions contributions/extensions \
-            src/codex_plugin_scanner/guard/contracts/data/extensions \
-            src/codex_plugin_scanner/guard/contracts/data/mcp_servers
+            src/codex_plugin_scanner/guard/contracts/data/extensions
           close_superseded() {
             stale_prs=$(gh pr list --repo "${GH_REPO}" --state open --limit 200 \
               --search "head:regen/artifacts-" \

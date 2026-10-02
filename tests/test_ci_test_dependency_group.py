@@ -9,6 +9,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+from tests.support.ci_workflow import expand_ci_job_actions
+
 try:
     import tomllib
 except ModuleNotFoundError:
@@ -35,11 +37,11 @@ def test_ci_group_preserves_dev_tools_except_the_type_checker() -> None:
 
 def test_test_workers_select_the_frozen_group_without_default_dev_dependencies() -> None:
     for filename in ("setup-ci-python", "native-regression"):
-        action = yaml.safe_load((ROOT / f".github/actions/{filename}/action.yml").read_text())
+        action = expand_ci_job_actions(yaml.safe_load((ROOT / f".github/actions/{filename}/action.yml").read_text()))
         commands = "\n".join(step.get("run", "") for step in action["runs"]["steps"])
         assert "uv sync --frozen --no-dev --group ci-test" in commands
         assert "--extra dev" not in commands
-    workflow = yaml.safe_load((ROOT / ".github/workflows/native-wheel-ci.yml").read_text())
+    workflow = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/native-wheel-ci.yml").read_text()))
     for job in ("wheel-contracts", "linux-build", "linux-proof", "windows-build", "windows-proof"):
         commands = "\n".join(step.get("run", "") for step in workflow["jobs"][job]["steps"])
         assert "uv sync --frozen --no-dev --group ci-test" in commands
@@ -50,7 +52,7 @@ def test_test_workers_select_the_frozen_group_without_default_dev_dependencies()
 
 @pytest.mark.parametrize("job", ["compatibility", "deep-compatibility", "cross-platform", "windows-updater"])
 def test_compatibility_workers_select_the_frozen_test_group(job: str) -> None:
-    workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
+    workflow = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text()))
     commands = "\n".join(step.get("run", "") for step in workflow["jobs"][job]["steps"])
     assert "uv sync --frozen --no-dev --group ci-test --python ${{ matrix.python-version }}" in commands
     assert "--extra dev" not in commands
@@ -58,7 +60,7 @@ def test_compatibility_workers_select_the_frozen_test_group(job: str) -> None:
 
 
 def test_reporting_and_optional_workers_preserve_their_dependency_boundaries() -> None:
-    jobs = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())["jobs"]
+    jobs = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text()))["jobs"]
     commands = {name: "\n".join(step.get("run", "") for step in job["steps"]) for name, job in jobs.items()}
     assert "uv sync --frozen --no-dev --group ci-test --python ${{ env.CI_PYTHON_VERSION }}" in commands["sonar"]
     assert (
@@ -71,7 +73,7 @@ def test_reporting_and_optional_workers_preserve_their_dependency_boundaries() -
 
 
 def test_staged_evaluator_wheel_selects_test_tools_without_installing_the_source_project() -> None:
-    workflow = yaml.safe_load((ROOT / ".github/workflows/evaluation-wheel-ci.yml").read_text())
+    workflow = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/evaluation-wheel-ci.yml").read_text()))
     commands = "\n".join(step.get("run", "") for step in workflow["jobs"]["staged-evaluator-wheel"]["steps"])
     assert "uv sync --frozen --no-dev --group ci-test --no-install-project --python 3.12" in commands
     assert "--extra dev" not in commands
@@ -80,13 +82,13 @@ def test_staged_evaluator_wheel_selects_test_tools_without_installing_the_source
 
 
 def test_coverage_cache_keeps_prebuilt_wheels_for_read_only_workers() -> None:
-    action = yaml.safe_load((ROOT / ".github/actions/setup-ci-python/action.yml").read_text())
+    action = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/actions/setup-ci-python/action.yml").read_text()))
     uv_steps = [step for step in action["runs"]["steps"] if step.get("uses", "").startswith("astral-sh/setup-uv@")]
     assert len(uv_steps) == 2
     assert all(step["with"]["prune-cache"] is False for step in uv_steps)
     assert all(step["with"]["save-cache"] == "${{ inputs.save-cache }}" for step in uv_steps)
     assert action["inputs"]["save-cache"]["default"] == "false"
-    jobs = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())["jobs"]
+    jobs = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text()))["jobs"]
     producer = next(
         step for step in jobs["coverage-plan"]["steps"] if step.get("uses") == "./.github/actions/setup-ci-python"
     )

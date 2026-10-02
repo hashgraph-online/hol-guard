@@ -10,6 +10,7 @@ import yaml
 
 from codex_plugin_scanner.guard.extension_builder.errors import BuilderError
 from codex_plugin_scanner.guard.extension_builder.source_oclif import _flag_names
+from tests.support.ci_workflow import expand_ci_job_actions
 
 
 @pytest.mark.parametrize(
@@ -64,7 +65,9 @@ def test_oclif_keeps_valid_prefixed_aliases_and_one_character_short_options() ->
 )
 def test_direct_authoring_validation_inputs_trigger_the_workflow(changed_path: str) -> None:
     root = Path(__file__).resolve().parents[1]
-    document = yaml.safe_load((root / ".github/workflows/extension-builder-ci.yml").read_text(encoding="utf-8"))
+    document = expand_ci_job_actions(
+        yaml.safe_load((root / ".github/workflows/extension-builder-ci.yml").read_text(encoding="utf-8"))
+    )
     assert isinstance(document, dict)
     # PyYAML's YAML 1.1 loader interprets the Actions key "on" as Boolean True.
     triggers = document.get("on", document.get(True))

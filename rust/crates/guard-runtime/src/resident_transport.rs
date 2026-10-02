@@ -2,13 +2,16 @@ use std::io::{self, Read, Write};
 use std::net::TcpStream;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::mpsc::{sync_channel, Receiver, SyncSender, TrySendError};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
 use sha2::{Digest, Sha256};
+#[path = "resident_worker_pool.rs"]
+mod worker_pool;
 #[cfg(unix)]
 use std::os::unix::net::UnixStream;
+use worker_pool::spawn_workers;
 
 pub(crate) trait ResidentStream: Read + Write + Send {
     fn set_resident_read_timeout(&self, timeout: Option<Duration>) -> io::Result<()>;
@@ -263,32 +266,21 @@ fn handle_pending_request(
     }
 }
 
-fn spawn_workers<T, F>(count: usize, receiver: Receiver<T>, handler: F)
-where
-    T: Send + 'static,
-    F: Fn(T) + Send + Sync + 'static,
-{
-    let receiver = Arc::new(Mutex::new(receiver));
-    let handler = Arc::new(handler);
-    for _ in 0..count {
-        let receiver = Arc::clone(&receiver);
-        let handler = Arc::clone(&handler);
-        thread::spawn(move || loop {
-            let next = match receiver.lock() {
-                Ok(guard) => guard.recv(),
-                Err(_) => return,
-            };
-            match next {
-                Ok(item) => handler(item),
-                Err(_) => return,
-            }
-        });
-    }
-}
-
 pub(crate) struct ResidentAdmission {
     primary: SyncSender<BoxedResidentStream>,
     overflow: SyncSender<BoxedResidentStream>,
+    workers: Vec<thread::JoinHandle<()>>,
+}
+
+pub(crate) fn drain_resident_workers(admission: ResidentAdmission) {
+    let ResidentAdmission {
+        primary,
+        overflow,
+        workers,
+    } = admission;
+    drop(primary);
+    drop(overflow);
+    worker_pool::drain(workers, Duration::from_secs(2));
 }
 
 fn retry_overflow_admissions(
@@ -320,7 +312,7 @@ pub(crate) fn start_resident_workers(
     let (evaluation_sender, evaluation_receiver) =
         sync_channel::<PendingRequest>(crate::evaluation_queue_capacity());
     let evaluation_policy_store = policy_store.clone();
-    spawn_workers(
+    let mut workers = spawn_workers(
         crate::evaluation_workers(),
         evaluation_receiver,
         move |pending| {
@@ -330,7 +322,7 @@ pub(crate) fn start_resident_workers(
 
     let (authentication_sender, authentication_receiver) =
         sync_channel::<BoxedResidentStream>(crate::auth_queue_capacity());
-    spawn_workers(
+    workers.extend(spawn_workers(
         crate::auth_workers(),
         authentication_receiver,
         move |mut stream| {
@@ -365,13 +357,16 @@ pub(crate) fn start_resident_workers(
                 Err(TrySendError::Disconnected(_returned)) => {}
             }
         },
-    );
+    ));
     let overflow_primary = authentication_sender.clone();
     let (overflow_sender, overflow_receiver) = sync_channel(crate::auth_queue_capacity());
-    thread::spawn(move || retry_overflow_admissions(overflow_primary, overflow_receiver));
+    workers.push(thread::spawn(move || {
+        retry_overflow_admissions(overflow_primary, overflow_receiver)
+    }));
     ResidentAdmission {
         primary: authentication_sender,
         overflow: overflow_sender,
+        workers,
     }
 }
 
@@ -441,7 +436,11 @@ mod tests {
         let overflow_primary = primary.clone();
         let (overflow, overflow_rx) = sync_channel(1);
         thread::spawn(move || retry_overflow_admissions(overflow_primary, overflow_rx));
-        let admission = ResidentAdmission { primary, overflow };
+        let admission = ResidentAdmission {
+            primary,
+            overflow,
+            workers: Vec::new(),
+        };
         let started = Instant::now();
         admit_connection(&admission, Box::new(NullStream)).expect("overflow handoff");
         assert!(

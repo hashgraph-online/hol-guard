@@ -66,17 +66,32 @@ def build_request() -> dict:
     }
 
 
+def _implementation_files(directory: Path) -> set[Path]:
+    """Match the native walk: reject links before selecting regular sources."""
+    if directory.is_symlink():
+        raise ValueError("invalid native implementation input")
+    selected = set()
+    for path in directory.rglob("*"):
+        if path.is_symlink():
+            raise ValueError("invalid native implementation input")
+        if path.is_file() and path.suffix in (".rs", ".json"):
+            selected.add(path)
+    return selected
+
+
 def implementation_digest() -> str:
     """Mirror the Rust build fingerprint, not its compilation or admission logic."""
     workspace = ROOT / "rust"
     paths = {workspace / "Cargo.lock", workspace / "Cargo.toml"}
     for crate in (workspace / "crates").iterdir():
+        if crate.is_symlink():
+            raise ValueError("invalid native implementation input")
         for name in ("Cargo.toml", "build.rs"):
             if (crate / name).is_file():
                 paths.add(crate / name)
         if (crate / "src").is_dir():
-            paths.update(path for path in (crate / "src").rglob("*") if path.suffix in (".rs", ".json"))
-    paths.update(path for path in (workspace / "build_support").rglob("*") if path.suffix in (".rs", ".json"))
+            paths.update(_implementation_files(crate / "src"))
+    paths.update(_implementation_files(workspace / "build_support"))
     digest = hashlib.sha256(b"hol-guard.native-source-implementation.v1\0")
     for path in sorted(paths, key=lambda item: item.relative_to(workspace).as_posix()):
         if path.is_symlink() or not path.is_file():

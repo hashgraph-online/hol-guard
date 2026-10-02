@@ -115,10 +115,11 @@ pub(crate) fn extract_generic_signals(
         && url_values.is_empty()
         && text_values.is_empty()
         && benign_prompt_text(&prompt_values[0]);
-    let content_sensitive = sensitive_text(&path_values)
+    let independent_sensitive_target = sensitive_text(&path_values)
         || sensitive_text(&url_values)
         || sensitive_text(&prompt_values)
-        || sensitive_text(&text_values)
+        || sensitive_text(&text_values);
+    let content_sensitive = independent_sensitive_target
         || command
             .as_deref()
             .is_some_and(super::super::super::sensitive_command_input);
@@ -140,6 +141,7 @@ pub(crate) fn extract_generic_signals(
         subprocess_intent,
         content_sensitive,
         sensitive_target,
+        independent_sensitive_target: guard_bypass_intent || independent_sensitive_target,
         event_hint,
     })
 }

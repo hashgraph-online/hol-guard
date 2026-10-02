@@ -9,6 +9,7 @@ import pytest
 import yaml
 
 from scripts.ci import verify_native_command_program as verifier
+from tests.support.ci_workflow import expand_ci_job_actions
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = (
@@ -32,7 +33,7 @@ WORKFLOWS = (
 
 @pytest.mark.parametrize("name", WORKFLOWS)
 def test_native_python_proofs_stage_matching_resources(name: str) -> None:
-    workflow = yaml.safe_load((ROOT / ".github/workflows" / name).read_text())
+    workflow = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows" / name).read_text()))
     observed = 0
     for job in workflow["jobs"].values():
         steps = job.get("steps", [])
@@ -76,7 +77,9 @@ def test_native_identity_watches_production_inputs_not_the_whole_test_tree() -> 
 
 
 def test_source_only_acceptance_runs_on_main_and_pull_requests() -> None:
-    workflow = yaml.safe_load((ROOT / ".github/workflows/extension-fixture-isolation.yml").read_text())
+    workflow = expand_ci_job_actions(
+        yaml.safe_load((ROOT / ".github/workflows/extension-fixture-isolation.yml").read_text())
+    )
     events = workflow.get("on", workflow.get(True))
     assert "pull_request" in events and events["push"]["branches"] == ["main"]
     job = workflow["jobs"]["source-only-acceptance"]

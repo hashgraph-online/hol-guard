@@ -298,7 +298,8 @@ fn devin_reads_allow_only_bounded_existing_files() {
         &home,
     );
     assert_eq!(write.action.action_type, PreToolActionTypeV1::FileWrite);
-    assert_eq!(write.minimum_action, "review");
+    assert_eq!(write.minimum_action, "allow");
+    assert_eq!(write.reason_code, "native_exact_safe_file_write");
 
     let mcp = devin(
         json!({

@@ -36,6 +36,7 @@ pub(super) struct GenericSignals {
     pub(super) subprocess_intent: bool,
     pub(super) content_sensitive: bool,
     pub(super) sensitive_target: bool,
+    pub(super) independent_sensitive_target: bool,
     pub(super) event_hint: Option<String>,
 }
 

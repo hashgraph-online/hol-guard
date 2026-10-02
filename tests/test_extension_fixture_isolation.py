@@ -11,6 +11,7 @@ import yaml
 from scripts import build_native_command_program as builder
 from scripts import refresh_extension_artifacts as refresh
 from scripts.ci.detect_pending_extension_regen import REGEN_OWNED_PATHS
+from tests.support.ci_workflow import expand_ci_job_actions
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -104,7 +105,7 @@ def test_catalog_and_contributor_interfaces_remain_in_the_repository():
 
 
 def test_authoring_checks_current_resources_before_tests_and_installed_wheel():
-    workflow = yaml.safe_load((ROOT / ".github/workflows/extension-builder-ci.yml").read_text())
+    workflow = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/extension-builder-ci.yml").read_text()))
     steps = workflow["jobs"]["authoring"]["steps"]
     prepare = next(
         i for i, step in enumerate(steps) if step.get("name") == "Prepare and verify current extension projections"

@@ -4,6 +4,7 @@ use std::collections::{HashSet, VecDeque};
 mod glob_class;
 mod hint;
 mod options;
+use options::unsafe_search_value;
 fn glob_matches(pattern: &[u8], value: &[u8]) -> bool {
     let mut previous = vec![false; value.len() + 1];
     previous[0] = true;
@@ -275,25 +276,12 @@ enum SearchValueRole {
     DirectoryAction,
     Other,
 }
-fn unsafe_search_value(role: SearchValueRole, value: &str) -> bool {
-    match role {
-        SearchValueRole::Glob | SearchValueRole::Path => {
-            value.starts_with(['/', '~'])
-                || value.split(['/', '\\']).any(|part| part == "..")
-                || sensitive_path_argument(value)
-                || glob_can_select_sensitive_path(value)
-        }
-        SearchValueRole::TypeGlob => value.split_once(':').is_none_or(|(_, glob)| {
-            sensitive_path_argument(glob) || glob_can_select_sensitive_path(glob)
-        }),
-        SearchValueRole::DirectoryAction => value.eq_ignore_ascii_case("recurse"),
-        SearchValueRole::Pattern | SearchValueRole::Other => false,
-    }
-}
+type ReadContext<'a> = (Option<&'a str>, Option<&'a str>);
 fn short_search_option(
     argument: &str,
     dangerous: &[char],
     value_options: &[(char, SearchValueRole)],
+    context: ReadContext<'_>,
 ) -> Result<(Option<SearchValueRole>, bool), ()> {
     for (offset, option) in argument[1..].char_indices() {
         if dangerous.contains(&option) {
@@ -302,7 +290,7 @@ fn short_search_option(
         if let Some((_, role)) = value_options.iter().find(|(name, _)| *name == option) {
             let value_start = offset + option.len_utf8();
             let attached = &argument[1 + value_start..];
-            if !attached.is_empty() && unsafe_search_value(*role, attached) {
+            if !attached.is_empty() && unsafe_search_value(*role, attached, context) {
                 return Err(());
             }
             return Ok((
@@ -314,22 +302,26 @@ fn short_search_option(
     Ok((None, false))
 }
 
-pub(super) fn safe_search_arguments(executable: &str, arguments: &[String]) -> bool {
+pub(super) fn safe_search_arguments_with_context(
+    executable: &str,
+    arguments: &[String],
+    context: ReadContext<'_>,
+) -> bool {
     match executable {
-        "rg" => safe_rg_arguments(arguments),
-        "grep" => safe_grep_arguments(arguments),
+        "rg" => safe_rg_arguments(arguments, context),
+        "grep" => safe_grep_arguments(arguments, context),
         _ => false,
     }
 }
 
-fn safe_rg_arguments(arguments: &[String]) -> bool {
+fn safe_rg_arguments(arguments: &[String], context: ReadContext<'_>) -> bool {
     let mut pending_value: Option<SearchValueRole> = None;
     let mut pattern_supplied = false;
     let mut options_enabled = true;
     let mut paths_only = false;
     for argument in arguments {
         if let Some(role) = pending_value.take() {
-            if unsafe_search_value(role, argument) {
+            if unsafe_search_value(role, argument, context) {
                 return false;
             }
             if matches!(role, SearchValueRole::Pattern) {
@@ -371,7 +363,7 @@ fn safe_rg_arguments(arguments: &[String]) -> bool {
             if let Some(role) = role {
                 if attached.is_empty() {
                     pending_value = Some(role);
-                } else if unsafe_search_value(role, attached) {
+                } else if unsafe_search_value(role, attached, context) {
                     return false;
                 } else if matches!(role, SearchValueRole::Pattern) {
                     pattern_supplied = true;
@@ -398,6 +390,7 @@ fn safe_rg_arguments(arguments: &[String]) -> bool {
                     ('t', SearchValueRole::Other),
                     ('T', SearchValueRole::Other),
                 ],
+                context,
             );
             let Ok((next_value, supplied_pattern)) = parsed else {
                 return false;
@@ -407,7 +400,7 @@ fn safe_rg_arguments(arguments: &[String]) -> bool {
             continue;
         }
         if paths_only || pattern_supplied {
-            if unsafe_search_value(SearchValueRole::Path, argument) {
+            if unsafe_search_value(SearchValueRole::Path, argument, context) {
                 return false;
             }
         } else {
@@ -417,13 +410,13 @@ fn safe_rg_arguments(arguments: &[String]) -> bool {
     pending_value.is_none()
 }
 
-fn safe_grep_arguments(arguments: &[String]) -> bool {
+fn safe_grep_arguments(arguments: &[String], context: ReadContext<'_>) -> bool {
     let mut pending_value: Option<SearchValueRole> = None;
     let mut pattern_supplied = false;
     let mut options_enabled = true;
     for argument in arguments {
         if let Some(role) = pending_value.take() {
-            if unsafe_search_value(role, argument) {
+            if unsafe_search_value(role, argument, context) {
                 return false;
             }
             if matches!(role, SearchValueRole::Pattern) {
@@ -450,7 +443,7 @@ fn safe_grep_arguments(arguments: &[String]) -> bool {
             if let Some(role) = role {
                 if attached.is_empty() {
                     pending_value = Some(role);
-                } else if unsafe_search_value(role, attached) {
+                } else if unsafe_search_value(role, attached, context) {
                     return false;
                 } else if matches!(role, SearchValueRole::Pattern) {
                     pattern_supplied = true;
@@ -471,6 +464,7 @@ fn safe_grep_arguments(arguments: &[String]) -> bool {
                     ('C', SearchValueRole::Other),
                     ('m', SearchValueRole::Other),
                 ],
+                context,
             );
             let Ok((next_value, supplied_pattern)) = parsed else {
                 return false;
@@ -480,7 +474,7 @@ fn safe_grep_arguments(arguments: &[String]) -> bool {
             continue;
         }
         if pattern_supplied {
-            if unsafe_search_value(SearchValueRole::Path, argument) {
+            if unsafe_search_value(SearchValueRole::Path, argument, context) {
                 return false;
             }
         } else {

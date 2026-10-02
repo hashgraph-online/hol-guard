@@ -10,11 +10,13 @@ from typing import Any
 import pytest
 import yaml
 
+from tests.support.ci_workflow import expand_ci_job_actions
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def _workflow(name: str) -> dict[str | bool, Any]:
-    return yaml.safe_load((ROOT / ".github/workflows" / name).read_text())
+    return expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows" / name).read_text()))
 
 
 def test_ci_checkouts_do_not_expose_credentials_to_project_code() -> None:
@@ -111,7 +113,7 @@ def test_duration_telemetry_uses_successful_push_on_target_branch() -> None:
     job = workflow["jobs"]["coverage-plan"]
     plan = next(step for step in job["steps"] if step.get("uses") == "./.github/actions/plan-pytest")
     assert plan["with"]["telemetry-branch"] == "${{ github.event.pull_request.base.ref || github.ref_name }}"
-    action = yaml.safe_load((ROOT / ".github/actions/plan-pytest/action.yml").read_text())
+    action = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/actions/plan-pytest/action.yml").read_text()))
     restore = next(step for step in action["runs"]["steps"] if step.get("id") == "latest-duration-telemetry")
     assert restore["env"]["TELEMETRY_BRANCH"] == "${{ inputs.telemetry-branch }}"
     command = restore["run"]

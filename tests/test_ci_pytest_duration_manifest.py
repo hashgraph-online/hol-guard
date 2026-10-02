@@ -11,6 +11,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+from tests.support.ci_workflow import expand_ci_job_actions
+
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_PATH = ROOT / "scripts" / "ci" / "pytest_duration_manifest.py"
 sys.path.insert(0, str(SCRIPT_PATH.parent))
@@ -42,7 +44,7 @@ def test_manifest_merges_reports_deterministically_and_rejects_duplicate_nodes(t
 
 
 def test_ci_duration_artifacts_cannot_mix_rerun_attempts(tmp_path: Path) -> None:
-    workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
+    workflow = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")))
     upload = next(
         step
         for step in workflow["jobs"]["coverage"]["steps"]
@@ -73,7 +75,7 @@ def test_ci_duration_artifacts_cannot_mix_rerun_attempts(tmp_path: Path) -> None
 
 
 def test_partial_rerun_retains_previous_manifest_without_publishing(tmp_path: Path) -> None:
-    workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
+    workflow = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")))
     steps = workflow["jobs"]["duration-manifest-candidate"]["steps"]
     build = next(step for step in steps if step.get("name") == "Build duration manifest candidate")
     upload = next(step for step in steps if step.get("name") == "Upload pytest duration manifest candidate")

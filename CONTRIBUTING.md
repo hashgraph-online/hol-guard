@@ -89,15 +89,15 @@ envelopes. Documentation-only edits do not require building the native binaries.
 Build both native executables before running command regression suites:
 
 ```bash
-cargo +1.88.0 build --locked --manifest-path rust/Cargo.toml --release -p guard-command --bin guard-command-source
-cargo +1.88.0 build --locked --manifest-path rust/Cargo.toml --release -p hol-guard-runtime
-uv run --no-sync python scripts/build_native_command_program.py --check --compiler rust/target/release/guard-command-source
+cargo +1.88.0 build --locked --manifest-path rust/Cargo.toml --release -p guard-command -p hol-guard-runtime --bin guard-command-source --bin hol-guard-runtime
+uv run --no-sync python scripts/ci/verify_native_command_program.py --compiler rust/target/release/guard-command-source
 ```
 
 On Windows, use `rust/target/release/guard-command-source.exe` for the explicit compiler path.
 If you change canonical command sources or Rust authoring semantics, follow the regeneration
-sequence in the [source guide](docs/guard/extension-contributions.md#regenerate-repository-projections)
-and rebuild the native binaries before testing their embedded program.
+steps in the [source guide](docs/guard/extension-contributions.md#regenerate-repository-projections).
+Build the native binaries once, then stage and verify their matching projections;
+generated fixtures do not require a second build.
 
 For work on the optional Cisco scanner integrations, use Python 3.11 through 3.14 and install
 those dependencies explicitly:

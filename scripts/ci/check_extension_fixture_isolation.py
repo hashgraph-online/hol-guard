@@ -48,6 +48,18 @@ def run(
     return completed
 
 
+def acceptance_source(root: Path) -> dict:
+    """Use a distinct synthetic identity, including normalized action classes."""
+    source_text = (root / "contributions/command-sources/command.noodle.json").read_text()
+    source = json.loads(
+        source_text.replace("command.noodle", EXTENSION_ID)
+        .replace("noodle", "hol-ci-fixture")
+        .replace("Noodle", "HOL CI Fixture")
+    )
+    source["extension"]["homepage"] = "https://example.com/hol-ci-fixture"
+    return source
+
+
 def exercise(root: Path, target: Path, results: list[dict[str, object]]) -> None:
     env = dict(os.environ)
     env.update(
@@ -171,9 +183,7 @@ def exercise(root: Path, target: Path, results: list[dict[str, object]]) -> None
     fixture_path = root / "tests/fixtures/command-source-hol-ci-fixture.v1.json"
     trust_path = root / "contracts/extensions/trust-class-map.v1.json"
     old_trust = trust_path.read_bytes()
-    source_text = (root / "contributions/command-sources/command.noodle.json").read_text()
-    source = json.loads(source_text.replace("command.noodle", EXTENSION_ID).replace("noodle", "hol-ci-fixture"))
-    source["extension"]["homepage"] = "https://example.com/hol-ci-fixture"
+    source = acceptance_source(root)
     trust = json.loads(old_trust)
     trust["classes"]["external"].append(EXTENSION_ID)
     trust["classes"]["external"].sort()

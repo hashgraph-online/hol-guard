@@ -158,7 +158,7 @@ def _run(command: list[str], *, input_bytes: bytes | None = None) -> bytes:
     )
     if completed.returncode:
         detail = completed.stderr.decode(errors="replace").strip() or completed.stdout.decode(errors="replace").strip()
-        raise ValueError(detail[:1024] or "Declarative contribution preparation failed.")
+        raise ValueError(detail[-2048:] or "Declarative contribution preparation failed.")
     return completed.stdout
 
 

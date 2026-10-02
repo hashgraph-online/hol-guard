@@ -15,6 +15,7 @@ import pytest
 import yaml
 
 from scripts.ci import wait_for_pytest_shards as barrier
+from tests.support.ci_workflow import expand_ci_job_actions
 
 _RUN_ID = 123456
 
@@ -84,7 +85,7 @@ def test_waits_through_planning_queue_and_running_then_requires_last_page() -> N
 
 def test_default_wait_covers_existing_producer_limits(monkeypatch: pytest.MonkeyPatch) -> None:
     root = Path(__file__).resolve().parents[1]
-    jobs = yaml.safe_load((root / ".github/workflows/ci.yml").read_text())["jobs"]
+    jobs = expand_ci_job_actions(yaml.safe_load((root / ".github/workflows/ci.yml").read_text()))["jobs"]
     producer_limit = 60 * (jobs["coverage-plan"]["timeout-minutes"] + jobs["coverage"]["timeout-minutes"])
     default_timeout = inspect.signature(barrier.wait_for_shards).parameters["timeout_seconds"].default
     assert default_timeout == producer_limit + 60
@@ -410,7 +411,7 @@ def test_api_redirect_is_rejected() -> None:
 
 def test_sonar_accepts_only_complete_coverage_from_successful_current_attempt() -> None:
     root = Path(__file__).resolve().parents[1]
-    workflow = yaml.safe_load((root / ".github/workflows/ci.yml").read_text())
+    workflow = expand_ci_job_actions(yaml.safe_load((root / ".github/workflows/ci.yml").read_text()))
     jobs = workflow["jobs"]
     assert barrier.SHARD_COUNT == 128
     assert jobs["coverage"]["name"] == "coverage (3.12, ${{ matrix.shard-index }})"
@@ -435,7 +436,7 @@ def test_sonar_accepts_only_complete_coverage_from_successful_current_attempt() 
 
 def test_sonar_installs_same_pinned_scanner_before_wait_without_analysis_credentials() -> None:
     root = Path(__file__).resolve().parents[1]
-    workflow = yaml.safe_load((root / ".github/workflows/ci.yml").read_text())
+    workflow = expand_ci_job_actions(yaml.safe_load((root / ".github/workflows/ci.yml").read_text()))
     steps = workflow["jobs"]["sonar"]["steps"]
     installer = next(step for step in steps if step.get("name") == "Install pinned Sonar scanner CLI")
     analysis = next(step for step in steps if step.get("name") == "Analyze with SonarQube Cloud")
