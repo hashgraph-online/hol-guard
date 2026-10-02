@@ -37,6 +37,8 @@ fn sensitive_targets_and_shell_execution_do_not_inherit_search_proof() {
     for command in [
         "rg password .env",
         "grep password ~/.ssh/id_rsa",
+        "rg password src/credentials.json",
+        "rg password ../src/auth.py",
         "rg -f .env password src/auth.py",
         "rg --pre 'cat .env' password src",
         "rg -L password src",

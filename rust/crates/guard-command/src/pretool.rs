@@ -285,6 +285,8 @@ fn exact_safe_command(model: &CanonicalCommandV1, allow_git_helper_context: bool
             && segment.arguments.iter().all(|argument| {
                 let value = argument.split_once('=').map_or(argument.as_str(), |(_, value)| value);
                 !value.starts_with(['/', '~'])
+                    && !value.split(['/', '\\']).any(|part| part == "..")
+                    && !sensitive_read_path_argument(value)
             });
         if (!inert_search && sensitive_command(&segment.text))
             || (!matches!(basename, "rg" | "grep")
