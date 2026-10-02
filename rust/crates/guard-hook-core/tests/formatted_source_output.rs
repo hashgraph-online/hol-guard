@@ -61,7 +61,7 @@ fn formatted_reads_require_complete_scanned_output_and_clean_source() {
     let output = "[example.py#ABCD]\n1: print(1 + 1)";
     let base = request(root.path(), output);
     let allowed = review_post_tool(&base);
-    assert_eq!(allowed.reason_code, "no_output_to_review");
+    assert_eq!(allowed.reason_code, "output_scan_allow");
     assert_eq!(allowed.model_output_action, "allow_original");
 
     let mut mismatch = base.clone();
