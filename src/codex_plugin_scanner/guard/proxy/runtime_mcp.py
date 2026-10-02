@@ -42,6 +42,7 @@ from ..local_supply_chain import (
     compose_current_package_policy_action,
     package_request_policy_hash,
 )
+from ..mcp_fresh_approval import fresh_claim_allows_reapproval
 from ..mcp_tool_calls import (
     ApprovalReuseClaimDisposition,
     ToolCallDecision,
@@ -2895,7 +2896,16 @@ class RuntimeMcpGuardProxy:
                 )
             if (
                 not context_matches
-                or fresh_action == "require-reapproval"
+                or (
+                    fresh_action == "require-reapproval"
+                    and not fresh_claim_allows_reapproval(
+                        claim_disposition=claim_disposition,
+                        reason_code=fresh_decision.approval_reuse_reason_code,
+                        decision=pending,
+                        artifact=fresh_authority.artifact,
+                        artifact_hash=fresh_authority.artifact_hash,
+                    )
+                )
                 or (fresh_action == "review" and not claim_authorizes_review)
             ):
                 return self._queue_approval_center_response(

@@ -83,13 +83,13 @@
       "command.cogext",
       "command.ctty",
       "command.digline",
+      "command.errand",
       "command.genclave",
       "command.gitsync",
       "command.mcp-filesystem",
       "command.mcp-instapods",
       "command.mcp-pr-ui-compare",
       "command.mcp-reaper",
-      "command.mcp-vome-home-assistant",
       "command.noodle",
       "command.ollama",
       "command.probe",
@@ -97,6 +97,7 @@
       "command.repo2nb",
       "command.skill-base",
       "command.skill-sunset",
+      "command.syngraphe",
       "command.uivoid"
     ]
   }

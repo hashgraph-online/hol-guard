@@ -26,7 +26,6 @@ _ARTIFACTS = {
     "contributions/mcp-servers/mcp.instapods.json": "mcp_servers/contributions/mcp.instapods.json",
     "contributions/mcp-servers/mcp.pr-ui-compare.json": "mcp_servers/contributions/mcp.pr-ui-compare.json",
     "contributions/mcp-servers/mcp.reaper.json": "mcp_servers/contributions/mcp.reaper.json",
-    "contributions/mcp-servers/mcp.vome-home-assistant.json": "mcp_servers/contributions/mcp.vome-home-assistant.json",
 }
 
 

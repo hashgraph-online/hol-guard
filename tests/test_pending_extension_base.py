@@ -39,19 +39,26 @@ def test_known_base_is_compared_without_fetch(monkeypatch: pytest.MonkeyPatch, s
     """Case-insensitive SHA inputs retain exact contribution detection."""
     calls = _git_results(monkeypatch, [(0, "contributions/command-sources/command.fixture.json\n")])
     assert detector._contributions_changed(sha) == ["contributions/command-sources/command.fixture.json"]
-    assert calls == [[
-        "git", "diff", "--name-only", BASE, "HEAD", "--",
-        "contributions/",
-        "rust/",
-        "scripts/build_native_command_program.py",
-        "src/codex_plugin_scanner/guard/",
-        "contracts/extensions/",
-        "contracts/managed-controls/",
-        "docs/guard/",
-        "tests/fixtures/",
-        "tests/guard_command_*",
-        "tests/test_guard_*",
-    ]]
+    assert calls == [
+        [
+            "git",
+            "diff",
+            "--name-only",
+            BASE,
+            "HEAD",
+            "--",
+            "contributions/",
+            "rust/",
+            "scripts/build_native_command_program.py",
+            "src/codex_plugin_scanner/guard/",
+            "contracts/extensions/",
+            "contracts/managed-controls/",
+            "docs/guard/",
+            "tests/fixtures/",
+            "tests/guard_command_*",
+            "tests/test_guard_*",
+        ]
+    ]
 
 
 def test_successful_empty_diff_is_the_only_unchanged_result(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -172,25 +179,14 @@ def test_real_shallow_checkout_distinguishes_changed_and_unavailable_bases(
         assert git("cat-file", "-t", base, cwd=checkout) == "commit"
 
 
-def test_pending_decision_diff_marker(monkeypatch):
-    """Only exact report inputs defer; unrelated or unavailable diffs stay strict."""
+@pytest.mark.parametrize("event", ["pull_request", "push", "workflow_dispatch"])
+@pytest.mark.parametrize("pending", [False, True])
+def test_current_decision_evidence_never_defers_to_regeneration(monkeypatch, event, pending):
+    """Freshness markers cannot exempt current behavioral evidence on any ref."""
     import tests.support.extension_freshness as freshness
 
-    monkeypatch.setattr(freshness, "pending_contribution_regen", lambda: False)
-    monkeypatch.delenv("GITHUB_BASE_REF", raising=False)
-    monkeypatch.delenv("CI", raising=False)
-
-    report = "tests/fixtures/guard-command-corpus/decision-diff-report.json"
-    monkeypatch.setattr(freshness, "_pr_diff_paths", lambda: ["src/other.py"])
-    assert freshness.pending_decision_diff_regen() is True
-
-    monkeypatch.setattr(freshness, "_pr_diff_paths", lambda: [report])
-    assert freshness.pending_decision_diff_regen() is False
-
-    monkeypatch.setattr(freshness, "_pr_diff_paths", lambda: None)
+    monkeypatch.setenv("GITHUB_EVENT_NAME", event)
     monkeypatch.setenv("GITHUB_BASE_REF", "main")
-    assert freshness.pending_decision_diff_regen() is True
-
-    monkeypatch.delenv("GITHUB_BASE_REF")
-    monkeypatch.setattr(freshness, "_pr_diff_paths", lambda: [])
+    monkeypatch.setattr(freshness, "pending_contribution_regen", lambda: pending)
+    monkeypatch.setattr(freshness, "_pr_diff_paths", lambda: pytest.fail("current evidence must not consult Git"))
     assert freshness.pending_decision_diff_regen() is False

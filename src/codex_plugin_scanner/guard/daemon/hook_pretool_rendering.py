@@ -19,7 +19,7 @@ def harness_json_from_native_pre_tool(harness: str, response: Mapping[str, objec
     reason_code = str(response.get("reason_code") or "native_pre_tool_review")
     canonical = _canonical_hook_harness(harness)
     if (
-        canonical == "omp"
+        canonical in {"omp", "zcode"}
         and action == "sandbox-required"
         and response.get("policy_action") == "sandbox-required"
         and response.get("decision") == "deny"
@@ -85,7 +85,7 @@ def harness_json_from_native_pre_tool(harness: str, response: Mapping[str, objec
         ):
             # This is not permission to execute the original input. New adapters
             # may route it to the protected sink; old adapters still see deny.
-            return {
+            receipt: dict[str, object] = {
                 "decision": "deny",
                 "policy_action": "sandbox-required",
                 "reason_code": reason_code,
@@ -102,6 +102,13 @@ def harness_json_from_native_pre_tool(harness: str, response: Mapping[str, objec
                     "native_pytest_readonly_containment_required": "pytest-readonly-v2",
                 }[reason_code],
             }
+            if canonical == "zcode":
+                receipt["hookSpecificOutput"] = {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": reason,
+                }
+            return receipt
     if action in {"allow", "warn"} and response.get("decision") == "allow":
         if canonical in {"pi", "omp"}:
             output: dict[str, object] = {

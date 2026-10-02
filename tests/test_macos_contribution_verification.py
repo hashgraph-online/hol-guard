@@ -12,6 +12,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+from tests.support.ci_workflow import expand_ci_job_actions
+
 ROOT = Path(__file__).resolve().parents[1]
 BUILD_SCRIPT = ROOT / "scripts/ci/build-native-wheel-macos.sh"
 BASE_SHA = "a" * 40
@@ -20,7 +22,7 @@ TARGETS = ("x86_64-apple-darwin", "aarch64-apple-darwin")
 
 def test_macos_verification_receives_only_the_pull_request_base_sha() -> None:
     """Keep the comparison identity scoped to the pull-request build step."""
-    jobs = yaml.safe_load((ROOT / ".github/workflows/native-wheel-ci.yml").read_text())["jobs"]
+    jobs = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/native-wheel-ci.yml").read_text()))["jobs"]
     build = next(step for step in jobs["macos-build"]["steps"] if step.get("name", "").startswith("Build and assemble"))
     assert build["env"]["NATIVE_PR_BASE_SHA"] == (
         "${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}"

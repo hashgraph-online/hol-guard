@@ -6,8 +6,11 @@ import sys
 from importlib.metadata import metadata
 from pathlib import Path
 
+import yaml
 from packaging.markers import default_environment
 from packaging.requirements import Requirement
+
+from tests.support.ci_workflow import expand_ci_job_actions
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -108,7 +111,9 @@ def test_readme_distinguishes_baseline_and_full_cisco_installs() -> None:
 
 
 def test_repo_controlled_surfaces_prefer_cisco_extra_where_supported() -> None:
-    ci_workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    """Verify repo controlled surfaces prefer cisco extra where supported."""
+    jobs = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text()))["jobs"]
+    ci_workflow = "\n".join([*jobs, *(step.get("run", "") for job in jobs.values() for step in job["steps"])])
     publish_workflow = (ROOT / ".github/workflows/publish.yml").read_text(encoding="utf-8")
     dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
     contributing = (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")

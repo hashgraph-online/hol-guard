@@ -7,8 +7,7 @@ mod pure_expression;
 mod restricted_tests;
 mod safe_reads;
 mod search;
-
-use search::safe_search_arguments;
+mod worktree_writes;
 
 pub mod generic;
 
@@ -268,6 +267,14 @@ fn safe_directory_target(target: &str) -> bool {
 }
 
 fn exact_safe_command(model: &CanonicalCommandV1, allow_git_helper_context: bool) -> bool {
+    exact_safe_command_with_context(model, allow_git_helper_context, (None, None))
+}
+
+fn exact_safe_command_with_context(
+    model: &CanonicalCommandV1,
+    allow_git_helper_context: bool,
+    context: (Option<&str>, Option<&str>),
+) -> bool {
     if model.confidence != "exact"
         || model.path_overridden
         || model.segments.is_empty()
@@ -281,7 +288,7 @@ fn exact_safe_command(model: &CanonicalCommandV1, allow_git_helper_context: bool
         };
         let basename = executable_basename(executable);
         let inert_search = matches!(basename, "rg" | "grep")
-            && safe_search_arguments(basename, &segment.arguments);
+            && search::safe_search_arguments_with_context(basename, &segment.arguments, context);
         if (!inert_search && sensitive_command(&segment.text))
             || (!matches!(basename, "rg" | "grep")
                 && segment
@@ -300,16 +307,20 @@ fn exact_safe_command(model: &CanonicalCommandV1, allow_git_helper_context: bool
             }
             "pwd" | "true" | "echo" | "printf" | "which" | "whoami" | "uname" | "stat" => true,
             "date" => safe_reads::safe_date_arguments(&segment.arguments),
-            "ls" => safe_reads::safe_listing_arguments(&segment.arguments),
-            "cat" => safe_reads::safe_plain_file_arguments(&segment.arguments),
+            "ls" => safe_reads::safe_listing_arguments(&segment.arguments, context),
+            "cat" => safe_reads::safe_plain_file_arguments(&segment.arguments, context),
+            "cp" => {
+                model.segments.len() == 1
+                    && safe_reads::safe_copy_arguments(&segment.arguments, context)
+            }
             // Admit stdin only when every producer in the pipeline is also proven safe.
             "head" | "tail" => {
-                safe_reads::safe_head_tail_arguments(&segment.arguments, segment.pipeline_index > 0)
+                safe_reads::safe_head_tail_arguments(&segment.arguments, segment.pipeline_index > 0, context)
             }
             "git" => safe_git_arguments(&segment.arguments, allow_git_helper_context),
             "gh" => safe_gh_arguments(&segment.arguments),
-            "rg" | "grep" => safe_search_arguments(basename, &segment.arguments),
-            "sed" => safe_reads::safe_sed_arguments(&segment.arguments, segment.pipeline_index > 0),
+            "rg" | "grep" => search::safe_search_arguments_with_context(basename, &segment.arguments, context),
+            "sed" => safe_reads::safe_sed_arguments(&segment.arguments, segment.pipeline_index > 0, context),
             "python" | "python3" | "node" | "nodejs" =>
                 pure_expression::safe_inline_expression(basename, &segment.arguments),
             _ => false,
@@ -362,9 +373,25 @@ fn exact_destructive_tool_introspection(model: &CanonicalCommandV1) -> bool {
 }
 
 pub fn evaluate_pre_tool(request: &CommandModelRequestV1) -> Result<PreToolDecisionV1, String> {
+    evaluate_pre_tool_with_context(request, None, None)
+}
+
+pub(super) fn evaluate_pre_tool_with_context(
+    request: &CommandModelRequestV1,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+) -> Result<PreToolDecisionV1, String> {
     let model = parse_command(request)?;
     let normalized = model.normalized_text.as_str();
-    if exact_safe_search_command(&model) {
+    let context = (home_dir, cwd);
+    if exact_safe_command_with_context(&model, false, context)
+        && model.segments.iter().all(|segment| {
+            segment
+                .executable
+                .as_deref()
+                .is_some_and(|executable| matches!(executable_basename(executable), "rg" | "grep"))
+        })
+    {
         return Ok(pretool_decision(
             model,
             "allow",
@@ -416,7 +443,7 @@ pub fn evaluate_pre_tool(request: &CommandModelRequestV1) -> Result<PreToolDecis
             "HOL Guard requires fresh approval for the privileged execution context.",
         ));
     }
-    if exact_safe_command(&model, false) {
+    if exact_safe_command_with_context(&model, false, context) {
         return Ok(pretool_decision(
             model,
             "allow",

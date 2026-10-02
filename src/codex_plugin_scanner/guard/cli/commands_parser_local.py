@@ -46,6 +46,7 @@ def _configure_guard_local_parsers(
 
     contained_hook_parser = guard_subparsers.add_parser("execute-contained-test", help=argparse.SUPPRESS)
     _add_guard_common_args(contained_hook_parser)
+    contained_hook_parser.add_argument("--harness", choices=("omp", "zcode"), default="omp")
     contained_hook_parser.add_argument("--request-file", required=True)
     contained_hook_parser.add_argument("--request-sha256", required=True)
     contained_hook_parser.add_argument("--timeout-seconds", type=int, default=30 * 60)
