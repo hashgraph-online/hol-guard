@@ -375,7 +375,7 @@ jobs:
           fi
           uv run --no-sync python scripts/sync_repo_version.py --version "$VERSION"
       - name: Generate projections for release source distributions
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name != 'pull_request'
         env:
           HOL_GUARD_BUILD_SHA: ${{ steps.version.outputs.source_sha }}
           HOL_GUARD_PACKAGE_VERSION: ${{ steps.version.outputs.version }}
