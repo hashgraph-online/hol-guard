@@ -19,6 +19,7 @@ from .native_policy_snapshot_constants import (
     _RENEWAL_JITTER_MAX_SECONDS,
     _RENEWAL_LEAD_SECONDS,
     _REQUIRED_PUBLISH_FEATURES,
+    POLICY_SNAPSHOT_UNAVAILABLE_ERRORS,
     NativePolicySnapshotError,
 )
 from .native_policy_snapshot_publisher_inputs import NativePolicySnapshotPublisherInputs
@@ -45,6 +46,38 @@ def _same_resident_paths(left, right) -> bool:
     """
 
     return {path for path, _mtime, _size in left} == {path for path, _mtime, _size in right}
+
+
+def provision_native_verifier_key_for_store(store: GuardStore) -> None:
+    """Provision the resident verifier key for a store's Guard home.
+
+    The Rust resident refuses to serve until this owner-private derived key
+    exists.  Publishers provision it at ``start()``; standalone native
+    decision callers must establish the same prerequisite or every request
+    fails closed on ``native_resident_start_timeout``.
+    """
+
+    material_getter = getattr(store, "_policy_integrity_secret_material", None)
+    if not callable(material_getter):
+        raise NativePolicySnapshotError("native_policy_snapshot_integrity_key_unavailable")
+    material: object = None
+    master_key: bytes | None = None
+    try:
+        material = material_getter(create=True)
+        if (
+            not isinstance(material, tuple)
+            or len(material) != 2
+            or not isinstance(material[0], bytes)
+            or not isinstance(material[1], str)
+        ):
+            raise NativePolicySnapshotError("native_policy_snapshot_integrity_key_unavailable")
+        master_key = material[0]
+        provision_native_policy_verifier_key(Path(store.guard_home), master_key)
+    finally:
+        # Keep the master key only for the derivation call.  The derived
+        # verifier is the only value written to native runtime state.
+        master_key = None
+        material = None
 
 
 class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
@@ -123,9 +156,12 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
         self.request_publish()
 
     def close(self, *, timeout_seconds: float = 1.0) -> None:
+        _ = self.close_contained(timeout_seconds=timeout_seconds)
+
+    def close_contained(self, *, timeout_seconds: float = 1.0) -> bool:
+        """Retain publication ownership until the publisher thread exits."""
+
         with self._condition:
-            if self._closed:
-                return
             self._closed = True
             self._acked = False
             self._condition.notify_all()
@@ -133,6 +169,8 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
         thread = self._thread
         if thread is not None and thread is not threading.current_thread():
             thread.join(timeout=max(0.0, timeout_seconds))
+        if thread is not None and thread.is_alive():
+            return False
         api = _snapshot_api()
         with api._PUBLISHER_LOCK:
             publishers = api._PUBLISHERS.get(api._publisher_key(self.guard_home))
@@ -140,6 +178,7 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
                 publishers.discard(self)
                 if not publishers:
                     api._PUBLISHERS.pop(api._publisher_key(self.guard_home), None)
+        return True
 
     def request_publish(self) -> None:
         with self._condition:
@@ -233,27 +272,7 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
         return True
 
     def _provision_verifier_key(self) -> None:
-        material_getter = getattr(self.store, "_policy_integrity_secret_material", None)
-        if not callable(material_getter):
-            raise NativePolicySnapshotError("native_policy_snapshot_integrity_key_unavailable")
-        material: object = None
-        master_key: bytes | None = None
-        try:
-            material = material_getter(create=True)
-            if (
-                not isinstance(material, tuple)
-                or len(material) != 2
-                or not isinstance(material[0], bytes)
-                or not isinstance(material[1], str)
-            ):
-                raise NativePolicySnapshotError("native_policy_snapshot_integrity_key_unavailable")
-            master_key = material[0]
-            provision_native_policy_verifier_key(self.guard_home, master_key)
-        finally:
-            # Keep the master key only for the derivation call.  The derived
-            # verifier is the only value written to native runtime state.
-            master_key = None
-            material = None
+        provision_native_verifier_key_for_store(self.store)
 
     def _mark_expired_locked(self) -> None:
         snapshot = self._snapshot
@@ -374,6 +393,10 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
                 self._mark_expired_locked()
                 if self._acked and self._snapshot is not None:
                     return True
+                # Known unavailable authority wakes the caller promptly. Keep
+                # bounded retries for lost ACKs and resident recovery.
+                if self._last_error in POLICY_SNAPSHOT_UNAVAILABLE_ERRORS:
+                    return False
                 remaining = deadline - self._monotonic_clock()
                 if remaining <= 0:
                     break
@@ -382,6 +405,11 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
             return self._acked and self._snapshot is not None and not self._closed
 
     def _run(self) -> None:
+        # ContextVar bindings from the starting thread do not propagate here;
+        # rebind so observed-identity digests resolve this store's resident.
+        from .native_context import bind_context_digest_home
+
+        bind_context_digest_home(self.guard_home)
         while True:
             with self._condition:
                 if self._closed:

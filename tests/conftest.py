@@ -39,59 +39,219 @@ os.environ.pop("HOL_GUARD_TEST_ALLOW_BROWSER_OPEN", None)
 
 @pytest.fixture(autouse=True)
 def _default_unit_tests_to_python_rollback(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Keep legacy unit fixtures on explicit, test-only oracle mode.
+    """Keep legacy unit fixtures off the production native default.
 
     Production default remains ``auto``. Native-authority tests monkeypatch
-    ``native_mode`` or delete this variable themselves. The oracle is injected
-    below; no production module imports the semantic evaluator.
+    ``native_mode`` or delete this variable themselves. There is no Python
+    semantic evaluator; ``off`` exercises the fail-safe surface.
     """
 
+    monkeypatch.setenv("HOL_GUARD_TEST_MODE", "1")
+    monkeypatch.setenv("HOL_GUARD_NATIVE_DIAGNOSTIC", "1")
     if "HOL_GUARD_NATIVE" not in os.environ:
         monkeypatch.setenv("HOL_GUARD_NATIVE", "off")
 
 
+class _GuardCommandsProxy:
+    """Patch target that rebinds a symbol in every loaded guard module.
+
+    The hook pipeline is split across ``commands_*``/``commands_support_*``
+    modules that share bindings through the ``commands_support`` union, so a
+    name patched on ``cli.commands`` alone would never reach the moved call
+    sites. ``monkeypatch.setattr(guard_commands_module, name, value)`` fans
+    the rebind out to every loaded ``codex_plugin_scanner`` module that holds
+    the same object, and restores through the same fan-out on teardown.
+    """
+
+    @staticmethod
+    def _original(name: str) -> object:
+        sentinel = object()
+        commands = sys.modules.get("codex_plugin_scanner.guard.cli.commands")
+        if commands is not None:
+            value = getattr(commands, name, sentinel)
+            if value is not sentinel:
+                return value
+        for module in list(sys.modules.values()):
+            if not getattr(module, "__name__", "").startswith("codex_plugin_scanner"):
+                continue
+            value = getattr(module, name, sentinel)
+            if value is not sentinel:
+                return value
+        raise AttributeError(name)
+
+    def __getattr__(self, name: str) -> object:
+        return self._original(name)
+
+    def __setattr__(self, name: str, value: object) -> None:
+        original = self._original(name)
+        for module in list(sys.modules.values()):
+            if not getattr(module, "__name__", "").startswith("codex_plugin_scanner"):
+                continue
+            if getattr(module, name, None) is original:
+                setattr(module, name, value)
+
+
+guard_commands_module = _GuardCommandsProxy()
+
+
+@pytest.fixture
+def native_hook_force(monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Drive hook entrypoints through the compiled native runtime.
+
+    Hook integration tests that assert real decisions (deny/review/allow)
+    need the Rust authority: ``force`` makes ``HOL_GUARD_NATIVE_BINARY``
+    authoritative, and the standalone CLI publishes its own policy snapshot.
+    There is no Python fallback, so the runtime is required, not skipped.
+    """
+
+    binary = os.environ.get("HOL_GUARD_NATIVE_BINARY")
+    if binary:
+        runtime = Path(binary).expanduser()
+    else:
+        root = Path(__file__).resolve().parents[1]
+        runtime = root / "rust" / "target" / "release" / "hol-guard-runtime"
+        if not runtime.is_file():
+            runtime = root / "rust" / "target" / "debug" / "hol-guard-runtime"
+    if not runtime.is_file():
+        pytest.fail("HOL_GUARD_NATIVE_BINARY must name the compiled Rust runtime; native retirement proof cannot skip")
+    runtime = runtime.resolve(strict=True)
+    monkeypatch.setenv("HOL_GUARD_NATIVE", "force")
+    monkeypatch.setenv("HOL_GUARD_NATIVE_BINARY", str(runtime))
+    return runtime
+
+
+@pytest.fixture(scope="session")
+def _native_context_home(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Path]:
+    """Session-shared guard home so the resident is spawned once per run."""
+
+    from codex_plugin_scanner.guard.native_policy_snapshot import (
+        provision_native_policy_verifier_key,
+    )
+    from codex_plugin_scanner.guard.native_resident_client import close_native_residents
+
+    guard_home = tmp_path_factory.mktemp("native-context-guard-home")
+    (guard_home / "native-runtime").mkdir(mode=0o700, parents=True)
+    # The managed resident refuses to serve until the policy verifier key the
+    # publisher would normally provision exists; seed a test key once.
+    provision_native_policy_verifier_key(guard_home, b"\x07" * 32)
+    # Pre-warm the capabilities cache and the persistent resident client pool
+    # at session scope.  Tests that patch subprocess.Popen globally would
+    # otherwise intercept the first probe/pool spawn mid-test and break the
+    # digest path (the pool spawns once and is then reused).
+    binary = _context_digest_runtime_binary()
+    if binary is not None:
+        from codex_plugin_scanner.guard import native_context
+
+        previous_native = os.environ.get("HOL_GUARD_NATIVE")
+        previous_binary = os.environ.get("HOL_GUARD_NATIVE_BINARY")
+        os.environ["HOL_GUARD_NATIVE"] = "force"
+        os.environ["HOL_GUARD_NATIVE_BINARY"] = str(binary)
+        try:
+            native_context.native_context_digest(
+                "launch_argv_digest",
+                {"argv": ["guard-context-warmup"]},
+                guard_home=guard_home,
+            )
+        finally:
+            if previous_native is None:
+                os.environ.pop("HOL_GUARD_NATIVE", None)
+            else:
+                os.environ["HOL_GUARD_NATIVE"] = previous_native
+            if previous_binary is None:
+                os.environ.pop("HOL_GUARD_NATIVE_BINARY", None)
+            else:
+                os.environ["HOL_GUARD_NATIVE_BINARY"] = previous_binary
+    yield guard_home
+    close_native_residents(guard_home)
+
+
+def _context_digest_runtime_binary() -> Path | None:
+    """Locate the compiled runtime for ambient digest calls."""
+
+    override = os.environ.get("HOL_GUARD_NATIVE_BINARY")
+    if override:
+        return Path(override).expanduser()
+    root = Path(__file__).resolve().parents[1]
+    # Release only: the debug resident exceeds the 600ms startup budget.
+    candidate = root / "rust" / "target" / "release" / "hol-guard-runtime"
+    return candidate if candidate.is_file() else None
+
+
 @pytest.fixture(autouse=True)
-def _explicit_python_differential_oracle(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Install the Python reviewer only for explicit differential-test paths."""
+def _ambient_context_digest_home(
+    _native_context_home: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Route ambient context-digest calls to the provisioned session resident.
 
-    monkeypatch.setenv("HOL_GUARD_TEST_MODE", "1")
-    monkeypatch.setenv("HOL_GUARD_PYTHON_ORACLE", "1")
-    monkeypatch.setenv("HOL_GUARD_NATIVE_DIAGNOSTIC", "1")
+    ``context_digest`` calls resolve their guard home either from the bound
+    flow context or the default user home; both are pointed at the keyed
+    session home.  Unit tests default to ``HOL_GUARD_NATIVE=off`` so the
+    adapter's status probe is additionally re-evaluated under ``force`` —
+    scoped to the ``native_context`` module only, leaving every other
+    off-mode surface (hook eval, fail-safe denials) untouched.  With no
+    resolvable runtime the probe is left alone and digests stay unavailable,
+    preserving the no-binary behavior.
+    """
 
-    from codex_plugin_scanner.guard.cli import commands_hook_source_ref
-    from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config
-    from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
-    from codex_plugin_scanner.guard.runtime.hook_content_scanner import ContentScanner
-    from codex_plugin_scanner.guard.runtime.hook_decision_cache import HookDecisionCache
-    from codex_plugin_scanner.guard.runtime.hook_review_engine import HookReviewEngine
-    from codex_plugin_scanner.guard.runtime.hook_review_types import HookReviewRequest, HookReviewResponse
-    from codex_plugin_scanner.guard.store import GuardStore
+    from codex_plugin_scanner.guard import native_context, native_runtime
+    from codex_plugin_scanner.guard.runtime import approval_context
 
-    def worker_oracle(worker: HookWorker) -> object:
-        return HookReviewEngine(
-            store=worker.store,
-            scanner=ContentScanner(),
-            cache=HookDecisionCache(worker.store),
-            config_loader=worker._load_config,
-            metrics=worker.metrics,
-        )
+    real_status = native_runtime.native_runtime_status
 
-    def source_ref_oracle(
-        request: HookReviewRequest,
-        store: GuardStore,
-        config: GuardConfig | None,
-    ) -> HookReviewResponse:
-        return HookReviewEngine(
-            store=store,
-            scanner=ContentScanner(),
-            cache=HookDecisionCache(store),
-            config_loader=lambda guard_home, workspace: (
-                config if config is not None else load_guard_config(guard_home, workspace=workspace)
-            ),
-        ).review(request)
+    def _digest_status() -> object:
+        status = real_status()
+        if status.mode != "off":
+            return status
+        binary = _context_digest_runtime_binary()
+        if binary is None:
+            return status
+        previous_mode = os.environ.get("HOL_GUARD_NATIVE")
+        previous_binary = os.environ.get("HOL_GUARD_NATIVE_BINARY")
+        os.environ["HOL_GUARD_NATIVE"] = "force"
+        os.environ["HOL_GUARD_NATIVE_BINARY"] = str(binary)
+        try:
+            return real_status()
+        finally:
+            if previous_mode is None:
+                os.environ.pop("HOL_GUARD_NATIVE", None)
+            else:
+                os.environ["HOL_GUARD_NATIVE"] = previous_mode
+            if previous_binary is None:
+                os.environ.pop("HOL_GUARD_NATIVE_BINARY", None)
+            else:
+                os.environ["HOL_GUARD_NATIVE_BINARY"] = previous_binary
 
-    monkeypatch.setattr(HookWorker, "_test_python_oracle_factory", worker_oracle)
-    monkeypatch.setattr(commands_hook_source_ref, "_test_source_ref_oracle", source_ref_oracle)
+    monkeypatch.setattr(native_context, "native_runtime_status", _digest_status)
+    monkeypatch.setattr(native_context, "context_digest_guard_home", lambda: _native_context_home)
+    monkeypatch.setattr(
+        approval_context,
+        "_context_digest_guard_home",
+        lambda _home: _native_context_home,
+    )
+
+
+@pytest.fixture
+def native_context_digest(
+    monkeypatch: pytest.MonkeyPatch,
+    _native_context_home: Path,
+) -> Path:
+    """Force the compiled runtime and return the isolated session resident home.
+
+    Unlike ``native_hook_force`` this skips when no runtime binary is
+    resolvable: environments like the cross-platform regressions job never
+    build Rust artifacts, and the suite must stay runnable there.  Every job
+    that sets ``HOL_GUARD_NATIVE_BINARY`` — or ships a release/debug build —
+    still exercises the real resident, so native proof coverage is preserved
+    where the binary exists.
+    """
+
+    binary = _context_digest_runtime_binary()
+    if binary is None:
+        pytest.skip("native context digest tests require the compiled Rust runtime")
+    monkeypatch.setenv("HOL_GUARD_NATIVE", "force")
+    monkeypatch.setenv("HOL_GUARD_NATIVE_BINARY", str(binary.resolve()))
+    return _native_context_home
 
 
 @pytest.fixture

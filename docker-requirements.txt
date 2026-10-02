@@ -1674,10 +1674,6 @@ protobuf==7.35.1 \
     --hash=sha256:b73f9489a4b8b1c9cb1f8ed951c736392592edb24b9d6819f36d2e10b171d5b4 \
     --hash=sha256:ce115a26fe0c39a2c29973d914d327e516a6455464489fe3cd1e51a1b354f81a
     # via onnxruntime
-publicsuffixlist==1.0.2.20260726 \
-    --hash=sha256:52b88aae7fbd991a491f73e2ef9c31901748cfb08959cf3a2a304e86383344a5 \
-    --hash=sha256:6abd9eace2fa7a8734fdae9c8b32403a8c6b22c5872dad59367f19bc83d990ea
-    # via hol-guard (pyproject.toml)
 puremagic==2.2.0 \
     --hash=sha256:c4f7ed7307f056c787199acfda839555921be1df13abba61e8e6db0c787ae1d0 \
     --hash=sha256:eb4bddf07c177c4b434554b92165b67449f5a51e152b976202d6254498810eef
@@ -2552,9 +2548,9 @@ uc-micro-py==2.0.0 \
     --hash=sha256:3603a3859af53e5a39bc7677713c78ea6589ff188d70f4fee165db88e22b242c \
     --hash=sha256:c53691e495c8db60e16ffc4861a35469b0ba0821fe409a8a7a0a71864d33a811
     # via linkify-it-py
-urllib3==2.7.0 \
-    --hash=sha256:231e0ec3b63ceb14667c67be60f2f2c40a518cb38b03af60abc813da26505f4c \
-    --hash=sha256:9fb4c81ebbb1ce9531cce37674bbc6f1360472bc18ca9a553ede278ef7276897
+urllib3==2.8.0 \
+    --hash=sha256:63bf2ead4c879426ebf22ef2a781eeb4aa3b4ae798a0435506f8687fd5bb9b63 \
+    --hash=sha256:0cf3cae568d36aa9576b28dfb35f11328f1cb974ca7647d9475ebb86c75ac6e3
     # via
     #   --override (workspace)
     #   requests

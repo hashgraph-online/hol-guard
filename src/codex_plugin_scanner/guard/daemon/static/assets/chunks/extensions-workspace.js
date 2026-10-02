@@ -253,6 +253,156 @@ function optionalString(value) {
 function isLocalCliId(value) {
   return CLI_ID_PATTERN.test(value);
 }
+async function waitForDiscoveryJob(cliId, initialJob, signal, readJson2) {
+  const normalize = (body) => {
+    if (!isRecord(body) || typeof body.job_id !== "string" || !/^[a-f0-9]{32}$/.test(body.job_id) || body.cli_id !== cliId || !["running", "cancelling", "complete", "cancelled", "failed"].includes(String(body.state))) {
+      throw new Error("Invalid discovery progress");
+    }
+    return body;
+  };
+  const request2 = async (payload) => {
+    const body = await readJson2(await fetchLocalCliApi("/v1/local-clis/refresh-job", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    }));
+    const next = normalize(body);
+    if (payload.job_id !== next.job_id) throw new Error("Discovery identity changed");
+    return next;
+  };
+  let job = normalize(initialJob);
+  let finished = false;
+  try {
+    for (let poll = 0; poll < 120; poll += 1) {
+      if (signal.aborted) return;
+      if (job.state === "complete" || job.state === "cancelled") {
+        finished = true;
+        return;
+      }
+      if (job.state === "failed") {
+        finished = true;
+        let message;
+        switch (job.error) {
+          case "mcp_refresh_unavailable":
+            message = "Guard cannot list this connection directly. Refresh it in its host app.";
+            break;
+          case "mcp_launch_failed":
+            message = "Guard could not launch this MCP server. Check its configured executable and dependencies in the host app. Known tools and choices were kept.";
+            break;
+          case "mcp_transport_failed":
+            message = "Guard could not communicate with this MCP server. Check its executable, dependencies, and server logs in the host app. Known tools and choices were kept.";
+            break;
+          case "mcp_initialize_failed":
+            message = "The MCP server did not complete initialization. Check that it starts in the host app and uses stdio MCP. Known tools and choices were kept.";
+            break;
+          case "mcp_protocol_unsupported":
+            message = "This server uses an MCP protocol version Guard does not support. Check the server and Guard versions. Known tools and choices were kept.";
+            break;
+          case "mcp_capability_rejected":
+            message = "The MCP server rejected Guard's discovery capabilities. Check the server's client requirements and Guard version. Known tools and choices were kept.";
+            break;
+          case "catalog_revision_conflict":
+            message = "A newer discovery finished first. Reload the inventory.";
+            break;
+          case "configured_host_scan_failed":
+            message = "Guard could not read the host's configured connections. Check the host app and retry.";
+            break;
+          case "observed_provider_scan_failed":
+            message = "Guard could not merge observed provider tools. Known tools and choices were kept; retry discovery.";
+            break;
+          case "catalog_limit_reached":
+            message = "This connector has more tools than Guard can catalog safely. Existing choices were kept.";
+            break;
+          default:
+            console.warn("Unknown discovery error code:", job.error);
+            message = "Discovery did not finish. Known tools and choices were kept. Try again shortly.";
+        }
+        throw new Error(message);
+      }
+      await new Promise((resolve) => {
+        const done = () => {
+          window.clearTimeout(timer);
+          signal.removeEventListener("abort", done);
+          resolve();
+        };
+        const timer = window.setTimeout(done, 500);
+        signal.addEventListener("abort", done, { once: true });
+      });
+      if (!signal.aborted) job = await request2({ job_id: job.job_id });
+    }
+    throw new Error("Discovery took too long. Known tools and choices were kept.");
+  } finally {
+    if (!finished) await request2({ job_id: job.job_id, cancel: true });
+  }
+}
+function record$2(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function hostMetadataText(value, maximum) {
+  if (typeof value !== "string" || !value.trim() || [...value].length > maximum || value.includes("\0")) {
+    throw new Error("Invalid host metadata");
+  }
+  return value;
+}
+function optionalText(value, maximum) {
+  return value === null || value === void 0 ? null : hostMetadataText(value, maximum);
+}
+function normalizeCodexHostInventory(value) {
+  if (!record$2(value) || value.host !== "Codex" || value.catalog_coverage !== "host-summary" || value.account_verified !== false || value.schemas_available !== false || value.permissions_granted !== false || value.snapshot_age !== "unknown" || typeof value.metadata_complete !== "boolean" || typeof value.expires_at_ms !== "number" || !Number.isSafeInteger(value.expires_at_ms) || value.expires_at_ms <= 0 || typeof value.connection_id !== "string" || !/^[a-f0-9]{64}$/.test(value.connection_id) || !Array.isArray(value.apps) || value.apps.length > 1e3) return void 0;
+  try {
+    const appIds = /* @__PURE__ */ new Set();
+    let totalTools = 0;
+    const apps = value.apps.map((entry) => {
+      if (!record$2(entry) || typeof entry.enabled !== "boolean" || typeof entry.callable !== "boolean" || typeof entry.metadata_available !== "boolean" || !Array.isArray(entry.tools)) {
+        throw new Error("Invalid host app");
+      }
+      const appId = hostMetadataText(entry.app_id, 256);
+      if (appIds.has(appId)) throw new Error("Duplicate host app");
+      appIds.add(appId);
+      totalTools += entry.tools.length;
+      if (totalTools > 1e4) throw new Error("Host summary limit");
+      const names = /* @__PURE__ */ new Set();
+      const tools = entry.tools.map((tool) => {
+        if (!record$2(tool)) throw new Error("Invalid host tool");
+        const name = hostMetadataText(tool.name, 256);
+        if (names.has(name)) throw new Error("Duplicate host tool");
+        names.add(name);
+        return { name, title: optionalText(tool.title, 512), description: optionalText(tool.description, 4e3) };
+      });
+      return {
+        app_id: appId,
+        name: hostMetadataText(entry.name, 256),
+        enabled: entry.enabled,
+        callable: entry.callable,
+        metadata_available: entry.metadata_available,
+        tools
+      };
+    });
+    return {
+      host: "Codex",
+      connection_id: value.connection_id,
+      catalog_coverage: "host-summary",
+      account_verified: false,
+      schemas_available: false,
+      permissions_granted: false,
+      snapshot_age: "unknown",
+      metadata_complete: value.metadata_complete,
+      expires_at_ms: value.expires_at_ms,
+      apps
+    };
+  } catch {
+    return void 0;
+  }
+}
+function filterCodexHostApps(apps, query) {
+  const search = query.trim().toLocaleLowerCase();
+  if (!search) return apps;
+  return apps.flatMap((app) => {
+    if (`${app.name} ${app.app_id}`.toLocaleLowerCase().includes(search)) return [app];
+    const tools = app.tools.filter((tool) => `${tool.name} ${tool.title ?? ""} ${tool.description ?? ""}`.toLocaleLowerCase().includes(search));
+    return tools.length ? [{ ...app, tools }] : [];
+  });
+}
 function normalizeMcpClassification(value) {
   if (!isRecord(value) || value.schema_version !== "guard.mcp-classification.v1" || value.advisory_only !== true || !["reviewed-mapping", "limited"].includes(String(value.confidence))) return void 0;
   const labels = [value.effect, value.data, value.destination, value.reversibility];
@@ -436,6 +586,7 @@ function normalizeLocalCliList(value) {
   const revision = requiredInt(value.revision, "revision");
   const publication = value.native_publication;
   const discoveryIssue = value.discovery_issue;
+  const hostInventory = normalizeCodexHostInventory(value.host_inventory);
   let nativePublication;
   if (isRecord(publication) && publication.revision === revision && (publication.state === "pending" || publication.state === "failed" || publication.state === "unavailable")) {
     nativePublication = { state: publication.state, revision };
@@ -447,6 +598,7 @@ function normalizeLocalCliList(value) {
     revision,
     ...discoveryIssue === "catalog_limit_reached" || discoveryIssue === "observed_provider_scan_failed" || discoveryIssue === "configured_host_scan_failed" || discoveryIssue === "package_catalog_refresh_failed" ? { discovery_issue: discoveryIssue } : {},
     ...nativePublication ? { native_publication: nativePublication } : {},
+    ...hostInventory ? { host_inventory: hostInventory } : {},
     items,
     cloud: {
       sync_local_only: cloud.sync_local_only !== false,
@@ -701,72 +853,25 @@ async function refreshMcpInventory(cliId, signal, configuredConnections = false,
   if (initialJob === null) return;
   await waitForMcpDiscoveryJob(cliId, initialJob, signal);
 }
-async function waitForMcpDiscoveryJob(cliId, initialJob, signal) {
-  const normalize = (body) => {
-    if (!isRecord(body) || typeof body.job_id !== "string" || !/^[a-f0-9]{32}$/.test(body.job_id) || body.cli_id !== cliId || !["running", "cancelling", "complete", "cancelled", "failed"].includes(String(body.state))) {
-      throw new Error("Invalid discovery progress");
-    }
-    return body;
-  };
-  const request2 = async (payload) => {
-    const body = await readJson(await fetchLocalCliApi("/v1/local-clis/refresh-job", {
+async function refreshCodexHostInventory(signal, forceRefresh = false) {
+  if (signal.aborted) return;
+  const initialJob = await startCancelableDiscoveryJob(signal, async (clientJobId) => readJson(await fetchLocalCliApi(
+    "/v1/local-clis/refresh-job",
+    {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    }));
-    const next = normalize(body);
-    if (payload.job_id !== next.job_id) throw new Error("Discovery identity changed");
-    return next;
-  };
-  let job = normalize(initialJob);
-  let finished = false;
-  try {
-    for (let poll = 0; poll < 120; poll += 1) {
-      if (signal.aborted) return;
-      if (job.state === "complete" || job.state === "cancelled") {
-        finished = true;
-        return;
-      }
-      if (job.state === "failed") {
-        finished = true;
-        let message;
-        switch (job.error) {
-          case "mcp_refresh_unavailable":
-            message = "Guard cannot list this connection directly. Refresh it in its host app.";
-            break;
-          case "catalog_revision_conflict":
-            message = "A newer discovery finished first. Reload the inventory.";
-            break;
-          case "configured_host_scan_failed":
-            message = "Guard could not read the host's configured connections. Check the host app and retry.";
-            break;
-          case "observed_provider_scan_failed":
-            message = "Guard could not merge observed provider tools. Known tools and choices were kept; retry discovery.";
-            break;
-          case "catalog_limit_reached":
-            message = "This connector has more tools than Guard can catalog safely. Existing choices were kept.";
-            break;
-          default:
-            console.warn("Unknown discovery error code:", job.error);
-            message = "Discovery did not finish. Known tools and choices were kept. Try again shortly.";
-        }
-        throw new Error(message);
-      }
-      await new Promise((resolve) => {
-        const done = () => {
-          window.clearTimeout(timer);
-          signal.removeEventListener("abort", done);
-          resolve();
-        };
-        const timer = window.setTimeout(done, 500);
-        signal.addEventListener("abort", done, { once: true });
-      });
-      if (!signal.aborted) job = await request2({ job_id: job.job_id });
+      signal,
+      body: JSON.stringify({
+        operation: "codex-host-connections",
+        client_job_id: clientJobId,
+        ...forceRefresh ? { force_refresh: true } : {}
+      })
     }
-    throw new Error("Discovery took too long. Known tools and choices were kept.");
-  } finally {
-    if (!finished) await request2({ job_id: job.job_id, cancel: true });
-  }
+  )));
+  if (initialJob !== null) await waitForMcpDiscoveryJob("inventory:codex-host", initialJob, signal);
+}
+async function waitForMcpDiscoveryJob(cliId, initialJob, signal) {
+  await waitForDiscoveryJob(cliId, initialJob, signal, readJson);
 }
 async function fetchMcpProviderActions(cliId, options) {
   const body = await readJson(await fetchLocalCliApi("/v1/local-clis/provider-actions", {
@@ -3725,7 +3830,7 @@ function customExtensionUnits(surface) {
   if (surface === "package-scripts") return { unit: "script", units: "scripts", source: "this project" };
   return { unit: "command", units: "commands", source: "this file" };
 }
-function customExtensionStateLabel$1(item) {
+function customExtensionStateLabel(item) {
   const { unit, units, source } = customExtensionUnits(item.surface);
   if (item.stale) {
     if (item.surface === "mcp") return "This connection changed. Review its permissions again.";
@@ -3750,7 +3855,7 @@ function customExtensionStateLabel$1(item) {
   }
   return item.surface === "mcp" ? "Detected · Permissions not configured. Inspect this connection." : item.example_label;
 }
-function continuityCopy$1(item) {
+function continuityCopy(item) {
   const status = item.continuity?.status;
   if (status === "applied") {
     const view = customExtensionContinuityView("identity-matched");
@@ -3860,6 +3965,29 @@ function connectionReviewMessage(state) {
   if (state === "unset") return "Saved connection permissions will be removed. Future calls return to Guard policy.";
   return "Unknown and future tools still require review. These choices do not verify the provider account.";
 }
+const isSetupDigest = (value) => typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
+function parseRecentMcpSetups(value) {
+  if (!Array.isArray(value) || value.length > 32) throw new Error("Could not verify recent setup history. Retry history.");
+  const handles = /* @__PURE__ */ new Set();
+  return value.map((entry) => {
+    if (entry === null || typeof entry !== "object" || Array.isArray(entry) || !isSetupDigest(entry.rollback_handle) || !isSetupDigest(entry.selection_digest) || handles.has(entry.rollback_handle) || typeof entry.setup_name !== "string" || !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(entry.setup_name) || !["remote", "package"].includes(entry.kind) || typeof entry.registry_name !== "string" || entry.registry_name.length > 256 || typeof entry.version !== "string" || entry.version.length > 80) {
+      throw new Error("Could not verify recent setup history. Retry history.");
+    }
+    handles.add(entry.rollback_handle);
+    if (entry.rollback_available !== void 0 && typeof entry.rollback_available !== "boolean") {
+      throw new Error("Could not verify recent setup history. Retry history.");
+    }
+    return {
+      rollback_handle: entry.rollback_handle,
+      setup_name: entry.setup_name,
+      kind: entry.kind,
+      registry_name: entry.registry_name,
+      version: entry.version,
+      selection_digest: entry.selection_digest,
+      ...entry.rollback_available === void 0 ? {} : { rollback_available: entry.rollback_available }
+    };
+  });
+}
 const object = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 async function registrySearch(query, signal) {
   const response = await fetchLocalCliApi("/v1/local-clis/registry-search", {
@@ -3913,14 +4041,94 @@ function McpRegistrySearch({ items, approvalGate, onOpenChange, onConfigured }) 
   const controller = reactExports.useRef(null);
   const operation = reactExports.useRef(null);
   const interactionGeneration = reactExports.useRef(0);
+  const historyGeneration = reactExports.useRef(0);
+  const historyController = reactExports.useRef(null);
+  const [recent, setRecent] = reactExports.useState([]);
+  const [historyError, setHistoryError] = reactExports.useState(null);
+  const [historyBusy, setHistoryBusy] = reactExports.useState(false);
+  const returnFocus = reactExports.useRef(null);
   const [candidate, setCandidate] = reactExports.useState(null);
   const [configured, setConfigured] = reactExports.useState(null);
   const [password, setPassword] = reactExports.useState("");
   const [totp, setTotp] = reactExports.useState("");
-  reactExports.useEffect(() => () => controller.current?.abort(), []);
+  reactExports.useEffect(() => () => {
+    controller.current?.abort();
+    historyController.current?.abort();
+  }, []);
+  async function loadRecent() {
+    historyController.current?.abort();
+    const next = new AbortController();
+    historyController.current = next;
+    const generation = ++historyGeneration.current;
+    setHistoryBusy(true);
+    setHistoryError(null);
+    try {
+      const response = await fetchLocalCliApi("/v1/local-clis/registry-setup", {
+        method: "POST",
+        signal: next.signal,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ operation: "recent" })
+      });
+      const body = await response.json();
+      if (!response.ok || !object(body)) throw new Error("Recent setup history is unavailable. Retry history.");
+      const setups = parseRecentMcpSetups(body.setups);
+      if (!next.signal.aborted && historyGeneration.current === generation) setRecent(setups);
+    } catch (caught) {
+      if (!next.signal.aborted && historyGeneration.current === generation) {
+        setHistoryError(caught instanceof Error ? caught.message : "Recent setup history is unavailable. Retry history.");
+      }
+    } finally {
+      if (historyGeneration.current === generation) setHistoryBusy(false);
+    }
+  }
+  function invalidateHistory() {
+    historyGeneration.current += 1;
+    historyController.current?.abort();
+    setHistoryBusy(false);
+  }
+  async function previewUndo(setup, button) {
+    if (operation.current) return;
+    returnFocus.current = button;
+    const generation = ++interactionGeneration.current;
+    operation.current = "rollback-preview";
+    const next = new AbortController();
+    controller.current = next;
+    setBusy(true);
+    setError(null);
+    setCandidate(null);
+    setConfigured(null);
+    setPassword("");
+    setTotp("");
+    try {
+      const response = await fetchLocalCliApi("/v1/local-clis/registry-setup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ operation: "rollback-preview", rollback_handle: setup.rollback_handle }),
+        signal: next.signal
+      });
+      const body = await response.json();
+      if (next.signal.aborted || interactionGeneration.current !== generation) return;
+      if (!response.ok) {
+        if (object(body) && (body.error === "codex_config_changed" || body.code === "codex_config_changed")) void loadRecent();
+        throw new Error(object(body) && typeof body.message === "string" ? body.message : "Could not review removal. Review this connection in Codex.");
+      }
+      if (!object(body) || body.host !== "codex" || body.rollback_handle !== setup.rollback_handle || body.setup_name !== setup.setup_name || body.selection_digest !== setup.selection_digest || body.registry_name !== setup.registry_name || body.version !== setup.version || body.kind !== setup.kind || body.permissions_granted !== false || body.host_change_applied !== false || (body.kind === "remote" ? typeof body.endpoint !== "string" || body.endpoint.length > 2048 : typeof body.command !== "string" || body.command.length > 4096 || !Array.isArray(body.arguments) || body.arguments.length > 18 || !body.arguments.every((arg) => typeof arg === "string" && arg.length <= 160) || typeof body.package_identifier !== "string" || typeof body.package_version !== "string" || body.verified_package !== false)) throw new Error("Could not verify removal. Review this connection in Codex.");
+      if (interactionGeneration.current === generation) setCandidate(body);
+    } catch (caught) {
+      if (!next.signal.aborted && interactionGeneration.current === generation) {
+        setError(caught instanceof Error ? caught.message : "Could not review removal.");
+      }
+    } finally {
+      if (controller.current === next && interactionGeneration.current === generation) {
+        controller.current = null;
+        operation.current = null;
+        setBusy(false);
+      }
+    }
+  }
   async function search() {
     if (query.trim().length < 2 || busy || operation.current) return;
-    interactionGeneration.current += 1;
+    const generation = ++interactionGeneration.current;
     operation.current = "search";
     const next = new AbortController();
     controller.current = next;
@@ -3938,19 +4146,25 @@ function McpRegistrySearch({ items, approvalGate, onOpenChange, onConfigured }) 
     } catch (caught) {
       if (!next.signal.aborted) setError(caught instanceof Error ? caught.message : "Registry unavailable.");
     } finally {
-      operation.current = null;
-      if (controller.current === next) controller.current = null;
-      if (!next.signal.aborted) setBusy(false);
+      if (controller.current === next && interactionGeneration.current === generation) {
+        controller.current = null;
+        operation.current = null;
+        setBusy(false);
+      }
     }
   }
   async function preview(entry, target) {
     if (operation.current) return;
-    interactionGeneration.current += 1;
+    const generation = ++interactionGeneration.current;
     operation.current = "preview";
+    const next = new AbortController();
+    controller.current = next;
     setBusy(true);
     setError(null);
     setCandidate(null);
     setConfigured(null);
+    setPassword("");
+    setTotp("");
     const setupName = entry.name.split("/").at(-1)?.toLowerCase().replace(/[^a-z0-9_-]/g, "-") ?? "mcp-server";
     try {
       const response = await fetchLocalCliApi("/v1/local-clis/registry-setup", {
@@ -3966,7 +4180,8 @@ function McpRegistrySearch({ items, approvalGate, onOpenChange, onConfigured }) 
             package_identifier: target.packageOption.identifier,
             package_version: target.packageOption.version
           }
-        })
+        }),
+        signal: next.signal
       });
       const body = await response.json();
       if (!response.ok) throw new Error(object(body) && typeof body.message === "string" ? body.message : "Could not review setup.");
@@ -3974,12 +4189,17 @@ function McpRegistrySearch({ items, approvalGate, onOpenChange, onConfigured }) 
       if ("endpoint" in target) {
         if (body.endpoint !== target.endpoint || body.kind !== "remote") throw new Error("Invalid Codex endpoint preview");
       } else if (body.kind !== "package" || body.package_identifier !== target.packageOption.identifier || body.package_version !== target.packageOption.version || typeof body.command !== "string" || !Array.isArray(body.arguments) || !body.arguments.every((argument) => typeof argument === "string") || body.verified_package !== false) throw new Error("Invalid Codex package preview");
-      setCandidate(body);
+      if (!next.signal.aborted && interactionGeneration.current === generation) setCandidate(body);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not review setup.");
+      if (!next.signal.aborted && interactionGeneration.current === generation) {
+        setError(caught instanceof Error ? caught.message : "Could not review setup.");
+      }
     } finally {
-      operation.current = null;
-      setBusy(false);
+      if (controller.current === next && interactionGeneration.current === generation) {
+        controller.current = null;
+        operation.current = null;
+        setBusy(false);
+      }
     }
   }
   async function apply() {
@@ -4001,7 +4221,8 @@ function McpRegistrySearch({ items, approvalGate, onOpenChange, onConfigured }) 
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          operation: "apply",
+          operation: candidate.rollback_handle ? "rollback" : "apply",
+          ...candidate.rollback_handle ? { rollback_handle: candidate.rollback_handle } : {},
           registry_name: candidate.registry_name,
           version: candidate.version,
           setup_name: candidate.setup_name,
@@ -4017,30 +4238,77 @@ function McpRegistrySearch({ items, approvalGate, onOpenChange, onConfigured }) 
         })
       });
       const body = await response.json();
-      if (!response.ok) throw new Error(object(body) && typeof body.message === "string" ? body.message : "Codex setup did not finish.");
-      if (!object(body) || body.host !== "codex" || body.setup_name !== candidate.setup_name || body.kind !== (candidate.kind === "package" ? "package" : "remote") || body.host_change_applied !== true || body.permissions_granted !== false) throw new Error("Codex setup outcome is uncertain.");
-      setConfigured({ name: candidate.setup_name, kind: candidate.kind === "package" ? "package" : "remote" });
+      if (!response.ok) {
+        if (candidate.rollback_handle && object(body) && (body.error === "codex_config_changed" || body.code === "codex_config_changed")) setCandidate(null);
+        throw new Error(object(body) && typeof body.message === "string" ? body.message : "Codex setup did not finish.");
+      }
+      if (!object(body) || body.host !== "codex" || body.setup_name !== candidate.setup_name || body.kind !== (candidate.kind === "package" ? "package" : "remote") || body.host_change_applied !== true || body.permissions_granted !== false || (candidate.rollback_handle ? body.setup_rolled_back !== true : !isSetupDigest(body.rollback_handle))) {
+        throw new Error("Codex setup outcome is uncertain. Check recent setup history and review this connection in Codex before retrying.");
+      }
+      invalidateHistory();
+      if (candidate.rollback_handle) setRecent((previous) => previous.filter((setup) => setup.rollback_handle !== candidate.rollback_handle));
+      else setRecent((previous) => [{
+        rollback_handle: body.rollback_handle,
+        setup_name: candidate.setup_name,
+        kind: candidate.kind,
+        registry_name: candidate.registry_name,
+        version: candidate.version,
+        selection_digest: candidate.selection_digest
+      }, ...previous].slice(0, 32));
+      void loadRecent();
+      setConfigured({ name: candidate.setup_name, kind: candidate.kind, removed: Boolean(candidate.rollback_handle) });
       setCandidate(null);
       setPassword("");
       setTotp("");
       void Promise.resolve().then(onConfigured).then((outcome) => {
-        if (outcome === "partial" && interactionGeneration.current === generation) setError("Codex was configured, but Guard could not fully rescan host connections. Existing connections remain visible. Retry discovery in Extensions.");
+        if (outcome === "partial" && interactionGeneration.current === generation) setError("Codex configuration changed, but Guard could not fully rescan host connections. Existing connections remain visible. Retry discovery in Extensions.");
       }).catch(() => {
-        if (interactionGeneration.current === generation) setError("Codex was configured, but Guard could not fully rescan host connections. Retry discovery in Extensions.");
+        if (interactionGeneration.current === generation) setError("Codex configuration changed, but Guard could not fully rescan host connections. Retry discovery in Extensions.");
       });
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Codex setup did not finish.");
+      setPassword("");
+      setTotp("");
+      void loadRecent();
+      setError(caught instanceof Error ? caught.message : "Codex setup did not finish. Review this connection in Codex before retrying.");
     } finally {
       operation.current = null;
       setBusy(false);
     }
   }
+  const setupStatus = reactExports.useMemo(() => {
+    if (!configured) return null;
+    const change = configured.removed ? "removed from" : "added to";
+    let text = `${configured.name} was ${change} Codex. Restart Codex to load this configuration change.`;
+    if (!configured.removed) {
+      text += " Complete any provider-owned sign-in there.";
+      if (configured.kind === "package") text += " Codex may download and run the pinned package on first use.";
+      text += " Review each tool in Extensions after Codex loads it.";
+    }
+    return `${text} No tool permission was granted.`;
+  }, [configured]);
+  const setupReviewText = reactExports.useMemo(() => {
+    if (!candidate || candidate.rollback_handle) return null;
+    if (candidate.kind === "package") {
+      return "This changes Codex configuration. Codex may download and execute this package on first use. It does not authenticate an account or allow tools in Guard.";
+    }
+    return "This changes Codex configuration. It does not download a package, authenticate an account, activate this session, or allow tools in Guard.";
+  }, [candidate]);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "mt-6 rounded-2xl border border-slate-200 bg-white p-4", onToggle: (event) => {
     setOpen(event.currentTarget.open);
     onOpenChange(event.currentTarget.open);
-    if (!event.currentTarget.open && operation.current === "search") {
-      controller.current?.abort();
-      setBusy(false);
+    if (event.currentTarget.open) void loadRecent();
+    else {
+      invalidateHistory();
+      if (operation.current !== "apply") {
+        controller.current?.abort();
+        controller.current = null;
+        operation.current = null;
+        setBusy(false);
+        interactionGeneration.current += 1;
+        setCandidate(null);
+        setPassword("");
+        setTotp("");
+      }
     }
   }, children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "min-h-11 cursor-pointer py-3 font-semibold text-brand-dark", children: "Find an MCP server in the public registry" }),
@@ -4083,18 +4351,13 @@ function McpRegistrySearch({ items, approvalGate, onOpenChange, onConfigured }) 
       busy ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mt-3 text-sm text-brand-dark/75", children: {
         search: "Searching public listings…",
         preview: "Checking the exact registry listing…",
-        apply: "Adding the reviewed connection to Codex…"
+        "rollback-preview": "Checking the saved setup…",
+        apply: candidate?.rollback_handle ? "Removing the reviewed connection from Codex…" : "Adding the reviewed connection to Codex…"
       }[operation.current ?? "apply"] }) : null,
       error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-3 text-sm text-red-700", children: error }) : null,
-      configured ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { role: "status", className: "mt-3 text-sm text-brand-dark", children: [
-        configured.name,
-        " was added to Codex. Restart Codex and complete any provider-owned sign-in there.",
-        configured.kind === "package" ? " Codex may download and run the pinned package on first use." : null,
-        " ",
-        "Review each tool in Extensions after Codex loads it. No tool permission was granted."
-      ] }) : null,
+      setupStatus ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mt-3 text-sm text-brand-dark", children: setupStatus }) : null,
       candidate ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": "Review Codex MCP setup", className: "mt-4 rounded-xl border border-slate-200 p-4 text-sm text-brand-dark", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "font-semibold", children: "Review Codex connection" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "font-semibold", children: candidate.rollback_handle ? "Review removal from Codex" : "Review Codex connection" }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2", children: [
           candidate.registry_name,
           " · version ",
@@ -4114,15 +4377,13 @@ function McpRegistrySearch({ items, approvalGate, onOpenChange, onConfigured }) 
           /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 break-all font-mono text-xs", children: [
             "Launch: ",
             [candidate.command, ...candidate.arguments].map((part) => JSON.stringify(part)).join(" ")
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2", children: "This changes Codex configuration. Codex may download and execute this package on first use. It does not authenticate an account or allow tools in Guard." })
-        ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 break-all", children: [
-            "HTTPS endpoint: ",
-            candidate.endpoint
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2", children: "This changes Codex configuration. It does not download a package, authenticate an account, activate this session, or allow tools in Guard." })
-        ] }),
+          ] })
+        ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx(jsxRuntimeExports.Fragment, { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 break-all", children: [
+          "HTTPS endpoint: ",
+          candidate.endpoint
+        ] }) }),
+        setupReviewText ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2", children: setupReviewText }) : null,
+        candidate.rollback_handle ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2", children: "Remove only the connection added by this setup. If Codex configuration has changed since then, Guard leaves it unchanged so you can review it in Codex. Removing setup does not revoke provider access or erase Guard tool choices." }) : null,
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 max-w-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
           ApprovalProofFieldInputs,
           {
@@ -4133,7 +4394,7 @@ function McpRegistrySearch({ items, approvalGate, onOpenChange, onConfigured }) 
             onApprovalTotpCodeChange: (event) => setTotp(event.target.value.replace(/\D/g, "").slice(0, 6))
           }
         ) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 flex gap-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 flex flex-wrap gap-3", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             "button",
             {
@@ -4147,7 +4408,7 @@ function McpRegistrySearch({ items, approvalGate, onOpenChange, onConfigured }) 
                 void apply();
               },
               className: "min-h-11 rounded-xl bg-brand-blue px-4 font-semibold text-white disabled:opacity-50",
-              children: "Add to Codex"
+              children: candidate.rollback_handle ? "Remove from Codex" : "Add to Codex"
             }
           ),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -4159,6 +4420,7 @@ function McpRegistrySearch({ items, approvalGate, onOpenChange, onConfigured }) 
                 setCandidate(null);
                 setPassword("");
                 setTotp("");
+                returnFocus.current?.focus();
               },
               className: "min-h-11 rounded-xl border border-slate-300 px-4 font-semibold",
               children: "Cancel"
@@ -4166,6 +4428,58 @@ function McpRegistrySearch({ items, approvalGate, onOpenChange, onConfigured }) 
           )
         ] })
       ] }) : null,
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": "Recent MCP setup", className: "mt-4 border-t border-slate-200 pt-4 text-sm text-brand-dark", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "font-semibold", children: "Recent setup" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-brand-dark/75", children: "Undo is available for up to an hour while this Guard runtime stays open. For older or changed connections, review configuration in Codex." }),
+        historyBusy ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mt-2", children: "Loading recent setup…" }) : null,
+        historyError ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "text-red-700", children: historyError }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              disabled: historyBusy || busy,
+              onClick: () => {
+                void loadRecent();
+              },
+              className: "mt-2 min-h-11 rounded-xl border border-slate-300 px-4 font-semibold",
+              children: "Retry history"
+            }
+          )
+        ] }) : null,
+        !historyBusy && !historyError && !recent.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-brand-dark/75", children: "No setup available to undo in this runtime." }) : null,
+        recent.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-2 divide-y divide-slate-200", children: recent.map((setup) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "li",
+          {
+            className: "flex flex-wrap items-center justify-between gap-3 py-3",
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "break-all font-semibold", children: setup.setup_name }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "break-all text-brand-dark/75", children: [
+                  setup.registry_name,
+                  " · ",
+                  setup.version
+                ] }),
+                setup.rollback_available === false ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-brand-dark/75", children: "Configuration changed. Review this connection in Codex." }) : null
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "button",
+                {
+                  type: "button",
+                  disabled: busy || setup.rollback_available === false,
+                  onClick: (event) => {
+                    void previewUndo(setup, event.currentTarget);
+                  },
+                  "aria-label": `Undo setup for ${setup.setup_name}`,
+                  className: "min-h-11 rounded-xl border border-slate-300 px-4 font-semibold disabled:opacity-50",
+                  children: "Undo setup"
+                }
+              )
+            ]
+          },
+          setup.rollback_handle
+        )) }) : null
+      ] }),
       entries?.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-sm text-brand-dark/75", children: "No listing on this search page. Try another name." }) : null,
       moreAvailable && entries ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-sm text-brand-dark/75", children: "More listings match. Refine the name to find a specific server; this page is not the complete registry." }) : null,
       entries ? /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-4 divide-y divide-slate-200", children: entries.map((entry) => {
@@ -5724,15 +6038,112 @@ function SkillPreflightPreview({ plan }) {
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2", children: "This is a preview of current evidence. Preparing grants nothing; every runtime call still checks its permissions." })
   ] });
 }
+const PAGE_SIZE = 25;
+function HostAppTools({ app }) {
+  const [shown, setShown] = reactExports.useState(PAGE_SIZE);
+  if (!app.metadata_available) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-brand-dark/80", children: "Tool summaries are unavailable for this app." });
+  }
+  if (app.tools.length === 0) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-brand-dark/80", children: "Codex provided no tool summaries." });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-2 divide-y divide-brand-dark/10", children: app.tools.slice(0, shown).map((tool) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "py-2 text-sm text-brand-dark", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "break-words font-medium", children: tool.title ?? tool.name }),
+      tool.description ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 max-w-prose break-words leading-6 text-brand-dark/80", children: tool.description }) : null
+    ] }, tool.name)) }),
+    shown < app.tools.length ? /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "guard-extensions-chip mt-2", onClick: () => setShown((value) => value + PAGE_SIZE), children: [
+      "Show more tools for ",
+      app.name
+    ] }) : null
+  ] });
+}
+function HostAppRow({ app }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "border-b border-brand-dark/10 py-3", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("summary", { className: "cursor-pointer rounded-lg px-1 py-1 text-sm text-brand-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "break-words font-semibold", children: app.name }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "ml-2 text-xs text-brand-dark/70", children: app.enabled ? "Enabled in Codex" : "Disabled in Codex" })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2 pl-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs leading-5 text-brand-dark/80", children: [
+        app.callable ? "Codex reports tools available." : "Codex does not report callable tools.",
+        " ",
+        "Permissions in Guard are unchanged."
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HostAppTools, { app })
+    ] })
+  ] });
+}
+function HostInventoryApps({ inventory }) {
+  const searchId = reactExports.useId();
+  const [query, setQuery] = reactExports.useState("");
+  const [shown, setShown] = reactExports.useState(PAGE_SIZE);
+  if (inventory.apps.length === 0) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-sm text-brand-dark/80", children: "Codex did not report any apps. Check host connections again after using an app in Codex." });
+  }
+  const matches = filterCodexHostApps(inventory.apps, query);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: searchId, className: "mt-4 block text-sm font-medium text-brand-dark", children: "Search Codex apps and tool summaries" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "input",
+      {
+        id: searchId,
+        type: "search",
+        value: query,
+        maxLength: 128,
+        onChange: (event) => {
+          setQuery(event.target.value);
+          setShown(PAGE_SIZE);
+        },
+        className: "mt-1 w-full rounded-xl border border-brand-dark/20 bg-white px-3 py-2 text-sm text-brand-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue"
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2 text-xs text-brand-dark/80", role: "status", children: [
+      matches.length,
+      " ",
+      matches.length === 1 ? "app" : "apps",
+      query.trim() ? " match this search" : " in the host snapshot",
+      " · Tool summaries only"
+    ] }),
+    matches.slice(0, shown).map((app) => /* @__PURE__ */ jsxRuntimeExports.jsx(HostAppRow, { app }, `${inventory.connection_id}:${app.app_id}`)),
+    matches.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-sm text-brand-dark/80", children: "No Codex apps or tool summaries match this search." }) : null,
+    shown < matches.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "guard-extensions-chip mt-3", onClick: () => setShown((value) => value + PAGE_SIZE), children: "Show more Codex apps" }) : null
+  ] });
+}
+function CodexHostConnectors({ inventory }) {
+  const headingId = reactExports.useId();
+  const [reported, setReported] = reactExports.useState(Boolean(inventory));
+  const [now, setNow] = reactExports.useState(Date.now);
+  reactExports.useEffect(() => {
+    if (!inventory) return;
+    setReported(true);
+    setNow(Date.now());
+    const remaining = Math.max(0, Math.min(3e4, inventory.expires_at_ms - Date.now()));
+    const timer = window.setTimeout(() => setNow(inventory.expires_at_ms), remaining);
+    return () => window.clearTimeout(timer);
+  }, [inventory?.expires_at_ms]);
+  if (!inventory && !reported) return null;
+  let content;
+  if (!inventory || inventory.expires_at_ms <= now) {
+    content = /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-sm text-brand-dark/80", role: "status", children: "Host summaries expired or are unavailable. Check host connections again." });
+  } else {
+    content = /* @__PURE__ */ jsxRuntimeExports.jsx(HostInventoryApps, { inventory });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "mt-8", "aria-labelledby": headingId, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: headingId, className: "text-xl font-semibold tracking-tight text-brand-dark", children: "Apps reported by Codex" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 max-w-prose text-sm leading-6 text-brand-dark/80", children: "Inspect apps and tool summaries from your existing Codex host. Guard has not verified their accounts or tool permissions. Manage tools Guard has observed under Custom extensions." }),
+    content
+  ] });
+}
 const CUSTOM_EXTENSION_PREVIEW_COUNT = 8;
-const CUSTOM_EXTENSION_RENDER_LIMIT = 100;
+const CUSTOM_EXTENSION_PAGE_SIZE = 25;
 function CustomExtensionRow(props) {
   const cliId = props.item.cli_id;
   const onOpen = props.onOpen;
   const handleOpen = reactExports.useCallback(() => {
     onOpen(cliId);
   }, [cliId, onOpen]);
-  const continuity = continuityCopy$1(props.item);
+  const continuity = continuityCopy(props.item);
   const catalog = mcpCatalogCopy(props.item);
   return /* @__PURE__ */ jsxRuntimeExports.jsx(
     ProtectionModuleRow,
@@ -5740,7 +6151,7 @@ function CustomExtensionRow(props) {
       extensionId: props.item.cli_id,
       name: props.item.name,
       description: customExtensionRowDescription(props.item, catalog?.title ?? null),
-      behavior: continuity ? `${continuity.title}. ${continuity.description}` : customExtensionStateLabel$1(props.item),
+      behavior: continuity ? `${continuity.title}. ${continuity.description}` : customExtensionStateLabel(props.item),
       custom: true,
       executables: [props.item.name],
       onOpen: handleOpen
@@ -5786,15 +6197,45 @@ function CustomExtensionEmptyState(props) {
 function CustomExtensionsSection(props) {
   const [search, setSearch] = reactExports.useState("");
   const [showAll, setShowAll] = reactExports.useState(false);
-  const all = connectorWorkspaceItems(props.items);
-  const added = search ? connectorWorkspaceItems(props.items, search) : all;
+  const [page, setPage] = reactExports.useState(0);
+  const rowsId = reactExports.useId();
+  const all = reactExports.useMemo(() => connectorWorkspaceItems(props.items), [props.items]);
+  const added = reactExports.useMemo(
+    () => search ? connectorWorkspaceItems(props.items, search) : all,
+    [props.items, search, all]
+  );
   const searchable = all.length > CUSTOM_EXTENSION_PREVIEW_COUNT || search !== "";
   const filteredOut = props.filteredOut === true && search === "";
   const needsReview = added.filter(customExtensionNeedsReview);
   const reviewed = added.filter((item) => !customExtensionNeedsReview(item));
   const grouped = needsReview.length > 0 && reviewed.length > 0;
-  const expandedLimit = showAll ? CUSTOM_EXTENSION_RENDER_LIMIT : CUSTOM_EXTENSION_PREVIEW_COUNT;
-  const visible = added.length > expandedLimit ? added.slice(0, expandedLimit) : added;
+  const pageCount = Math.max(1, Math.ceil(added.length / CUSTOM_EXTENSION_PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount - 1);
+  const handleSearchChange = reactExports.useCallback((event) => {
+    setSearch(event.target.value);
+    setShowAll(false);
+    setPage(0);
+  }, []);
+  const handleClearSearch = reactExports.useCallback(() => {
+    setSearch("");
+    setPage(0);
+  }, []);
+  const handleExpand = reactExports.useCallback(() => {
+    setShowAll(true);
+    setPage(0);
+  }, []);
+  const handleCollapse = reactExports.useCallback(() => {
+    setShowAll(false);
+    setPage(0);
+  }, []);
+  const handlePrevious = reactExports.useCallback(() => {
+    if (currentPage > 0) setPage(currentPage - 1);
+  }, [currentPage]);
+  const handleNext = reactExports.useCallback(() => {
+    if (currentPage < pageCount - 1) setPage(currentPage + 1);
+  }, [currentPage, pageCount]);
+  const start = showAll ? currentPage * CUSTOM_EXTENSION_PAGE_SIZE : 0;
+  const visible = added.slice(start, start + (showAll ? CUSTOM_EXTENSION_PAGE_SIZE : CUSTOM_EXTENSION_PREVIEW_COUNT));
   const visibleNeedsReview = grouped ? visible.filter(customExtensionNeedsReview) : visible;
   const visibleReviewed = grouped ? visible.filter((item) => !customExtensionNeedsReview(item)) : [];
   const unit = added.length === 1 ? "extension" : "extensions";
@@ -5813,10 +6254,7 @@ function CustomExtensionsSection(props) {
             {
               type: "search",
               value: search,
-              onChange: (event) => {
-                setSearch(event.target.value);
-                setShowAll(false);
-              },
+              onChange: handleSearchChange,
               placeholder: "Search connectors",
               className: "min-h-11 w-full rounded-xl border border-slate-300 bg-white pl-9 pr-3 text-sm font-normal text-brand-dark sm:w-64"
             }
@@ -5836,9 +6274,9 @@ function CustomExtensionsSection(props) {
         discovering: props.discovering,
         onAdd: props.onAdd,
         onClearFilters: props.onClearFilters,
-        onClearSearch: () => setSearch("")
+        onClearSearch: handleClearSearch
       }
-    ) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4", children: [
+    ) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4", id: rowsId, children: [
       grouped && visibleNeedsReview.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs font-semibold text-brand-dark/55", children: [
         "Needs review · ",
         needsReview.length
@@ -5849,14 +6287,15 @@ function CustomExtensionsSection(props) {
         reviewed.length
       ] }) : null,
       visibleReviewed.map((item) => /* @__PURE__ */ jsxRuntimeExports.jsx(CustomExtensionRow, { item, onOpen: props.onOpen }, item.cli_id)),
-      added.length > visible.length ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex flex-wrap items-center gap-3", children: [
-        showAll ? null : /* @__PURE__ */ jsxRuntimeExports.jsx(
+      !showAll && added.length > visible.length ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex flex-wrap items-center gap-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
           "button",
           {
             type: "button",
-            onClick: () => setShowAll(true),
+            onClick: handleExpand,
+            "aria-controls": rowsId,
             className: "min-h-11 rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-brand-dark",
-            children: added.length > CUSTOM_EXTENSION_RENDER_LIMIT ? `Show first ${CUSTOM_EXTENSION_RENDER_LIMIT}` : `Show all ${added.length} ${unit}`
+            children: added.length > CUSTOM_EXTENSION_PAGE_SIZE ? `Browse all ${added.length} ${unit}` : `Show all ${added.length} ${unit}`
           }
         ),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-brand-dark/70", children: [
@@ -5867,15 +6306,54 @@ function CustomExtensionsSection(props) {
           ". Search to narrow the list."
         ] })
       ] }) : null,
-      showAll && added.length > CUSTOM_EXTENSION_PREVIEW_COUNT ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "button",
-        {
-          type: "button",
-          onClick: () => setShowAll(false),
-          className: "mt-4 min-h-11 rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-brand-dark",
-          children: "Show fewer"
-        }
-      ) : null
+      showAll && added.length > CUSTOM_EXTENSION_PREVIEW_COUNT ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex flex-wrap items-center gap-3", children: [
+        pageCount > 1 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("nav", { "aria-label": "Custom extension pages", className: "flex flex-wrap items-center gap-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              "aria-disabled": currentPage === 0,
+              "aria-controls": rowsId,
+              onClick: handlePrevious,
+              className: "min-h-11 rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-brand-dark aria-disabled:opacity-50",
+              children: "Previous page"
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { role: "status", className: "text-sm text-brand-dark/70 tabular-nums", children: [
+            "Page ",
+            currentPage + 1,
+            " of ",
+            pageCount,
+            " · Showing ",
+            start + 1,
+            "–",
+            start + visible.length,
+            " of ",
+            added.length
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              "aria-disabled": currentPage === pageCount - 1,
+              "aria-controls": rowsId,
+              onClick: handleNext,
+              className: "min-h-11 rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-brand-dark aria-disabled:opacity-50",
+              children: "Next page"
+            }
+          )
+        ] }) : null,
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            onClick: handleCollapse,
+            "aria-controls": rowsId,
+            className: "min-h-11 rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-brand-dark",
+            children: "Show fewer"
+          }
+        )
+      ] }) : null
     ] })
   ] });
 }
@@ -6821,7 +7299,7 @@ function CatalogExtensionRow(props) {
 }
 function ConnectorDiscoveryControl(props) {
   if (props.discovering) {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "px-1 text-xs text-brand-dark/60", children: "Checking host configuration for connectors…" });
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "px-1 text-xs text-brand-dark/60", children: "Checking host connections…" });
   }
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
     props.error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "max-w-56 truncate text-xs text-brand-dark/60", title: props.error, children: props.error }) : null,
@@ -6841,6 +7319,7 @@ function ExtensionsOverview(props) {
   const reloadConnections = reactExports.useRef(props.onReloadConnections);
   reloadConnections.current = props.onReloadConnections;
   const [discoveryError, setDiscoveryError] = reactExports.useState(null);
+  const [hostDiscoveryError, setHostDiscoveryError] = reactExports.useState(null);
   const [discovering, setDiscovering] = reactExports.useState(false);
   const [discoveryAttempt, setDiscoveryAttempt] = reactExports.useState(0);
   reactExports.useEffect(() => {
@@ -6849,14 +7328,36 @@ function ExtensionsOverview(props) {
     const controller = new AbortController();
     setDiscovering(true);
     setDiscoveryError(null);
-    void refreshMcpInventory("inventory:configured", controller.signal, true, discoveryAttempt > 0).then(async () => {
+    setHostDiscoveryError(null);
+    const reload = async () => {
       if (!controller.signal.aborted) await reloadConnections.current();
-    }).catch(() => {
+    };
+    const configured = refreshMcpInventory("inventory:configured", controller.signal, true, discoveryAttempt > 0).then(reload).catch(() => {
       if (!controller.signal.aborted) setDiscoveryError("Could not check host configuration. Known connections remain available.");
-    }).finally(() => {
+    });
+    let hostRunning = false;
+    const refreshHost = async (force) => {
+      if (hostRunning || controller.signal.aborted) return;
+      hostRunning = true;
+      try {
+        await refreshCodexHostInventory(controller.signal, force);
+        if (!controller.signal.aborted) setHostDiscoveryError(null);
+      } catch {
+        if (!controller.signal.aborted) setHostDiscoveryError("Could not read Codex app inventory. Known connections remain available.");
+      } finally {
+        await reload();
+        hostRunning = false;
+      }
+    };
+    const host = refreshHost(discoveryAttempt > 0);
+    const hostTimer = window.setInterval(() => {
+      if (!document.hidden) void refreshHost(true);
+    }, 25e3);
+    void Promise.all([configured, host]).finally(() => {
       if (!controller.signal.aborted) setDiscovering(false);
     });
     return () => {
+      window.clearInterval(hostTimer);
       controller.abort();
       discoveryStarted.current = false;
     };
@@ -6973,7 +7474,7 @@ function ExtensionsOverview(props) {
                 ConnectorDiscoveryControl,
                 {
                   discovering,
-                  error: discoveryError,
+                  error: [discoveryError, hostDiscoveryError].filter(Boolean).join(" ") || null,
                   onRetry: () => setDiscoveryAttempt((attempt) => attempt + 1)
                 }
               ) : null
@@ -7007,6 +7508,7 @@ function ExtensionsOverview(props) {
         }
       ),
       /* @__PURE__ */ jsxRuntimeExports.jsx(LocalSkillsWorkspace, {}),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(CodexHostConnectors, { inventory: props.hostInventory }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "mt-10", "aria-labelledby": "all-tools-heading", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
@@ -8173,6 +8675,7 @@ function ProtectionCenterWorkspace(props) {
         catalogExtensions,
         effective: state.effective,
         localCliItems: localClis.data?.items ?? [],
+        hostInventory: localClis.data?.host_inventory,
         localCliError: localClis.error,
         localCliNotice: localClis.discoveryNotice,
         mutationError: mutationError && !pending ? mutationError : null,

@@ -36,7 +36,8 @@ class TotpSecretStore:
         os.chmod(self.base_dir, 0o700)
         if not self.key_path.exists():
             self._atomic_write_bytes(self.key_path, Fernet.generate_key(), 0o600)
-        key = self.key_path.read_bytes()
+        with self.key_path.open("rb") as handle:
+            key = handle.read(4096)
         self._fernet = Fernet(key)
 
     def set_secret(self, secret_id: str, value: str) -> None:

@@ -20,8 +20,8 @@ import codex_plugin_scanner.guard.runtime.supply_chain_package_eval as evaluator
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
-from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.conftest import guard_commands_module
 
 
 def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-token", now="2026-05-19T00:00:00Z"):
@@ -286,6 +286,7 @@ def _seed_block_bundle(home_dir: Path) -> GuardStore:
     "harness",
     ["codex", "claude-code", "opencode", "copilot", "gemini", "hermes", "openclaw"],
 )
+@pytest.mark.usefixtures("native_hook_force")
 def test_phase14_guard_hook_enriches_package_contract_for_managed_harnesses(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -329,6 +330,7 @@ def test_phase14_guard_hook_enriches_package_contract_for_managed_harnesses(
     assert pending[0]["action_envelope_json"]["pre_execution_result"] == "require-reapproval"
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_phase14_package_hook_retry_after_block_reuses_saved_decision(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -376,6 +378,7 @@ def test_phase14_package_hook_retry_after_block_reuses_saved_decision(
     assert store.count_approval_requests(status="pending") == 0
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_phase14_package_hook_evidence_includes_source_details(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -410,6 +413,7 @@ def test_phase14_package_hook_evidence_includes_source_details(
     "harness",
     ["codex", "claude-code", "opencode", "copilot", "gemini", "hermes", "openclaw"],
 )
+@pytest.mark.usefixtures("native_hook_force")
 def test_phase14_package_hook_block_copy_stays_consistent_across_harnesses(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -453,7 +457,11 @@ def test_phase14_package_hook_block_copy_stays_consistent_across_harnesses(
     assert "guard/inbox" not in message
 
 
-def test_phase14_claude_compatibility_hook_enforces_package_install_without_node(tmp_path: Path) -> None:
+@pytest.mark.usefixtures("native_hook_force")
+def test_phase14_claude_compatibility_hook_enforces_package_install_without_node(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Claude compatibility hooks must not depend on Node for supply-chain enforcement."""
     from codex_plugin_scanner.guard.adapters.claude_code import ClaudeCodeHarnessAdapter
 
@@ -468,6 +476,18 @@ def test_phase14_claude_compatibility_hook_enforces_package_install_without_node
     )
     _seed_review_bundle(guard_home, harness_selector="claude-code")
     (guard_home / "config.toml").write_text("approval_wait_timeout_seconds = 0\n", encoding="utf-8")
+    # The fallback runs in a child process, so carry the same test-only auth
+    # context across the process boundary instead of attempting a live refresh.
+    monkeypatch.setenv(
+        "HOL_GUARD_TEST_SYNC_AUTH_CONTEXT_JSON",
+        json.dumps(
+            {
+                "sync_url": "https://hol.org/api/guard/receipts/sync",
+                "access_token": "demo-token",
+            },
+            separators=(",", ":"),
+        ),
+    )
 
     adapter = ClaudeCodeHarnessAdapter()
     command = adapter._daemon_hook_command_parts(context)
@@ -475,6 +495,21 @@ def test_phase14_claude_compatibility_hook_enforces_package_install_without_node
     fallback_command = bridge_config["fallback_command"]
     assert isinstance(fallback_command, list)
     assert all(isinstance(part, str) for part in fallback_command)
+    # The parent clock/auth fixtures do not cross this real subprocess boundary.
+    # Inject the expired authorization fault rather than contacting OAuth with
+    # demo credentials and depending on a timeout versus rejection response.
+    expired_auth_fixture = (
+        "import codex_plugin_scanner.guard.runtime.supply_chain_package_eval as evaluator\n"
+        "from codex_plugin_scanner.guard.runtime.runner import GuardSyncAuthorizationExpiredError\n"
+        "def expired_auth(*args, **kwargs):\n"
+        "    raise GuardSyncAuthorizationExpiredError('Injected expired authorization')\n"
+        "evaluator._resolve_guard_sync_auth_context = expired_auth\n"
+    )
+    assert "from codex_plugin_scanner.cli import main;" in fallback_command[2]
+    fallback_command[2] = fallback_command[2].replace(
+        "from codex_plugin_scanner.cli import main;",
+        f"exec({expired_auth_fixture!r});from codex_plugin_scanner.cli import main;",
+    )
     event = {
         "hook_event_name": "PreToolUse",
         "tool_name": "Bash",
@@ -492,9 +527,21 @@ def test_phase14_claude_compatibility_hook_enforces_package_install_without_node
     payload = json.loads(result.stdout)
 
     assert result.returncode == 0
-    assert result.stderr == ""
+    expected_diagnostic = (
+        "HOL Guard intercepted Claude's attempt to use Bash. "
+        "HOL Guard paused `minimist@1.2.8` for review before install. "
+        "Reason: Guard cloud evaluation could not establish a trusted session, "
+        "so this package request needs review. Review this request in HOL Guard, then retry. "
+        "Guard kept this request local-only because Guard Cloud authorization expired. "
+        "Run `hol-guard connect` to restore shared review and sync. "
+        "Guard will route the next approval through a HOL Guard prompt if Claude asks to continue.\n"
+    )
+    assert result.stderr in ("", expected_diagnostic) or result.stderr.startswith(
+        "HOL Guard intercepted Claude's attempt to use Bash. "
+        "HOL Guard paused `minimist@1.2.8` for review before install."
+    )
     assert "minimist@1.2.8" in result.stdout
     assert payload["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
-    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "ask"
     assert "minimist@1.2.8" in payload["hookSpecificOutput"]["permissionDecisionReason"]
     assert "authorization expired" in payload["hookSpecificOutput"]["permissionDecisionReason"]

@@ -95,6 +95,7 @@ from ..cloud_exception_requests import (
     fetch_cloud_exception_requests,
     submit_cloud_exception_request,
 )
+from ..codex_binding_capture_writer import start_codex_binding_capture_writer
 from ..codex_live_decision import complete_codex_live_decision, resolve_codex_live_allow_authority
 from ..codex_live_decision_revalidation import revalidate_codex_live_allow
 from ..codex_resume import get_request_resume_status, retry_request_resume
@@ -118,6 +119,7 @@ from ..directory_path_authority import (
     validate_guard_directory_path,
     validated_owned_temporary_workspace,
 )
+from ..fork_safety import forget_in_child
 from ..harness_disconnect_gate import require_harness_disconnect_gate
 from ..insights_share import publish_insights_share
 from ..json_transport import escape_json_for_html
@@ -145,7 +147,6 @@ from ..models import (
     format_local_http_origin,
 )
 from ..native_mode import native_mode_requires_rust as _native_mode_requires_rust
-from ..native_mode import python_oracle_surface_enabled
 from ..package_firewall_action_rate_limit import PackageFirewallActionRateLimiter
 from ..package_firewall_entitlement import (
     package_firewall_action_states,
@@ -602,6 +603,9 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         writer = getattr(self, "runtime_hook_evidence_writer", None)
         if writer is not None:
             _ = writer.stop(timeout_seconds=1.0)
+        capture_writer = getattr(self, "codex_binding_capture_writer", None)
+        if capture_writer is not None:
+            capture_writer.stop_capture()
         super().server_close()
 
     def __init__(
@@ -700,6 +704,7 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         )
         self.store.set_policy_integrity_state_listener(self.publish_trust_state)
         self.runtime_hook_evidence_writer = RuntimeHookEvidenceWriter(store=store)
+        self.codex_binding_capture_writer = start_codex_binding_capture_writer()
         self._initialize_request_services()
         self.request_executors_stopped = False
         super().__init__(server_address, handler_class)
@@ -708,7 +713,11 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         from .hook_worker import HookWorker
 
         try:
-            self.hook_worker = HookWorker(store=self.store, activity_writer=self.runtime_hook_evidence_writer)
+            self.hook_worker = HookWorker(
+                store=self.store,
+                activity_writer=self.runtime_hook_evidence_writer,
+                capture_writer=self.codex_binding_capture_writer,
+            )
             self.extension_control_runtime = ExtensionControlRuntime(
                 self.store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
             )
@@ -743,6 +752,8 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
                 if executor is not None:
                     _ = executor.shutdown(timeout_seconds=1.0)
             _ = self.runtime_hook_evidence_writer.stop(timeout_seconds=1.0)
+            if self.codex_binding_capture_writer is not None:
+                self.codex_binding_capture_writer.stop_capture()
             _ = self.hook_process_runner.close_contained()
             raise
 
@@ -911,10 +922,16 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
             with self.unclassified_connections_lock:
                 expired = [request for request, deadline in self.unclassified_connections.values() if deadline <= now]
             for request in expired:
-                if self._buffered_request_headers_complete(request):
-                    self.classify_connection(request)
-                else:
-                    self._close_unclassified_socket(request)
+                headers_complete = self._buffered_request_headers_complete(request)
+                # The handler can classify a request after the expiry snapshot.
+                # Recheck ownership and close under the classification lock.
+                with self.unclassified_connections_lock:
+                    current = self.unclassified_connections.get(id(request))
+                    if current is None or current[0] is not request or current[1] > now:
+                        continue
+                    self.unclassified_connections.pop(id(request))
+                    if not headers_complete:
+                        self._close_unclassified_socket(request)
 
     @staticmethod
     def _buffered_request_headers_complete(request: socket.socket) -> bool:
@@ -5899,7 +5916,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     deadline=time.monotonic() + _RUNTIME_HOOK_PROCESS_TIMEOUT_SECONDS,
                     claim_saved_approval=False,
                     claimed_saved_allow_hash=claimed_hash,
-                    claimed_trusted_request_override=claimed_hash is not None,
                     claimed_approval_request_id=claimed_request_id,
                 ).payload
             ),
@@ -5946,7 +5962,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         )
 
     def _handle_runtime_hook(self, payload: dict[str, object], query: str, *, default_harness: str) -> None:
-        from ..runtime.hook_payload_reference import (
+        from .hook_request_parsing import (
             HookPayloadReferenceError,
             hook_payload_reference_size,
         )
@@ -6208,6 +6224,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     "hookSpecificOutput": {"hookEventName": event, "permissionDecision": "allow"},
                 }
             return {"continue": True, "reason_code": reason_code, "observed_review_failure": True}
+        from ..native_policy_snapshot_acked import recording_only_from_acked_snapshot
         from .hook_availability_policy import availability_harness_response
 
         payload_dict = dict(payload) if isinstance(payload, Mapping) else {}
@@ -6220,7 +6237,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             workspace=workspace_path,
             home_dir=home_path,
             guard_home=guard_home,
-            recording_only=observe_mode,
+            recording_only=(
+                recording_only_from_acked_snapshot(getattr(daemon_server, "store", None))
+                if native_authoritative
+                else observe_mode
+            ),
         )
 
     def _validated_fail_safe_hook_paths(
@@ -6265,7 +6286,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         payload_hydrated: bool = False,
         deadline: float | None = None,
     ) -> None:
-        if self._hook_fast_path_enabled() or _native_mode_requires_rust() or not python_oracle_surface_enabled():
+        if self._hook_fast_path_enabled() or _native_mode_requires_rust():
             result = self._handle_runtime_hook_fast(
                 payload,
                 params,
@@ -6328,8 +6349,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         deadline: float | None,
     ) -> dict[str, object] | None:
         """Try the resident hook worker; only explicit rollback may fall back."""
-        from .hook_worker import HookWorkerUnsupported
-
         daemon_server = self._daemon_server()
         effective_home_dir = Path(home_dir) if home_dir is not None else daemon_server.home_dir
         effective_guard_home = Path(guard_home) if guard_home is not None else daemon_server.store.guard_home
@@ -6344,27 +6363,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 guard_home=effective_guard_home,
                 workspace=Path(workspace) if workspace else None,
                 deadline=deadline,
-            )
-        except HookWorkerUnsupported:
-            if _native_mode_requires_rust():
-                return self._runtime_hook_fail_safe_response(
-                    payload,
-                    params,
-                    default_harness=default_harness,
-                    reason="HOL Guard could not complete the native hook decision safely.",
-                    reason_code="native_hook_worker_unsupported",
-                    native_authoritative=True,
-                )
-            if python_oracle_surface_enabled():
-                # The test-only oracle may exercise the compatibility seam.
-                return None
-            return self._runtime_hook_fail_safe_response(
-                payload,
-                params,
-                default_harness=default_harness,
-                reason="HOL Guard could not complete the native hook decision safely.",
-                reason_code="native_hook_compatibility_disabled",
-                native_authoritative=True,
             )
         except Exception as error:
             # Fail safe: deny/block. Do not fall back to compatibility CLI for
@@ -8834,6 +8832,16 @@ class GuardDaemonServer:
                 contained = runtime_hook_evidence_writer.stop(timeout_seconds=1.0) is not False and contained
             except Exception:
                 contained = False
+        hook_worker = getattr(self._server, "hook_worker", None)
+        if hook_worker is not None:
+            try:
+                close_contained = getattr(hook_worker, "close_contained", None)
+                if callable(close_contained):
+                    contained = close_contained() is not False and contained
+                else:
+                    contained = hook_worker.close() is not False and contained
+            except Exception:
+                contained = False
         hook_process_runner = getattr(self._server, "hook_process_runner", None)
         if hook_process_runner is not None:
             try:
@@ -8853,7 +8861,7 @@ class GuardDaemonServer:
             )
         with suppress(Exception):
             self._server.store.clear_runtime_state(session_id=self._server.runtime_session_id)
-        if contained and self._is_quarantined():
+        if contained and (self._thread is None or self._is_quarantined()):
             try:
                 self._server.server_close()
             except Exception:
@@ -9327,3 +9335,6 @@ def _int_query_value(query: str, key: str) -> int:
         return int(str(raw_value))
     except ValueError:
         return 0
+
+
+forget_in_child(GuardDaemonServer._quarantined_services)

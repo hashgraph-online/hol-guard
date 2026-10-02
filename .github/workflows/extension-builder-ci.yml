@@ -122,25 +122,28 @@ jobs:
           detect=(--flag)
           arguments=(--compiler "$HOL_GUARD_NATIVE_SOURCE_COMPILER")
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            detect+=(--changed-from "${{ github.event.pull_request.base.sha }}")
-            arguments+=(--changed-from "${{ github.event.pull_request.base.sha }}")
+            git fetch -q origin "+refs/heads/${{ github.event.pull_request.base.ref }}:refs/remotes/origin/${{ github.event.pull_request.base.ref }}"
+            comparison_base=$(git merge-base HEAD "origin/${{ github.event.pull_request.base.ref }}")
+            detect+=(--changed-from "$comparison_base")
+            arguments+=(--changed-from "$comparison_base")
           fi
           pending=$(uv run --no-sync python scripts/ci/detect_pending_extension_regen.py "${detect[@]}")
           if [[ "$pending" == "true" ]]; then
             if [[ "${{ github.event_name }}" == "pull_request" ]]; then
               uv run --no-sync python scripts/ci/verify_contribution_trust_map.py \
-                --changed-from "${{ github.event.pull_request.base.sha }}"
-            fi
-            if git diff --name-only "${{ github.event.pull_request.base.sha }}" HEAD -- \
+                --changed-from "$comparison_base"
+              if git diff --name-only "$comparison_base" HEAD -- \
                 contracts/extensions/command-catalog.v1.json \
                 contracts/extensions/native-command-program.v1.json \
                 contracts/extensions/native-command-control-authority.v1.fixtures.json \
                 src/codex_plugin_scanner/guard/contracts/data/extensions \
                 ':(glob)src/codex_plugin_scanner/guard/extension_builder/*.v1.json' \
                 ':(exclude)src/codex_plugin_scanner/guard/extension_builder/*.schema.json' \
-                contracts/managed-controls | grep -q .; then
-              echo "generated projections are maintainer-owned; remove them from this PR" >&2
-              exit 1
+                contracts/managed-controls/v1/extension-projection-digest-vector.json \
+                contracts/managed-controls/v1/policy-bundle-v2-extension-signature-vector.json | grep -q .; then
+                echo "generated projections are maintainer-owned; remove them from this PR" >&2
+                exit 1
+              fi
             fi
             uv run --no-sync python scripts/prepare_extension_contribution.py "${arguments[@]}"
             uv run --no-sync python scripts/render_command_extension_directory.py

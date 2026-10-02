@@ -20,11 +20,25 @@ import {
   suggestedHarnessExtensions,
   suggestedPackageScriptExtensions,
   suggestedSeenExtensions,
+  waitForMcpDiscoveryJob,
 } from "./local-cli-api";
 import { parseProtectionRoute, localCliHref, addCustomExtensionHref } from "./local-cli-links";
 
 assert.equal(isLocalCliId("local-cli.cwv-py-abcdef12"), true);
 assert.equal(isLocalCliId("command.git"), false);
+
+for (const [error, guidance] of [
+  ["mcp_launch_failed", "configured executable and dependencies"],
+  ["mcp_transport_failed", "executable, dependencies, and server logs"],
+  ["mcp_initialize_failed", "starts in the host app and uses stdio MCP"],
+  ["mcp_protocol_unsupported", "protocol version Guard does not support"],
+  ["mcp_capability_rejected", "rejected Guard's discovery capabilities"],
+]) {
+  await assert.rejects(waitForMcpDiscoveryJob("local-cli.fixture", {
+    job_id: "a".repeat(32), cli_id: "local-cli.fixture", state: "failed", error,
+  }, new AbortController().signal), (caught: unknown) => caught instanceof Error
+    && caught.message.includes(guidance) && caught.message.includes("Known tools and choices were kept"));
+}
 
 {
   const receipt = { state: "acknowledged", revision: 3, generation: 8, policy_digest: "a".repeat(64) };

@@ -28,6 +28,7 @@ from typing import BinaryIO, Literal, TypedDict, cast
 
 from ...version import __version__
 from .. import windows_processes
+from ..fork_safety import forget_in_child
 from ..frozen_runtime_commands import (
     FROZEN_DAEMON_SERVE_ARG,
     decode_frozen_daemon_serve_payload,
@@ -54,6 +55,7 @@ from .discovery import (
 from .file_locking import lock_daemon_file as _lock_daemon_start_file
 from .file_locking import try_lock_daemon_file as _try_lock_daemon_file
 from .lifecycle_journal import record_daemon_lifecycle_event
+from .pipx_import_paths import pipx_shared_import_paths
 from .start_classification import (
     GuardDaemonStillStartingError,
     SpawnedDaemonSignals,
@@ -153,6 +155,9 @@ _EPHEMERAL_REAP_SCHEDULE_LOCK = threading.Lock()
 _EPHEMERAL_REAP_IN_FLIGHT = False
 _DUPLICATE_RETIRE_SCHEDULE_LOCK = threading.Lock()
 _DUPLICATE_RETIRE_IN_FLIGHT: set[str] = set()
+forget_in_child(_RECOVERY_LOCKS)
+forget_in_child(_STATE_WRITE_LOCKS)
+forget_in_child(_DUPLICATE_RETIRE_IN_FLIGHT)
 _LAST_EPHEMERAL_REAP_AT = 0.0
 _runtime_fingerprint_cache: tuple[str, str] | None = None
 
@@ -267,6 +272,8 @@ def _trusted_daemon_import_paths() -> tuple[Path, ...]:
         value = configured_paths.get(key)
         if isinstance(value, str) and value.strip():
             candidates.append(Path(value).expanduser())
+
+    candidates.extend(pipx_shared_import_paths(_trusted_daemon_prefix(sys.prefix), configured_paths))
 
     trusted_paths: list[Path] = []
     seen: set[Path] = set()

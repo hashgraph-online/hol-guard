@@ -9,7 +9,7 @@ from dataclasses import dataclass, replace
 from hashlib import sha256
 from ipaddress import ip_address
 from pathlib import Path, PurePath
-from typing import Literal, cast
+from typing import Literal
 
 from .action_lattice import most_restrictive_guard_action, normalize_guard_action
 from .approval_gate import ApprovalGateGrant
@@ -23,7 +23,7 @@ from .runtime.approval_context import (
     build_approval_context_token,
 )
 from .runtime.approval_context import (
-    saved_allow_context_validation_reason as _tool_call_saved_allow_validation_reason,
+    saved_allow_context_validation_reason as _tool_call_saved_allow_validation_reason,  # noqa: F401 - evaluation compatibility
 )
 from .runtime.approval_reuse import (
     APPROVAL_REUSE_ACCEPTED,
@@ -469,130 +469,16 @@ def evaluate_tool_call(
     claim_saved_approval: bool = True,
     fresh_authority_provider: (Callable[[], tuple[GuardConfig, GuardArtifact, str, object] | None] | None) = None,
 ) -> ToolCallDecision:
-    current = _evaluate_current_tool_call(
+    from .mcp_tool_call_evaluation import evaluate_tool_call as evaluate
+
+    return evaluate(
+        store=store,
         config=config,
         artifact=artifact,
-        arguments=arguments,
-    )
-    current = _apply_temporary_mcp_grant(
-        store=store,
-        artifact=artifact,
         artifact_hash=artifact_hash,
         arguments=arguments,
-        current=current,
-    )
-    if (
-        composio_requires_action_review(artifact.command or "")
-        and current.action != "block"
-        and store.read_mcp_provider_authority_hash() != artifact.metadata.get("mcp_provider_catalog_hash")
-    ):
-        return replace(
-            current,
-            action=most_restrictive_guard_action(current.action, "require-reapproval"),
-            source="composio-schema-reapproval",
-            summary="The app action inventory changed. Rebuild this call and review it again.",
-        )
-    runtime_exact_match_context = _browser_runtime_exact_match_context(artifact, arguments)
-    policy_lookup = store.resolve_policy_decision_lookup_with_memory_pattern(
-        artifact.harness,
-        artifact.artifact_id,
-        artifact_hash=artifact_hash,
-        workspace=str(config.workspace) if config.workspace is not None else None,
-        publisher=artifact.publisher,
-        runtime_exact_match_context=runtime_exact_match_context,
-        memory_command=artifact.command,
-        memory_artifact_type=artifact.artifact_type,
-        memory_artifact_name=artifact.name,
-        consume_one_shot=False,
-    )
-    saved_decision = policy_lookup["decision"]
-    ignored_integrity = policy_lookup["ignored_local_integrity"]
-    if saved_decision is None and ignored_integrity is None:
-        diagnosed_reason = store.approval_reuse_validation_reason(
-            artifact.harness,
-            artifact.artifact_id,
-            artifact_hash,
-            str(config.workspace) if config.workspace is not None else None,
-            artifact.publisher,
-        )
-        if diagnosed_reason is None:
-            return current
-        saved_action: object | None = "allow"
-        validation_reason: ApprovalReuseValidationFailure | None = cast(
-            ApprovalReuseValidationFailure,
-            diagnosed_reason,
-        )
-    else:
-        saved_action = (
-            saved_decision.get("action")
-            if saved_decision is not None
-            else ("require-reapproval" if ignored_integrity is not None else None)
-        )
-        validation_reason = (
-            "approval_reuse_integrity_failure"
-            if ignored_integrity is not None
-            else (
-                cast(
-                    ApprovalReuseValidationFailure,
-                    _tool_call_saved_allow_validation_reason(
-                        saved_decision,
-                        artifact_hash=artifact_hash,
-                    ),
-                )
-                if saved_decision is not None
-                else None
-            )
-        )
-
-    if (
-        validation_reason is None
-        and saved_decision is not None
-        and saved_action == "allow"
-        and composio_requires_action_review(artifact.command or "")
-        and store.approval_reuse_claim_disposition(saved_decision) != "consumed"
-    ):
-        # No supported account resolver exists for this profile. A retained
-        # wrapper approval could silently follow a changed default account.
-        # Fresh single-use review remains available; durable reuse does not.
-        validation_reason = "approval_reuse_provider_account_unverified"
-    reuse = evaluate_approval_reuse(
-        current.action,
-        saved_action,
-        saved_decision_present=True,
-        validation_reason=validation_reason,
-    )
-    pending_decision: Mapping[str, object] | None = None
-    claim_disposition: ApprovalReuseClaimDisposition | None = None
-    if reuse.should_claim and saved_decision is not None:
-        raw_claim_disposition = store.approval_reuse_claim_disposition(saved_decision)
-        if raw_claim_disposition in {"consumed", "retained"}:
-            claim_disposition = raw_claim_disposition
-        if claim_saved_approval:
-            if not store.claim_approval_reuse_decision(saved_decision):
-                reuse = evaluate_approval_reuse(
-                    current.action,
-                    saved_action,
-                    saved_decision_present=True,
-                    validation_reason=APPROVAL_REUSE_CLAIM_FAILED,
-                )
-            else:
-                return _revalidate_claimed_tool_call_approval(
-                    store=store,
-                    initial_artifact=artifact,
-                    initial_artifact_hash=artifact_hash,
-                    initial_arguments=arguments,
-                    initial_config=config,
-                    claimed_decision=saved_decision,
-                    claim_disposition=claim_disposition,
-                    fresh_authority_provider=fresh_authority_provider,
-                )
-        else:
-            pending_decision = saved_decision
-    return _tool_call_decision_with_reuse(
-        current,
-        reuse,
-        pending_decision=pending_decision,
-        claim_disposition=claim_disposition,
+        claim_saved_approval=claim_saved_approval,
+        fresh_authority_provider=fresh_authority_provider,
     )
 
 
@@ -679,6 +565,9 @@ def _revalidate_claimed_tool_call_approval(
     all of those inputs before returning an executable allow.
     """
 
+    from .native_context import bind_context_digest_home
+
+    bind_context_digest_home(getattr(store, "guard_home", None))
     refresh_failed = False
     if fresh_authority_provider is None:
         fresh_config = initial_config

@@ -4,6 +4,8 @@ on:
     paths:
       - .github/workflows/desktop-core-linux-feed.yml
       - tests/test_desktop_core_alpha_feed_security.py
+      - tests/test_desktop_core_feed_queue.py
+      - tests/test_core_feed_publication_handoff.py
       - tests/test_stage_native_runtime_for_desktop_core.py
       - tests/test_verify_*.py
       - tests/test_seal_pyinstaller_native_manifest.py
@@ -26,15 +28,8 @@ on:
       core_version:
         description: Optional exact published stable Core version to backfill
         type: string
-  workflow_run:
-    workflows: ["Publish to PyPI"]
-    types: [completed]
-    branches: [main]
 permissions:
   contents: read
-concurrency:
-  group: desktop-core-stable-feed
-  cancel-in-progress: false
 jobs:
   validate:
     name: Validate workflow
@@ -55,14 +50,19 @@ jobs:
       - name: Install Actionlint
         run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.11
       - name: Validate workflow syntax
-        run: '"$(go env GOPATH)/bin/actionlint" .github/workflows/desktop-core-linux-feed.yml'
+        # Actionlint 1.7.11 lacks the documented queue key; retain all other diagnostics.
+        run: '"$(go env GOPATH)/bin/actionlint" -ignore ''^unexpected key "queue" for "concurrency" section\.'' .github/workflows/desktop-core-linux-feed.yml'
   publish-linux-x64:
     name: Publish Linux x64 Core sidecar
-    if: >-
-      github.event_name != 'pull_request' &&
-      (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success')
+    concurrency:
+      group: desktop-core-stable-feed
+      cancel-in-progress: false
+      queue: max
+    if: github.event_name != 'pull_request'
     needs: validate
-    runs-on: ubuntu-24.04
+    # Keep libpython compatible with Pop!_OS 22.04.
+    # Move this build baseline into a container before runner retirement on 2027-04-17.
+    runs-on: ubuntu-22.04
     timeout-minutes: 90
     permissions:
       contents: write

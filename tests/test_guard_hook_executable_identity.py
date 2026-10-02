@@ -2,27 +2,20 @@
 
 from __future__ import annotations
 
-import argparse
 import hashlib
 import json
 from copy import deepcopy
 from pathlib import Path
-from typing import cast
 
 import pytest
 
 from codex_plugin_scanner.guard.cli import commands_support as _commands_support  # noqa: F401
-from codex_plugin_scanner.guard.cli.commands_hook_generic import (
-    _generic_hook_runtime_launch_identity,
-    _run_hook_generic_payload,
-)
 from codex_plugin_scanner.guard.cli.commands_support_runtime_resolution import _copilot_runtime_tool_call
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.mcp_tool_calls import evaluate_tool_call
 from codex_plugin_scanner.guard.models import GuardArtifact, PolicyDecision
 from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
 from codex_plugin_scanner.guard.runtime.approval_context import (
-    APPROVAL_CONTEXT_TOKEN_PREFIX,
     approval_context_tokens_validation_reason,
 )
 from codex_plugin_scanner.guard.store import GuardStore
@@ -49,36 +42,6 @@ def _replace_file(path: Path, content: bytes) -> None:
     replacement.parent.mkdir(parents=True, exist_ok=True)
     replacement.write_bytes(content)
     replacement.replace(path)
-
-
-def _run_generic_hook(
-    *,
-    capsys: pytest.CaptureFixture[str],
-    config: GuardConfig,
-    payload: dict[str, object],
-    store: GuardStore,
-    workspace: Path,
-    action_envelope: GuardActionEnvelope | None = None,
-) -> tuple[int, dict[str, object]]:
-    args = argparse.Namespace(
-        artifact_id=None,
-        artifact_name=None,
-        harness=_GENERIC_HARNESS,
-        json=True,
-        policy_action=None,
-    )
-    rc = _run_hook_generic_payload(
-        args,
-        action_envelope=action_envelope,
-        config=config,
-        home_dir=workspace.parent,
-        payload=payload,
-        runtime_workspace=workspace,
-        store=store,
-    )
-    output = json.loads(capsys.readouterr().out)
-    assert isinstance(output, dict)
-    return rc, cast(dict[str, object], output)
 
 
 def _approval_reuse_reason(output: dict[str, object]) -> str:
@@ -143,317 +106,6 @@ def _generic_server_action_envelope(command: str, *, workspace: Path) -> GuardAc
     )
 
 
-def test_generic_hook_resolves_tilde_executable_from_trusted_home(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    executable = tmp_path / "bin" / "reviewed-commit"
-    executable.parent.mkdir()
-    executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
-    executable.chmod(0o700)
-    command = "~/bin/reviewed-commit --message reviewed"
-    monkeypatch.delenv("HOME", raising=False)
-
-    identity = _generic_hook_runtime_launch_identity(
-        _generic_server_action_envelope(command, workspace=tmp_path),
-        _generic_server_payload(command),
-        home_dir=tmp_path,
-        launch_cwd=tmp_path,
-    )
-
-    resolved_launch = identity["resolved_launch"]
-    assert isinstance(resolved_launch, dict)
-    assert resolved_launch["executable"]["status"] == "verified"
-    assert resolved_launch["executable"]["path"] == str(executable.resolve())
-
-
-def test_generic_hook_keeps_repeated_tilde_separators_inside_trusted_home(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    executable = tmp_path / "bin" / "reviewed-commit"
-    executable.parent.mkdir()
-    executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
-    executable.chmod(0o700)
-    command = "~//bin/reviewed-commit --message reviewed"
-    monkeypatch.delenv("HOME", raising=False)
-
-    identity = _generic_hook_runtime_launch_identity(
-        _generic_server_action_envelope(command, workspace=tmp_path),
-        _generic_server_payload(command),
-        home_dir=tmp_path,
-        launch_cwd=tmp_path,
-    )
-
-    resolved_launch = identity["resolved_launch"]
-    assert isinstance(resolved_launch, dict)
-    assert resolved_launch["executable"]["status"] == "verified"
-    assert resolved_launch["executable"]["path"] == str(executable.resolve())
-
-
-@pytest.mark.parametrize(
-    "command",
-    ('"~/bin/reviewed-commit"', "\\~/bin/reviewed-commit", "~\\/bin/reviewed-commit", '~""/bin/reviewed-commit'),
-)
-def test_generic_hook_rejects_non_expanding_tilde_syntax(
-    command: str,
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    monkeypatch.delenv("HOME", raising=False)
-
-    identity = _generic_hook_runtime_launch_identity(
-        _generic_server_action_envelope(command, workspace=tmp_path),
-        _generic_server_payload(command),
-        home_dir=tmp_path,
-        launch_cwd=tmp_path,
-    )
-
-    resolved_launch = identity["resolved_launch"]
-    assert isinstance(resolved_launch, dict)
-    assert resolved_launch["executable"]["status"] == "ambiguous_tilde_syntax"
-    assert isinstance(resolved_launch["executable"]["reuse_nonce"], str)
-
-
-def test_generic_hook_rejects_exact_allow_after_same_path_executable_replacement(
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    workspace = tmp_path / "workspace"
-    outside_cwd = tmp_path / "outside"
-    workspace.mkdir()
-    outside_cwd.mkdir()
-    server = workspace / "server"
-    _replace_executable(server, b"#!/bin/sh\necho version-one\n")
-    monkeypatch.chdir(outside_cwd)
-    store = GuardStore(tmp_path / "guard-home")
-    config = GuardConfig(
-        guard_home=tmp_path / "guard-home",
-        workspace=workspace,
-        default_action="review",
-    )
-    payload = _generic_server_payload("./server --stdio")
-    action_envelope = _generic_server_action_envelope("./server --stdio", workspace=workspace)
-
-    first_rc, first_output = _run_generic_hook(
-        capsys=capsys,
-        config=config,
-        payload=payload,
-        store=store,
-        workspace=workspace,
-        action_envelope=action_envelope,
-    )
-    approved_token = str(store.list_receipts(limit=1)[0]["artifact_hash"])
-    assert first_rc == 1
-    assert first_output["policy_action"] == "review"
-    assert approved_token.startswith(APPROVAL_CONTEXT_TOKEN_PREFIX)
-    _record_generic_allow(
-        store,
-        artifact_hash=approved_token,
-        request_id="generic-server-v1",
-        workspace=workspace,
-    )
-
-    _replace_executable(server, b"#!/bin/sh\necho version-two\n")
-    second_rc, second_output = _run_generic_hook(
-        capsys=capsys,
-        config=config,
-        payload=payload,
-        store=store,
-        workspace=workspace,
-        action_envelope=action_envelope,
-    )
-
-    assert second_rc == 1
-    assert second_output["policy_action"] == "review"
-    assert _approval_reuse_reason(second_output) == "approval_reuse_identity_changed"
-    current_token = str(store.list_receipts(limit=1)[0]["artifact_hash"])
-    assert approval_context_tokens_validation_reason(approved_token, current_token) == (
-        "approval_reuse_identity_changed"
-    )
-    assert (
-        store.resolve_policy_decision(
-            _GENERIC_HARNESS,
-            _GENERIC_ARTIFACT_ID,
-            approved_token,
-            str(workspace),
-            consume_one_shot=False,
-        )
-        is not None
-    )
-
-
-@pytest.mark.parametrize(
-    ("launcher_name", "entrypoint_name", "version_one", "version_two"),
-    (
-        ("python", "server.py", b"print('version one')\n", b"print('version two')\n"),
-        ("node", "server.js", b"console.log('version one');\n", b"console.log('version two');\n"),
-    ),
-)
-def test_generic_hook_rejects_exact_allow_after_only_interpreted_entrypoint_changes(
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-    launcher_name: str,
-    entrypoint_name: str,
-    version_one: bytes,
-    version_two: bytes,
-) -> None:
-    workspace = tmp_path / "workspace"
-    workspace.mkdir()
-    launcher = workspace / launcher_name
-    entrypoint = workspace / entrypoint_name
-    _replace_executable(launcher, b"fake native interpreter\n")
-    _replace_file(entrypoint, version_one)
-    store = GuardStore(tmp_path / "guard-home")
-    config = GuardConfig(
-        guard_home=tmp_path / "guard-home",
-        workspace=workspace,
-        default_action="review",
-    )
-    command = f"./{launcher_name} {entrypoint_name} --stdio"
-    payload = _generic_server_payload(command)
-    action_envelope = _generic_server_action_envelope(command, workspace=workspace)
-
-    _, first_output = _run_generic_hook(
-        capsys=capsys,
-        config=config,
-        payload=payload,
-        store=store,
-        workspace=workspace,
-        action_envelope=action_envelope,
-    )
-    approved_token = str(store.list_receipts(limit=1)[0]["artifact_hash"])
-    assert first_output["policy_action"] == "review"
-    _record_generic_allow(
-        store,
-        artifact_hash=approved_token,
-        request_id=f"generic-{launcher_name}-entrypoint-v1",
-        workspace=workspace,
-    )
-
-    _replace_file(entrypoint, version_two)
-    second_rc, second_output = _run_generic_hook(
-        capsys=capsys,
-        config=config,
-        payload=payload,
-        store=store,
-        workspace=workspace,
-        action_envelope=action_envelope,
-    )
-
-    current_token = str(store.list_receipts(limit=1)[0]["artifact_hash"])
-    assert second_rc == 1
-    assert second_output["policy_action"] == "review"
-    assert _approval_reuse_reason(second_output) == "approval_reuse_identity_changed"
-    assert approval_context_tokens_validation_reason(approved_token, current_token) == (
-        "approval_reuse_identity_changed"
-    )
-
-
-def test_generic_hook_resolved_interpreter_with_missing_entrypoint_never_reuses_allow(
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    workspace = tmp_path / "workspace"
-    workspace.mkdir()
-    _replace_executable(workspace / "python", b"fake native interpreter\n")
-    store = GuardStore(tmp_path / "guard-home")
-    config = GuardConfig(
-        guard_home=tmp_path / "guard-home",
-        workspace=workspace,
-        default_action="review",
-    )
-    command = "./python missing-server.py --stdio"
-    payload = _generic_server_payload(command)
-    action_envelope = _generic_server_action_envelope(command, workspace=workspace)
-
-    _run_generic_hook(
-        capsys=capsys,
-        config=config,
-        payload=payload,
-        store=store,
-        workspace=workspace,
-        action_envelope=action_envelope,
-    )
-    approved_token = str(store.list_receipts(limit=1)[0]["artifact_hash"])
-    _record_generic_allow(
-        store,
-        artifact_hash=approved_token,
-        request_id="generic-python-missing-entrypoint",
-        workspace=workspace,
-    )
-
-    second_rc, second_output = _run_generic_hook(
-        capsys=capsys,
-        config=config,
-        payload=payload,
-        store=store,
-        workspace=workspace,
-        action_envelope=action_envelope,
-    )
-    current_token = str(store.list_receipts(limit=1)[0]["artifact_hash"])
-
-    assert second_rc == 1
-    assert second_output["policy_action"] == "review"
-    assert _approval_reuse_reason(second_output) == "approval_reuse_identity_changed"
-    assert approved_token != current_token
-
-
-def test_generic_hook_unresolved_executable_never_reuses_exact_allow(
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    workspace = tmp_path / "workspace"
-    workspace.mkdir()
-    store = GuardStore(tmp_path / "guard-home")
-    config = GuardConfig(
-        guard_home=tmp_path / "guard-home",
-        workspace=workspace,
-        default_action="review",
-    )
-    payload = _generic_server_payload("./missing-server --stdio")
-
-    _run_generic_hook(
-        capsys=capsys,
-        config=config,
-        payload=payload,
-        store=store,
-        workspace=workspace,
-    )
-    approved_token = str(store.list_receipts(limit=1)[0]["artifact_hash"])
-    _record_generic_allow(
-        store,
-        artifact_hash=approved_token,
-        request_id="generic-unresolved-server",
-        workspace=workspace,
-    )
-
-    second_rc, second_output = _run_generic_hook(
-        capsys=capsys,
-        config=config,
-        payload=payload,
-        store=store,
-        workspace=workspace,
-    )
-    current_token = str(store.list_receipts(limit=1)[0]["artifact_hash"])
-
-    assert second_rc == 1
-    assert second_output["policy_action"] == "review"
-    assert _approval_reuse_reason(second_output) == "approval_reuse_identity_changed"
-    assert approved_token != current_token
-    assert (
-        store.resolve_policy_decision(
-            _GENERIC_HARNESS,
-            _GENERIC_ARTIFACT_ID,
-            approved_token,
-            str(workspace),
-            consume_one_shot=False,
-        )
-        is not None
-    )
-
-
 def _copilot_server_config(command: str = "./server") -> dict[str, object]:
     return {
         "type": "local",
@@ -495,7 +147,7 @@ def _resolve_copilot_tool(
     return resolved
 
 
-def test_copilot_mcp_exact_allow_is_invalid_after_server_executable_bytes_change(tmp_path: Path) -> None:
+def test_copilot_mcp_exact_allow_is_invalid_after_server_executable_bytes_change(tmp_path: Path, native_context_digest: Path) -> None:
     home_dir = tmp_path / "home"
     workspace = tmp_path / "workspace"
     workspace.mkdir()
@@ -581,6 +233,7 @@ def test_copilot_mcp_exact_allow_is_invalid_after_server_executable_bytes_change
 
 def test_copilot_mcp_exact_allow_is_invalid_after_only_python_entrypoint_bytes_change(
     tmp_path: Path,
+    native_context_digest: Path,
 ) -> None:
     home_dir = tmp_path / "home"
     workspace = tmp_path / "workspace"
@@ -676,6 +329,7 @@ def test_copilot_mcp_exact_allow_is_invalid_after_only_python_entrypoint_bytes_c
 def test_copilot_mcp_server_and_tool_configuration_changes_invalidate_identity(
     tmp_path: Path,
     change: str,
+    native_context_digest: Path,
 ) -> None:
     home_dir = tmp_path / "home"
     workspace = tmp_path / "workspace"

@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import cast
 
 from scripts.native_slo_adapter import Observation
 from scripts.native_slo_contract import (
@@ -19,6 +20,12 @@ from scripts.native_slo_contract import (
     assert_privacy_safe,
     gate_results,
     summarize,
+)
+from scripts.native_slo_progress import (
+    SloProgress,
+    SloProgressStage,
+    classify_benchmark_error,
+    incomplete_slo_result,
 )
 
 
@@ -35,6 +42,8 @@ class SloMeasurements:
     readiness: list[float]
     rss_baseline: int
     rss_peak: int
+    recovery_adapter: list[float] | None = None
+    recovery_enclosing: list[float] | None = None
 
 
 @dataclass(frozen=True)
@@ -231,7 +240,23 @@ def slo_result(
     gates: dict[str, bool],
     *,
     corpus_origin: str = "installed_wheel_ownership_contract",
+    progress: SloProgress | None = None,
 ) -> dict[str, object]:
+    recovery_adapter = measurements.recovery_adapter
+    recovery_enclosing = (
+        measurements.recovery if measurements.recovery_enclosing is None else measurements.recovery_enclosing
+    )
+    enclosing_values = [
+        value
+        for value in (getattr(item, "enclosing_latency_ms", None) for item in summary.all_observations)
+        if value is not None
+    ]
+    timing = {
+        "adapter": summarize([getattr(item, "latency_ms", 0.0) for item in summary.all_observations]),
+        "enclosing": summarize(enclosing_values) if enclosing_values else None,
+        "recovery_adapter": summarize(recovery_adapter) if recovery_adapter else None,
+        "recovery_enclosing": summarize(recovery_enclosing) if recovery_enclosing else None,
+    }
     result: dict[str, object] = {
         "schema": SLO_SCHEMA,
         "scope": "installed_adapter_to_decision",
@@ -274,6 +299,7 @@ def slo_result(
             "resident_recovery": summarize(measurements.recovery),
             "readiness": summarize(measurements.readiness),
         },
+        "timing": timing,
         "thresholds": {
             "installed_adapter_p95_ms": MAX_INSTALLED_ADAPTER_P95_MS,
             "installed_adapter_concurrent_p99_ms": MAX_INSTALLED_ADAPTER_P99_MS,
@@ -299,12 +325,24 @@ def slo_result(
         "gates": gates,
         "passed": all_gates_pass(gates),
     }
+    if progress is not None:
+        denominators = progress.stage_snapshot()
+        corpus = cast(dict[str, object], result["corpus"])
+        corpus.update(progress.observation_snapshot())
+        corpus["denominators"] = denominators
+        concurrency = cast(dict[str, dict[str, object]], result["concurrency"])
+        concurrency["sixteen"]["denominators"] = denominators.get("concurrent_16")
+        concurrency["sixty_four"]["denominators"] = denominators.get("concurrent_64")
     return assert_privacy_safe(result)
 
 
 __all__ = [
     "SloMeasurements",
+    "SloProgress",
+    "SloProgressStage",
     "SloSummary",
+    "classify_benchmark_error",
+    "incomplete_slo_result",
     "safe_failure_rate",
     "slo_gates",
     "slo_result",

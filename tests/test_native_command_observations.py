@@ -10,7 +10,11 @@ from typing import Any
 import pytest
 
 from codex_plugin_scanner.guard.native_command_observations import validate_native_command_observations
-from codex_plugin_scanner.guard.native_decision_receipt import receipt_matches_edge, validate_native_decision_receipt
+from codex_plugin_scanner.guard.native_decision_receipt import (
+    canonical_receipt_bytes,
+    receipt_matches_edge,
+    validate_native_decision_receipt,
+)
 from codex_plugin_scanner.guard.native_hook_edge import _decode_pre_tool_result
 
 
@@ -143,6 +147,21 @@ def test_observations_bind_exact_redacted_evidence_to_receipt() -> None:
         changed_result = copy.deepcopy(observations)
         changed_result["binding"][field] += 1
         assert not receipt_matches_edge(_edge(changed_result), receipt)
+
+
+def test_prompt_extension_binding_cannot_be_detached_from_its_native_receipt() -> None:
+    observations = _observations()
+    receipt = {**_receipt(observations), "event_name": "UserPromptSubmit"}
+    receipt["decision_id"] = hashlib.sha256(canonical_receipt_bytes(receipt)).hexdigest()
+    edge = _edge(observations)
+    edge["event_name"] = "UserPromptSubmit"
+    edge["result"]["action"] = {"event": "UserPromptSubmit", "action_type": "prompt"}
+    assert validate_native_decision_receipt(receipt) == receipt
+    assert receipt_matches_edge(edge, receipt)
+
+    changed = copy.deepcopy(edge)
+    changed["result"]["command_extensions"]["binding"]["program_digest"] = "e" * 64
+    assert not receipt_matches_edge(changed, receipt)
 
 
 @pytest.mark.parametrize(

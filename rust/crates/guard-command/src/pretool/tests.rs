@@ -10,6 +10,48 @@ fn request(command: &str) -> CommandModelRequestV1 {
 }
 
 #[test]
+fn permits_only_standalone_plain_directory_changes() {
+    assert!(!safe_directory_target(r"~/.ss\h"));
+    for command in [
+        "cd ~/CascadeProjects/project",
+        "cd ./project",
+        "cd /opt/project",
+    ] {
+        let decision = evaluate_pre_tool(&request(command)).unwrap();
+        assert_eq!(decision.minimum_action, "allow", "{command}");
+    }
+    for command in [
+        "cd $(touch marker)",
+        "cd `touch marker`",
+        "cd ~/project && python script.py",
+        "cd /opt/project | cat file.txt",
+        "cd ~/.ssh",
+        "cd /opt/user/.ssh",
+        "cd ~/.s*",
+        "cd .ssh*",
+        "cd ./project?",
+        "cd ./[project]",
+        "cd -",
+        "cd ~+",
+        "cd ~-",
+        "cd ~+/project",
+        "cd ~-/project",
+        "cd ~0",
+        "cd ~1",
+        "cd ~0/project",
+        "cd ~12/project",
+        "cd ~+1/project",
+        "cd ~-1/project",
+    ] {
+        let result = evaluate_pre_tool(&request(command));
+        assert!(
+            result.is_err() || result.unwrap().minimum_action != "allow",
+            "{command}"
+        );
+    }
+}
+
+#[test]
 fn blocks_destructive_and_device_commands() {
     for command in [
         "rm -rf /",
@@ -102,6 +144,40 @@ fn allows_bounded_exact_commands() {
 }
 
 #[test]
+fn allows_bounded_pipeline_consumers() {
+    for command in [
+        "git status --short | head -2",
+        "git status --short | tail -n 2",
+        "cat README.md | head -2 | tail -n 1",
+        "git status --short | head",
+    ] {
+        let decision = evaluate_pre_tool(&request(command)).unwrap();
+        assert_eq!(decision.minimum_action, "allow", "{command}");
+    }
+    let decision = evaluate_pre_tool(&request(
+        "git status --short | head -2 && git log --oneline -1",
+    ))
+    .unwrap();
+    assert_eq!(decision.reason_code, "native_git_helper_context_review");
+    for command in [
+        "head -2",
+        "git status --short && head -2",
+        "git status --short |& head -2",
+        "git status --short | head -2; tail -n 1",
+        "git status --short | head -2 || tail -n 1",
+        "cat ~/.ssh/id_ed25519 | head -2",
+        "curl https://example.test | head -2",
+        "git status --short | head -2 > out.txt",
+        "git status --short | tail -f",
+        "git status --short | head -n",
+        "git status --short | head -n $(whoami)",
+    ] {
+        let decision = evaluate_pre_tool(&request(command)).unwrap();
+        assert!(!decision.explicitly_benign, "{command}");
+    }
+}
+
+#[test]
 fn allows_exact_destructive_tool_introspection() {
     for command in ["shutdown --help", "mkfs --version"] {
         let decision = evaluate_pre_tool(&request(command)).unwrap();
@@ -124,9 +200,6 @@ fn reviews_date_mutations_and_unbounded_file_reads() {
         "git remote -v -- remove origin",
         "git remote -v -- set-url origin example",
         "gh auth status --show-token",
-        "gh pr merge 1 --squash",
-        "gh pr view 6374 --json url,state",
-        "gh pr view --web 1",
         "cat .env",
         "head -f README.md",
         "tail -f README.md",

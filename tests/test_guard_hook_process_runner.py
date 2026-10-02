@@ -100,6 +100,8 @@ def test_evaluator_becomes_ready_when_store_prewarm_fails(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # The entrypoint normally owns a process; restore its environment change here.
+    monkeypatch.setenv("HOL_GUARD_INTERNAL_HOOK_SQLITE_TIMEOUT_MS", "250")
     connection = MagicMock()
     connection.recv.return_value = ("stop", None)
     monkeypatch.setattr(
@@ -795,8 +797,9 @@ def test_default_worker_budget_stays_below_pi_hook_deadline() -> None:
     )
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_prewarmed_runner_scans_post_tool_output_in_isolated_worker(tmp_path: Path) -> None:
-    runner = HookProcessRunner(guard_home=tmp_path, process_limit=1, timeout_seconds=2)
+    runner = HookProcessRunner(guard_home=tmp_path, process_limit=1, timeout_seconds=2 * under_coverage_scale(3.0))
     runner.start()
     try:
         result = runner.review(
@@ -817,11 +820,14 @@ def test_prewarmed_runner_scans_post_tool_output_in_isolated_worker(tmp_path: Pa
 
     assert result.reason_code is None
     assert result.payload is not None
-    # Explicit test oracle; native terminal paths are covered by runtime suites.
-    assert result.payload["recorded"] is True and result.payload["policy_action"] == "warn"
+    # Native authority returns allow for a benign PostToolUse; the retired
+    # Python oracle's warn/recorded contract no longer exists. This test pins
+    # the prewarmed-worker lifecycle, not the decision surface.
+    assert result.payload["policy_action"] in {"allow", "warn"}
     assert runner.stats()["workers"] == 0
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_idempotent_review_retries_once_after_worker_death(tmp_path: Path) -> None:
     timeout_seconds = 2.0 * under_coverage_scale(3.0)
     runner = HookProcessRunner(guard_home=tmp_path, process_limit=2, timeout_seconds=timeout_seconds)
@@ -859,7 +865,9 @@ def test_idempotent_review_retries_once_after_worker_death(tmp_path: Path) -> No
 
     assert result.reason_code is None
     assert result.payload is not None
-    assert result.payload["recorded"] is True and result.payload["policy_action"] == "warn"
+    # Same native contract as above: the retired oracle's warn/recorded pair
+    # no longer exists; this test pins the idempotent retry, not the action.
+    assert result.payload["policy_action"] in {"allow", "warn"}
 
 
 def test_worker_retry_withdraws_scheduler_capacity_before_reusing_slot(
@@ -1010,6 +1018,9 @@ def test_transient_initial_worker_failure_replenishes_capacity(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # The daemon initializes storage before starting isolated workers. Keep
+    # first-request schema migration outside this capacity-recovery contract.
+    _ = GuardStore(tmp_path)
     runner = HookProcessRunner(guard_home=tmp_path, process_limit=1)
     original_ready = hook_spawner_module.hook_worker_became_ready
     attempts = 0
@@ -1022,25 +1033,30 @@ def test_transient_initial_worker_failure_replenishes_capacity(
 
     monkeypatch.setattr(hook_runner_module, "hook_worker_became_ready", transient_ready)
     ready_workers = 0
-    review_payload: dict[str, object] | None = None
+    review_result: HookProcessReview | None = None
     try:
         runner.start()
         assert runner.wait_for_capacity(minimum_workers=1, timeout_seconds=10)
         ready_workers = runner.stats()["ready"]
-        review_payload = runner.review(
+        review_result = runner.review(
             payload={"hook_event_name": "SessionStart"},
             harness="pi",
             home_dir=tmp_path,
             guard_home=tmp_path,
             workspace=tmp_path,
             hook_env={},
-        ).payload
+        )
     finally:
         runner.close()
 
     assert attempts >= 2
     assert ready_workers == 1
-    assert review_payload is not None
+    assert review_result is not None
+    assert review_result.payload is not None, {
+        "reason_code": review_result.reason_code,
+        "runner_stats": runner.stats(),
+    }
+    assert review_result.reason_code is None
     assert runner.stats()["workers"] == 0
 
 

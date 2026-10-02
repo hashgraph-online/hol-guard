@@ -2652,6 +2652,7 @@ def test_consumer_current_allow_and_exact_allow_do_not_hide_tampered_broader_aut
 
 def test_consumer_current_allow_detects_tampered_block_moved_out_of_exact_lookup(
     tmp_path: Path,
+    native_context_digest: Path,
 ) -> None:
     artifact = _artifact(tmp_path)
     detection = _detection(artifact)
@@ -2696,7 +2697,7 @@ def test_consumer_current_allow_detects_tampered_block_moved_out_of_exact_lookup
     assert item["approval_reuse_reason_code"] == "approval_reuse_integrity_failure"
 
 
-def test_consumer_current_allow_ignores_tampered_nonmatching_local_row(tmp_path: Path) -> None:
+def test_consumer_current_allow_ignores_tampered_nonmatching_local_row(tmp_path: Path, native_context_digest: Path) -> None:
     artifact = _artifact(tmp_path)
     detection = _detection(artifact)
     store = GuardStore(tmp_path / "guard-home")
