@@ -62,7 +62,12 @@ runs:
     shell: bash
   - name: TODO/FIXME scan (L330)
     run: |
-      count=$(grep -rn "TODO\|FIXME\|HACK\|XXX" src/codex_plugin_scanner/guard/ --include="*.py" | grep -v "# type: ignore" | wc -l | tr -d ' ')
+      test -d src/codex_plugin_scanner/guard/
+      count=$(
+        { grep -rn "TODO\|FIXME\|HACK\|XXX" src/codex_plugin_scanner/guard/ --include="*.py" || [ "$?" -eq 1 ]; } |
+        { grep -v "# type: ignore" || [ "$?" -eq 1 ]; } |
+        wc -l | tr -d ' '
+      )
       echo "Guard TODO/FIXME count: $count"
       if [ "$count" -gt "0" ]; then
         grep -rn "TODO\|FIXME\|HACK\|XXX" src/codex_plugin_scanner/guard/ --include="*.py" | grep -v "# type: ignore"
