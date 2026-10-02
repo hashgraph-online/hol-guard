@@ -11,6 +11,7 @@ from pathlib import Path
 
 from .restricted_linux_elf import resolve_linux_elf_loader
 from .restricted_linux_landlock import LinuxContainmentUnavailableError
+from .restricted_linux_mapping_plan import collect_mapping_evidence
 from .restricted_linux_paths import collect_linux_read_grants
 from .restricted_pytest_model import READ_ONLY_TEST_PROFILES, RestrictedPytestPlan
 
@@ -30,6 +31,7 @@ def linux_readonly_argv(plan: RestrictedPytestPlan, *, private_root: Path) -> li
         raise LinuxContainmentUnavailableError("Unsafe Linux private execution directory.")
     entry = Path(__file__).resolve().with_name("restricted_linux_entry.py")
     boundary = entry.with_name("restricted_linux_landlock.py")
+    mappings = entry.with_name("restricted_linux_mappings.py")
     python = Path(sys.executable).resolve(strict=True)
     images = set(path.resolve(strict=True) for path in plan.allowed_executables)
     # The helper runs before restrictions; repository code gets only plan images.
@@ -57,6 +59,7 @@ def linux_readonly_argv(plan: RestrictedPytestPlan, *, private_root: Path) -> li
         helper_root,
         entry,
         boundary,
+        mappings,
         *images,
     ]
     grants = list(collect_linux_read_grants(plan.workspace))
@@ -92,8 +95,22 @@ def linux_readonly_argv(plan: RestrictedPytestPlan, *, private_root: Path) -> li
     for path in plan.output_roots:
         path.mkdir(mode=0o700, exist_ok=True)
     write_roots = (private_root, *plan.output_roots)
+    mapping_records = collect_mapping_evidence(
+        images=images, read_files=set(indexed), runtime_roots=runtime_roots, workspace=plan.workspace
+    )
+    for record in mapping_records:
+        canonical = Path(record["path"])
+        aliases = {canonical}
+        for destination in mounts:
+            source = destination.resolve(strict=True)
+            if source.is_dir() and canonical.is_relative_to(source):
+                aliases.add(destination / canonical.relative_to(source))
+            elif source == canonical:
+                aliases.add(destination)
+        record["targets"] = list(map(str, sorted(aliases)))
     payload = {
-        "schema": "guard-linux-readonly-plan.v1",
+        "schema": "guard-linux-readonly-plan.v2",
+        "mapping_records": mapping_records,
         "command": list(plan.command),
         # Library trees can contain application .env files too. READ_DIR permits
         # discovery only; all file reads use the same filtered inode index.
@@ -118,12 +135,18 @@ def linux_readonly_argv(plan: RestrictedPytestPlan, *, private_root: Path) -> li
         "--unshare-all",
         "--cap-drop",
         "ALL",
+        "--cap-add",
+        "CAP_SYS_ADMIN",
+        "--cap-add",
+        "CAP_SETPCAP",
         "--proc",
         "/proc",
         "--dev",
         "/dev",
         "--tmpfs",
         "/tmp",
+        "--tmpfs",
+        "/guard-approved-mappings",
     ]
     mounted = []
     for path in sorted(set(mounts), key=lambda path: (len(path.parts), str(path))):

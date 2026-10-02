@@ -37,6 +37,7 @@ def test_linked_metadata_has_listing_without_parent_checkout_or_secret_read_gran
     monkeypatch.setattr(model, "_LINUX_READ_FILES", ())
     monkeypatch.setattr(sandbox, "_runtime_read_roots", lambda plan: ())
     monkeypatch.setattr(namespace, "resolve_linux_elf_loader", lambda path: None)
+    monkeypatch.setattr(namespace, "collect_mapping_evidence", lambda **kwargs: [])
     plan = model.RestrictedPytestPlan(
         profile_version=model.GIT_READ_ONLY_PROFILE_VERSION,
         backend="linux-bubblewrap",
@@ -51,6 +52,8 @@ def test_linked_metadata_has_listing_without_parent_checkout_or_secret_read_gran
     )
     argv = namespace.linux_readonly_argv(plan, private_root=private)
     snapshot = json.loads((private / "linux-plan.json").read_text())
+    assert snapshot["schema"] == "guard-linux-readonly-plan.v2"
+    assert "mapping_records" in snapshot
     assert snapshot["list_roots"] == [str(workspace), *([str(library)] if with_system_library else []), str(metadata)]
     assert snapshot["read_roots"] == []
     assert str(metadata / "HEAD") in snapshot["read_files"]
@@ -60,3 +63,5 @@ def test_linked_metadata_has_listing_without_parent_checkout_or_secret_read_gran
     assert str(parent) not in argv
     assert snapshot["write_roots"] == [str(private)]
     assert "--unshare-all" in argv and argv[argv.index("--cap-drop") + 1] == "ALL"
+    assert "CAP_SYS_ADMIN" in argv and "CAP_SETPCAP" in argv
+    assert "/guard-approved-mappings" in argv

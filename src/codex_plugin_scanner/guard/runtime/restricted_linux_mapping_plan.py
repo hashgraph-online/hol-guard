@@ -91,12 +91,14 @@ def _elf(stream, metadata, *, library: bool, system_library: bool = False) -> tu
             else:
                 dependencies.append(name)
     if library:
-        # glibc is a system library with a documented standalone entry point.
-        # No user-owned/program-shaped .so receives this platform exception.
-        system_libc = (
-            system_library and soname == "libc.so.6" and metadata.st_uid == 0 and metadata.st_mode & 0o022 == 0
+        # e_entry is nonzero in real ARM/Rust DSOs, so it is not an image-type
+        # discriminator. ELF's explicit PIE flag and PT_INTERP identify programs.
+        trusted_system_dso = (
+            system_library and soname is not None and metadata.st_uid == 0 and metadata.st_mode & 0o022 == 0
         )
-        if fields[1] != 3 or ((fields[4] != 0 or any(p[0] == 3 for p in programs)) and not system_libc):
+        has_interpreter = any(p[0] == 3 for p in programs)
+        is_pie = any(tag == 0x6FFFFFFB and value & 0x08000000 for tag, value in entries)
+        if fields[1] != 3 or is_pie or (has_interpreter and not (trusted_system_dso and soname == "libc.so.6")):
             raise ValueError("Program image is not a shared-library mapping exception.")
     return soname, tuple(dependencies)
 
@@ -110,43 +112,56 @@ def collect_mapping_evidence(
 ) -> list[dict[str, object]]:
     """Select dependency closure, not every library installed on the machine."""
     parents = sorted({path.parent for path in read_files})
-    pending = [(path, False) for path in sorted(images)]
-    pending.extend(
-        (path, True)
+    optional = [
+        path
         for path in sorted(read_files - images)
         if (path.is_relative_to(workspace) or any(path.is_relative_to(root) for root in runtime_roots))
         and (re.search(r"\.so(?:\.[0-9]+)*$", path.name) or path.suffix == ".node")
-    )
-    records, visited, total = [], set(), 0
-    try:
+    ]
+    cache, total = {}, 0
+
+    class MissingDependencyError(ValueError):
+        pass
+
+    def inspect(path):
+        nonlocal total
+        if path in cache:
+            return cache[path]
+        if len(cache) >= _MAX_MAPPINGS:
+            raise ValueError("Too many executable mappings.")
+        library = path not in images
+        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC)
+        with os.fdopen(descriptor, "rb") as stream:
+            before = os.fstat(stream.fileno())
+            if not stat.S_ISREG(before.st_mode) or not 0 < before.st_size <= _MAX_FILE_BYTES:
+                raise ValueError("Invalid executable mapping file.")
+            prefix = stream.read(4)
+            if prefix == b"\x7fELF":
+                system_library = any(path.is_relative_to(root) for root in (Path("/usr/lib"), Path("/lib")))
+                _soname, dependencies = _elf(stream, before, library=library, system_library=system_library)
+            elif not library and prefix.startswith(b"#!"):
+                dependencies = ()
+            else:
+                raise ValueError("Unverified executable mapping.")
+            total += before.st_size
+            if total > _MAX_MAPPING_BYTES:
+                raise ValueError("Executable mapping memory budget exceeded.")
+            stream.seek(0)
+            digest = hashlib.file_digest(stream, "sha256").hexdigest()
+            if _identity(before) != _identity(os.fstat(stream.fileno())):
+                raise ValueError("Executable mapping changed during inspection.")
+        record = {"path": str(path), "identity": list(_identity(before)), "sha256": digest}
+        cache[path] = record, dependencies
+        return cache[path]
+
+    def closure(seeds):
+        pending, records = list(seeds), {}
         while pending:
-            path, library = pending.pop()
-            if path in visited:
+            path = pending.pop()
+            if path in records:
                 continue
-            visited.add(path)
-            if len(visited) > _MAX_MAPPINGS:
-                raise ValueError("Too many executable mappings.")
-            descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC)
-            with os.fdopen(descriptor, "rb") as stream:
-                before = os.fstat(stream.fileno())
-                if not stat.S_ISREG(before.st_mode) or not 0 < before.st_size <= _MAX_FILE_BYTES:
-                    raise ValueError("Invalid executable mapping file.")
-                prefix = stream.read(4)
-                if prefix == b"\x7fELF":
-                    system_library = any(path.is_relative_to(root) for root in (Path("/usr/lib"), Path("/lib")))
-                    _soname, dependencies = _elf(stream, before, library=library, system_library=system_library)
-                elif not library and prefix.startswith(b"#!"):
-                    dependencies = ()
-                else:
-                    raise ValueError("Unverified executable mapping.")
-                total += before.st_size
-                if total > _MAX_MAPPING_BYTES:
-                    raise ValueError("Executable mapping memory budget exceeded.")
-                stream.seek(0)
-                digest = hashlib.file_digest(stream, "sha256").hexdigest()
-                if _identity(before) != _identity(os.fstat(stream.fileno())):
-                    raise ValueError("Executable mapping changed during inspection.")
-            records.append({"path": str(path), "identity": list(_identity(before)), "sha256": digest})
+            record, dependencies = inspect(path)
+            records[path] = record
             for name in dependencies:
                 matches = set()
                 for parent in parents:
@@ -157,8 +172,20 @@ def collect_mapping_evidence(
                     if candidate in read_files or candidate in images:
                         matches.add(candidate)
                 if not matches:
-                    raise ValueError("An executable mapping dependency is unavailable.")
-                pending.extend((candidate, candidate not in images) for candidate in matches)
+                    raise MissingDependencyError("An executable mapping dependency is unavailable.")
+                pending.extend(matches)
+        return records
+
+    try:
+        records = closure(sorted(images))
+        for module in optional:
+            try:
+                component = closure([module])
+            except MissingDependencyError:
+                # Unused optional modules with missing dependencies stay noexec;
+                # they must not prevent unrelated ordinary work from starting.
+                continue
+            records.update(component)
     except (OSError, ValueError, struct.error, UnicodeError) as error:
         raise LinuxContainmentUnavailableError("Linux executable mapping evidence could not be verified.") from error
-    return records
+    return [records[path] for path in sorted(records)]

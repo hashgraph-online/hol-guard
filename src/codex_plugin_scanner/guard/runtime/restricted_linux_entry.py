@@ -27,6 +27,7 @@ _FIELDS = frozenset(
         "read_identities",
         "write_identities",
         "device_files",
+        "mapping_records",
     }
 )
 _MAX_BYTES = 64 * 1024 * 1024
@@ -66,7 +67,7 @@ def load_plan(path: Path, digest: str) -> dict:
     if len(raw) > _MAX_BYTES or hashlib.sha256(raw).hexdigest() != digest:
         raise ValueError("Linux execution plan changed.")
     plan = json.loads(raw, object_pairs_hook=_unique)
-    if not isinstance(plan, dict) or plan.keys() != _FIELDS or plan["schema"] != "guard-linux-readonly-plan.v1":
+    if not isinstance(plan, dict) or plan.keys() != _FIELDS or plan["schema"] != "guard-linux-readonly-plan.v2":
         raise ValueError("Unsupported Linux execution plan.")
     command = plan["command"]
     if (
@@ -127,6 +128,17 @@ def main() -> int:
             raise ValueError("The packaged Linux boundary is unavailable.")
         boundary = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(boundary)
+        mapping_path = boundary_path.with_name("restricted_linux_mappings.py")
+        mapping_spec = importlib.util.spec_from_file_location("guard_linux_mappings", mapping_path)
+        if mapping_spec is None or mapping_spec.loader is None:
+            raise ValueError("The packaged Linux mapping boundary is unavailable.")
+        mappings = importlib.util.module_from_spec(mapping_spec)
+        mapping_spec.loader.exec_module(mappings)
+        sealed = mappings.enforce_mapping_boundary(
+            plan["mapping_records"], approved_paths=set(plan["read_files"]) | set(plan["executables"])
+        )
+        for path in set(plan["read_files"]) & sealed.keys():
+            plan["read_identities"][path] = sealed[path]
         boundary.enforce_landlock(
             **{
                 key: plan[key]
@@ -139,7 +151,7 @@ def main() -> int:
                     "read_identities",
                     "device_files",
                 )
-            }
+            },
         )
         boundary.enforce_socket_boundary()
         os.execv(plan["command"][0], plan["command"])

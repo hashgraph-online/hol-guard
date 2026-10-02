@@ -11,13 +11,14 @@ from codex_plugin_scanner.guard.runtime import restricted_linux_mapping_plan as 
 from codex_plugin_scanner.guard.runtime.restricted_linux_landlock import LinuxContainmentUnavailableError
 
 
-def _image(path, *, library=False, needed=(), soname=None, entry=0):
+def _image(path, *, library=False, needed=(), soname=None, entry=0, pie=False):
     strings = bytearray(b"\x00")
     names = []
     for tag, name in [(1, name) for name in needed] + ([(14, soname)] if soname else []):
         names.append((tag, len(strings)))
         strings.extend(name.encode("ascii") + b"\x00")
-    dynamic = [*names, (5, 176 + (len(names) + 3) * 16), (10, len(strings)), (0, 0)]
+    flags = [(0x6FFFFFFB, 0x08000000)] if pie else []
+    dynamic = [*names, *flags, (5, 176 + (len(names) + len(flags) + 3) * 16), (10, len(strings)), (0, 0)]
     tail = b"".join(struct.pack("<qQ", *record) for record in dynamic) + strings
     size = 176 + len(tail)
     header = struct.pack(
@@ -101,12 +102,24 @@ def test_dependency_names_cannot_inject_paths(tmp_path, name):
 
 
 def test_program_shaped_workspace_library_cannot_claim_system_libc_exception(tmp_path):
-    fake = _image(tmp_path / "libc.so.6", library=True, soname="libc.so.6", entry=4096)
+    fake = _image(tmp_path / "libc.so.6", library=True, soname="libc.so.6", entry=4096, pie=True)
     metadata = SimpleNamespace(st_size=fake.stat().st_size, st_uid=0, st_mode=0o100555)
     with fake.open("rb") as stream, pytest.raises(ValueError, match="Program image"):
         mapping._elf(stream, metadata, library=True)
-    with fake.open("rb") as stream:
-        assert mapping._elf(stream, metadata, library=True, system_library=True) == ("libc.so.6", ())
+    with fake.open("rb") as stream, pytest.raises(ValueError, match="Program image"):
+        mapping._elf(stream, metadata, library=True, system_library=True)
+
+
+def test_real_shared_library_entry_metadata_is_not_a_program_flag(tmp_path):
+    module = _image(tmp_path / "binding.node", library=True, entry=4096)
+    assert len(_collect(tmp_path, [], [module])) == 1
+
+
+def test_missing_optional_library_dependency_stays_noexec_without_blocking_runner(tmp_path):
+    program = _image(tmp_path / "runner")
+    optional = _image(tmp_path / "unused.so", library=True, needed=("missing.so",))
+    records = _collect(tmp_path, [program], [optional])
+    assert [record["path"] for record in records] == [str(program)]
 
 
 def test_unresolved_symlink_cannot_be_admitted_as_a_program(tmp_path):

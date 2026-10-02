@@ -14,7 +14,8 @@ def _payload(root):
     executable = str(Path(sys.executable).resolve())
     metadata = root.stat()
     return {
-        "schema": "guard-linux-readonly-plan.v1",
+        "schema": "guard-linux-readonly-plan.v2",
+        "mapping_records": [],
         "command": [executable, "-V"],
         "read_roots": [],
         "read_files": [],
@@ -69,6 +70,15 @@ def test_changed_private_bytes_do_not_keep_old_execution_hash(tmp_path):
     path, digest = _write(tmp_path, _payload(tmp_path))
     path.write_text("{}")
     with pytest.raises(ValueError, match="changed"):
+        load_plan(path, digest)
+
+
+def test_legacy_plan_cannot_skip_executable_mapping_boundary(tmp_path):
+    payload = _payload(tmp_path)
+    payload["schema"] = "guard-linux-readonly-plan.v1"
+    payload.pop("mapping_records")
+    path, digest = _write(tmp_path, payload)
+    with pytest.raises(ValueError, match="Unsupported"):
         load_plan(path, digest)
 
 
