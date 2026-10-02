@@ -89,6 +89,7 @@ jobs:
         uses: ./.github/actions/setup-rust
 
       - name: Build native hook runtime
+        shell: bash
         env:
           HOL_GUARD_BUILD_SHA: ${{ github.sha }}
         run: |
