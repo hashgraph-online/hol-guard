@@ -382,8 +382,10 @@ def _run_backend_process(
     stdout_capture: bytearray | None = None,
     node_virtual_address_space: bool = False,
 ) -> int:
-    if node_virtual_address_space and sys.platform == "linux" and (
-        not _RESOURCE_AVAILABLE or _resource is None or not hasattr(_resource, "RLIMIT_DATA")
+    if (
+        node_virtual_address_space
+        and sys.platform == "linux"
+        and (not _RESOURCE_AVAILABLE or _resource is None or not hasattr(_resource, "RLIMIT_DATA"))
     ):
         raise RestrictedPytestError(
             PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE,
