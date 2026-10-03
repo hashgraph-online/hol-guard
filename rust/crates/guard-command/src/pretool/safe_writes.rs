@@ -178,6 +178,7 @@ fn absent_move_destination(value: &str, context: super::PathContext<'_>) -> bool
 
 #[cfg(unix)]
 fn bounded_temporary_copy_target(value: &str, context: super::PathContext<'_>) -> bool {
+    use super::read_paths::resolved_path_allowed_in_scope;
     use std::os::unix::fs::MetadataExt;
     use std::path::Path;
 
