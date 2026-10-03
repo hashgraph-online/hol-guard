@@ -105,6 +105,7 @@ def test_generated_client_stamps_outer_environment_before_daemon_forwarding(
     monkeypatch.setenv("HOME", "/frozen/outer/home")
     monkeypatch.setenv("GIT_PAGER", "cat")
     monkeypatch.setenv("PAGER", "")
+    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "true")
     monkeypatch.setenv("GIT_EXTERNAL_DIFF", "frozen-caller-secret-not-serialized")
 
     forwarded = module._stamp_hook_input(
@@ -121,6 +122,7 @@ def test_generated_client_stamps_outer_environment_before_daemon_forwarding(
     assert context["home"] == "/frozen/outer/home"
     assert context["git_pager_disabled"] is True
     assert context["pager_disabled"] is True
+    assert context["git_config_no_system"] is True
     assert context["path"] != "/model-supplied"
     assert "GIT_EXTERNAL_DIFF" in context["environment_names"]
     assert context["environment_digest"]

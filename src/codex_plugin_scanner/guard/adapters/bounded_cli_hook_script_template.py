@@ -80,6 +80,11 @@ _AUTHORITY_REMEDIATION = (
     "degradation, or `hol-guard command controls recover-authority`, to restore the "
     "protected control floor."
 )
+_GIT_TRUE_VALUES = frozenset({"1", "true", "yes", "on"})
+
+
+def _git_config_no_system_enabled(value: str | None) -> bool:
+    return value is not None and value.casefold() in _GIT_TRUE_VALUES
 
 
 def _stderr_reason(reason: str) -> str:
@@ -126,7 +131,9 @@ def _stamp_hook_input(text: str) -> str:
             json.dumps(active, sort_keys=True, separators=(",", ":")).encode()
         ).hexdigest(),
         "xdg_config_home": os.environ.get("XDG_CONFIG_HOME") or None,
-        "git_config_no_system": os.environ.get("GIT_CONFIG_NOSYSTEM") == "1",
+        "git_config_no_system": _git_config_no_system_enabled(
+            os.environ.get("GIT_CONFIG_NOSYSTEM")
+        ),
         "home": os.environ.get("HOME"),
         "git_pager_disabled": os.environ.get("GIT_PAGER") in ("", "cat"),
         "pager_disabled": os.environ.get("PAGER") in ("", "cat"),

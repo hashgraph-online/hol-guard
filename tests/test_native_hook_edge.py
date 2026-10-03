@@ -10,6 +10,9 @@ import pytest
 from codex_plugin_scanner.guard import native_command_model
 from codex_plugin_scanner.guard.codex_hook_launch_runtime import BoundedHookProcessResult
 from codex_plugin_scanner.guard.daemon.hook_request_parsing import runtime_hook_event_name
+from codex_plugin_scanner.guard.hook_execution_environment import (
+    collect_hook_execution_environment,
+)
 from codex_plugin_scanner.guard.native_decision_receipt import canonical_receipt_bytes
 from codex_plugin_scanner.guard.native_hook_edge import _decode_edge, review_raw_hook_native
 from codex_plugin_scanner.guard.native_resident_client import (
@@ -21,6 +24,12 @@ from codex_plugin_scanner.guard.native_runtime import (
     NativeRuntimeIdentity,
     NativeRuntimeStatus,
 )
+
+
+@pytest.mark.parametrize("value", ("1", "true", "TRUE", "yes", "on"))
+def test_git_config_no_system_accepts_git_truthy_values(monkeypatch, value):
+    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", value)
+    assert collect_hook_execution_environment()["git_config_no_system"] is True
 
 
 def test_execution_lookup_context_is_feature_gated_and_omits_environment_values(monkeypatch):

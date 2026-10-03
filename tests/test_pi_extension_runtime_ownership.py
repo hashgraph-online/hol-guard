@@ -22,6 +22,7 @@ def test_pi_extension_keeps_fallbacks_inside_outer_hook_deadline(tmp_path: Path)
     source = _source(tmp_path)
     assert "guard_execution_environment" in source
     assert "home: typeof process.env.HOME" in source
+    assert "['1', 'true', 'yes', 'on']" in source
     assert "git_pager_disabled: process.env.GIT_PAGER" in source
     assert "pager_disabled: process.env.PAGER" in source
     assert "let payloadToSend = {" in source
