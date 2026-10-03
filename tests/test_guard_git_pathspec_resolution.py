@@ -31,11 +31,14 @@ def _write(path: Path, text: str) -> None:
 
 
 def _git(repository: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    environment = os.environ.copy()
+    environment["GIT_CONFIG_GLOBAL"] = os.devnull
     return subprocess.run(
         ["git", "-C", str(repository), *args],
         check=True,
         capture_output=True,
         text=True,
+        env=environment,
     )
 
 
