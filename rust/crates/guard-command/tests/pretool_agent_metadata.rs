@@ -38,3 +38,28 @@ fn task_list_proof_rejects_external_aliases_and_executable_inputs() {
         assert_ne!(evaluate(payload).minimum_action, "allow");
     }
 }
+
+#[test]
+fn task_output_only_retrieves_a_bounded_existing_host_task() {
+    let result = evaluate(json!({"tool_name":"TaskOutput", "tool_input":{
+        "task_id":"exec_01234567-89ab-cdef", "block":true, "timeout":600000
+    }}));
+    assert_eq!(result.minimum_action, "allow");
+    assert_eq!(result.reason_code, "native_agent_task_metadata");
+    for input in [
+        json!({"task_id":"../.env"}),
+        json!({"task_id":"task", "command":"echo unsafe"}),
+        json!({"task_id":"task", "timeout":600001}),
+        json!({"task_id":"task", "block":"true"}),
+    ] {
+        assert_ne!(
+            evaluate(json!({"tool_name":"TaskOutput", "tool_input":input})).minimum_action,
+            "allow"
+        );
+    }
+    assert_ne!(
+        evaluate(json!({"tool_name":"mcp__external__TaskOutput", "tool_input":{"task_id":"task"}}))
+            .minimum_action,
+        "allow"
+    );
+}

@@ -2,7 +2,7 @@ use serde_json::Value;
 
 /// Only host task-list data is admitted here, never commands or external tools.
 pub(super) fn bounded_task_list(payload: &Value, tool_name: Option<&str>) -> bool {
-    if tool_name != Some("TodoWrite") {
+    if !matches!(tool_name, Some("TodoWrite" | "TaskOutput")) {
         return false;
     }
     let Some(root) = payload.as_object() else {
@@ -45,6 +45,25 @@ pub(super) fn bounded_task_list(payload: &Value, tool_name: Option<&str>) -> boo
             .is_some_and(|value| value.as_object() != Some(input))
     }) {
         return false;
+    }
+    if tool_name == Some("TaskOutput") {
+        return input
+            .keys()
+            .all(|key| matches!(key.as_str(), "task_id" | "block" | "timeout"))
+            && input
+                .get("task_id")
+                .and_then(Value::as_str)
+                .is_some_and(|id| {
+                    !id.is_empty()
+                        && id.len() <= 128
+                        && id
+                            .bytes()
+                            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
+                })
+            && input.get("block").is_none_or(Value::is_boolean)
+            && input
+                .get("timeout")
+                .is_none_or(|value| value.as_u64().is_some_and(|n| n <= 600000));
     }
     if input.len() != 1 {
         return false;
