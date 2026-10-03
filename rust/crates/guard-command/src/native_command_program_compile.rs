@@ -76,6 +76,24 @@ pub(super) fn compile_node(
                 child_index(&node.children, "consumer", indices)?,
             )
         }
+        "confirmation-fed.v1" => {
+            if node.children.len() != 1 {
+                return Err("native_command_combinator_invalid");
+            }
+            Matcher::ConfirmationFed(child_index(&node.children, "consumer", indices)?, {
+                let config: ConfirmationFedNode = serde_json::from_value(node.config)
+                    .map_err(|_| "invalid_confirmation_fed_matcher_config")?;
+                // Without a feeder or a consent value nothing can ever match,
+                // so an empty set is an authoring error rather than a rule that
+                // silently protects nothing. An empty `forwarders` set stays
+                // valid: it only declines to follow consent through a
+                // transparent stage.
+                if config.feeders.is_empty() || config.values.is_empty() {
+                    return Err("confirmation_fed_matcher_config_empty");
+                }
+                config
+            })
+        }
         operation => {
             if !node.children.is_empty() {
                 return Err("native_command_unexpected_children");
@@ -206,6 +224,7 @@ fn graph_children(matcher: &Matcher) -> Vec<usize> {
     match matcher {
         Matcher::Any(children) | Matcher::All(children) => children.clone(),
         Matcher::Pipeline(producer, consumer) => vec![*producer, *consumer],
+        Matcher::ConfirmationFed(consumer, _) => vec![*consumer],
         _ => Vec::new(),
     }
 }
