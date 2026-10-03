@@ -69,6 +69,8 @@ pub(super) fn submodules_are_inert(
         "ls-files",
         "--stage",
         "-z",
+        "--",
+        ":/",
     ]);
     let (status, bytes) = output(&mut index, deadline, 2 * 1024 * 1024)?;
     if !status.success() {
