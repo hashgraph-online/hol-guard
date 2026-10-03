@@ -22,14 +22,9 @@ jobs:
         run: |
           set -euo pipefail
           owned='^contracts/extensions/(native-command-program|command-catalog)\.v1\.json$'
-          owned+='|^contracts/managed-controls/v1/(extension-projection-digest-vector|policy-bundle-v2-extension-signature-vector)\.json$'
           owned+='|^docs/guard/extensions/(README\.md|catalog\.v[12]\.json)$'
           owned+='|^src/codex_plugin_scanner/guard/contracts/data/extensions/'
           owned+='|^src/codex_plugin_scanner/guard/contracts/data/mcp_servers/'
-          owned+='|^tests/fixtures/extension-controls/catalog-baseline\.v1\.json$'
-          owned+='|^tests/fixtures/guard-command-corpus/decision-diff-report\.(json|framed-sha256)$'
-          owned+='|^tests/test_guard_extension_trust\.py$'
-          owned+='|^tests/test_policy_bundle_delivery_runtime\.py$'
           files=$(gh api --paginate "repos/${GH_REPO}/pulls/${PR_NUMBER}/files?per_page=100" \
             --jq '.[].filename')
           changed=$(printf '%s\n' "${files}" | grep -E "${owned}" || [ $? -eq 1 ])

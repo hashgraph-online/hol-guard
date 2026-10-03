@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 
 from .restricted_linux_elf import resolve_linux_elf_loader
+from .restricted_linux_entry import PLAN_DIRECTORY, PLAN_FILENAME
 from .restricted_linux_landlock import LinuxContainmentUnavailableError
 from .restricted_linux_mapping_plan import collect_mapping_evidence
 from .restricted_linux_paths import collect_linux_read_grants
@@ -17,6 +18,7 @@ from .restricted_pytest_model import READ_ONLY_TEST_PROFILES, RestrictedPytestPl
 
 
 def linux_readonly_argv(plan: RestrictedPytestPlan, *, private_root: Path) -> list[str]:
+    """Build namespace arguments that preserve the declared read, write and executable boundaries."""
     from .restricted_pytest_model import _LINUX_READ_FILES, _LINUX_READ_ROOTS
     from .restricted_pytest_sandbox import _runtime_read_roots
 
@@ -127,7 +129,7 @@ def linux_readonly_argv(plan: RestrictedPytestPlan, *, private_root: Path) -> li
         "device_files": ["/dev/null", "/dev/random", "/dev/urandom"],
     }
     raw = json.dumps(payload, separators=(",", ":")).encode()
-    snapshot = private_root / "linux-plan.json"
+    snapshot = private_root / PLAN_FILENAME
     descriptor = os.open(snapshot, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
     with os.fdopen(descriptor, "wb") as stream:
         stream.write(raw)
@@ -146,8 +148,10 @@ def linux_readonly_argv(plan: RestrictedPytestPlan, *, private_root: Path) -> li
         "/proc",
         "--dev",
         "/dev",
-        "--tmpfs",
-        "/tmp",
+        # TMPDIR/TEMP/TMP already point into the private 0700 execution root.
+        # Do not add an unrelated temporary directory to the readonly profile.
+        "--perms",
+        "0700",
         "--tmpfs",
         "/guard-approved-mappings",
     ]
@@ -164,7 +168,9 @@ def linux_readonly_argv(plan: RestrictedPytestPlan, *, private_root: Path) -> li
     argv.extend(("--ro-bind", str(plan.workspace), str(plan.workspace)))
     for path in write_roots:
         argv.extend(("--bind", str(path), str(path)))
-    argv.extend(
-        ("--chdir", str(plan.cwd), "--", str(python), "-I", str(entry), str(snapshot), hashlib.sha256(raw).hexdigest())
-    )
+    # Create an owner-only namespace directory and mount only the plan read-only.
+    # The entrypoint never opens a caller-chosen path, even before Landlock starts.
+    argv.extend(("--perms", "0700", "--dir", str(PLAN_DIRECTORY)))
+    argv.extend(("--ro-bind", str(snapshot), str(PLAN_DIRECTORY / PLAN_FILENAME)))
+    argv.extend(("--chdir", str(plan.cwd), "--", str(python), "-I", str(entry), hashlib.sha256(raw).hexdigest()))
     return argv

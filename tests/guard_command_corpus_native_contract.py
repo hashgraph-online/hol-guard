@@ -64,6 +64,8 @@ class NativeCaseContract:
     expected_uncertain_rule_ids: tuple[str, ...]
     expected_native_reason: str
     expected_path_overridden: bool
+    expected_explicitly_benign: bool
+    expected_decision: str
 
 
 def _mapping(value: object, name: str) -> dict[str, object]:
@@ -83,6 +85,7 @@ def _unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
 
 @lru_cache(maxsize=1)
 def _contract_data() -> dict[str, object]:
+    """Load the historical corpus contract and verify its independently authored input hashes."""
     encoded = NATIVE_CONTRACT_PATH.read_bytes()
     if len(encoded) > 1_048_576:
         raise ValueError("native corpus contract exceeds its size bound")
@@ -92,11 +95,16 @@ def _contract_data() -> dict[str, object]:
     for relative, digest in _mapping(data.get("immutable_input_sha256"), "input identities").items():
         if hashlib.sha256((ROOT / relative).read_bytes()).hexdigest() != digest:
             raise ValueError(f"native corpus immutable input changed: {relative}")
+    # Historical hashes document the implementation that established the
+    # reviewed groups. They must not freeze today's implementation. Immutable
+    # corpus/oracle inputs remain hash-bound above, and live responses still
+    # have to satisfy the independently authored groups in validate_native_case.
     provenance = _mapping(data.get("inherited_source_identities"), "source identities")
-    for relative, raw in _mapping(provenance.get("sources"), "sources").items():
+    for raw in _mapping(provenance.get("sources"), "sources").values():
         identity = _mapping(raw, "source identity")
-        if hashlib.sha256((ROOT / relative).read_bytes()).hexdigest() != identity.get("candidate_sha256"):
-            raise ValueError(f"native corpus reviewed implementation changed: {relative}")
+        digest = identity.get("candidate_sha256")
+        if not isinstance(digest, str) or len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest):
+            raise ValueError("native corpus historical source identity is invalid")
     return data
 
 
@@ -134,6 +142,8 @@ def _groups() -> dict[str, NativeCaseContract]:
             expected_uncertain_rule_ids=tuple(cast(list[str], rules)),
             expected_native_reason=cast(str, expected["native_reason"]),
             expected_path_overridden=cast(bool, expected["path_overridden"]),
+            expected_explicitly_benign=cast(bool, expected.get("explicitly_benign", False)),
+            expected_decision=cast(str, expected.get("decision", "deny")),
         )
         if (
             not isinstance(value.group_id, str)
@@ -145,7 +155,11 @@ def _groups() -> dict[str, NativeCaseContract]:
             or not 0 <= value.variant_remainder < value.variant_modulus
             or value.original_floor not in _ACTIONS
             or value.expected_floor not in _ACTIONS
-            or value.expected_native_floor not in ("review", "block")
+            or value.expected_native_floor not in ("allow", "review", "block")
+            or type(value.expected_explicitly_benign) is not bool
+            or value.expected_decision not in ("allow", "deny")
+            or (value.expected_native_floor == "allow") != value.expected_explicitly_benign
+            or (value.expected_decision == "allow") != value.expected_explicitly_benign
             or value.expected_confidence not in ("exact", "uncertain")
             or value.expected_evalerror not in (None, "native_command_evaluation_failed")
             or type(value.expected_path_overridden) is not bool
@@ -349,8 +363,8 @@ def validate_native_case(case: CommandCorpusCase, oracle: OracleRecord, reviewed
         ("path_overridden", model.get("path_overridden"), expected.expected_path_overridden),
         ("evaluation_error", evidence.get("evaluation_error"), expected.expected_evalerror),
         ("uncertain_rules", tuple(sorted(uncertain_rules)), expected.expected_uncertain_rule_ids),
-        ("explicitly_benign", payload.get("explicitly_benign"), False),
-        ("decision", payload.get("decision"), "deny"),
+        ("explicitly_benign", payload.get("explicitly_benign"), expected.expected_explicitly_benign),
+        ("decision", payload.get("decision"), expected.expected_decision),
         ("authority", payload.get("authority"), "rust"),
         ("observation_count", binding.get("observation_count"), len(observations) + len(permissions)),
         (

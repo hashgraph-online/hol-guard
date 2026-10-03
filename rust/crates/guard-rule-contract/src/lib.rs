@@ -209,7 +209,7 @@ const COMPONENTS: &[(&str, &[u8])] = &[
     ),
     (
         "native-command-program-artifact",
-        include_bytes!("../../../../contracts/extensions/native-command-program.v1.json"),
+        guard_command::native_command_program::packaged_command_program_bytes(),
     ),
     (
         "guard-command-command-ascii-comparison",

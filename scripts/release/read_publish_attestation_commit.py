@@ -23,11 +23,7 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit("provenance workflow is not the publish workflow")
     if workflow.get("ref") != expected_ref:
         raise SystemExit("provenance ref is not the release branch")
-    if (
-        not isinstance(digest, str)
-        or len(digest) != 40
-        or any(char not in "0123456789abcdef" for char in digest)
-    ):
+    if not isinstance(digest, str) or len(digest) != 40 or any(char not in "0123456789abcdef" for char in digest):
         raise SystemExit("provenance commit is not a commit sha")
     print(digest)
     return 0

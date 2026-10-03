@@ -234,9 +234,7 @@ NATIVE_STRICTER_CRITICAL_COMMANDS = frozenset(
 
 
 @pytest.mark.parametrize(("command", "factor_floor"), CRITICAL_COMMAND_FLOORS)
-def test_real_native_critical_floor_matches_frozen_baseline(
-    command: str, factor_floor: GuardAction
-) -> None:
+def test_real_native_critical_floor_matches_frozen_baseline(command: str, factor_floor: GuardAction) -> None:
     action, error = _native_action(command)
     expected = "block" if command in NATIVE_STRICTER_CRITICAL_COMMANDS else factor_floor
     assert action == expected

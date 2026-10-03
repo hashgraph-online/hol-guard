@@ -6,6 +6,8 @@ from pathlib import Path
 
 import yaml
 
+from tests.support.ci_workflow import expand_ci_job_actions
+
 ROOT = Path(__file__).resolve().parents[1]
 PUBLISH_WORKFLOW = ROOT / ".github" / "workflows" / "publish.yml"
 CI_WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
@@ -17,7 +19,7 @@ RELEASE_MAINTAINERS = {"@kantorcodes", "@deep-purple-boots", "@zerocodefast"}
 
 
 def _workflow(path: Path) -> dict[object, object]:
-    workflow = yaml.safe_load(path.read_text(encoding="utf-8"))
+    workflow = expand_ci_job_actions(yaml.safe_load(path.read_text(encoding="utf-8")))
     assert isinstance(workflow, dict)
     return workflow
 

@@ -18,9 +18,7 @@ def test_compose_rmi_accepts_documented_values(value: str, tmp_path: Path) -> No
     )
 
     assert payload["status"] == "review"
-    assert "command.container-runtime.compose-destructive-cleanup" in {
-        rule["rule_id"] for rule in payload["rules"]
-    }
+    assert "command.container-runtime.compose-destructive-cleanup" in {rule["rule_id"] for rule in payload["rules"]}
 
 
 @pytest.mark.parametrize(

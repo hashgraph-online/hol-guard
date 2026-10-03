@@ -115,7 +115,11 @@ class RuntimeHookEvidenceWriter:
         self._receipt_failures = 0
         self._stopping = False
         self._drain_deadline: float | None = None
+        # Lock waits stay short so a contended stop returns quickly. The
+        # operation clock covers a cold discovery persist, which is longer
+        # than that wait.
         self._sqlite_timeout_seconds = 0.05
+        self._sqlite_operation_seconds = 5.0
         self._journal_path = journal_path or self._guard_home / "runtime-hook-evidence.jsonl"
         try:
             self._correlation_key: InstallationCorrelationKey | None = load_or_create_installation_correlation_key(
@@ -355,7 +359,10 @@ class RuntimeHookEvidenceWriter:
                         self._in_flight = False
                         return
                 try:
-                    with sqlite_connect_timeout_override(self._sqlite_timeout_seconds):
+                    with sqlite_connect_timeout_override(
+                        self._sqlite_timeout_seconds,
+                        operation_seconds=self._sqlite_operation_seconds,
+                    ):
                         if isinstance(record, _NativeDecisionReceiptRecord):
                             persisted = persist_native_decision_receipt(
                                 store=self._store,

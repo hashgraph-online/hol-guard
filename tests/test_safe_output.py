@@ -1,9 +1,37 @@
+import os
 from pathlib import Path
 
 import pytest
 
 from codex_plugin_scanner.action_runner import _write_outputs
 from codex_plugin_scanner.safe_output import write_text_atomic_no_follow
+
+
+def test_no_follow_inverse_removal_preserves_symlinked_parent_target(tmp_path: Path):
+    from codex_plugin_scanner.safe_output import remove_file_no_follow
+
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    target = outside / "user-file"
+    target.write_bytes(b"preserve")
+    linked = tmp_path / "linked"
+    linked.symlink_to(outside, target_is_directory=True)
+    with pytest.raises(OSError):
+        remove_file_no_follow(linked / "user-file")
+    assert target.read_bytes() == b"preserve"
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX mode restoration")
+def test_no_follow_output_restores_declared_mode_and_removal_is_idempotent(tmp_path: Path):
+    from codex_plugin_scanner.safe_output import remove_file_no_follow, write_bytes_atomic_no_follow
+
+    target = tmp_path / "owned-file"
+    write_bytes_atomic_no_follow(target, b"inverse", mode=0o640)
+    assert target.read_bytes() == b"inverse"
+    assert target.stat().st_mode & 0o777 == 0o640
+    remove_file_no_follow(target)
+    remove_file_no_follow(target)
+    assert not target.exists()
 
 
 def test_atomic_output_replaces_symlink_without_overwriting_target(tmp_path: Path) -> None:

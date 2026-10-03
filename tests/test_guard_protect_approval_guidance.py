@@ -16,6 +16,8 @@ from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import (
 )
 from codex_plugin_scanner.guard.store import GuardStore
 
+pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
+
 
 @pytest.mark.parametrize("rich_available", [True, False])
 @pytest.mark.parametrize("action", ["review", "require-reapproval"])

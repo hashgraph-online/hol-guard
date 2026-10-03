@@ -122,20 +122,42 @@ def _run_guard_execute_contained_test_command(
 
     if guard_home is None or workspace is None or context is None or store is None:
         return 126
+
+    def execution_workspace(original: dict[str, object]) -> Path:
+        if "cwd" not in original:
+            return workspace
+        try:
+            return Path(str(original["cwd"])).resolve(strict=True)
+        except (OSError, RuntimeError) as error:
+            raise RestrictedPytestError(
+                "guard_contained_test_rejected", f"Execution directory is unavailable: {error}",
+            ) from error
+
+    request_validated = False
     try:
         payload = read_contained_test_request(
             Path(args.request_file), str(args.request_sha256), workspace=workspace,
         )
+        request_validated = True
         return run_authorized_contained_test(
             payload, workspace=workspace, timeout_seconds=int(args.timeout_seconds),
             authorize=lambda original: try_native_hook_authority(
-                payload=original, harness="omp", home_dir=context.home_dir,
-                guard_home=guard_home, workspace=workspace, store=store,
+                payload={**original, "guard_containment_receipt_only": True},
+                harness=str(getattr(args, "harness", "omp")), home_dir=context.home_dir,
+                guard_home=guard_home,
+                workspace=execution_workspace(original),
+                store=store,
             ),
         )
     except RestrictedPytestError as error:
         print(f"{error.reason_code}: {error}", file=sys.stderr)
         return error.exit_code
+    finally:
+        if request_validated and getattr(args, "harness", "omp") == "zcode":
+            with suppress(OSError):
+                request_file = Path(args.request_file)
+                request_file.unlink(missing_ok=True)
+                request_file.parent.rmdir()
 
 def _run_guard_command_inspection_command(
     args: argparse.Namespace,

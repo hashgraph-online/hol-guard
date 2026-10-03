@@ -14,17 +14,33 @@ _FIRST = "2026-09-27T12:00:00Z"
 
 
 def _result() -> dict[str, object]:
-    return {"successful": True, "error": None, "data": {
-        "success": True, "session": {"id": "PRIVATE_SESSION_NEVER_PERSIST"},
-        "results": [{"use_case": "Private personal request not retained",
-                     "primary_tool_slugs": ["SLACK_SEARCH_MESSAGES", "SLACK_SEND_MESSAGE"],
-                     "related_tool_slugs": ["SLACK_FIND_CHANNELS"],
-                     "recommended_plan_steps": ["private user text not retained"],
-                     "reference_workbench_snippets": ["do not persist code"]}],
-        "tool_schemas": {slug: {"toolkit": "slack", "tool_slug": slug, "description": "Synthetic",
-                                "input_schema": {"type": "object"}, "hasFullSchema": True}
-                         for slug in ("SLACK_SEARCH_MESSAGES", "SLACK_SEND_MESSAGE")},
-    }}
+    return {
+        "successful": True,
+        "error": None,
+        "data": {
+            "success": True,
+            "session": {"id": "PRIVATE_SESSION_NEVER_PERSIST"},
+            "results": [
+                {
+                    "use_case": "Private personal request not retained",
+                    "primary_tool_slugs": ["SLACK_SEARCH_MESSAGES", "SLACK_SEND_MESSAGE"],
+                    "related_tool_slugs": ["SLACK_FIND_CHANNELS"],
+                    "recommended_plan_steps": ["private user text not retained"],
+                    "reference_workbench_snippets": ["do not persist code"],
+                }
+            ],
+            "tool_schemas": {
+                slug: {
+                    "toolkit": "slack",
+                    "tool_slug": slug,
+                    "description": "Synthetic",
+                    "input_schema": {"type": "object"},
+                    "hasFullSchema": True,
+                }
+                for slug in ("SLACK_SEARCH_MESSAGES", "SLACK_SEND_MESSAGE")
+            },
+        },
+    }
 
 
 def test_optional_guidance_yields_only_action_dependencies():

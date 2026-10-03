@@ -24,6 +24,9 @@ PLAN_SCHEMA_VERSION = 1
 UNKNOWN_NODE_DURATION_SECONDS = 1.0
 MAX_UNSPLIT_FILE_TARGET_MULTIPLIER = 1.15
 MAX_NODES_PER_AFFINITY_GROUP = 8
+# These assertions share one full, independently checked corpus evaluation.
+# Keep them in one process rather than paying the 51,000-case setup per shard.
+SINGLE_PROCESS_FILES = frozenset({"tests/test_guard_command_decision_diff.py"})
 SCHEDULING_ONLY_NODE_IDS = frozenset(
     {
         "tests/test_guard_hook_process_runner.py::"
@@ -40,8 +43,7 @@ SCHEDULING_ONLY_NODE_IDS = frozenset(
         "tests/test_guard_omp_fast_path_regression.py::test_omp_post_tool_read_burst_uses_resident_scanner",
         "tests/test_guard_cloud_review_runtime_recovery.py::"
         "test_cloud_review_worker_survives_ten_thousand_recurring_disconnects",
-        "tests/test_rust_io_ownership_gate.py::"
-        "test_gate_inventories_reachable_io_and_passes_current_sources",
+        "tests/test_rust_io_ownership_gate.py::test_gate_inventories_reachable_io_and_passes_current_sources",
     }
 )
 
@@ -96,7 +98,10 @@ def _split_file_nodes(
     estimates: Mapping[str, float],
     target_seconds: float,
 ) -> list[tuple[str, int, list[str], float]]:
+    """Keep report tests in one process while splitting other large modules."""
     total = sum(estimates[node_id] for node_id in node_ids)
+    if file_path in SINGLE_PROCESS_FILES:
+        return [(file_path, 0, sorted(node_ids), total)]
     split_count = math.ceil(len(node_ids) / MAX_NODES_PER_AFFINITY_GROUP)
     if total > target_seconds * MAX_UNSPLIT_FILE_TARGET_MULTIPLIER:
         split_count = max(split_count, math.ceil(total / target_seconds))

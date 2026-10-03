@@ -15,6 +15,8 @@ sha2.workspace = true
 hex.workspace = true
 
 [build-dependencies]
+guard-command-build = { path = "../guard-command-build" }
+serde_json.workspace = true
 sha2.workspace = true
 
 [lints]

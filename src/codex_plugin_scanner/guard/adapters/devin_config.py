@@ -204,6 +204,12 @@ def load_devin_jsonc(path: Path) -> DevinJsonDocument:
         # must fail closed so install() refuses rather than rewriting it.
         exists = path.exists()
         return DevinJsonDocument(payload={}, had_comments=False, parse_failed=exists, exists=exists)
+    return parse_devin_jsonc(text)
+
+
+def parse_devin_jsonc(text: str) -> DevinJsonDocument:
+    """Parse an already captured generation with the same JSONC inventory rules."""
+
     if not text.strip():
         return DevinJsonDocument(payload={}, had_comments=False, parse_failed=False, exists=True)
     try:

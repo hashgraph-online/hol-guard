@@ -1,4 +1,4 @@
-import { basename, resolve } from "node:path";
+import { resolve } from "node:path";
 import { verifyDatabasePrivacy } from "./database-privacy";
 import {
   composeCommand,
@@ -81,18 +81,12 @@ function repoRelativeWheel(path: string): string {
   }
   return absolute.slice(root.length);
 }
-async function resolveWheel(runner: CommandRunner, version: string): Promise<string> {
+export function resolveWheel(): string {
   if (Bun.env.HOL_GUARD_WHEEL) return repoRelativeWheel(Bun.env.HOL_GUARD_WHEEL);
-  requireSuccess(
-    await runner(["uv", "build", "--wheel", "--out-dir", "dist"], { cwd: REPO_ROOT }),
-    "wheel build",
+  throw new Error(
+    "HOL_GUARD_WHEEL must name a native-injected wheel inside this worktree; "
+    + "use a verified CI wheel or scripts/build_native_hol_guard_wheel.py with verified runtime provenance",
   );
-  const wheels = Array.fromAsync(
-    new Bun.Glob(`hol_guard-${version.replaceAll("-", "_")}-*.whl`).scan({ cwd: resolve(REPO_ROOT, "dist") }),
-  );
-  const matches = await wheels;
-  if (matches.length !== 1) throw new Error(`expected exactly one built wheel, found ${matches.length}`);
-  return `dist/${basename(matches[0])}`;
 }
 async function waitForReady(origin: string, timeoutMs = 60_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
@@ -472,7 +466,7 @@ export async function runLab(runner: CommandRunner = runCommand): Promise<LabEvi
   const origin = `http://127.0.0.1:${port}`;
   const version = Bun.env.HOL_GUARD_LAB_EXPECTED_VERSION
     ?? packageVersion(await Bun.file(resolve(REPO_ROOT, "pyproject.toml")).text());
-  const wheel = await resolveWheel(runner, version);
+  const wheel = resolveWheel();
   const environment = {
     GUARD_TEST_PROJECT: project,
     HOL_GUARD_LAB_EXPECTED_VERSION: version,

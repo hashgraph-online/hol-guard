@@ -21,6 +21,8 @@ from codex_plugin_scanner.guard.approvals import apply_approval_resolution
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
 
+pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
+
 
 def _request(tmp_path: Path, request_id: str) -> GuardApprovalRequest:
     return GuardApprovalRequest(

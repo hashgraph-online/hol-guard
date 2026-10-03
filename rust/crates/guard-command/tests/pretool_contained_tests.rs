@@ -122,35 +122,46 @@ fn direct_node_tests_require_containment_without_weakening_other_execution() {
 
 #[test]
 fn vitest_wrapper_and_resolved_script_require_the_same_protected_profile() {
-    for command in [
-        "bunx vitest run tests/example.test.ts",
-        "npx --no-install vitest run",
-        "vitest run",
-        "node /home/tester/project/node_modules/vitest/vitest.mjs run tests/example.test.ts",
-    ] {
-        let result = classify("omp", command);
-        assert_eq!(result.decision, "deny", "{command}");
-        let expected = if cfg!(target_os = "macos") {
-            "native_vitest_readonly_containment_required"
-        } else {
-            "native_command_review_required"
-        };
-        assert_eq!(result.reason_code, expected, "{command}");
-    }
-    for command in [
-        "bunx vitest@evil run",
-        "bunx other run",
-        "vitest watch",
-        "bunx vitest run && rm -rf /",
-        "bunx vitest run $(cat .env)",
-        "bunx vitest run > .env",
-    ] {
-        let result = classify("omp", command);
-        assert_ne!(
-            result.reason_code, "native_vitest_readonly_containment_required",
-            "{command}"
-        );
-        assert_ne!(result.decision, "allow", "{command}");
+    for harness in ["omp", "zcode"] {
+        for command in [
+            "bunx vitest run tests/example.test.ts",
+            "bun x vitest run tests/example.test.ts",
+            "bun --cwd /project x vitest run tests/example.test.ts",
+            "bun --cwd=/project x --no-install vitest run tests/example.test.ts",
+            "bunx vitest run __tests__/one.test.ts __tests__/two.test.ts",
+            "npx --no-install vitest run",
+            "vitest run",
+            "node /home/tester/project/node_modules/vitest/vitest.mjs run tests/example.test.ts",
+        ] {
+            let result = classify(harness, command);
+            assert_eq!(result.decision, "deny", "{command}");
+            let expected = if cfg!(target_os = "macos") {
+                "native_vitest_readonly_containment_required"
+            } else if command.starts_with("bun ") {
+                "native_package_review"
+            } else {
+                "native_command_review_required"
+            };
+            assert_eq!(result.reason_code, expected, "{command}");
+        }
+        for command in [
+            "bunx vitest@evil run",
+            "bun --cwd /project x vitest@evil run",
+            "bun --cwd /project x vitest watch",
+            "bun --cwd /project x vitest run && rm -rf /",
+            "bunx other run",
+            "vitest watch",
+            "bunx vitest run && rm -rf /",
+            "bunx vitest run $(cat .env)",
+            "bunx vitest run > .env",
+        ] {
+            let result = classify(harness, command);
+            assert_ne!(
+                result.reason_code, "native_vitest_readonly_containment_required",
+                "{command}"
+            );
+            assert_ne!(result.decision, "allow", "{command}");
+        }
     }
 }
 

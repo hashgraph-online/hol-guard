@@ -9,11 +9,16 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import math
 import os
 import shlex
 import stat
 import sys
 import sysconfig
+import time
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 
 
@@ -24,6 +29,46 @@ class CodexHookIntegrityError(RuntimeError):
         super().__init__(message)
         self.reason = reason
         self.message = message
+
+
+_VALIDATION_DEADLINE: ContextVar[float | None] = ContextVar("codex_hook_validation_deadline", default=None)
+
+
+def active_hook_validation_deadline() -> float | None:
+    return _VALIDATION_DEADLINE.get()
+
+
+def check_hook_validation_deadline() -> None:
+    deadline = active_hook_validation_deadline()
+    if deadline is not None and time.monotonic() >= deadline:
+        raise CodexHookIntegrityError(
+            "codex_hook_validation_deadline_expired",
+            "Codex hook identity validation exhausted the operation deadline.",
+        )
+
+
+@contextmanager
+def hook_validation_deadline(deadline: float | None) -> Iterator[None]:
+    """Carry an I/O budget only; this scope grants no mutation authority.
+
+    Nested legacy validators inherit the original budget. A narrower scope
+    may shorten it, but cannot renew it. OS calls are checked on return; this
+    does not claim to interrupt a stalled filesystem or identity service.
+    """
+    if deadline is not None and (isinstance(deadline, bool) or not math.isfinite(deadline)):
+        raise CodexHookIntegrityError(
+            "codex_hook_validation_deadline_invalid",
+            "Codex hook validation budget is invalid.",
+        )
+    parent = active_hook_validation_deadline()
+    effective = parent if deadline is None else deadline if parent is None else min(parent, deadline)
+    token = _VALIDATION_DEADLINE.set(effective)
+    try:
+        check_hook_validation_deadline()
+        yield
+        check_hook_validation_deadline()
+    finally:
+        _VALIDATION_DEADLINE.reset(token)
 
 
 def split_hook_command(command: object) -> list[str] | None:
@@ -177,7 +222,10 @@ def _is_installed_python_package_file(path: Path) -> bool:
 def canonical_path(path: Path) -> str:
     """Return the non-strict canonical absolute spelling used in identities."""
 
-    return str(path.expanduser().resolve(strict=False))
+    check_hook_validation_deadline()
+    result = str(path.expanduser().resolve(strict=False))
+    check_hook_validation_deadline()
+    return result
 
 
 def describe_regular_file(path: Path, *, role: str, executable_required: bool) -> dict[str, object]:
@@ -202,6 +250,7 @@ def describe_executable_file(path: Path, *, role: str) -> dict[str, object]:
     both the absolute invocation path and the canonical target instead.
     """
 
+    check_hook_validation_deadline()
     invocation = path.expanduser().absolute()
     try:
         invocation_metadata = invocation.lstat()
@@ -211,6 +260,7 @@ def describe_executable_file(path: Path, *, role: str) -> dict[str, object]:
             f"codex_hook_{role}_missing",
             f"The Codex hook {role} is missing; repair the installation.",
         ) from exc
+    check_hook_validation_deadline()
     is_symlink = stat.S_ISLNK(invocation_metadata.st_mode)
     if not is_symlink and not stat.S_ISREG(invocation_metadata.st_mode):
         raise CodexHookIntegrityError(
@@ -241,6 +291,7 @@ def describe_executable_file(path: Path, *, role: str) -> dict[str, object]:
 
 
 def verify_regular_file_identity(identity: object) -> None:
+    check_hook_validation_deadline()
     if not isinstance(identity, dict):
         raise CodexHookIntegrityError(
             "codex_hook_file_identity_invalid",
@@ -292,6 +343,7 @@ def verify_regular_file_identity(identity: object) -> None:
 
 
 def verify_executable_file_identity(identity: object) -> None:
+    check_hook_validation_deadline()
     if not isinstance(identity, dict):
         raise CodexHookIntegrityError(
             "codex_hook_interpreter_identity_invalid",
@@ -363,6 +415,7 @@ def verify_executable_file_identity(identity: object) -> None:
 
 
 def validate_regular_file(path: Path, *, role: str, executable_required: bool) -> os.stat_result:
+    check_hook_validation_deadline()
     try:
         metadata = path.lstat()
     except OSError as exc:
@@ -370,6 +423,7 @@ def validate_regular_file(path: Path, *, role: str, executable_required: bool) -
             f"codex_hook_{role}_missing",
             f"The Codex hook {role} is missing; repair the installation.",
         ) from exc
+    check_hook_validation_deadline()
     if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
         raise CodexHookIntegrityError(
             f"codex_hook_{role}_not_regular",
@@ -397,6 +451,7 @@ def validate_regular_file(path: Path, *, role: str, executable_required: bool) -
             and (role == "config_target" or _is_installed_python_package_file(path))
             and _owner_is_only_group_member(current_uid, metadata.st_gid)
         )
+        check_hook_validation_deadline()
         unsafe_group_write = bool(mode & stat.S_IWGRP) and not (
             trusted_interpreter_group_write or trusted_user_private_group_write
         )
@@ -415,14 +470,22 @@ def validate_regular_file(path: Path, *, role: str, executable_required: bool) -
             f"codex_hook_{role}_not_executable",
             f"The Codex hook {role} is not executable; repair the installation.",
         )
+    check_hook_validation_deadline()
     return metadata
 
 
 def _sha256_file(path: Path) -> str:
+    check_hook_validation_deadline()
     digest = hashlib.sha256()
     with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+        while True:
+            check_hook_validation_deadline()
+            chunk = handle.read(1024 * 1024)
+            check_hook_validation_deadline()
+            if not chunk:
+                break
             digest.update(chunk)
+    check_hook_validation_deadline()
     return digest.hexdigest()
 
 

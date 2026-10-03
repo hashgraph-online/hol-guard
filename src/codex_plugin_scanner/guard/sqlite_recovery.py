@@ -4,29 +4,20 @@ from __future__ import annotations
 
 import sqlite3
 import time
-from contextlib import suppress
+from contextlib import closing, suppress
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Literal
 from uuid import uuid4
 
+from .sqlite_deadline_connection import connect_sqlite_with_deadline
+from .sqlite_errors import sqlite_error_is_fatal, sqlite_error_is_io
 from .sqlite_quarantine_forensics import QUARANTINE_FORENSICS_SUFFIX
 
-FATAL_SQLITE_ERROR_MARKERS = (
-    "database disk image is malformed",
-    "database corruption",
-    "file is not a database",
-)
-SQLITE_IO_ERROR_MARKER = "disk i/o error"
 SQLiteStoreProbe = Literal["fatal", "healthy", "io", "unknown"]
 SQLiteFileIdentity = tuple[int, int, int, int, int]
 SQLiteStoreIdentity = tuple[SQLiteFileIdentity | None, SQLiteFileIdentity | None, SQLiteFileIdentity | None]
-
-
-def sqlite_error_is_io(error: BaseException) -> bool:
-    code = getattr(error, "sqlite_errorcode", None)
-    return (isinstance(code, int) and code & 0xFF == 10) or SQLITE_IO_ERROR_MARKER in str(error).lower()
 
 
 def _sqlite_readonly_uri(path: Path) -> str:
@@ -35,13 +26,14 @@ def _sqlite_readonly_uri(path: Path) -> str:
 
 def _probe_sqlite_store(path: Path) -> SQLiteStoreProbe:
     try:
-        with sqlite3.connect(_sqlite_readonly_uri(path), uri=True, timeout=1.0) as connection:
+        with closing(
+            connect_sqlite_with_deadline(_sqlite_readonly_uri(path), uri=True, timeout_seconds=1.0)
+        ) as connection:
             result = connection.execute("pragma quick_check").fetchone()
     except sqlite3.DatabaseError as error:
-        message = str(error).lower()
-        if any(marker in message for marker in FATAL_SQLITE_ERROR_MARKERS):
+        if sqlite_error_is_fatal(error):
             return "fatal"
-        if SQLITE_IO_ERROR_MARKER in message:
+        if sqlite_error_is_io(error):
             return "io"
         return "unknown"
     return "healthy" if result == ("ok",) else "fatal"
@@ -50,7 +42,7 @@ def _probe_sqlite_store(path: Path) -> SQLiteStoreProbe:
 def _guard_home_accepts_sqlite_write(guard_home: Path) -> bool:
     probe_path = guard_home / f"storage-probe-{uuid4().hex}.db"
     try:
-        with sqlite3.connect(probe_path, timeout=0.1) as probe:
+        with closing(connect_sqlite_with_deadline(probe_path, timeout_seconds=0.1)) as probe, probe:
             probe.execute("create table probe (value integer)")
             probe.execute("insert into probe values (1)")
         return probe_path.is_file()
@@ -95,7 +87,7 @@ def sqlite_store_probe_detail(
 ) -> SQLiteStoreProbeDetail:
     """Revalidate the current path before permitting destructive recovery."""
 
-    io_error = SQLITE_IO_ERROR_MARKER in str(error).lower()
+    io_error = sqlite_error_is_io(error)
     if not fatal_error and not io_error:
         return SQLiteStoreProbeDetail(
             proven_unusable=False,
@@ -391,8 +383,9 @@ def salvage_local_cli_state(*, source: Path, destination: Path) -> bool:
     try:
         source_uri = f"{source.resolve().as_uri()}?mode=ro"
         with (
-            sqlite3.connect(source_uri, uri=True, timeout=1.0) as src,
-            sqlite3.connect(destination, timeout=1.0) as dst,
+            closing(connect_sqlite_with_deadline(source_uri, uri=True, timeout_seconds=1.0)) as src,
+            closing(connect_sqlite_with_deadline(destination, timeout_seconds=1.0)) as dst,
+            dst,
         ):
             from .store_local_cli_schema import ensure_local_cli_schema
 

@@ -191,8 +191,7 @@ def test_symlink_metadata_not_contents():
             encoding="utf-8",
         )
         result = run_restricted_pytest(
-            [sys.executable, "-m", "pytest", "--confcutdir", str(project),
-             "-c", str(configuration), str(source), "-q"],
+            [sys.executable, "-m", "pytest", "--confcutdir", str(project), "-c", str(configuration), str(source), "-q"],
             workspace=workspace,
             cwd=project,
             timeout_seconds=60,

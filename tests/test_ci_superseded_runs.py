@@ -12,8 +12,10 @@ from urllib.parse import parse_qs, urlsplit
 import pytest
 import yaml
 
+from tests.support.ci_workflow import expand_ci_job_actions
+
 ROOT = Path(__file__).resolve().parents[1]
-WORKFLOW = yaml.safe_load((ROOT / ".github/workflows/ci-superseded-runs.yml").read_text())
+WORKFLOW = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/ci-superseded-runs.yml").read_text()))
 SCRIPT = WORKFLOW["jobs"]["retire"]["steps"][0]["run"]
 MODULE = ModuleType("superseded_workflow_test")
 exec(compile(SCRIPT, "ci-superseded-runs.yml", "exec"), MODULE.__dict__)

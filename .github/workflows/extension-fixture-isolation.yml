@@ -1,0 +1,76 @@
+name: Extension fixture isolation acceptance
+on:
+  pull_request:
+    paths:
+      - rust/**
+      - contributions/command-sources/**
+      - contributions/mcp-servers/**
+      - contracts/extensions/**
+      - scripts/build_native_command_program.py
+      - scripts/prepare_extension_contribution.py
+      - scripts/refresh_extension_artifacts.py
+      - scripts/ci/verify_native_command_program.py
+      - scripts/ci/check_extension_fixture_isolation.py
+      - tests/test_native_build_projection_workflows.py
+      - pyproject.toml
+      - .github/workflows/extension-fixture-isolation.yml
+  push:
+    branches: [main]
+    paths:
+      - rust/**
+      - contributions/command-sources/**
+      - contributions/mcp-servers/**
+      - contracts/extensions/**
+      - scripts/build_native_command_program.py
+      - scripts/prepare_extension_contribution.py
+      - scripts/refresh_extension_artifacts.py
+      - scripts/ci/verify_native_command_program.py
+      - scripts/ci/check_extension_fixture_isolation.py
+      - tests/test_native_build_projection_workflows.py
+      - pyproject.toml
+      - .github/workflows/extension-fixture-isolation.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: extension-fixture-isolation-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  source-only-acceptance:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: '0.9.26'
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - uses: ./.github/actions/setup-rust
+        with:
+          cache-key: extension-fixture-isolation
+      - name: Install locked test tools
+        run: uv sync --frozen --no-dev --group ci-test --python 3.12
+      - name: Check acceptance harness and native build contracts
+        run: |
+          uv run --no-sync ruff check scripts/ci/check_extension_fixture_isolation.py tests/test_native_build_projection_workflows.py
+          uv run --no-sync ruff format --check scripts/ci/check_extension_fixture_isolation.py tests/test_native_build_projection_workflows.py
+          uv run --no-sync pytest tests/test_native_build_projection_workflows.py --tb=short
+      - name: Exercise unchanged contributor paths without fixture rebuilds
+        run: |
+          uv run --no-sync python scripts/ci/check_extension_fixture_isolation.py \
+            --target-dir "$GITHUB_WORKSPACE/rust/target/fixture-acceptance" \
+            --output "$RUNNER_TEMP/fixture-isolation-evidence/acceptance.json"
+      - name: Retain source-only acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: extension-fixture-isolation-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/fixture-isolation-evidence/
+          if-no-files-found: error
+          retention-days: 7

@@ -1524,10 +1524,12 @@ def test_trusted_recovery_overlays_only_valid_failure_kind(
         cwd: Path,
         environment: Mapping[str, str],
         timeout_seconds: float,
+        deadline_monotonic: float | None = None,
         output_limit: int = 1_000_000,
         allow_windows_breakaway: bool = False,
     ) -> BoundedHookProcessResult:
         del command, input_text, cwd, timeout_seconds, output_limit
+        assert deadline_monotonic is None
         assert allow_windows_breakaway
         environments.append(dict(environment))
         return BoundedHookProcessResult(0, "", False, False)

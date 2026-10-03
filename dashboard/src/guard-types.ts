@@ -985,6 +985,7 @@ export type GuardSettings = {
   harness_risk_actions: Record<string, Record<string, string>>;
   approval_wait_timeout_seconds: number;
   approval_surface_policy: string;
+  blocked_request_mode?: "safe-alternative" | "ask";
   approval_browser_delay_seconds: number;
   approval_browser_immediate_severity: RiskSignalV2Severity;
   telemetry: boolean;

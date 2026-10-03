@@ -12,9 +12,11 @@ from ..adapters.cline import ClineHarnessAdapter
 from ..adapters.contracts import contract_for
 from ..adapters.cursor import CursorHarnessAdapter
 from ..agent_safety_guidance import install_agent_safety_guidance, uninstall_agent_safety_guidance
+from ..codex_install_transaction import codex_install_transaction
 from ..managed_install_proof import bind_managed_install_proof, verify_managed_install_proof
 from ..runtime.mcp_skill_firewall import build_mcp_skill_firewall_fingerprints, portal_skill_identity
 from ..runtime.skill_protection import build_skill_identity, detect_skill_content_risk, skill_identity_metadata
+from ..runtime_transition import assert_transition_mutation_allowed
 from ..store import GuardStore
 from .cursor_actions import (
     cursor_install_surface,
@@ -86,6 +88,26 @@ def apply_managed_install(
     *,
     surface: str | None = None,
 ) -> dict[str, object]:
+    # The adapter's publication and the corresponding store proof belong to
+    # the same home-wide ownership interval, including multi-app operations.
+    with codex_install_transaction(context.guard_home, context.guard_home / "managed", actor=f"managed.{command}"):
+        return _apply_managed_install_owned(
+            command, requested_harness, install_all, context, store, workspace, now, surface=surface
+        )
+
+
+def _apply_managed_install_owned(
+    command: str,
+    requested_harness: str | Sequence[str] | None,
+    install_all: bool,
+    context: HarnessContext,
+    store: GuardStore,
+    workspace: str | None,
+    now: str,
+    *,
+    surface: str | None = None,
+) -> dict[str, object]:
+    assert_transition_mutation_allowed(context.guard_home)
     targets = _resolve_targets(command, requested_harness, install_all, context, store)
     active = command == "install"
     managed_installs: list[dict[str, object]] = []

@@ -1,6 +1,66 @@
 use super::*;
 
 #[test]
+fn codex_browser_process_timing_is_not_a_credential_selector() {
+    for token in [
+        "linux:12345",
+        "windows:134036121234567890",
+        "posix:Thu Oct  1 01:02:03 2026",
+    ] {
+        let payload = json!({"tool_name": "Bash", "tool_input": {"command": "pwd"},
+            "guard_codex_browser_wait_process": {"pid": 123, "startToken": token}});
+        let mut installed = policy("allow");
+        installed
+            .risk_actions
+            .insert("local_secret_read".into(), "block".into());
+        let native =
+            guard_command::pretool::evaluate_pre_tool_envelope("codex", "PreToolUse", &payload);
+        let result = apply_pre_tool_policy(&snapshot(installed), &payload, native).unwrap();
+        assert_eq!(result.decision, "allow", "{}", result.reason_code);
+    }
+}
+
+#[test]
+fn codex_browser_process_metadata_does_not_hide_credentials() {
+    for payload in [
+        json!({"tool_name": "Bash", "tool_input": {"command": "pwd", "startToken": "linux:123"}}),
+        json!({"tool_name": "Bash", "tool_input": {"command": "pwd"},
+            "guard_codex_browser_wait_process": {"pid": 123, "startToken": "private credential"}}),
+        json!({"tool_name": "Bash", "tool_input": {"command": "pwd"},
+            "guard_codex_browser_wait_process": {"pid": 0, "startToken": "linux:123"}}),
+        json!({"tool_name": "Bash", "tool_input": {"command": "pwd"},
+            "guard_codex_browser_wait_process": {"pid": 123, "startToken": "linux:123", "secret": "private"}}),
+        json!({"tool_name": "Bash", "tool_input": {"command": "pwd"},
+            "nested": {"guard_codex_browser_wait_process": {"pid": 123, "startToken": "linux:123"}}}),
+        json!({"tool_name": "Bash", "tool_input": {"command": "cat credentials.yaml"},
+            "guard_codex_browser_wait_process": {"pid": 123, "startToken": "linux:123"}}),
+    ] {
+        let mut installed = policy("allow");
+        installed
+            .risk_actions
+            .insert("local_secret_read".into(), "block".into());
+        let native =
+            guard_command::pretool::evaluate_pre_tool_envelope("codex", "PreToolUse", &payload);
+        let result = apply_pre_tool_policy(&snapshot(installed), &payload, native).unwrap();
+        assert_eq!(result.decision, "deny");
+    }
+}
+
+#[test]
+fn codex_browser_process_metadata_exception_does_not_apply_to_other_harnesses() {
+    let payload = json!({"tool_name": "Bash", "tool_input": {"command": "pwd"},
+        "guard_codex_browser_wait_process": {"pid": 123, "startToken": "linux:123"}});
+    let mut installed = policy("allow");
+    installed
+        .risk_actions
+        .insert("local_secret_read".into(), "block".into());
+    let native =
+        guard_command::pretool::evaluate_pre_tool_envelope("claude-code", "PreToolUse", &payload);
+    let result = apply_pre_tool_policy(&snapshot(installed), &payload, native).unwrap();
+    assert_eq!(result.decision, "deny");
+}
+
+#[test]
 fn codex_command_output_budget_is_not_a_credential_read() {
     let mut installed_policy = policy("allow");
     installed_policy

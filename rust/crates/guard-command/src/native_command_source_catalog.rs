@@ -71,7 +71,7 @@ fn trust_rows(bytes: &[u8]) -> Result<(TrustMap, BTreeMap<String, String>), &'st
 }
 
 /// Existing MCP JSON remains canonical and is lowered alongside command sources.
-fn lower_catalog(
+pub(super) fn lower_catalog(
     sources: &[&[u8]],
     mcp_sources: &[&[u8]],
     trust: &[u8],

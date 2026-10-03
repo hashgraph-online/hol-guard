@@ -145,6 +145,7 @@ _PRESENTATION_PATHS: Final = frozenset(
         # continuation surfaces. These render or forward decisions; they
         # never compute them.
         "src/codex_plugin_scanner/guard/adapters/cursor_native_approval.py",
+        "src/codex_plugin_scanner/guard/adapters/zcode_contained_tests.py",
         "src/codex_plugin_scanner/guard/approval_scope_support.py",
         "src/codex_plugin_scanner/guard/approvals.py",
         "src/codex_plugin_scanner/guard/codex_app_server.py",
@@ -166,6 +167,7 @@ _SERVICE_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/daemon/manager.py",
         "src/codex_plugin_scanner/guard/daemon/runtime_peer.py",
         "src/codex_plugin_scanner/guard/daemon/start_classification.py",
+        "src/codex_plugin_scanner/guard/frozen_daemon_runtime.py",
         "src/codex_plugin_scanner/guard/runtime/mcp_connection_identity.py",
         "src/codex_plugin_scanner/guard/extension_builder/io.py",
         "src/codex_plugin_scanner/guard/frozen_runtime_commands.py",
