@@ -45,6 +45,9 @@ jobs:
       - uses: ./.github/actions/setup-rust
         with:
           cache-key: pytest-native-command
+          components: rustfmt
+      - name: Check native formatting before compilation
+        run: cargo fmt --manifest-path rust/Cargo.toml --all --check
       - name: Build native command evaluators once for pytest shards
         run: |
           cargo build --manifest-path rust/Cargo.toml --locked --release -p guard-command -p hol-guard-runtime --bin guard-command-source --bin hol-guard-runtime
@@ -65,6 +68,16 @@ jobs:
           uv run --no-sync python scripts/render_command_extension_directory.py
           uv run --no-sync python scripts/export_extension_directory.py --check
           uv run --no-sync python scripts/render_command_extension_directory.py --check
+      - name: Check native contract groups before pytest fan-out
+        env:
+          HOL_GUARD_NATIVE_SOURCE_COMPILER: ${{ github.workspace }}/rust/target/release/guard-command-source
+          HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER: ${{ github.workspace }}/rust/target/release/guard-command-source
+          HOL_GUARD_NATIVE_BINARY: ${{ github.workspace }}/rust/target/release/hol-guard-runtime
+          HOL_GUARD_NATIVE_REGRESSION: "1"
+        run: |
+          uv run --no-sync pytest -q --tb=short \
+            tests/test_guard_command_corpus_native_contract.py::test_native_contract_validates_every_authored_signature_without_rewriting_evidence \
+            tests/test_pi_legacy_source_contract.py
       - name: Upload native command evaluators
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:

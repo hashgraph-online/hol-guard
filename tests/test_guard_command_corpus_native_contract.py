@@ -119,10 +119,15 @@ def native_samples() -> dict[str, tuple[CommandCorpusCase, OracleRecord, NativeC
 def test_native_contract_validates_every_authored_signature_without_rewriting_evidence(
     native_samples: dict[str, tuple[CommandCorpusCase, OracleRecord, NativeCommandEvaluation]],
 ) -> None:
+    failures: list[str] = []
     for group_id, (case, oracle, reviewed) in native_samples.items():
         before = json.dumps(reviewed.payload, sort_keys=True)
-        assert contract.validate_native_case(case, oracle, reviewed) == group_id
+        try:
+            assert contract.validate_native_case(case, oracle, reviewed) == group_id
+        except ValueError as error:
+            failures.append(str(error))
         assert json.dumps(reviewed.payload, sort_keys=True) == before
+    assert not failures, "Native contract groups requiring investigation:\n" + "\n".join(failures)
 
 
 @pytest.mark.parametrize("mutation", ("model_uncertainty", "evaluation_error", "native_reason", "benign_proof"))
@@ -170,3 +175,33 @@ def test_native_contract_rejects_decision_floor_drift_in_either_direction(
     )
     with pytest.raises(ValueError, match="decision_plane_floor"):
         contract.validate_native_case(case, oracle, cast("NativeCommandEvaluation", changed))
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("native_floor", "private/path/secret-token"),
+        ("native_reason", "secret_token_that_looks_like_a_reason"),
+        ("model_text", "command with a private argument"),
+        ("uncertain_rules", ["private-rule-name"]),
+    ],
+)
+def test_contract_diagnostics_do_not_print_arbitrary_native_values(field: str, value: object) -> None:
+    rendered = contract._diagnostic_value(field, value)
+    assert rendered.startswith("sha256:")
+    assert len(rendered) == 71
+    assert "private" not in rendered and "secret" not in rendered
+
+
+@pytest.mark.parametrize(
+    "field,value,expected",
+    [
+        ("native_floor", "require-reapproval", "require-reapproval"),
+        ("decision_plane_floor", "review", "review"),
+        ("explicitly_benign", False, "false"),
+        ("observation_count", 15, "15"),
+        ("evaluation_error", None, "null"),
+    ],
+)
+def test_contract_diagnostics_show_actionable_finite_facts(field: str, value: object, expected: str) -> None:
+    assert contract._diagnostic_value(field, value) == expected
