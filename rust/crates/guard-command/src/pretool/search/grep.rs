@@ -20,14 +20,16 @@ fn safe_arguments(arguments: &[String], context: ReadContext<'_>, stdin_only: bo
     let mut excluded_directories = Vec::new();
     let mut pending_exclusion = None;
     let mut includes_present = false;
+    let mut positional_started = false;
     for argument in arguments {
         if let Some(directory) = pending_exclusion.take() {
-            if exact_exclusion(argument) {
-                if directory {
-                    excluded_directories.push(argument.as_str());
-                } else {
-                    excluded_files.push(argument.as_str());
-                }
+            if !exact_exclusion(argument) {
+                return false;
+            }
+            if directory {
+                excluded_directories.push(argument.as_str());
+            } else {
+                excluded_files.push(argument.as_str());
             }
             continue;
         }
@@ -53,6 +55,9 @@ fn safe_arguments(arguments: &[String], context: ReadContext<'_>, stdin_only: bo
         if options_enabled && argument.starts_with("--") {
             let (name, attached) = argument.split_once('=').unwrap_or((argument.as_str(), ""));
             if matches!(name, "--exclude" | "--exclude-dir") {
+                if positional_started {
+                    return false;
+                }
                 let directory = name == "--exclude-dir";
                 if attached.is_empty() {
                     if argument.contains('=') {
@@ -148,6 +153,7 @@ fn safe_arguments(arguments: &[String], context: ReadContext<'_>, stdin_only: bo
         } else {
             pattern_supplied = true;
         }
+        positional_started = true;
     }
     pending_value.is_none()
         && pending_exclusion.is_none()

@@ -33,10 +33,10 @@ def create_cases(root: Path) -> tuple[Path, Path, list[WorkflowCase]]:
     (workspace / "unsafe-tests/.env").write_text("SYNTHETIC_ONLY=not-a-real-secret\n")
     (workspace / "grep-exclusions/fixtures/tls").mkdir(parents=True)
     (workspace / "grep-exclusions/one.ts").write_text(source)
-    (workspace / "grep-exclusions/fixtures/tls/test-root-ca.key").write_text("SYNTHETIC_ONLY\n")
+    (workspace / "grep-exclusions/fixtures/tls/test-root-ca.key").write_text("ordinary-key-only\n")
     (workspace / "grep-files").mkdir()
     (workspace / "grep-files/one.ts").write_text(source)
-    (workspace / "grep-files/private.key").write_text("SYNTHETIC_ONLY\n")
+    (workspace / "grep-files/private.key").write_text("ordinary-key-only\n")
     try:
         (workspace / "unsafe-tests/alias.ts").symlink_to(workspace / ".env")
     except OSError as error:

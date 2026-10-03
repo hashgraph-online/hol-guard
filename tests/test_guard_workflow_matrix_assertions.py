@@ -39,6 +39,20 @@ def test_live_execution_requires_every_exact_command_and_success():
     assert_execution([case], events)
 
 
+def test_live_exclusion_execution_rejects_excluded_path_output():
+    case = WorkflowCase("grep-exclude-file", "grep -rn --exclude=private.key ordinary grep-files/")
+    events = [
+        {"type": "tool_execution_start", "args": {"command": case.command}},
+        {
+            "type": "tool_execution_end",
+            "isError": False,
+            "result": {"content": [{"type": "text", "text": "grep-files/private.key:1:ordinary"}]},
+        },
+    ]
+    with pytest.raises(AssertionError, match="excluded path appeared"):
+        assert_execution([case], events)
+
+
 @pytest.mark.parametrize("value", [None, [], "invalid"])
 def test_malformed_tool_arguments_fail_as_assertions(value):
     events = [

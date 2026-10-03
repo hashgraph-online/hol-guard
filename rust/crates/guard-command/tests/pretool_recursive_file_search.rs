@@ -42,7 +42,7 @@ fn recursive_search_exclusions_prove_only_unread_descendants() {
             ("grep -rn ordinary tests/", false),
             ("grep -rn --exclude-dir=fixtures ordinary tests/", true),
             ("grep -rn --exclude-dir fixtures ordinary tests/", true),
-            ("grep -rn ordinary tests/ --exclude-dir=fixtures", true),
+            ("grep -rn ordinary tests/ --exclude-dir=fixtures", false),
             ("grep -rn --exclude-dir=fixture ordinary tests/", false),
             ("grep -rn --exclude=fixtures ordinary tests/", false),
             ("grep -rn --exclude=test-root-ca.key ordinary tests/", true),

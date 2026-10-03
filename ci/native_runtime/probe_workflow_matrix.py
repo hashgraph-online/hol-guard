@@ -113,6 +113,11 @@ def assert_execution(cases: list[WorkflowCase], events: list[dict[str, object]])
                 raise AssertionError("protected tests produced no passing test output")
         else:
             commands.append(args.get("command"))
+            if "--exclude" in case.command:
+                output = json.dumps(end.get("result", {}))
+                for excluded_path in ("grep-exclusions/fixtures/tls/test-root-ca.key", "grep-files/private.key"):
+                    if excluded_path in output:
+                        raise AssertionError(f"excluded path appeared in live output: {excluded_path}")
     if commands != [case.command for case in cases]:
         raise AssertionError("Pi omitted, duplicated, reordered, or changed a workflow command")
     if len(ends) != len(cases) or any(event.get("isError") is not False for event in ends):
