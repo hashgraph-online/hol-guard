@@ -9,6 +9,7 @@ from .review import Review
 
 def _catalog_tests() -> list[str]:
     return [
+        "@requires_fresh_projections",
         "def test_generated_catalog_is_external_and_off() -> None:",
         "    extension = BUILT_IN_COMMAND_EXTENSION_REGISTRY.get(_CATALOG_ID)",
         "    assert extension is not None",
@@ -38,6 +39,7 @@ def render_mcp_tests(discovery: Discovery, review: Review) -> str:
             "    mcp_tool_state,",
             "    validate_mcp_contribution,",
             ")",
+            "from tests.support.extension_freshness import requires_fresh_projections",
             "",
             *emit(discovery.metadata.catalog_id, prefix="_CATALOG_ID = "),
             *emit(cases, prefix="_TOOL_CASES = "),

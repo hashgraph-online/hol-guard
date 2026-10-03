@@ -89,6 +89,7 @@
       "command.mcp-contribos",
       "command.mcp-filesystem",
       "command.mcp-instapods",
+      "command.mcp-mail-server",
       "command.mcp-pr-ui-compare",
       "command.mcp-reaper",
       "command.noodle",
