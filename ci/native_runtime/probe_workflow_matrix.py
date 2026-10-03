@@ -190,7 +190,7 @@ def run_live(
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--live-omp", action="store_true")
-    parser.add_argument("--model", default="devin/swe-2")
+    parser.add_argument("--model", default="opencode-go/deepseek-flash")
     parser.add_argument("--expected-source-sha", help="Fail before testing if the installed native build is stale")
     parser.add_argument("--test-project", type=Path, help="Existing isolated Vitest project; no dependencies installed")
     parser.add_argument("--output", type=Path, required=True)

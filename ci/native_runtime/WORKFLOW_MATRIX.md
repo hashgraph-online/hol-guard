@@ -9,7 +9,7 @@ python -m ci.native_runtime.probe_workflow_matrix --live-omp \
   --output /absolute/path/to/private-evidence
 ```
 
-The model defaults to `devin/swe-2`. `omp` must be on PATH. The existing isolated
+The model defaults to `opencode-go/deepseek-flash`. `omp` must be on PATH. The existing isolated
 test project must contain `tests/workflow.test.mjs`, `tests/zcode-multi.test.mjs`
 and its already-installed local Vitest. This runner never installs dependencies,
 enables Codex, grants approvals, changes user policy, or mutates the test project.
