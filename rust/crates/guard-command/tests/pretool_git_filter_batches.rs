@@ -37,7 +37,10 @@ fn assert_fixture_git_dir(repository: &std::path::Path) {
         .unwrap();
     assert!(output.status.success());
     let actual = std::path::PathBuf::from(String::from_utf8(output.stdout).unwrap().trim());
-    assert_eq!(actual.canonicalize().unwrap(), repository.join(".git").canonicalize().unwrap());
+    assert_eq!(
+        actual.canonicalize().unwrap(),
+        repository.join(".git").canonicalize().unwrap()
+    );
 }
 
 #[test]
