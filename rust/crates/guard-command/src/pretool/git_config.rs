@@ -81,7 +81,13 @@ fn probe(
         .unwrap_or(&home);
     let mut child = command
         .args(leading)
-        .args(["--no-pager", "config", "--null", "--get-regexp", "^(core\\.fsmonitor|core\\.pager|pager\\..*|diff\\.external|diff\\..*\\.(command|textconv)|filter\\..*\\.(process|clean|smudge)|log\\.showsignature|gpg\\.program|gpg\\..*\\.program)$"])
+        .args([
+            "--no-pager",
+            "config",
+            "--null",
+            "--get-regexp",
+            "^(core\\.fsmonitor|core\\.pager|pager\\..*|diff\\.external|diff\\..*\\.(command|textconv)|filter\\..*\\.(process|clean|smudge)|log\\.showsignature|gpg\\.program|gpg\\..*\\.program)$",
+        ])
         .current_dir(&cwd)
         .env("HOME", git_home)
         .env("USERPROFILE", git_home)
