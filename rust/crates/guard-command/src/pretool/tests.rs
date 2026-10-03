@@ -58,7 +58,13 @@ fn read_only_github_predecessor_counts_as_benign_for_git_context() {
     ))
     .unwrap();
     assert_eq!(
-        benign_command_segments(&model, (Some("/tmp"), Some("/tmp"))),
+        benign_command_segments(
+            &model,
+            PathContext {
+                home_dir: Some("/tmp"),
+                cwd: Some("/tmp"),
+            },
+        ),
         vec![0, 1]
     );
 }

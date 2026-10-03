@@ -54,10 +54,7 @@ pub fn evaluate_pre_tool_envelope_with_context(
         payload,
         controls,
         deadline,
-        crate::pretool::PathContext {
-            home_dir: home_dir,
-            cwd: cwd,
-        },
+        crate::pretool::PathContext { home_dir, cwd },
         None,
     )
 }
