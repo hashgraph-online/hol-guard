@@ -263,6 +263,67 @@ def test_main_degrades_when_daemon_returns_malformed_json(
     assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
+def test_main_stamps_caller_environment_before_daemon_forwarding(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    captured: list[str] = []
+
+    def fake_post(
+        endpoint: str,
+        data: str,
+        *,
+        state_path: str | Path,
+        deadline: float | None = None,
+    ) -> str:
+        del endpoint, state_path, deadline
+        captured.append(data)
+        return json.dumps(
+            {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "allow",
+                }
+            }
+        )
+
+    monkeypatch.setenv("PATH", "/claude/outer/bin")
+    monkeypatch.setenv("HOME", "/claude/outer/home")
+    monkeypatch.setenv("GIT_EXTERNAL_DIFF", "claude-caller-secret-not-serialized")
+    monkeypatch.setattr(bridge, "state_path_for_query", lambda state_path, query: state_path)
+    monkeypatch.setattr(bridge, "_daemon_url", lambda state_path, fallback: "http://127.0.0.1:5474")
+    monkeypatch.setattr(bridge, "_post_to_loopback_daemon", fake_post)
+    monkeypatch.setattr(
+        "sys.stdin",
+        io.StringIO(
+            json.dumps(
+                {
+                    "hook_event_name": "PreToolUse",
+                    "guard_execution_environment": {"path": "/model-supplied"},
+                }
+            )
+        ),
+    )
+
+    assert bridge.main(
+        state_path=tmp_path / "daemon-state.json",
+        fallback_daemon_url="http://127.0.0.1:5474",
+        fallback_command=(sys.executable, "-c", "print('{}')"),
+        query="guard-home=/tmp/guard-home",
+    ) == 0
+
+    assert len(captured) == 1
+    forwarded = json.loads(captured[0])
+    context = forwarded["guard_execution_environment"]
+    assert context["path"] == "/claude/outer/bin"
+    assert context["home"] == "/claude/outer/home"
+    assert context["path"] != "/model-supplied"
+    assert "GIT_EXTERNAL_DIFF" in context["environment_names"]
+    assert "claude-caller-secret-not-serialized" not in captured[0]
+    assert json.loads(capsys.readouterr().out)["hookSpecificOutput"]["permissionDecision"] == "allow"
+
+
 def test_run_local_fallback_degrades_invalid_json() -> None:
     response = bridge._run_local_fallback(
         "daemon unavailable",

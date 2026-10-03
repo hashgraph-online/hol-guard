@@ -80,7 +80,10 @@ def test_capacity_proof_warms_resident_clients_before_isolated_c16_and_c64(
         _routes: object,
         concurrency: int,
         executor: ThreadPoolExecutor,
+        *,
+        stage: str,
     ) -> tuple[list[Observation], int]:
+        assert stage in {"capacity_prewarm", "concurrent_16", "concurrent_64"}
         calls.append((f"c{concurrency}", executor))
         return [Observation("codex", "PreToolUse", "1k", 0.0, "native_resident", True)] * concurrency, 0
 
@@ -169,7 +172,7 @@ def test_capacity_prewarm_rejects_incomplete_worker_initialization(
     monkeypatch.setattr(
         capacity,
         "_run_concurrent",
-        lambda *_args: ([object() for _ in range(completed)], errors),
+        lambda *_args, **_kwargs: ([object() for _ in range(completed)], errors),
     )
     with pytest.raises(RuntimeError, match="capacity prewarm did not complete every request"):
         capacity._prewarm_capacity_workers(cast(AdapterSession, object()), (("codex", "PreToolUse"),), 2)
@@ -188,7 +191,7 @@ def test_capacity_prewarm_rejects_failed_native_review(
 ) -> None:
     success = Observation("pi", "PreToolUse", "1k", 0.0, "native_resident", True)
     observations = [success] * 15 + [replace(success, **failed)]
-    monkeypatch.setattr(capacity, "_run_concurrent", lambda *_args: (observations, 0))
+    monkeypatch.setattr(capacity, "_run_concurrent", lambda *_args, **_kwargs: (observations, 0))
     with pytest.raises(RuntimeError, match="capacity prewarm did not complete native review"):
         capacity._prewarm_capacity_workers(cast(AdapterSession, object()), (("pi", "PreToolUse"),), 2)
 

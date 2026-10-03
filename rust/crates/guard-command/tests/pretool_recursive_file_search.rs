@@ -12,6 +12,91 @@ impl Drop for FixtureDirectory {
 }
 
 #[test]
+fn recursive_search_exclusions_prove_only_unread_descendants() {
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../target/recursive-file-search")
+        .join(format!("exclusions-{}-{nonce}", std::process::id()));
+    let _fixture = FixtureDirectory(root.clone());
+    std::fs::create_dir_all(root.join("tests/fixtures/tls")).unwrap();
+    std::fs::create_dir_all(root.join("mixed")).unwrap();
+    let root = std::fs::canonicalize(root).unwrap();
+    // Match the real project's scale without touching production credentials.
+    for index in 0..5_025 {
+        std::fs::write(root.join(format!("tests/case-{index}.test.ts")), "ordinary").unwrap();
+    }
+    std::fs::write(
+        root.join("tests/fixtures/tls/test-root-ca.key"),
+        "synthetic key",
+    )
+    .unwrap();
+    std::fs::write(root.join("mixed/one.ts"), "ordinary").unwrap();
+    std::fs::write(root.join("mixed/private.key"), "synthetic key").unwrap();
+    std::os::unix::fs::symlink(root.join("mixed/private.key"), root.join("mixed/alias.ts"))
+        .unwrap();
+    for harness in ["omp", "zcode"] {
+        for (command, expected) in [
+            ("grep -rn ordinary tests/", false),
+            ("grep -rn --exclude-dir=fixtures ordinary tests/", true),
+            ("grep -rn --exclude-dir fixtures ordinary tests/", true),
+            ("grep -rn ordinary tests/ --exclude-dir=fixtures", false),
+            ("grep -rn --exclude-dir=fixture ordinary tests/", false),
+            ("grep -rn --exclude=fixtures ordinary tests/", false),
+            ("grep -rn --exclude=test-root-ca.key ordinary tests/", true),
+            ("grep -rn --exclude test-root-ca.key ordinary tests/", true),
+            (
+                "grep -rn --exclude=test-root-ca.key ordinary tests/fixtures/tls/test-root-ca.key",
+                false,
+            ),
+            (
+                "grep -rn --exclude-dir=fixtures ordinary tests/fixtures/",
+                false,
+            ),
+            (
+                "grep -rn --exclude-dir=fixtures ordinary tests/ mixed/",
+                false,
+            ),
+            (
+                "grep -rn --exclude=private.key --exclude=alias.ts ordinary mixed/",
+                false,
+            ),
+            ("grep -rn --exclude='*.key' ordinary tests/", false),
+            (
+                "grep -rn --exclude-dir=fixtures ordinary tests/ --exclude",
+                false,
+            ),
+            ("grep -rn --exclude-dir= fixtures ordinary tests/", false),
+            (
+                "grep -rn --exclude= test-root-ca.key ordinary tests/",
+                false,
+            ),
+            (
+                "grep -rn --exclude=test-root-ca.key --include=test-root-ca.key ordinary tests/",
+                false,
+            ),
+        ] {
+            let result = evaluate_pre_tool_envelope_with_context(
+                harness,
+                "PreToolUse",
+                &json!({"toolName":"Bash", "toolInput":{"command":command}}),
+                None,
+                None,
+                root.to_str(),
+                root.to_str(),
+            );
+            assert_eq!(
+                result.minimum_action == "allow",
+                expected,
+                "{harness}: {command}"
+            );
+        }
+    }
+}
+
+#[test]
 fn recursive_search_checks_every_reachable_path() {
     let nonce = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -72,6 +157,10 @@ fn recursive_search_checks_every_reachable_path() {
             ),
             ("grep -rn ordinary src".to_owned(), false),
             ("grep -rn ordinary __tests__/".to_owned(), true),
+            (
+                "grep -rn --exclude='*.md' ordinary __tests__/".to_owned(),
+                true,
+            ),
             (
                 format!("grep -rn ordinary {}/__tests__/", root.display()),
                 true,

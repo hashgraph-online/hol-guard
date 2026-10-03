@@ -96,6 +96,39 @@ def test_generated_client_canonicalizes_copilot_permission_events(
     assert module._event_name(json.dumps({"hook_event_name": event_name})) == "PermissionRequest"
 
 
+def test_generated_client_stamps_outer_environment_before_daemon_forwarding(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_script(tmp_path, harness="zcode")
+    monkeypatch.setenv("PATH", "/frozen/outer/bin")
+    monkeypatch.setenv("HOME", "/frozen/outer/home")
+    monkeypatch.setenv("GIT_PAGER", "cat")
+    monkeypatch.setenv("PAGER", "")
+    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "true")
+    monkeypatch.setenv("GIT_EXTERNAL_DIFF", "frozen-caller-secret-not-serialized")
+
+    forwarded = module._stamp_hook_input(
+        json.dumps(
+            {
+                "hook_event_name": "PreToolUse",
+                "guard_execution_environment": {"path": "/model-supplied"},
+            }
+        )
+    )
+    payload = json.loads(forwarded)
+    context = payload["guard_execution_environment"]
+    assert context["path"] == "/frozen/outer/bin"
+    assert context["home"] == "/frozen/outer/home"
+    assert context["git_pager_disabled"] is True
+    assert context["pager_disabled"] is True
+    assert context["git_config_no_system"] is True
+    assert context["path"] != "/model-supplied"
+    assert "GIT_EXTERNAL_DIFF" in context["environment_names"]
+    assert context["environment_digest"]
+    assert "frozen-caller-secret-not-serialized" not in forwarded
+
+
 @pytest.mark.parametrize(
     "event_name",
     [

@@ -278,6 +278,7 @@ version = "0.1.0"
 dependencies = [
  "guard-command-build",
  "guard-contracts",
+ "guard-runtime-windows-process",
  "guard-secure-fs",
  "hex",
  "regex",
@@ -291,6 +292,7 @@ name = "guard-command-build"
 version = "0.1.0"
 dependencies = [
  "guard-contracts",
+ "guard-runtime-windows-process",
  "guard-secure-fs",
  "hex",
  "regex",

@@ -158,3 +158,32 @@ def test_resolver_fails_closed_for_unknown_symbol_on_repository_module(tmp_path:
 
     with pytest.raises(RuntimeError, match="unresolved repository-qualified helper call"):
         MODULE.resolve_call(tmp_path, caller, "known_helper.read_source", records)
+
+
+@pytest.mark.parametrize("mutation", ["new_io", "syntax_error"])
+def test_validation_reloads_sources_between_passes(tmp_path: Path, mutation: str) -> None:
+    """A fast repeat must inspect changed source, not a previous pass's AST."""
+    _copy_gate_sources(tmp_path)
+    assert MODULE.validate(tmp_path)["status"] == "passed"
+    edge = tmp_path / "src/codex_plugin_scanner/guard/native_hook_edge.py"
+    original = edge.read_text(encoding="utf-8")
+    if mutation == "syntax_error":
+        edge.write_text(original + "\ndef incomplete(\n", encoding="utf-8")
+        with pytest.raises(SyntaxError):
+            MODULE.validate(tmp_path)
+    else:
+        marker = "    status = native_runtime_status()\n"
+        assert marker in original
+        edge.write_text(original.replace(marker, marker + '    open("new-secret.txt")\n', 1), encoding="utf-8")
+        with pytest.raises(RuntimeError, match="reachable unclassified Python I/O"):
+            MODULE.validate(tmp_path)
+
+
+def test_extracted_command_factor_hashes_retain_decision_time_ownership() -> None:
+    path = "src/codex_plugin_scanner/guard/runtime/command_native_factors.py"
+    original = "src/codex_plugin_scanner/guard/runtime/command_evaluation.py"
+    assert MODULE._category(path, "hash") == MODULE._category(original, "hash")
+    assert MODULE._category(path, "hash") == "pending_authority_migration"
+    assert MODULE._category(path, "filesystem") == "unclassified_python_io"
+    assert MODULE._category(path, "decode") == "unclassified_python_content_io"
+    assert MODULE._category(path, "archive") == "unclassified_python_content_io"

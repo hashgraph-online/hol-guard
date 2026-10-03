@@ -31,7 +31,9 @@ from typing import Any
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _TEXT_LIMIT = 12_000
 _NODE_PROBE_TIMEOUT = 5.0
-_DAEMON_READINESS_TIMEOUT = 5.0
+# Cold policy publication is setup, not part of the timed hook request.
+# Match the production workspace-readiness cap without extending hook budgets.
+_DAEMON_READINESS_TIMEOUT = 25.0
 _DAEMON_CLEANUP_TIMEOUT = 10.0
 _NODE_PROBE_SOURCE = 'const typedValue: string = "node-capability-probe";\nprocess.stdout.write(typedValue);\n'
 _ENV_ALLOWLIST = {
@@ -880,7 +882,11 @@ def _prepare_installed_daemon_workspace(daemon: Any, workspace: Path) -> Any:
     except BaseException as exc:
         raise ProbeError(f"installed Guard daemon workspace readiness failed: {type(exc).__name__}") from exc
     if prepared is None:
-        raise ProbeError("installed Guard daemon workspace policy was not ready")
+        publisher = getattr(hook_worker, "policy_snapshot_publisher", None)
+        reason = getattr(publisher, "last_error", None)
+        if not isinstance(reason, str) or not reason:
+            reason = "readiness_deadline_exceeded"
+        raise ProbeError(f"installed Guard daemon workspace policy was not ready: {reason}")
     return prepared
 
 

@@ -15,12 +15,25 @@ on:
 permissions: {}
 
 concurrency:
-  group: gitar-managed-state-${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number || github.run_id }}
+  group: >-
+    gitar-managed-state-${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number || github.run_id }}-${{
+      github.event_name == 'workflow_dispatch' ||
+      github.event.pull_request.state == 'open' ||
+      github.event.issue.state == 'open'
+    }}
   cancel-in-progress: true
 
 jobs:
   reconcile:
-    if: ${{ github.event_name != 'issue_comment' || github.event.issue.pull_request != null }}
+    if: >-
+      (
+        github.event_name == 'pull_request_target' &&
+        github.event.pull_request.state == 'open'
+      ) || (
+        github.event_name == 'issue_comment' &&
+        github.event.issue.pull_request != null &&
+        github.event.issue.state == 'open'
+      ) || github.event_name == 'workflow_dispatch'
     permissions:
       issues: write
       pull-requests: write

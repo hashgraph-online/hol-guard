@@ -303,7 +303,11 @@ fn split_execution_segments(
             {
                 return Err("non_posix_quoting_not_yet_supported");
             }
-            '<' | '>' if is_stderr_to_stdout_redirect(&chars, index) => {}
+            '<' | '>'
+                if is_stderr_to_stdout_redirect(&chars, index, preserve_unquoted_backslash) => {}
+            '>' if index.checked_sub(1).is_some_and(|start| {
+                is_stderr_to_null_redirect(&chars, start, preserve_unquoted_backslash)
+            }) => {}
             '<' | '>' => return Err("command_redirect_not_yet_supported"),
             '(' | ')' => return Err("compound_shell_not_yet_supported"),
             '{' | '}'
@@ -317,7 +321,7 @@ fn split_execution_segments(
                 return Err("compound_shell_not_yet_supported");
             }
             '&' => {
-                if is_stderr_to_stdout_redirect(&chars, index) {
+                if is_stderr_to_stdout_redirect(&chars, index, preserve_unquoted_backslash) {
                     index += 1;
                     continue;
                 }
@@ -442,7 +446,7 @@ fn trimmed_bounds(chars: &[char], start: usize, end: usize) -> Option<(usize, us
     (left < right).then_some((left, right))
 }
 
-fn is_stderr_to_stdout_redirect(chars: &[char], index: usize) -> bool {
+fn is_stderr_to_stdout_redirect(chars: &[char], index: usize, preserve_backslash: bool) -> bool {
     let start = match chars.get(index) {
         Some('&') => index.checked_sub(2),
         Some('>') => index.checked_sub(1),
@@ -455,10 +459,35 @@ fn is_stderr_to_stdout_redirect(chars: &[char], index: usize) -> bool {
         return false;
     };
     redirect == ['2', '>', '&', '1']
-        && (start == 0 || is_shell_token_whitespace(chars[start - 1]))
+        && starts_at_shell_token_boundary(chars, start, preserve_backslash)
         && chars.get(start + 4).is_none_or(|value| {
             is_shell_token_whitespace(*value) || matches!(*value, '|' | '&' | ';')
         })
+}
+
+fn is_stderr_to_null_redirect(chars: &[char], start: usize, preserve_backslash: bool) -> bool {
+    // Only Unix's fixed stderr sink is inert; arbitrary paths and descriptors
+    // must still pass through the unsupported-redirection guard.
+    cfg!(unix)
+        && chars.get(start..start.saturating_add(11))
+            == Some(&['2', '>', '/', 'd', 'e', 'v', '/', 'n', 'u', 'l', 'l'])
+        && starts_at_shell_token_boundary(chars, start, preserve_backslash)
+        && chars.get(start + 11).is_none_or(|value| {
+            is_shell_token_whitespace(*value) || matches!(*value, '|' | '&' | ';')
+        })
+}
+
+fn starts_at_shell_token_boundary(chars: &[char], start: usize, preserve_backslash: bool) -> bool {
+    start == 0
+        || (is_shell_token_whitespace(chars[start - 1])
+            && (preserve_backslash
+                || chars[..start - 1]
+                    .iter()
+                    .rev()
+                    .take_while(|value| **value == '\\')
+                    .count()
+                    % 2
+                    == 0))
 }
 
 fn is_plain_cd_target(value: &str) -> bool {
@@ -507,7 +536,9 @@ fn shell_tokens(command: &str, preserve_backslash: bool) -> Result<Vec<String>, 
     let mut quote = Quote::None;
     let mut escaped = false;
 
-    for current in command.chars() {
+    let chars: Vec<char> = command.chars().collect();
+    let mut characters = chars.iter().copied().enumerate();
+    while let Some((index, current)) = characters.next() {
         if escaped {
             if quote == Quote::Double && current != '"' && current != '\\' {
                 token.push('\\');
@@ -538,6 +569,15 @@ fn shell_tokens(command: &str, preserve_backslash: bool) -> Result<Vec<String>, 
                 }
             }
             Quote::None => match current {
+                '2' if !token_started
+                    && is_stderr_to_null_redirect(&chars, index, preserve_backslash) =>
+                {
+                    // A shell redirection is not an argv operand. Preserve it
+                    // in segment.text/spans, but exclude it from argument proofs.
+                    for _ in 0..10 {
+                        characters.next();
+                    }
+                }
                 '\'' => {
                     quote = Quote::Single;
                     token_started = true;
@@ -764,6 +804,44 @@ mod tests {
         assert_eq!(parsed.segments[0].arguments, ["status", "--short"]);
         assert_eq!(parsed.segments[0].span.start, 0);
         assert_eq!(parsed.segments[0].span.end, 18);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn parses_only_literal_stderr_null_sink_without_changing_quoted_arguments() {
+        let parsed = parse_command(&request("ls -la src 2>/dev/null; echo done")).unwrap();
+        assert_eq!(parsed.confidence, "exact");
+        assert_eq!(parsed.segments[0].arguments, ["-la", "src"]);
+        assert_eq!(parsed.segments[0].text, "ls -la src 2>/dev/null");
+        let quoted = parse_command(&request("echo '2>/dev/null'")).unwrap();
+        assert_eq!(quoted.segments[0].arguments, ["2>/dev/null"]);
+        for command in [
+            "ls 2>/dev/null.env",
+            "ls 2>/dev/null/other",
+            "ls 12>/dev/null",
+            "ls 2>>/dev/null",
+            "ls >/dev/null",
+            "ls 2> .env",
+            "ls src2>/dev/null",
+            "cat foo\\ 2>/dev/null",
+            "cat foo\\\n2>/dev/null",
+            "cat foo\\ 2>&1",
+        ] {
+            assert_ne!(
+                parse_command(&request(command)).unwrap().confidence,
+                "exact",
+                "{command}"
+            );
+        }
+    }
+
+    #[test]
+    fn redirect_boundary_respects_backslash_profile() {
+        let escaped: Vec<char> = "foo\\ 2>&1".chars().collect();
+        assert!(!starts_at_shell_token_boundary(&escaped, 5, false));
+        assert!(starts_at_shell_token_boundary(&escaped, 5, true));
+        let paired: Vec<char> = "foo\\\\ 2>&1".chars().collect();
+        assert!(starts_at_shell_token_boundary(&paired, 6, false));
     }
 
     #[test]

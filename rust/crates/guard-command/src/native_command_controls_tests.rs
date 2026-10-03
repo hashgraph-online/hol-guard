@@ -93,6 +93,44 @@ fn git_containment_preserves_disabled_execution_permission() {
 }
 
 #[test]
+fn git_context_proof_reaches_native_extension_observations() {
+    let program = packaged_command_program().unwrap();
+    let mut binding: NativeCommandControlBindingV1 = serde_json::from_value(serde_json::json!({
+        "schema": "guard.native-command-control-binding.v1",
+        "program_digest": program.program_digest, "catalog_digest": program.catalog_digest,
+        "trust_digest": program.trust_digest, "health": "protected",
+        "revision": 1, "managed_revision": 0, "effective_digest": "", "layers": []
+    }))
+    .unwrap();
+    binding.effective_digest = binding.compute_effective_digest().unwrap();
+    let controls = CompiledNativeCommandControls::new(&binding).unwrap();
+    let repository = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../..")
+        .canonicalize()
+        .unwrap();
+    let repository = repository.to_str().unwrap();
+    let result = crate::pretool::evaluate_pre_tool_envelope_with_context(
+        "omp",
+        "PreToolUse",
+        &serde_json::json!({
+            "tool_name": "bash",
+            "tool_input": {"command": "git -C rust status --short"}
+        }),
+        Some(&controls),
+        None,
+        Some(repository),
+        Some(repository),
+    );
+    let observations = result.command_extensions.unwrap();
+    assert_eq!(observations.binding.uncertainty_count, 0);
+    assert!(observations.observations.iter().any(|observation| {
+        observation.rule_id == "command.git.status"
+            && observation.uncertainty_reasons.is_empty()
+            && observation.effective_segment_indexes == [0]
+    }));
+}
+
+#[test]
 fn vitest_containment_never_overrides_disabled_package_permission() {
     let program = packaged_command_program().unwrap();
     let mut binding: NativeCommandControlBindingV1 = serde_json::from_value(serde_json::json!({

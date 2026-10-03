@@ -8,111 +8,18 @@ use guard_contracts::{
 };
 use guard_hook_core::review_post_tool;
 use serde_json::Value;
-use sha2::{Digest, Sha256};
 use std::time::{Duration, Instant};
 
 use crate::native_hook_receipt::{
     receipt_from_post_tool, receipt_from_pre_tool, NativeReceiptIdentity,
 };
 
-const MAX_HARNESS_BYTES: usize = 64;
-const MAX_EVENT_BYTES: usize = 64;
-const MAX_PATH_BYTES: usize = 32 * 1024;
-fn request_id_is_safe(value: &str) -> bool {
-    let opaque_token = !value.is_empty()
-        && value.len() <= 256
-        && value.bytes().all(|byte| {
-            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'-' | b'_' | b'.')
-        });
-    let compact_uuid = value.len() == 32
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte));
-    let dashed_uuid = value.len() == 36
-        && value.bytes().enumerate().all(|(index, byte)| {
-            matches!(index, 8 | 13 | 18 | 23)
-                .then_some(byte == b'-')
-                .unwrap_or_else(|| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-        });
-    opaque_token || compact_uuid || dashed_uuid
-}
-
-fn request_payload_identity(payload: &Value, harness: &str, event: &str) -> Result<Value, String> {
-    let Some(record) = payload.as_object() else {
-        return Err("native_hook_payload_invalid".to_owned());
-    };
-    // Event aliases and adapter timestamps are transport metadata, not request
-    // semantics. Event aliases are validated for agreement by
-    // `authoritative_event`, then omitted here so a harness spelling change
-    // cannot change an otherwise identical request. Timestamps are removed
-    // only at the envelope root: a nested timestamp may be an actual tool
-    // argument and must remain part of the action commitment.
-    let mut identity = record.clone();
-    for key in [
-        "event",
-        "eventName",
-        "hook_event_name",
-        "hookEventName",
-        "hook_name",
-        "hookName",
-        "timestamp",
-        "timestamp_ms",
-        "timestampMs",
-        "created_at",
-        "createdAt",
-        "received_at",
-        "receivedAt",
-    ] {
-        identity.remove(key);
-    }
-    // Pi retries create a new transport call ID for the unchanged action.
-    // Keep nested tool arguments and session identity in the commitment.
-    if matches!(harness, "pi" | "omp")
-        && event == "PreToolUse"
-        && identity
-            .get("session_id")
-            .and_then(Value::as_str)
-            .is_some_and(|s| !s.is_empty())
-    {
-        identity.remove("tool_call_id");
-    }
-    Ok(Value::Object(identity))
-}
-
-fn stable_policy_identity(snapshot: &Value, generation: u64) -> Value {
-    let object = snapshot.as_object();
-    let runtime_identity = object
-        .and_then(|value| value.get("runtime_identity"))
-        .cloned()
-        .unwrap_or(Value::Null);
-    let policy_digest = object
-        .and_then(|value| value.get("policy_digest"))
-        .cloned()
-        .unwrap_or(Value::Null);
-    let rule_digest = object
-        .and_then(|value| value.get("rule_digest"))
-        .cloned()
-        .unwrap_or(Value::Null);
-    let scope_digest = object
-        .and_then(|value| value.get("scope_contract"))
-        .and_then(Value::as_object)
-        .and_then(|scope| scope.get("scope_digest"))
-        .cloned()
-        .unwrap_or(Value::Null);
-    serde_json::json!({
-        "generation": generation,
-        "policy_digest": policy_digest,
-        "rule_digest": rule_digest,
-        "runtime_identity": runtime_identity,
-        "scope_digest": scope_digest,
-    })
-}
-
-fn canonical_identity_digest(value: &Value, error_code: &str) -> Result<String, String> {
-    let canonical =
-        guard_policy_snapshot::canonical_json_bytes(value).map_err(|_| error_code.to_owned())?;
-    Ok(hex::encode(Sha256::digest(&canonical)))
-}
+#[path = "edge_identity.rs"]
+mod edge_identity;
+use edge_identity::{
+    canonical_identity_digest, request_id_is_safe, request_payload_identity,
+    stable_policy_identity, MAX_EVENT_BYTES, MAX_HARNESS_BYTES, MAX_PATH_BYTES,
+};
 
 /// Bind the exact validated tool intent without policy-generation identity.
 /// Policy evaluation remains bound by `request_identity`; this commitment is
@@ -121,7 +28,7 @@ pub(crate) fn execution_intent_digest(envelope: &GuardHookEnvelopeV2) -> Result<
     let harness = canonical_harness(&envelope.harness)?;
     let event = authoritative_event(envelope)?;
     let payload = request_payload_identity(&envelope.raw_payload, &harness, &event)?;
-    let value = serde_json::json!({
+    let mut value = serde_json::json!({
         "schema": "guard-native-execution-intent.v1",
         "version": 1,
         "event": event,
@@ -131,6 +38,10 @@ pub(crate) fn execution_intent_digest(envelope: &GuardHookEnvelopeV2) -> Result<
             "cwd": envelope.source.cwd,
         },
     });
+    if let Some(context) = &envelope.source.execution_environment {
+        value["source"]["execution_environment"] = serde_json::to_value(context)
+            .map_err(|_| "native_hook_execution_intent_digest_failed")?;
+    }
     canonical_identity_digest(&value, "native_hook_execution_intent_digest_failed")
 }
 
@@ -143,12 +54,16 @@ pub(crate) fn request_identity(envelope: &GuardHookEnvelopeV2) -> Result<(String
     let harness = canonical_harness(&envelope.harness)?;
     let event = authoritative_event(envelope)?;
     let payload = request_payload_identity(&envelope.raw_payload, &harness, &event)?;
-    let source = serde_json::json!({
+    let mut source = serde_json::json!({
         "cwd": envelope.source.cwd,
         "guard_home": envelope.source.guard_home,
         "home_dir": envelope.source.home_dir,
         "source_ref_external_allowed": envelope.source.source_ref_external_allowed,
     });
+    if let Some(context) = &envelope.source.execution_environment {
+        source["execution_environment"] =
+            serde_json::to_value(context).map_err(|_| "native_hook_request_digest_failed")?;
+    }
     let value = serde_json::json!({
         "schema": "guard-native-request-identity.v3",
         "version": 3,
@@ -316,6 +231,9 @@ fn validate_envelope_shape(envelope: &GuardHookEnvelopeV2) -> Result<(), String>
     if encoded.len() > MAX_NATIVE_REQUEST_BYTES {
         return Err("native_hook_request_bounds_exceeded".to_owned());
     }
+    // Optional lookup context is bounded by the whole-envelope transport cap.
+    // Its tighter Git-specific limits are checked by git_config before quiet
+    // admission; oversized environments must not reject unrelated file hooks.
     let _ = request_identity(envelope)?;
     for path in [
         envelope.source.cwd.as_deref(),
@@ -359,7 +277,9 @@ fn evaluate_validated_envelope(
     }
     let (result, mut receipt) = match event_name.as_str() {
         "PreToolUse" | "UserPromptSubmit" => {
-            let native = guard_command::pretool::evaluate_pre_tool_envelope_with_context(
+            let unavailable_environment =
+                guard_contracts::GuardExecutionEnvironmentV1::unavailable();
+            let native = guard_command::pretool::evaluate_pre_tool_envelope_with_execution_context(
                 &harness,
                 &event_name,
                 &envelope.raw_payload,
@@ -370,8 +290,17 @@ fn evaluate_validated_envelope(
                             envelope.deadline_budget_ms.unwrap_or(9_000).min(9_000),
                         ),
                 ),
-                Some(envelope.source.home_dir.as_str()),
-                envelope.source.cwd.as_deref(),
+                guard_command::pretool::PathContext {
+                    home_dir: Some(envelope.source.home_dir.as_str()),
+                    cwd: envelope.source.cwd.as_deref(),
+                },
+                Some(
+                    envelope
+                        .source
+                        .execution_environment
+                        .as_ref()
+                        .unwrap_or(&unavailable_environment),
+                ),
             );
             let evaluated = if let Some(snapshot) = policy_snapshot {
                 crate::policy_enforcement::apply_pre_tool_policy(

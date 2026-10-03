@@ -84,6 +84,17 @@ fn explicit_command_permission_settles_only_its_covered_generic_review() {
             "{command}"
         );
     }
+    #[cfg(unix)]
+    {
+        assert_eq!(
+            evaluate(&controls, "echo ready 2>/dev/null; git push origin main").minimum_action,
+            "allow"
+        );
+        assert_ne!(
+            evaluate(&controls, "git push origin main; cat .env 2>/dev/null").minimum_action,
+            "allow"
+        );
+    }
     for command in [
         "cat ordinary.txt; git push origin main",
         "cat alias.txt; git push origin main",
@@ -234,25 +245,52 @@ fn explicit_command_permission_settles_only_its_covered_generic_review() {
     );
     mixed.effective_digest = mixed.compute_effective_digest().unwrap();
     let mixed_controls = CompiledNativeCommandControls::new(&mixed).unwrap();
-    assert_eq!(
-        evaluate(
-            &mixed_controls,
-            "git push origin main; gh pr view 1 --json title"
-        )
-        .minimum_action,
-        "block"
-    );
+    for operator in [";", "&&", "||", "|"] {
+        for command in [
+            format!("git push origin main {operator} gh pr view 1 --json title"),
+            format!("gh pr view 1 --json title {operator} git push origin main"),
+        ] {
+            assert_eq!(
+                evaluate(&mixed_controls, &command).minimum_action,
+                "block",
+                "a denied segment must dominate regardless of position: {command}"
+            );
+        }
+    }
     let mut disabled = binding.clone();
     disabled.layers[0].controls[0].state = "disabled".into();
     disabled.effective_digest = disabled.compute_effective_digest().unwrap();
     let controls = CompiledNativeCommandControls::new(&disabled).unwrap();
+    #[cfg(unix)]
+    assert_eq!(
+        evaluate(&controls, "echo ready 2>/dev/null; git push origin main").minimum_action,
+        "block"
+    );
     assert_eq!(
         evaluate(&controls, "git push origin main").minimum_action,
         "block"
     );
+    for operator in [";", "&&", "||", "|"] {
+        for command in [
+            format!("gh pr view 1 --json title {operator} git push origin main"),
+            format!("git push origin main {operator} gh pr view 1 --json title"),
+        ] {
+            assert_eq!(
+                evaluate(&controls, &command).minimum_action,
+                "block",
+                "a benign GitHub segment must not hide denied Git: {command}"
+            );
+        }
+    }
+
+    let mut delegated = binding.clone();
+    delegated.layers[0].controls[0].target_id = "command.git.permission.status".into();
+    delegated.layers[0].controls[0].state = "disabled".into();
+    delegated.effective_digest = delegated.compute_effective_digest().unwrap();
+    let controls = CompiledNativeCommandControls::new(&delegated).unwrap();
     for command in [
-        "pwd; git push origin main",
-        "git push origin main | head -1",
+        "git -C project status --short",
+        "pwd; git -Cproject status --short; echo done",
     ] {
         assert_eq!(
             evaluate(&controls, command).minimum_action,

@@ -26,6 +26,41 @@ def _pool(tmp_path: Path) -> _PersistentNativeClientPool:
     )
 
 
+def test_pool_recovers_retired_capacity_only_after_containment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    clients = []
+
+    class Client:
+        def __init__(self, **_kwargs: object) -> None:
+            self.contained = False
+            self.deadlines: list[float] = []
+            clients.append(self)
+
+        def request(self, _payload: bytes, *, deadline_monotonic: float) -> bytes | None:
+            return None if self is clients[0] else b"recovered"
+
+        def close(self, *, deadline_monotonic: float) -> bool:
+            self.deadlines.append(deadline_monotonic)
+            return self.contained
+
+    monkeypatch.setattr(client_module, "_PersistentNativeClient", Client)
+    monkeypatch.setattr(client_module, "_MAX_PERSISTENT_CLIENTS", 1)
+    pool = _pool(tmp_path)
+    assert pool.request(b"timed-out", deadline_monotonic=time.monotonic() - 1) is None
+    failed = clients[0]
+    assert failed in pool._clients
+    assert failed in pool._retiring
+    assert pool.request(b"still-contained", deadline_monotonic=time.monotonic() + 0.01) is None
+    assert len(clients) == 1, "uncontained client must still occupy its slot"
+    failed.contained = True
+    assert pool.request(b"next", deadline_monotonic=time.monotonic() + 1) == b"recovered"
+    assert len(clients) == 2
+    assert failed not in pool._clients
+    assert failed not in pool._retiring
+    assert len(pool._clients) == 1
+
+
 def test_client_reader_keeps_response_binding_with_the_captured_generation_queue(
     tmp_path: Path,
 ) -> None:

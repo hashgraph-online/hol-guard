@@ -4,6 +4,16 @@ from ci.native_runtime.probe_workflow_matrix import assert_admission, assert_exe
 from ci.native_runtime.workflow_matrix_cases import WorkflowCase
 
 
+def test_workflow_prompt_preserves_compound_commands_as_atomic_json_elements():
+    import json
+    from ci.native_runtime.probe_workflow_matrix import _workflow_prompt
+
+    commands = ["pwd; gh api repos/hashgraph-online/hol-guard --jq '.name'", "echo first && echo second"]
+    prompt = _workflow_prompt([WorkflowCase(str(index), command) for index, command in enumerate(commands)])
+    assert "Do not split compound commands" in prompt
+    assert json.loads(prompt.split("\n", 1)[1]) == commands
+
+
 def test_a_blocked_positive_or_allowed_negative_cannot_be_skipped():
     cases = [WorkflowCase("read", "cat ordinary.ts"), WorkflowCase("secret", "cat .env", False)]
     with pytest.raises(AssertionError, match="skipped"):
@@ -27,6 +37,20 @@ def test_live_execution_requires_every_exact_command_and_success():
         assert_execution([case], events)
     events[1]["isError"] = False
     assert_execution([case], events)
+
+
+def test_live_exclusion_execution_rejects_excluded_path_output():
+    case = WorkflowCase("grep-exclude-file", "grep -rn --exclude=private.key ordinary grep-files/")
+    events = [
+        {"type": "tool_execution_start", "args": {"command": case.command}},
+        {
+            "type": "tool_execution_end",
+            "isError": False,
+            "result": {"content": [{"type": "text", "text": "grep-files/private.key:1:ordinary"}]},
+        },
+    ]
+    with pytest.raises(AssertionError, match="excluded path appeared"):
+        assert_execution([case], events)
 
 
 @pytest.mark.parametrize("value", [None, [], "invalid"])
@@ -57,3 +81,15 @@ def test_protected_admission_requires_the_exact_containment_route():
     for field, value in [("decision", "allow"), ("required_execution_profile", "wrong-profile")]:
         with pytest.raises(AssertionError, match="vitest"):
             assert_admission([case], [{**result, field: value}])
+
+
+def test_workflow_fixture_removes_only_successful_runs(tmp_path, monkeypatch):
+    from ci.native_runtime.probe_workflow_matrix import workflow_fixture
+
+    monkeypatch.chdir(tmp_path)
+    with workflow_fixture() as successful:
+        assert successful.is_dir()
+    assert not successful.exists()
+    with pytest.raises(RuntimeError, match="cleanup uncertain"), workflow_fixture() as retained:
+        raise RuntimeError("cleanup uncertain")
+    assert retained.is_dir()

@@ -19,6 +19,7 @@ from codex_plugin_scanner.guard.codex_live_decision_revalidation import revalida
 from codex_plugin_scanner.guard.daemon.hook_process_entrypoint import (
     _run_resident_hook_request,  # pyright: ignore[reportPrivateUsage]
 )
+from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
 from codex_plugin_scanner.guard.store import GuardStore
 
 pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
@@ -195,12 +196,30 @@ def test_explicit_home_is_part_of_exact_action_binding(tmp_path: Path) -> None:
     assert wrong_home is False
 
 
-@pytest.mark.usefixtures("native_hook_force")
-def test_first_exact_live_allow_revalidates_through_resident_worker(tmp_path: Path) -> None:
+@pytest.fixture
+def acknowledged_live_policy(tmp_path: Path, native_hook_force):
+    home = tmp_path / "home"
+    workspace = tmp_path / "workspace"
+    home.mkdir()
+    workspace.mkdir()
+    store = GuardStore(tmp_path / "guard-home")
+    owner = HookWorker(store=store)
+    try:
+        # The daemon publishes and ACKs workspace policy before handing an
+        # action to the non-publishing resident worker under test.
+        snapshot = owner.prepare_workspace_policy(workspace)
+        assert snapshot is not None, owner.policy_snapshot_publisher.last_error
+        yield store
+    finally:
+        assert owner.close()
+
+
+def test_first_exact_live_allow_revalidates_through_resident_worker(
+    tmp_path: Path, acknowledged_live_policy: GuardStore
+) -> None:
     home_dir = tmp_path / "home"
     guard_home = tmp_path / "guard-home"
     workspace = tmp_path / "workspace"
-    workspace.mkdir()
     payload: dict[str, object] = {
         "hook_event_name": "PreToolUse",
         "tool_name": "Read",
@@ -214,16 +233,19 @@ def test_first_exact_live_allow_revalidates_through_resident_worker(tmp_path: Pa
         "guard_home": str(guard_home),
         "workspace": str(workspace),
     }
-    stores: dict[str, GuardStore] = {}
+    stores: dict[str, GuardStore] = {str(guard_home): acknowledged_live_policy}
+    workers: dict[str, HookWorker] = {}
     first = _run_resident_hook_request(
         request,
         stores=stores,
-        hook_workers={},
+        hook_workers=workers,
         configured_guard_home=str(guard_home),
     )
     assert first["reason_code"] is None
     store = stores[str(guard_home)]
-    approval = store.list_approval_requests(limit=1)[0]
+    approvals = store.list_approval_requests(limit=1)
+    assert len(approvals) == 1, first
+    approval = approvals[0]
     request_id = str(approval["request_id"])
     artifact_hash = str(approval["artifact_hash"])
     assert store.resolve_one_request_only(
@@ -259,7 +281,7 @@ def test_first_exact_live_allow_revalidates_through_resident_worker(tmp_path: Pa
                 "claimed_approval_request_id": claimed_request_id,
             },
             stores=stores,
-            hook_workers={},
+            hook_workers=workers,
             configured_guard_home=str(guard_home),
         )
         assert second["reason_code"] is None

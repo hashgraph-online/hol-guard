@@ -10,6 +10,9 @@ import pytest
 from codex_plugin_scanner.guard import native_command_model
 from codex_plugin_scanner.guard.codex_hook_launch_runtime import BoundedHookProcessResult
 from codex_plugin_scanner.guard.daemon.hook_request_parsing import runtime_hook_event_name
+from codex_plugin_scanner.guard.hook_execution_environment import (
+    collect_hook_execution_environment,
+)
 from codex_plugin_scanner.guard.native_decision_receipt import canonical_receipt_bytes
 from codex_plugin_scanner.guard.native_hook_edge import _decode_edge, review_raw_hook_native
 from codex_plugin_scanner.guard.native_resident_client import (
@@ -21,6 +24,58 @@ from codex_plugin_scanner.guard.native_runtime import (
     NativeRuntimeIdentity,
     NativeRuntimeStatus,
 )
+
+
+@pytest.mark.parametrize("value", ("1", "true", "TRUE", "yes", "on"))
+def test_git_config_no_system_accepts_git_truthy_values(monkeypatch, value):
+    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", value)
+    assert collect_hook_execution_environment()["git_config_no_system"] is True
+
+
+def test_execution_lookup_context_is_feature_gated_and_omits_environment_values(monkeypatch):
+    from codex_plugin_scanner.guard.native_hook_edge import _encode_hook_envelope
+
+    monkeypatch.setenv("PATH", "/verified/system/bin")
+    monkeypatch.setenv("XDG_CONFIG_HOME", "/verified/user/config")
+    monkeypatch.setenv("GIT_EXTERNAL_DIFF", "synthetic-secret-must-not-serialize")
+    arguments = dict(
+        payload={"tool_name": "bash", "command": "git status --short"},
+        harness="omp",
+        event="PreToolUse",
+        guard_home=Path("/guard"),
+        home_dir=Path("/home/test"),
+        cwd=Path("/workspace"),
+        source_ref_external_allowed=False,
+        deadline_budget_ms=500,
+        snapshot={"generation": 1},
+    )
+    legacy = json.loads(_encode_hook_envelope(**arguments))
+    assert "execution_environment" not in legacy["source"]
+    encoded = _encode_hook_envelope(**arguments, execution_context_supported=True)
+    context = json.loads(encoded)["source"]["execution_environment"]
+    assert context["path"] == "/verified/system/bin"
+    assert context["xdg_config_home"] == "/verified/user/config"
+    assert context["git_config_no_system"] is False
+    assert "GIT_EXTERNAL_DIFF" in context["environment_names"]
+    assert b"synthetic-secret-must-not-serialize" not in encoded
+    monkeypatch.setenv("GIT_EXTERNAL_DIFF", "different-synthetic-value")
+    changed = json.loads(_encode_hook_envelope(**arguments, execution_context_supported=True))
+    assert changed["source"]["execution_environment"]["environment_digest"] != context["environment_digest"]
+    forwarded = {**context, "path": "/actual/caller/bin"}
+    arguments["payload"]["guard_execution_environment"] = forwarded
+    encoded = json.loads(_encode_hook_envelope(**arguments, execution_context_supported=True))
+    assert encoded["source"]["execution_environment"] == forwarded
+    assert "guard_execution_environment" not in encoded["raw_payload"]
+    monkeypatch.setenv("XDG_CONFIG_HOME", "")
+    arguments["payload"].pop("guard_execution_environment", None)
+    empty_xdg = json.loads(_encode_hook_envelope(**arguments, execution_context_supported=True))
+    empty_context = empty_xdg["source"]["execution_environment"]
+    assert empty_context["xdg_config_home"] is None
+    assert empty_context["git_config_no_system"] is False
+    assert "XDG_CONFIG_HOME" not in empty_context["environment_names"]
+    arguments["payload"]["guard_execution_environment"] = None
+    unavailable = json.loads(_encode_hook_envelope(**arguments, execution_context_supported=True))
+    assert "execution_environment" not in unavailable["source"]
 
 
 def _edge_result() -> dict[str, object]:
@@ -392,10 +447,12 @@ def test_native_client_classifies_bounded_failure_states(
 
 
 @pytest.mark.parametrize("request_id", [None, "request-1", "different-request"])
+@pytest.mark.parametrize("execution_context_supported", [True, False])
 def test_raw_hook_bridge_preserves_payload_for_rust_parsing(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     request_id: str | None,
+    execution_context_supported: bool,
 ) -> None:
     runtime = tmp_path / "hol-guard-runtime"
     runtime.write_bytes(b"runtime")
@@ -415,6 +472,7 @@ def test_raw_hook_bridge_preserves_payload_for_rust_parsing(
             "hook-envelope-v2",
             "native-resident-client-v1",
             "pre-tool-generic-authority-v1",
+            *(["git-execution-context-v1"] if execution_context_supported else []),
         ),
     )
     monkeypatch.setattr(
@@ -455,6 +513,10 @@ def test_raw_hook_bridge_preserves_payload_for_rust_parsing(
         policy_snapshot={"generation": 1},
         request_id=request_id,
     )
+    if not execution_context_supported:
+        assert result is None
+        assert not captured
+        return
     assert result == (_edge_result() if request_id != "different-request" else None)
     encoded = captured["payload"]
     assert isinstance(encoded, bytes)
