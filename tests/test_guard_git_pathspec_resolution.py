@@ -33,6 +33,7 @@ def _write(path: Path, text: str) -> None:
 def _git(repository: Path, *args: str) -> subprocess.CompletedProcess[str]:
     environment = os.environ.copy()
     environment["GIT_CONFIG_GLOBAL"] = os.devnull
+    environment["GIT_CONFIG_NOSYSTEM"] = "1"
     return subprocess.run(
         ["git", "-C", str(repository), *args],
         check=True,
@@ -60,7 +61,6 @@ def git_repository(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.delenv("GIT_EXTERNAL_DIFF", raising=False)
     monkeypatch.delenv("GIT_CONFIG_COUNT", raising=False)
     monkeypatch.delenv("GIT_CONFIG_PARAMETERS", raising=False)
-    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
     repository = tmp_path / "repository"
     repository.mkdir()
     _git(repository, "init", "--quiet")
