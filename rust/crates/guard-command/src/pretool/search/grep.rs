@@ -16,7 +16,21 @@ fn safe_arguments(arguments: &[String], context: ReadContext<'_>, stdin_only: bo
     let mut options_enabled = true;
     let mut recursive = false;
     let mut targets = Vec::new();
+    let mut excluded_files = Vec::new();
+    let mut excluded_directories = Vec::new();
+    let mut pending_exclusion = None;
     for argument in arguments {
+        if let Some(directory) = pending_exclusion.take() {
+            if !exact_exclusion(argument) {
+                return false;
+            }
+            if directory {
+                excluded_directories.push(argument.as_str());
+            } else {
+                excluded_files.push(argument.as_str());
+            }
+            continue;
+        }
         if let Some(role) = pending_value.take() {
             if matches!(role, SearchValueRole::DirectoryAction)
                 && argument.eq_ignore_ascii_case("recurse")
@@ -38,6 +52,19 @@ fn safe_arguments(arguments: &[String], context: ReadContext<'_>, stdin_only: bo
         }
         if options_enabled && argument.starts_with("--") {
             let (name, attached) = argument.split_once('=').unwrap_or((argument.as_str(), ""));
+            if matches!(name, "--exclude" | "--exclude-dir") {
+                let directory = name == "--exclude-dir";
+                if attached.is_empty() {
+                    pending_exclusion = Some(directory);
+                } else if !exact_exclusion(attached) {
+                    return false;
+                } else if directory {
+                    excluded_directories.push(attached);
+                } else {
+                    excluded_files.push(attached);
+                }
+                continue;
+            }
             if matches!(name, "--recursive" | "--dereference-recursive") {
                 if !attached.is_empty() {
                     return false;
@@ -111,9 +138,7 @@ fn safe_arguments(arguments: &[String], context: ReadContext<'_>, stdin_only: bo
                 return false;
             }
             targets.push(argument.as_str());
-            if unsafe_search_value(SearchValueRole::Path, argument, context)
-                && !(recursive && tree::safe_recursive_target(argument, context))
-            {
+            if unsafe_search_value(SearchValueRole::Path, argument, context) && !recursive {
                 return false;
             }
         } else {
@@ -121,12 +146,26 @@ fn safe_arguments(arguments: &[String], context: ReadContext<'_>, stdin_only: bo
         }
     }
     pending_value.is_none()
+        && pending_exclusion.is_none()
         && (!stdin_only || (pattern_supplied && !recursive))
         && (!recursive
             || (!targets.is_empty()
-                && targets
-                    .iter()
-                    .all(|target| tree::safe_recursive_target(target, context))))
+                && targets.iter().all(|target| {
+                    tree::safe_recursive_target_excluding(
+                        target,
+                        context,
+                        &excluded_files,
+                        &excluded_directories,
+                    )
+                })))
+}
+
+fn exact_exclusion(value: &str) -> bool {
+    !value.is_empty()
+        && !matches!(value, "." | "..")
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
 }
 
 #[cfg(test)]
