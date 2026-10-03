@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 from collections.abc import Mapping
 from pathlib import Path
@@ -256,10 +257,11 @@ def _encode_hook_envelope(
     source_ref_external_allowed: bool,
     deadline_budget_ms: int,
     snapshot: Mapping[str, object],
+    request_id: str | None = None,
 ) -> bytes | None:
     envelope = {
         "schema": "guard-hook-envelope.v2",
-        "request_id": None,
+        "request_id": request_id,
         "harness": harness,
         "event": event,
         "raw_payload": payload,
@@ -305,8 +307,13 @@ def review_raw_hook_native(
     observe_mode: bool,
     deadline: float | None,
     policy_snapshot: Mapping[str, object] | None = None,
+    request_id: str | None = None,
 ) -> dict[str, Any] | None:
     """Return a typed Rust edge result, or fail closed without reinterpretation."""
+    if request_id is not None and (
+        not isinstance(request_id, str) or re.fullmatch(r"[a-z0-9][a-z0-9_.:-]{0,255}", request_id) is None
+    ):
+        return record_native_hook_result("native_fail_safe", None)
     status = native_runtime_status()
     event_key = event.strip().lower().replace("_", "").replace("-", "")
     required_features = {_EDGE_FEATURE, _CLIENT_FEATURE}
@@ -349,6 +356,7 @@ def review_raw_hook_native(
         source_ref_external_allowed=source_ref_external_allowed,
         deadline_budget_ms=deadline_budget_ms,
         snapshot=snapshot,
+        request_id=request_id,
     )
     if encoded is None:
         return record_native_hook_result("native_fail_safe", None)
@@ -375,7 +383,7 @@ def review_raw_hook_native(
         decoded = _decode_edge(response_payload)
     except (UnicodeDecodeError, json.JSONDecodeError):
         decoded = None
-    if decoded is None:
+    if decoded is None or (request_id is not None and decoded["receipt"]["request_id"] != request_id):
         native_record_resident_failure(
             status.identity.sha256,
             guard_home,

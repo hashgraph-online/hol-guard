@@ -30,11 +30,15 @@ _ARTIFACTS = {
 }
 
 
-def stage_artifacts(source_root: Path) -> tuple[Path, ...]:
+def stage_artifacts(source_root: Path, *, destination_root: Path | None = None) -> tuple[Path, ...]:
     """Copy canonical artifacts into package data and return staged paths."""
 
     source_root = source_root.resolve()
-    data_root = source_root / "src/codex_plugin_scanner/guard/contracts/data"
+    data_root = (
+        destination_root.resolve()
+        if destination_root is not None
+        else source_root / "src/codex_plugin_scanner/guard/contracts/data"
+    )
     staged: list[Path] = []
     for source_name, destination_name in _ARTIFACTS.items():
         source = source_root / source_name
@@ -66,8 +70,9 @@ def main() -> int:
         type=Path,
         default=Path(__file__).resolve().parents[2],
     )
+    parser.add_argument("--destination-root", type=Path)
     args = parser.parse_args()
-    for path in stage_artifacts(args.source_root):
+    for path in stage_artifacts(args.source_root, destination_root=args.destination_root):
         print(path)
     return 0
 

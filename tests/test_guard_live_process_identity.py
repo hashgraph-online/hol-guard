@@ -7,6 +7,8 @@ import subprocess
 import sys
 from typing import cast
 
+import pytest
+
 from codex_plugin_scanner.guard.live_process_identity import current_process_identity, process_identity_matches
 
 
@@ -16,6 +18,27 @@ def test_current_process_identity_matches_only_the_exact_live_process() -> None:
     assert identity is not None
     assert process_identity_matches(identity) is True
     assert process_identity_matches({**identity, "startToken": "reused-process"}) is False
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="models POSIX process identity query")
+def test_process_start_query_consumes_the_original_deadline(monkeypatch):
+    from codex_plugin_scanner.guard import live_process_identity as module
+
+    clock, timeouts = {"value": 100.0}, []
+    monkeypatch.setattr(module.time, "monotonic", lambda: clock["value"])
+    monkeypatch.setattr(module, "_linux_proc_stat", lambda _pid: None)
+    monkeypatch.setattr(module, "_trusted_posix_ps_path", lambda: "/usr/bin/ps")
+
+    def query(*args, **kwargs):
+        timeouts.append(kwargs["timeout"])
+        clock["value"] += kwargs["timeout"]
+        return subprocess.CompletedProcess(args, 0, stdout="fixture start\n")
+
+    monkeypatch.setattr(module.subprocess, "run", query)
+    assert module.process_start_token(123, deadline_monotonic=100.125) is None
+    assert timeouts == [0.125]
+    assert module.process_start_token(123, deadline_monotonic=100.125) is None
+    assert timeouts == [0.125], "an expired process query must not start another child"
 
 
 def test_process_identity_rejects_unbound_or_extended_payloads() -> None:

@@ -1,6 +1,6 @@
 [package]
 name = "hol-guard-runtime"
-version.workspace = true
+version = "3.16.3"
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true

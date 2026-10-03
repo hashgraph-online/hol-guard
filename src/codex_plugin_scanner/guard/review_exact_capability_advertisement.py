@@ -47,7 +47,7 @@ def exact_review_capability_advertisement(
         capability = _verified_capability(store, revoke_binding_drift=False)
     except (AttributeError, ExactCloudReviewError):
         return None
-    return {
+    advertisement: dict[str, object] = {
         "actionDigest": claim["actionEnvelopeHash"],
         "capabilityId": _capability_digest(capability),
         "deviceId": oauth.device_id,
@@ -64,6 +64,11 @@ def exact_review_capability_advertisement(
         "sourceClaimHash": claim["claimHash"],
         "workspaceId": oauth.workspace_id,
     }
+    for field in ("nativeBindingVersion", "nativeBindingDigest"):
+        value = claim.get(field)
+        if isinstance(value, str) and value:
+            advertisement[field] = value
+    return advertisement
 
 
 def attach_exact_review_capability(

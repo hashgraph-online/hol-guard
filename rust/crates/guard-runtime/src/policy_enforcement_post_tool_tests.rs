@@ -110,6 +110,41 @@ fn post_warning_policy_preserves_allow_with_warning() {
 }
 
 #[test]
+fn scanned_write_output_does_not_invent_persistence_but_preserves_denials() {
+    let request = post_request(json!({"tool_name": "write", "tool_response": "wrote source file"}));
+    let mut effective = policy("warn");
+    effective
+        .risk_actions
+        .insert("persistence".into(), "require-reapproval".into());
+    let result = apply_post_tool_policy(
+        &snapshot(effective.clone()),
+        &request,
+        GuardHookPayloadKindV2::Inline,
+        HookReviewResponseV1::allow("output_scan_allow"),
+    )
+    .unwrap();
+    assert_eq!(result.decision, "allow");
+    assert_eq!(result.policy_action.as_deref(), Some("warn"));
+    effective.default_action = "block".into();
+    let result = apply_post_tool_policy(
+        &snapshot(effective),
+        &request,
+        GuardHookPayloadKindV2::Inline,
+        HookReviewResponseV1::allow("output_scan_allow"),
+    )
+    .unwrap();
+    assert_eq!(result.decision, "deny");
+    let result = apply_post_tool_policy(
+        &snapshot(policy("allow")),
+        &request,
+        GuardHookPayloadKindV2::Inline,
+        HookReviewResponseV1::deny("sensitive_output", "synthetic protected content"),
+    )
+    .unwrap();
+    assert_eq!(result.decision, "deny");
+}
+
+#[test]
 fn post_policy_fields_raise_without_python_semantic_input() {
     let mut effective = policy("allow");
     effective.unknown_publisher_action = "review".into();

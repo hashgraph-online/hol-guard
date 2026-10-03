@@ -10,6 +10,7 @@ from inspect import signature
 from typing import Concatenate, ParamSpec
 
 # ruff: noqa: F403,F405
+from .retry_lineage import preserve_retry_lineage
 from .store_base import *
 from .store_resume import update_request_resume as _update_request_resume
 
@@ -169,6 +170,21 @@ class StoreSessionsMixin:
         now: str,
     ) -> dict[str, object]:
         with self._connect() as connection:
+            # Serialize the read/merge/write boundary so a concurrent first
+            # writer cannot replace an already valid retry lineage.
+            connection.execute("begin immediate")
+            existing_row = connection.execute(
+                "select metadata_json from guard_operations where operation_id = ?",
+                (operation_id,),
+            ).fetchone()
+            persisted_metadata = metadata
+            if existing_row is not None:
+                try:
+                    existing_metadata = json.loads(str(existing_row["metadata_json"]))
+                except (TypeError, ValueError):
+                    existing_metadata = {}
+                if isinstance(existing_metadata, dict):
+                    persisted_metadata = preserve_retry_lineage(existing_metadata, metadata)
             connection.execute(
                 """
                 insert into guard_operations (
@@ -202,7 +218,7 @@ class StoreSessionsMixin:
                     status,
                     json.dumps(approval_request_ids),
                     resume_token,
-                    json.dumps(metadata),
+                    json.dumps(persisted_metadata),
                     now,
                     now,
                 ),

@@ -688,14 +688,16 @@
       "variant_remainder": 0
     },
     {
-      "basis": "inherited GitHub remote read permission retains contextual review",
+      "basis": "closed GitHub read grammar permits routine native reads; independent contextual oracle remains review",
       "expected": {
         "decision_plane_floor": "review",
         "evaluation_error": null,
         "model_confidence": "exact",
         "model_uncertainty": null,
-        "native_floor": "review",
-        "native_reason": "native_command_review_required",
+        "native_floor": "allow",
+        "native_reason": "native_exact_safe_command",
+        "explicitly_benign": true,
+        "decision": "allow",
         "path_overridden": false,
         "uncertain_rule_ids": []
       },
@@ -710,14 +712,16 @@
       "variant_remainder": 0
     },
     {
-      "basis": "inherited GitHub remote read permission retains contextual review",
+      "basis": "closed GitHub read grammar permits routine native reads; independent contextual oracle remains review",
       "expected": {
         "decision_plane_floor": "review",
         "evaluation_error": null,
         "model_confidence": "exact",
         "model_uncertainty": null,
-        "native_floor": "review",
-        "native_reason": "native_command_review_required",
+        "native_floor": "allow",
+        "native_reason": "native_exact_safe_command",
+        "explicitly_benign": true,
+        "decision": "allow",
         "path_overridden": false,
         "uncertain_rule_ids": []
       },
@@ -1329,8 +1333,8 @@
         "baseline_git_blob": "4cc8d7ccdaa97ad49cb7a4e0bdae6dee04930431",
         "baseline_sha256": "12d74f5afa697c20ecb2af2b9539b1de2a38a812efba6ee13a37446579889255",
         "byte_identical": false,
-        "candidate_git_blob": "dac8e6a9afcc9891db11c4b1ac3eb60550a1765b",
-        "candidate_sha256": "2ff3abbad79d1c8e9dc71db0f3c93e89fc7f6af0de5cc0bc0285b94344127c52",
+        "candidate_git_blob": "abb31f97086a2bec60034be58968c4a4cc95a8a8",
+        "candidate_sha256": "af71644220c1325db525ce11098ed0e538dbc035c7a654d6a451601bb0dbfc52",
         "reviewed_change": "Accept bounded timeout wrapper evidence for inner-command attribution; apply every catalog rule and preserve wrapper review."
       },
       "rust/crates/guard-command/src/command_compatibility/domains.rs": {
@@ -1354,9 +1358,10 @@
       "rust/crates/guard-command/src/command_compatibility/github.rs": {
         "baseline_git_blob": "0f7c32c741bb0fee2ff9fcf98b58246033b4cac9",
         "baseline_sha256": "6794dc442c50c98f991edce4e4539bbf3e2fa5f681e0af4f208a2058e4c85cc4",
-        "byte_identical": true,
-        "candidate_git_blob": "0f7c32c741bb0fee2ff9fcf98b58246033b4cac9",
-        "candidate_sha256": "6794dc442c50c98f991edce4e4539bbf3e2fa5f681e0af4f208a2058e4c85cc4"
+        "byte_identical": false,
+        "candidate_git_blob": "333abbcbec71dce8ebf6c295201210c4f551da14",
+        "candidate_sha256": "7b56f833213c716cc8b0eecc9f90847068013f8df8ce7023278164944fa810a7",
+        "reviewed_change": "Reuse closed GitHub read capabilities for benign admission; reject browser-opening and token-revealing flags and retain local-read and remote-read permission checks for authenticated status."
       },
       "rust/crates/guard-command/src/command_compatibility/github_api.rs": {
         "baseline_git_blob": "905bb6ac282939b95d2842fc136087b4a5cf463f",
@@ -1367,8 +1372,8 @@
       },
       "rust/crates/guard-command/src/command_compatibility/interpreter.rs": {
         "byte_identical": false,
-        "candidate_git_blob": "6a670366ba38be2818005dd820da8252f28043df",
-        "candidate_sha256": "fbef078baff4a8bf861a9f8014170c1001e2a41e5cfc954001e3821dc621590f",
+        "candidate_git_blob": "24a6effdc58bf80a1c6b8c0eef6b53f16aecd4bd",
+        "candidate_sha256": "edd32cb3f61333420ceccb3f99a3881b2e1732342a8b89808aaeff7dcd102f2d",
         "reviewed_change": "Closed interpreter literal/public-environment/Artisan forms avoid invented secret ownership; unmodeled programs retain uncertainty."
       },
       "rust/crates/guard-command/src/command_option_parsing.rs": {

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Callable
+from contextlib import suppress
 from pathlib import Path
 from typing import Any, TextIO
 
@@ -115,6 +116,23 @@ def route_native_hook(
         reason_code = (
             "native_hook_disabled" if native_mode_is_fail_safe_disabled() else "native_shadow_diagnostic_disabled"
         )
+        if runtime_hook_event_name(payload) == "PreToolUse":
+            writer: RuntimeHookEvidenceWriter | None = None
+            # Evidence is bounded and best effort; denial never depends on it.
+            with suppress(Exception):
+                writer = RuntimeHookEvidenceWriter(store=store)
+                writer.submit_command_activity(
+                    harness=args.harness,
+                    event="PreToolUse",
+                    payload=payload,
+                    succeeded=True,
+                    policy_action="block",
+                    receipt_id=None,
+                    prompted=False,
+                )
+            if writer is not None:
+                with suppress(Exception):
+                    writer.stop(timeout_seconds=_NATIVE_RECEIPT_DRAIN_TIMEOUT_SECONDS)
         _emit(
             "hook",
             availability_harness_response(

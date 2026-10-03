@@ -9,9 +9,13 @@ import shlex
 import shutil
 import subprocess
 import sys
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
+
+if TYPE_CHECKING:
+    from .runtime_transition import TransitionFile
 
 from .durable_harness_launcher import build_harness_shim, build_windows_script
 from .launcher import merge_guard_launcher_env
@@ -120,17 +124,24 @@ _TRUSTED_CLI_LAUNCHER = (
 )
 
 
-def install_guard_shim(
+@dataclass(frozen=True)
+class PreparedGuardShim:
+    files: tuple[TransitionFile, ...]
+    manifest: dict[str, object]
+
+
+def prepare_guard_shim(
     harness: str,
     context: HarnessContextLike,
     *,
     launcher_name: str | None = None,
     display_name: str | None = None,
-) -> dict[str, object]:
-    """Create a local launcher shim that routes harness launches through Guard."""
+) -> PreparedGuardShim:
+    """Render and snapshot both launchers without creating or changing files."""
+    from .codex_hook_recovery import _snapshot
+    from .runtime_transition import TransitionFile
 
     shim_dir = context.guard_home / "bin"
-    shim_dir.mkdir(parents=True, exist_ok=True)
     shim_name = launcher_name or harness
     harness_label = display_name or harness
     posix_path = shim_dir / f"guard-{shim_name}"
@@ -138,10 +149,24 @@ def install_guard_shim(
     workspace_args = []
     if context.workspace_dir is not None:
         workspace_args = ["--workspace", str(context.workspace_dir)]
-    posix_path.write_text(_build_python_shim(harness, context, workspace_args), encoding="utf-8")
-    posix_path.chmod(posix_path.stat().st_mode | 0o755)
-    windows_path.write_text(_build_windows_script(posix_path), encoding="utf-8")
-    return {
+    posix_source = _build_python_shim(harness, context, workspace_args)
+    files = []
+    for path, text, executable in (
+        (posix_path, posix_source, True),
+        (windows_path, _build_windows_script(posix_path, source=posix_source), False),
+    ):
+        before = _snapshot(path)
+        before_mode = path.stat().st_mode & 0o777 if before is not None else 0o644
+        change = TransitionFile(
+            path.resolve(strict=False),
+            before,
+            text.replace("\n", os.linesep).encode("utf-8"),
+            before_mode=before_mode,
+            after_mode=before_mode | 0o755 if executable else before_mode,
+        )
+        change.payload()  # Reject unsafe modes/targets before any publication.
+        files.append(change)
+    manifest: dict[str, object] = {
         "shim_path": str(posix_path),
         "shim_dir": str(shim_dir),
         "shim_command": posix_path.name,
@@ -151,6 +176,28 @@ def install_guard_shim(
             f"Add {shim_dir} to PATH to use the wrapper command from any shell.",
         ],
     }
+    return PreparedGuardShim(tuple(files), manifest)
+
+
+def install_guard_shim(
+    harness: str,
+    context: HarnessContextLike,
+    *,
+    launcher_name: str | None = None,
+    display_name: str | None = None,
+) -> dict[str, object]:
+    """Publish the same prepared launcher bytes used by runtime transitions."""
+    from .codex_hook_integrity import atomic_write_bytes
+    from .codex_install_transaction import codex_install_transaction
+    from .runtime_transition import assert_transition_mutation_allowed
+
+    with codex_install_transaction(context.guard_home, context.guard_home / "bin", actor="harness-shim.install"):
+        assert_transition_mutation_allowed(context.guard_home)
+        prepared = prepare_guard_shim(harness, context, launcher_name=launcher_name, display_name=display_name)
+        for change in prepared.files:
+            assert change.after is not None
+            atomic_write_bytes(change.path, change.after, mode=change.after_mode, private=False)
+        return prepared.manifest
 
 
 def remove_guard_shim(
@@ -162,6 +209,28 @@ def remove_guard_shim(
     display_name: str | None = None,
 ) -> dict[str, object]:
     """Remove a previously installed Guard launcher shim."""
+    from .codex_install_transaction import codex_install_transaction
+    from .runtime_transition import assert_transition_mutation_allowed
+
+    with codex_install_transaction(context.guard_home, context.guard_home / "bin", actor="harness-shim.uninstall"):
+        assert_transition_mutation_allowed(context.guard_home)
+        return _remove_guard_shim_owned(
+            harness,
+            context,
+            launcher_name=launcher_name,
+            legacy_launcher_names=legacy_launcher_names,
+            display_name=display_name,
+        )
+
+
+def _remove_guard_shim_owned(
+    harness: str,
+    context: HarnessContextLike,
+    *,
+    launcher_name: str | None,
+    legacy_launcher_names: tuple[str, ...],
+    display_name: str | None,
+) -> dict[str, object]:
 
     shim_dir = context.guard_home / "bin"
     shim_name = launcher_name or harness
@@ -199,8 +268,8 @@ def _build_python_shim(harness: str, context: HarnessContextLike, workspace_args
     )
 
 
-def _build_windows_script(posix_path: Path) -> str:
-    return build_windows_script(package_shim_interpreter(), posix_path)
+def _build_windows_script(posix_path: Path, *, source: str | None = None) -> str:
+    return build_windows_script(package_shim_interpreter(), posix_path, source=source)
 
 
 def _write_package_manager_shim_files(context: HarnessContext, command: str, shim_dir: Path) -> Path:
@@ -787,34 +856,63 @@ def repair_package_shims(
     }
 
 
-def ensure_guard_shim_path_in_shell_profile(context: HarnessContext) -> dict[str, object]:
-    """Prepend the harness launcher shim dir in the user's normal shell profile."""
+def prepare_guard_shim_shell_profile(context: HarnessContext) -> PreparedGuardShim:
+    """Capture the selected shell profile and render its PATH block without writes."""
+    from .adapters.base import _ensure_path_within_root
+    from .codex_hook_recovery import _snapshot
+    from .runtime_transition import TransitionFile
 
     shim_dir = context.guard_home / "bin"
-    if os.name == "nt":
-        return {
-            "changed": False,
-            "profile_path": None,
-            "shim_dir": str(shim_dir),
-            "restart_shell_required": False,
-            "manual_path_required": True,
-        }
-    if _is_transient_path(shim_dir):
-        return {
-            "changed": False,
-            "profile_path": None,
-            "shim_dir": str(shim_dir),
-            "restart_shell_required": False,
-            "manual_path_required": True,
-        }
+    if os.name == "nt" or _is_transient_path(shim_dir):
+        return PreparedGuardShim(
+            (),
+            {
+                "changed": False,
+                "profile_path": None,
+                "shim_dir": str(shim_dir),
+                "restart_shell_required": False,
+                "manual_path_required": True,
+            },
+        )
     profile_path, export_line = _guard_shim_profile_target(context.home_dir, shim_dir)
-    result = _upsert_managed_profile_block(profile_path, export_line, _GUARD_PROFILE_MARKER)
-    return {
-        "changed": result["changed"],
-        "profile_path": str(profile_path),
-        "shim_dir": str(shim_dir),
-        "restart_shell_required": True,
-    }
+    _ensure_path_within_root(context.home_dir, profile_path, label="Guard shell profile")
+    before = _snapshot(profile_path)
+    existing = before.decode("utf-8") if before is not None else ""
+    after = _managed_profile_content(existing, export_line, _GUARD_PROFILE_MARKER).encode("utf-8")
+    mode = profile_path.stat().st_mode & 0o777 if before is not None else 0o600
+    change = TransitionFile(
+        profile_path.resolve(strict=False), before, after, before_mode=mode, after_mode=mode, no_follow=True
+    )
+    change.payload()
+    return PreparedGuardShim(
+        (change,),
+        {
+            "changed": before != after,
+            "profile_path": str(profile_path),
+            "shim_dir": str(shim_dir),
+            "restart_shell_required": True,
+        },
+    )
+
+
+def ensure_guard_shim_path_in_shell_profile(context: HarnessContext) -> dict[str, object]:
+    """Prepend the harness launcher shim dir in the user's normal shell profile."""
+    from .codex_install_transaction import codex_install_transaction
+    from .runtime_transition import RuntimeTransition, assert_transition_mutation_allowed
+
+    prepared = prepare_guard_shim_shell_profile(context)
+    if not prepared.files:
+        return prepared.manifest
+    assert_transition_mutation_allowed(context.guard_home)
+    with codex_install_transaction(context.guard_home, context.guard_home / "bin", actor="harness-profile.install"):
+        assert_transition_mutation_allowed(context.guard_home)
+        prepared = prepare_guard_shim_shell_profile(context)
+        payload: dict[str, object] = {"files": [change.payload() for change in prepared.files]}
+        RuntimeTransition._compare(payload, "before")
+        for change in prepared.files:
+            RuntimeTransition._write_file(change.payload(), "after")
+        RuntimeTransition._compare(payload, "after")
+        return prepared.manifest
 
 
 def ensure_package_shim_path_in_shell_profile(context: HarnessContext) -> dict[str, object]:
@@ -882,6 +980,15 @@ def _upsert_managed_profile_block(
 
     profile_path.parent.mkdir(parents=True, exist_ok=True)
     existing = profile_path.read_text(encoding="utf-8") if profile_path.exists() else ""
+    new_content = _managed_profile_content(existing, export_line, marker)
+    if new_content == existing:
+        return {"changed": False}
+    profile_path.write_text(new_content, encoding="utf-8")
+    return {"changed": True}
+
+
+def _managed_profile_content(existing: str, export_line: str, marker: str) -> str:
+    """Render the same idempotent block for normal and transition publication."""
     export_line = export_line.rstrip("\n")
     marker_line = export_line.split("\n", 1)[0]
     if marker_line.strip() != marker.strip():
@@ -889,17 +996,14 @@ def _upsert_managed_profile_block(
         export_line = f"{marker}\n{export_line}"
     desired = f"{export_line}\n"
     if existing == desired:
-        return {"changed": False}
+        return existing
     cleaned = _strip_managed_marker_blocks(existing, marker)
     if cleaned == "":
         new_content = desired
     else:
         prefix = "" if cleaned.endswith("\n") else "\n"
         new_content = f"{cleaned}{prefix}{desired}"
-    if new_content == existing:
-        return {"changed": False}
-    profile_path.write_text(new_content, encoding="utf-8")
-    return {"changed": True}
+    return new_content
 
 
 def _strip_managed_marker_blocks(content: str, marker: str) -> str:

@@ -26,6 +26,8 @@ from tests.conftest import guard_commands_module
 from tests.guard_cli_facade_isolation import isolate_terminal_block_patches, restore_cli_facade_approval_hooks
 from tests.guard_signed_approval_fixtures import write_synthetic_daemon_auth_token
 
+pytestmark = [pytest.mark.usefixtures("approval_questionnaire_mode"), pytest.mark.usefixtures("bundle_first_cloud")]
+
 
 @pytest.fixture(autouse=True)
 def _restore_cli_facade_approval_hooks() -> Iterator[None]:
@@ -63,8 +65,6 @@ def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-to
         "dpop_key_material": None,
     }
 
-
-pytestmark = pytest.mark.usefixtures("bundle_first_cloud")
 
 WORKSPACE_ID = "workspace-alpha"
 

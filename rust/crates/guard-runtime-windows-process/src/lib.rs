@@ -14,6 +14,8 @@ use std::io;
 use std::path::Path;
 
 #[cfg(windows)]
+mod secure_storage;
+#[cfg(windows)]
 mod windows;
 
 #[cfg(windows)]
@@ -25,6 +27,12 @@ pub use windows::{
     delete_private_file_handle, open_private_directory, open_private_file, process_start_marker,
     remove_file_if_same, terminate_process, terminate_process_verified, wait_for_process_exit,
     PrivateDirectoryBinding,
+};
+
+#[cfg(windows)]
+pub use secure_storage::{
+    credential_delete, credential_read, credential_write, dpapi_protect, dpapi_unprotect,
+    secure_zero,
 };
 
 #[cfg(windows)]

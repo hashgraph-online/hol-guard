@@ -1,6 +1,144 @@
 use super::*;
 
 #[test]
+fn test_containment_requirement_cannot_override_lockdown() {
+    let program = packaged_command_program().unwrap();
+    let mut binding: NativeCommandControlBindingV1 = serde_json::from_value(serde_json::json!({
+        "schema": "guard.native-command-control-binding.v1",
+        "program_digest": program.program_digest, "catalog_digest": program.catalog_digest,
+        "trust_digest": program.trust_digest, "health": "protected",
+        "revision": 1, "managed_revision": 0, "effective_digest": "", "layers": []
+    }))
+    .unwrap();
+    let evaluate = |binding: &NativeCommandControlBindingV1, command: &str| {
+        let controls = CompiledNativeCommandControls::new(binding).unwrap();
+        crate::pretool::evaluate_pre_tool_envelope_with_context(
+            "omp",
+            "PreToolUse",
+            &serde_json::json!({"tool_name":"bash","tool_input":{"command":command}}),
+            Some(&controls),
+            None,
+            Some("/home/tester"),
+            Some("/home/tester/project"),
+        )
+    };
+    binding.effective_digest = binding.compute_effective_digest().unwrap();
+    assert_eq!(
+        evaluate(&binding, "python3 -m pytest -q").minimum_action,
+        if cfg!(target_os = "macos") {
+            "sandbox-required"
+        } else {
+            "review"
+        }
+    );
+    binding.layers = serde_json::from_value(serde_json::json!([{
+        "schema_version": "1.0.0", "kind": "local-admin", "catalog_digest": program.catalog_digest,
+        "global_lockdown": true, "controls": []
+    }]))
+    .unwrap();
+    binding.effective_digest = binding.compute_effective_digest().unwrap();
+    for command in [
+        "python3 -m pytest -q",
+        "python3 -c 'import json; print(1)'",
+        "node -e 'console.log(1)'",
+    ] {
+        let result = evaluate(&binding, command);
+        assert_eq!(result.minimum_action, "block", "{command}");
+        assert!(
+            !result
+                .reason_code
+                .ends_with("readonly_containment_required"),
+            "{command}"
+        );
+    }
+}
+
+#[test]
+fn git_containment_preserves_disabled_execution_permission() {
+    let program = packaged_command_program().unwrap();
+    let permission = program
+        .rules
+        .iter()
+        .find(|rule| rule.rule_id == "command.git.diff")
+        .unwrap()
+        .permission_id
+        .clone();
+    let mut binding: NativeCommandControlBindingV1 = serde_json::from_value(serde_json::json!({
+        "schema": "guard.native-command-control-binding.v1",
+        "program_digest": program.program_digest, "catalog_digest": program.catalog_digest,
+        "trust_digest": program.trust_digest, "health": "protected",
+        "revision": 1, "managed_revision": 0, "effective_digest": "", "layers": [{
+            "schema_version": "1.0.0", "kind": "local-admin", "catalog_digest": program.catalog_digest,
+            "global_lockdown": false, "controls": [{
+                "target_kind": "permission", "target_id": permission, "state": "disabled"
+            }]
+        }]
+    })).unwrap();
+    binding.effective_digest = binding.compute_effective_digest().unwrap();
+    let controls = CompiledNativeCommandControls::new(&binding).unwrap();
+    let result = crate::pretool::evaluate_pre_tool_envelope_with_context(
+        "omp",
+        "PreToolUse",
+        &serde_json::json!({"tool_name":"bash", "tool_input":{"command":"git diff --stat"}}),
+        Some(&controls),
+        None,
+        Some("/home/tester"),
+        Some("/home/tester/project"),
+    );
+    assert_eq!(result.minimum_action, "block");
+    assert_ne!(
+        result.reason_code,
+        "native_git_readonly_containment_required"
+    );
+}
+
+#[test]
+fn vitest_containment_never_overrides_disabled_package_permission() {
+    let program = packaged_command_program().unwrap();
+    let mut binding: NativeCommandControlBindingV1 = serde_json::from_value(serde_json::json!({
+        "schema": "guard.native-command-control-binding.v1",
+        "program_digest": program.program_digest, "catalog_digest": program.catalog_digest,
+        "trust_digest": program.trust_digest, "health": "protected",
+        "revision": 1, "managed_revision": 0, "effective_digest": "", "layers": [{
+            "schema_version": "1.0.0", "kind": "local-admin", "catalog_digest": program.catalog_digest,
+            "global_lockdown": false, "controls": [{
+                "target_kind": "permission",
+                "target_id": "command.package.node.permission.package-protection",
+                "state": "disabled"
+            }]
+        }]
+    })).unwrap();
+    binding.effective_digest = binding.compute_effective_digest().unwrap();
+    let controls = CompiledNativeCommandControls::new(&binding).unwrap();
+    for command in [
+        "bunx vitest run tests/example.test.ts",
+        "bun run lint",
+        "bunx tsc --noEmit",
+        "bun run build",
+        "npm test",
+        "npm run test",
+        "bun run test",
+    ] {
+        let result = crate::pretool::evaluate_pre_tool_envelope_with_context(
+            "omp",
+            "PreToolUse",
+            &serde_json::json!({"tool_name":"bash", "tool_input":{"command":command}}),
+            Some(&controls),
+            None,
+            Some("/home/tester"),
+            Some("/home/tester/project"),
+        );
+        assert_eq!(result.minimum_action, "block", "{command}");
+        assert!(
+            !result
+                .reason_code
+                .ends_with("readonly_containment_required"),
+            "{command}"
+        );
+    }
+}
+
+#[test]
 fn timeout_wrapper_parsing_is_bounded_and_preserves_inner_commands() {
     for command in [
         "timeout 120 pwd",

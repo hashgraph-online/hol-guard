@@ -353,7 +353,7 @@ def test_cloud_safe_variants_clone_path_set_matcher_constraints() -> None:
         allowed_values=frozenset({"name"}),
     )
 
-    cloned, = option_variant.matcher.matchers
+    (cloned,) = option_variant.matcher.matchers
 
     assert isinstance(cloned, ExecutablePathSetMatcher)
     assert cloned.paths == frozenset({("delete", "pod")})
@@ -387,7 +387,7 @@ def test_cloud_safe_flag_variant_clones_executable_matcher_constraints() -> None
         flag="--dry-run",
         inverse_flag="--no-dry-run",
     )
-    cloned, = variant.matcher.matchers
+    (cloned,) = variant.matcher.matchers
 
     assert isinstance(cloned, ExecutableMatcher)
     assert cloned.subcommands == ("ec2", "terminate-instances")

@@ -88,12 +88,10 @@ def test_negative_timeout_is_rejected() -> None:
 def test_run_timeout_terminates_descendant_process_group(tmp_path: Path) -> None:
     marker = tmp_path / "descendant-finished"
     child_code = (
-        "import pathlib,sys,time; time.sleep(1); "
-        "pathlib.Path(sys.argv[1]).write_text('finished', encoding='utf-8')"
+        "import pathlib,sys,time; time.sleep(1); pathlib.Path(sys.argv[1]).write_text('finished', encoding='utf-8')"
     )
     parent_code = (
-        "import subprocess,sys,time; "
-        "subprocess.Popen([sys.executable, '-c', sys.argv[2], sys.argv[1]]); time.sleep(30)"
+        "import subprocess,sys,time; subprocess.Popen([sys.executable, '-c', sys.argv[2], sys.argv[1]]); time.sleep(30)"
     )
     result = _SMOKE._run(
         [sys.executable, "-c", parent_code, str(marker), child_code],

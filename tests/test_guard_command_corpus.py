@@ -71,7 +71,7 @@ _WORKFLOW_FAMILIES = {
 # independent semantic labels; neither supplies native execution authority.
 _NATIVE_PAIR_MINIMUM_ACTIONS = {
     "p-navigation-boundary": ("allow", "allow"),
-    "p-source-boundary": ("allow", "allow"),
+    "p-source-boundary": ("allow", "review"),
     "p-typescript-source": ("review", "review"),
     "p-git-history": ("review", "review"),
     "p-github-mutation-impact": ("block", "block"),

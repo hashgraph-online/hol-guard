@@ -454,8 +454,16 @@ def evaluate_command(
     native_classification_factors = _native_classification_factors(
         native_extension_evidence, command, allow_benign_proof=not execution_proof_required
     )
+    # Authenticated consent is evidence for the current decision, not proof
+    # that the same command is benign without the control layer.
+    baseline_native_factors = (
+        ()
+        if isinstance(native_extension_evidence, dict)
+        and native_extension_evidence.get("reason_code") == "native_command_explicit_permission_allow"
+        else native_classification_factors
+    )
     baseline_factors = (
-        *native_classification_factors,
+        *baseline_native_factors,
         *baseline_decision_factors,
         *((contained_routine_candidate,) if contained_routine_candidate is not None else ()),
         *((verified_read_candidate,) if verified_read_candidate is not None else ()),

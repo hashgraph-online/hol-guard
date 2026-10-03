@@ -23,6 +23,8 @@ from codex_plugin_scanner.guard.approvals import apply_approval_resolution
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.conftest import guard_commands_module
 
+pytestmark = [pytest.mark.usefixtures("approval_questionnaire_mode"), pytest.mark.usefixtures("bundle_first_cloud")]
+
 
 def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-token", now="2026-05-19T00:00:00Z"):
     """Seed OAuth credentials (replaces legacy set_sync_credentials scaffolding).
@@ -54,8 +56,6 @@ def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-to
         "dpop_key_material": None,
     }
 
-
-pytestmark = pytest.mark.usefixtures("bundle_first_cloud")
 
 WORKSPACE_ID = "workspace-alpha"
 EVALUATION_NOW = datetime(2026, 5, 19, tzinfo=timezone.utc)
@@ -475,7 +475,9 @@ def test_phase14_claude_compatibility_hook_enforces_package_install_without_node
         guard_home=guard_home,
     )
     _seed_review_bundle(guard_home, harness_selector="claude-code")
-    (guard_home / "config.toml").write_text("approval_wait_timeout_seconds = 0\n", encoding="utf-8")
+    (guard_home / "config.toml").write_text(
+        'approval_wait_timeout_seconds = 0\nblocked_request_mode = "ask"\n', encoding="utf-8"
+    )
     # The fallback runs in a child process, so carry the same test-only auth
     # context across the process boundary instead of attempting a live refresh.
     monkeypatch.setenv(

@@ -64,7 +64,7 @@ fn envelope(event: &str, payload: Value) -> GuardHookEnvelopeV2 {
 fn evaluate_isolated(envelope: GuardHookEnvelopeV2) -> Result<Vec<u8>, String> {
     let guard_home = std::path::PathBuf::from(&envelope.source.guard_home);
     let result = validate_envelope_shape(&envelope)
-        .and_then(|_| evaluate_validated_envelope(envelope, None));
+        .and_then(|_| evaluate_validated_envelope(envelope, None, None));
     std::fs::remove_dir_all(guard_home).expect("remove edge generation fixture");
     result
 }
@@ -279,7 +279,6 @@ fn request_digest_binds_source_cwd() {
         request_identity(&changed).unwrap().1
     );
 }
-
 #[test]
 fn rejects_malformed_source_reference_before_review() {
     let error = evaluate_isolated(envelope(
@@ -384,25 +383,8 @@ fn evaluates_generic_pretool_for_supported_harness_aliases() {
     }
 }
 
-#[test]
-fn unknown_and_ambiguous_pretool_payloads_never_receive_an_allow_floor() {
-    let unknown = evaluate_isolated(envelope(
-        "PreToolUse",
-        serde_json::json!({"toolName": "future_tool", "opaque": true}),
-    ))
-    .unwrap();
-    let unknown_result: GuardHookEdgeResultV2 = serde_json::from_slice(&unknown).unwrap();
-    assert_eq!(unknown_result.result["minimum_action"], "review");
+#[path = "edge_payload_tests.rs"]
+mod payload_tests;
 
-    let ambiguous = evaluate_isolated(envelope(
-        "PreToolUse",
-        serde_json::json!({"command": "pwd", "cmd": "whoami"}),
-    ))
-    .unwrap();
-    let ambiguous_result: GuardHookEdgeResultV2 = serde_json::from_slice(&ambiguous).unwrap();
-    assert_eq!(ambiguous_result.result["minimum_action"], "block");
-    assert_eq!(
-        ambiguous_result.result["reason_code"],
-        "native_pre_tool_ambiguous_payload"
-    );
-}
+#[path = "edge_request_identity_tests.rs"]
+mod request_identity_tests;

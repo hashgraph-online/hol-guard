@@ -4,9 +4,11 @@ import base64
 import json
 import os
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
+from codex_plugin_scanner.guard.runtime import approval_context
 from codex_plugin_scanner.guard.runtime.approval_context import (
     APPROVAL_CONTEXT_TOKEN_PREFIX,
     ApprovalContextToken,
@@ -246,7 +248,9 @@ def test_opaque_token_comparison_accepts_unchanged_context(native_context_digest
         f"{APPROVAL_CONTEXT_TOKEN_PREFIX}{_encoded_payload({'version': 1, 'identity': '0' * 64})}",
     ),
 )
-def test_legacy_or_malformed_saved_value_fails_closed_as_changed_content(legacy_or_malformed: object, native_context_digest: Path) -> None:
+def test_legacy_or_malformed_saved_value_fails_closed_as_changed_content(
+    legacy_or_malformed: object, native_context_digest: Path
+) -> None:
     assert approval_context_tokens_validation_reason(legacy_or_malformed, _token()) == "approval_reuse_content_changed"
 
 
@@ -281,6 +285,55 @@ def test_builder_rejects_non_json_context_without_leaking_its_value() -> None:
         _token(identity=Unsupported())
 
     assert "very-private-value" not in str(exc_info.value)
+
+
+@pytest.mark.parametrize(
+    "mutation", ["none", "execute-bits", "read-only", "missing-birthtime", "birthtime", "inode", "during-read"]
+)
+def test_windows_executable_hash_keeps_descriptor_race_checks(tmp_path, monkeypatch, mutation) -> None:
+    executable = tmp_path / "synthetic-executable"
+    executable.write_bytes(b"synthetic executable bytes\n")
+    metadata = executable.stat()
+    birthtime = getattr(metadata, "st_birthtime_ns", metadata.st_ctime_ns)
+    real_fstat = os.fstat
+    calls = []
+
+    class WindowsOs:
+        name = "nt"
+
+        def __getattr__(self, name):
+            return getattr(os, name)
+
+        def fstat(self, descriptor):
+            actual = real_fstat(descriptor)
+            changed_time = metadata.st_ctime_ns + 100
+            if mutation == "during-read" and calls:
+                changed_time += 1
+            calls.append(True)
+            fields = {
+                "st_dev": actual.st_dev,
+                "st_ino": actual.st_ino + (1 if mutation == "inode" else 0),
+                "st_size": actual.st_size,
+                "st_mode": actual.st_mode & ~0o222 if mutation == "read-only" else actual.st_mode,
+                "st_mtime_ns": actual.st_mtime_ns,
+                "st_ctime_ns": changed_time,
+            }
+            if mutation != "missing-birthtime":
+                fields["st_birthtime_ns"] = birthtime + (1 if mutation == "birthtime" else 0)
+            return SimpleNamespace(**fields)
+
+    monkeypatch.setattr(approval_context, "os", WindowsOs())
+    expected_stat = approval_context._executable_stat_key(metadata)
+    if mutation == "execute-bits":
+        expected_stat = (*expected_stat[:5], expected_stat[5] | 0o111)
+    digest, status, _, _ = approval_context._cached_executable_hash(
+        str(executable),
+        expected_stat,
+        expected_birthtime_ns=birthtime,
+    )
+    unchanged = mutation in {"none", "execute-bits"}
+    assert status == ("verified" if unchanged else "identity_raced")
+    assert (digest is not None) == unchanged
 
 
 def test_runtime_executable_identity_changes_after_same_path_byte_replacement(tmp_path) -> None:

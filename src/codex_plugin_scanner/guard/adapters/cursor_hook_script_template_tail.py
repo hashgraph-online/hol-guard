@@ -240,7 +240,10 @@ def _cursor_availability_response(
     *,
     hook_event_name: str,
     workspace: str | None,
+    deadline_monotonic: float | None = None,
 ) -> tuple[dict[str, object], int]:
+    if deadline_monotonic is not None and _remaining_seconds(deadline_monotonic) <= 0:
+        return _cursor_unavailable_response(hook_event_name)
     workspace_path = Path(workspace) if workspace else None
     try:
         from codex_plugin_scanner.guard.daemon.hook_availability_policy import cursor_fallback_permission
@@ -252,9 +255,11 @@ def _cursor_availability_response(
             guard_home=Path(GUARD_HOME),
             recording_only=False,
         )
+    except ModuleNotFoundError:
+        # The isolated hook cannot load the policy package. Deny without guessing.
+        return _cursor_unavailable_response(hook_event_name)
     except Exception:
-        # This generated hook is the final denial boundary, including for faulty
-        # evaluators. An unexpected exception must never escape as a permission.
+        # A present evaluator that fails still owes the repair instruction.
         compact = hook_event_name.strip().lower().replace("_", "").replace("-", "")
         if compact in {"aftershellexecution", "aftermcpexecution"}:
             return {}, 0
@@ -264,6 +269,14 @@ def _cursor_availability_response(
             "user_message": reason,
             "agent_message": reason,
         }, 2
+
+
+def _cursor_unavailable_response(hook_event_name: str) -> tuple[dict[str, object], int]:
+    compact = hook_event_name.strip().lower().replace("_", "").replace("-", "")
+    if compact in {"aftershellexecution", "aftermcpexecution"}:
+        return {}, 0
+    reason = "HOL Guard could not complete the native hook decision safely."
+    return {"permission": "deny", "user_message": reason}, 2
 
 
 _LAST_HOOK_EVENT_NAME = ""
@@ -283,6 +296,10 @@ def _cursor_hook_event_from_argv() -> str:
 
 def _exit_unparseable_cursor_input() -> int:
     event_name = _cursor_hook_event_from_argv() or _LAST_HOOK_EVENT_NAME
+    if _remaining_seconds(_HOOK_DEADLINE_MONOTONIC) <= 0:
+        response, code = _cursor_unavailable_response(event_name)
+        print("{}" if not response else json.dumps(response))
+        return code
     try:
         from codex_plugin_scanner.guard.daemon.hook_availability_policy import (
             cursor_unparseable_input_permission,
@@ -316,7 +333,7 @@ def _main_inner() -> int:
     argv_event = _cursor_hook_event_from_argv()
     if argv_event:
         _LAST_HOOK_EVENT_NAME = argv_event
-    raw = sys.stdin.read()
+    raw = _read_hook_input(_HOOK_DEADLINE_MONOTONIC)
     if not raw.strip():
         return _exit_unparseable_cursor_input()
     try:
@@ -348,7 +365,7 @@ def _main_inner() -> int:
         if proof:
             guard_env["HOL_GUARD_CURSOR_AFTER_SHELL_PROOF"] = proof
     payload_json = json.dumps(prepared)
-    deadline_monotonic = time.monotonic() + GUARD_HOOK_TIMEOUT_SECONDS
+    deadline_monotonic = _HOOK_DEADLINE_MONOTONIC
     daemon_result, daemon_failure_kind = _daemon_hook_result(
         payload_json,
         deadline_monotonic=deadline_monotonic,
@@ -389,6 +406,7 @@ def _main_inner() -> int:
             prepared,
             hook_event_name=hook_event_name,
             workspace=workspace,
+            deadline_monotonic=deadline_monotonic,
         )
         print(json.dumps(response))
         return exit_code
@@ -409,6 +427,7 @@ def _main_inner() -> int:
             prepared,
             hook_event_name=hook_event_name,
             workspace=workspace,
+            deadline_monotonic=deadline_monotonic,
         )
         print(json.dumps(response))
         return exit_code

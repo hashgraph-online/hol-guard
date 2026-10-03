@@ -56,8 +56,8 @@ def test_hao038_claim_hermes_pairing_saves_runtime_id_and_label(
     context = _context(tmp_path)
     store = GuardStore(context.guard_home)
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.cli.remote_pair_flow.os.geteuid",
-        lambda: 1000,
+        "codex_plugin_scanner.guard.cli.remote_pair_flow._assert_no_root_install_allowed",
+        lambda **_kwargs: None,
         raising=False,
     )
 
@@ -107,8 +107,8 @@ def test_hao039_claim_openclaw_pairing_saves_runtime_id_and_label(
     context = _context(tmp_path)
     store = GuardStore(context.guard_home)
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.cli.remote_pair_flow.os.geteuid",
-        lambda: 1000,
+        "codex_plugin_scanner.guard.cli.remote_pair_flow._assert_no_root_install_allowed",
+        lambda **_kwargs: None,
         raising=False,
     )
 
@@ -164,8 +164,8 @@ def test_hao040_verify_distinguishes_connected_from_paired_not_protected(
     context = _context(tmp_path)
     store = GuardStore(context.guard_home)
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.cli.remote_pair_flow.os.geteuid",
-        lambda: 1000,
+        "codex_plugin_scanner.guard.cli.remote_pair_flow._assert_no_root_install_allowed",
+        lambda **_kwargs: None,
         raising=False,
     )
 
@@ -240,8 +240,8 @@ def test_hao041_status_payload_returns_runtime_label_protection_grant(
 
     # First, set up credentials via a fake claim
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.cli.remote_pair_flow.os.geteuid",
-        lambda: 1000,
+        "codex_plugin_scanner.guard.cli.remote_pair_flow._assert_no_root_install_allowed",
+        lambda **_kwargs: None,
         raising=False,
     )
 
@@ -389,8 +389,8 @@ def test_hao045_claim_response_never_logs_pairing_code_or_oauth_token(
     context = _context(tmp_path)
     store = GuardStore(context.guard_home)
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.cli.remote_pair_flow.os.geteuid",
-        lambda: 1000,
+        "codex_plugin_scanner.guard.cli.remote_pair_flow._assert_no_root_install_allowed",
+        lambda **_kwargs: None,
         raising=False,
     )
 

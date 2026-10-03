@@ -310,8 +310,7 @@ def test_ledger_rejects_malformed_node_identity(ledger_repository, reference: st
 def test_ledger_rejects_noncollectible_parametrized_nodes(ledger_repository, reference: str) -> None:
     root, _, ledger = ledger_repository
     (root / "tests/test_native.py").write_text(
-        (root / "tests/test_native.py").read_text(encoding="utf-8")
-        + "def test_plain():\n    pass\n",
+        (root / "tests/test_native.py").read_text(encoding="utf-8") + "def test_plain():\n    pass\n",
         encoding="utf-8",
     )
     ledger["retired_tests"][0]["replacement_nodes"] = [reference]

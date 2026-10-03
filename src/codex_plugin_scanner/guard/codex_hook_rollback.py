@@ -6,11 +6,14 @@ import os
 import stat
 from pathlib import Path
 
+from .codex_hook_file_integrity import CodexHookIntegrityError
 
-def _conflict() -> RuntimeError:
-    return RuntimeError(
-        "codex_hook_rollback_conflict: Codex configuration changed during the failed transaction; "
-        + "Guard preserved it and could not restore the previous hook state."
+
+def _conflict() -> CodexHookIntegrityError:
+    return CodexHookIntegrityError(
+        "codex_hook_rollback_conflict",
+        "codex_hook_rollback_conflict: Codex publication needs recovery; Guard preserved the recovery record "
+        + "and current files.",
     )
 
 

@@ -21,6 +21,8 @@ from codex_plugin_scanner.guard.daemon.hook_process_entrypoint import (
 )
 from codex_plugin_scanner.guard.store import GuardStore
 
+pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
+
 
 def test_daemon_server_import_is_order_independent() -> None:
     completed = subprocess.run(

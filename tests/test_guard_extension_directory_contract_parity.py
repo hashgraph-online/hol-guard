@@ -22,7 +22,6 @@ from codex_plugin_scanner.guard.extension_builder.listing import (
 from codex_plugin_scanner.guard.runtime.mcp_server_contribution import catalog_id_for_mcp_id
 from tests.extension_builder_support import REPOSITORY, metadata
 from tests.support.extension_directory import copy_projected_contribution_sources
-from tests.support.extension_freshness import requires_fresh_projections
 
 
 def directory_schema() -> dict[str, object]:
@@ -101,7 +100,6 @@ def test_listing_contract_distinguishes_presentation_from_claim_authority() -> N
         assert packaged == public
 
 
-@requires_fresh_projections
 def test_exporter_never_infers_claim_authority_when_ids_are_omitted(tmp_path: Path) -> None:
     specification = importlib.util.spec_from_file_location(
         "publisher_contract_export", REPOSITORY / "scripts/export_extension_directory.py"

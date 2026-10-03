@@ -137,13 +137,10 @@ def test_builder_workflow_checks_trust_before_regeneration() -> None:
     root = Path(__file__).resolve().parents[1]
     workflow = yaml.safe_load((root / ".github/workflows/extension-builder-ci.yml").read_text())
     steps = [step for job in workflow["jobs"].values() for step in job.get("steps", [])]
-    step = next(item for item in steps if item.get("name") == "Verify native public directory projections")
+    step = next(item for item in steps if item.get("name") == "Prepare and verify current extension projections")
     script = step["run"]
     assert script.index("git fetch -q origin") < script.index("comparison_base=$(git merge-base")
-    assert script.count('--changed-from "$comparison_base"') == 3
-    assert 'git diff --name-only "$comparison_base" HEAD --' in script
+    assert script.count('--changed-from "$comparison_base"') == 2
     assert "github.event.pull_request.base.sha" not in script
     assert script.index("verify_contribution_trust_map.py") < script.index("prepare_extension_contribution.py")
-    assert "--changed-from" in script
-    assert "contracts/extensions/native-command-program.v1.json" in script
-    assert "contracts/extensions/command-catalog.v1.json" in script
+    assert script.index("verify_contribution_trust_map.py") < script.index("verify_native_command_program.py")

@@ -6,6 +6,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+guard-command = { path = "../guard-command" }
 hex.workspace = true
 serde.workspace = true
 sha2.workspace = true
