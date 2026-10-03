@@ -17,15 +17,16 @@ import sys
 from collections import Counter
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from functools import cache
 from pathlib import Path
 from typing import Final, cast
 
 if __package__ is None:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from scripts.ci.rust_io_ownership_cache import analysis_cache
+from scripts.ci.rust_io_ownership_cache import parsed_module as _parsed_module
 from scripts.ci.rust_io_ownership_contract import capability_contract
-from scripts.ci.rust_io_ownership_resolver import FunctionRecordLike, resolve_call
+from scripts.ci.rust_io_ownership_resolver import FunctionIndex, FunctionRecordLike, resolve_call
 
 SCHEMA: Final = "hol-guard.decision-critical-io.v1"
 NATIVE_MODES: Final = frozenset({"auto", "force"})
@@ -352,20 +353,6 @@ ROOTS: Final = (
 )
 
 
-def _read(path: Path) -> str:
-    try:
-        return path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError) as exc:
-        raise RuntimeError(f"could not inspect {path}") from exc
-
-
-@cache
-def _parsed_module(path: Path) -> ast.Module:
-    """Parse a source file once per process; inputs are read-only while validating."""
-
-    return ast.parse(_read(path), filename=str(path))
-
-
 def _relative(path: Path, root: Path) -> str:
     return path.relative_to(root).as_posix()
 
@@ -513,7 +500,7 @@ def _reachable_records(
     records: dict[tuple[str, str], list[FunctionRecord]],
 ) -> tuple[FunctionRecord, ...]:
     pending = [_root_record(root, spec, records) for spec in ROOTS]
-    records_view = cast(Mapping[tuple[str, str], list[FunctionRecordLike]], records)
+    records_view = FunctionIndex(cast(Mapping[tuple[str, str], list[FunctionRecordLike]], records))
     seen: set[tuple[str, str]] = set()
     result: list[FunctionRecord] = []
     while pending:
@@ -618,6 +605,12 @@ def _capability_contract() -> list[dict[str, object]]:
 
 
 def validate(root: Path) -> dict[str, object]:
+    """Validate current source in a fresh, bounded-lifetime analysis scope."""
+    with analysis_cache():
+        return _validate(root)
+
+
+def _validate(root: Path) -> dict[str, object]:
     root = root.resolve()
     records = _function_map(root)
     reachable = _reachable_records(root, records)

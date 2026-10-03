@@ -5,9 +5,11 @@ from __future__ import annotations
 import ast
 from collections.abc import Mapping
 from dataclasses import dataclass
-from functools import lru_cache
 from pathlib import Path
 from typing import Protocol, TypeVar
+
+from scripts.ci.rust_io_ownership_cache import cached
+from scripts.ci.rust_io_ownership_cache import parsed_module as _parsed_module
 
 
 class FunctionRecordLike(Protocol):
@@ -21,20 +23,7 @@ class FunctionRecordLike(Protocol):
 RecordT = TypeVar("RecordT", bound=FunctionRecordLike)
 
 
-def _read(path: Path) -> str:
-    try:
-        return path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError) as exc:
-        raise RuntimeError(f"could not inspect {path}") from exc
-
-
-@lru_cache(maxsize=None)
-def _parsed_module(path: Path) -> ast.Module:
-    """Parse a source file once per process; inputs are read-only while validating."""
-
-    return ast.parse(_read(path), filename=str(path))
-
-
+@cached
 def _local_binding_names(record: FunctionRecordLike) -> frozenset[str]:
     """Return names bound as local values in a function body.
 
@@ -151,6 +140,7 @@ _PYTHON_BUILTINS = frozenset(
 )
 
 
+@cached
 def _module_level_names(root: Path, record: FunctionRecordLike) -> frozenset[str]:
     """Return names bound at module top level that could shadow builtins."""
 
@@ -168,6 +158,7 @@ def _module_level_names(root: Path, record: FunctionRecordLike) -> frozenset[str
     return frozenset(names)
 
 
+@cached
 def _module_file(root: Path, target: Path) -> str | None:
     """Resolve a source module/package path to its repository-relative file."""
 
@@ -183,6 +174,7 @@ def _module_file(root: Path, target: Path) -> str | None:
     return None
 
 
+@cached
 def _import_target_path(
     root: Path,
     source_path: str,
@@ -212,6 +204,7 @@ def _import_target_path(
     return _module_file(root, relative_target)
 
 
+@cached
 def _repository_module_path(root: Path, module_name: str) -> str | None:
     """Resolve a dotted import to a repository-relative module file."""
 
@@ -227,6 +220,7 @@ def _repository_module_path(root: Path, module_name: str) -> str | None:
     return None
 
 
+@cached
 def _module_dunder_all(tree: ast.Module) -> frozenset[str] | None:
     """Return a module's literal ``__all__`` names when statically declared."""
 
@@ -245,6 +239,7 @@ def _module_dunder_all(tree: ast.Module) -> frozenset[str] | None:
     return None
 
 
+@cached
 def _module_binds_symbol(tree: ast.Module, name: str) -> bool:
     """Return whether a module binds ``name`` at top level (vars() semantics)."""
 
@@ -268,6 +263,7 @@ def _module_binds_symbol(tree: ast.Module, name: str) -> bool:
     return False
 
 
+@cached
 def _union_source_modules(root: Path, module_path: str, tree: ast.Module) -> list[str]:
     """Return ordered member modules for a ``_SOURCE_MODULES`` union module.
 
@@ -410,6 +406,7 @@ class _VisibleImport:
     scope: int
 
 
+@cached
 def _function_scopes(tree: ast.Module, qualname: str) -> tuple[ast.FunctionDef | ast.AsyncFunctionDef, ...]:
     """Return enclosing function scopes for a qualified function name."""
 
@@ -468,6 +465,7 @@ def _scope_imports(body: list[ast.stmt]) -> tuple[ast.Import | ast.ImportFrom, .
     return tuple(imports)
 
 
+@cached
 def _visible_imports(root: Path, record: FunctionRecordLike) -> tuple[_VisibleImport, ...]:
     """Return module and enclosing-function imports visible to ``record``."""
 
@@ -485,6 +483,7 @@ def _qualified_parts(name: str) -> tuple[str, str] | None:
     return parts[0], parts[-1]
 
 
+@cached
 def imported_symbol_path(root: Path, record: FunctionRecordLike, name: str) -> tuple[str, str | None] | None:
     """Return the repository path and symbol name imported for ``name``.
 
@@ -553,6 +552,16 @@ def imported_symbol_path(root: Path, record: FunctionRecordLike, name: str) -> t
     return None
 
 
+class FunctionIndex(dict[tuple[str, str], list[RecordT]]):
+    """Index the existing record order once instead of scanning it per call."""
+
+    def __init__(self, records: Mapping[tuple[str, str], list[RecordT]]) -> None:
+        super().__init__(records)
+        self.by_name: dict[str, list[RecordT]] = {}
+        for (_path, name), values in records.items():
+            self.by_name.setdefault(name, []).extend(values)
+
+
 def resolve_call(
     root: Path,
     record: RecordT,
@@ -582,12 +591,16 @@ def resolve_call(
         if imported is None:
             return None
         name = name.rsplit(".", 1)[-1]
-    matches = [
-        candidate
-        for (_path, candidate_name), values in records.items()
-        if candidate_name == name
-        for candidate in values
-    ]
+    matches = (
+        records.by_name.get(name, [])
+        if isinstance(records, FunctionIndex)
+        else [
+            candidate
+            for (_path, candidate_name), values in records.items()
+            if candidate_name == name
+            for candidate in values
+        ]
+    )
     if not matches:
         return None
     if imported is not None:
