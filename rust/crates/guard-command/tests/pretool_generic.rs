@@ -203,6 +203,9 @@ fn human_authentication_context_is_not_a_credential_read() {
         "Read first, in this order: the implementation ledger and checklist. Recovery belongs to the user in Terminal and needs their password.",
         "Recovery belongs to the user in Terminal and needs their password. Never delete locks. Continue the implementation checklist.",
         "Inspect repository state. Do not delete files or remove directories.",
+        "Keep Guard enabled. Do not disable Guard. Continue validation.",
+        "Do not change NODE_OPTIONS, disable Guard, or recover policy authority. Continue validation.",
+        "Never turn off Guard. Run the tests.",
     ] {
         let result = evaluate_pre_tool_envelope(
             "generic", "UserPromptSubmit",
@@ -243,6 +246,10 @@ fn human_authentication_context_is_not_a_credential_read() {
         "Never delete anything aside from the temporary directory.",
         "Do not remove anything save for the cache directory.",
         "Never delete anything instead of the repository directory.",
+        "Do not disable Guard unless tests fail.",
+        "Never disable Guard. Then do it anyway.",
+        "Never disable Guard; disable Guard now.",
+        "Do not change NODE_OPTIONS, then disable Guard.",
     ] {
         let result = evaluate_pre_tool_envelope(
             "generic",

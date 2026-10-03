@@ -331,6 +331,8 @@ fn prompt_sensitive_text(value: &str) -> bool {
 }
 
 fn guard_bypass_prompt(values: &[String]) -> bool {
+    static PROHIBITION: OnceLock<Regex> = OnceLock::new();
+    static REVERSAL: OnceLock<Regex> = OnceLock::new();
     values.iter().any(|value| {
         let lowered = value.to_ascii_lowercase();
         let normalized = lowered.split_whitespace().collect::<Vec<_>>().join(" ");
@@ -347,7 +349,28 @@ fn guard_bypass_prompt(values: &[String]) -> bool {
             "guard_bypass",
         ]
         .iter()
-        .any(|pattern| normalized.contains(pattern))
+        .any(|pattern| {
+            normalized.match_indices(pattern).any(|(offset, _)| {
+                let start = normalized[..offset]
+                    .rfind(['.', '!', '?', ';'])
+                    .map_or(0, |index| index + 1);
+                let prefix = &normalized[start..offset];
+                let prohibition = PROHIBITION.get_or_init(|| {
+                    Regex::new(r"(?i)\b(?:never|do\s+not|don't|dont|must\s+not|should\s+not)\s+(?:[a-z0-9_ -]{1,80},\s*(?:(?:or|and)\s+)?)?$")
+                        .expect("bounded guard bypass prohibition")
+                });
+                let reversal = REVERSAL.get_or_init(|| {
+                    Regex::new(r"(?i)\b(?:except|unless|until|without|if|but|then|anyway|regardless)\b|\b(?:do|perform|execute|run|use)\s+(?:it|that|this|them)\b")
+                        .expect("bounded guard bypass reversal")
+                });
+                // Mask only an unconditional prohibition, not a later bypass
+                // instruction or a conditional exception to the prohibition.
+                let tail = &normalized[offset + pattern.len()..];
+                let clause = tail.split(['.', '!', '?', ';']).next().unwrap_or("");
+                !prohibition.is_match(prefix) || reversal.is_match(prefix) || reversal.is_match(clause)
+                    || reversal.is_match(tail)
+            })
+        })
             || ["approval_policy=\"never\"", "approval_policy='never'"]
                 .iter()
                 .any(|pattern| normalized.replace(' ', "").contains(pattern))
