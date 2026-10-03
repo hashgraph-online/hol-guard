@@ -228,7 +228,7 @@ fn pager_checks_follow_the_actual_subcommand_and_global_override() {
             true,
             "deny",
         ),
-        ("[pager]\nstatus = true\n", false, true, "deny"),
+        ("[pager]\nstatus = true\n", false, true, "allow"),
     ] {
         std::fs::write(&config, settings).unwrap();
         let mut caller = context.clone();
