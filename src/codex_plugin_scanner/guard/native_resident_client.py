@@ -137,19 +137,33 @@ class _PersistentNativeClientPool:
                     self._idle.append(client)
                 self._condition.notify()
             if close_client:
-                client.close()
+                try:
+                    contained = client.close(deadline_monotonic=deadline_monotonic)
+                except BaseException:
+                    with self._condition:
+                        self._clients.add(client)
+                    raise
+                if contained is False:
+                    with self._condition:
+                        self._clients.add(client)
 
-    def close(self) -> None:
+    def close(self, *, deadline_monotonic: float | None = None) -> bool:
         with self._condition:
             self._closed = True
             clients = tuple(self._clients)
-            self._clients.clear()
             self._idle.clear()
             self._condition.notify_all()
         for client in clients:
-            client.close()
+            contained = (
+                client.close() if deadline_monotonic is None else client.close(deadline_monotonic=deadline_monotonic)
+            )
+            if contained is not False:
+                with self._condition:
+                    self._clients.discard(client)
         for client in clients:
             _contain_persistent_resident(client)
+        with self._condition:
+            return not self._clients
 
 
 _CLIENTS_LOCK = threading.Lock()
@@ -179,10 +193,12 @@ def _client_pool_for(executable: Path, state_dir: Path, environment: Mapping[str
     return pool
 
 
-def _state_files(state_dir: Path) -> tuple[Path, ...]:
+def _state_files(state_dir: Path, *, strict: bool = False) -> tuple[Path, ...]:
     try:
         return tuple(state_dir.glob("resident-v3-*/generation-*.json"))
     except (OSError, RuntimeError):
+        if strict:
+            raise
         return ()
 
 
@@ -196,7 +212,7 @@ def _contain_persistent_resident(client: _PersistentNativeClient) -> None:
     _ = client
 
 
-def close_native_resident_clients(guard_home: Path | None = None) -> None:
+def close_native_resident_clients(guard_home: Path | None = None, *, deadline_monotonic: float | None = None) -> bool:
     """Close persistent Rust clients, optionally limited to one Guard home."""
 
     resolved_guard_home = guard_home.expanduser().resolve() if guard_home is not None else None
@@ -207,17 +223,25 @@ def close_native_resident_clients(guard_home: Path | None = None) -> None:
             for key, pool in _CLIENT_POOLS.items()
             if resolved_guard_home is None or Path(key[1]).parent == resolved_guard_home
         ]
-        for key, _pool in selected:
-            _CLIENT_POOLS.pop(key, None)
     first_error: Exception | None = None
-    for _key, pool in selected:
+    all_contained = True
+    for key, pool in selected:
         try:
-            pool.close()
+            contained = (
+                pool.close() if deadline_monotonic is None else pool.close(deadline_monotonic=deadline_monotonic)
+            )
+            if contained is False:
+                all_contained = False
+            else:
+                with _CLIENTS_LOCK:
+                    if _CLIENT_POOLS.get(key) is pool:
+                        _CLIENT_POOLS.pop(key)
         except Exception as error:
             if first_error is None:
                 first_error = error
     if first_error is not None:
         raise first_error
+    return all_contained
 
 
 atexit.register(close_native_resident_clients)
@@ -236,29 +260,77 @@ def stop_native_resident(
     state_dir: Path,
     environment: Mapping[str, str],
     timeout_seconds: float = 3.0,
+    retire_clients: bool = False,
+    deadline_monotonic: float | None = None,
 ) -> bool:
     """Stop one Rust-managed resident and wait for its state retirement."""
+    command = [str(executable), "resident-stop", "--state-dir", str(state_dir)]
+    if retire_clients:
+        command.append("--retire-clients")
     result = run_isolated_hook_process(
-        (str(executable), "resident-stop", "--state-dir", str(state_dir)),
+        tuple(command),
         input_text="",
         cwd=executable.parent,
         environment=dict(environment),
         timeout_seconds=timeout_seconds,
+        deadline_monotonic=deadline_monotonic,
         output_limit=_MAX_RESPONSE_BYTES,
     )
+    if result.timed_out or result.containment_failed:
+        return False
+    try:
+        state_files = _state_files(state_dir, strict=True)
+    except (OSError, RuntimeError):
+        return False
+    if result.returncode == 0:
+        return not state_files
+    # Rust uses this authenticated, idempotent result when no resident state
+    # exists. Update retirement also inspects leases, so accept it only after
+    # the strict final state scan and only for the update-only command.
     return (
-        result.returncode == 0
-        and not result.timed_out
-        and not result.containment_failed
-        and not _state_files(state_dir)
+        retire_clients
+        and result.returncode == 2
+        and result.stderr.strip() == "native_resident_stop_unavailable"
+        and not state_files
     )
 
 
-def close_native_residents(guard_home: Path | None = None) -> bool:
+def retire_native_resident_for_update(
+    *,
+    executable: Path,
+    guard_home: Path,
+    environment: Mapping[str, str],
+    timeout_seconds: float = 3.0,
+) -> bool:
+    """Retire any resident before its executable can be replaced in place.
+
+    The resident registry is process-local, so an updater may need to retire a
+    resident started by another Guard process. State discovery stays bounded to
+    this Guard home, while shutdown still goes through the authenticated Rust
+    command and its PID/start-marker/runtime-digest checks.
+    """
+
+    resolved_guard_home = guard_home.expanduser().resolve()
+    state_dir = resolved_guard_home / "native-runtime"
+    try:
+        close_native_resident_clients(resolved_guard_home)
+        _ = _state_files(state_dir, strict=True)
+        return stop_native_resident(
+            executable=executable,
+            state_dir=state_dir,
+            environment=environment,
+            timeout_seconds=timeout_seconds,
+            retire_clients=True,
+        )
+    except (OSError, RuntimeError, ValueError):
+        return False
+
+
+def close_native_residents(guard_home: Path | None = None, *, deadline_monotonic: float | None = None) -> bool:
     """Stop this process's residents, optionally limited to one Guard home."""
 
     resolved_guard_home = guard_home.expanduser().resolve() if guard_home is not None else None
-    close_native_resident_clients(guard_home)
+    clients_contained = close_native_resident_clients(guard_home, deadline_monotonic=deadline_monotonic)
     with _RESIDENTS_LOCK:
         residents = [
             (key, environment)
@@ -270,13 +342,19 @@ def close_native_residents(guard_home: Path | None = None) -> bool:
             for key, environment in _RESIDENTS.items()
             if resolved_guard_home is not None and key[1].parent != resolved_guard_home
         }
-    all_contained = True
+    all_contained = clients_contained is not False
     for (executable, state_dir), environment in residents:
-        if _state_files(state_dir) and not stop_native_resident(
+        if not _state_files(state_dir):
+            continue
+        remaining_seconds = 3.0 if deadline_monotonic is None else min(3.0, deadline_monotonic - time.monotonic())
+        stopped = remaining_seconds > 0 and stop_native_resident(
             executable=executable,
             state_dir=state_dir,
             environment=environment,
-        ):
+            timeout_seconds=remaining_seconds,
+            deadline_monotonic=deadline_monotonic,
+        )
+        if not stopped:
             remaining[(executable, state_dir)] = environment
             all_contained = False
     with _RESIDENTS_LOCK:
@@ -395,5 +473,6 @@ __all__ = [
     "native_resident_client_failure_code",
     "native_resident_client_request",
     "record_native_resident_client_failure_code",
+    "retire_native_resident_for_update",
     "stop_native_resident",
 ]

@@ -51,6 +51,48 @@ class _CapturingProxyHandler(BaseHTTPRequestHandler):
         return
 
 
+@pytest.mark.parametrize("reason", ["missing authority", "fallback timed out", "capacity exhausted", "validator fault"])
+@pytest.mark.parametrize("event", ["PreToolUse", "PermissionRequest"])
+def test_unverified_degradation_never_grants_tool_permission(reason: str, event: str) -> None:
+    response = json.loads(bridge._degraded(reason, json.dumps({"hook_event_name": event})))
+    output = response["hookSpecificOutput"]
+    if event == "PreToolUse":
+        assert output["permissionDecision"] == "deny"
+        assert reason in output["permissionDecisionReason"]
+    else:
+        assert output["decision"]["behavior"] == "deny"
+        assert reason in output["decision"]["message"]
+
+
+@pytest.mark.parametrize(
+    "output",
+    [
+        {},
+        {"hookSpecificOutput": {}},
+        {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "unknown"}},
+        {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": ["allow"]}},
+        {"hookSpecificOutput": {"hookEventName": "Stop", "permissionDecision": "allow"}},
+    ],
+)
+def test_incomplete_or_wrong_event_tool_response_requires_native_approval(output):
+    response = bridge._valid_hook_json_or_degraded(
+        json.dumps(output),
+        reason="invalid tool response",
+        data=json.dumps({"hook_event_name": "PreToolUse"}),
+    )
+    assert json.loads(response)["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+@pytest.mark.parametrize("event", ["PermissionRequest", "PermissionRequestV2"])
+def test_empty_permission_response_is_denied(event):
+    response = bridge._valid_hook_json_or_degraded(
+        "{}",
+        reason="invalid permission response",
+        data=json.dumps({"hook_event_name": event}),
+    )
+    assert json.loads(response)["hookSpecificOutput"]["decision"]["behavior"] == "deny"
+
+
 def test_assert_loopback_http_url_rejects_remote_host() -> None:
     with pytest.raises(ValueError, match="loopback"):
         bridge._assert_loopback_http_url("http://evil.example:5474/v1/hooks/claude-code")
@@ -219,6 +261,67 @@ def test_main_degrades_when_daemon_returns_malformed_json(
     payload = json.loads(output)
     assert payload["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
     assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_main_stamps_caller_environment_before_daemon_forwarding(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    captured: list[str] = []
+
+    def fake_post(
+        endpoint: str,
+        data: str,
+        *,
+        state_path: str | Path,
+        deadline: float | None = None,
+    ) -> str:
+        del endpoint, state_path, deadline
+        captured.append(data)
+        return json.dumps(
+            {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "allow",
+                }
+            }
+        )
+
+    monkeypatch.setenv("PATH", "/claude/outer/bin")
+    monkeypatch.setenv("HOME", "/claude/outer/home")
+    monkeypatch.setenv("GIT_EXTERNAL_DIFF", "claude-caller-secret-not-serialized")
+    monkeypatch.setattr(bridge, "state_path_for_query", lambda state_path, query: state_path)
+    monkeypatch.setattr(bridge, "_daemon_url", lambda state_path, fallback: "http://127.0.0.1:5474")
+    monkeypatch.setattr(bridge, "_post_to_loopback_daemon", fake_post)
+    monkeypatch.setattr(
+        "sys.stdin",
+        io.StringIO(
+            json.dumps(
+                {
+                    "hook_event_name": "PreToolUse",
+                    "guard_execution_environment": {"path": "/model-supplied"},
+                }
+            )
+        ),
+    )
+
+    assert bridge.main(
+        state_path=tmp_path / "daemon-state.json",
+        fallback_daemon_url="http://127.0.0.1:5474",
+        fallback_command=(sys.executable, "-c", "print('{}')"),
+        query="guard-home=/tmp/guard-home",
+    ) == 0
+
+    assert len(captured) == 1
+    forwarded = json.loads(captured[0])
+    context = forwarded["guard_execution_environment"]
+    assert context["path"] == "/claude/outer/bin"
+    assert context["home"] == "/claude/outer/home"
+    assert context["path"] != "/model-supplied"
+    assert "GIT_EXTERNAL_DIFF" in context["environment_names"]
+    assert "claude-caller-secret-not-serialized" not in captured[0]
+    assert json.loads(capsys.readouterr().out)["hookSpecificOutput"]["permissionDecision"] == "allow"
 
 
 def test_run_local_fallback_degrades_invalid_json() -> None:

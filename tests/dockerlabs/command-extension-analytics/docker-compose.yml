@@ -7,9 +7,9 @@ services:
         HOL_GUARD_LAB_WHEEL: ${HOL_GUARD_LAB_WHEEL:?set by runner}
     environment:
       HOL_GUARD_LAB_EXPECTED_VERSION: ${HOL_GUARD_LAB_EXPECTED_VERSION:?set by runner}
-      # Force the Python policy path so native matching cannot change this workflow approval fixture.
-      HOL_GUARD_NATIVE: "off"
-      HOL_GUARD_PYTHON_ORACLE: "1"
+      # Exercise the installed native authority; off is a fail-safe denial,
+      # not a supported Python policy fallback.
+      HOL_GUARD_NATIVE: "auto"
       HOL_GUARD_TEST_MODE: "1"
       PYTHONDONTWRITEBYTECODE: "1"
       PYTHONUNBUFFERED: "1"

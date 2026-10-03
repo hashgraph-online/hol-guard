@@ -11,6 +11,8 @@ from pathlib import Path
 from subprocess import CompletedProcess
 from typing import ClassVar
 
+import pytest
+
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import protect
 from codex_plugin_scanner.guard.advisory_model import ProtectTargetIdentity, advisory_matches_target
@@ -1286,6 +1288,7 @@ class TestGuardProtect:
         synced_advisories = GuardStore(home_dir).list_cached_advisories(limit=None)
         assert any(item.get("id") == "adv-sync-block" for item in synced_advisories)
 
+    @pytest.mark.usefixtures("approval_questionnaire_mode")
     def test_guard_protect_trusted_session_failure_keeps_approval_link_actionable(
         self,
         tmp_path,

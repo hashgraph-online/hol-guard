@@ -31,7 +31,9 @@ _COMMANDS: tuple[tuple[str, bool], ...] = (
 )
 
 
-def _run(runtime: Path, argv: tuple[str, ...], payload: bytes, timeout: float = 3.0) -> subprocess.CompletedProcess[bytes]:
+def _run(
+    runtime: Path, argv: tuple[str, ...], payload: bytes, timeout: float = 3.0
+) -> subprocess.CompletedProcess[bytes]:
     environment = {
         key: value
         for key, value in os.environ.items()

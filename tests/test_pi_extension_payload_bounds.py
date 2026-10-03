@@ -1,10 +1,77 @@
 from __future__ import annotations
 
+import json
+import subprocess
+import tempfile
 from pathlib import Path
 
 from tests.pi_extension_response_callback_support import _run_generated_callback_payload
 from tests.pi_extension_response_runtime_support import _run_generated_preprocessing_fixture
 from tests.pi_extension_response_source_support import _generated_source
+
+
+def _run_generated_reference_fixture(source: str) -> dict[str, object]:
+    helper_start = source.index("function base64Url(")
+    helper_end = source.index("/* HOL Guard bounded preprocessing begins */", helper_start)
+    helper = source[helper_start:helper_end]
+    helper = helper.replace("function base64Url(value: Buffer): string", "function base64Url(value)")
+    helper = helper.replace(
+        "function encryptedPayload(serializedPayload: string)",
+        "function encryptedPayload(serializedPayload)",
+    )
+    helper = helper.replace(
+        "function referencedPayload(payload: Record<string, unknown>, serializedPayload: string)",
+        "function referencedPayload(payload, serializedPayload)",
+    )
+    helper = helper.replace("const referencePayload: Record<string, unknown>", "const referencePayload")
+    javascript = f'''\
+import {{ createCipheriv, createHash, randomBytes }} from "node:crypto";
+import {{ chmodSync, mkdtempSync, rmSync, writeFileSync }} from "node:fs";
+import {{ tmpdir }} from "node:os";
+import {{ join }} from "node:path";
+
+{helper}
+
+const metadata = {{
+  path: "/outer/bin",
+  environment_names: ["GIT_PAGER", "PATH"],
+  environment_digest: "caller-digest",
+  xdg_config_home: "/outer/config",
+  git_config_no_system: false,
+  home: "/outer/home",
+  git_pager_disabled: true,
+  pager_disabled: false,
+}};
+const payload = {{
+  hook_event_name: "PostToolUse",
+  config_path: "/guard/config.toml",
+  tool_name: "bash",
+  is_error: false,
+  large_field: "must-stay-encrypted",
+  guard_execution_environment: metadata,
+}};
+const serializedPayload = JSON.stringify(payload);
+const referenced = referencedPayload(payload, serializedPayload);
+const wrapper = referenced.payload;
+console.log(JSON.stringify({{
+  context: wrapper.guard_execution_environment,
+  keys: Object.keys(wrapper).sort(),
+  hasLargeField: Object.prototype.hasOwnProperty.call(wrapper, "large_field"),
+  hasPlaintext: JSON.stringify(wrapper).includes("must-stay-encrypted"),
+  serializedChars: wrapper.guard_payload_ref.serialized_chars,
+  inputChars: serializedPayload.length,
+}}));
+referenced.cleanup();
+'''
+    with tempfile.NamedTemporaryFile("w", suffix=".mjs", prefix="omp-reference-", delete=False) as fixture:
+        fixture.write(javascript)
+        fixture_path = Path(fixture.name)
+    try:
+        completed = subprocess.run(["node", str(fixture_path)], capture_output=True, text=True, check=False)
+    finally:
+        fixture_path.unlink(missing_ok=True)
+    assert completed.returncode == 0, completed.stderr
+    return json.loads(completed.stdout)
 
 
 def test_generated_astral_excerpts_obey_code_unit_limits_without_splitting_pairs(tmp_path: Path) -> None:
@@ -183,6 +250,32 @@ console.log(JSON.stringify({ cases }));
 """,
     )
     assert result == {"cases": [{"exactBytes": True, "usesReference": True, "bounded": True}] * 3}
+
+
+def test_generated_reference_wrapper_preserves_caller_environment_metadata(tmp_path: Path) -> None:
+    result = _run_generated_reference_fixture(_generated_source(tmp_path))
+
+    assert result["context"] == {
+        "path": "/outer/bin",
+        "environment_names": ["GIT_PAGER", "PATH"],
+        "environment_digest": "caller-digest",
+        "xdg_config_home": "/outer/config",
+        "git_config_no_system": False,
+        "home": "/outer/home",
+        "git_pager_disabled": True,
+        "pager_disabled": False,
+    }
+    assert result["keys"] == [
+        "config_path",
+        "guard_execution_environment",
+        "guard_payload_ref",
+        "hook_event_name",
+        "is_error",
+        "tool_name",
+    ]
+    assert result["hasLargeField"] is False
+    assert result["hasPlaintext"] is False
+    assert result["serializedChars"] == result["inputChars"]
 
 
 def test_generated_payload_budget_accepts_ordinary_shape_below_reference_limit(tmp_path: Path) -> None:

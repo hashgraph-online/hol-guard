@@ -100,11 +100,12 @@ def _windows_cli_bootstrap(package_root: Path, *, guard_home: Path, harness: str
         "_windows_job=assign_current_process_to_windows_hook_job() if os.name=='nt' else None;"
         "sys.stderr.write('HOL_GUARD_WINDOWS_JOB_CONTAINED\\n') if _windows_job is not None else None;"
         "sys.stderr.flush() if _windows_job is not None else None;from pathlib import Path;"
+        "from codex_plugin_scanner.guard.hook_execution_environment import stamp_hook_input_text;"
         "from codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge import run_bounded_cli_hook;"
         "argv=json.loads(sys.argv[1]);config={'python_executable':sys.executable,"
         f"'package_root':{str(package_root)!r},'guard_home':{str(guard_home)!r},"
         f"'cli_args':argv,'harness':{harness!r},'timeout_seconds':0.75}};"
-        "raise SystemExit(run_bounded_cli_hook(config,input_text=sys.stdin.read(1000001)))"
+        "raise SystemExit(run_bounded_cli_hook(config,input_text=stamp_hook_input_text(sys.stdin.read(1000001))))"
     )
 
 

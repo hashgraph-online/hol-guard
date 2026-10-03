@@ -260,6 +260,20 @@ fn terminate_managed_process(
     platform_result
 }
 
+pub(super) fn terminate_client_process(
+    process_id: u32,
+    start_marker: &str,
+    runtime_digest: &str,
+    timeout: Duration,
+) -> Result<(), String> {
+    let identity = ManagedProcessIdentity {
+        process_id,
+        start_marker: Some(start_marker.to_owned()),
+        runtime_digest: Some(runtime_digest.to_owned()),
+    };
+    terminate_managed_process(&identity, timeout)
+}
+
 fn generation_process_ids(
     states: &[ResidentState],
     known_processes: &[ManagedProcessIdentity],

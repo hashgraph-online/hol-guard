@@ -99,6 +99,7 @@
       "command.skill-base",
       "command.skill-sunset",
       "command.syngraphe",
+      "command.tui-runner",
       "command.uivoid"
     ]
   }

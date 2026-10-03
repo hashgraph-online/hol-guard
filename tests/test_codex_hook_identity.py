@@ -332,6 +332,7 @@ def test_readback_failure_preserves_original_toml_and_legacy_json(
     backups = list((guard_home / "managed" / "codex" / "migration-backups").glob("*.json"))
     assert len(backups) == 1
     assert json.loads(backups[0].read_text(encoding="utf-8"))["content"] == original_config
+    print("H4 pass stage=readback config_restored=true legacy_json_restored=true")
 
 
 def test_partial_unlink_failure_restores_every_legacy_source_and_keeps_toml_backups(
@@ -384,3 +385,4 @@ def test_partial_unlink_failure_restores_every_legacy_source_and_keeps_toml_back
         original_home_config,
         original_workspace_config,
     }
+    print("H4 pass stage=legacy_json_removal config_restored=true manifest_absent=true key_absent=true")

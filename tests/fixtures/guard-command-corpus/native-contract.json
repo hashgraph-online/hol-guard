@@ -578,7 +578,7 @@
       "variant_remainder": 0
     },
     {
-      "basis": "inherited Git branch attribution plus cd context",
+      "basis": "Non-inspection Git operations retain their existing review floor; they do not use the execution-helper configuration proof.",
       "expected": {
         "decision_plane_floor": "review",
         "evaluation_error": null,
@@ -600,14 +600,14 @@
       "variant_remainder": 0
     },
     {
-      "basis": "inherited Git diff attribution plus cd context",
+      "basis": "Unverified Git inspection requires fresh approval, and the host decision plane preserves that intrinsic native floor.",
       "expected": {
-        "decision_plane_floor": "review",
+        "decision_plane_floor": "require-reapproval",
         "evaluation_error": null,
         "model_confidence": "exact",
         "model_uncertainty": null,
-        "native_floor": "review",
-        "native_reason": "native_command_review_required",
+        "native_floor": "require-reapproval",
+        "native_reason": "native_git_execution_context_review",
         "path_overridden": false,
         "uncertain_rule_ids": []
       },
@@ -622,14 +622,14 @@
       "variant_remainder": 0
     },
     {
-      "basis": "inherited Git log attribution plus cd context",
+      "basis": "Unverified Git inspection requires fresh approval, and the host decision plane preserves that intrinsic native floor.",
       "expected": {
-        "decision_plane_floor": "review",
+        "decision_plane_floor": "require-reapproval",
         "evaluation_error": null,
         "model_confidence": "exact",
         "model_uncertainty": null,
-        "native_floor": "review",
-        "native_reason": "native_command_review_required",
+        "native_floor": "require-reapproval",
+        "native_reason": "native_git_execution_context_review",
         "path_overridden": false,
         "uncertain_rule_ids": []
       },
@@ -644,14 +644,14 @@
       "variant_remainder": 0
     },
     {
-      "basis": "inherited Git show attribution plus cd context",
+      "basis": "Unverified Git inspection requires fresh approval, and the host decision plane preserves that intrinsic native floor.",
       "expected": {
-        "decision_plane_floor": "review",
+        "decision_plane_floor": "require-reapproval",
         "evaluation_error": null,
         "model_confidence": "exact",
         "model_uncertainty": null,
-        "native_floor": "review",
-        "native_reason": "native_command_review_required",
+        "native_floor": "require-reapproval",
+        "native_reason": "native_git_execution_context_review",
         "path_overridden": false,
         "uncertain_rule_ids": []
       },
@@ -688,14 +688,16 @@
       "variant_remainder": 0
     },
     {
-      "basis": "inherited GitHub remote read permission retains contextual review",
+      "basis": "closed GitHub read grammar permits routine native reads; independent contextual oracle remains review",
       "expected": {
+        "decision": "allow",
         "decision_plane_floor": "review",
         "evaluation_error": null,
+        "explicitly_benign": true,
         "model_confidence": "exact",
         "model_uncertainty": null,
-        "native_floor": "review",
-        "native_reason": "native_command_review_required",
+        "native_floor": "allow",
+        "native_reason": "native_exact_safe_command",
         "path_overridden": false,
         "uncertain_rule_ids": []
       },
@@ -710,14 +712,16 @@
       "variant_remainder": 0
     },
     {
-      "basis": "inherited GitHub remote read permission retains contextual review",
+      "basis": "closed GitHub read grammar permits routine native reads; independent contextual oracle remains review",
       "expected": {
+        "decision": "allow",
         "decision_plane_floor": "review",
         "evaluation_error": null,
+        "explicitly_benign": true,
         "model_confidence": "exact",
         "model_uncertainty": null,
-        "native_floor": "review",
-        "native_reason": "native_command_review_required",
+        "native_floor": "allow",
+        "native_reason": "native_exact_safe_command",
         "path_overridden": false,
         "uncertain_rule_ids": []
       },
@@ -778,7 +782,7 @@
       "variant_remainder": 0
     },
     {
-      "basis": "Reviewed exact git rev-parse --show-toplevel grammar removes unrelated compatibility owners; native execution remains review with no allow proof.",
+      "basis": "Non-inspection Git operations retain their existing review floor; they do not use the execution-helper configuration proof.",
       "expected": {
         "decision_plane_floor": "review",
         "evaluation_error": null,
@@ -800,14 +804,14 @@
       "variant_remainder": 0
     },
     {
-      "basis": "inherited Git status attribution plus cd context",
+      "basis": "Unverified Git inspection requires fresh approval, and the host decision plane preserves that intrinsic native floor.",
       "expected": {
-        "decision_plane_floor": "review",
+        "decision_plane_floor": "require-reapproval",
         "evaluation_error": null,
         "model_confidence": "exact",
         "model_uncertainty": null,
-        "native_floor": "review",
-        "native_reason": "native_command_review_required",
+        "native_floor": "require-reapproval",
+        "native_reason": "native_git_execution_context_review",
         "path_overridden": false,
         "uncertain_rule_ids": []
       },
@@ -1068,14 +1072,14 @@
       "variant_remainder": 0
     },
     {
-      "basis": "inherited Git status attribution with bounded wc consumer",
+      "basis": "Unverified Git inspection requires fresh approval, and the host decision plane preserves that intrinsic native floor.",
       "expected": {
-        "decision_plane_floor": "review",
+        "decision_plane_floor": "require-reapproval",
         "evaluation_error": null,
         "model_confidence": "exact",
         "model_uncertainty": null,
-        "native_floor": "review",
-        "native_reason": "native_command_review_required",
+        "native_floor": "require-reapproval",
+        "native_reason": "native_git_execution_context_review",
         "path_overridden": false,
         "uncertain_rule_ids": []
       },
@@ -1282,7 +1286,7 @@
       "variant_remainder": 0
     },
     {
-      "basis": "Reviewed git apply --check literal relative patch path removes unrelated compatibility owners; independent patch-read and workspace proofs and native review remain required.",
+      "basis": "Non-inspection Git operations retain their existing review floor; they do not use the execution-helper configuration proof.",
       "expected": {
         "decision_plane_floor": "review",
         "evaluation_error": null,
@@ -1329,8 +1333,8 @@
         "baseline_git_blob": "4cc8d7ccdaa97ad49cb7a4e0bdae6dee04930431",
         "baseline_sha256": "12d74f5afa697c20ecb2af2b9539b1de2a38a812efba6ee13a37446579889255",
         "byte_identical": false,
-        "candidate_git_blob": "dac8e6a9afcc9891db11c4b1ac3eb60550a1765b",
-        "candidate_sha256": "2ff3abbad79d1c8e9dc71db0f3c93e89fc7f6af0de5cc0bc0285b94344127c52",
+        "candidate_git_blob": "abb31f97086a2bec60034be58968c4a4cc95a8a8",
+        "candidate_sha256": "af71644220c1325db525ce11098ed0e538dbc035c7a654d6a451601bb0dbfc52",
         "reviewed_change": "Accept bounded timeout wrapper evidence for inner-command attribution; apply every catalog rule and preserve wrapper review."
       },
       "rust/crates/guard-command/src/command_compatibility/domains.rs": {
@@ -1354,9 +1358,10 @@
       "rust/crates/guard-command/src/command_compatibility/github.rs": {
         "baseline_git_blob": "0f7c32c741bb0fee2ff9fcf98b58246033b4cac9",
         "baseline_sha256": "6794dc442c50c98f991edce4e4539bbf3e2fa5f681e0af4f208a2058e4c85cc4",
-        "byte_identical": true,
-        "candidate_git_blob": "0f7c32c741bb0fee2ff9fcf98b58246033b4cac9",
-        "candidate_sha256": "6794dc442c50c98f991edce4e4539bbf3e2fa5f681e0af4f208a2058e4c85cc4"
+        "byte_identical": false,
+        "candidate_git_blob": "333abbcbec71dce8ebf6c295201210c4f551da14",
+        "candidate_sha256": "7b56f833213c716cc8b0eecc9f90847068013f8df8ce7023278164944fa810a7",
+        "reviewed_change": "Reuse closed GitHub read capabilities for benign admission; reject browser-opening and token-revealing flags and retain local-read and remote-read permission checks for authenticated status."
       },
       "rust/crates/guard-command/src/command_compatibility/github_api.rs": {
         "baseline_git_blob": "905bb6ac282939b95d2842fc136087b4a5cf463f",
@@ -1403,7 +1408,7 @@
   "totals": {
     "below_original_oracle": 0,
     "cases": 51000,
-    "equal_to_original_oracle": 39442,
+    "equal_to_original_oracle": 39317,
     "groups": 58,
     "improved_bounded_git_cases": 50,
     "improved_bounded_git_sources": 2,
@@ -1411,6 +1416,6 @@
     "improved_upstream_benign_sources": 3,
     "native_evaluation_errors": 27084,
     "sources": 52,
-    "stronger_than_original_oracle": 11558
+    "stronger_than_original_oracle": 11683
   }
 }

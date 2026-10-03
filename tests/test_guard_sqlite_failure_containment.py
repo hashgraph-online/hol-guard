@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 import threading
 import time
@@ -129,6 +130,95 @@ def test_lock_contention_does_not_quarantine_healthy_store(tmp_path: Path) -> No
 )
 def test_fatal_storage_errors_are_recognized(message: str) -> None:
     assert GuardStore._is_fatal_sqlite_error(sqlite3.DatabaseError(message)) is True
+
+
+@pytest.mark.parametrize(
+    "code",
+    [
+        pytest.param(11, id="SQLITE_CORRUPT"),
+        pytest.param(779, id="SQLITE_CORRUPT_INDEX"),
+        pytest.param(26, id="SQLITE_NOTADB"),
+    ],
+)
+def test_coded_corruption_recovers_only_after_real_stable_probes(tmp_path: Path, code: int) -> None:
+    store = GuardStore(tmp_path / "guard", prime_policy_integrity=False)
+    corrupted = _corrupt_store(store.path)
+    error = sqlite3.DatabaseError("generated opaque diagnostic")
+    error.sqlite_errorcode = code
+    assert store._recover_fatal_sqlite_store(error)
+    quarantined = _quarantined_databases(store.guard_home)
+    assert len(quarantined) == 1 and quarantined[0].read_bytes() == corrupted
+    forensics = json.loads(Path(f"{quarantined[0]}.forensics.json").read_text(encoding="utf-8"))
+    assert forensics["sqlite_errorcode"] == code, "forensics must retain the full extended code"
+    assert forensics["probe"]["first_state"] == forensics["probe"]["second_state"] == "fatal"
+    assert forensics["probe"]["identity_stable"] is True
+    with sqlite3.connect(store.path) as connection:
+        assert connection.execute("pragma quick_check").fetchone() == ("ok",)
+
+
+@pytest.mark.parametrize(
+    "code",
+    [
+        pytest.param(5, id="SQLITE_BUSY"),
+        pytest.param(262, id="SQLITE_LOCKED_SHAREDCACHE"),
+        pytest.param(13, id="SQLITE_FULL"),
+        pytest.param(8, id="SQLITE_READONLY"),
+    ],
+)
+def test_nonfatal_numeric_code_prevents_message_from_entering_recovery(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    code: int,
+) -> None:
+    store = GuardStore(tmp_path / "guard", prime_policy_integrity=False)
+    original_identity = store.path.stat().st_ino
+    error = sqlite3.OperationalError("database disk image is malformed")
+    error.sqlite_errorcode = code
+
+    def forbidden_probe(_error: BaseException) -> bool:
+        raise AssertionError("nonfatal coded error entered corruption recovery")
+
+    monkeypatch.setattr(store, "_store_is_proven_unusable", forbidden_probe)
+    assert not store._recover_fatal_sqlite_store(error)
+    assert store.path.stat().st_ino == original_identity
+    assert not _quarantined_databases(store.guard_home)
+
+
+@pytest.mark.parametrize(
+    "code", [pytest.param(266, id="SQLITE_IOERR_READ"), pytest.param(1034, id="SQLITE_IOERR_FSYNC")]
+)
+def test_coded_io_probe_is_not_corruption_even_with_misleading_message(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    code: int,
+) -> None:
+    from codex_plugin_scanner.guard import sqlite_recovery
+
+    error = sqlite3.OperationalError("database disk image is malformed")
+    error.sqlite_errorcode = code
+
+    def failed_connect(*_args: object, **_kwargs: object) -> sqlite3.Connection:
+        raise error
+
+    monkeypatch.setattr(sqlite_recovery.sqlite3, "connect", failed_connect)
+    assert sqlite_recovery._probe_sqlite_store(tmp_path / "generated.db") == "io"
+
+
+@pytest.mark.parametrize(
+    "code, message, expected",
+    [
+        (517, "generated opaque diagnostic", True),  # SQLITE_BUSY_SNAPSHOT
+        (262, "generated opaque diagnostic", True),  # SQLITE_LOCKED_SHAREDCACHE
+        (3850, "database is locked", False),  # SQLITE_IOERR_LOCK
+        (13, "database is busy", False),  # SQLITE_FULL
+    ],
+)
+def test_busy_lock_routing_uses_extended_code_before_message(code: int, message: str, expected: bool) -> None:
+    from codex_plugin_scanner.guard.sqlite_profile import sqlite_error_is_busy_locked
+
+    error = sqlite3.OperationalError(message)
+    error.sqlite_errorcode = code
+    assert sqlite_error_is_busy_locked(error) is expected
 
 
 def test_transient_io_error_does_not_quarantine_healthy_store(
@@ -402,11 +492,15 @@ def test_recovery_waits_for_in_flight_connection(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard", prime_policy_integrity=False)
     entered = threading.Event()
     release = threading.Event()
+    holder_errors: list[sqlite3.DatabaseError] = []
 
     def hold_connection() -> None:
-        with store._connect():  # pyright: ignore[reportPrivateUsage]
-            entered.set()
-            assert release.wait(timeout=2)
+        try:
+            with store._connect():  # pyright: ignore[reportPrivateUsage]
+                entered.set()
+                assert release.wait(timeout=2)
+        except sqlite3.DatabaseError as error:
+            holder_errors.append(error)
 
     holder = threading.Thread(target=hold_connection)
     holder.start()
@@ -428,6 +522,8 @@ def test_recovery_waits_for_in_flight_connection(tmp_path: Path) -> None:
     holder.join(timeout=2)
     recovery.join(timeout=2)
 
+    assert not holder.is_alive() and not recovery.is_alive()
+    assert all(store._is_fatal_sqlite_error(error) for error in holder_errors)
     assert recovered == [True]
     assert _quarantined_databases(store.guard_home)[0].read_bytes() == corrupt_bytes
 

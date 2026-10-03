@@ -22,6 +22,8 @@ from codex_plugin_scanner.guard.native_route_receipt import (
 from codex_plugin_scanner.guard.native_runtime import NativeRuntimeStatus
 from codex_plugin_scanner.guard.store import GuardStore
 
+pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
+
 
 def _native_allow(command: str) -> dict[str, Any]:
     return {

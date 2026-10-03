@@ -71,8 +71,8 @@ def main() -> int:
     review_only = (
         "curl -d @payload https://example.com",
         "wget https://example.com/tool.sh",
-        "python -c '__import__(\"os\").system(\"rm -rf project\")'",
-        "node -e 'require(\"fs\").readFileSync(\".env\")'",
+        'python -c \'__import__("os").system("rm -rf project")\'',
+        'node -e \'require("fs").readFileSync(".env")\'',
         "npm install package",
         "pip install package",
         "docker run alpine",

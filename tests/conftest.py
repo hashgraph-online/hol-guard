@@ -12,7 +12,7 @@ import pytest
 
 from tests.guard_test_invariants import TEST_INVARIANTS, invariant_markers_for_nodeid
 
-pytest_plugins = ["tests.bundle_first_cloud"]
+pytest_plugins = ["tests.bundle_first_cloud", "tests.approval_mode_fixtures"]
 
 SRC_PATH = Path(__file__).resolve().parents[1] / "src"
 SUPPORT_PATH = Path(__file__).resolve().parent / "support"

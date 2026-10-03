@@ -19,6 +19,16 @@ def _write_artifacts(root: Path) -> None:
         source.write_text(source_name, encoding="utf-8")
 
 
+def test_external_destination_preserves_source_package_data(tmp_path: Path) -> None:
+    source, destination = tmp_path / "source", tmp_path / "bundle-data"
+    _write_artifacts(source)
+    staged = MODULE.stage_artifacts(source, destination_root=destination)
+    assert all(path.is_relative_to(destination) for path in staged)
+    assert not (source / "src").exists()
+    for source_name, destination_name in MODULE._ARTIFACTS.items():
+        assert (destination / destination_name).read_bytes() == (source / source_name).read_bytes()
+
+
 def test_stage_artifacts_copies_every_canonical_artifact(tmp_path: Path) -> None:
     _write_artifacts(tmp_path)
 

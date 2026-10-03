@@ -122,6 +122,17 @@ def _run_guard_execute_contained_test_command(
 
     if guard_home is None or workspace is None or context is None or store is None:
         return 126
+
+    def execution_workspace(original: dict[str, object]) -> Path:
+        if "cwd" not in original:
+            return workspace
+        try:
+            return Path(str(original["cwd"])).resolve(strict=True)
+        except (OSError, RuntimeError) as error:
+            raise RestrictedPytestError(
+                "guard_contained_test_rejected", f"Execution directory is unavailable: {error}",
+            ) from error
+
     request_validated = False
     try:
         payload = read_contained_test_request(
@@ -133,7 +144,9 @@ def _run_guard_execute_contained_test_command(
             authorize=lambda original: try_native_hook_authority(
                 payload={**original, "guard_containment_receipt_only": True},
                 harness=str(getattr(args, "harness", "omp")), home_dir=context.home_dir,
-                guard_home=guard_home, workspace=workspace, store=store,
+                guard_home=guard_home,
+                workspace=execution_workspace(original),
+                store=store,
             ),
         )
     except RestrictedPytestError as error:

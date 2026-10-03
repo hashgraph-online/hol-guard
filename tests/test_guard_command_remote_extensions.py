@@ -314,7 +314,9 @@ REMOTE_SAFE_COMMANDS: tuple[str, ...] = (
 
 def test_remote_observer_and_preview_commands_remain_safe(tmp_path: Path) -> None:
     upload_cases = tuple(command for command in REMOTE_SAFE_COMMANDS if command.startswith(("scp ", "rsync ")))
-    assert_safe_command_cases(tuple(command for command in REMOTE_SAFE_COMMANDS if command not in upload_cases), tmp_path)
+    assert_safe_command_cases(
+        tuple(command for command in REMOTE_SAFE_COMMANDS if command not in upload_cases), tmp_path
+    )
     for command in upload_cases:
         assert real_native_command_evaluation(command, cwd=tmp_path).evaluation.minimum_action in {"review", "block"}
 
@@ -458,13 +460,13 @@ def test_subcommand_operand_prefix_matcher_ignores_option_values_and_skips_leadi
 
     assert matcher.match(
         parse_shell_command(
-            "remote-admin --profile prod workspace run --context workspace:option-value "
-            "source workspace:target"
+            "remote-admin --profile prod workspace run --context workspace:option-value source workspace:target"
         )
     )
-    assert matcher.match(
-        parse_shell_command("remote-admin --profile prod workspace run --context workspace:option-value")
-    ) == ()
+    assert (
+        matcher.match(parse_shell_command("remote-admin --profile prod workspace run --context workspace:option-value"))
+        == ()
+    )
 
 
 def test_structured_matchers_reject_invalid_operand_and_value_key_contracts() -> None:

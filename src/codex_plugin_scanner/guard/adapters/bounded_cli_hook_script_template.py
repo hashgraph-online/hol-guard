@@ -2,15 +2,21 @@
 
 from __future__ import annotations
 
+from .hook_http_deadline import HOOK_HTTP_DEADLINE_TEMPLATE
+from .hook_input_reader import HOOK_INPUT_READER_TEMPLATE
+
 BOUNDED_HOOK_SCRIPT_TEMPLATE = '''#!/usr/bin/env python3
 """Managed by HOL Guard. Re-run hol-guard install after moving Guard home."""
 from __future__ import annotations
+
+import hashlib
+import time
+_HOOK_STARTED_MONOTONIC = time.monotonic()
 
 import json
 import os
 import stat
 import sys
-import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -19,7 +25,9 @@ from urllib.parse import quote, urlparse
 GUARD_HOME = __GUARD_HOME__
 HARNESS = __HARNESS__
 TIMEOUT_SECONDS = __TIMEOUT_SECONDS__
-_MAX_INPUT_BYTES = 1_000_000
+_HOOK_DEADLINE_MONOTONIC = _HOOK_STARTED_MONOTONIC + TIMEOUT_SECONDS
+__HOOK_INPUT_READER__
+__HOOK_HTTP_DEADLINE__
 _MAX_RESPONSE_BYTES = 1_000_000
 _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 _DECISION_HARNESSES = frozenset({"grok", "hermes", "openclaw"})
@@ -72,6 +80,11 @@ _AUTHORITY_REMEDIATION = (
     "degradation, or `hol-guard command controls recover-authority`, to restore the "
     "protected control floor."
 )
+_GIT_TRUE_VALUES = frozenset({"1", "true", "yes", "on"})
+
+
+def _git_config_no_system_enabled(value: str | None) -> bool:
+    return value is not None and value.casefold() in _GIT_TRUE_VALUES
 
 
 def _stderr_reason(reason: str) -> str:
@@ -104,6 +117,28 @@ def _json_object(text: str) -> dict[str, object] | None:
     except json.JSONDecodeError:
         return None
     return raw if isinstance(raw, dict) else None
+
+
+def _stamp_hook_input(text: str) -> str:
+    payload = _json_object(text)
+    if payload is None:
+        return text
+    active = {key: value for key, value in os.environ.items() if value}
+    payload["guard_execution_environment"] = {
+        "path": os.environ.get("PATH", ""),
+        "environment_names": sorted(active),
+        "environment_digest": hashlib.sha256(
+            json.dumps(active, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest(),
+        "xdg_config_home": os.environ.get("XDG_CONFIG_HOME") or None,
+        "git_config_no_system": _git_config_no_system_enabled(
+            os.environ.get("GIT_CONFIG_NOSYSTEM")
+        ),
+        "home": os.environ.get("HOME"),
+        "git_pager_disabled": os.environ.get("GIT_PAGER") in ("", "cat"),
+        "pager_disabled": os.environ.get("PAGER") in ("", "cat"),
+    }
+    return json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
 
 
 def _compact(event_name: str) -> str:
@@ -226,9 +261,13 @@ def _approval_wait_seconds() -> float:
 
 
 def _daemon_auth() -> tuple[str, int, str] | None:
+    if time.monotonic() >= _HOOK_DEADLINE_MONOTONIC:
+        return None
     raw_state = _read_private_text(Path(GUARD_HOME) / "daemon-state.json", max_bytes=64 * 1024)
+    if raw_state is None or time.monotonic() >= _HOOK_DEADLINE_MONOTONIC:
+        return None
     token = _read_private_text(Path(GUARD_HOME) / "daemon-auth-token", max_bytes=4096)
-    if raw_state is None or token is None:
+    if token is None or time.monotonic() >= _HOOK_DEADLINE_MONOTONIC:
         return None
     state = _json_object(raw_state)
     if state is None:
@@ -450,6 +489,9 @@ def _fail(input_text: str, *, reason: str = _FAILURE_REASON) -> int:
 
 
 def _http_json(url: str, token: str, *, data: bytes | None, timeout: float) -> dict[str, object] | None:
+    deadline = min(_HOOK_DEADLINE_MONOTONIC, time.monotonic() + timeout)
+    if time.monotonic() >= deadline:
+        return None
     try:
         _assert_loopback_http_url(url)
     except ValueError:
@@ -464,6 +506,7 @@ def _http_json(url: str, token: str, *, data: bytes | None, timeout: float) -> d
         opener = urllib.request.build_opener(
             urllib.request.ProxyHandler({}),
             _LoopbackOnlyRedirectHandler(),
+            _deadline_http_handler(deadline),
         )
         with opener.open(request, timeout=timeout) as response:
             final_url = response.geturl()
@@ -474,7 +517,7 @@ def _http_json(url: str, token: str, *, data: bytes | None, timeout: float) -> d
             body = response.read(_MAX_RESPONSE_BYTES + 1)
     except (OSError, urllib.error.URLError, TimeoutError, ValueError):
         return None
-    if len(body) > _MAX_RESPONSE_BYTES:
+    if time.monotonic() >= deadline or len(body) > _MAX_RESPONSE_BYTES:
         return None
     try:
         text = body.decode("utf-8")
@@ -536,14 +579,16 @@ def _apply_grok_wait(input_text: str, native: tuple[str, str, int]) -> tuple[str
     wait_seconds = _approval_wait_seconds()
     if wait_seconds <= 0:
         return native
-    deadline = time.monotonic() + wait_seconds
+    deadline = min(time.monotonic() + wait_seconds, _HOOK_DEADLINE_MONOTONIC)
     resolved: dict[str, str] = {}
     while time.monotonic() < deadline and len(resolved) < len(request_ids):
         for request_id in request_ids:
             if request_id in resolved:
                 continue
             url = _loopback_url(host, port, "/v1/requests/" + quote(request_id, safe=""))
-            remaining = max(0.05, deadline - time.monotonic())
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
             status = _http_json(url, token, data=None, timeout=min(remaining, 1.0))
             if status is None:
                 continue
@@ -564,12 +609,16 @@ def _apply_grok_wait(input_text: str, native: tuple[str, str, int]) -> tuple[str
 
 
 def _post_hook(input_text: str) -> tuple[str, str, int] | None:
+    if time.monotonic() >= _HOOK_DEADLINE_MONOTONIC:
+        return None
     auth = _daemon_auth()
     if auth is None:
         return None
     host, port, token = auth
     url = _loopback_url(host, port, f"/v1/hooks/{HARNESS}")
-    timeout = min(float(TIMEOUT_SECONDS) * 0.5, 5.0)
+    timeout = min(float(TIMEOUT_SECONDS) * 0.5, 5.0, _HOOK_DEADLINE_MONOTONIC - time.monotonic())
+    if timeout <= 0:
+        return None
     parsed = _http_json(url, token, data=input_text.encode("utf-8"), timeout=timeout)
     if parsed is None:
         return None
@@ -577,15 +626,18 @@ def _post_hook(input_text: str) -> tuple[str, str, int] | None:
 
 
 def main() -> int:
-    raw = sys.stdin.buffer.read(_MAX_INPUT_BYTES + 1)
-    prefix = raw[:_MAX_INPUT_BYTES].decode("utf-8", errors="replace")
-    if len(raw) > _MAX_INPUT_BYTES:
+    try:
+        prefix = _read_hook_input(_HOOK_DEADLINE_MONOTONIC)
+    except _HookInputError as error:
         return _fail(
-            prefix,
+            error.prefix,
             reason="HOL Guard blocked this action because hook input exceeded the safe size limit.",
         )
-    result = _post_hook(prefix)
-    if result is None:
+    except (TimeoutError, OSError, ValueError):
+        return _fail("{}")
+    stamped_prefix = _stamp_hook_input(prefix)
+    result = _post_hook(stamped_prefix)
+    if result is None or time.monotonic() >= _HOOK_DEADLINE_MONOTONIC:
         return _fail(prefix)
     stdout, stderr, exit_code = result
     if stdout:
@@ -597,4 +649,6 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-'''
+'''.replace("__HOOK_INPUT_READER__", HOOK_INPUT_READER_TEMPLATE).replace(
+    "__HOOK_HTTP_DEADLINE__", HOOK_HTTP_DEADLINE_TEMPLATE
+)

@@ -35,6 +35,8 @@ from tests.test_guard_package_hook import (
     _write_codex_pre_tool_payload,
 )
 
+pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
+
 
 def _approve_request(store: GuardStore, request_id: str) -> dict[str, object]:
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)

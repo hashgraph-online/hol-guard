@@ -57,6 +57,4 @@ def test_linux_node_headroom_requires_data_limit_support_before_process_start(mo
     monkeypatch.setattr(sandbox, "_resource", None)
     monkeypatch.setattr(sandbox.subprocess, "Popen", lambda *args, **kwargs: pytest.fail("must not start"))
     with pytest.raises(sandbox.RestrictedPytestError, match="execution was not started"):
-        sandbox._run_backend_process(
-            ["/fixed/program"], env={}, timeout_seconds=10, node_virtual_address_space=True
-        )
+        sandbox._run_backend_process(["/fixed/program"], env={}, timeout_seconds=10, node_virtual_address_space=True)

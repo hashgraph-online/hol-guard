@@ -73,22 +73,3 @@ def managed_extension_source(
         platform_name=os.name,
         variant=_ACTIVE_SOURCE_VARIANT_V1,
     )
-
-
-def legacy_managed_extension_source(
-    *,
-    guard_home: Path,
-    home_dir: Path,
-    settings_path: Path,
-    harness: str = "pi",
-    display_name: str = "Pi",
-) -> str:
-    from .pi_extension_legacy_source import legacy_managed_extension_source as legacy_source
-
-    return legacy_source(
-        guard_home=guard_home,
-        home_dir=home_dir,
-        settings_path=settings_path,
-        harness=harness,
-        display_name=display_name,
-    )

@@ -35,7 +35,10 @@ fn allows_bounded_command_without_returning_raw_content() {
 fn pipeline_input_preserves_benign_and_git_context_decisions() {
     for harness in ["zcode", "pi", "opencode", "claude-code"] {
         for (command, reason) in [
-            ("git status --short | head -2", "native_exact_safe_command"),
+            (
+                "git status --short | head -2",
+                "native_git_execution_context_review",
+            ),
             (
                 "git status --short | head -2 && git log --oneline -1",
                 "native_git_helper_context_review",

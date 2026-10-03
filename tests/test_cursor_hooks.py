@@ -246,7 +246,7 @@ def test_cursor_hook_script_uses_one_deadline_and_isolated_process_tree(tmp_path
     context = HarnessContext(home_dir=tmp_path / "home", guard_home=tmp_path / "guard", workspace_dir=tmp_path)
     source = cursor_hook_script_source(context)
 
-    assert "deadline_monotonic = time.monotonic() + GUARD_HOOK_TIMEOUT_SECONDS" in source
+    assert "deadline_monotonic = _HOOK_DEADLINE_MONOTONIC" in source
     assert "timeout = _request_timeout(deadline_monotonic" in source
     assert "run_isolated_hook_process(" in source
     assert "allow_windows_breakaway=True" in source
@@ -506,9 +506,7 @@ def test_cursor_hook_recovery_honors_total_deadline(tmp_path: Path) -> None:
     assert proc.returncode == 2
     response = json.loads(proc.stdout)
     assert response["permission"] == "deny"
-    assert response["user_message"] == (
-        "Guard could not complete a trusted hook decision. Retry or repair Guard from a terminal."
-    )
+    assert response["user_message"] == ("HOL Guard could not complete the native hook decision safely.")
 
 
 def test_cursor_hook_denies_workspace_read_within_recovery_deadline(tmp_path: Path) -> None:
@@ -564,9 +562,7 @@ def test_cursor_hook_denies_workspace_read_within_recovery_deadline(tmp_path: Pa
     assert proc.returncode == 2, proc.stderr
     response = json.loads(proc.stdout)
     assert response["permission"] == "deny"
-    assert response["user_message"] == (
-        "Guard could not complete a trusted hook decision. Retry or repair Guard from a terminal."
-    )
+    assert response["user_message"] == ("HOL Guard could not complete the native hook decision safely.")
     assert not fallback_marker.exists()
 
 
@@ -580,7 +576,14 @@ def test_cursor_hook_emits_json_when_guard_package_import_fails(tmp_path: Path) 
     workspace_dir.mkdir()
     context = HarnessContext(home_dir=home_dir, guard_home=guard_home, workspace_dir=workspace_dir)
     script_path = tmp_path / "cursor-hook.py"
-    script_path.write_text(cursor_hook_script_source(context), encoding="utf-8")
+    script_path.write_text(
+        cursor_hook_script_source(
+            context,
+            guard_cli=[sys.executable, "-c", "raise SystemExit(1)"],
+            recovery_command=[sys.executable, "-c", "raise SystemExit(0)"],
+        ),
+        encoding="utf-8",
+    )
     proc = subprocess.run(
         [sys.executable, "-S", str(script_path)],
         input=json.dumps(
@@ -593,7 +596,7 @@ def test_cursor_hook_emits_json_when_guard_package_import_fails(tmp_path: Path) 
         capture_output=True,
         text=True,
         env={"PATH": os.environ.get("PATH", ""), "HOME": str(home_dir)},
-        timeout=30,
+        timeout=3,
     )
     assert proc.returncode == 2, proc.stderr
     assert json.loads(proc.stdout) == {

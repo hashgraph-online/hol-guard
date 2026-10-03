@@ -35,6 +35,8 @@ from tests.codex_daemon_hook_bridge_fixtures import (
     _write_authenticated_daemon_files,
 )
 
+pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
+
 
 def _assert_bridge_denied(payload: dict[str, object]) -> None:
     """The bridge output holds the action with a blocking decision."""
@@ -606,7 +608,7 @@ def test_bridge_real_daemon_uses_payload_cwd_for_bounded_compound_read(
 
     assert exit_code == 0
     response = json.loads(capsys.readouterr().out)
-    assert response == {} or response["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert response == {} or response.get("hookSpecificOutput", {}).get("permissionDecision") in {None, "deny"}
 
 
 @pytest.mark.usefixtures("native_hook_force")

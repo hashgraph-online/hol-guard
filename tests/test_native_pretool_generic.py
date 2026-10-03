@@ -25,6 +25,8 @@ from codex_plugin_scanner.guard.native_hook_edge import _decode_edge
 from codex_plugin_scanner.guard.native_pretool import _decode_pre_tool
 from codex_plugin_scanner.guard.store import GuardStore
 
+pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
+
 
 def _edge(harness: str, event: str, action_type: str = "unknown") -> dict[str, object]:
     edge: dict[str, object] = {

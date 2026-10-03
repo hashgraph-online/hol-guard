@@ -81,7 +81,7 @@ def test_generated_parsed_cursor_unavailable_denies(
     assert module_globals["main"]() == 2
     response = json.loads(capsys.readouterr().out)
     assert response["permission"] == "deny"
-    assert "terminal" in response["user_message"]
+    assert response["user_message"] == "Guard could not complete a trusted hook decision. Retry or repair Guard from a terminal."
     assert config_path.read_bytes() == config_bytes
 
 
@@ -176,4 +176,4 @@ def test_generated_parsed_cursor_without_guard_imports_denies(tmp_path: Path, ev
     assert result.returncode == 2, result.stderr
     response = json.loads(result.stdout)
     assert response["permission"] == "deny"
-    assert "terminal" in response["user_message"]
+    assert response["user_message"] == "HOL Guard could not complete the native hook decision safely."

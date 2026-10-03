@@ -64,7 +64,12 @@ def test_client_frame_write_skips_selector_on_windows_pipes(
 
     stdin = PipeStdin()
     monkeypatch.setattr(transport.os, "name", "nt")
-    assert transport.write_frame(stdin, b"frame", deadline_monotonic=time.monotonic() + 1)
+    assert transport.write_frame(
+        stdin,
+        b"frame",
+        deadline_monotonic=time.monotonic() + 1,
+        launch_worker=lambda worker: worker.start() or True,
+    )
     assert stdin.written == b"frame"
 
 
@@ -90,15 +95,29 @@ def test_client_frame_write_is_bounded_when_pipe_writer_blocks() -> None:
             self.released.set()
 
     stdin = BlockingStdin()
+    workers = []
+
+    def launch_worker(worker: threading.Thread) -> bool:
+        workers.append(worker)
+        worker.start()
+        return True
+
     started = time.monotonic()
-    assert not _PersistentNativeClient._write_frame(  # pyright: ignore[reportPrivateUsage]
-        stdin,
-        b"frame",
-        deadline_monotonic=time.monotonic() + 0.05,
-    )
-    assert stdin.started.is_set()
-    assert stdin.closed
-    assert time.monotonic() - started < 0.5
+    try:
+        assert not _PersistentNativeClient._write_frame(  # pyright: ignore[reportPrivateUsage]
+            stdin,
+            b"frame",
+            deadline_monotonic=time.monotonic() + 0.05,
+            launch_worker=launch_worker,
+        )
+        assert stdin.started.is_set()
+        assert not stdin.closed
+        assert time.monotonic() - started < 0.5
+    finally:
+        stdin.released.set()
+        for worker in workers:
+            worker.join(timeout=1)
+            assert not worker.is_alive()
 
 
 def test_client_close_can_interrupt_a_blocked_frame_write(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -137,7 +156,8 @@ def test_client_close_can_interrupt_a_blocked_frame_write(tmp_path: Path, monkey
     started = threading.Event()
     result: list[bytes | None] = []
 
-    def fake_start() -> bool:
+    def fake_start(*, deadline_monotonic: float | None = None) -> bool:
+        del deadline_monotonic
         object.__setattr__(client, "_process", process)
         return True
 
@@ -146,6 +166,7 @@ def test_client_close_can_interrupt_a_blocked_frame_write(tmp_path: Path, monkey
         _frame: bytes,
         *,
         deadline_monotonic: float,
+        **kwargs: object,
     ) -> bool:
         del deadline_monotonic
         started.set()
@@ -201,7 +222,7 @@ def test_pool_dispatches_requests_across_persistent_streams(
 
     closed: list[_PersistentNativeClient] = []
     monkeypatch.setattr(_PersistentNativeClient, "request", fake_request)
-    monkeypatch.setattr(_PersistentNativeClient, "close", lambda client: closed.append(client))
+    monkeypatch.setattr(_PersistentNativeClient, "close", lambda client, **kwargs: closed.append(client))
     assert not pool._clients  # pyright: ignore[reportPrivateUsage]
 
     try:
@@ -297,7 +318,7 @@ def test_pool_evicts_failed_stream_before_next_dispatch(
         return None if calls == 1 else payload
 
     monkeypatch.setattr(_PersistentNativeClient, "request", fake_request)
-    monkeypatch.setattr(_PersistentNativeClient, "close", lambda client: closed.append(client))
+    monkeypatch.setattr(_PersistentNativeClient, "close", lambda client, **kwargs: closed.append(client))
     try:
         assert pool.request(b"failed", deadline_monotonic=time.monotonic() + 1) is None
         assert not pool._clients  # pyright: ignore[reportPrivateUsage]

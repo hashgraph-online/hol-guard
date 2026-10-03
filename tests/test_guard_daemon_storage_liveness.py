@@ -30,7 +30,11 @@ from codex_plugin_scanner.guard.daemon.server import (
     GuardDaemonServer,
     _GuardDaemonHttpServer,
 )
-from codex_plugin_scanner.guard.sqlite_tuning import sqlite_connect_timeout_override, sqlite_connect_timeout_seconds
+from codex_plugin_scanner.guard.sqlite_tuning import (
+    sqlite_connect_timeout_override,
+    sqlite_connect_timeout_seconds,
+    sqlite_operation_deadline_monotonic,
+)
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.native_command_activity_test_support import use_real_native_activity_reviews
 
@@ -272,8 +276,19 @@ def test_internal_hook_sqlite_timeout_is_bounded_without_changing_default() -> N
 def test_sqlite_timeout_override_is_scoped_to_current_context() -> None:
     assert sqlite_connect_timeout_seconds({}) == 30.0
     with sqlite_connect_timeout_override(0.05):
-        assert sqlite_connect_timeout_seconds({}) == 0.05
+        assert 0 < sqlite_connect_timeout_seconds({}) <= 0.05
     assert sqlite_connect_timeout_seconds({}) == 30.0
+
+
+def test_sqlite_lock_wait_stays_short_when_the_operation_clock_is_longer() -> None:
+    with sqlite_connect_timeout_override(0.05, operation_seconds=5):
+        assert 0 < sqlite_connect_timeout_seconds({}) <= 0.05
+        deadline = sqlite_operation_deadline_monotonic()
+        assert deadline is not None
+        remaining = deadline - time.monotonic()
+        assert 4 < remaining <= 5
+    assert sqlite_connect_timeout_seconds({}) == 30.0
+    assert sqlite_operation_deadline_monotonic() is None
 
 
 def test_store_promotes_rollback_journal_before_bounded_hook_writes(
@@ -317,7 +332,10 @@ def test_store_promotes_rollback_journal_before_bounded_hook_writes(
     try:
         reader.execute("begin")
         assert reader.execute("select count(*) from command_activity").fetchone() == (0,)
-        with sqlite_connect_timeout_override(0.05):
+        # The override is a wall clock from entry, and native review runs before
+        # the write. The reader keeps its transaction until this call returns,
+        # so a lock wait still fails instead of waiting the reader out.
+        with sqlite_connect_timeout_override(5):
             assert record_pre_hook_command_activity_best_effort(
                 store=store,
                 guard_home=guard_home,

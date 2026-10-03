@@ -1,3 +1,31 @@
+pub(super) use super::read_paths::{
+    bounded_file_read_target, bounded_read_target, safe_read_target, verified_cwd_target,
+    verified_path_context,
+};
+pub(super) use super::safe_writes::{
+    bounded_native_file_write_target, safe_copy_arguments, safe_file_mutation_arguments,
+};
+
+pub(super) fn safe_sleep_arguments(arguments: &[String]) -> bool {
+    const MAX_SAFE_SLEEP_SECONDS: f64 = 60.0;
+
+    let [duration] = arguments else {
+        return false;
+    };
+    if duration.is_empty()
+        || duration.len() > 16
+        || !duration
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || byte == b'.')
+        || duration.bytes().filter(|byte| *byte == b'.').count() > 1
+    {
+        return false;
+    }
+    duration
+        .parse::<f64>()
+        .is_ok_and(|seconds| (0.0..=MAX_SAFE_SLEEP_SECONDS).contains(&seconds))
+}
+
 pub(super) fn safe_date_arguments(arguments: &[String]) -> bool {
     let mut saw_format = false;
     let mut expect_epoch = false;
@@ -55,396 +83,9 @@ pub(super) fn safe_date_arguments(arguments: &[String]) -> bool {
     !expect_epoch
 }
 
-pub(super) fn safe_read_target(argument: &str) -> bool {
-    let Some(normalized) = lexical_read_path(argument) else {
-        return false;
-    };
-    let lowered = normalized.to_ascii_lowercase();
-    const ROOTS: [&str; 7] = [
-        "/etc",
-        "/dev",
-        "/proc",
-        "/sys",
-        "/var",
-        "/private/etc",
-        "/private/var",
-    ];
-    if lowered.starts_with('/')
-        || ROOTS
-            .iter()
-            .any(|prefix| lowered == *prefix || lowered.starts_with(&format!("{prefix}/")))
-        || lowered.starts_with('~')
-        || super::sensitive_command(argument)
-        || super::sensitive_command(&normalized)
-        || super::sensitive_read_path_argument(&normalized)
-    {
-        return false;
-    }
-    true
-}
-
-/// Share canonical path-risk checks between structured reads and shell reads.
-/// Absolute/home-relative targets must resolve; sensitive symlink destinations
-/// stay guarded. Unresolved relative targets retain the legacy lexical floor.
-pub(super) fn bounded_file_read_target(
-    value: &str,
-    home_dir: Option<&str>,
-    cwd: Option<&str>,
-) -> bool {
-    bounded_read_target(value, home_dir, cwd, false)
-}
-
-pub(super) fn bounded_read_target(
-    value: &str,
-    home_dir: Option<&str>,
-    cwd: Option<&str>,
-    allow_directory: bool,
-) -> bool {
-    let path = value.trim();
-    let path = path.strip_prefix(r"\\?\").unwrap_or(path);
-    if path.is_empty() || path.len() > 4096 {
-        return false;
-    }
-    if path.contains([
-        '$', '`', '|', ';', '&', '<', '>', '\n', '\r', '\0', '*', '?', '[', ']', '{', '}',
-    ]) {
-        return false;
-    }
-    if path.split(['/', '\\']).any(|part| part == "..") {
-        return false;
-    }
-    if path.starts_with('~') && expand_home_read_path(path, home_dir).is_none() {
-        return false;
-    }
-    let expanded = expand_home_read_path(path, home_dir).unwrap_or_else(|| path.to_owned());
-    let expanded_path = std::path::Path::new(&expanded);
-    let candidate = if expanded_path.is_absolute() {
-        expanded_path.to_path_buf()
-    } else if let Some(root) = cwd
-        .and_then(|root| expand_home_read_path(root, home_dir).or_else(|| Some(root.to_owned())))
-        .filter(|root| std::path::Path::new(root).is_absolute())
-    {
-        std::path::Path::new(&root).join(expanded_path)
-    } else {
-        return safe_read_target(path);
-    };
-    if let Ok(canonical) = std::fs::canonicalize(&candidate) {
-        return (canonical.is_file() || (allow_directory && canonical.is_dir()))
-            && resolved_path_allowed(&canonical, home_dir, cwd);
-    }
-    // An unresolvable absolute or `~` target cannot prove a bounded file;
-    // a workspace-relative spelling keeps the pre-existing lexical floor.
-    if expanded_path.is_absolute() {
-        return false;
-    }
-    safe_read_target(path)
-}
-
-/// Location outside the workspace is not itself a risk. The resolved regular
-/// file must still clear every sensitive-path screen.
-fn resolved_path_allowed(
-    canonical: &std::path::Path,
-    home_dir: Option<&str>,
-    cwd: Option<&str>,
-) -> bool {
-    resolved_path_allowed_in_scope(canonical, home_dir, cwd, false)
-}
-
-fn resolved_path_allowed_in_scope(
-    canonical: &std::path::Path,
-    home_dir: Option<&str>,
-    cwd: Option<&str>,
-    verified_temporary: bool,
-) -> bool {
-    let rendered = canonical.to_string_lossy().replace('\\', "/");
-    let lowered = rendered.to_ascii_lowercase();
-    const ROOTS: [&str; 7] = [
-        "/etc",
-        "/dev",
-        "/proc",
-        "/sys",
-        "/var",
-        "/private/etc",
-        "/private/var",
-    ];
-    if (!verified_temporary
-        && ROOTS
-            .iter()
-            .any(|prefix| lowered == *prefix || lowered.starts_with(&format!("{prefix}/"))))
-        || foreign_user_home(canonical, home_dir, cwd)
-        || guard_secure_fs::sensitive_path_family(canonical).is_some()
-        || guard_secure_fs::credential_named_path(canonical)
-        || !(guard_secure_fs::hidden_read_parts_allowed(canonical)
-            || guard_safety_doc(canonical, home_dir)
-            || agent_skill_document(canonical, home_dir))
-    {
-        return false;
-    }
-    true
-}
-
-pub(super) fn bounded_file_write_target(
-    value: &str,
-    home_dir: Option<&str>,
-    cwd: Option<&str>,
-) -> bool {
-    let Some(workspace) = cwd.and_then(|root| {
-        let expanded = expand_home_read_path(root, home_dir).unwrap_or_else(|| root.to_owned());
-        std::fs::canonicalize(expanded).ok()
-    }) else {
-        return false;
-    };
-    if value.is_empty()
-        || value.len() > 4096
-        || value.contains([
-            '$', '`', '|', ';', '&', '<', '>', '\n', '\r', '\0', '*', '?', '[', ']', '{', '}',
-        ])
-        || value.split(['/', '\\']).any(|part| part == "..")
-    {
-        return false;
-    }
-    if value.starts_with('~') && expand_home_read_path(value, home_dir).is_none() {
-        return false;
-    }
-    let expanded = expand_home_read_path(value, home_dir).unwrap_or_else(|| value.to_owned());
-    let supplied = std::path::Path::new(&expanded);
-    let target = if supplied.is_absolute() {
-        supplied.to_path_buf()
-    } else {
-        workspace.join(supplied)
-    };
-    let Some(canonical) = super::worktree_writes::canonical_write_target(&target) else {
-        return false;
-    };
-    (canonical.starts_with(&workspace)
-        || super::worktree_writes::same_repository_worktree(&workspace, &canonical))
-        && guard_secure_fs::hidden_read_parts_allowed(&canonical)
-        && resolved_path_allowed(&canonical, home_dir, workspace.to_str())
-        && !autostart_write_target(&canonical)
-}
-
-pub(super) fn safe_copy_arguments(
-    arguments: &[String],
-    context: (Option<&str>, Option<&str>),
-) -> bool {
-    let paths = match arguments {
-        [source, destination] => (source, destination),
-        [separator, source, destination] if separator == "--" => (source, destination),
-        _ => return false,
-    };
-    let expanded = expand_home_read_path(paths.1, context.0).unwrap_or_else(|| paths.1.clone());
-    let destination = std::path::Path::new(&expanded);
-    let destination = if destination.is_absolute() {
-        destination.to_path_buf()
-    } else if let Some(cwd) = context.1 {
-        std::path::Path::new(
-            &expand_home_read_path(cwd, context.0).unwrap_or_else(|| cwd.to_owned()),
-        )
-        .join(destination)
-    } else {
-        return false;
-    };
-    if destination
-        .symlink_metadata()
-        .is_ok_and(|metadata| metadata.file_type().is_symlink())
-    {
-        return false;
-    }
-    // Only a single file-to-file copy. Flags, directory destinations and
-    // recursive copies need separate evaluation; cp follows destination links.
-    !paths.0.starts_with('-')
-        && !paths.1.starts_with('-')
-        && paths.0.trim() == paths.0
-        && bounded_file_read_target(paths.0, context.0, context.1)
-        && (bounded_file_write_target(paths.1, context.0, context.1)
-            || bounded_temporary_copy_target(paths.1, context))
-}
-
-#[cfg(unix)]
-fn bounded_temporary_copy_target(value: &str, context: (Option<&str>, Option<&str>)) -> bool {
-    use std::os::unix::fs::MetadataExt;
-    use std::path::Path;
-
-    let Some(owner) = context
-        .0
-        .and_then(|home| std::fs::metadata(home).ok())
-        .map(|m| m.uid())
-    else {
-        return false;
-    };
-    let path = Path::new(value);
-    if !path.is_absolute()
-        || value.len() > 4096
-        || value.contains([
-            '$', '`', '|', ';', '&', '<', '>', '\n', '\r', '\0', '*', '?', '[', ']', '{', '}',
-        ])
-        || path
-            .components()
-            .any(|part| matches!(part, std::path::Component::ParentDir))
-    {
-        return false;
-    }
-    let Some(parent) = path.parent().and_then(|p| std::fs::canonicalize(p).ok()) else {
-        return false;
-    };
-    let Ok(parent_metadata) = parent.metadata() else {
-        return false;
-    };
-    let roots = [Path::new("/tmp"), Path::new("/var/tmp")];
-    let in_scope = roots
-        .iter()
-        .filter_map(|root| std::fs::canonicalize(root).ok())
-        .any(|root| {
-            parent.starts_with(&root)
-                && (parent == root
-                    || (parent_metadata.uid() == owner && parent_metadata.mode() & 0o022 == 0))
-        });
-    if !in_scope || !parent_metadata.is_dir() {
-        return false;
-    }
-    // Do not follow a pre-existing leaf symlink or overwrite another user's
-    // file (including a hard-link alias) in a shared temporary directory.
-    match path.symlink_metadata() {
-        Ok(metadata) if !metadata.is_file() || metadata.uid() != owner || metadata.nlink() != 1 => {
-            return false
-        }
-        Ok(_) => {}
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-        Err(_) => return false,
-    }
-    let Some(target) = path.file_name().map(|name| parent.join(name)) else {
-        return false;
-    };
-    resolved_path_allowed_in_scope(&target, context.0, context.1, true)
-        && guard_secure_fs::hidden_read_parts_allowed(&target)
-        && !autostart_write_target(&target)
-}
-
-#[cfg(not(unix))]
-fn bounded_temporary_copy_target(_value: &str, _context: (Option<&str>, Option<&str>)) -> bool {
-    false
-}
-
-fn autostart_write_target(path: &std::path::Path) -> bool {
-    let rendered = path
-        .to_string_lossy()
-        .replace('\\', "/")
-        .to_ascii_lowercase();
-    let parts: Vec<&str> = rendered
-        .split('/')
-        .filter(|part| !part.is_empty())
-        .collect();
-    parts.windows(2).any(|pair| {
-        matches!(
-            pair,
-            ["library", "launchagents"]
-                | ["library", "launchdaemons"]
-                | [".config", "autostart"]
-                | [".config", "systemd"]
-        )
-    }) || parts
-        .windows(3)
-        .any(|parts| parts == ["start menu", "programs", "startup"])
-}
-
-fn agent_skill_document(canonical: &std::path::Path, home_dir: Option<&str>) -> bool {
-    let Some(home) = home_dir.and_then(|root| std::fs::canonicalize(root).ok()) else {
-        return false;
-    };
-    let Ok(skills) = std::fs::canonicalize(home.join(".agents/skills")) else {
-        return false;
-    };
-    let Ok(relative) = canonical.strip_prefix(skills) else {
-        return false;
-    };
-    canonical.extension().is_some_and(|extension| extension == "md")
-        && relative.components().count() >= 2
-        && relative.components().all(|component| {
-            matches!(component, std::path::Component::Normal(part) if !part.to_string_lossy().starts_with('.'))
-        })
-}
-
-/// `~/.hol-support/SAFETY.md` is the harness-facing safety guide that agents
-/// are instructed to read before acting; it gets the same explicit allowance
-/// the Python source-path classifier grants.
-fn guard_safety_doc(canonical: &std::path::Path, home_dir: Option<&str>) -> bool {
-    home_dir
-        .and_then(|root| std::fs::canonicalize(root).ok())
-        .is_some_and(|home| canonical == home.join(".hol-support/SAFETY.md"))
-}
-
-fn foreign_user_home(
-    canonical: &std::path::Path,
-    home_dir: Option<&str>,
-    cwd: Option<&str>,
-) -> bool {
-    let user_root = ["/home", "/Users"].iter().find_map(|root| {
-        let relative = canonical.strip_prefix(root).ok()?;
-        let user = relative.components().next()?;
-        Some(std::path::Path::new(root).join(user.as_os_str()))
-    });
-    user_root.is_some_and(|user_root| {
-        ![home_dir, cwd]
-            .into_iter()
-            .flatten()
-            .any(|root| std::fs::canonicalize(root).is_ok_and(|root| root.starts_with(&user_root)))
-    })
-}
-
-fn expand_home_read_path(path: &str, home_dir: Option<&str>) -> Option<String> {
-    let rest = path.strip_prefix('~')?;
-    if !rest.is_empty() && !rest.starts_with('/') {
-        return None;
-    }
-    let home = home_dir?.trim();
-    if home.is_empty() || !std::path::Path::new(home).is_absolute() {
-        return None;
-    }
-    if rest.is_empty() {
-        return Some(home.to_owned());
-    }
-    #[cfg(windows)]
-    let rest = rest.trim_start_matches('/').replace('/', "\\");
-    #[cfg(not(windows))]
-    let rest = rest.trim_start_matches('/');
-    Some(
-        std::path::Path::new(home)
-            .join(rest)
-            .to_string_lossy()
-            .into_owned(),
-    )
-}
-
-fn lexical_read_path(value: &str) -> Option<String> {
-    if value.is_empty() || value.contains(['\0', '\n', '\r', '%', '*', '?', '[', ']', '{', '}']) {
-        return None;
-    }
-    let unified = value.replace('\\', "/");
-    let absolute = unified.starts_with('/');
-    let mut parts = Vec::new();
-    for part in unified.split('/') {
-        if part.is_empty() || part == "." {
-            continue;
-        }
-        if part == ".." || part.starts_with('~') {
-            return None;
-        }
-        parts.push(part);
-    }
-    if parts.is_empty() {
-        return None;
-    }
-    let mut normalized = String::new();
-    if absolute {
-        normalized.push('/');
-    }
-    normalized.push_str(&parts.join("/"));
-    Some(normalized)
-}
-
 pub(super) fn safe_listing_arguments(
     arguments: &[String],
-    context: (Option<&str>, Option<&str>),
+    context: super::PathContext<'_>,
 ) -> bool {
     arguments.iter().all(|argument| {
         if argument == "-" || argument == "-R" || argument == "--recursive" {
@@ -459,27 +100,45 @@ pub(super) fn safe_listing_arguments(
 
 fn command_read_target(
     value: &str,
-    context: (Option<&str>, Option<&str>),
+    context: super::PathContext<'_>,
     allow_directory: bool,
 ) -> bool {
-    if context.0.is_some() || context.1.is_some() {
-        bounded_read_target(value, context.0, context.1, allow_directory)
+    if context.home_dir.is_some() || context.cwd.is_some() {
+        bounded_read_target(value, context.home_dir, context.cwd, allow_directory)
     } else {
         safe_read_target(value)
     }
 }
 
-pub(super) fn safe_sed_arguments(
-    arguments: &[String],
-    piped_input: bool,
-    context: (Option<&str>, Option<&str>),
-) -> bool {
+fn sed_program_and_targets(arguments: &[String]) -> Option<(bool, &str, &[String])> {
     let (quiet, rest) = if arguments.first().is_some_and(|arg| arg == "-n") {
         (true, &arguments[1..])
     } else {
         (false, arguments)
     };
-    let Some((program, targets)) = rest.split_first() else {
+    let rest = if rest.first().is_some_and(|arg| arg == "-e") {
+        &rest[1..]
+    } else {
+        rest
+    };
+    let (program, targets) = rest.split_first()?;
+    Some((quiet, program, targets))
+}
+
+pub(super) fn safe_sed_stdin_arguments(arguments: &[String]) -> bool {
+    let Some((_, _, targets)) = sed_program_and_targets(arguments) else {
+        return false;
+    };
+    (targets.is_empty() || matches!(targets, [target] if target == "-"))
+        && safe_sed_arguments(arguments, true, super::PathContext::default())
+}
+
+pub(super) fn safe_sed_arguments(
+    arguments: &[String],
+    piped_input: bool,
+    context: super::PathContext<'_>,
+) -> bool {
+    let Some((quiet, program, targets)) = sed_program_and_targets(arguments) else {
         return false;
     };
     if program.len() > 256 || program.contains(['\n', '\r', '\\', ';']) {
@@ -504,13 +163,13 @@ pub(super) fn safe_sed_arguments(
             parts.len() == 3 && matches!(parts[2], "" | "g")
         });
     (bounded_print || substitution)
-        && (matches!(targets, [target] if !target.starts_with('-') && command_read_target(target, context, false))
+        && (matches!(targets, [target] if (target == "-" && piped_input) || (!target.starts_with('-') && command_read_target(target, context, false)))
             || (targets.is_empty() && piped_input))
 }
 
 pub(super) fn safe_plain_file_arguments(
     arguments: &[String],
-    context: (Option<&str>, Option<&str>),
+    context: super::PathContext<'_>,
 ) -> bool {
     let mut saw_target = false;
     let mut after_options = false;
@@ -553,7 +212,149 @@ pub(super) fn safe_plain_file_arguments(
 pub(super) fn safe_head_tail_arguments(
     arguments: &[String],
     piped_input: bool,
-    context: (Option<&str>, Option<&str>),
+    context: super::PathContext<'_>,
+) -> bool {
+    safe_head_tail_with_targets(arguments, piped_input, context, true)
+}
+
+pub(super) fn safe_head_tail_stdin_arguments(arguments: &[String]) -> bool {
+    safe_head_tail_with_targets(
+        arguments,
+        true,
+        crate::pretool::PathContext::default(),
+        false,
+    )
+}
+
+pub(super) fn safe_word_count_arguments(
+    arguments: &[String],
+    piped_input: bool,
+    context: super::PathContext<'_>,
+) -> bool {
+    safe_word_count_with_targets(arguments, piped_input, context, true)
+}
+
+pub(super) fn safe_word_count_stdin_arguments(arguments: &[String]) -> bool {
+    safe_word_count_with_targets(arguments, true, super::PathContext::default(), false)
+}
+
+fn safe_word_count_with_targets(
+    arguments: &[String],
+    piped_input: bool,
+    context: super::PathContext<'_>,
+    allow_targets: bool,
+) -> bool {
+    let mut operands = false;
+    let mut separator = false;
+    let mut saw_target = false;
+    for argument in arguments {
+        if !operands && argument == "--" {
+            operands = true;
+            separator = true;
+            continue;
+        }
+        if !operands && argument.starts_with('-') && argument != "-" {
+            let counting_option = matches!(
+                argument.as_str(),
+                "--bytes" | "--chars" | "--lines" | "--words" | "--max-line-length"
+            ) || argument.strip_prefix('-').is_some_and(|flags| {
+                !flags.is_empty()
+                    && flags
+                        .bytes()
+                        .all(|flag| matches!(flag, b'c' | b'm' | b'l' | b'w' | b'L'))
+            });
+            if !counting_option {
+                return false;
+            }
+            continue;
+        }
+        operands = true;
+        if argument == "-" {
+            if !piped_input {
+                return false;
+            }
+        } else if !allow_targets
+            || (argument.starts_with('-') && !separator)
+            || !command_read_target(argument, context, false)
+        {
+            return false;
+        }
+        saw_target = true;
+    }
+    saw_target || piped_input
+}
+
+pub(super) fn safe_jq_stdin_arguments(arguments: &[String]) -> bool {
+    let mut filter = None;
+    for argument in arguments {
+        if filter.is_none()
+            && matches!(
+                argument.as_str(),
+                "-r" | "-c"
+                    | "-e"
+                    | "-M"
+                    | "--raw-output"
+                    | "--compact-output"
+                    | "--exit-status"
+                    | "--monochrome-output"
+            )
+        {
+            continue;
+        }
+        if filter.replace(argument.as_str()).is_some() {
+            return false;
+        }
+    }
+    let Some(filter) = filter else { return false };
+    // Only field/index projections: no functions, file operands, modules or env access.
+    if filter.len() > 256 || !filter.starts_with('.') {
+        return false;
+    }
+    let bytes = filter.as_bytes();
+    let mut index = 1;
+    while index < bytes.len() {
+        if bytes[index] == b'[' {
+            index += 1;
+            while index < bytes.len() && bytes[index].is_ascii_digit() {
+                index += 1;
+            }
+            if bytes.get(index) != Some(&b']') {
+                return false;
+            }
+            index += 1;
+            if index < bytes.len() && !matches!(bytes[index], b'.' | b'[') {
+                return false;
+            }
+        } else {
+            if bytes[index] == b'.' {
+                if index == 1 {
+                    return false;
+                }
+                index += 1;
+            }
+            if index >= bytes.len() || !(bytes[index].is_ascii_alphabetic() || bytes[index] == b'_')
+            {
+                return false;
+            }
+            index += 1;
+            while index < bytes.len()
+                && (bytes[index].is_ascii_alphanumeric() || bytes[index] == b'_')
+            {
+                index += 1;
+            }
+            if index < bytes.len() && !matches!(bytes[index], b'.' | b'[') {
+                return false;
+            }
+        }
+    }
+    true
+}
+
+fn safe_head_tail_with_targets(
+    arguments: &[String],
+    piped_input: bool,
+    context: super::PathContext<'_>,
+    allow_target: bool,
 ) -> bool {
     let mut saw_target = false;
     let mut expect_count = false;
@@ -570,7 +371,11 @@ pub(super) fn safe_head_tail_arguments(
             continue;
         }
         if after_options {
-            if argument == "-" || !command_read_target(argument, context, false) || saw_target {
+            if !allow_target
+                || argument == "-"
+                || !command_read_target(argument, context, false)
+                || saw_target
+            {
                 return false;
             }
             saw_target = true;
@@ -606,7 +411,7 @@ pub(super) fn safe_head_tail_arguments(
         if argument.starts_with('-') {
             return false;
         }
-        if !command_read_target(argument, context, false) {
+        if !allow_target || !command_read_target(argument, context, false) {
             return false;
         }
         if saw_target {

@@ -18,6 +18,9 @@ from tests.native_command_test_support import (
 from tests.native_command_test_support import inspect_command_native_test as inspect_command
 from tests.native_command_test_support import real_native_command_evaluation
 
+pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
+
+
 _ACTION = "process environment secret read"
 
 
