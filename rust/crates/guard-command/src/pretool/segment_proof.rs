@@ -66,6 +66,7 @@ pub(crate) fn benign_command_segments(
                 || exact_safe_segment_with_context(model, segment, false, proof_context)
         })
         .collect();
+    let mut all_previous_benign = true;
     model
         .segments
         .iter()
@@ -145,15 +146,15 @@ pub(crate) fn benign_command_segments(
                 }
                 found
             };
-            let all_previous_benign = segment_benign[..index].iter().all(|benign| *benign);
             // Earlier extension-approved segments may rewrite the tree (checkout/pull);
             // a pre-execution path proof only holds while every predecessor is benign.
-            (benign
+            let covered = benign
                 && ls_has_explicit_target
                 && (!requires_path_context
                     || safe_reads::verified_path_context(proof_context.0, proof_context.1))
-                && (path_free || all_previous_benign))
-                .then_some(index)
+                && (path_free || all_previous_benign);
+            all_previous_benign = all_previous_benign && benign;
+            covered.then_some(index)
         })
         .collect()
 }

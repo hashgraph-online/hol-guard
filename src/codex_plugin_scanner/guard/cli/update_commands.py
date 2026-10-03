@@ -43,6 +43,13 @@ from ..daemon.update_refresh_program import DAEMON_REFRESH_SCRIPT
 from ..mdm.contracts import ManagedNetworkPolicy, ManagedPolicy
 from ..mdm.network import ManagedNetworkError, managed_urlopen
 from ..mdm.policy import load_managed_policy
+from ..native_resident_client import retire_native_resident_for_update
+from ..native_resident_update_lock import (
+    NativeResidentUpdateLock,
+    NativeResidentUpdateLockError,
+    hold_native_resident_update_lock,
+)
+from ..native_runtime import _bundled_runtime_candidate, _isolated_environment
 from ..redaction import redact_sensitive_text
 from ..runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from ..runtime.extension_control_authority import AuthorityHealth
@@ -74,6 +81,26 @@ from .update_subprocess import (
 )
 
 _TRUSTED_UPDATE_FAILURE_MESSAGES = {
+    "update_native_resident_lock_failed": (
+        "HOL Guard could not establish its native resident update barrier. "
+        "The current installation remains active; retry the update when it is idle."
+    ),
+    "update_native_resident_lock_busy": (
+        "HOL Guard could not establish its native resident update barrier because another "
+        "native request is still active. Retry the update when it is idle."
+    ),
+    "update_native_resident_lock_finalize_failed": (
+        "HOL Guard updated its package but could not verify the new native runtime. "
+        "Retry the update to finish the installation."
+    ),
+    "update_native_resident_lock_release_failed": (
+        "HOL Guard updated its package but could not release its native resident update barrier. "
+        "Restart the updater before retrying."
+    ),
+    "update_native_resident_retirement_failed": (
+        "HOL Guard could not safely stop its native resident before updating. "
+        "The current installation remains active; retry the update when it is idle."
+    ),
     "update_install_inconsistent": (
         "HOL Guard updated its version metadata but not all of its installed files. "
         "Retry the update to finish the installation."
@@ -168,6 +195,22 @@ if before.get("installed_managers"):
 after = package_shim_status(context, path_env=diagnostic_path)
 print(json.dumps({"before": before, "repair": repair, "after": after}))
 """.strip()
+
+
+def _retire_native_resident_before_update(guard_home: Path) -> bool:
+    """Stop shared native state while the installed runtime is still intact."""
+
+    try:
+        return retire_native_resident_for_update(
+            executable=_bundled_runtime_candidate(),
+            guard_home=guard_home,
+            environment=_isolated_environment(),
+        )
+    except Exception:
+        # A failed preflight must leave the current package untouched.
+        return False
+
+
 _DAEMON_REFRESH_TIMEOUT_SECONDS = 75.0
 _DAEMON_REFRESH_CLEANUP_TIMEOUT_SECONDS = 15.0
 _DAEMON_REFRESH_SCRIPT = DAEMON_REFRESH_SCRIPT
@@ -294,6 +337,89 @@ def run_guard_update(
     wheel: str | None = None,
     guard_home: Path | None = None,
     include_alpha: bool = False,
+) -> tuple[dict[str, object], int]:
+    """Run an update while preventing native resident respawn during replacement."""
+
+    if dry_run or _is_desktop_managed_runtime():
+        return _run_guard_update_unlocked(
+            dry_run=dry_run,
+            context=context,
+            store=store,
+            workspace=workspace,
+            now=now,
+            force_pypi_reinstall=force_pypi_reinstall,
+            wheel=wheel,
+            guard_home=guard_home,
+            include_alpha=include_alpha,
+        )
+    if guard_home is not None:
+        resolved_guard_home = guard_home.expanduser().resolve()
+    elif context is not None:
+        resolved_guard_home = context.guard_home.expanduser().resolve()
+    else:
+        resolved_guard_home = resolve_guard_home()
+    try:
+        with hold_native_resident_update_lock(
+            resolved_guard_home,
+            initial_executable=_bundled_runtime_candidate(),
+        ) as resident_update_lock:
+            result = _run_guard_update_unlocked(
+                dry_run=dry_run,
+                context=context,
+                store=store,
+                workspace=workspace,
+                now=now,
+                force_pypi_reinstall=force_pypi_reinstall,
+                wheel=wheel,
+                guard_home=guard_home,
+                include_alpha=include_alpha,
+                resident_update_lock=resident_update_lock,
+            )
+            if resident_update_lock.active:
+                payload, _exit_code = result
+                try:
+                    _ = resident_update_lock.publish_runtime_digest(_bundled_runtime_candidate())
+                except NativeResidentUpdateLockError as error:
+                    if _should_publish_runtime_digest(payload):
+                        payload["status"] = "failed"
+                        payload["changed"] = True
+                        payload["reason_code"] = error.reason_code
+                        payload["message"] = _TRUSTED_UPDATE_FAILURE_MESSAGES.get(
+                            error.reason_code,
+                            "HOL Guard could not safely establish its native resident update barrier.",
+                        )
+                        _exit_code = 1
+                resident_update_lock.release()
+                result = payload, _exit_code
+            return result
+    except NativeResidentUpdateLockError as error:
+        reason_code = error.reason_code
+        payload: dict[str, object] = {
+            "installer": "desktop" if _is_desktop_managed_runtime() else _installer_kind(),
+            "dry_run": dry_run,
+            "status": "failed",
+            "changed": False,
+            "reason_code": reason_code,
+            "message": _TRUSTED_UPDATE_FAILURE_MESSAGES.get(
+                reason_code,
+                "HOL Guard could not safely establish its native resident update barrier.",
+            ),
+        }
+        return payload, 1
+
+
+def _run_guard_update_unlocked(
+    *,
+    dry_run: bool,
+    context: HarnessContext | None = None,
+    store: GuardStore | None = None,
+    workspace: str | None = None,
+    now: str | None = None,
+    force_pypi_reinstall: bool = False,
+    wheel: str | None = None,
+    guard_home: Path | None = None,
+    include_alpha: bool = False,
+    resident_update_lock: NativeResidentUpdateLock | None = None,
 ) -> tuple[dict[str, object], int]:
     installer = "desktop" if _is_desktop_managed_runtime() else _installer_kind()
     payload: dict[str, object] = {
@@ -619,10 +745,21 @@ def run_guard_update(
     attempted_pipx_recovery = False
     propagation_retries = 0
     installer_execution_started = False
+    native_resident_retirement_attempted = False
     while True:
         try:
             if trusted_wheel is not None:
                 trusted_wheel.revalidate()
+            if not native_resident_retirement_attempted:
+                native_resident_retirement_attempted = True
+                if not _retire_native_resident_before_update(resolved_guard_home):
+                    return finish_update(
+                        _trusted_update_failure(
+                            payload,
+                            UpdateSubprocessError("update_native_resident_retirement_failed"),
+                            trusted_wheel=trusted_wheel,
+                        )
+                    )
             installer_execution_started = True
             result = update_context.run(active_command)
         except UpdateArtifactError as error:
@@ -818,6 +955,29 @@ def run_guard_update(
     notes = _success_notes(payload)
     if notes:
         payload["notes"] = [*_payload_notes(payload), *notes]
+    finalization_exit_code = 0
+    if resident_update_lock is not None and resident_update_lock.active and _should_publish_runtime_digest(payload):
+        # A refreshed daemon may issue native requests immediately. Publish the
+        # installed executable identity before releasing the barrier so a
+        # pre-update client cannot revive the old resident.
+        try:
+            _ = resident_update_lock.publish_runtime_digest(_bundled_runtime_candidate())
+            resident_update_lock.release()
+        except NativeResidentUpdateLockError as error:
+            reason_code = error.reason_code
+            if resident_update_lock.active:
+                try:
+                    resident_update_lock.release()
+                except NativeResidentUpdateLockError as release_error:
+                    reason_code = release_error.reason_code
+            payload["status"] = "failed"
+            payload["reason_code"] = reason_code
+            payload["message"] = _TRUSTED_UPDATE_FAILURE_MESSAGES.get(
+                reason_code,
+                "HOL Guard could not safely establish its native resident update barrier.",
+            )
+            payload["changed"] = True
+            finalization_exit_code = 1
     daemon_refresh: dict[str, object] | None = None
     if context is not None:
         daemon_refresh, daemon_refresh_note = refresh_guard_daemon_after_update(
@@ -877,7 +1037,7 @@ def run_guard_update(
                 }
             )
             return finish_update((payload, 1))
-    return finish_update((payload, 0))
+    return finish_update((payload, finalization_exit_code))
 
 
 def _record_verified_local_wheel_receipt(
@@ -1085,6 +1245,12 @@ def _directory_path(path: str | Path) -> Path:
 
 def _output_lines(value: str) -> list[str]:
     return [line.strip() for line in value.splitlines() if line.strip()]
+
+
+def _should_publish_runtime_digest(payload: dict[str, object]) -> bool:
+    """Publish only after a successful installer, including same-version repairs."""
+
+    return payload.get("return_code") == 0 and payload.get("status") in {"current", "stale", "updated"}
 
 
 def _success_status(payload: dict[str, object]) -> str:

@@ -75,6 +75,7 @@ _REVIEWED_IMPORTS: dict[str, frozenset[str]] = {
             "PhpArtisanScriptMatcher",
             "CurlElasticsearchDeleteMatcher",
             "Repo2nbUnresolvedExpansionMatcher",
+            "TuiRunnerUnresolvedExpansionMatcher",
             "ReviewedLiteralCommandMatcher",
             "CommandSafetyRule",
             "CommandSafeVariant",
@@ -114,6 +115,7 @@ _REVIEWED_IMPORTS: dict[str, frozenset[str]] = {
     "command_framework_extensions": frozenset({"PhpArtisanScriptMatcher"}),
     "command_search_messaging_extensions": frozenset({"CurlElasticsearchDeleteMatcher"}),
     "command_repo2nb_extensions": frozenset({"Repo2nbUnresolvedExpansionMatcher"}),
+    "command_tui_runner_extensions": frozenset({"TuiRunnerUnresolvedExpansionMatcher"}),
     "command_reviewed_literal_matcher": frozenset({"ReviewedLiteralCommandMatcher"}),
 }
 
@@ -283,6 +285,7 @@ class _RestrictedEvaluator:
         "PhpArtisanScriptMatcher",
         "CurlElasticsearchDeleteMatcher",
         "Repo2nbUnresolvedExpansionMatcher",
+        "TuiRunnerUnresolvedExpansionMatcher",
         "ReviewedLiteralCommandMatcher",
     }
     _NATIVE_MATCHER_SPECS: ClassVar[dict[str, tuple[object, ...]]] = {
@@ -425,6 +428,11 @@ class _RestrictedEvaluator:
         "Repo2nbUnresolvedExpansionMatcher": (
             "repo2nb-expansion.v1",
             ("subcommand", "launchers", "leading_options_with_values", "expansion_markers"),
+            (),
+        ),
+        "TuiRunnerUnresolvedExpansionMatcher": (
+            "tui-runner-expansion.v1",
+            ("launchers", "leading_options_with_values", "expansion_markers"),
             (),
         ),
         "ReviewedLiteralCommandMatcher": (

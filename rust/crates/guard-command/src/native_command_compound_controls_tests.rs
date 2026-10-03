@@ -50,6 +50,7 @@ fn explicit_command_permission_settles_only_its_covered_generic_review() {
         allowed.reason_code,
         "native_command_explicit_permission_allow"
     );
+    assert!(allowed.explicitly_benign);
     for command in [
         "pwd; git push origin main",
         "echo ready && git push origin main",

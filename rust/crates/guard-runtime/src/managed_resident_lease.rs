@@ -11,7 +11,8 @@ use std::thread;
 use std::time::{Duration, Instant, SystemTime};
 
 use crate::resident_state::{
-    ensure_private_directory_under, private_root_for_state_base, process_start_marker,
+    ensure_private_directory_under, private_root_for_state_base, process_is_definitively_gone,
+    process_start_marker,
 };
 
 #[path = "managed_resident_lease_identity.rs"]
@@ -36,6 +37,16 @@ const LEASE_ACQUIRE_RETRY_MAX_DELAY: Duration = Duration::from_millis(16);
 mod owner;
 use owner::deadline_for_timeout;
 pub(super) use owner::ClientLease;
+#[path = "managed_resident_lease_retirement.rs"]
+mod retirement;
+
+pub(super) fn retire_clients_for_update(
+    state_base: &Path,
+    expected_digest: &str,
+    deadline: Instant,
+) -> Result<(), String> {
+    retirement::retire_clients_for_update(state_base, expected_digest, deadline)
+}
 
 struct LeaseDirectoryLock {
     file: File,

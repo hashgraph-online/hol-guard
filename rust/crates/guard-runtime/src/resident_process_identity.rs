@@ -65,6 +65,35 @@ pub(crate) fn process_start_marker(process_id: u32) -> Result<String, String> {
     Ok(format!("posix:{}", process.start_time()))
 }
 
+/// Prove that a process no longer exists without treating identity lookup
+/// errors as proof of death.
+#[cfg(unix)]
+pub(crate) fn process_is_definitively_gone(process_id: u32) -> Result<bool, String> {
+    use nix::errno::Errno;
+    use nix::sys::signal::kill;
+    use nix::unistd::Pid;
+
+    if process_id == 0 || process_id > i32::MAX as u32 {
+        return Ok(true);
+    }
+    match kill(Pid::from_raw(process_id as i32), None) {
+        Ok(()) | Err(Errno::EPERM) | Err(Errno::EACCES) => Ok(false),
+        Err(Errno::ESRCH) => Ok(true),
+        Err(_) => Err("native_resident_process_identity_unavailable".to_owned()),
+    }
+}
+
+#[cfg(windows)]
+pub(crate) fn process_is_definitively_gone(process_id: u32) -> Result<bool, String> {
+    guard_runtime_windows_process::wait_for_process_exit(process_id, std::time::Duration::ZERO)
+        .map_err(|_| "native_resident_process_identity_unavailable".to_owned())
+}
+
+#[cfg(not(any(unix, windows)))]
+pub(crate) fn process_is_definitively_gone(_process_id: u32) -> Result<bool, String> {
+    Err("native_resident_process_identity_unavailable".to_owned())
+}
+
 #[cfg(target_os = "macos")]
 fn darwin_process_start_marker(process_id: u32) -> Option<String> {
     let info =

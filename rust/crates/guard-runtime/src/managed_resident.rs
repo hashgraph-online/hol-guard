@@ -18,6 +18,8 @@ mod containment;
 mod lease;
 pub(crate) use lease::client_request;
 use lease::client_request_with_lease;
+#[path = "managed_resident_client_request.rs"]
+mod client_request_flow;
 #[path = "managed_resident_transport.rs"]
 mod managed_resident_transport;
 #[cfg(windows)]
@@ -35,33 +37,32 @@ mod restart_budget;
 const MANAGED_OWNER_LOCK_FILE_NAME: &str = owner_lock::MANAGED_OWNER_LOCK_FILE_NAME;
 
 use crate::resident_state::{
-    acquire_startup_lock, clear_stale_startup_lock, discover_home_states_prefer, next_generation,
-    process_start_marker, runtime_digest, state_scope, token_from_state,
-    validate_package_process_identity, validate_runtime_process_identity,
+    discover_home_states_prefer, process_start_marker, runtime_digest, state_scope,
+    token_from_state,
 };
 
 pub(crate) fn client_stream(state_base: &Path) -> Result<(), String> {
     client_stream::run(state_base)
 }
 
-// Startup may use the caller's remaining budget, never more than nine seconds.
-const CLIENT_START_TIMEOUT: Duration = Duration::from_millis(9_000);
-const CLIENT_RETRY_DELAY: Duration = Duration::from_millis(5);
-
-fn try_live_or_restart(
-    state_base: &Path,
-    payload: &[u8],
-    deadline: Instant,
-    preferred_digest: &str,
-) -> Result<Option<Vec<u8>>, String> {
-    match try_home_states(state_base, payload, deadline, preferred_digest) {
-        Err(error) if error == "native_resident_live_request_failed" => Ok(None),
-        other => other,
-    }
-}
 const MANAGED_IDLE_TIMEOUT: Duration = Duration::from_secs(60 * 60);
 const MANAGED_STOP_TIMEOUT: Duration = Duration::from_secs(2);
+const CLIENT_RETRY_DELAY: Duration = Duration::from_millis(5);
 static MANAGED_SHUTDOWN_REQUESTED: AtomicBool = AtomicBool::new(false);
+
+fn client_request_with_deadline(
+    state_base: &Path,
+    payload: &[u8],
+    overall_deadline: Instant,
+    client_lease: &lease::ClientLease,
+) -> Result<Vec<u8>, String> {
+    client_request_flow::client_request_with_deadline(
+        state_base,
+        payload,
+        overall_deadline,
+        client_lease,
+    )
+}
 
 pub(crate) fn acquire_managed_owner_lock(
     scope: &Path,
@@ -129,153 +130,7 @@ fn combine_liveness(
     combined
 }
 
-fn try_home_states(
-    state_base: &Path,
-    payload: &[u8],
-    deadline: Instant,
-    preferred_digest: &str,
-) -> Result<Option<Vec<u8>>, String> {
-    let runtime_digest = runtime_digest()?;
-    for (_scope, _digest, state) in discover_home_states_prefer(state_base, Some(preferred_digest))?
-    {
-        if deadline.saturating_duration_since(Instant::now()).is_zero() {
-            return Ok(None);
-        }
-        let same_runtime = runtime_digest == state.runtime_sha256;
-        if (same_runtime
-            && validate_package_process_identity(state.process_id, &state.process_start_marker)
-                .is_err())
-            || (!same_runtime
-                && validate_runtime_process_identity(
-                    state.process_id,
-                    &state.process_start_marker,
-                    &state.runtime_sha256,
-                )
-                .is_err())
-        {
-            continue;
-        }
-        let token = token_from_state(&state)?;
-        let identity = crate::resident_client::ExpectedProcessIdentity {
-            process_id: state.process_id,
-            start_marker: &state.process_start_marker,
-            digest: (!same_runtime).then_some(&state.runtime_sha256),
-        };
-        let timeout = deadline.saturating_duration_since(Instant::now());
-        if timeout.is_zero() {
-            return Ok(None);
-        }
-        match crate::resident_client::send_request_for_digest_detailed(
-            &state.transport,
-            &state.endpoint,
-            &token,
-            payload,
-            timeout,
-            &identity,
-        ) {
-            Ok(response) => return Ok(Some(response)),
-            Err(error)
-                if containment::skip_failed_home_state_request(&error, same_runtime, &state) => {}
-            Err(_) => return Err("native_resident_live_request_failed".to_owned()),
-        }
-    }
-    Ok(None)
-}
-
-fn client_request_with_deadline(
-    state_base: &Path,
-    payload: &[u8],
-    overall_deadline: Instant,
-    _client_lease: &lease::ClientLease,
-) -> Result<Vec<u8>, String> {
-    // Keep the caller's budget intact. Windows spawn already has
-    // CLIENT_START_TIMEOUT; shrinking every live request by 300ms makes the
-    // 250ms command-model SLO miss the ready serve entirely.
-    if Instant::now() >= overall_deadline {
-        return Err("native_client_deadline_exceeded".to_owned());
-    }
-    let digest = runtime_digest()?;
-    let scope = state_scope(state_base, &digest)?;
-    if let Some(response) = try_home_states(state_base, payload, overall_deadline, &digest)? {
-        return Ok(response);
-    }
-    if Instant::now() >= overall_deadline {
-        return Err("native_client_deadline_exceeded".to_owned());
-    }
-    // Older per-digest launchers left their startup marker in the runtime
-    // scope.  Retire only an authenticated stale marker before taking the
-    // home-wide lock; a live marker remains an active startup signal.
-    let _ = clear_stale_startup_lock(&scope, &digest)?;
-    let mut lock = acquire_startup_lock(state_base)?;
-    if lock.is_none() && clear_stale_startup_lock(state_base, &digest)? {
-        lock = acquire_startup_lock(state_base)?;
-    }
-    if lock.is_none() {
-        let deadline = overall_deadline.min(Instant::now() + CLIENT_START_TIMEOUT);
-        while Instant::now() < deadline {
-            if let Some(response) =
-                try_live_or_restart(state_base, payload, overall_deadline, &digest)?
-            {
-                return Ok(response);
-            }
-            thread::sleep(
-                CLIENT_RETRY_DELAY.min(deadline.saturating_duration_since(Instant::now())),
-            );
-        }
-        if clear_stale_startup_lock(state_base, &digest)? {
-            lock = acquire_startup_lock(state_base)?;
-        }
-    }
-    let _startup_lock = lock.ok_or_else(|| "native_resident_start_in_progress".to_owned())?;
-    if Instant::now() >= overall_deadline {
-        return Err("native_client_deadline_exceeded".to_owned());
-    }
-    if let Some(response) = try_live_or_restart(state_base, payload, overall_deadline, &digest)? {
-        return Ok(response);
-    }
-    restart_budget::consume(&scope)?;
-    let generation = next_generation(&scope, &digest)?;
-    let mut token = [0u8; crate::AUTH_TOKEN_BYTES];
-    getrandom::fill(&mut token).map_err(|_| "native_client_random_failed".to_owned())?;
-    let mut spawned = containment::spawn_managed_for_owner(
-        state_base,
-        generation,
-        &digest,
-        &token,
-        std::process::id(),
-        overall_deadline,
-    )?;
-    let deadline = overall_deadline.min(Instant::now() + CLIENT_START_TIMEOUT);
-    let request_result = loop {
-        if Instant::now() >= deadline {
-            break Err("native_resident_start_timeout".to_owned());
-        }
-        match try_live_or_restart(state_base, payload, overall_deadline, &digest) {
-            Ok(Some(response)) => break Ok(response),
-            Ok(None) => {}
-            Err(error) => break Err(error),
-        }
-        thread::sleep(CLIENT_RETRY_DELAY.min(deadline.saturating_duration_since(Instant::now())));
-    };
-    match request_result {
-        Ok(response) => Ok(response),
-        Err(error) => {
-            // Cleanup retries share the request deadline. A failed containment
-            // check must remain visible rather than be hidden by the request error.
-            containment::abort_spawned_managed(
-                &mut spawned,
-                &scope,
-                &digest,
-                generation,
-                &token,
-                overall_deadline,
-            )?;
-            Err(error)
-        }
-    }
-}
-
-pub(crate) fn stop_managed(state_base: &Path) -> Result<(), String> {
+pub(crate) fn stop_managed(state_base: &Path, retire_clients: bool) -> Result<(), String> {
     // Materialize the current runtime scope even when no resident state is
     // present.  This keeps the stop command's authenticated, private-home
     // contract deterministic for callers that use it to initialize a fresh
@@ -288,8 +143,14 @@ pub(crate) fn stop_managed(state_base: &Path) -> Result<(), String> {
         .into_iter()
         .next()
     else {
+        if retire_clients {
+            lease::retire_clients_for_update(state_base, &digest, deadline)?;
+        }
         return Err("native_resident_stop_unavailable".to_owned());
     };
+    if retire_clients {
+        lease::retire_clients_for_update(state_base, &digest, deadline)?;
+    }
     let process_ids = containment::state_process_identities(std::slice::from_ref(&state));
     let token = token_from_state(&state)?;
     let identity = crate::resident_client::ExpectedProcessIdentity {
@@ -481,11 +342,7 @@ pub(crate) fn parse_process_id(value: &str) -> Result<u32, String> {
 pub(crate) fn client_timeout(payload: &[u8]) -> Duration {
     let budget = crate::strict_json_value(payload)
         .ok()
-        .and_then(|value| {
-            value
-                .get("deadline_budget_ms")
-                .and_then(serde_json::Value::as_u64)
-        })
+        .and_then(|value| value.get("deadline_budget_ms")?.as_u64())
         .unwrap_or(750)
         .clamp(1, 9_000);
     Duration::from_millis(budget)
