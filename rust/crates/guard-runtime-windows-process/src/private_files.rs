@@ -142,7 +142,7 @@ pub(super) fn open_inspect_private_file(path: &Path) -> io::Result<std::fs::File
 /// Return whether an existing regular file has exactly one directory entry.
 /// The link count is read from the opened handle so aliases cannot be hidden
 /// by a path-only metadata lookup.
-pub(super) fn is_single_link_file(path: &Path) -> io::Result<bool> {
+pub fn is_single_link_file(path: &Path) -> io::Result<bool> {
     let file = open_raw_with_access(
         path,
         false,
