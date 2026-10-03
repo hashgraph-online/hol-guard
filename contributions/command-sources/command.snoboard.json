@@ -1,0 +1,652 @@
+{
+  "schema": "guard.command-extension-source.v1",
+  "extension": {
+    "extension_id": "command.snoboard",
+    "version": "1.0.0",
+    "name": "Snoboard CLI",
+    "description": "Reviews snoboard commands that write initiative.md or fetch from origin. validate, status, and next-number without --fetch only read and are not matched. fix --dry-run, --help, and --version exit without writing. Upstream CLI 0.1.0.",
+    "action_classes": [
+      "snoboard initiative write",
+      "snoboard origin fetch"
+    ],
+    "risk_classes": [
+      "destructive_shell",
+      "execution",
+      "network_egress"
+    ],
+    "safer_alternatives": [
+      "Run `snoboard validate` or `snoboard status` to inspect initiatives without writing.",
+      "Run `snoboard fix --dry-run` to preview normalisations before they are written."
+    ],
+    "reference_urls": [
+      "https://github.com/serrnovik/snoboard",
+      "https://github.com/serrnovik/snoboard/blob/main/docs/cli.md"
+    ],
+    "required": false,
+    "source": "built-in",
+    "aliases": [],
+    "dependencies": [],
+    "conflicts": [],
+    "ecosystem_ids": [],
+    "executables": [
+      "snoboard",
+      "snoboard.cmd",
+      "snoboard.exe"
+    ],
+    "project_markers": [],
+    "publisher": {
+      "id": "serrnovik",
+      "display_name": "Sergey Novikov",
+      "url": "https://github.com/serrnovik/snoboard"
+    },
+    "homepage": "https://github.com/serrnovik/snoboard",
+    "icon": {
+      "kind": "none"
+    },
+    "license": "Apache-2.0",
+    "permissions": [
+      {
+        "permission_id": "command.snoboard.permission.new",
+        "implementation_version": "1.0.0",
+        "label": "Create an initiative file",
+        "description": "Reviews `snoboard new`, which chooses the next number and writes initiatives/<project>/<NNN>-<slug>/initiative.md. `--fetch` also runs git fetch against origin before the write.",
+        "risk_tier": "high",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "snoboard initiative write"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "deprecated": false,
+        "safer_guidance": [
+          "Run `snoboard validate` or `snoboard status` to inspect initiatives without writing.",
+          "Run `snoboard fix --dry-run` to preview normalisations before they are written."
+        ],
+        "example_command": "snoboard new acme search --title \"Search\""
+      },
+      {
+        "permission_id": "command.snoboard.permission.fix",
+        "implementation_version": "1.0.0",
+        "label": "Normalise initiative files",
+        "description": "Reviews `snoboard fix`, which rewrites opted-in initiative frontmatter in the working tree. `--dry-run` prints pending changes and writes nothing.",
+        "risk_tier": "high",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "snoboard initiative write"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "deprecated": false,
+        "safer_guidance": [
+          "Run `snoboard fix --dry-run` and review the printed changes before writing them."
+        ],
+        "example_command": "snoboard fix"
+      },
+      {
+        "permission_id": "command.snoboard.permission.fetch",
+        "implementation_version": "1.0.0",
+        "label": "Fetch origin before numbering",
+        "description": "Reviews `snoboard next-number --fetch`, which runs git fetch against origin and updates remote-tracking refs. Without `--fetch` the command only reads local refs.",
+        "risk_tier": "medium",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "snoboard origin fetch"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "deprecated": false,
+        "safer_guidance": [
+          "Run `snoboard next-number <project>` without `--fetch` to read the next number from local refs."
+        ],
+        "example_command": "snoboard next-number acme --fetch"
+      }
+    ],
+    "rules": [
+      {
+        "rule_id": "command.snoboard.new",
+        "rule_version": "1.0.0",
+        "permission_id": "command.snoboard.permission.new",
+        "title": "Create an initiative file",
+        "description": "Identifies `snoboard new`, which writes a new initiative.md. `--help` and `--version` exit before any write.",
+        "severity": "high",
+        "risk_classes": [
+          "destructive_shell",
+          "execution"
+        ],
+        "action_classes": [
+          "snoboard initiative write"
+        ],
+        "safer_alternatives": [
+          "Run `snoboard validate` or `snoboard status` to inspect initiatives without writing.",
+          "Run `snoboard fix --dry-run` to preview normalisations before they are written."
+        ],
+        "default_mode": "review",
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "executable.v1",
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "snoboard",
+                  "snoboard.cmd",
+                  "snoboard.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--fetch",
+                  "--help",
+                  "--version"
+                ],
+                "interspersed_options_with_values": [
+                  "--priority",
+                  "--repo",
+                  "--title"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--priority",
+                  "--repo",
+                  "--title"
+                ],
+                "options_with_values": [
+                  "--priority",
+                  "--repo",
+                  "--title"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "new"
+                ]
+              }
+            }
+          ]
+        },
+        "safe_variants": [
+          {
+            "variant_id": "help",
+            "title": "new command help",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "snoboard",
+                      "snoboard.cmd",
+                      "snoboard.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--fetch",
+                      "--help",
+                      "--version"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--priority",
+                      "--repo",
+                      "--title"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--priority",
+                      "--repo",
+                      "--title"
+                    ],
+                    "options_with_values": [
+                      "--priority",
+                      "--repo",
+                      "--title"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "new"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "variant_id": "version",
+            "title": "new command version",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "snoboard",
+                      "snoboard.cmd",
+                      "snoboard.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--fetch",
+                      "--help",
+                      "--version"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--priority",
+                      "--repo",
+                      "--title"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--priority",
+                      "--repo",
+                      "--title"
+                    ],
+                    "options_with_values": [
+                      "--priority",
+                      "--repo",
+                      "--title"
+                    ],
+                    "required_flags": [
+                      "--version"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "new"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "rule_id": "command.snoboard.fix",
+        "rule_version": "1.0.0",
+        "permission_id": "command.snoboard.permission.fix",
+        "title": "Normalise initiative files",
+        "description": "Identifies `snoboard fix`, which rewrites initiative frontmatter. `--dry-run` writes nothing. `--help` and `--version` exit before any write.",
+        "severity": "high",
+        "risk_classes": [
+          "destructive_shell",
+          "execution"
+        ],
+        "action_classes": [
+          "snoboard initiative write"
+        ],
+        "safer_alternatives": [
+          "Run `snoboard fix --dry-run` and review the printed changes before writing them."
+        ],
+        "default_mode": "review",
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "executable.v1",
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "snoboard",
+                  "snoboard.cmd",
+                  "snoboard.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--dry-run",
+                  "--help",
+                  "--json",
+                  "--version"
+                ],
+                "interspersed_options_with_values": [
+                  "--repo"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--repo"
+                ],
+                "options_with_values": [
+                  "--repo"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "fix"
+                ]
+              }
+            }
+          ]
+        },
+        "safe_variants": [
+          {
+            "variant_id": "dry-run",
+            "title": "Preview normalisations without writing",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "snoboard",
+                      "snoboard.cmd",
+                      "snoboard.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--dry-run",
+                      "--help",
+                      "--json",
+                      "--version"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--repo"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--repo"
+                    ],
+                    "options_with_values": [
+                      "--repo"
+                    ],
+                    "required_flags": [
+                      "--dry-run"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "fix"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "variant_id": "help",
+            "title": "fix command help",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "snoboard",
+                      "snoboard.cmd",
+                      "snoboard.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--dry-run",
+                      "--help",
+                      "--json",
+                      "--version"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--repo"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--repo"
+                    ],
+                    "options_with_values": [
+                      "--repo"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "fix"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "variant_id": "version",
+            "title": "fix command version",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "snoboard",
+                      "snoboard.cmd",
+                      "snoboard.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--dry-run",
+                      "--help",
+                      "--json",
+                      "--version"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--repo"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--repo"
+                    ],
+                    "options_with_values": [
+                      "--repo"
+                    ],
+                    "required_flags": [
+                      "--version"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "fix"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "rule_id": "command.snoboard.fetch",
+        "rule_version": "1.0.0",
+        "permission_id": "command.snoboard.permission.fetch",
+        "title": "Fetch origin before numbering",
+        "description": "Identifies `snoboard next-number --fetch`, which runs git fetch against origin. The same command without `--fetch` is not matched.",
+        "severity": "medium",
+        "risk_classes": [
+          "network_egress",
+          "execution"
+        ],
+        "action_classes": [
+          "snoboard origin fetch"
+        ],
+        "safer_alternatives": [
+          "Run `snoboard next-number <project>` without `--fetch` to read the next number from local refs."
+        ],
+        "default_mode": "review",
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "executable.v1",
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "snoboard",
+                  "snoboard.cmd",
+                  "snoboard.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--fetch",
+                  "--help",
+                  "--version"
+                ],
+                "interspersed_options_with_values": [
+                  "--repo"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--repo"
+                ],
+                "options_with_values": [
+                  "--repo"
+                ],
+                "required_flags": [
+                  "--fetch"
+                ],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": [
+                  "next-number"
+                ]
+              }
+            }
+          ]
+        },
+        "safe_variants": [
+          {
+            "variant_id": "help",
+            "title": "next-number help",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "snoboard",
+                      "snoboard.cmd",
+                      "snoboard.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--fetch",
+                      "--help",
+                      "--version"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--repo"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--repo"
+                    ],
+                    "options_with_values": [
+                      "--repo"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "next-number"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "variant_id": "version",
+            "title": "next-number version",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "snoboard",
+                      "snoboard.cmd",
+                      "snoboard.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--fetch",
+                      "--help",
+                      "--version"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--repo"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--repo"
+                    ],
+                    "options_with_values": [
+                      "--repo"
+                    ],
+                    "required_flags": [
+                      "--version"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "next-number"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
