@@ -384,16 +384,21 @@ fn exfil_prompt_intent(values: &[String]) -> bool {
 fn destructive_prompt_intent(values: &[String]) -> bool {
     static PATTERN: OnceLock<Regex> = OnceLock::new();
     static REFERENTIAL: OnceLock<Regex> = OnceLock::new();
+    static FS_NOUN: OnceLock<Regex> = OnceLock::new();
     let pattern = PATTERN.get_or_init(|| {
         Regex::new(r"(?i)(?:\brm\s+-[a-z]*[rf]\b|\b(?:delete|remove|overwrite|truncate|chmod|chown|mv)\b[^.!?;\n]{0,60}\b(?:file|directory|repo|workspace|contents?)\b)")
             .expect("bounded destructive prompt intent")
     });
     let referential = REFERENTIAL.get_or_init(|| {
-        Regex::new(r"(?i)\b(?:delete|remove|overwrite|truncate|chmod|chown|mv)\b[^.!?;\n]{0,60}\b(?:it|them|those|these|that|this)\b")
+        Regex::new(r"(?i)\b(?:delete|remove|overwrite|truncate|chmod|chown|mv)\s+(?:all\s+of\s+)?(?:it|them|those|these)\b")
             .expect("bounded referential destructive prompt intent")
     });
+    let fs_noun = FS_NOUN.get_or_init(|| {
+        Regex::new(r"(?i)\b(?:files?|director(?:y|ies)|repo(?:sitory)?|workspace)\b").expect("fs noun")
+    });
     values.iter().any(|value| {
-        pattern.is_match(&mask_destructive_prohibitions(value)) || referential.is_match(value)
+        pattern.is_match(&mask_destructive_prohibitions(value))
+            || (referential.is_match(value) && fs_noun.is_match(value))
     })
 }
 
