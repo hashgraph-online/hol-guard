@@ -45,9 +45,16 @@ def assert_file_tools(events: list[dict], workspace: Path, target_root: Path | N
                     matched = re.fullmatch(r"(.+)#[0-9A-Fa-f]{4}", headers[0])
                     if matched is not None:
                         anchored_target = matched.group(1)
-            if anchored_target is None or (target is not None and target != anchored_target):
-                raise AssertionError("Pi supplied conflicting or invalid anchored edit targets")
-            target = anchored_target
+            if isinstance(anchored, str):
+                if anchored_target is None or (target is not None and target != anchored_target):
+                    raise AssertionError("Pi supplied conflicting or invalid anchored edit targets")
+                target = anchored_target
+            elif not (
+                isinstance(target, str)
+                and args.get("old_string") == "fixture-before"
+                and args.get("new_string") == "fixture-after"
+            ):
+                raise AssertionError("Pi supplied an invalid string-replacement edit")
         if not isinstance(target, str):
             raise AssertionError("Pi omitted a file target")
         try:
