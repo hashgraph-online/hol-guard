@@ -144,10 +144,13 @@ fn probe(
     }
     let pager_key = format!("pager.{operation}");
     let pager_setting = effective.get(pager_key.as_str()).copied();
-    let paging = !leading.iter().any(|argument| argument == "--no-pager")
-        && !execution_environment.is_some_and(|context| context.git_pager_disabled)
-        && pager_setting.map_or(operation != "status", |value| !disabled_boolean(value));
-    if paging && has_environment_pager(execution_environment) {
+    let environment_pager = environment_pager_disabled(execution_environment);
+    let git_pager_disabled = git_pager_disabled(execution_environment);
+    let no_pager = leading.iter().any(|argument| argument == "--no-pager");
+    let configured_paging =
+        !no_pager && pager_setting.map_or(operation != "status", |value| !disabled_boolean(value));
+    let paging = configured_paging && !environment_pager.is_some_and(|disabled| disabled);
+    if paging && environment_pager == Some(false) {
         return Some(false);
     }
     for (key, value) in effective {
@@ -155,7 +158,8 @@ fn probe(
         let unsafe_value = match key {
             "core.fsmonitor" => matches!(operation, "status" | "diff") && !disabled,
             "core.pager" => {
-                paging
+                configured_paging
+                    && !git_pager_disabled
                     && pager_setting.is_none_or(enabled_boolean)
                     && !value.is_empty()
                     && value != "cat"
@@ -200,7 +204,37 @@ fn enabled_boolean(value: &str) -> bool {
     )
 }
 
-fn has_environment_pager(
+fn environment_pager_disabled(
+    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+) -> Option<bool> {
+    match execution_environment {
+        Some(context) => {
+            if context
+                .environment_names
+                .iter()
+                .any(|name| name.eq_ignore_ascii_case("GIT_PAGER"))
+            {
+                Some(context.git_pager_disabled)
+            } else if context
+                .environment_names
+                .iter()
+                .any(|name| name.eq_ignore_ascii_case("PAGER"))
+            {
+                Some(context.pager_disabled)
+            } else {
+                None
+            }
+        }
+        None => std::env::var_os("GIT_PAGER")
+            .map(|value| value.is_empty() || value.to_string_lossy() == "cat")
+            .or_else(|| {
+                std::env::var_os("PAGER")
+                    .map(|value| value.is_empty() || value.to_string_lossy() == "cat")
+            }),
+    }
+}
+
+fn git_pager_disabled(
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
 ) -> bool {
     match execution_environment {
@@ -208,15 +242,11 @@ fn has_environment_pager(
             context
                 .environment_names
                 .iter()
-                .any(|name| match name.to_ascii_uppercase().as_str() {
-                    "GIT_PAGER" => !context.git_pager_disabled,
-                    "PAGER" => !context.pager_disabled,
-                    _ => false,
-                })
+                .any(|name| name.eq_ignore_ascii_case("GIT_PAGER"))
+                && context.git_pager_disabled
         }
-        None => ["GIT_PAGER", "PAGER"]
-            .iter()
-            .any(|name| std::env::var_os(name).is_some_and(|value| !value.is_empty())),
+        None => std::env::var_os("GIT_PAGER")
+            .is_some_and(|value| value.is_empty() || value.to_string_lossy() == "cat"),
     }
 }
 

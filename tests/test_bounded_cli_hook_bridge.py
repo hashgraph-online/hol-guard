@@ -164,9 +164,12 @@ def test_outer_bounded_bridge_stamps_caller_environment_before_dispatch(
     )
     captured: dict[str, object] = {}
 
-    def fake_run(config: dict[str, object], *, input_text: str) -> int:
+    def fake_run(
+        config: dict[str, object], *, input_text: str, deadline_monotonic: float | None = None
+    ) -> int:
         captured["config"] = config
         captured["input_text"] = input_text
+        captured["deadline_monotonic"] = deadline_monotonic
         return 0
 
     monkeypatch.setenv("PATH", "/outer/bin")
