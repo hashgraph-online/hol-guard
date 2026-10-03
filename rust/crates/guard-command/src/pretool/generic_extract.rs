@@ -390,7 +390,7 @@ fn destructive_prompt_intent(values: &[String]) -> bool {
             .expect("bounded destructive prompt intent")
     });
     let referential = REFERENTIAL.get_or_init(|| {
-        Regex::new(r"(?i)\b(?:delete|remove|overwrite|truncate|chmod|chown|mv)\s+(?:all\s+of\s+)?(?:it|them|those|these)\b")
+        Regex::new(r"(?i)\b(?:delete|remove|overwrite|truncate|chmod|chown|mv)\s+(?:all\s+of\s+|everything\s+in\s+)?(?:it|them|those|these|that|this)\b")
             .expect("bounded referential destructive prompt intent")
     });
     let fs_noun = FS_NOUN.get_or_init(|| {
