@@ -4,6 +4,16 @@ from ci.native_runtime.probe_workflow_matrix import assert_admission, assert_exe
 from ci.native_runtime.workflow_matrix_cases import WorkflowCase
 
 
+def test_workflow_prompt_preserves_compound_commands_as_atomic_json_elements():
+    import json
+    from ci.native_runtime.probe_workflow_matrix import _workflow_prompt
+
+    commands = ["pwd; gh api repos/hashgraph-online/hol-guard --jq '.name'", "echo first && echo second"]
+    prompt = _workflow_prompt([WorkflowCase(str(index), command) for index, command in enumerate(commands)])
+    assert "Do not split compound commands" in prompt
+    assert json.loads(prompt.split("\n", 1)[1]) == commands
+
+
 def test_a_blocked_positive_or_allowed_negative_cannot_be_skipped():
     cases = [WorkflowCase("read", "cat ordinary.ts"), WorkflowCase("secret", "cat .env", False)]
     with pytest.raises(AssertionError, match="skipped"):
