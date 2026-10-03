@@ -18,6 +18,9 @@ fn host_task_lists_do_not_execute_their_descriptions() {
         "tool_input":{"todos":[]}, "toolInput":{"todos":[]},
         "cwd":"/project", "workspace_root":"/project", "workspaceRoot":"/project",
         "session_id":"session", "sessionId":"session", "toolCallId":"call"
+        ,"turnId":"turn", "traceId":"trace", "timestamp":1234,
+        "mode":"build", "riskLevel":"low", "sideEffectScope":"session",
+        "transcriptPath":"/project/transcript.jsonl", "transcript_path":"/project/transcript.jsonl"
     }));
     assert_eq!(transported.minimum_action, "allow");
     assert_eq!(transported.reason_code, "native_agent_task_metadata");
