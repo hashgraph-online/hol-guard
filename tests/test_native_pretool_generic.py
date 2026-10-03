@@ -118,8 +118,13 @@ def test_bounded_host_task_metadata_decodes_at_the_transport_edge(operation: str
     edge = _edge("claude-code", "PreToolUse", "harness")
     result = edge["result"]
     result["action"]["operation"] = operation
-    result.update(decision="allow", policy_action="allow", minimum_action="allow",
-                  explicitly_benign=True, reason_code="native_agent_task_metadata")
+    result.update(
+        decision="allow",
+        policy_action="allow",
+        minimum_action="allow",
+        explicitly_benign=True,
+        reason_code="native_agent_task_metadata",
+    )
     _sync_receipt(edge)
     assert _decode_edge(edge) == edge
     assert _decode_pre_tool(result, command="ignored") == result

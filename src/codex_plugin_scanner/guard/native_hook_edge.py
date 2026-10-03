@@ -67,7 +67,7 @@ _PRE_TOOL_ACTION_OPERATIONS = {
     "browser": {"navigate"},
     "config": {"set"},
     "prompt": {"submit"},
-    "harness": {"start", "stop"},
+    "harness": {"start", "stop", "set", "read"},
     "unknown": {"unknown"},
 }
 _PRE_TOOL_RESULT_KEYS = {
