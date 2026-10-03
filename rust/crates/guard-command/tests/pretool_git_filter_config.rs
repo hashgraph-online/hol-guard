@@ -13,15 +13,33 @@ fn unused_global_filters_do_not_block_unrelated_repository_inspection() {
     std::fs::create_dir_all(repository.join("src")).unwrap();
     std::fs::write(repository.join("ordinary.txt"), "ordinary fixture\n").unwrap();
     let marker = root.join("filter-executed");
+    // Git config interprets backslashes as escapes; raw Windows paths are not
+    // valid config values. Quote the shell operand and then the config value.
+    let marker_path = marker.to_string_lossy().replace('\\', "/");
+    let marker_command = format!("touch '{}'", marker_path.replace('\'', "'\\''"));
+    let config_command = serde_json::to_string(&marker_command).unwrap();
     std::fs::write(
         home.join(".gitconfig"),
         format!(
-            "[filter \"synthetic\"]\n\tclean = touch {}\n\tsmudge = touch {}\n",
-            marker.display(),
-            marker.display()
+            "[filter \"synthetic\"]\n\tclean = {config_command}\n\tsmudge = {config_command}\n"
         ),
     )
     .unwrap();
+    let parsed = std::process::Command::new("git")
+        .args(["config", "--file"])
+        .arg(home.join(".gitconfig"))
+        .args(["--get", "filter.synthetic.clean"])
+        .output()
+        .unwrap();
+    assert!(
+        parsed.status.success(),
+        "filter fixture must be valid Git config: {}",
+        String::from_utf8_lossy(&parsed.stderr)
+    );
+    assert_eq!(
+        String::from_utf8(parsed.stdout).unwrap().trim_end(),
+        marker_command
+    );
     assert!(std::process::Command::new("git")
         .args(["init", "--quiet"])
         .arg(&repository)
