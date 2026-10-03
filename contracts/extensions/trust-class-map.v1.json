@@ -86,7 +86,6 @@
       "command.errand",
       "command.genclave",
       "command.gitsync",
-      "command.mcp-authyouragent",
       "command.mcp-filesystem",
       "command.mcp-instapods",
       "command.mcp-pr-ui-compare",
