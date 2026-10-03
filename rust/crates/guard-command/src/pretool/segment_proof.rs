@@ -39,6 +39,63 @@ pub(super) fn verified_cwd_compound_context(
     Some(cwd)
 }
 
+pub(super) fn exact_safe_cwd_compound(
+    model: &CanonicalCommandV1,
+    context: super::PathContext<'_>,
+) -> bool {
+    let Some(cwd) = verified_cwd_compound_context(model, context) else {
+        return false;
+    };
+    if model.segments.len() == 2
+        && matches!(
+            model.segments[1].executable.as_deref(),
+            Some("cp" | "mkdir" | "touch" | "mv")
+        )
+    {
+        // A verified successful cd has no filesystem side effects. Reuse the
+        // standalone mutation proof without admitting a later write chain.
+        let mut operation = model.clone();
+        operation.segments = vec![model.segments[1].clone()];
+        return exact_safe_segment_with_context(
+            &operation,
+            &operation.segments[0],
+            false,
+            (context.0, Some(&cwd)),
+        );
+    }
+    model.segments[1..].iter().all(|segment| {
+        matches!(
+            segment.executable.as_deref(),
+            Some(
+                "pwd"
+                    | "true"
+                    | "echo"
+                    | "printf"
+                    | "which"
+                    | "whoami"
+                    | "uname"
+                    | "date"
+                    | "sleep"
+                    | "ls"
+                    | "cat"
+                    | "stat"
+                    | "head"
+                    | "tail"
+                    | "git"
+                    | "gh"
+                    | "jq"
+                    | "wc"
+                    | "rg"
+                    | "grep"
+                    | "sed"
+                    | "sort"
+                    | "uniq"
+                    | "cut"
+            )
+        ) && exact_safe_segment_with_context(model, segment, false, (context.0, Some(&cwd)))
+    })
+}
+
 pub(crate) fn benign_command_segments(
     model: &CanonicalCommandV1,
     context: super::PathContext<'_>,
@@ -78,7 +135,15 @@ pub(crate) fn benign_command_segments(
                 && ((matches!(basename, "head" | "tail")
                     && safe_reads::safe_head_tail_stdin_arguments(&segment.arguments))
                     || (basename == "jq"
-                        && safe_reads::safe_jq_stdin_arguments(&segment.arguments)));
+                        && safe_reads::safe_jq_stdin_arguments(&segment.arguments))
+                    || (basename == "wc"
+                        && safe_reads::safe_word_count_stdin_arguments(&segment.arguments))
+                    || (basename == "grep"
+                        && search::safe_grep_stdin_arguments(&segment.arguments))
+                    || (basename == "rg" && search::safe_rg_stdin_arguments(&segment.arguments))
+                    || (basename == "sed"
+                        && safe_reads::safe_sed_stdin_arguments(&segment.arguments))
+                    || super::stdin_filters::safe_arguments(basename, &segment.arguments));
             let path_free = matches!(
                 basename,
                 "pwd"
@@ -109,6 +174,7 @@ pub(crate) fn benign_command_segments(
                         | "rg"
                         | "grep"
                         | "sed"
+                        | "wc"
                         | "stat"
                 );
             let ls_has_explicit_target = basename != "ls" || {
@@ -213,6 +279,15 @@ pub(super) fn exact_safe_segment_with_context(
         "gh" => safe_gh_arguments(&segment.arguments),
         "jq" => {
             segment.pipeline_index > 0 && safe_reads::safe_jq_stdin_arguments(&segment.arguments)
+        }
+        "wc" => safe_reads::safe_word_count_arguments(
+            &segment.arguments,
+            segment.pipeline_index > 0,
+            context,
+        ),
+        "sort" | "uniq" | "cut" => {
+            segment.pipeline_index > 0
+                && super::stdin_filters::safe_arguments(basename, &segment.arguments)
         }
         "rg" | "grep" => {
             search::safe_search_arguments_with_context(basename, &segment.arguments, context)

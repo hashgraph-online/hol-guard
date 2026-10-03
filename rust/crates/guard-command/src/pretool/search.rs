@@ -316,7 +316,23 @@ pub(super) fn safe_search_arguments_with_context(
     }
 }
 
+pub(super) fn safe_grep_stdin_arguments(arguments: &[String]) -> bool {
+    grep::safe_stdin_arguments(arguments)
+}
+
+pub(super) fn safe_rg_stdin_arguments(arguments: &[String]) -> bool {
+    safe_rg_arguments_inner(arguments, (None, None), true)
+}
+
 fn safe_rg_arguments(arguments: &[String], context: ReadContext<'_>) -> bool {
+    safe_rg_arguments_inner(arguments, context, false)
+}
+
+fn safe_rg_arguments_inner(
+    arguments: &[String],
+    context: ReadContext<'_>,
+    stdin_only: bool,
+) -> bool {
     let mut pending_value: Option<SearchValueRole> = None;
     let mut pattern_supplied = false;
     let mut options_enabled = true;
@@ -357,12 +373,18 @@ fn safe_rg_arguments(arguments: &[String], context: ReadContext<'_>) -> bool {
             }
             let role = options::rg_value_role(name);
             if name == "--files" {
+                if stdin_only {
+                    return false;
+                }
                 paths_only = true;
             }
             if role.is_none() && !options::safe_rg_flag(name) {
                 return false;
             }
             if let Some(role) = role {
+                if stdin_only && matches!(role, SearchValueRole::Path) {
+                    return false;
+                }
                 if attached.is_empty() {
                     pending_value = Some(role);
                 } else if unsafe_search_value(role, attached, context) {
@@ -374,6 +396,19 @@ fn safe_rg_arguments(arguments: &[String], context: ReadContext<'_>) -> bool {
             continue;
         }
         if options_enabled && argument.starts_with('-') && argument.len() > 1 {
+            if stdin_only
+                && argument[1..]
+                    .chars()
+                    .take_while(|option| {
+                        !matches!(
+                            option,
+                            'e' | 'g' | 'A' | 'B' | 'C' | 'E' | 'j' | 'm' | 'M' | 'r' | 't' | 'T'
+                        )
+                    })
+                    .any(|option| option == 'f')
+            {
+                return false;
+            }
             let parsed = short_search_option(
                 argument,
                 &['u', '.', 'L'],
@@ -402,6 +437,9 @@ fn safe_rg_arguments(arguments: &[String], context: ReadContext<'_>) -> bool {
             continue;
         }
         if paths_only || pattern_supplied {
+            if stdin_only {
+                return false;
+            }
             if unsafe_search_value(SearchValueRole::Path, argument, context)
                 && !tree::safe_recursive_target(argument, context)
             {
@@ -411,5 +449,5 @@ fn safe_rg_arguments(arguments: &[String], context: ReadContext<'_>) -> bool {
             pattern_supplied = true;
         }
     }
-    pending_value.is_none()
+    pending_value.is_none() && (!stdin_only || pattern_supplied)
 }

@@ -13,6 +13,7 @@ mod restricted_tests;
 mod safe_reads;
 mod search;
 mod segment_proof;
+mod stdin_filters;
 mod worktree_writes;
 
 pub mod generic;
@@ -421,6 +422,9 @@ fn exact_safe_command_with_context(
         || !model.wrapper_chain.is_empty()
     {
         return false;
+    }
+    if segment_proof::exact_safe_cwd_compound(model, context) {
+        return true;
     }
     model.segments.iter().all(|segment| {
         segment_proof::exact_safe_segment_with_context(

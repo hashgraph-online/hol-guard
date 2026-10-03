@@ -704,17 +704,35 @@ fn command_read_target(
     }
 }
 
-pub(super) fn safe_sed_arguments(
-    arguments: &[String],
-    piped_input: bool,
-    context: super::PathContext<'_>,
-) -> bool {
+fn sed_program_and_targets(arguments: &[String]) -> Option<(bool, &str, &[String])> {
     let (quiet, rest) = if arguments.first().is_some_and(|arg| arg == "-n") {
         (true, &arguments[1..])
     } else {
         (false, arguments)
     };
-    let Some((program, targets)) = rest.split_first() else {
+    let rest = if rest.first().is_some_and(|arg| arg == "-e") {
+        &rest[1..]
+    } else {
+        rest
+    };
+    let (program, targets) = rest.split_first()?;
+    Some((quiet, program, targets))
+}
+
+pub(super) fn safe_sed_stdin_arguments(arguments: &[String]) -> bool {
+    let Some((_, _, targets)) = sed_program_and_targets(arguments) else {
+        return false;
+    };
+    (targets.is_empty() || matches!(targets, [target] if target == "-"))
+        && safe_sed_arguments(arguments, true, (None, None))
+}
+
+pub(super) fn safe_sed_arguments(
+    arguments: &[String],
+    piped_input: bool,
+    context: super::PathContext<'_>,
+) -> bool {
+    let Some((quiet, program, targets)) = sed_program_and_targets(arguments) else {
         return false;
     };
     if program.len() > 256 || program.contains(['\n', '\r', '\\', ';']) {
@@ -739,7 +757,7 @@ pub(super) fn safe_sed_arguments(
             parts.len() == 3 && matches!(parts[2], "" | "g")
         });
     (bounded_print || substitution)
-        && (matches!(targets, [target] if !target.starts_with('-') && command_read_target(target, context, false))
+        && (matches!(targets, [target] if (target == "-" && piped_input) || (!target.starts_with('-') && command_read_target(target, context, false)))
             || (targets.is_empty() && piped_input))
 }
 
@@ -795,6 +813,64 @@ pub(super) fn safe_head_tail_arguments(
 
 pub(super) fn safe_head_tail_stdin_arguments(arguments: &[String]) -> bool {
     safe_head_tail_with_targets(arguments, true, (None, None), false)
+}
+
+pub(super) fn safe_word_count_arguments(
+    arguments: &[String],
+    piped_input: bool,
+    context: super::PathContext<'_>,
+) -> bool {
+    safe_word_count_with_targets(arguments, piped_input, context, true)
+}
+
+pub(super) fn safe_word_count_stdin_arguments(arguments: &[String]) -> bool {
+    safe_word_count_with_targets(arguments, true, (None, None), false)
+}
+
+fn safe_word_count_with_targets(
+    arguments: &[String],
+    piped_input: bool,
+    context: super::PathContext<'_>,
+    allow_targets: bool,
+) -> bool {
+    let mut operands = false;
+    let mut separator = false;
+    let mut saw_target = false;
+    for argument in arguments {
+        if !operands && argument == "--" {
+            operands = true;
+            separator = true;
+            continue;
+        }
+        if !operands && argument.starts_with('-') && argument != "-" {
+            let counting_option = matches!(
+                argument.as_str(),
+                "--bytes" | "--chars" | "--lines" | "--words" | "--max-line-length"
+            ) || argument.strip_prefix('-').is_some_and(|flags| {
+                !flags.is_empty()
+                    && flags
+                        .bytes()
+                        .all(|flag| matches!(flag, b'c' | b'm' | b'l' | b'w' | b'L'))
+            });
+            if !counting_option {
+                return false;
+            }
+            continue;
+        }
+        operands = true;
+        if argument == "-" {
+            if !piped_input {
+                return false;
+            }
+        } else if !allow_targets
+            || (argument.starts_with('-') && !separator)
+            || !command_read_target(argument, context, false)
+        {
+            return false;
+        }
+        saw_target = true;
+    }
+    saw_target || piped_input
 }
 
 pub(super) fn safe_jq_stdin_arguments(arguments: &[String]) -> bool {

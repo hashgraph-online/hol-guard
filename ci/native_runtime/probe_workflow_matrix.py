@@ -184,6 +184,11 @@ def run_live(
         not (workspace / "src/copy.ts").is_file() or not (workspace / "src/moved.ts").is_file()
     ):
         raise AssertionError("file workflow side effects were not completed")
+    if any(case.name == "cwd-move" for case in quiet) and (
+        not (workspace / "src/cwd-moved.ts").is_file()
+        or (workspace / "src/cwd-move-source.ts").exists()
+    ):
+        raise AssertionError("cwd move workflow side effects were not completed")
     return executed
 
 

@@ -22,7 +22,7 @@ def create_cases(root: Path) -> tuple[Path, Path, list[WorkflowCase]]:
         directory.mkdir(parents=True)
     subprocess.run(["git", "init", "--quiet", str(workspace)], check=True, capture_output=True)
     source = "ordinary-workflow-fixture\nsecond-line\n"
-    for name in ("one.ts", "two.ts", "path with spaces.ts", "move-source.ts"):
+    for name in ("one.ts", "two.ts", "path with spaces.ts", "move-source.ts", "cwd-move-source.ts"):
         (workspace / "src" / name).write_text(source)
     (workspace / "__tests__/nested/one.test.ts").write_text(source)
     (home / "notes.txt").write_text(source)
@@ -54,6 +54,23 @@ def create_cases(root: Path) -> tuple[Path, Path, list[WorkflowCase]]:
         ("read-outside", f"cat {outside}"),
         ("head", "head -n 1 src/one.ts"),
         ("tail", "tail -n 1 src/one.ts"),
+        ("head-shorthand", "head -1 src/one.ts"),
+        ("tail-shorthand", "tail -1 src/one.ts"),
+        ("word-count-file", "wc -l src/one.ts"),
+        ("word-count-files", "wc -lw src/one.ts src/two.ts"),
+        ("word-count-pipeline", "cat src/one.ts | wc -l"),
+        ("sort-stdin", "cat src/one.ts | sort -u"),
+        ("uniq-stdin", "cat src/one.ts | uniq -c"),
+        ("cut-stdin", "cat src/one.ts | cut -d '-' -f 1"),
+        ("grep-stdin", "cat src/one.ts | grep -n -e ordinary"),
+        ("grep-stdin-attached-pattern", "cat src/one.ts | grep -efixt"),
+        ("rg-stdin", "cat src/one.ts | rg -n -e ordinary"),
+        ("rg-stdin-attached-pattern", "cat src/one.ts | rg -efixt"),
+        ("sed-stdin-print", "cat src/one.ts | sed -n -e '1,2p' -"),
+        ("sed-stdin-substitution", "cat src/one.ts | sed -e 's/fixture/public/g'"),
+        ("cwd-read", f"cd {repository} && cat src/one.ts"),
+        ("cwd-search-pipeline", f"cd {repository} && grep -n ordinary src/one.ts | head -1"),
+        ("cwd-count", f"cd {repository} && wc -l src/one.ts"),
         ("sed-range", "sed -n '1,2p' src/one.ts"),
         ("grep-file", "grep -n ordinary src/one.ts"),
         ("grep-files", "grep -n ordinary src/one.ts src/two.ts"),
@@ -73,6 +90,10 @@ def create_cases(root: Path) -> tuple[Path, Path, list[WorkflowCase]]:
         ("copy-file", "cp src/one.ts src/copy.ts"),
         ("copy-directory", "cp src/two.ts output"),
         ("copy-quoted", 'cp -- "src/path with spaces.ts" "src/copy with spaces.ts"'),
+        ("cwd-copy", f"cd {repository} && cp src/one.ts src/cwd-copied.ts"),
+        ("cwd-touch", f"cd {repository} && touch src/cwd-created.ts"),
+        ("cwd-mkdir", f"cd {repository} && mkdir -p generated-cwd/nested"),
+        ("cwd-move", f"cd {repository} && mv src/cwd-move-source.ts src/cwd-moved.ts"),
         ("mkdir", "mkdir generated"),
         ("mkdir-parents", "mkdir -p generated/deep/nested"),
         ("touch-source", "touch src/created.ts"),
@@ -99,6 +120,25 @@ def create_cases(root: Path) -> tuple[Path, Path, list[WorkflowCase]]:
     ]
     negatives = [
         ("secret-read", "cat .env"),
+        ("word-count-secret", "wc -l .env"),
+        ("word-count-secret-pipeline", "cat .env | wc -l"),
+        ("word-count-file-list", "wc --files0-from=src/one.ts"),
+        ("sort-secret-source", "cat .env | sort -u"),
+        ("sort-output-file", "cat src/one.ts | sort -o .env"),
+        ("sort-executable-helper", "cat src/one.ts | sort --compress-program=sh"),
+        ("uniq-file-operands", "cat src/one.ts | uniq .env output.txt"),
+        ("cut-file-operand", "cat src/one.ts | cut -f1 .env"),
+        ("grep-stdin-secret-pattern-file", "cat src/one.ts | grep -f .env"),
+        ("grep-stdin-recursive", "cat src/one.ts | grep -r ordinary"),
+        ("rg-stdin-secret-pattern-file", "cat src/one.ts | rg -f .env"),
+        ("rg-stdin-helper", "cat src/one.ts | rg --pre=sh ordinary"),
+        ("sed-stdin-script-file", "cat src/one.ts | sed -f .env"),
+        ("sed-stdin-execute", "cat src/one.ts | sed 's/fixture/public/e'"),
+        ("cwd-secret", f"cd {repository} && cat .env"),
+        ("cwd-fallback", f"cd {repository} || cat src/one.ts"),
+        ("cwd-copy-secret", f"cd {repository} && cp .env src/copied.ts"),
+        ("cwd-copy-metadata", f"cd {repository} && cp src/one.ts .git/config"),
+        ("cwd-mutation-chain", f"cd {repository} && cp src/one.ts src/copied.ts && cat src/copied.ts"),
         ("secret-copy", "cp .env src/copied.ts"),
         ("secret-alias", "cat unsafe-tests/alias.ts"),
         ("secret-recursion", "grep -rn SYNTHETIC_ONLY unsafe-tests/"),

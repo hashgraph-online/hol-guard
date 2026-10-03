@@ -52,6 +52,18 @@ fn permits_only_standalone_plain_directory_changes() {
 }
 
 #[test]
+fn read_only_github_predecessor_counts_as_benign_for_git_context() {
+    let model = parse_command(&request(
+        "gh api repos/owner/repo/compare/base...main; git status --short",
+    ))
+    .unwrap();
+    assert_eq!(
+        benign_command_segments(&model, (Some("/tmp"), Some("/tmp"))),
+        vec![0, 1]
+    );
+}
+
+#[test]
 fn git_c_inspections_require_verified_repository_scope() {
     let repository = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../..")

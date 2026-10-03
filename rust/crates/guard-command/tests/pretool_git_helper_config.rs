@@ -532,20 +532,25 @@ fn configured_fsmonitor_cannot_be_admitted_as_a_benign_read() {
                 result.reason_code, result.reason
             );
         }
-        let command = "git log --no-ext-diff --no-textconv --show-signature -1";
-        let result = evaluate_pre_tool_envelope_with_context(
-            harness,
-            "PreToolUse",
-            &json!({"tool_name":"bash", "tool_input":{"command":command}}),
-            Some(&enabled),
-            None,
-            home.to_str(),
-            repository.to_str(),
-        );
-        assert_ne!(
-            result.decision, "allow",
-            "{harness}: {command}: signature reads must retain review"
-        );
+        for command in [
+            "git log --no-ext-diff --no-textconv -1",
+            "git show --no-ext-diff --no-textconv HEAD",
+            "git log --no-ext-diff --no-textconv --show-signature -1",
+        ] {
+            let result = evaluate_pre_tool_envelope_with_context(
+                harness,
+                "PreToolUse",
+                &json!({"tool_name":"bash", "tool_input":{"command":command}}),
+                Some(&enabled),
+                None,
+                home.to_str(),
+                repository.to_str(),
+            );
+            assert_ne!(
+                result.decision, "allow",
+                "{harness}: {command}: signature reads must retain review"
+            );
+        }
     }
     let disabled = github_controls("disabled");
     let defaults = github_controls("default");
