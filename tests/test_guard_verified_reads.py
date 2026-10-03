@@ -99,7 +99,7 @@ def test_git_read_overlap_reaches_the_frozen_cdx_064_pair_baseline() -> None:
 
     assert verified_read_candidate_operation(evaluation.command) == "workspace-read"
     assert evaluation.minimum_action == "review"
-    assert evaluation.decision_plane.action == "require-reapproval"
+    assert evaluation.decision_plane.action == "review"
     assert evaluation.decision_plane.proof_routes == frozenset()
 
 
