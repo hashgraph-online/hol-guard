@@ -43,7 +43,7 @@ fn git_github_controls(
     github_state: &str,
 ) -> guard_command::native_command_controls::CompiledNativeCommandControls {
     let program = guard_command::native_command_program::packaged_command_program().unwrap();
-    let mut binding: guard_contracts::NativeCommandControlBindingV1 = serde_json::from_value(json!({
+    let mut value = json!({
         "schema":"guard.native-command-control-binding.v1",
         "program_digest":program.program_digest, "catalog_digest":program.catalog_digest,
         "trust_digest":program.trust_digest, "health":"protected", "revision":1,
@@ -57,7 +57,13 @@ fn git_github_controls(
                 {"target_kind":"permission", "target_id":"command.github.permission.read-remote", "state":github_state}
             ]
         }]
-    })).unwrap();
+    });
+    value["layers"][0]["controls"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|control| control["state"] != "default");
+    let mut binding: guard_contracts::NativeCommandControlBindingV1 =
+        serde_json::from_value(value).unwrap();
     binding.effective_digest = binding.compute_effective_digest().unwrap();
     guard_command::native_command_controls::CompiledNativeCommandControls::new(&binding).unwrap()
 }
@@ -417,6 +423,11 @@ fn configured_fsmonitor_cannot_be_admitted_as_a_benign_read() {
             "git -P -c core.quotepath=false -C . status --short",
             "echo ready && git status --short | head -1",
             "git status --short && gh api repos/owner/repo/compare/base...main | head -1",
+            "gh api repos/hashgraph-online/points-portal/compare/dc1ace862c...main --jq '[.files[].filename] | map(select(test(\"protection|protect-page|protect-resource|guard-protect-asset\"))) | .[]'",
+            "git status --short && gh api repos/owner/repo/compare/base...main --jq '[.files[].filename] | .[]' | head -1",
+            "gh api repos/owner/repo/compare/base...main; git status --short",
+            "git status --short || gh api repos/owner/repo/compare/base...main",
+            "gh api repos/owner/repo/compare/base...main | git status --short",
         ] {
             let result = evaluate_pre_tool_envelope_with_context(
                 harness,
@@ -449,6 +460,25 @@ fn configured_fsmonitor_cannot_be_admitted_as_a_benign_read() {
         );
     }
     let disabled = github_controls("disabled");
+    let defaults = github_controls("default");
+    for harness in ["omp", "zcode"] {
+        for command in [
+            "gh api repos/hashgraph-online/points-portal/compare/dc1ace862c...main --jq '[.files[].filename] | map(select(test(\"protection|protect-page|protect-resource|guard-protect-asset\"))) | .[]'",
+            "git status --short && gh api repos/owner/repo/compare/base...main | head -1",
+            "gh api repos/owner/repo/compare/base...main; git status --short",
+        ] {
+            let result = evaluate_pre_tool_envelope_with_context(
+                harness,
+                "PreToolUse",
+                &json!({"tool_name":"bash", "tool_input":{"command":command}}),
+                Some(&defaults),
+                None,
+                home.to_str(),
+                repository.to_str(),
+            );
+            assert_eq!(result.decision, "allow", "{harness}: default permissions: {command}: {}", result.reason_code);
+        }
+    }
     for (git_state, github_state) in [("disabled", "enabled"), ("enabled", "disabled")] {
         let mixed = git_github_controls(git_state, github_state);
         for harness in ["omp", "zcode"] {
@@ -458,6 +488,7 @@ fn configured_fsmonitor_cannot_be_admitted_as_a_benign_read() {
                 "git status --short || gh api repos/owner/repo/compare/base...main",
                 "gh api repos/owner/repo/compare/base...main | git status --short",
                 "git -P status --short && gh api repos/owner/repo/compare/base...main",
+                "git status --short && gh api repos/owner/repo/compare/base...main --jq '[.files[].filename] | .[]' | head -1",
             ] {
                 let result = evaluate_pre_tool_envelope_with_context(
                     harness,
@@ -498,6 +529,8 @@ fn configured_fsmonitor_cannot_be_admitted_as_a_benign_read() {
             "PAGER=/tmp/synthetic-never-execute git status --short",
             "gh api repos/owner/repo; cat .env",
             "git status --short; rm -rf src",
+            "git status --short && synthetic-unknown-tool",
+            "synthetic-unknown-tool; gh api repos/owner/repo/compare/base...main",
         ] {
             let result = evaluate_pre_tool_envelope_with_context(
                 harness,
