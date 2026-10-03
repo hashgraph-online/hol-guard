@@ -13,6 +13,14 @@ fn host_task_lists_do_not_execute_their_descriptions() {
     ]}}));
     assert_eq!(result.minimum_action, "allow");
     assert_eq!(result.reason_code, "native_agent_task_metadata");
+    let transported = evaluate(json!({
+        "hook_event_name":"PreToolUse", "tool_name":"TodoWrite", "toolName":"TodoWrite",
+        "tool_input":{"todos":[]}, "toolInput":{"todos":[]},
+        "cwd":"/project", "workspace_root":"/project", "workspaceRoot":"/project",
+        "session_id":"session", "sessionId":"session", "toolCallId":"call"
+    }));
+    assert_eq!(transported.minimum_action, "allow");
+    assert_eq!(transported.reason_code, "native_agent_task_metadata");
 }
 
 #[test]
@@ -21,6 +29,7 @@ fn task_list_proof_rejects_external_aliases_and_executable_inputs() {
         json!({"tool_name":"mcp__server__TodoWrite", "tool_input":{"todos":[]}}),
         json!({"tool_name":"TodoWrite", "mcp_server":"external", "tool_input":{"todos":[]}}),
         json!({"tool_name":"TodoWrite", "command":"echo unsafe", "tool_input":{"todos":[]}}),
+        json!({"tool_name":"TodoWrite", "tool_input":{"todos":[]}, "toolInput":{"command":"echo unsafe"}}),
         json!({"tool_name":"TodoWrite", "tool_input":{"todos":[], "command":"echo unsafe"}}),
         json!({"tool_name":"TodoWrite", "tool_input":{"todos":[{"content":"Task", "status":"execute"}]}}),
         json!({"tool_name":"TodoWrite", "tool_input":{"todos":[{"content":"Task", "status":"pending", "path":".env"}]}}),

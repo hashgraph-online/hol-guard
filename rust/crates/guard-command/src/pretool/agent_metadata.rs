@@ -14,14 +14,20 @@ pub(super) fn bounded_task_list(payload: &Value, tool_name: Option<&str>) -> boo
             "tool_name"
                 | "toolName"
                 | "tool_input"
+                | "toolInput"
+                | "arguments"
                 | "hook_event_name"
                 | "hookEventName"
                 | "session_id"
+                | "sessionId"
                 | "tool_use_id"
                 | "tool_call_id"
+                | "toolCallId"
                 | "tool_id"
                 | "turn_id"
                 | "cwd"
+                | "workspace_root"
+                | "workspaceRoot"
                 | "transcript_path"
                 | "permission_mode"
                 | "harness"
@@ -33,6 +39,11 @@ pub(super) fn bounded_task_list(payload: &Value, tool_name: Option<&str>) -> boo
     let Some(input) = payload.get("tool_input").and_then(Value::as_object) else {
         return false;
     };
+    if ["toolInput", "arguments"].iter().any(|alias| {
+        payload.get(*alias).is_some_and(|value| value.as_object() != Some(input))
+    }) {
+        return false;
+    }
     if input.len() != 1 {
         return false;
     }
