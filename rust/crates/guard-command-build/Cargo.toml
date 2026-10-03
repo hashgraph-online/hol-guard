@@ -21,6 +21,7 @@ bench = false
 [dependencies]
 guard-secure-fs = { path = "../guard-secure-fs" }
 guard-contracts = { path = "../guard-contracts" }
+guard-runtime-windows-process = { path = "../guard-runtime-windows-process" }
 regex = "1.11.2"
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.143"

@@ -536,7 +536,8 @@ fn single_link_write_target(path: &std::path::Path) -> bool {
     #[cfg(windows)]
     {
         match path.symlink_metadata() {
-            Ok(metadata) => !metadata.is_file(),
+            Ok(metadata) if !metadata.is_file() => false,
+            Ok(_) => guard_runtime_windows_process::is_single_link_file(path).unwrap_or(false),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => true,
             Err(_) => false,
         }
