@@ -187,7 +187,11 @@ fn probe(
                     && !disabled
                     && !value.is_empty()
                     && value != "cat"
-                    && if enabled_boolean(value) { paging } else { configured_paging }
+                    && if enabled_boolean(value) {
+                        paging
+                    } else {
+                        configured_paging
+                    }
             }
             "diff.external" => !no_external && !value.is_empty(),
             key if key.starts_with("diff.") && key.ends_with(".command") => {
