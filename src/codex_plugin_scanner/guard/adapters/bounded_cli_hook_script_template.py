@@ -125,7 +125,7 @@ def _stamp_hook_input(text: str) -> str:
         "environment_digest": hashlib.sha256(
             json.dumps(active, sort_keys=True, separators=(",", ":")).encode()
         ).hexdigest(),
-        "xdg_config_home": os.environ.get("XDG_CONFIG_HOME"),
+        "xdg_config_home": os.environ.get("XDG_CONFIG_HOME") or None,
         "git_config_no_system": os.environ.get("GIT_CONFIG_NOSYSTEM") == "1",
         "home": os.environ.get("HOME"),
         "git_pager_disabled": os.environ.get("GIT_PAGER") in ("", "cat"),

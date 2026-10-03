@@ -151,14 +151,22 @@ fn probe(
     }
     let pager_key = format!("pager.{operation}");
     let pager_setting = effective.get(pager_key.as_str()).copied();
+    let configured_pager = pager_setting.or_else(|| {
+        (operation != "status")
+            .then(|| effective.get("core.pager").copied())
+            .flatten()
+    });
     let environment_pager = environment_pager_disabled(execution_environment);
     let git_pager_disabled = git_pager_disabled(execution_environment);
     let no_pager = leading
         .iter()
         .any(|argument| matches!(argument.as_str(), "-P" | "--no-pager"));
-    let configured_paging =
-        !no_pager && pager_setting.map_or(operation != "status", |value| !disabled_boolean(value));
-    let paging = configured_paging && !environment_pager.is_some_and(|disabled| disabled);
+    let configured_paging = !no_pager
+        && configured_pager.map_or(operation != "status", |value| !disabled_boolean(value));
+    let configured_pager_is_cat = configured_pager.is_some_and(|value| value == "cat");
+    let paging = configured_paging
+        && !configured_pager_is_cat
+        && !environment_pager.is_some_and(|disabled| disabled);
     if paging && environment_pager == Some(false) {
         return Some(false);
     }
@@ -174,7 +182,12 @@ fn probe(
                     && value != "cat"
             }
             key if key.starts_with("pager.") => {
-                paging && key == pager_key && !disabled && !value.is_empty() && value != "cat"
+                configured_paging
+                    && !git_pager_disabled
+                    && key == pager_key
+                    && !disabled
+                    && !value.is_empty()
+                    && value != "cat"
             }
             "diff.external" => !no_external && !value.is_empty(),
             key if key.starts_with("diff.") && key.ends_with(".command") => {

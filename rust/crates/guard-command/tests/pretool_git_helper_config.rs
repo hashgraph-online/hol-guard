@@ -1,5 +1,13 @@
 use serde_json::json;
 
+struct FixtureCleanup(std::path::PathBuf);
+
+impl Drop for FixtureCleanup {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
 // Cargo injects dynamic-loader settings into the test process. Model the
 // synthetic hook caller explicitly rather than inheriting the build harness.
 fn evaluate_pre_tool_envelope_with_context(
@@ -74,6 +82,7 @@ fn pager_checks_follow_the_actual_subcommand_and_global_override() {
     let root = std::env::temp_dir().join(format!("guard-git-pager-{}", std::process::id()));
     let home = root.join("home");
     let repository = root.join("repository");
+    let _cleanup = FixtureCleanup(root.clone());
     std::fs::create_dir_all(&home).unwrap();
     std::fs::create_dir_all(&repository).unwrap();
     assert!(std::process::Command::new("git")
@@ -181,6 +190,31 @@ fn pager_checks_follow_the_actual_subcommand_and_global_override() {
         );
         assert_eq!(result.decision, expected, "{command}: inherited pager");
     }
+    for (settings, pager_disabled, expected) in [
+        (
+            "[pager]\nstatus = ./synthetic-never-execute\n",
+            true,
+            "deny",
+        ),
+        ("[pager]\nstatus = cat\n", false, "allow"),
+        ("[core]\npager = cat\n", false, "allow"),
+    ] {
+        std::fs::write(&config, settings).unwrap();
+        let mut caller = context.clone();
+        caller.environment_names = vec!["GIT_CONFIG_NOSYSTEM".into(), "PAGER".into()];
+        caller.pager_disabled = pager_disabled;
+        let result = guard_command::pretool::evaluate_pre_tool_envelope_with_execution_context(
+            "omp",
+            "PreToolUse",
+            &json!({"tool_name":"bash", "tool_input":{"command":"git status --short"}}),
+            Some(&enabled),
+            None,
+            home.to_str(),
+            repository.to_str(),
+            Some(&caller),
+        );
+        assert_eq!(result.decision, expected, "PAGER override: {settings}");
+    }
     for (settings, git_pager_disabled, pager_disabled, expected) in [
         (
             "[core]\npager = ./synthetic-never-execute\n[pager]\nstatus = true\n",
@@ -194,7 +228,7 @@ fn pager_checks_follow_the_actual_subcommand_and_global_override() {
             true,
             "deny",
         ),
-        ("[pager]\nstatus = true\n", false, true, "allow"),
+        ("[pager]\nstatus = true\n", false, true, "deny"),
     ] {
         std::fs::write(&config, settings).unwrap();
         let mut caller = context.clone();
@@ -221,10 +255,10 @@ fn pager_checks_follow_the_actual_subcommand_and_global_override() {
         );
         assert_eq!(
             result.decision, expected,
-            "disabled pager precedence: {settings}"
+            "disabled pager precedence: {settings}: {} / {}",
+            result.reason_code, result.reason
         );
     }
-    std::fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
@@ -234,6 +268,7 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
     let root = std::env::temp_dir().join(format!("guard-git-lookup-{}", std::process::id()));
     let home = root.join("home");
     let repository = root.join("repository");
+    let _cleanup = FixtureCleanup(root.clone());
     std::fs::create_dir_all(&home).unwrap();
     std::fs::create_dir_all(&repository).unwrap();
     assert!(std::process::Command::new("git")
@@ -406,7 +441,6 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
         git_config_no_system: true,
     };
     assert_eq!(evaluate(&context).decision, "deny");
-    std::fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
@@ -414,6 +448,7 @@ fn configured_fsmonitor_cannot_be_admitted_as_a_benign_read() {
     let root = std::env::temp_dir().join(format!("guard-git-config-{}", std::process::id()));
     let home = root.join("home");
     let repository = root.join("repository");
+    let _cleanup = FixtureCleanup(root.clone());
     std::fs::create_dir_all(&home).unwrap();
     std::fs::create_dir_all(&repository).unwrap();
     assert!(std::process::Command::new("git")
@@ -627,5 +662,4 @@ fn configured_fsmonitor_cannot_be_admitted_as_a_benign_read() {
             .unwrap()
             .success());
     }
-    std::fs::remove_dir_all(root).unwrap();
 }
