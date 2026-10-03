@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
-import os
 import re
 import time
 from collections.abc import Mapping
@@ -262,12 +260,16 @@ def _encode_hook_envelope(
     execution_context_supported: bool = False,
     request_id: str | None = None,
 ) -> bytes | None:
+    from .hook_execution_environment import HOOK_EXECUTION_ENVIRONMENT_KEY, collect_hook_execution_environment
+
+    raw_payload = dict(payload)
+    caller_context = raw_payload.pop(HOOK_EXECUTION_ENVIRONMENT_KEY, ...)
     envelope = {
         "schema": "guard-hook-envelope.v2",
         "request_id": request_id,
         "harness": harness,
         "event": event,
-        "raw_payload": payload,
+        "raw_payload": raw_payload,
         "deadline_budget_ms": deadline_budget_ms,
         "policy_generation": snapshot["generation"],
         # The resident already authenticated and cached the full snapshot at
@@ -287,22 +289,14 @@ def _encode_hook_envelope(
         },
     }
     if execution_context_supported:
-        # Carry lookup context, never environment values or secret contents.
-        active_environment = {key: value for key, value in os.environ.items() if value}
-        path_value = os.environ.get("PATH", "")
-        if (
-            len(active_environment) <= 512
-            and len(path_value.encode()) <= 32 * 1024
-            and all(len(name.encode()) <= 256 and name.isprintable() for name in active_environment)
-        ):
-            cast(dict[str, Any], envelope["source"])["execution_environment"] = {
-                "path": path_value,
-                "environment_names": sorted(active_environment),
-                "xdg_config_home": os.environ.get("XDG_CONFIG_HOME"),
-                "environment_digest": hashlib.sha256(
-                    json.dumps(active_environment, sort_keys=True, separators=(",", ":")).encode()
-                ).hexdigest(),
-            }
+        # Direct CLI calls capture locally; daemon workers explicitly pass
+        # None when caller context is unavailable instead of using daemon env.
+        if caller_context is ...:
+            caller_context = collect_hook_execution_environment()
+        if caller_context is not None:
+            if not isinstance(caller_context, Mapping):
+                return None
+            cast(dict[str, Any], envelope["source"])["execution_environment"] = dict(caller_context)
     try:
         encoded = json.dumps(
             envelope,
@@ -349,6 +343,8 @@ def review_raw_hook_native(
         "prompt",
     }:
         required_features.add("pre-tool-generic-authority-v1")
+        if event_key not in {"userpromptsubmit", "userpromptsubmitted", "prompt"}:
+            required_features.add("git-execution-context-v1")
     if (
         status.mode not in {"auto", "force"}
         or not status.available

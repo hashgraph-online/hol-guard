@@ -51,10 +51,7 @@ fn probe(
     let home = fs::canonicalize(context.0?).ok()?;
     let cwd = fs::canonicalize(context.1?).ok()?;
     let leading = &arguments[..arguments.len().checked_sub(remaining.len())?];
-    if !home.is_dir()
-        || !cwd.is_dir()
-        || !clean_environment(operation, leading, execution_environment)
-    {
+    if !home.is_dir() || !cwd.is_dir() || !clean_environment(execution_environment) {
         return None;
     }
     let binary = trusted_git(executable, &home, &cwd, execution_environment)?;
@@ -79,7 +76,7 @@ fn probe(
         .args(leading)
         .args(["--no-pager", "config", "--null", "--get-regexp", "^(core\\.fsmonitor|core\\.pager|pager\\..*|diff\\.external|diff\\..*\\.(command|textconv)|filter\\..*\\.(process|clean|smudge)|log\\.showsignature|gpg\\.program|gpg\\..*\\.program)$"])
         .current_dir(&cwd)
-        .env("HOME", &home)
+        .env("HOME", execution_environment.and_then(|context| context.home.as_deref()).map(Path::new).unwrap_or(&home))
         .env("USERPROFILE", &home)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -108,10 +105,7 @@ fn probe(
     };
     let output = reader.join().ok()??;
     let status = status?;
-    if status.code() == Some(1) && output.is_empty() {
-        return Some(true);
-    }
-    if !status.success() {
+    if !(status.success() || status.code() == Some(1) && output.is_empty()) {
         return None;
     }
     let output = std::str::from_utf8(&output).ok()?;
@@ -148,15 +142,27 @@ fn probe(
         let (key, value) = record.split_once('\n')?;
         effective.insert(key, value);
     }
+    let pager_key = format!("pager.{operation}");
+    let pager_setting = effective.get(pager_key.as_str()).copied();
+    let paging = !leading.iter().any(|argument| argument == "--no-pager")
+        && !execution_environment.is_some_and(|context| context.git_pager_disabled)
+        && pager_setting.map_or(operation != "status", |value| !disabled_boolean(value));
+    if paging && has_environment_pager(execution_environment) {
+        return Some(false);
+    }
     for (key, value) in effective {
-        let disabled = matches!(
-            value.trim().to_ascii_lowercase().as_str(),
-            "0" | "false" | "no" | "off"
-        );
+        let disabled = disabled_boolean(value);
         let unsafe_value = match key {
             "core.fsmonitor" => matches!(operation, "status" | "diff") && !disabled,
-            "core.pager" => !value.is_empty() && value != "cat",
-            key if key.starts_with("pager.") => !disabled && !value.is_empty() && value != "cat",
+            "core.pager" => {
+                paging
+                    && pager_setting.is_none_or(enabled_boolean)
+                    && !value.is_empty()
+                    && value != "cat"
+            }
+            key if key.starts_with("pager.") => {
+                paging && key == pager_key && !disabled && !value.is_empty() && value != "cat"
+            }
             "diff.external" => !no_external && !value.is_empty(),
             key if key.starts_with("diff.") && key.ends_with(".command") => {
                 !no_external && !value.is_empty()
@@ -180,18 +186,51 @@ fn probe(
     Some(true)
 }
 
-fn clean_environment(
-    operation: &str,
-    arguments: &[String],
+fn disabled_boolean(value: &str) -> bool {
+    matches!(
+        value.trim().to_ascii_lowercase().as_str(),
+        "0" | "false" | "no" | "off"
+    )
+}
+
+fn enabled_boolean(value: &str) -> bool {
+    matches!(
+        value.trim().to_ascii_lowercase().as_str(),
+        "true" | "yes" | "on" | "1"
+    )
+}
+
+fn has_environment_pager(
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
 ) -> bool {
-    // Status does not page by default; pager.status enabling it is checked
-    // in effective config. --no-pager also disables environment pagers.
-    let can_page = operation != "status" && !arguments.iter().any(|arg| arg == "--no-pager");
+    match execution_environment {
+        Some(context) => {
+            context
+                .environment_names
+                .iter()
+                .any(|name| match name.to_ascii_uppercase().as_str() {
+                    "GIT_PAGER" => !context.git_pager_disabled,
+                    "PAGER" => !context.pager_disabled,
+                    _ => false,
+                })
+        }
+        None => ["GIT_PAGER", "PAGER"]
+            .iter()
+            .any(|name| std::env::var_os(name).is_some_and(|value| !value.is_empty())),
+    }
+}
+
+fn clean_environment(
+    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+) -> bool {
     let names = match execution_environment {
         Some(context) => {
             if context.path.len() > 32768
                 || context.path.contains('\0')
+                || context
+                    .home
+                    .as_ref()
+                    .is_some_and(|path| path.len() > 32768 || path.contains('\0'))
                 || context
                     .xdg_config_home
                     .as_ref()
@@ -222,7 +261,6 @@ fn clean_environment(
             || key.starts_with("DYLD_")
             || key.starts_with("LD_")
             || key.starts_with("GIT_CONFIG")
-            || (can_page && matches!(key.as_str(), "GIT_PAGER" | "PAGER"))
             || matches!(
                 key.as_str(),
                 "GIT_DIR"
@@ -230,6 +268,7 @@ fn clean_environment(
                     | "GIT_COMMON_DIR"
                     | "GIT_WORK_TREE"
                     | "GIT_EXEC_PATH"
+                    | "GIT_DISCOVERY_ACROSS_FILESYSTEM"
                     | "LD_PRELOAD"
                     | "LD_LIBRARY_PATH"
                     | "DYLD_INSERT_LIBRARIES"

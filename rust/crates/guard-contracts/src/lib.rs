@@ -53,7 +53,27 @@ pub struct GuardExecutionEnvironmentV1 {
     pub environment_names: Vec<String>,
     pub environment_digest: String,
     #[serde(default)]
+    pub home: Option<String>,
+    #[serde(default)]
+    pub git_pager_disabled: bool,
+    #[serde(default)]
+    pub pager_disabled: bool,
+    #[serde(default)]
     pub xdg_config_home: Option<String>,
+}
+
+impl GuardExecutionEnvironmentV1 {
+    pub fn unavailable() -> Self {
+        Self {
+            path: String::new(),
+            environment_names: Vec::new(),
+            environment_digest: String::new(),
+            home: None,
+            git_pager_disabled: false,
+            pager_disabled: false,
+            xdg_config_home: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

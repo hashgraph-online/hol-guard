@@ -235,6 +235,10 @@ fn validate_envelope_shape(envelope: &GuardHookEnvelopeV2) -> Result<(), String>
         if context.path.len() > MAX_PATH_BYTES
             || context.path.contains('\0')
             || context
+                .home
+                .as_ref()
+                .is_some_and(|path| path.len() > MAX_PATH_BYTES || path.contains('\0'))
+            || context
                 .xdg_config_home
                 .as_ref()
                 .is_some_and(|path| path.len() > MAX_PATH_BYTES || path.contains('\0'))
@@ -295,6 +299,8 @@ fn evaluate_validated_envelope(
     }
     let (result, mut receipt) = match event_name.as_str() {
         "PreToolUse" | "UserPromptSubmit" => {
+            let unavailable_environment =
+                guard_contracts::GuardExecutionEnvironmentV1::unavailable();
             let native = guard_command::pretool::evaluate_pre_tool_envelope_with_execution_context(
                 &harness,
                 &event_name,
@@ -308,7 +314,13 @@ fn evaluate_validated_envelope(
                 ),
                 Some(envelope.source.home_dir.as_str()),
                 envelope.source.cwd.as_deref(),
-                envelope.source.execution_environment.as_ref(),
+                Some(
+                    envelope
+                        .source
+                        .execution_environment
+                        .as_ref()
+                        .unwrap_or(&unavailable_environment),
+                ),
             );
             let evaluated = if let Some(snapshot) = policy_snapshot {
                 crate::policy_enforcement::apply_pre_tool_policy(

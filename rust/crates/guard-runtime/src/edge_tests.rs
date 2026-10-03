@@ -14,6 +14,9 @@ fn execution_environment_is_bounded_and_binds_request_and_approval_intent() {
         path: "/usr/bin:/bin".into(),
         environment_names: vec!["PATH".into()],
         environment_digest: "a".repeat(64),
+        home: None,
+        git_pager_disabled: false,
+        pager_disabled: false,
         xdg_config_home: None,
     });
     assert!(validate_envelope_shape(&request).is_ok());

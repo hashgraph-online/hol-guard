@@ -37,6 +37,7 @@ from ..cli.commands_support_command_activity import (
 )
 from ..codex_binding_capture_writer import CodexBindingCaptureWriter
 from ..config import load_guard_config
+from ..hook_execution_environment import HOOK_EXECUTION_ENVIRONMENT_KEY
 from ..native_hook_edge import review_raw_hook_native
 from ..native_policy_snapshot import get_native_policy_snapshot_publisher
 from ..native_policy_snapshot_acked import acked_snapshot_binding_for_store
@@ -282,6 +283,11 @@ class HookWorker(HookWorkerNativeMixin):
         protection. Local inspection needs the same trusted decision boundary.
         ``off`` and ``shadow`` remain fail-safe without Python semantics.
         """
+        # Keep caller metadata intact across the resident boundary. The outer
+        # hook bridge stamps this field; a direct daemon caller has no trusted
+        # caller context and must not be replaced with the daemon environment.
+        payload = dict(payload)
+        payload.setdefault(HOOK_EXECUTION_ENVIRONMENT_KEY, None)
         self._last_native_decision_receipt = None
         harness = self._runtime_harness(params) or default_harness
         event_name = self._hook_event_name(payload)

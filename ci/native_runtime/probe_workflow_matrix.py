@@ -18,6 +18,7 @@ from pathlib import Path
 
 from ci.native_runtime import probe_installed_pi_output as probe
 from ci.native_runtime.workflow_matrix_cases import WorkflowCase, create_cases
+from codex_plugin_scanner.guard.hook_execution_environment import collect_hook_execution_environment
 
 
 @contextmanager
@@ -219,6 +220,7 @@ def main() -> int:
                         "tool_input": {"command": case.command},
                         "session_id": "workflow-matrix",
                         "tool_call_id": case.name,
+                        "guard_execution_environment": collect_hook_execution_environment(),
                     },
                     params={},
                     default_harness="omp",

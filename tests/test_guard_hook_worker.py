@@ -10,6 +10,7 @@ import pytest
 
 from codex_plugin_scanner.guard.config import HOOK_FAST_PATH_ENV, hook_fast_path_enabled
 from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+from codex_plugin_scanner.guard.hook_execution_environment import HOOK_EXECUTION_ENVIRONMENT_KEY
 from codex_plugin_scanner.guard.native_runtime import NativeRuntimeStatus
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -241,6 +242,43 @@ class TestHookWorkerMalformedPayload:
 
 
 class TestHookWorkerNonPostTool:
+    def test_review_copies_payload_and_does_not_use_daemon_environment(
+        self, worker: HookWorker, workspace: Path, home_dir: Path, guard_home: Path, monkeypatch
+    ) -> None:
+        captured: list[dict[str, object]] = []
+
+        def fake_review_native_edge(**kwargs: object) -> dict[str, object]:
+            payload = kwargs["payload"]
+            assert isinstance(payload, dict)
+            captured.append(payload)
+            return {"decision": "allow"}
+
+        monkeypatch.setattr(worker, "_review_native_edge", fake_review_native_edge)
+        payload = {"hook_event_name": "PreToolUse", "tool_name": "Read"}
+        worker.review_http_payload(
+            payload=payload,
+            params={},
+            default_harness="pi",
+            home_dir=home_dir,
+            guard_home=guard_home,
+            workspace=workspace,
+        )
+        assert payload == {"hook_event_name": "PreToolUse", "tool_name": "Read"}
+        assert captured[0] is not payload
+        assert captured[0][HOOK_EXECUTION_ENVIRONMENT_KEY] is None
+
+        forwarded_context = {"path": "/caller/bin", "environment_names": []}
+        payload[HOOK_EXECUTION_ENVIRONMENT_KEY] = forwarded_context
+        worker.review_http_payload(
+            payload=payload,
+            params={},
+            default_harness="pi",
+            home_dir=home_dir,
+            guard_home=guard_home,
+            workspace=workspace,
+        )
+        assert captured[1][HOOK_EXECUTION_ENVIRONMENT_KEY] is forwarded_context
+
     def test_pre_tool_use_fails_safe_when_native_unavailable(
         self, worker: HookWorker, workspace: Path, home_dir: Path, guard_home: Path, monkeypatch
     ) -> None:

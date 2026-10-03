@@ -15,6 +15,9 @@ fn evaluate_pre_tool_envelope_with_context(
         path: std::env::var("PATH").unwrap(),
         environment_names: vec![],
         environment_digest: "0".repeat(64),
+        home: None,
+        git_pager_disabled: false,
+        pager_disabled: false,
         xdg_config_home: None,
     };
     guard_command::pretool::evaluate_pre_tool_envelope_with_execution_context(
@@ -32,6 +35,13 @@ fn evaluate_pre_tool_envelope_with_context(
 fn github_controls(
     state: &str,
 ) -> guard_command::native_command_controls::CompiledNativeCommandControls {
+    git_github_controls(state, state)
+}
+
+fn git_github_controls(
+    git_state: &str,
+    github_state: &str,
+) -> guard_command::native_command_controls::CompiledNativeCommandControls {
     let program = guard_command::native_command_program::packaged_command_program().unwrap();
     let mut binding: guard_contracts::NativeCommandControlBindingV1 = serde_json::from_value(json!({
         "schema":"guard.native-command-control-binding.v1",
@@ -40,16 +50,160 @@ fn github_controls(
         "managed_revision":0, "effective_digest":"", "layers":[{
             "schema_version":"1.0.0", "kind":"local-admin", "catalog_digest":program.catalog_digest,
             "global_lockdown":false, "controls":[
-                {"target_kind":"permission", "target_id":"command.git.permission.status", "state":state},
-                {"target_kind":"permission", "target_id":"command.git.permission.diff", "state":state},
-                {"target_kind":"permission", "target_id":"command.git.permission.log", "state":state},
-                {"target_kind":"permission", "target_id":"command.github.permission.read-local", "state":state},
-                {"target_kind":"permission", "target_id":"command.github.permission.read-remote", "state":state}
+                {"target_kind":"permission", "target_id":"command.git.permission.status", "state":git_state},
+                {"target_kind":"permission", "target_id":"command.git.permission.diff", "state":git_state},
+                {"target_kind":"permission", "target_id":"command.git.permission.log", "state":git_state},
+                {"target_kind":"permission", "target_id":"command.github.permission.read-local", "state":github_state},
+                {"target_kind":"permission", "target_id":"command.github.permission.read-remote", "state":github_state}
             ]
         }]
     })).unwrap();
     binding.effective_digest = binding.compute_effective_digest().unwrap();
     guard_command::native_command_controls::CompiledNativeCommandControls::new(&binding).unwrap()
+}
+
+#[test]
+fn pager_checks_follow_the_actual_subcommand_and_global_override() {
+    let root = std::env::temp_dir().join(format!("guard-git-pager-{}", std::process::id()));
+    let home = root.join("home");
+    let repository = root.join("repository");
+    std::fs::create_dir_all(&home).unwrap();
+    std::fs::create_dir_all(&repository).unwrap();
+    assert!(std::process::Command::new("git")
+        .args(["init", "--quiet"])
+        .arg(&repository)
+        .status()
+        .unwrap()
+        .success());
+    let config = repository.join(".git/config");
+    let enabled = github_controls("enabled");
+    for (settings, command, expected) in [
+        (
+            "[core]\npager = ./synthetic-never-execute\n",
+            "git status --short",
+            "allow",
+        ),
+        (
+            "[pager]\nlog = ./synthetic-never-execute\n",
+            "git status --short",
+            "allow",
+        ),
+        (
+            "[pager]\nstatus = ./synthetic-never-execute\n",
+            "git status --short",
+            "deny",
+        ),
+        ("[pager]\nstatus = true\n", "git status --short", "deny"),
+        (
+            "[core]\npager = ./synthetic-never-execute\n[pager]\nstatus = true\n",
+            "git status --short",
+            "deny",
+        ),
+        (
+            "[core]\npager = ./synthetic-never-execute\n[pager]\nstatus = false\n",
+            "git status --short",
+            "allow",
+        ),
+        (
+            "[core]\npager = ./synthetic-never-execute\n[pager]\nstatus = cat\n",
+            "git status --short",
+            "allow",
+        ),
+        (
+            "[core]\npager = ./synthetic-never-execute\n",
+            "git --no-pager diff --no-ext-diff --no-textconv",
+            "allow",
+        ),
+        (
+            "[core]\npager = ./synthetic-never-execute\n",
+            "git diff --no-ext-diff --no-textconv",
+            "deny",
+        ),
+    ] {
+        std::fs::write(&config, settings).unwrap();
+        for harness in ["omp", "zcode"] {
+            let result = evaluate_pre_tool_envelope_with_context(
+                harness,
+                "PreToolUse",
+                &json!({"tool_name":"bash", "tool_input":{"command":command}}),
+                Some(&enabled),
+                None,
+                home.to_str(),
+                repository.to_str(),
+            );
+            assert_eq!(
+                result.decision, expected,
+                "{harness}: {command}: {settings}"
+            );
+        }
+    }
+    std::fs::write(&config, "[pager]\nstatus = true\n").unwrap();
+    let context = guard_contracts::GuardExecutionEnvironmentV1 {
+        path: std::env::var("PATH").unwrap(),
+        environment_names: vec!["GIT_PAGER".into()],
+        environment_digest: "0".repeat(64),
+        home: None,
+        git_pager_disabled: false,
+        pager_disabled: false,
+        xdg_config_home: None,
+    };
+    for (command, expected) in [
+        ("git status --short", "deny"),
+        ("git --no-pager status --short", "allow"),
+    ] {
+        let result = guard_command::pretool::evaluate_pre_tool_envelope_with_execution_context(
+            "omp",
+            "PreToolUse",
+            &json!({"tool_name":"bash", "tool_input":{"command":command}}),
+            Some(&enabled),
+            None,
+            home.to_str(),
+            repository.to_str(),
+            Some(&context),
+        );
+        assert_eq!(result.decision, expected, "{command}: inherited pager");
+    }
+    for (settings, git_pager_disabled, pager_disabled, expected) in [
+        (
+            "[core]\npager = ./synthetic-never-execute\n[pager]\nstatus = true\n",
+            true,
+            false,
+            "allow",
+        ),
+        (
+            "[core]\npager = ./synthetic-never-execute\n[pager]\nstatus = true\n",
+            false,
+            true,
+            "deny",
+        ),
+        ("[pager]\nstatus = true\n", false, true, "allow"),
+    ] {
+        std::fs::write(&config, settings).unwrap();
+        let mut caller = context.clone();
+        caller.environment_names = vec![if git_pager_disabled {
+            "GIT_PAGER"
+        } else {
+            "PAGER"
+        }
+        .into()];
+        caller.git_pager_disabled = git_pager_disabled;
+        caller.pager_disabled = pager_disabled;
+        let result = guard_command::pretool::evaluate_pre_tool_envelope_with_execution_context(
+            "omp",
+            "PreToolUse",
+            &json!({"tool_name":"bash", "tool_input":{"command":"git status --short"}}),
+            Some(&enabled),
+            None,
+            home.to_str(),
+            repository.to_str(),
+            Some(&caller),
+        );
+        assert_eq!(
+            result.decision, expected,
+            "disabled pager precedence: {settings}"
+        );
+    }
+    std::fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
@@ -84,9 +238,32 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
         path: original_path.clone(),
         environment_names: vec![],
         environment_digest: "0".repeat(64),
+        home: None,
+        git_pager_disabled: false,
+        pager_disabled: false,
         xdg_config_home: None,
     };
     assert_eq!(evaluate(&context).decision, "allow");
+    let caller_home = root.join("actual-caller-home");
+    std::fs::create_dir_all(&caller_home).unwrap();
+    std::fs::write(
+        caller_home.join(".gitconfig"),
+        b"[core]\nfsmonitor = ./synthetic-never-execute\n",
+    )
+    .unwrap();
+    let mut home_routed = context.clone();
+    home_routed.home = Some(caller_home.to_string_lossy().into_owned());
+    assert_eq!(evaluate(&home_routed).decision, "deny");
+    std::fs::write(
+        caller_home.join(".gitconfig"),
+        b"[core]\nfsmonitor = false\n",
+    )
+    .unwrap();
+    assert_eq!(evaluate(&home_routed).decision, "allow");
+    assert_eq!(
+        evaluate(&GuardExecutionEnvironmentV1::unavailable()).decision,
+        "deny"
+    );
     let xdg = root.join("custom-config");
     std::fs::create_dir_all(xdg.join("git")).unwrap();
     std::fs::write(
@@ -105,24 +282,45 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
             path: "/synthetic-no-git".into(),
             environment_names: vec![],
             environment_digest: "0".repeat(64),
+            home: None,
+            git_pager_disabled: false,
+            pager_disabled: false,
             xdg_config_home: None,
         },
         GuardExecutionEnvironmentV1 {
             path: original_path.clone(),
             environment_names: vec!["GIT_EXTERNAL_DIFF".into()],
             environment_digest: "0".repeat(64),
+            home: None,
+            git_pager_disabled: false,
+            pager_disabled: false,
             xdg_config_home: None,
         },
         GuardExecutionEnvironmentV1 {
             path: original_path.clone(),
             environment_names: vec!["git_config_global".into()],
             environment_digest: "0".repeat(64),
+            home: None,
+            git_pager_disabled: false,
+            pager_disabled: false,
+            xdg_config_home: None,
+        },
+        GuardExecutionEnvironmentV1 {
+            path: original_path.clone(),
+            environment_names: vec!["GIT_DISCOVERY_ACROSS_FILESYSTEM".into()],
+            environment_digest: "0".repeat(64),
+            home: None,
+            git_pager_disabled: false,
+            pager_disabled: false,
             xdg_config_home: None,
         },
         GuardExecutionEnvironmentV1 {
             path: "x".repeat(32769),
             environment_names: vec![],
             environment_digest: "0".repeat(64),
+            home: None,
+            git_pager_disabled: false,
+            pager_disabled: false,
             xdg_config_home: None,
         },
     ] {
@@ -138,6 +336,9 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
         path: shadow_path.to_string_lossy().into_owned(),
         environment_names: vec![],
         environment_digest: "0".repeat(64),
+        home: None,
+        git_pager_disabled: false,
+        pager_disabled: false,
         xdg_config_home: None,
     };
     assert_eq!(evaluate(&context).decision, "deny");
@@ -235,6 +436,31 @@ fn configured_fsmonitor_cannot_be_admitted_as_a_benign_read() {
         );
     }
     let disabled = github_controls("disabled");
+    for (git_state, github_state) in [("disabled", "enabled"), ("enabled", "disabled")] {
+        let mixed = git_github_controls(git_state, github_state);
+        for harness in ["omp", "zcode"] {
+            for command in [
+                "git status --short && gh api repos/owner/repo/compare/base...main | head -1",
+                "gh api repos/owner/repo/compare/base...main; git status --short",
+                "git status --short || gh api repos/owner/repo/compare/base...main",
+                "gh api repos/owner/repo/compare/base...main | git status --short",
+            ] {
+                let result = evaluate_pre_tool_envelope_with_context(
+                    harness,
+                    "PreToolUse",
+                    &json!({"tool_name":"bash", "tool_input":{"command":command}}),
+                    Some(&mixed),
+                    None,
+                    home.to_str(),
+                    repository.to_str(),
+                );
+                assert_eq!(
+                    result.minimum_action, "block",
+                    "{harness}: {git_state}/{github_state}: {command}"
+                );
+            }
+        }
+    }
     for harness in ["omp", "zcode"] {
         for command in [
             "echo ready && git status --short | head -1",

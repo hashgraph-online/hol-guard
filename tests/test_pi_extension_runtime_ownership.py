@@ -20,6 +20,11 @@ def _source(tmp_path: Path) -> str:
 
 def test_pi_extension_keeps_fallbacks_inside_outer_hook_deadline(tmp_path: Path) -> None:
     source = _source(tmp_path)
+    assert "guard_execution_environment" in source
+    assert "home: typeof process.env.HOME" in source
+    assert "git_pager_disabled: process.env.GIT_PAGER" in source
+    assert "pager_disabled: process.env.PAGER" in source
+    assert "let payloadToSend = {" in source
     for constant in (
         "const GUARD_TIMEOUT_MS = 4250;",
         "const GUARD_DEADLINE_RESERVE_MS = 250;",
