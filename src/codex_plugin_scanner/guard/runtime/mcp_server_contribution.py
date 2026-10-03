@@ -16,6 +16,7 @@ from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError
 
 from .extension_contribution import frozen_package_data
+from .mcp_protection import _command_name
 
 _SCHEMA_VERSION: Final = "guard.mcp-server-contribution.v1"
 _ALLOWED_ICON_NAMES: Final = frozenset(
@@ -235,6 +236,20 @@ def validate_mcp_contribution(payload: Mapping[str, object], *, filename: str = 
     if launch_kind == "package-launcher":
         if launch.get("command") not in _ALLOWED_LAUNCHERS:
             raise ValueError(f"{filename} launch command is not an allowlisted package launcher")
+    elif launch_kind == "direct-command":
+        cmd = launch.get("command")
+        if not isinstance(cmd, str) or not cmd.strip():
+            raise ValueError(f"{filename} direct command is invalid")
+        if "/" in cmd or "\\" in cmd:
+            raise ValueError(f"{filename} direct command cannot contain path separators")
+        args = launch.get("args")
+        if args is not None:
+            if not isinstance(args, list) or any(not isinstance(a, str) for a in args):
+                raise ValueError(f"{filename} direct command args must be a list of strings")
+            if len(args) > 16:
+                raise ValueError(f"{filename} direct command args exceeds 16 items")
+            if any(len(a) > 128 for a in args):
+                raise ValueError(f"{filename} direct command arg exceeds 128 characters")
     elif launch_kind == "remote-http":
         if normalized_remote_mcp_url(launch.get("url")) is None:
             raise ValueError(
@@ -357,6 +372,7 @@ def _load_packaged_payloads() -> tuple[dict[str, object], ...]:
 
 def _finalize_payloads(payloads: tuple[dict[str, object], ...]) -> tuple[dict[str, object], ...]:
     packages: dict[str, str] = {}
+    direct_commands: dict[str, str] = {}
     remote_urls: dict[str, str] = {}
     remote_names: dict[str, str] = {}
     ids: set[str] = set()
@@ -379,6 +395,16 @@ def _finalize_payloads(payloads: tuple[dict[str, object], ...]) -> tuple[dict[st
             if previous is not None:
                 raise ValueError(f"duplicate MCP launch package {package} for {previous} and {mcp_id}")
             packages[key] = mcp_id
+            continue
+        if launch.get("kind") == "direct-command":
+            cmd = launch.get("command")
+            if not isinstance(cmd, str) or not cmd.strip():
+                raise ValueError(f"{mcp_id} is missing a direct command")
+            key = _command_name(cmd.strip())
+            previous = direct_commands.get(key)
+            if previous is not None:
+                raise ValueError(f"duplicate MCP direct command {cmd} for {previous} and {mcp_id}")
+            direct_commands[key] = mcp_id
             continue
         if launch.get("kind") != "remote-http":
             raise ValueError(f"{mcp_id} has unsupported launch metadata")

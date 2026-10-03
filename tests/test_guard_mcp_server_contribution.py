@@ -186,3 +186,56 @@ def test_frozen_mcp_payloads_fail_closed_without_package_data(tmp_path: Path, mo
     monkeypatch.setattr(mcp_module.resources, "files", missing_package)
     with pytest.raises(FileNotFoundError, match="contributions"):
         mcp_module._load_packaged_payloads()
+
+
+def test_run_contribution_validates_and_maps_tool_states() -> None:
+    run_path = Path(__file__).resolve().parents[1] / "contributions/mcp-servers/mcp.run.json"
+    payload = json.loads(run_path.read_text(encoding="utf-8"))
+    validate_mcp_contribution(payload, filename="mcp.run.json")
+
+    assert payload["id"] == "mcp.run"
+    assert catalog_id_for_mcp_id("mcp.run") == "command.mcp-run"
+    assert payload["launch"]["kind"] == "direct-command"
+    assert payload["launch"]["command"] == "run"
+    assert payload["launch"]["args"] == ["--serve-mcp"]
+
+    assert mcp_tool_state(payload, "run_docs") == "inherit"
+    assert mcp_tool_state(payload, "get_cwd") == "inherit"
+    assert mcp_tool_state(payload, "set_cwd") == "review"
+    assert mcp_tool_state(payload, "other") == "review"
+    assert mcp_tool_state(payload, "arbitrary_task") == "review"
+
+
+def test_direct_command_launch_validation() -> None:
+    run_path = Path(__file__).resolve().parents[1] / "contributions/mcp-servers/mcp.run.json"
+    payload = json.loads(run_path.read_text(encoding="utf-8"))
+
+    invalid_cmd = dict(payload)
+    invalid_cmd["launch"] = {"kind": "direct-command", "command": "   "}
+    with pytest.raises(ValueError, match="direct command is invalid"):
+        validate_mcp_contribution(invalid_cmd, filename="empty_cmd.json")
+
+    invalid_args = dict(payload)
+    invalid_args["launch"] = {"kind": "direct-command", "command": "run", "args": [123]}
+    with pytest.raises(ValueError, match="schema"):
+        validate_mcp_contribution(invalid_args, filename="invalid_args.json")
+
+    path_cmd = dict(payload)
+    path_cmd["launch"] = {"kind": "direct-command", "command": "/usr/bin/run"}
+    with pytest.raises(ValueError, match="path separators"):
+        validate_mcp_contribution(path_cmd, filename="path_cmd.json")
+
+
+def test_duplicate_direct_command_rejected(tmp_path: Path) -> None:
+    run_path = Path(__file__).resolve().parents[1] / "contributions/mcp-servers/mcp.run.json"
+    first = json.loads(run_path.read_text(encoding="utf-8"))
+    second = json.loads(run_path.read_text(encoding="utf-8"))
+    second["id"] = "mcp.run-dup"
+
+    directory = tmp_path / "mcp-servers"
+    directory.mkdir()
+    (directory / "mcp.run.json").write_text(json.dumps(first), encoding="utf-8")
+    (directory / "mcp.run-dup.json").write_text(json.dumps(second), encoding="utf-8")
+    with pytest.raises(ValueError, match="duplicate MCP direct command"):
+        load_mcp_contribution_payloads(directory)
+

@@ -280,3 +280,65 @@ def test_evaluate_write_file_stays_review_while_inert(tmp_path: Path) -> None:
     )
     assert decision.action == "review"
     assert decision.source != "catalog-mcp-extension"
+
+
+def test_matching_direct_command_contribution() -> None:
+    from codex_plugin_scanner.guard.runtime.mcp_server_grants import matching_mcp_contribution
+
+    identity = build_mcp_server_identity(
+        config_path="",
+        command="run",
+        args=("--serve-mcp",),
+        transport="stdio",
+    )
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="run",
+        tool_name="set_cwd",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+        server_identity=identity,
+    )
+    payload = matching_mcp_contribution(artifact)
+    assert payload is not None
+    assert payload["id"] == "mcp.run"
+
+    # Full path to binary also matches if args match
+    path_identity = build_mcp_server_identity(
+        config_path="",
+        command="/usr/local/bin/run",
+        args=("--serve-mcp",),
+        transport="stdio",
+    )
+    path_artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="run",
+        tool_name="set_cwd",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+        server_identity=path_identity,
+    )
+    path_payload = matching_mcp_contribution(path_artifact)
+    assert path_payload is not None
+    assert path_payload["id"] == "mcp.run"
+
+    # Mismatched args must not inherit the contribution
+    mismatched_identity = build_mcp_server_identity(
+        config_path="",
+        command="run",
+        args=("--different",),
+        transport="stdio",
+    )
+    mismatched_artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="run",
+        tool_name="set_cwd",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+        server_identity=mismatched_identity,
+    )
+    assert matching_mcp_contribution(mismatched_artifact) is None
+

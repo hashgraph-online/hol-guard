@@ -56,6 +56,14 @@ def _values_for_payload(payload: Mapping[str, object]) -> CommandExtensionValues
             raise ValueError(f"{mcp_id} launch package is invalid")
         example = f"{command} -y {package}"
         executables = (command,)
+    elif launch_kind == "direct-command":
+        command = launch.get("command")
+        if not isinstance(command, str) or not command.strip():
+            raise ValueError(f"{mcp_id} launch command is invalid")
+        args = launch.get("args")
+        arg_str = " ".join(args) if isinstance(args, list) else ""
+        example = f"{command} {arg_str}".strip()
+        executables = (command,)
     elif launch_kind == "remote-http":
         remote_url = launch.get("url")
         example = remote_mcp_endpoint_identity(remote_url)
