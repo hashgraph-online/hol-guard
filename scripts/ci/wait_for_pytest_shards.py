@@ -217,7 +217,7 @@ def _snapshot(
                 raise ShardWaitError("GitHub jobs API returned an invalid Python coverage shard index")
             return tuple(states)
         if len(jobs_by_id) > total_count:
-            raise ShardWaitError("GitHub jobs API returned an incomplete job list")
+            raise _TransientApiError("GitHub jobs API returned an incomplete job list")
         if len(jobs) != 100:
             raise _TransientApiError("GitHub jobs API returned an incomplete job list")
     raise ShardWaitError("GitHub jobs API exceeded its pagination limit")

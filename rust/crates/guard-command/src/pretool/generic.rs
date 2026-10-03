@@ -112,12 +112,13 @@ pub fn evaluate_pre_tool_envelope_with_context(
         .and_then(|decision| decision.as_ref().ok())
         .map(|decision| &decision.command_model);
     let mut result = match (controls, command_model) {
-        (Some(controls), Some(model)) => controls.apply_with_tool(
+        (Some(controls), Some(model)) => controls.apply_with_tool_and_context(
             Some(model),
             result,
             signals.tool_name.as_deref(),
             &signals.package_values,
             deadline,
+            (home_dir, cwd),
         ),
         (Some(controls), _) => controls.apply_with_tool(
             None,
@@ -154,6 +155,7 @@ pub fn evaluate_pre_tool_envelope_with_context(
                 contained_test_reason,
                 Some(
                     "native_node_tool_readonly_containment_required"
+                        | "native_vitest_readonly_containment_required"
                         | "native_package_test_readonly_containment_required"
                         | "native_node_build_output_containment_required"
                 )

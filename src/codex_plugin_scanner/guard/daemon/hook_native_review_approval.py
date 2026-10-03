@@ -156,6 +156,26 @@ def pause_native_pre_tool_for_approval(
         response = harness_json_from_native_pre_tool(harness, allowed)
         response["approval_reuse_status"] = "accepted"
         return response
+    from ..blocked_request_mode import asks_for_approval, safe_alternative_reason
+    from ..config import load_guard_config
+
+    try:
+        ask = asks_for_approval(load_guard_config(guard_home, workspace=workspace))
+    except (OSError, RuntimeError, TypeError, ValueError):
+        ask = False
+    if not ask:
+        blocked = dict(native_result)
+        blocked.update(
+            decision="deny",
+            minimum_action="block",
+            policy_action="block",
+            reason=safe_alternative_reason(str(native_result.get("reason") or "HOL Guard blocked this action.")),
+        )
+        response = harness_json_from_native_pre_tool(harness, blocked)
+        response["prompted"] = False
+        response["blocked_request_mode"] = "safe-alternative"
+        return response
+
     queued = queue_native_pre_tool_review(
         store,
         harness=harness,

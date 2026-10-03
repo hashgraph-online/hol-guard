@@ -1,11 +1,50 @@
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 import pytest
 
 from codex_plugin_scanner.guard import native_resident_client as client_module
 from codex_plugin_scanner.guard.native_resident_client import _PersistentNativeClientPool
+
+
+def test_resident_shutdown_consumes_one_original_deadline_and_retains_unstopped_owners(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    keys = [(tmp_path / name, home / "native-runtime") for name in ("first", "second")]
+    monkeypatch.setattr(client_module, "_RESIDENTS", {key: {} for key in keys})
+    monkeypatch.setattr(client_module, "close_native_resident_clients", lambda _home, **_kwargs: None)
+    monkeypatch.setattr(client_module, "_state_files", lambda _path: (tmp_path / "state",))
+    clock = [100.0]
+    monkeypatch.setattr(client_module.time, "monotonic", lambda: clock[0])
+    budgets = []
+
+    def stop(**kwargs):
+        assert kwargs["deadline_monotonic"] == 101.0
+        budgets.append(kwargs["timeout_seconds"])
+        clock[0] = 102.0
+        return True
+
+    monkeypatch.setattr(client_module, "stop_native_resident", stop)
+    assert client_module.close_native_residents(home, deadline_monotonic=101.0) is False
+    assert budgets == [1.0]
+    assert keys[0] not in client_module._RESIDENTS
+    assert keys[1] in client_module._RESIDENTS
+
+
+def test_expired_resident_shutdown_does_not_launch_stop_child(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    key = (tmp_path / "runtime", home / "native-runtime")
+    monkeypatch.setattr(client_module, "_RESIDENTS", {key: {}})
+    monkeypatch.setattr(client_module, "close_native_resident_clients", lambda _home, **_kwargs: None)
+    monkeypatch.setattr(client_module, "_state_files", lambda _path: (tmp_path / "state",))
+
+    def forbidden_stop(**kwargs):
+        raise AssertionError("expired shutdown launched a child")
+
+    monkeypatch.setattr(client_module, "stop_native_resident", forbidden_stop)
+    assert client_module.close_native_residents(home, deadline_monotonic=time.monotonic() - 1) is False
+    assert key in client_module._RESIDENTS
 
 
 def test_close_native_resident_clients_attempts_all_selected_pools_before_raising(
@@ -30,7 +69,8 @@ def test_close_native_resident_clients_attempts_all_selected_pools_before_raisin
         client_module.close_native_resident_clients(guard_home)
 
     assert closed == [first_pool, second_pool]
-    assert not any(Path(key[1]).parent == guard_home.resolve() for key in client_module._CLIENT_POOLS)
+    assert first_pool in client_module._CLIENT_POOLS.values()
+    assert second_pool not in client_module._CLIENT_POOLS.values()
 
 
 def test_stream_close_does_not_stop_shared_resident(

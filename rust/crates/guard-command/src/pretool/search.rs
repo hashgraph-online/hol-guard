@@ -2,8 +2,10 @@ use super::sensitive_read_path_argument as sensitive_path_argument;
 use glob_class::glob_class_matches;
 use std::collections::{HashSet, VecDeque};
 mod glob_class;
+mod grep;
 mod hint;
 mod options;
+mod tree;
 use options::unsafe_search_value;
 fn glob_matches(pattern: &[u8], value: &[u8]) -> bool {
     let mut previous = vec![false; value.len() + 1];
@@ -309,7 +311,7 @@ pub(super) fn safe_search_arguments_with_context(
 ) -> bool {
     match executable {
         "rg" => safe_rg_arguments(arguments, context),
-        "grep" => safe_grep_arguments(arguments, context),
+        "grep" => grep::safe_grep_arguments(arguments, context),
         _ => false,
     }
 }
@@ -400,81 +402,9 @@ fn safe_rg_arguments(arguments: &[String], context: ReadContext<'_>) -> bool {
             continue;
         }
         if paths_only || pattern_supplied {
-            if unsafe_search_value(SearchValueRole::Path, argument, context) {
-                return false;
-            }
-        } else {
-            pattern_supplied = true;
-        }
-    }
-    pending_value.is_none()
-}
-
-fn safe_grep_arguments(arguments: &[String], context: ReadContext<'_>) -> bool {
-    let mut pending_value: Option<SearchValueRole> = None;
-    let mut pattern_supplied = false;
-    let mut options_enabled = true;
-    for argument in arguments {
-        if let Some(role) = pending_value.take() {
-            if unsafe_search_value(role, argument, context) {
-                return false;
-            }
-            if matches!(role, SearchValueRole::Pattern) {
-                pattern_supplied = true;
-            }
-            continue;
-        }
-        if options_enabled && argument == "--" {
-            options_enabled = false;
-            continue;
-        }
-        if options_enabled && argument.starts_with("--") {
-            let (name, attached) = argument.split_once('=').unwrap_or((argument.as_str(), ""));
-            if matches!(
-                name,
-                "--recursive" | "--dereference-recursive" | "--file" | "--exclude-from"
-            ) {
-                return false;
-            }
-            let role = options::grep_value_role(name);
-            if role.is_none() && !options::safe_grep_flag(name) {
-                return false;
-            }
-            if let Some(role) = role {
-                if attached.is_empty() {
-                    pending_value = Some(role);
-                } else if unsafe_search_value(role, attached, context) {
-                    return false;
-                } else if matches!(role, SearchValueRole::Pattern) {
-                    pattern_supplied = true;
-                }
-            }
-            continue;
-        }
-        if options_enabled && argument.starts_with('-') && argument.len() > 1 {
-            let parsed = short_search_option(
-                argument,
-                &['r', 'R'],
-                &[
-                    ('e', SearchValueRole::Pattern),
-                    ('f', SearchValueRole::Path),
-                    ('d', SearchValueRole::DirectoryAction),
-                    ('A', SearchValueRole::Other),
-                    ('B', SearchValueRole::Other),
-                    ('C', SearchValueRole::Other),
-                    ('m', SearchValueRole::Other),
-                ],
-                context,
-            );
-            let Ok((next_value, supplied_pattern)) = parsed else {
-                return false;
-            };
-            pending_value = next_value;
-            pattern_supplied |= supplied_pattern;
-            continue;
-        }
-        if pattern_supplied {
-            if unsafe_search_value(SearchValueRole::Path, argument, context) {
+            if unsafe_search_value(SearchValueRole::Path, argument, context)
+                && !tree::safe_recursive_target(argument, context)
+            {
                 return false;
             }
         } else {

@@ -119,6 +119,11 @@ fn managed_accept_loop(
                     }
                     crate::resident_transport::admit_connection(&admission, Box::new(stream))?;
                 }
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    failures = 0;
+                    crate::hardening::wait_for_accept_ready(&listener)
+                        .map_err(|_| "native_socket_accept_failed".to_owned())?;
+                }
                 Err(error)
                     if crate::hardening::classify_io_error(&error)
                         != crate::hardening::IoFailureClass::Other =>
@@ -189,6 +194,13 @@ pub(super) fn serve_loopback_managed(
                     crate::resident_transport::admit_connection(&admission, Box::new(stream))
                 {
                     break Err(error);
+                }
+            }
+            #[cfg(unix)]
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                failures = 0;
+                if crate::hardening::wait_for_accept_ready(&listener).is_err() {
+                    break Err("native_resident_loopback_accept_failed".to_owned());
                 }
             }
             Err(error)

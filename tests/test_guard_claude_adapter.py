@@ -18,6 +18,8 @@ from codex_plugin_scanner.guard.adapters.claude_code import (
     _shell_command,
 )
 
+pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
+
 
 def _write_json(path: Path, payload: dict[str, object]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -402,6 +404,8 @@ def test_claude_daemon_hook_command_survives_shell_execution(tmp_path):
 @pytest.mark.usefixtures("native_hook_force")
 def test_claude_daemon_hook_command_falls_back_without_blocking_prompt_on_daemon_miss(tmp_path):
     context = _build_context(tmp_path)
+    context.guard_home.mkdir(parents=True, exist_ok=True)
+    (context.guard_home / "config.toml").write_text('blocked_request_mode = "ask"\n', encoding="utf-8")
     adapter = ClaudeCodeHarnessAdapter()
     command = adapter._daemon_hook_command(context)
 
@@ -432,6 +436,8 @@ def test_claude_daemon_hook_command_falls_back_without_blocking_prompt_on_daemon
 @pytest.mark.usefixtures("native_hook_force")
 def test_claude_daemon_hook_command_falls_back_to_native_ask_on_daemon_miss(tmp_path):
     context = _build_context(tmp_path)
+    context.guard_home.mkdir(parents=True, exist_ok=True)
+    (context.guard_home / "config.toml").write_text('blocked_request_mode = "ask"\n', encoding="utf-8")
     adapter = ClaudeCodeHarnessAdapter()
     command = adapter._daemon_hook_command(context)
 

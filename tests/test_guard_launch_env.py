@@ -27,6 +27,8 @@ from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.conftest import guard_commands_module
 
+pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
+
 
 def _write_text(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)

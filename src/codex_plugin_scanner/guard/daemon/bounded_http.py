@@ -210,6 +210,7 @@ class BoundedThreadingHTTPServer(ThreadingHTTPServer):
                 _MAX_ACTIVE_REQUESTS,
             )
             self._guard_slots = threading.BoundedSemaphore(capacity)
+            self._guard_capacity_limit = capacity
             self._guard_socket_timeout = _bounded_float(
                 "HOL_GUARD_DAEMON_SOCKET_TIMEOUT_SECONDS",
                 _DEFAULT_SOCKET_TIMEOUT_SECONDS,
@@ -314,9 +315,7 @@ class BoundedThreadingHTTPServer(ThreadingHTTPServer):
 
     def _guard_admit_request(self, request: socket.socket) -> bool:
         if not self._guard_slots.acquire(blocking=False):
-            _METRICS.rejected_overload()
-            self._reject_overload(request)
-            self.shutdown_request(request)
+            self._guard_reject_overload(request)
             return False
         _METRICS.acquired()
         try:
@@ -333,6 +332,15 @@ class BoundedThreadingHTTPServer(ThreadingHTTPServer):
                     self.close_request(request)
             return False
         return True
+
+    def _guard_reject_overload(self, request: socket.socket) -> None:
+        """Record and close overloads rejected before an admission lease exists."""
+
+        _METRICS.rejected_overload()
+        try:
+            self._reject_overload(request)
+        finally:
+            self.shutdown_request(request)
 
     def _guard_release_request(self) -> None:
         self._guard_slots.release()

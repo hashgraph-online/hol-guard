@@ -457,7 +457,9 @@ def test_batch_claim_consumes_two_exact_one_shot_approvals_atomically(tmp_path, 
     assert all(row[1] is not None for row in rows)
 
 
-def test_batch_claim_rolls_back_every_sibling_when_one_row_fails_integrity(tmp_path, native_context_digest: Path) -> None:
+def test_batch_claim_rolls_back_every_sibling_when_one_row_fails_integrity(
+    tmp_path, native_context_digest: Path
+) -> None:
     store = GuardStore(tmp_path / "guard-home")
     selected: list[Mapping[str, object]] = []
     approval_ids: list[str] = []
@@ -538,7 +540,9 @@ def test_default_lookup_still_consumes_non_package_local_once_approval(tmp_path)
 
 
 @pytest.mark.parametrize("scope", ("artifact", "workspace", "publisher", "harness", "global"))
-def test_approval_resolution_preserves_exact_context_token_across_every_scope(tmp_path, scope: str, native_context_digest: Path) -> None:
+def test_approval_resolution_preserves_exact_context_token_across_every_scope(
+    tmp_path, scope: str, native_context_digest: Path
+) -> None:
     store = GuardStore(tmp_path / "guard-home")
     workspace = "/workspace/a"
     artifact_id = "codex:project:mcp-tool:read"
@@ -617,7 +621,9 @@ def test_approval_resolution_preserves_exact_context_token_across_every_scope(tm
     )
 
 
-def test_broad_scope_exact_context_allow_does_not_resolve_or_authorize_other_context(tmp_path, native_context_digest: Path) -> None:
+def test_broad_scope_exact_context_allow_does_not_resolve_or_authorize_other_context(
+    tmp_path, native_context_digest: Path
+) -> None:
     store = GuardStore(tmp_path / "guard-home")
     first_token = _approval_context_token(content="sha256:first")
     second_token = _approval_context_token(
@@ -721,7 +727,9 @@ def test_lookup_preserves_stored_block_over_local_once_allow(tmp_path, consume_o
     assert store.claim_local_once_approval(approval_id, claimed_at="2026-07-17T12:03:00+00:00") is True
 
 
-def test_non_consuming_runtime_lookup_composes_specific_allow_with_broader_managed_block(tmp_path, native_context_digest: Path) -> None:
+def test_non_consuming_runtime_lookup_composes_specific_allow_with_broader_managed_block(
+    tmp_path, native_context_digest: Path
+) -> None:
     store = GuardStore(tmp_path / "guard-home")
     artifact_id = "codex:project:mcp-tool:managed-block"
     approval_hash = _approval_context_token(content="sha256:managed-block")
@@ -867,7 +875,9 @@ def test_non_consuming_scope_lookup_preserves_specificity_and_stronger_actions(
     assert stronger["integrity_status"] == "valid"
 
 
-def test_non_consuming_runtime_lookup_composes_direct_allow_with_exact_command_block(tmp_path, native_context_digest: Path) -> None:
+def test_non_consuming_runtime_lookup_composes_direct_allow_with_exact_command_block(
+    tmp_path, native_context_digest: Path
+) -> None:
     store = GuardStore(tmp_path / "guard-home")
     artifact_id = "codex:project:tool-action:shell"
     command = "deploy production"
@@ -1070,7 +1080,9 @@ def test_claim_rejects_allow_when_broader_block_is_inserted_after_lookup(tmp_pat
     assert store.claim_approval_reuse_decision(selected, now="2026-07-17T12:03:00+00:00") is False
 
 
-def test_claim_rejects_direct_allow_when_memory_block_is_inserted_after_lookup(tmp_path, native_context_digest: Path) -> None:
+def test_claim_rejects_direct_allow_when_memory_block_is_inserted_after_lookup(
+    tmp_path, native_context_digest: Path
+) -> None:
     store = GuardStore(tmp_path / "guard-home")
     artifact_id = "codex:project:tool-action:memory-race"
     command = "deploy production"
@@ -1116,7 +1128,9 @@ def test_claim_rejects_direct_allow_when_memory_block_is_inserted_after_lookup(t
     assert store.claim_approval_reuse_decision(selected, now="2026-07-17T12:03:00+00:00") is False
 
 
-def test_claim_rejects_local_once_when_policy_changes_and_keeps_it_unclaimed(tmp_path, native_context_digest: Path) -> None:
+def test_claim_rejects_local_once_when_policy_changes_and_keeps_it_unclaimed(
+    tmp_path, native_context_digest: Path
+) -> None:
     store = GuardStore(tmp_path / "guard-home")
     artifact_id = "codex:project:tool-action:local-once-race"
     approval_hash = _approval_context_token(content="sha256:local-once-race")
@@ -1278,7 +1292,9 @@ def test_lookup_miss_diagnostic_remains_targeted_with_many_unrelated_allows(tmp_
     assert reason == "approval_reuse_content_changed"
 
 
-def test_non_consuming_policy_lookup_is_bounded_and_fails_closed_on_match_overflow(tmp_path, native_context_digest: Path) -> None:
+def test_non_consuming_policy_lookup_is_bounded_and_fails_closed_on_match_overflow(
+    tmp_path, native_context_digest: Path
+) -> None:
     store = GuardStore(tmp_path / "guard-home")
     store.replace_remote_policies(
         [
@@ -1337,7 +1353,9 @@ def test_non_consuming_policy_lookup_is_bounded_and_fails_closed_on_match_overfl
     }.issubset({index for detail in query_plan_details for index in detail.split()})
 
 
-def test_non_consuming_policy_lookup_miss_uses_only_fully_constrained_scope_probes(tmp_path, native_context_digest: Path) -> None:
+def test_non_consuming_policy_lookup_miss_uses_only_fully_constrained_scope_probes(
+    tmp_path, native_context_digest: Path
+) -> None:
     store = GuardStore(tmp_path / "guard-home")
     current_hash = _approval_context_token(content="sha256:current")
     with sqlite3.connect(store.path) as connection:
@@ -1416,7 +1434,9 @@ def test_non_consuming_policy_lookup_miss_uses_only_fully_constrained_scope_prob
     }.issubset({index for detail in plan_details for index in detail.split()})
 
 
-def test_non_consuming_policy_probe_partitions_preserve_every_scope_selector(tmp_path, native_context_digest: Path) -> None:
+def test_non_consuming_policy_probe_partitions_preserve_every_scope_selector(
+    tmp_path, native_context_digest: Path
+) -> None:
     store = GuardStore(tmp_path / "guard-home")
     artifact_id = "codex:project:tool-action:selector-matrix"
     context_hash = _approval_context_token(content="sha256:selector-matrix")
@@ -1584,7 +1604,9 @@ def test_approval_reuse_diagnostic_live_probes_are_index_ordered_without_temp_so
     }.issubset({index for detail in policy_details for index in detail.split()})
 
 
-def test_exact_package_local_once_approval_remains_reusable_for_three_retries(tmp_path, native_context_digest: Path) -> None:
+def test_exact_package_local_once_approval_remains_reusable_for_three_retries(
+    tmp_path, native_context_digest: Path
+) -> None:
     store = GuardStore(tmp_path / "guard-home")
     artifact_id = "guard-cli:project:package-request:npm-install"
     context_hash = _approval_context_token(content="sha256:unchanged-package")
@@ -1688,7 +1710,9 @@ def test_policy_expiry_is_utc_normalized_and_excluded_at_boundary(
     )
 
 
-def test_local_once_offset_expiry_is_normalized_and_excluded_after_actual_instant(tmp_path, native_context_digest: Path) -> None:
+def test_local_once_offset_expiry_is_normalized_and_excluded_after_actual_instant(
+    tmp_path, native_context_digest: Path
+) -> None:
     store = GuardStore(tmp_path / "guard-home")
     artifact_id = "codex:project:tool-action:local-expiry"
     context_hash = _approval_context_token(content="sha256:local-expiry")
@@ -1768,9 +1792,7 @@ def test_lookup_miss_diagnostic_reports_changed_context_dimension(
             "approval_reuse_content_changed",
         ),
         (
-            (
-                _approval_context_token(capabilities=["filesystem:read", "network:egress"]),
-            ),
+            (_approval_context_token(capabilities=["filesystem:read", "network:egress"]),),
             "approval_reuse_capability_changed",
         ),
         (

@@ -492,9 +492,7 @@ class TestSpawnedDaemonStartClassification:
             lambda pid: {999999: 555555, 555555: own_pid}.get(pid),
         )
         assert (
-            start_classification.daemon_journal_records_start_requested_after(
-                guard_home, root_pid=own_pid, since_ns=1
-            )
+            start_classification.daemon_journal_records_start_requested_after(guard_home, root_pid=own_pid, since_ns=1)
             is True
         )
         assert (
@@ -509,9 +507,7 @@ class TestSpawnedDaemonStartClassification:
         other_home.mkdir()
         record_daemon_lifecycle_event(other_home, event="start_requested", pid=888888)
         assert (
-            start_classification.daemon_journal_records_start_requested_after(
-                other_home, root_pid=own_pid, since_ns=1
-            )
+            start_classification.daemon_journal_records_start_requested_after(other_home, root_pid=own_pid, since_ns=1)
             is False
         )
         assert (
@@ -592,9 +588,7 @@ class TestSpawnedDaemonStartClassification:
             guard_home,
             process,
             owner_lock_held=False,
-            journal_wait=lambda: record_daemon_lifecycle_event(
-                guard_home, event="start_requested", pid=process.pid
-            ),
+            journal_wait=lambda: record_daemon_lifecycle_event(guard_home, event="start_requested", pid=process.pid),
         )
 
         with pytest.raises(RuntimeError, match=r"^Guard daemon is still starting"):
@@ -760,9 +754,7 @@ class TestStillStartingAdoption:
             "_wait_for_guard_daemon_url",
             lambda _gh, **_kw: None,
         )
-        monkeypatch.setattr(
-            daemon_manager_module, "_guard_daemon_pid_is_running", lambda _pid: True
-        )
+        monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_running", lambda _pid: True)
         monkeypatch.setattr(
             daemon_manager_module,
             "daemon_still_starting_evidence_present",
@@ -795,9 +787,7 @@ class TestStillStartingAdoption:
             "_wait_for_guard_daemon_url",
             lambda _gh, **_kw: None,
         )
-        monkeypatch.setattr(
-            daemon_manager_module, "_guard_daemon_pid_is_running", lambda _pid: False
-        )
+        monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_running", lambda _pid: False)
         monkeypatch.setattr(
             daemon_manager_module,
             "_wait_for_started_guard_daemon_url",
@@ -830,15 +820,9 @@ class TestStillStartingAdoption:
         )
 
         assert (
-            daemon_manager_module._windows_pending_launch_needs_retirement(
-                guard_home, progress_is_live=True
-            )
-            is False
+            daemon_manager_module._windows_pending_launch_needs_retirement(guard_home, progress_is_live=True) is False
         )
         assert pending_loads == []
         assert (
-            daemon_manager_module._windows_pending_launch_needs_retirement(
-                guard_home, progress_is_live=False
-            )
-            is True
+            daemon_manager_module._windows_pending_launch_needs_retirement(guard_home, progress_is_live=False) is True
         )

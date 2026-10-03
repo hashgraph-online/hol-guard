@@ -43,9 +43,7 @@ def test_readme_and_contribution_guide_expose_complete_entry_path() -> None:
     readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
     contributing = (REPO_ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
     guide = (REPO_ROOT / "docs" / "guard" / "extensions" / "contributing.md").read_text(encoding="utf-8")
-    pr_template = (REPO_ROOT / ".github" / "PULL_REQUEST_TEMPLATE" / "command-extension.md").read_text(
-        encoding="utf-8"
-    )
+    pr_template = (REPO_ROOT / ".github" / "PULL_REQUEST_TEMPLATE" / "command-extension.md").read_text(encoding="utf-8")
 
     assert "docs/guard/extensions/README.md" in readme
     assert "docs/guard/extensions/contributing.md" in readme

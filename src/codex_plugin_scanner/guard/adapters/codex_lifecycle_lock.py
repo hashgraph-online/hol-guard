@@ -6,16 +6,43 @@ import errno
 import os
 import re
 import stat
-from collections.abc import Callable, Generator
+import threading
+import time
+from collections.abc import Callable, Generator, Iterable
 from contextlib import ExitStack, contextmanager
+from contextvars import ContextVar
 from functools import wraps
 from hashlib import sha256
 from pathlib import Path
+from typing import BinaryIO
 
 from ..daemon.file_locking import try_lock_daemon_file
 from ..mdm.file_lock import release_file_lock
 from ..windows_paths import trusted_windows_user_profile
 from .base import HarnessContext
+
+_TargetOwnerKey = tuple[str, int, int]
+_HELD_TARGETS: ContextVar[frozenset[_TargetOwnerKey]] = ContextVar("codex_lifecycle_targets", default=frozenset())
+_open_target_handles: dict[_TargetOwnerKey, BinaryIO] = {}
+
+
+def _after_fork_child() -> None:
+    global _open_target_handles
+    # Close inherited references without explicitly unlocking the parent's
+    # open-file description. Child operations must acquire their own ownership.
+    for handle in _open_target_handles.values():
+        handle.close()
+    _open_target_handles = {}
+    _HELD_TARGETS.set(frozenset())
+
+
+if hasattr(os, "register_at_fork"):
+    os.register_at_fork(after_in_child=_after_fork_child)
+
+
+def _check_deadline(deadline: float | None) -> None:
+    if deadline is not None and time.monotonic() >= deadline:
+        raise TimeoutError("Codex lifecycle transaction deadline exceeded.")
 
 
 def _account_home() -> Path:
@@ -62,9 +89,35 @@ def _lock_identity(path: Path) -> tuple[int, int] | None:
 
 
 @contextmanager
-def _target_lock(directory: Path) -> Generator[None, None, None]:
+def _target_lock(
+    directory: Path,
+    *,
+    deadline: float | None = None,
+    allow_owned: bool = False,
+    wait: bool = False,
+) -> Generator[None, None, None]:
+    if wait and deadline is None:
+        raise ValueError("Codex lifecycle waiting requires an absolute deadline.")
+    _check_deadline(deadline)
     try:
         path = _lifecycle_lock_path(directory)
+    except OSError as error:
+        raise _unavailable_lock("directory", error) from error
+    owner_key = str(path), os.getpid(), threading.get_ident()
+    if allow_owned and owner_key in _HELD_TARGETS.get():
+        try:
+            handle = _open_target_handles.get(owner_key)
+            if handle is None or handle.closed:
+                raise RuntimeError("codex_lifecycle_lock_invalid: lifecycle owner is no longer live")
+            opened = os.fstat(handle.fileno())
+            if _lock_identity(path) != (opened.st_dev, opened.st_ino):
+                raise RuntimeError("codex_lifecycle_lock_invalid: lifecycle lock changed during ownership")
+        except OSError as error:
+            raise _unavailable_lock("file", error) from error
+        _check_deadline(deadline)
+        yield
+        return
+    try:
         path.parent.mkdir(mode=0o700, exist_ok=True)
         # lstat rejects a substituted symlink instead of following it.
         metadata = path.parent.lstat()
@@ -87,15 +140,60 @@ def _target_lock(directory: Path) -> Generator[None, None, None]:
             raise RuntimeError("codex_lifecycle_lock_invalid: lifecycle lock changed while opening")
         with os.fdopen(descriptor, "a+b") as handle:
             descriptor = -1
-            if not try_lock_daemon_file(handle):
-                raise RuntimeError("codex_lifecycle_busy: another lifecycle operation owns this Codex configuration")
+            owner_pid = os.getpid()
+            # Register before the kernel can grant ownership. A fork during
+            # acquisition must close the child's inherited descriptor even
+            # when the parent has not yet published its ContextVar owner.
+            _open_target_handles[owner_key] = handle
+            token = None
+            acquired = False
             try:
+                while not try_lock_daemon_file(handle):
+                    if not wait:
+                        raise RuntimeError(
+                            "codex_lifecycle_busy: another lifecycle operation owns this Codex configuration"
+                        )
+                    _check_deadline(deadline)
+                    assert deadline is not None
+                    time.sleep(min(0.025, max(0, deadline - time.monotonic())))
+                acquired = True
+                token = _HELD_TARGETS.set(_HELD_TARGETS.get() | {owner_key})
+                _check_deadline(deadline)
                 yield
             finally:
-                release_file_lock(handle)
+                if token is not None:
+                    _HELD_TARGETS.reset(token)
+                try:
+                    if acquired and os.getpid() == owner_pid and not handle.closed:
+                        release_file_lock(handle)
+                finally:
+                    if _open_target_handles.get(owner_key) is handle:
+                        del _open_target_handles[owner_key]
     finally:
         if descriptor >= 0:
             os.close(descriptor)
+
+
+@contextmanager
+def codex_configuration_lock(config_path: Path, *, deadline: float | None = None) -> Generator[None, None, None]:
+    """Share the adapter's target exclusion with direct publication writers."""
+    deadline = time.monotonic() + 5 if deadline is None else deadline
+    with _target_lock(config_path.parent, deadline=deadline, allow_owned=True, wait=True):
+        yield
+
+
+@contextmanager
+def codex_publication_locks(paths: Iterable[Path], *, deadline: float) -> Generator[None, None, None]:
+    """Exclude every planned file target without waiting under a home owner.
+
+    A busy target refuses before publication. Reentrant ownership is limited
+    to the same live process/thread and checked lock inode.
+    """
+    targets = {os.path.normcase(str(path.parent.resolve())): path.parent for path in paths}
+    with ExitStack() as stack:
+        for _identity, directory in sorted(targets.items()):
+            stack.enter_context(_target_lock(directory, deadline=deadline, allow_owned=True))
+        yield
 
 
 @contextmanager

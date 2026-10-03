@@ -58,6 +58,27 @@ def test_persistent_transport_failure_stops_after_three_backoffs() -> None:
     assert "private-error" not in "\n".join(logs)
 
 
+def test_underreported_inventory_restarts_pagination_before_accepting_coverage() -> None:
+    options, calls, sleeps, logs = _fixture(
+        [
+            {"total_count": 0, "jobs": _jobs()[:100]},
+            *_pages(),
+        ]
+    )
+    barrier.wait_for_shards("owner/repo", _RUN_ID, 2, **options)
+    assert [path.rsplit("=", 1)[1] for path in calls] == ["1", "1", "2"]
+    assert sleeps == [5]
+    assert "All 128 Python coverage shards succeeded" in logs[-1]
+
+
+def test_persistently_underreported_inventory_never_accepts_partial_coverage() -> None:
+    options, calls, sleeps, _logs = _fixture([{"total_count": 0, "jobs": _jobs()[:100]} for _ in range(4)])
+    with pytest.raises(barrier.ShardWaitError, match="three bounded retries"):
+        barrier.wait_for_shards("owner/repo", _RUN_ID, 2, **options)
+    assert len(calls) == 4
+    assert sleeps == [5, 10, 20]
+
+
 def test_transport_retry_does_not_extend_the_original_deadline() -> None:
     options, calls, sleeps, _logs = _fixture([barrier._TransientApiError("offline")])
     with pytest.raises(barrier.ShardWaitError, match="Timed out"):

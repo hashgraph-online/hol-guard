@@ -77,6 +77,17 @@ def _run_apps_command(
     if not harness:
         print("guard apps requires a harness.", file=sys.stderr)
         return 2
+    if apps_command == "repair" and (
+        bool(getattr(args, "restore_authority", False)) or getattr(args, "authority_request", None)
+        or getattr(args, "authority_request_sha256", None)
+        or getattr(args, "authority_deadline_epoch", None) is not None
+        or getattr(args, "authority_verification_workspace", None) is not None
+    ):
+        from .codex_authority_repair import run_codex_authority_repair
+
+        code, payload = run_codex_authority_repair(args, context, store, Path(workspace) if workspace else None)
+        _emit("apps", payload, getattr(args, "json", False))
+        return code
     if apps_command == "test":
         try:
             payload = build_harness_verification(harness, context, store, surface=getattr(args, "surface", None))

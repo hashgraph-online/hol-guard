@@ -7,6 +7,7 @@ mod pure_expression;
 mod restricted_tests;
 mod safe_reads;
 mod search;
+mod segment_proof;
 mod worktree_writes;
 
 pub mod generic;
@@ -14,6 +15,7 @@ pub mod generic;
 pub use generic::evaluate_pre_tool_envelope;
 pub use generic::evaluate_pre_tool_envelope_with_context;
 pub use generic::evaluate_pre_tool_envelope_with_extensions;
+pub(crate) use segment_proof::benign_command_segments;
 
 fn executable_basename(executable: &str) -> &str {
     executable.rsplit(['/', '\\']).next().unwrap_or(executable)
@@ -238,15 +240,9 @@ fn exfiltration_command(value: &str) -> bool {
 }
 
 fn safe_gh_arguments(arguments: &[String]) -> bool {
-    match arguments {
-        [auth, status] if auth == "auth" && status == "status" => true,
-        [auth, status, flag]
-            if auth == "auth" && status == "status" && matches!(flag.as_str(), "--help" | "-h") =>
-        {
-            true
-        }
-        _ => false,
-    }
+    matches!(arguments, [auth, status, flag]
+        if auth == "auth" && status == "status" && matches!(flag.as_str(), "--help" | "-h"))
+        || crate::command_compatibility::github_arguments_are_read_only(arguments)
 }
 
 fn safe_directory_target(target: &str) -> bool {
@@ -283,48 +279,12 @@ fn exact_safe_command_with_context(
         return false;
     }
     model.segments.iter().all(|segment| {
-        let Some(executable) = segment.executable.as_deref() else {
-            return false;
-        };
-        let basename = executable_basename(executable);
-        let inert_search = matches!(basename, "rg" | "grep")
-            && search::safe_search_arguments_with_context(basename, &segment.arguments, context);
-        if (!inert_search && sensitive_command(&segment.text))
-            || (!matches!(basename, "rg" | "grep")
-                && segment
-                    .arguments
-                    .iter()
-                    .any(|argument| sensitive_path_argument(argument)))
-            || !segment.environment_names.is_empty()
-            || executable.contains(['/', '\\'])
-        {
-            return false;
-        }
-        match basename {
-            "cd" => {
-                model.segments.len() == 1
-                    && matches!(segment.arguments.as_slice(), [target] if safe_directory_target(target))
-            }
-            "pwd" | "true" | "echo" | "printf" | "which" | "whoami" | "uname" | "stat" => true,
-            "date" => safe_reads::safe_date_arguments(&segment.arguments),
-            "ls" => safe_reads::safe_listing_arguments(&segment.arguments, context),
-            "cat" => safe_reads::safe_plain_file_arguments(&segment.arguments, context),
-            "cp" => {
-                model.segments.len() == 1
-                    && safe_reads::safe_copy_arguments(&segment.arguments, context)
-            }
-            // Admit stdin only when every producer in the pipeline is also proven safe.
-            "head" | "tail" => {
-                safe_reads::safe_head_tail_arguments(&segment.arguments, segment.pipeline_index > 0, context)
-            }
-            "git" => safe_git_arguments(&segment.arguments, allow_git_helper_context),
-            "gh" => safe_gh_arguments(&segment.arguments),
-            "rg" | "grep" => search::safe_search_arguments_with_context(basename, &segment.arguments, context),
-            "sed" => safe_reads::safe_sed_arguments(&segment.arguments, segment.pipeline_index > 0, context),
-            "python" | "python3" | "node" | "nodejs" =>
-                pure_expression::safe_inline_expression(basename, &segment.arguments),
-            _ => false,
-        }
+        segment_proof::exact_safe_segment_with_context(
+            model,
+            segment,
+            allow_git_helper_context,
+            context,
+        )
     })
 }
 

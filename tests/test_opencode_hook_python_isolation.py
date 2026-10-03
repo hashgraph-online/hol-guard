@@ -21,6 +21,43 @@ def _context(tmp_path: Path, *, workspace: Path | None = None) -> HarnessContext
     )
 
 
+def test_preparation_attests_running_python_without_persistent_probe_state(tmp_path: Path) -> None:
+    context = _context(tmp_path)
+    with pytest.raises(RuntimeError, match="preparation interrupted"), hook_python.disposable_guard_hook_probe():
+        probe = hook_python._attestation_probe_cwd(context)
+        attestation = hook_python.attest_guard_hook_python(context)
+        assert attestation.executable == Path(sys.executable).absolute()
+        assert hook_python._path_is_owned_private_directory(probe)
+        assert not context.guard_home.exists()
+        raise RuntimeError("preparation interrupted")
+    assert not probe.exists()
+    assert hook_python._PREPARATION_PROBE.get() is None
+    assert not context.guard_home.exists()
+
+
+def test_preparation_rejects_inherited_probe_scope(tmp_path: Path) -> None:
+    context = _context(tmp_path)
+    with hook_python.disposable_guard_hook_probe():
+        probe = hook_python._attestation_probe_cwd(context)
+        token = hook_python._PREPARATION_PROBE.set((os.getpid() + 1, probe))
+        try:
+            with pytest.raises(RuntimeError, match="neutral_cwd_unavailable"):
+                hook_python.attest_guard_hook_python(context)
+        finally:
+            hook_python._PREPARATION_PROBE.reset(token)
+    assert not context.guard_home.exists()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX private directory modes")
+def test_preparation_rejects_probe_that_loses_private_permissions(tmp_path: Path) -> None:
+    with hook_python.disposable_guard_hook_probe():
+        probe = hook_python._attestation_probe_cwd(_context(tmp_path))
+        probe.chmod(0o755)
+        with pytest.raises(RuntimeError, match="neutral_cwd_unavailable"):
+            hook_python.attest_guard_hook_python(_context(tmp_path))
+    assert not probe.exists()
+
+
 def test_probe_environment_drops_python_virtualenv_and_loader_controls(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

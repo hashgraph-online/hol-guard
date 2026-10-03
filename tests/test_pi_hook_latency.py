@@ -22,6 +22,8 @@ from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.coverage_ci import under_coverage_scale
 
+pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
+
 
 class _DaemonInternals(Protocol):
     auth_token: str

@@ -122,6 +122,19 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
         return Some("native_git_readonly_containment_required");
     }
     let vitest = match super::executable_basename(executable) {
+        "bun" => {
+            let arguments = match arguments {
+                [flag, directory, rest @ ..]
+                    if flag == "--cwd" && !directory.is_empty() && !directory.starts_with('-') =>
+                {
+                    rest
+                }
+                [flag, rest @ ..] if flag.starts_with("--cwd=") && flag.len() > 6 => rest,
+                rest => rest,
+            };
+            matches!(arguments, [wrapper, tool, run, ..] if wrapper == "x" && tool == "vitest" && run == "run")
+                || matches!(arguments, [wrapper, flag, tool, run, ..] if wrapper == "x" && flag == "--no-install" && tool == "vitest" && run == "run")
+        }
         "bunx" | "npx" => {
             matches!(arguments, [tool, run, ..] if tool == "vitest" && run == "run")
                 || matches!(arguments, [flag, tool, run, ..] if flag == "--no-install" && tool == "vitest" && run == "run")

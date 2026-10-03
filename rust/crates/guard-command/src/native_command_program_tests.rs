@@ -378,7 +378,7 @@ fn compatibility_safe_commands_and_ruleless_permissions_obey_controls() {
         ),
         (
             "permission",
-            "command.github.permission.read-local",
+            "command.github.permission.read-remote",
             "gh auth status",
         ),
         (

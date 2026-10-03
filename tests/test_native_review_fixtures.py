@@ -110,6 +110,9 @@ def _worker(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, edge: dict[str, obj
         review_raw_hook_native,
     )
     store = GuardStore(tmp_path / "guard-home")
+    from codex_plugin_scanner.guard.config import update_guard_settings
+
+    update_guard_settings(store.guard_home, {"blocked_request_mode": "ask"})
     store.upsert_runtime_state(
         session_id="native-review",
         daemon_host="127.0.0.1",

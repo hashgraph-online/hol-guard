@@ -94,6 +94,27 @@ pub(super) fn bounded_file_read_target(
     bounded_read_target(value, home_dir, cwd, false)
 }
 
+pub(super) fn existing_regular_read_target(
+    value: &str,
+    home: Option<&str>,
+    cwd: Option<&str>,
+) -> bool {
+    if value.trim() != value || !bounded_file_read_target(value, home, cwd) {
+        return false;
+    }
+    let expanded = expand_home_read_path(value, home).unwrap_or_else(|| value.to_owned());
+    let path = std::path::Path::new(&expanded);
+    let candidate = if path.is_absolute() {
+        path.to_path_buf()
+    } else if let Some(cwd) = cwd {
+        std::path::Path::new(&expand_home_read_path(cwd, home).unwrap_or_else(|| cwd.to_owned()))
+            .join(path)
+    } else {
+        return false;
+    };
+    std::fs::canonicalize(candidate).is_ok_and(|path| path.is_file())
+}
+
 pub(super) fn bounded_read_target(
     value: &str,
     home_dir: Option<&str>,
@@ -138,6 +159,29 @@ pub(super) fn bounded_read_target(
         return false;
     }
     safe_read_target(path)
+}
+
+pub(super) fn verified_path_context(home_dir: Option<&str>, cwd: Option<&str>) -> bool {
+    let (Some(home_dir), Some(cwd)) = (home_dir, cwd) else {
+        return false;
+    };
+    context_root_is_absolute(home_dir, Some(home_dir))
+        && context_root_is_absolute(cwd, Some(home_dir))
+}
+
+fn context_root_is_absolute(root: &str, home_dir: Option<&str>) -> bool {
+    if root.is_empty() || root.trim() != root {
+        return false;
+    }
+    let expanded = if std::path::Path::new(root).is_absolute() {
+        Some(root.to_owned())
+    } else {
+        expand_home_read_path(root, home_dir)
+    };
+    expanded.is_some_and(|root| {
+        let path = std::path::Path::new(&root);
+        path.is_absolute() && std::fs::canonicalize(path).is_ok_and(|canonical| canonical.is_dir())
+    })
 }
 
 /// Location outside the workspace is not itself a risk. The resolved regular
@@ -188,6 +232,15 @@ pub(super) fn bounded_file_write_target(
     home_dir: Option<&str>,
     cwd: Option<&str>,
 ) -> bool {
+    bounded_write_target(value, home_dir, cwd, false)
+}
+
+fn bounded_write_target(
+    value: &str,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+    directory: bool,
+) -> bool {
     let Some(workspace) = cwd.and_then(|root| {
         let expanded = expand_home_read_path(root, home_dir).unwrap_or_else(|| root.to_owned());
         std::fs::canonicalize(expanded).ok()
@@ -213,7 +266,12 @@ pub(super) fn bounded_file_write_target(
     } else {
         workspace.join(supplied)
     };
-    let Some(canonical) = super::worktree_writes::canonical_write_target(&target) else {
+    let canonical = if directory && target.is_dir() {
+        std::fs::canonicalize(&target).ok()
+    } else {
+        super::worktree_writes::canonical_write_target(&target)
+    };
+    let Some(canonical) = canonical else {
         return false;
     };
     (canonical.starts_with(&workspace)
@@ -244,6 +302,17 @@ pub(super) fn safe_copy_arguments(
     } else {
         return false;
     };
+    let destination = if destination.is_dir() {
+        let Some(name) = std::path::Path::new(paths.0).file_name() else {
+            return false;
+        };
+        destination.join(name)
+    } else {
+        destination
+    };
+    let Some(destination_text) = destination.to_str() else {
+        return false;
+    };
     if destination
         .symlink_metadata()
         .is_ok_and(|metadata| metadata.file_type().is_symlink())
@@ -256,8 +325,53 @@ pub(super) fn safe_copy_arguments(
         && !paths.1.starts_with('-')
         && paths.0.trim() == paths.0
         && bounded_file_read_target(paths.0, context.0, context.1)
-        && (bounded_file_write_target(paths.1, context.0, context.1)
-            || bounded_temporary_copy_target(paths.1, context))
+        && (bounded_file_write_target(destination_text, context.0, context.1)
+            || bounded_temporary_copy_target(destination_text, context))
+}
+
+pub(super) fn safe_file_mutation_arguments(
+    command: &str,
+    arguments: &[String],
+    context: (Option<&str>, Option<&str>),
+) -> bool {
+    match (command, arguments) {
+        ("mkdir", [target]) => {
+            !target.starts_with('-') && bounded_write_target(target, context.0, context.1, true)
+        }
+        ("mkdir", [flag, target]) if matches!(flag.as_str(), "-p" | "--parents" | "--") => {
+            !target.starts_with('-') && bounded_write_target(target, context.0, context.1, true)
+        }
+        ("touch", [target]) => {
+            !target.starts_with('-') && bounded_file_write_target(target, context.0, context.1)
+        }
+        ("touch", [flag, target]) if flag == "--" => {
+            !target.starts_with('-') && bounded_file_write_target(target, context.0, context.1)
+        }
+        ("mv", [source, destination]) => {
+            existing_regular_read_target(source, context.0, context.1)
+                && bounded_file_write_target(source, context.0, context.1)
+                && bounded_file_write_target(destination, context.0, context.1)
+                && absent_move_destination(destination, context)
+                && safe_copy_arguments(arguments, context)
+        }
+        _ => false,
+    }
+}
+
+fn absent_move_destination(value: &str, context: (Option<&str>, Option<&str>)) -> bool {
+    let expanded = expand_home_read_path(value, context.0).unwrap_or_else(|| value.to_owned());
+    let supplied = std::path::Path::new(&expanded);
+    let target = if supplied.is_absolute() {
+        supplied.to_path_buf()
+    } else if let Some(cwd) = context.1 {
+        std::path::Path::new(
+            &expand_home_read_path(cwd, context.0).unwrap_or_else(|| cwd.to_owned()),
+        )
+        .join(supplied)
+    } else {
+        return false;
+    };
+    matches!(target.symlink_metadata(), Err(error) if error.kind() == std::io::ErrorKind::NotFound)
 }
 
 #[cfg(unix)]
@@ -555,6 +669,19 @@ pub(super) fn safe_head_tail_arguments(
     piped_input: bool,
     context: (Option<&str>, Option<&str>),
 ) -> bool {
+    safe_head_tail_with_targets(arguments, piped_input, context, true)
+}
+
+pub(super) fn safe_head_tail_stdin_arguments(arguments: &[String]) -> bool {
+    safe_head_tail_with_targets(arguments, true, (None, None), false)
+}
+
+fn safe_head_tail_with_targets(
+    arguments: &[String],
+    piped_input: bool,
+    context: (Option<&str>, Option<&str>),
+    allow_target: bool,
+) -> bool {
     let mut saw_target = false;
     let mut expect_count = false;
     let mut after_options = false;
@@ -570,7 +697,11 @@ pub(super) fn safe_head_tail_arguments(
             continue;
         }
         if after_options {
-            if argument == "-" || !command_read_target(argument, context, false) || saw_target {
+            if !allow_target
+                || argument == "-"
+                || !command_read_target(argument, context, false)
+                || saw_target
+            {
                 return false;
             }
             saw_target = true;
@@ -606,7 +737,7 @@ pub(super) fn safe_head_tail_arguments(
         if argument.starts_with('-') {
             return false;
         }
-        if !command_read_target(argument, context, false) {
+        if !allow_target || !command_read_target(argument, context, false) {
             return false;
         }
         if saw_target {

@@ -342,6 +342,25 @@ def _valid_hook_json_or_degraded(output: str, *, reason: str, data: str) -> str:
         return _degraded(reason, data)
     if not isinstance(decoded, dict):
         return _degraded(reason, data)
+    event = _event_name(data)
+    if event == "PreToolUse":
+        hook_output = decoded.get("hookSpecificOutput")
+        if (
+            not isinstance(hook_output, dict)
+            or hook_output.get("hookEventName") != event
+            or hook_output.get("permissionDecision") not in ("allow", "ask", "deny")
+        ):
+            return _degraded(reason, data)
+    elif event.startswith("Permission"):
+        hook_output = decoded.get("hookSpecificOutput")
+        decision = hook_output.get("decision") if isinstance(hook_output, dict) else None
+        if (
+            not isinstance(hook_output, dict)
+            or hook_output.get("hookEventName") != event
+            or not isinstance(decision, dict)
+            or decision.get("behavior") not in ("allow", "deny")
+        ):
+            return _degraded(reason, data)
     return trimmed
 
 

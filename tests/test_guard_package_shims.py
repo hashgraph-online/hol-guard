@@ -910,9 +910,7 @@ def _generated_shim_with_fake_guard(context: HarnessContext, child_code: str) ->
     base_command_line = next(line for line in source.splitlines() if line.startswith("base_command = "))
     fake_command = [sys.executable, "-c", child_code]
     source = source.replace(base_command_line, f"base_command = {fake_command!r}", 1)
-    contained_start = source.index(
-        "try:\n    from codex_plugin_scanner.guard.contained_package_script_execution"
-    )
+    contained_start = source.index("try:\n    from codex_plugin_scanner.guard.contained_package_script_execution")
     guard_env_start = source.index("guard_env = dict(os.environ)", contained_start)
     return source[:contained_start] + "contained_result = None\n" + source[guard_env_start:]
 
@@ -1961,6 +1959,7 @@ def test_guard_protect_pnpm_install_alias_renders_wrapped_review_link_for_cloud_
     assert "http://127.0.0.1:5474/requests/" not in output
 
 
+@pytest.mark.usefixtures("approval_questionnaire_mode")
 def test_guard_protect_ignores_stale_policy_bundle_package_family_block(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

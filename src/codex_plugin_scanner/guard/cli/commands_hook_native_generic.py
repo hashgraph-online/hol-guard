@@ -721,6 +721,8 @@ def run_native_generic_payload(
 
     bind_context_digest_home(getattr(store, "guard_home", None))
     payload_map = dict(payload)
+    payload_map.pop("blocked_request_guidance", None)
+    blocked_request_guidance: str | None = None
     artifact_id = _coalesce_string(
         getattr(args, "artifact_id", None),
         payload_map.get("artifact_id"),
@@ -1154,6 +1156,32 @@ def run_native_generic_payload(
                 }
             )
     hook_event_name = hook_event_name or "PreToolUse"
+    from ..blocked_request_mode import asks_for_approval, safe_alternative_reason
+
+    if (
+        hook_is_pre_event(hook_event_name)
+        and policy_action in {"review", "require-reapproval"}
+        and not asks_for_approval(config)
+    ):
+        if approval_reuse.status == "rejected":
+            policy_reason = "A saved approval does not cover this action under current protection."
+        elif configured_policy_normalization.action in {"review", "require-reapproval"}:
+            policy_reason = "Current local policy requires review for this action."
+        elif cli_action_normalization is not None and cli_action_normalization.action in {
+            "review",
+            "require-reapproval",
+        }:
+            policy_reason = "The trusted hook invocation requires review for this action."
+        else:
+            policy_reason = "No applicable policy or valid saved approval allows this action."
+        policy_action = "block"
+        payload_map.update(
+            policy_action="block",
+            approval_requests=[],
+            prompted=False,
+        )
+        blocked_request_guidance = safe_alternative_reason(policy_reason)
+        payload_map["blocked_request_guidance"] = blocked_request_guidance
     changed_capabilities = _string_list(payload_map.get("changed_capabilities"))
     if not changed_capabilities and isinstance(payload_map.get("event"), str):
         changed_capabilities = [str(payload_map["event"])]
@@ -1219,9 +1247,13 @@ def run_native_generic_payload(
             payload=payload_map,
             policy_action=cast(GuardAction, policy_action),
             receipt_id=command_activity_receipt_id,
-            prompted=command_activity_was_prompted(
-                cast(GuardAction, policy_action),
-                command_activity_reuse_status,
+            prompted=(
+                False
+                if blocked_request_guidance is not None
+                else command_activity_was_prompted(
+                    cast(GuardAction, policy_action),
+                    command_activity_reuse_status,
+                )
             ),
             approval_reuse_status=command_activity_reuse_status,
             cwd=runtime_workspace,
@@ -1237,7 +1269,11 @@ def run_native_generic_payload(
     if _should_emit_copilot_hook_response(args):
         _emit_copilot_hook_response(
             policy_action=policy_action,
-            reason=_copilot_hook_reason(payload_map.get("permission_decision_reason")),
+            reason=(
+                blocked_request_guidance
+                if blocked_request_guidance is not None
+                else _copilot_hook_reason(payload_map.get("permission_decision_reason"))
+            ),
             output_stream=output_stream,
         )
         return 0
@@ -1357,7 +1393,8 @@ def run_native_generic_payload(
         payload_map["approval_center_url"] = approval_center_url
     _localize_pending_approval_copy(payload_map, harness=args.harness)
     incoming_reason = (
-        daemon_failure_reason
+        blocked_request_guidance
+        or daemon_failure_reason
         or _decision_v2_harness_message(payload_map)
         or payload_map.get("permission_decision_reason")
     )
@@ -1454,6 +1491,9 @@ def run_native_generic_payload(
     }
     if isinstance(payload_map.get("approval_requests"), list):
         hook_envelope["approval_requests"] = payload_map["approval_requests"]
+    if blocked_request_guidance is not None:
+        hook_envelope["blocked_request_guidance"] = blocked_request_guidance
+        hook_envelope["prompted"] = False
     if getattr(args, "json", False) and output_stream is None:
         json_result = _native_hook_json_document(
             args,

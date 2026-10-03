@@ -110,4 +110,7 @@ def failure_payload(
     if not pauses:
         # Observations continue processing completed activity without authorizing a tool action.
         return _observe_payload(harness, event_name, reason), 0
+    # A failed review cannot authorize a protected action. Keep the legacy
+    # keyword for callers, but continuation applies only to observer/watch
+    # events handled above, never to this protected-event branch.
     return _pause_payload(harness, event_name, reason)

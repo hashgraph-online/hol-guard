@@ -391,9 +391,11 @@ def test_native_client_classifies_bounded_failure_states(
     assert native_resident_client_failure_code() == expected_code
 
 
+@pytest.mark.parametrize("request_id", [None, "request-1", "different-request"])
 def test_raw_hook_bridge_preserves_payload_for_rust_parsing(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    request_id: str | None,
 ) -> None:
     runtime = tmp_path / "hol-guard-runtime"
     runtime.write_bytes(b"runtime")
@@ -451,14 +453,16 @@ def test_raw_hook_bridge_preserves_payload_for_rust_parsing(
         observe_mode=False,
         deadline=None,
         policy_snapshot={"generation": 1},
+        request_id=request_id,
     )
-    assert result == _edge_result()
+    assert result == (_edge_result() if request_id != "different-request" else None)
     encoded = captured["payload"]
     assert isinstance(encoded, bytes)
     envelope = json.loads(encoded)
     assert envelope["raw_payload"] == raw_payload
     assert envelope["harness"] == "claude"
     assert envelope["event"] == "PreToolUse"
+    assert envelope["request_id"] == request_id
     assert captured["raw_hook_envelope"] is True
 
     for invalid_value in ({"not", "json"}, float("nan")):

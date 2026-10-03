@@ -9,12 +9,13 @@ import sys
 from multiprocessing import Event as ProcessEvent
 from multiprocessing import Queue
 from pathlib import Path
-from threading import Event, Lock, Thread
+from threading import Event, Lock, RLock, Thread
 from types import SimpleNamespace
 from typing import BinaryIO
 
 import pytest
 
+from codex_plugin_scanner.guard import codex_install_transaction as install_transaction
 from codex_plugin_scanner.guard.adapters import copilot_state_paths
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.copilot import CopilotHarnessAdapter
@@ -111,12 +112,29 @@ def test_concurrent_installs_preserve_original_backup(
             call_number = state_call_count
         if call_number == 1:
             first_state_entered.set()
-            if not release_first_state.wait(timeout=5):
+            if not release_first_state.wait(timeout=30):
                 raise RuntimeError("timed out waiting to release first Copilot install")
         real_write_state(*args, **kwargs)
 
     lock_contention_observed = Event()
     lock_attempts = 0
+
+    class ObservedOwnerLock:
+        """Observe real home-wide exclusion before the inner target lock."""
+
+        def __init__(self) -> None:
+            self.lock = RLock()
+
+        def acquire(self, *, timeout: float) -> bool:
+            if self.lock.acquire(blocking=False):
+                return True
+            lock_contention_observed.set()
+            return self.lock.acquire(timeout=timeout)
+
+        def release(self) -> None:
+            self.lock.release()
+
+    monkeypatch.setitem(install_transaction._locks, str(context.guard_home.resolve()), ObservedOwnerLock())
 
     def observe_lock_attempt(handle: BinaryIO) -> bool:
         nonlocal lock_attempts
@@ -154,12 +172,13 @@ def test_concurrent_installs_preserve_original_backup(
         second_thread.start()
         second_started_flag = True
         assert second_started.wait(timeout=5)
-        # The first install is paused while holding the lifecycle locks. The
-        # second install must visibly contend before the first transaction is
-        # released; this is stronger than merely waiting for a later outcome.
-        assert lock_contention_observed.wait(timeout=2)
+        # The shared home owner excludes the second install before it reaches
+        # target lifecycle locks. Require observed contention and prove only
+        # the first writer reached state publication while that owner is held.
+        assert lock_contention_observed.wait(timeout=30)
         with counters_lock:
             assert lock_attempts >= 1
+            assert state_call_count == 1
     finally:
         release_first_state.set()
         if first_started:

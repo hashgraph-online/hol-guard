@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable, Mapping
@@ -371,22 +372,33 @@ def try_daemon_hook(
     harness: str,
     input_text: str,
     timeout_seconds: float,
+    deadline_monotonic: float | None = None,
     _endpoint_loader: Callable[[Path, str], str | None] | None = None,
     _token_loader: Callable[[Path], str | None] | None = None,
     _opener_builder: Callable[[], urllib.request.OpenerDirector] | None = None,
 ) -> tuple[str, str, int] | None:
     """POST the hook payload to the running daemon; return native stdout or None."""
+    started = time.monotonic()
+    from .hook_http_deadline import deadline_http_handler
+
+    deadline = started + timeout_seconds if deadline_monotonic is None else deadline_monotonic
+    if started >= deadline:
+        return None
     endpoint = (_endpoint_loader or _daemon_hook_endpoint)(guard_home, harness)
-    if endpoint is None:
+    if endpoint is None or time.monotonic() >= deadline:
         return None
     try:
         _assert_loopback_http_url(endpoint)
     except ValueError:
         return None
     token = (_token_loader or _read_daemon_auth_token)(guard_home)
-    if token is None:
+    if token is None or time.monotonic() >= deadline:
         return None
     timeout = min(float(timeout_seconds) * 0.5, _DAEMON_TIMEOUT_BUDGET_SECONDS)
+    transport_deadline = min(deadline, time.monotonic() + timeout)
+    timeout = transport_deadline - time.monotonic()
+    if timeout <= 0:
+        return None
     request = urllib.request.Request(
         endpoint,
         data=input_text.encode("utf-8"),
@@ -395,6 +407,8 @@ def try_daemon_hook(
     )
     try:
         opener = (_opener_builder or _build_loopback_opener)()
+        if isinstance(opener, urllib.request.OpenerDirector):
+            opener.add_handler(deadline_http_handler(transport_deadline))
         with opener.open(request, timeout=timeout) as response:
             final_url = response.geturl()
             if final_url:
@@ -404,7 +418,7 @@ def try_daemon_hook(
             body = response.read(_MAX_HOOK_RESPONSE_BYTES + 1)
     except (OSError, urllib.error.URLError, TimeoutError, ValueError):
         return None
-    if len(body) > _MAX_HOOK_RESPONSE_BYTES:
+    if time.monotonic() >= transport_deadline or len(body) > _MAX_HOOK_RESPONSE_BYTES:
         return None
     try:
         text = body.decode("utf-8")

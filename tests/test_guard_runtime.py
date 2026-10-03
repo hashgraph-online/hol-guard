@@ -96,7 +96,8 @@ from tests.policy_bundle_signing_helpers import (
 )
 from tests.support.network import stub_authenticated_urlopen
 
-pytestmark = pytest.mark.usefixtures("native_hook_force")
+pytestmark = [pytest.mark.usefixtures("approval_questionnaire_mode"), pytest.mark.usefixtures("native_hook_force")]
+
 
 COPILOT_NATIVE_DENY_COMMANDS = (
     """node -e "require('fs').unlinkSync('dangerous-marker.json')" """,
@@ -3230,6 +3231,7 @@ clearer UX and an implementation plan with technical references.
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         _build_guard_fixture(home_dir, workspace_dir)
+        _write_text(home_dir / "config.toml", 'approval_wait_timeout_seconds = 0\nblocked_request_mode = "ask"\n')
         event = {
             "event": "PostToolUse",
             "tool_name": "Bash",
@@ -3798,6 +3800,7 @@ clearer UX and an implementation plan with technical references.
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         _build_guard_fixture(home_dir, workspace_dir)
+        _write_text(home_dir / "config.toml", 'approval_wait_timeout_seconds = 0\nblocked_request_mode = "ask"\n')
         event = {
             "event": "PostToolUse",
             "tool_name": "Bash",
@@ -8294,6 +8297,7 @@ def test_guard_hook_emits_copilot_permission_request_deny_for_risky_mcp_tool(
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
+    _write_text(home_dir / "config.toml", 'approval_wait_timeout_seconds = 0\nblocked_request_mode = "ask"\n')
     monkeypatch.setattr(
         guard_commands_module, "schedule_guard_daemon_ensure", lambda _guard_home, **_kwargs: "http://127.0.0.1:4455"
     )
@@ -8323,7 +8327,7 @@ def test_guard_hook_emits_copilot_permission_request_deny_for_risky_mcp_tool(
     assert rc == 0
     assert output["behavior"] == "deny"
     assert output["interrupt"] is True
-    assert "HOL Guard blocked" in output["message"]
+    assert "Call shape implies filesystem path access" in output["message"]
     assert "danger_lab:dangerous_delete" in output["message"]
     assert "http://127.0.0.1:4455/requests/" in output["message"]
     events = GuardStore(home_dir).list_guard_events_v1(uploaded=False)

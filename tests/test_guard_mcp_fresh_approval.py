@@ -94,6 +94,7 @@ def test_fresh_opencode_reapproval_runs_exactly_once(
     store = GuardStore(ctx.guard_home)
     _enable_gate(store)
     config = GuardConfig(
+        blocked_request_mode="ask",
         guard_home=ctx.guard_home,
         workspace=ctx.workspace_dir,
         security_level="custom",

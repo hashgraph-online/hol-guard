@@ -51,6 +51,48 @@ class _CapturingProxyHandler(BaseHTTPRequestHandler):
         return
 
 
+@pytest.mark.parametrize("reason", ["missing authority", "fallback timed out", "capacity exhausted", "validator fault"])
+@pytest.mark.parametrize("event", ["PreToolUse", "PermissionRequest"])
+def test_unverified_degradation_never_grants_tool_permission(reason: str, event: str) -> None:
+    response = json.loads(bridge._degraded(reason, json.dumps({"hook_event_name": event})))
+    output = response["hookSpecificOutput"]
+    if event == "PreToolUse":
+        assert output["permissionDecision"] == "deny"
+        assert reason in output["permissionDecisionReason"]
+    else:
+        assert output["decision"]["behavior"] == "deny"
+        assert reason in output["decision"]["message"]
+
+
+@pytest.mark.parametrize(
+    "output",
+    [
+        {},
+        {"hookSpecificOutput": {}},
+        {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "unknown"}},
+        {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": ["allow"]}},
+        {"hookSpecificOutput": {"hookEventName": "Stop", "permissionDecision": "allow"}},
+    ],
+)
+def test_incomplete_or_wrong_event_tool_response_requires_native_approval(output):
+    response = bridge._valid_hook_json_or_degraded(
+        json.dumps(output),
+        reason="invalid tool response",
+        data=json.dumps({"hook_event_name": "PreToolUse"}),
+    )
+    assert json.loads(response)["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+@pytest.mark.parametrize("event", ["PermissionRequest", "PermissionRequestV2"])
+def test_empty_permission_response_is_denied(event):
+    response = bridge._valid_hook_json_or_degraded(
+        "{}",
+        reason="invalid permission response",
+        data=json.dumps({"hook_event_name": event}),
+    )
+    assert json.loads(response)["hookSpecificOutput"]["decision"]["behavior"] == "deny"
+
+
 def test_assert_loopback_http_url_rejects_remote_host() -> None:
     with pytest.raises(ValueError, match="loopback"):
         bridge._assert_loopback_http_url("http://evil.example:5474/v1/hooks/claude-code")

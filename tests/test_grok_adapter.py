@@ -88,10 +88,6 @@ class TestGrokDetect:
 class TestGrokInstallUninstall:
     def test_install_writes_managed_hooks_and_config(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.grok.install_guard_shim",
-            lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-grok"), "notes": []},
-        )
         manifest = GrokHarnessAdapter().install(ctx)
         managed_config = ctx.home_dir / ".grok" / "managed_config.toml"
         pretool_hook = ctx.home_dir / ".grok" / "hooks" / "hol-guard-pretooluse.json"
@@ -123,10 +119,6 @@ class TestGrokInstallUninstall:
 
     def test_repeated_install_is_idempotent(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.grok.install_guard_shim",
-            lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-grok"), "notes": []},
-        )
         adapter = GrokHarnessAdapter()
         adapter.install(ctx)
         first_config = (ctx.home_dir / ".grok" / "managed_config.toml").read_text(encoding="utf-8")
@@ -140,14 +132,6 @@ class TestGrokInstallUninstall:
         user_config = ctx.home_dir / ".grok" / "config.toml"
         user_config.parent.mkdir(parents=True, exist_ok=True)
         user_config.write_text("[ui]\nsimple_mode = true\n", encoding="utf-8")
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.grok.install_guard_shim",
-            lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-grok"), "notes": []},
-        )
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.grok.remove_guard_shim",
-            lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-grok"), "notes": []},
-        )
         adapter = GrokHarnessAdapter()
         adapter.install(ctx)
         adapter.uninstall(ctx)
@@ -547,10 +531,6 @@ GITHUB_TOKEN = "redacted"
         user_config = ctx.home_dir / ".grok" / "config.toml"
         user_config.parent.mkdir(parents=True, exist_ok=True)
         user_config.write_text("[ui]\nsimple_mode = true\n", encoding="utf-8")
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.grok.install_guard_shim",
-            lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-grok"), "notes": []},
-        )
         GrokHarnessAdapter().install(ctx)
         assert user_config.read_text(encoding="utf-8") == "[ui]\nsimple_mode = true\n"
 

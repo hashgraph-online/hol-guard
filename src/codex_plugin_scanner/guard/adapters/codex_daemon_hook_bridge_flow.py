@@ -24,6 +24,8 @@ _OVERLOAD_RESERVE_MS = 100
 _LAUNCHER_INTEGRITY_REASONS = frozenset(
     {
         "codex_hook_file_identity_invalid",
+        "codex_hook_validation_deadline_expired",
+        "codex_hook_validation_deadline_invalid",
         "codex_hook_integrity_io_error",
         "codex_hook_interpreter_path_mismatch",
         "codex_hook_manifest_argv_mismatch",
@@ -209,6 +211,7 @@ def bridge_review_response(
             start_command=start_command,
             config_json=config_json,
             failure_causes=failure_causes,
+            deadline_monotonic=deadline,
         )
         if _daemon_start_succeeded(
             daemon_overloaded=daemon_overloaded,
@@ -236,6 +239,7 @@ def bridge_review_response(
                 start_command=start_command,
                 config_json=config_json,
                 failure_causes=failure_causes,
+                deadline_monotonic=deadline,
             )
         response = _fallback_response(
             trusted_launch=trusted_launch,
@@ -310,6 +314,7 @@ def _trusted_launch_for_fallback(
     start_command: Sequence[str],
     config_json: str | None,
     failure_causes: list[BridgeFailureCause] | None = None,
+    deadline_monotonic: float | None = None,
 ) -> tuple[TrustedHookLaunch | None, bool]:
     if manifest_path is None and config_json is None:
         return None, False
@@ -323,6 +328,7 @@ def _trusted_launch_for_fallback(
                 fallback_command=fallback_command,
                 start_command=start_command,
                 config_json=config_json,
+                deadline_monotonic=deadline_monotonic,
             ),
             False,
         )

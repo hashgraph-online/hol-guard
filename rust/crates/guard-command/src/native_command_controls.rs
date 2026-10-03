@@ -190,10 +190,22 @@ impl CompiledNativeCommandControls {
     pub fn apply_with_tool(
         &self,
         command: Option<&CanonicalCommandV1>,
+        result: PreToolResultV1,
+        tool: Option<&str>,
+        packages: &[String],
+        deadline: Option<Instant>,
+    ) -> PreToolResultV1 {
+        self.apply_with_tool_and_context(command, result, tool, packages, deadline, (None, None))
+    }
+
+    pub(crate) fn apply_with_tool_and_context(
+        &self,
+        command: Option<&CanonicalCommandV1>,
         mut result: PreToolResultV1,
         tool: Option<&str>,
         packages: &[String],
         deadline: Option<Instant>,
+        context: (Option<&str>, Option<&str>),
     ) -> PreToolResultV1 {
         let observed = match command {
             Some(command) => self
@@ -323,7 +335,9 @@ impl CompiledNativeCommandControls {
             && !result.action.sensitive_target
             && floor == "allow"
             && binding.uncertainty_count == 0
-            && command.is_some_and(|model| self.explicit_permissions_cover_command(model, &batch))
+            && command.is_some_and(|model| {
+                self.explicit_permissions_cover_command(model, &batch, context)
+            })
         {
             // Authenticated consent to every classified command segment can
             // settle the generic unknown-command floor, never an intrinsic risk.
@@ -355,6 +369,7 @@ impl CompiledNativeCommandControls {
         &self,
         command: &CanonicalCommandV1,
         batch: &NativeCommandObservationBatchV1,
+        context: (Option<&str>, Option<&str>),
     ) -> bool {
         if command.confidence != "exact"
             || command.path_overridden
@@ -363,7 +378,9 @@ impl CompiledNativeCommandControls {
         {
             return false;
         }
-        let mut covered = BTreeSet::new();
+        let mut covered: BTreeSet<_> = crate::pretool::benign_command_segments(command, context)
+            .into_iter()
+            .collect();
         for observation in &batch.observations {
             if observation.effective_segment_indexes.is_empty() {
                 continue;
@@ -375,13 +392,20 @@ impl CompiledNativeCommandControls {
                 .explicitly_enabled_permissions
                 .contains(&self.program.rules[*index].permission_id)
             {
+                if observation
+                    .effective_segment_indexes
+                    .iter()
+                    .all(|index| covered.contains(index))
+                {
+                    continue;
+                }
                 return false;
             }
             covered.extend(observation.effective_segment_indexes.iter().copied());
         }
         // Delegated package-firewall ownership is not execution consent. Only
-        // verified rule observations can cover a segment; an extra unclassified
-        // command in a shell chain must retain its own review.
+        // verified rule observations or the native benign proof can cover a
+        // segment; an extra unclassified command retains its own review.
         (0..command.segments.len()).all(|index| covered.contains(&index))
     }
 }
@@ -445,3 +469,7 @@ fn strengthen(result: &mut PreToolResultV1, action: &str, reason: &str) {
 #[cfg(test)]
 #[path = "native_command_controls_tests.rs"]
 mod review_regressions;
+
+#[cfg(test)]
+#[path = "native_command_compound_controls_tests.rs"]
+mod compound_regressions;
