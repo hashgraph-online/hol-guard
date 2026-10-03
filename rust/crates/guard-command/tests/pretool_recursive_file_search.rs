@@ -64,7 +64,7 @@ fn recursive_search_exclusions_prove_only_unread_descendants() {
                 false,
             ),
             (
-                "grep -rn --exclude-dir=fixtures --exclude='*.key' ordinary tests/",
+                "grep -rn --exclude='*.key' ordinary tests/",
                 false,
             ),
             (
@@ -160,6 +160,7 @@ fn recursive_search_checks_every_reachable_path() {
             ),
             ("grep -rn ordinary src".to_owned(), false),
             ("grep -rn ordinary __tests__/".to_owned(), true),
+            ("grep -rn --exclude='*.md' ordinary __tests__/".to_owned(), true),
             (
                 format!("grep -rn ordinary {}/__tests__/", root.display()),
                 true,

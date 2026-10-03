@@ -22,13 +22,12 @@ fn safe_arguments(arguments: &[String], context: ReadContext<'_>, stdin_only: bo
     let mut includes_present = false;
     for argument in arguments {
         if let Some(directory) = pending_exclusion.take() {
-            if !exact_exclusion(argument) {
-                return false;
-            }
-            if directory {
-                excluded_directories.push(argument.as_str());
-            } else {
-                excluded_files.push(argument.as_str());
+            if exact_exclusion(argument) {
+                if directory {
+                    excluded_directories.push(argument.as_str());
+                } else {
+                    excluded_files.push(argument.as_str());
+                }
             }
             continue;
         }
@@ -60,12 +59,12 @@ fn safe_arguments(arguments: &[String], context: ReadContext<'_>, stdin_only: bo
                         return false;
                     }
                     pending_exclusion = Some(directory);
-                } else if !exact_exclusion(attached) {
-                    return false;
-                } else if directory {
-                    excluded_directories.push(attached);
-                } else {
-                    excluded_files.push(attached);
+                } else if exact_exclusion(attached) {
+                    if directory {
+                        excluded_directories.push(attached);
+                    } else {
+                        excluded_files.push(attached);
+                    }
                 }
                 continue;
             }
