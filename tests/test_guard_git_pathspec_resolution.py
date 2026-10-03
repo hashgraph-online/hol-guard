@@ -62,6 +62,12 @@ def git_repository(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     for name in tuple(os.environ):
         if name.upper().startswith("GIT_CONFIG"):
             monkeypatch.delenv(name, raising=False)
+    # Setup and native review must inspect the same clean Git configuration.
+    # Use supported caller fields rather than an unattested config override.
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
+    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
     repository = tmp_path / "repository"
     repository.mkdir()
     _git(repository, "init", "--quiet")

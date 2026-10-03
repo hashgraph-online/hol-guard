@@ -578,14 +578,14 @@
       "variant_remainder": 0
     },
     {
-      "basis": "inherited Git branch attribution plus cd context",
+      "basis": "Native Git execution-context hardening raises unverifiable branch reads to require-reapproval; the corpus cd target is absent from the offline evaluator.",
       "expected": {
         "decision_plane_floor": "review",
         "evaluation_error": null,
         "model_confidence": "exact",
         "model_uncertainty": null,
-        "native_floor": "review",
-        "native_reason": "native_command_review_required",
+        "native_floor": "require-reapproval",
+        "native_reason": "native_git_execution_context_review",
         "path_overridden": false,
         "uncertain_rule_ids": []
       },
@@ -600,14 +600,14 @@
       "variant_remainder": 0
     },
     {
-      "basis": "inherited Git diff attribution plus cd context",
+      "basis": "Native Git execution-context hardening raises unverifiable diff checks to require-reapproval; the corpus cd target is absent from the offline evaluator.",
       "expected": {
         "decision_plane_floor": "review",
         "evaluation_error": null,
         "model_confidence": "exact",
         "model_uncertainty": null,
-        "native_floor": "review",
-        "native_reason": "native_command_review_required",
+        "native_floor": "require-reapproval",
+        "native_reason": "native_git_execution_context_review",
         "path_overridden": false,
         "uncertain_rule_ids": []
       },
@@ -622,14 +622,14 @@
       "variant_remainder": 0
     },
     {
-      "basis": "inherited Git log attribution plus cd context",
+      "basis": "Native Git execution-context hardening raises unverifiable log reads to require-reapproval; the corpus cd target is absent from the offline evaluator.",
       "expected": {
         "decision_plane_floor": "review",
         "evaluation_error": null,
         "model_confidence": "exact",
         "model_uncertainty": null,
-        "native_floor": "review",
-        "native_reason": "native_command_review_required",
+        "native_floor": "require-reapproval",
+        "native_reason": "native_git_execution_context_review",
         "path_overridden": false,
         "uncertain_rule_ids": []
       },
@@ -644,14 +644,14 @@
       "variant_remainder": 0
     },
     {
-      "basis": "inherited Git show attribution plus cd context",
+      "basis": "Native Git execution-context hardening raises unverifiable show reads to require-reapproval; the corpus cd target is absent from the offline evaluator.",
       "expected": {
         "decision_plane_floor": "review",
         "evaluation_error": null,
         "model_confidence": "exact",
         "model_uncertainty": null,
-        "native_floor": "review",
-        "native_reason": "native_command_review_required",
+        "native_floor": "require-reapproval",
+        "native_reason": "native_git_execution_context_review",
         "path_overridden": false,
         "uncertain_rule_ids": []
       },
@@ -782,14 +782,14 @@
       "variant_remainder": 0
     },
     {
-      "basis": "Reviewed exact git rev-parse --show-toplevel grammar removes unrelated compatibility owners; native execution remains review with no allow proof.",
+      "basis": "Native Git execution-context hardening raises unverifiable repository-root reads to require-reapproval; the corpus cd target is absent from the offline evaluator.",
       "expected": {
         "decision_plane_floor": "review",
         "evaluation_error": null,
         "model_confidence": "exact",
         "model_uncertainty": null,
-        "native_floor": "review",
-        "native_reason": "native_command_review_required",
+        "native_floor": "require-reapproval",
+        "native_reason": "native_git_execution_context_review",
         "path_overridden": false,
         "uncertain_rule_ids": []
       },
@@ -804,14 +804,14 @@
       "variant_remainder": 0
     },
     {
-      "basis": "inherited Git status attribution plus cd context",
+      "basis": "Native Git execution-context hardening raises unverifiable status reads to require-reapproval; the corpus cd target is absent from the offline evaluator.",
       "expected": {
         "decision_plane_floor": "review",
         "evaluation_error": null,
         "model_confidence": "exact",
         "model_uncertainty": null,
-        "native_floor": "review",
-        "native_reason": "native_command_review_required",
+        "native_floor": "require-reapproval",
+        "native_reason": "native_git_execution_context_review",
         "path_overridden": false,
         "uncertain_rule_ids": []
       },
@@ -1072,14 +1072,14 @@
       "variant_remainder": 0
     },
     {
-      "basis": "inherited Git status attribution with bounded wc consumer",
+      "basis": "Native Git execution-context hardening raises unverifiable status pipelines to require-reapproval; the corpus cd target is absent from the offline evaluator.",
       "expected": {
         "decision_plane_floor": "review",
         "evaluation_error": null,
         "model_confidence": "exact",
         "model_uncertainty": null,
-        "native_floor": "review",
-        "native_reason": "native_command_review_required",
+        "native_floor": "require-reapproval",
+        "native_reason": "native_git_execution_context_review",
         "path_overridden": false,
         "uncertain_rule_ids": []
       },
@@ -1286,14 +1286,14 @@
       "variant_remainder": 0
     },
     {
-      "basis": "Reviewed git apply --check literal relative patch path removes unrelated compatibility owners; independent patch-read and workspace proofs and native review remain required.",
+      "basis": "Native Git execution-context hardening raises unverifiable patch checks to require-reapproval; the corpus cd target is absent from the offline evaluator.",
       "expected": {
         "decision_plane_floor": "review",
         "evaluation_error": null,
         "model_confidence": "exact",
         "model_uncertainty": null,
-        "native_floor": "review",
-        "native_reason": "native_command_review_required",
+        "native_floor": "require-reapproval",
+        "native_reason": "native_git_execution_context_review",
         "path_overridden": false,
         "uncertain_rule_ids": []
       },

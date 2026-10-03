@@ -60,8 +60,8 @@ def guard_home(tmp_path: Path) -> Path:
 
 
 @pytest.fixture()
-def worker(store: GuardStore) -> Iterator[HookWorker]:
-    active = HookWorker(store=store)
+def worker(store: GuardStore, workspace: Path) -> Iterator[HookWorker]:
+    active = HookWorker(store=store, workspace=workspace)
     try:
         yield active
     finally:

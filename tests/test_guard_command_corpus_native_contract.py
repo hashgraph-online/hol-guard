@@ -54,6 +54,40 @@ def test_native_contract_keeps_complete_original_inputs_and_visible_stronger_dif
     }
 
 
+_GIT_CONTEXT_REVIEW_GROUPS = frozenset(
+    {
+        "workflow:git-local:branches|all",
+        "workflow:git-local:diff-check|all",
+        "workflow:git-local:recent-log|all",
+        "workflow:git-local:show-stat|all",
+        "workflow:navigation-public-read:repository-root|all",
+        "workflow:navigation-public-read:status|all",
+        "workflow:shell-composition:json-pipeline|all",
+        "workflow:workspace-patch-write:patch-check|all",
+    }
+)
+
+
+def test_git_context_hardening_has_explicit_raw_native_floor() -> None:
+    selected: dict[str, contract.NativeCaseContract] = {}
+    counts: dict[str, int] = {}
+    for case, oracle in _pairs():
+        expected = contract.expected_native_case(case, oracle)
+        if expected.group_id in _GIT_CONTEXT_REVIEW_GROUPS:
+            selected[expected.group_id] = expected
+            counts[expected.group_id] = counts.get(expected.group_id, 0) + 1
+
+    assert set(selected) == _GIT_CONTEXT_REVIEW_GROUPS
+    assert counts == {group_id: 25 for group_id in _GIT_CONTEXT_REVIEW_GROUPS}
+    for expected in selected.values():
+        assert expected.original_floor == "review"
+        assert expected.expected_floor == "review"
+        assert expected.expected_native_floor == "require-reapproval"
+        assert expected.expected_native_reason == "native_git_execution_context_review"
+        assert expected.expected_decision == "deny"
+        assert expected.expected_explicitly_benign is False
+
+
 @pytest.mark.parametrize("mutation", ("command", "context", "case_id", "oracle_source", "oracle_floor"))
 def test_native_contract_rejects_changed_inputs_and_oracles(mutation: str) -> None:
     case, oracle = next(_pairs())
