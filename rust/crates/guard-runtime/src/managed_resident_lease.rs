@@ -1,5 +1,7 @@
 #![forbid(unsafe_code)]
 
+#[cfg(test)]
+use self::tests::{notify_lock_busy_for_test, notify_lock_retry_deadline_for_test};
 #[cfg(not(windows))]
 use std::fs::OpenOptions;
 use std::fs::{self, File};
@@ -7,11 +9,10 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime};
-#[cfg(test)]
-use std::{cell::RefCell, sync::mpsc::Sender};
 
 use crate::resident_state::{
-    ensure_private_directory_under, private_root_for_state_base, process_start_marker,
+    ensure_private_directory_under, private_root_for_state_base, process_is_definitively_gone,
+    process_start_marker,
 };
 
 #[path = "managed_resident_lease_identity.rs"]
@@ -27,39 +28,25 @@ const LEASE_MAX_FILES: usize = 64;
 const LEASE_MAX_DIRECTORY_ENTRIES: usize = LEASE_MAX_FILES + 1;
 const LEASE_HEARTBEAT: Duration = Duration::from_millis(250);
 pub(super) const LEASE_EXPIRY: Duration = Duration::from_secs(1);
-const LEASE_ACQUIRE_RETRY_BUDGET: Duration = Duration::from_millis(200);
+const LEASE_ACQUIRE_RETRY_BUDGET: Duration = Duration::from_millis(1000);
 const LEASE_CLEANUP_RETRY_BUDGET: Duration = Duration::from_millis(100);
 const LEASE_ACQUIRE_RETRY_INITIAL_DELAY: Duration = Duration::from_millis(1);
 const LEASE_ACQUIRE_RETRY_MAX_DELAY: Duration = Duration::from_millis(16);
-
-#[cfg(test)]
-thread_local! {
-    static LOCK_BUSY_NOTIFICATION: RefCell<Option<Sender<()>>> = const { RefCell::new(None) };
-    static LOCK_RETRY_DEADLINE_NOTIFICATION: RefCell<Option<Sender<()>>> = const { RefCell::new(None) };
-}
-
-#[cfg(test)]
-fn notify_lock_busy_for_test() {
-    LOCK_BUSY_NOTIFICATION.with(|notification| {
-        if let Some(sender) = notification.borrow_mut().take() {
-            let _ = sender.send(());
-        }
-    });
-}
-
-#[cfg(test)]
-fn notify_lock_retry_deadline_for_test() {
-    LOCK_RETRY_DEADLINE_NOTIFICATION.with(|notification| {
-        if let Some(sender) = notification.borrow_mut().take() {
-            let _ = sender.send(());
-        }
-    });
-}
 
 #[path = "managed_resident_lease_owner.rs"]
 mod owner;
 use owner::deadline_for_timeout;
 pub(super) use owner::ClientLease;
+#[path = "managed_resident_lease_retirement.rs"]
+mod retirement;
+
+pub(super) fn retire_clients_for_update(
+    state_base: &Path,
+    expected_digest: &str,
+    deadline: Instant,
+) -> Result<(), String> {
+    retirement::retire_clients_for_update(state_base, expected_digest, deadline)
+}
 
 struct LeaseDirectoryLock {
     file: File,
@@ -111,29 +98,45 @@ fn acquire_directory_lock_until(
     private_root: &Path,
     deadline: Instant,
 ) -> Result<LeaseDirectoryLock, String> {
+    acquire_directory_lock_with_clock(
+        directory,
+        private_root,
+        deadline,
+        Instant::now,
+        thread::sleep,
+    )
+}
+
+fn acquire_directory_lock_with_clock(
+    directory: &Path,
+    private_root: &Path,
+    deadline: Instant,
+    now: impl Fn() -> Instant,
+    mut sleep: impl FnMut(Duration),
+) -> Result<LeaseDirectoryLock, String> {
     let mut delay = LEASE_ACQUIRE_RETRY_INITIAL_DELAY;
     loop {
-        if Instant::now() >= deadline {
+        if now() >= deadline {
             #[cfg(test)]
-            notify_lock_retry_deadline_for_test();
+            notify_lock_retry_deadline_for_test(deadline);
             return Err("native_resident_lease_busy".to_owned());
         }
         if let Some(lock) = acquire_directory_lock(directory, private_root)? {
-            if Instant::now() < deadline {
+            if now() < deadline {
                 return Ok(lock);
             }
             drop(lock);
             #[cfg(test)]
-            notify_lock_retry_deadline_for_test();
+            notify_lock_retry_deadline_for_test(deadline);
             return Err("native_resident_lease_busy".to_owned());
         }
-        let remaining = deadline.saturating_duration_since(Instant::now());
+        let remaining = deadline.saturating_duration_since(now());
         if remaining.is_zero() {
             #[cfg(test)]
-            notify_lock_retry_deadline_for_test();
+            notify_lock_retry_deadline_for_test(deadline);
             return Err("native_resident_lease_busy".to_owned());
         }
-        thread::sleep(delay.min(remaining));
+        sleep(delay.min(remaining));
         delay = (delay * 2).min(LEASE_ACQUIRE_RETRY_MAX_DELAY);
     }
 }

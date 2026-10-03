@@ -22,6 +22,7 @@ from tests.native_command_test_support import real_native_command_evaluation
             "native.classification-block",
             "native_command_evaluation_failed",
         ),
+        ("git status", "require-reapproval", "native.classification-reapproval", None),
         ("printf baseline-proof", "allow", "native.explicit-benign", None),
     ],
 )
@@ -47,9 +48,13 @@ def test_native_classification_survives_baseline_and_shadow_comparison(
     assert shadow_baseline.proof_routes == baseline.proof_routes
 
 
-def test_authenticated_permission_proof_remains_outside_uncontrolled_baseline() -> None:
+@pytest.mark.parametrize(
+    "command",
+    ["git push --force origin feature", "pwd; git push --force origin feature; echo done"],
+)
+def test_authenticated_permission_proof_remains_outside_uncontrolled_baseline(command: str) -> None:
     reviewed = real_native_command_evaluation(
-        "git push --force origin feature",
+        command,
         controls=(("permission", "command.git.permission.force-push", "enabled"),),
     )
     current = reviewed.evaluation.decision_plane

@@ -138,6 +138,7 @@ Protection model meanings:
 | `command.mcp-pr-ui-compare` | Reviews PR UI Compare tools that run project install and start commands, write artifacts outside the repository, and download Chromium or FFmpeg. Off until you turn it on. | 0 | External opt-in |
 | `command.mcp-reaper` | Reviews destructive REAPER project-editing tools: batch track deletion, track template deletion, clearing every tempo marker, and multi-step undo. Off until you turn it on. | 0 | External opt-in |
 | `command.skill-sunset` | Reviews the canonical Skill Sunset audit surface and its local report and viewer side effects. Experiment execution and npm launcher policy remain outside this extension. | 1 | External opt-in |
+| `command.tui-runner` | Reviews TUI Runner --reconfigure invocations, which overwrite a project's saved process configuration. Port cleanup, process spawning, and project scaffolding happen through TUI Runner's interactive menu after launch and are not observable command-line events, so this extension does not cover them. | 1 | External opt-in |
 
 ### Other extensions
 
@@ -148,6 +149,7 @@ Protection model meanings:
 | `command.cogext` | Reviews the cogext CLI's mutating commitment operations (add, fulfill, fail). Read-only commands (extract, list, get, stats) are not matched and remain automatic. Note: `cogext add` may initialize ~/.cogext on a fresh machine; that side effect is covered structurally because `add` is in the reviewed set. | 3 | External opt-in |
 | `command.ctty` | Reviews ctty remote execution (batch exec and bare-host SSH), file transfers (put/get/scp), SFTP/FTP/WebDAV mutations, and local inventory writes (add/edit/move/import), while leaving read-only inspection unmatched. | 7 | External opt-in |
 | `command.digline` | Reviews digline commands that spend model calls, write under .digline/, or expose a way to change the approved baseline. digline is a regression gate for LLM applications, the approved reference lives in your repo. | 6 | External opt-in |
+| `command.errand` | Requires Errand 0.4.2 or later. Reviews job execution (any operand-bearing invocation) and `fetch --apply`; flag-only and help invocations remain automatic. Conservative port of the v1 detector: declarative matchers cannot exclude known read-only subcommands, so operand-bearing calls like `errand ps` also review. | 2 | External opt-in |
 | `command.framework.laravel` | Reviews destructive Artisan database wipes, migration resets, and queue purges. | 5 | Built in |
 | `command.genclave` | Reviews gEnclave (ge) security enclave operations that mutate credentials, modify access policies, or unlock persistent sessions. | 3 | External opt-in |
 | `command.gitsync` | Reviews gitsync's live mirror sync, server-side webhook rewrites, and service install/uninstall. `check`, `status`, and plain `hooks` do not match any rule here; Guard's default floor still applies to them since gitsync is not on the built-in safe-command list and no rule in this extension matches those subcommands. Every mutating subcommand covered here always requires review, even with --help, -h or --dry-run present, because gitsync's flag parser can silently drop those flags depending on argument order and this matcher engine cannot detect when that happened. | 2 | External opt-in |
@@ -156,6 +158,7 @@ Protection model meanings:
 | `command.probe` | Reviews HTTP execution and OpenCollection workspace mutations through the Probe CLI. | 8 | External opt-in |
 | `command.repo2nb` | Reviews repo2nb commands that can overwrite an existing destination directory or silently drop untracked notebook cells. | 2 | External opt-in |
 | `command.skill-base` | Reviews authenticated Skill Base CLI publications before local Skill files are uploaded as a new version. | 1 | External opt-in |
+| `command.syngraphe` | Reviews shared repository context initialization, document creation, state archiving, and agent policy creation through syngraphe or syg. | 4 | External opt-in |
 | `command.uivoid` | Reviews uivoid commands that create or reconfigure a live MCP server mapped from an existing API, rotate the credential it calls that API with, or write local session and skill files a later command or agent session will trust. | 5 | External opt-in |
 
 <!-- END GENERATED EXTENSION DIRECTORY -->

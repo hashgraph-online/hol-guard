@@ -120,9 +120,7 @@ def test_page_url_signs_the_loopback_repair_route(monkeypatch: pytest.MonkeyPatc
         lambda url, guard_home, **_kwargs: f"{url}#guard-token=gld1.test",
     )
 
-    assert command_policy_repair_page_url(tmp_path) == (
-        "http://127.0.0.1:5474/protection/repair#guard-token=gld1.test"
-    )
+    assert command_policy_repair_page_url(tmp_path) == ("http://127.0.0.1:5474/protection/repair#guard-token=gld1.test")
 
 
 def test_repair_link_session_is_limited_to_the_repair_page(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

@@ -8,8 +8,10 @@ from pathlib import Path
 from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
 from ..agent_safety_guidance import install_agent_safety_guidance
+from ..codex_install_transaction import codex_install_transaction
 from ..config import GuardConfig
 from ..daemon import ensure_guard_daemon
+from ..runtime_transition import assert_transition_mutation_allowed
 from ..store import GuardStore
 from .install_commands import apply_managed_install
 from .product import build_guard_start_payload
@@ -71,6 +73,24 @@ def _resolve_harness(payload: dict[str, object], requested_harness: str | None) 
 
 
 def _build_bootstrap_install(
+    *,
+    requested_harness: str | None,
+    skip_install: bool,
+    context: HarnessContext,
+    store: GuardStore,
+) -> dict[str, object]:
+    if requested_harness is None or skip_install:
+        return _build_bootstrap_install_owned(
+            requested_harness=requested_harness, skip_install=skip_install, context=context, store=store
+        )
+    with codex_install_transaction(context.guard_home, context.guard_home / "managed", actor="bootstrap.install"):
+        assert_transition_mutation_allowed(context.guard_home)
+        return _build_bootstrap_install_owned(
+            requested_harness=requested_harness, skip_install=skip_install, context=context, store=store
+        )
+
+
+def _build_bootstrap_install_owned(
     *,
     requested_harness: str | None,
     skip_install: bool,

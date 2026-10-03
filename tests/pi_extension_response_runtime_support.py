@@ -26,6 +26,8 @@ def _run_generated_fixture(source: str) -> dict[str, object]:
     run_guard = _strip_generated_types(source[run_start:run_end])
 
     javascript = f"""\
+import {{ createHash }} from "node:crypto";
+
 const GUARD_DAEMON_TIMEOUT_MS = 3100;
 const GUARD_HOME = "/tmp/omp-hook-contract/guard-home";
 const GUARD_HOME_DIR_IS_DEFAULT = true;
@@ -242,7 +244,7 @@ console.log(JSON.stringify(result));
 
 
 def _run_generated_tool_result_fixture(source: str) -> dict[str, object]:
-    handler_start = source.index('  pi.on("tool_result"')
+    handler_start = source.index('  pi.on("tool_result", async (event, ctx) => {')
     handler_end = source.index("\n  });\n}", handler_start) + len("\n  });")
     handler = source[handler_start:handler_end]
     for old, new in {
@@ -281,6 +283,8 @@ let guardResponse = {{ decision: "allow", model_output_action: "allow_original" 
 {_generated_structured_helper(source)}
 
 function sourceFileRefForPostToolUse() {{ return null; }}
+// Containment lifecycle is exercised separately with its real request map.
+function cleanupContainedTestRequest() {{}}
 function toolCallIdKey(value) {{ return typeof value === "string" && value.trim() ? value.trim() : null; }}
 function modelVisibleBlockedReason(reason) {{ return `blocked: ${{reason}}`; }}
 function blockedToolResult(reason, details) {{

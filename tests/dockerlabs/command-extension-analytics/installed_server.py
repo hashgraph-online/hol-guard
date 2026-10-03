@@ -103,6 +103,8 @@ def _safe_hook_response_summary(value: str) -> str:
         {
             "keys": sorted(payload),
             "policy_action": payload.get("policy_action"),
+            "decision_reason_code": payload.get("decision_reason_code"),
+            "reason_code": payload.get("reason_code"),
             "approval_reuse": {
                 "status": reuse.get("status"),
                 "reason_code": reuse.get("reason_code"),
@@ -137,7 +139,7 @@ def _run_installed_hook(
     *,
     expected_status: int = 0,
     policy_action: str | None = None,
-) -> None:
+) -> str:
     command = [
         "hol-guard",
         "hook",
@@ -184,6 +186,7 @@ def _run_installed_hook(
             + f"stderr={_safe_hook_diagnostic(completed.stderr)!r}"
         )
         raise RuntimeError(diagnostic)
+    return _safe_hook_response_summary(completed.stdout)
 
 
 def _invoke_real_harnesses() -> int:
@@ -193,7 +196,12 @@ def _invoke_real_harnesses() -> int:
         "tool_input": {"command": "git diff --stat"},
         "tool_call_id": "codex_lab_0000000000000001",
     }
-    codex_post = {**codex_pre, "hook_event_name": "PostToolUse", "success": True}
+    codex_post = {
+        **codex_pre,
+        "hook_event_name": "PostToolUse",
+        "success": True,
+        "tool_response": {"stdout": "fixture.txt | 1 +\n", "stderr": "", "exit_code": 0},
+    }
     claude_no_post = {
         "hook_event_name": "PreToolUse",
         "tool_name": "Bash",
@@ -228,7 +236,7 @@ def _pending_workflow_request(store: GuardStore) -> dict[str, object]:
         "tool_input": {"command": _WORKFLOW_COMMAND},
         "tool_call_id": "codex_lab_workflow_initial_0001",
     }
-    _run_installed_hook("codex", payload, expected_status=1)
+    hook_summary = _run_installed_hook("codex", payload, expected_status=1)
     all_pending = store.list_approval_requests(status="pending")
     pending = [
         request
@@ -245,7 +253,7 @@ def _pending_workflow_request(store: GuardStore) -> dict[str, object]:
             }
             for request in all_pending
         ]
-        raise RuntimeError(f"workflow approval request mismatch: {summary!r}")
+        raise RuntimeError(f"workflow approval request mismatch: {summary!r}; hook={hook_summary}")
     contract = request_scope_contract(pending[0])
     if not contract.task_capability_eligible or "artifact" not in contract.allow_scopes:
         raise RuntimeError("workflow request did not expose the exact task-capability contract")
@@ -447,6 +455,10 @@ def main() -> None:
     GUARD_HOME.mkdir(parents=True, exist_ok=True)
     _prepare_workspace()
     store = GuardStore(GUARD_HOME, prime_policy_integrity=False)
+    from codex_plugin_scanner.guard.config import update_guard_settings
+
+    if not (GUARD_HOME / "config.toml").exists():
+        update_guard_settings(GUARD_HOME, {"blocked_request_mode": "ask"})
     daemon = GuardDaemonServer(
         store,
         host="127.0.0.1",

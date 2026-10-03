@@ -10,10 +10,7 @@ from codex_plugin_scanner.guard.adapters import get_adapter, list_adapters
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.contracts import contract_for
 from codex_plugin_scanner.guard.adapters.pi_extension_previous_source import previous_managed_extension_source
-from codex_plugin_scanner.guard.adapters.pi_extension_source import (
-    legacy_managed_extension_source,
-    managed_extension_source,
-)
+from codex_plugin_scanner.guard.adapters.pi_extension_source import managed_extension_source
 from codex_plugin_scanner.guard.adapters.pi_support import stable_suffix
 from codex_plugin_scanner.guard.approvals import queue_blocked_approvals
 from codex_plugin_scanner.guard.cli.commands_support_codex_tool_output_messages import (
@@ -273,10 +270,6 @@ class TestPiDetect:
 class TestPiInstall:
     def test_install_writes_managed_extension(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.pi.install_guard_shim",
-            lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-pi"), "notes": []},
-        )
 
         manifest = get_adapter("pi").install(ctx)
 
@@ -395,10 +388,6 @@ class TestPiInstall:
 
     def test_install_writes_managed_extension_that_denies_on_hook_errors(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.pi.install_guard_shim",
-            lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-pi"), "notes": []},
-        )
 
         manifest = get_adapter("pi").install(ctx)
 
@@ -427,10 +416,6 @@ class TestPiInstall:
         monkeypatch,
     ) -> None:
         ctx = _ctx(tmp_path)
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.pi.install_guard_shim",
-            lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-pi"), "notes": []},
-        )
 
         manifest = get_adapter("pi").install(ctx)
         text = Path(str(manifest["config_path"])).read_text(encoding="utf-8")
@@ -453,10 +438,6 @@ class TestPiInstall:
         monkeypatch,
     ) -> None:
         ctx = _ctx(tmp_path)
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.pi.install_guard_shim",
-            lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-pi"), "notes": []},
-        )
 
         manifest = get_adapter("pi").install(ctx)
 
@@ -552,10 +533,6 @@ class TestPiInstall:
 
     def test_omp_install_writes_only_omp_extension(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.pi.install_guard_shim",
-            lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-omp"), "notes": []},
-        )
 
         manifest = get_adapter("omp").install(ctx)
 
@@ -589,10 +566,6 @@ class TestPiInstall:
 
     def test_uninstall_removes_managed_extension(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.pi.install_guard_shim",
-            lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-pi"), "notes": []},
-        )
         monkeypatch.setattr(
             "codex_plugin_scanner.guard.adapters.pi.remove_guard_shim",
             lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-pi"), "notes": []},
@@ -670,36 +643,7 @@ class TestPiInstall:
         assert not omp_extension_path.exists()
         assert json.loads(omp_settings_path.read_text(encoding="utf-8"))["extensions"] == []
 
-    def test_uninstall_removes_pre_response_contract_legacy_omp_extension(
-        self,
-        tmp_path: Path,
-        monkeypatch,
-    ) -> None:
-        ctx = _ctx(tmp_path)
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.pi.remove_guard_shim",
-            lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-pi"), "notes": []},
-        )
-        omp_settings_path = ctx.home_dir / ".omp" / "agent" / "settings.json"
-        omp_extension_path = omp_settings_path.parent / "extensions" / "hol-guard.ts"
-        omp_extension_path.parent.mkdir(parents=True, exist_ok=True)
-        omp_extension_path.write_text(
-            legacy_managed_extension_source(
-                guard_home=ctx.guard_home,
-                home_dir=ctx.home_dir,
-                settings_path=omp_settings_path,
-                harness="pi",
-            ),
-            encoding="utf-8",
-        )
-        _write_json(omp_settings_path, {"extensions": [str(omp_extension_path)]})
-
-        get_adapter("pi").uninstall(ctx)
-
-        assert not omp_extension_path.exists()
-        assert json.loads(omp_settings_path.read_text(encoding="utf-8"))["extensions"] == []
-
-    def test_uninstall_preserves_modified_pre_response_contract_legacy_omp_extension(
+    def test_uninstall_preserves_modified_previous_omp_extension(
         self,
         tmp_path: Path,
         monkeypatch,
@@ -713,7 +657,7 @@ class TestPiInstall:
         omp_extension_path = omp_settings_path.parent / "extensions" / "hol-guard.ts"
         omp_extension_path.parent.mkdir(parents=True, exist_ok=True)
         modified_source = (
-            legacy_managed_extension_source(
+            previous_managed_extension_source(
                 guard_home=ctx.guard_home,
                 home_dir=ctx.home_dir,
                 settings_path=omp_settings_path,

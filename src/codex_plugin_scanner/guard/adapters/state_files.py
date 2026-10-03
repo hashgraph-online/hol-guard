@@ -10,8 +10,17 @@ def load_backup_payload(backup_path: Path) -> dict[str, str | bool | None]:
     """Load the stable Guard backup envelope without raising on corrupt state."""
 
     try:
-        payload = json.loads(backup_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+        text = backup_path.read_text(encoding="utf-8")
+    except OSError:
+        return {"readable": False, "existed": False, "content": None}
+    return parse_backup_payload(text)
+
+
+def parse_backup_payload(text: str) -> dict[str, str | bool | None]:
+    """Decode a captured backup generation without consulting the filesystem."""
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
         return {"readable": False, "existed": False, "content": None}
     if not isinstance(payload, dict):
         return {"readable": False, "existed": False, "content": None}

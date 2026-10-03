@@ -26,6 +26,41 @@ def _pool(tmp_path: Path) -> _PersistentNativeClientPool:
     )
 
 
+def test_pool_recovers_retired_capacity_only_after_containment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    clients = []
+
+    class Client:
+        def __init__(self, **_kwargs: object) -> None:
+            self.contained = False
+            self.deadlines: list[float] = []
+            clients.append(self)
+
+        def request(self, _payload: bytes, *, deadline_monotonic: float) -> bytes | None:
+            return None if self is clients[0] else b"recovered"
+
+        def close(self, *, deadline_monotonic: float) -> bool:
+            self.deadlines.append(deadline_monotonic)
+            return self.contained
+
+    monkeypatch.setattr(client_module, "_PersistentNativeClient", Client)
+    monkeypatch.setattr(client_module, "_MAX_PERSISTENT_CLIENTS", 1)
+    pool = _pool(tmp_path)
+    assert pool.request(b"timed-out", deadline_monotonic=time.monotonic() - 1) is None
+    failed = clients[0]
+    assert failed in pool._clients
+    assert failed in pool._retiring
+    assert pool.request(b"still-contained", deadline_monotonic=time.monotonic() + 0.01) is None
+    assert len(clients) == 1, "uncontained client must still occupy its slot"
+    failed.contained = True
+    assert pool.request(b"next", deadline_monotonic=time.monotonic() + 1) == b"recovered"
+    assert len(clients) == 2
+    assert failed not in pool._clients
+    assert failed not in pool._retiring
+    assert len(pool._clients) == 1
+
+
 def test_client_reader_keeps_response_binding_with_the_captured_generation_queue(
     tmp_path: Path,
 ) -> None:
@@ -64,7 +99,12 @@ def test_client_frame_write_skips_selector_on_windows_pipes(
 
     stdin = PipeStdin()
     monkeypatch.setattr(transport.os, "name", "nt")
-    assert transport.write_frame(stdin, b"frame", deadline_monotonic=time.monotonic() + 1)
+    assert transport.write_frame(
+        stdin,
+        b"frame",
+        deadline_monotonic=time.monotonic() + 1,
+        launch_worker=lambda worker: worker.start() or True,
+    )
     assert stdin.written == b"frame"
 
 
@@ -90,15 +130,29 @@ def test_client_frame_write_is_bounded_when_pipe_writer_blocks() -> None:
             self.released.set()
 
     stdin = BlockingStdin()
+    workers = []
+
+    def launch_worker(worker: threading.Thread) -> bool:
+        workers.append(worker)
+        worker.start()
+        return True
+
     started = time.monotonic()
-    assert not _PersistentNativeClient._write_frame(  # pyright: ignore[reportPrivateUsage]
-        stdin,
-        b"frame",
-        deadline_monotonic=time.monotonic() + 0.05,
-    )
-    assert stdin.started.is_set()
-    assert stdin.closed
-    assert time.monotonic() - started < 0.5
+    try:
+        assert not _PersistentNativeClient._write_frame(  # pyright: ignore[reportPrivateUsage]
+            stdin,
+            b"frame",
+            deadline_monotonic=time.monotonic() + 0.05,
+            launch_worker=launch_worker,
+        )
+        assert stdin.started.is_set()
+        assert not stdin.closed
+        assert time.monotonic() - started < 0.5
+    finally:
+        stdin.released.set()
+        for worker in workers:
+            worker.join(timeout=1)
+            assert not worker.is_alive()
 
 
 def test_client_close_can_interrupt_a_blocked_frame_write(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -137,7 +191,8 @@ def test_client_close_can_interrupt_a_blocked_frame_write(tmp_path: Path, monkey
     started = threading.Event()
     result: list[bytes | None] = []
 
-    def fake_start() -> bool:
+    def fake_start(*, deadline_monotonic: float | None = None) -> bool:
+        del deadline_monotonic
         object.__setattr__(client, "_process", process)
         return True
 
@@ -146,6 +201,7 @@ def test_client_close_can_interrupt_a_blocked_frame_write(tmp_path: Path, monkey
         _frame: bytes,
         *,
         deadline_monotonic: float,
+        **kwargs: object,
     ) -> bool:
         del deadline_monotonic
         started.set()
@@ -201,7 +257,7 @@ def test_pool_dispatches_requests_across_persistent_streams(
 
     closed: list[_PersistentNativeClient] = []
     monkeypatch.setattr(_PersistentNativeClient, "request", fake_request)
-    monkeypatch.setattr(_PersistentNativeClient, "close", lambda client: closed.append(client))
+    monkeypatch.setattr(_PersistentNativeClient, "close", lambda client, **kwargs: closed.append(client))
     assert not pool._clients  # pyright: ignore[reportPrivateUsage]
 
     try:
@@ -297,7 +353,7 @@ def test_pool_evicts_failed_stream_before_next_dispatch(
         return None if calls == 1 else payload
 
     monkeypatch.setattr(_PersistentNativeClient, "request", fake_request)
-    monkeypatch.setattr(_PersistentNativeClient, "close", lambda client: closed.append(client))
+    monkeypatch.setattr(_PersistentNativeClient, "close", lambda client, **kwargs: closed.append(client))
     try:
         assert pool.request(b"failed", deadline_monotonic=time.monotonic() + 1) is None
         assert not pool._clients  # pyright: ignore[reportPrivateUsage]

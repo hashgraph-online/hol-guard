@@ -110,8 +110,10 @@ def remote_approval(
 ) -> dict[str, object]:
     request = store.get_approval_request(request_id)
     assert isinstance(request, dict)
+    persisted_request = store.get_raw_approval_request_snapshot(request_id)
+    assert isinstance(persisted_request, dict)
     claim = source_claim or build_local_review_request_claim(
-        request_row=request, oauth=_oauth_metadata(store), store=store
+        request_row=persisted_request, oauth=_oauth_metadata(store), store=store
     )
     advertisement = claim.get("exactReviewCapability")
     issued_at = issued_at or datetime.now(timezone.utc).replace(microsecond=0)
@@ -156,6 +158,10 @@ def remote_approval(
     }
     if authority is not None:
         envelope["authority"] = authority
+    if isinstance(claim.get("nativeBindingVersion"), str):
+        envelope["nativeBindingVersion"] = claim["nativeBindingVersion"]
+        if isinstance(claim.get("nativeBindingDigest"), str):
+            envelope["nativeBindingDigest"] = claim["nativeBindingDigest"]
     envelope["payloadHash"] = payload_hash_for_remote_approval_envelope(envelope)
     envelope["signature"] = sign_review_payload(envelope)
     return envelope

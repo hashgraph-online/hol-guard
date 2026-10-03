@@ -4,308 +4,20 @@ mod extract;
 mod result;
 
 use crate::native_command_controls::CompiledNativeCommandControls;
-use crate::{CanonicalCommandV1, CommandModelRequestV1};
+use crate::CommandModelRequestV1;
 use guard_contracts::{
     NativePromptRiskClassV1, PreToolActionTypeV1, PreToolOperationV1, PreToolResultV1,
 };
 use serde_json::Value;
 
-use super::{evaluate_pre_tool, PreToolDecisionV1};
+use super::{evaluate_pre_tool_with_context, PreToolDecisionV1};
 use extract::{extract_generic_signals, GenericSignals};
 use result::{generic_action, generic_error_result, generic_result, review_reason};
 use std::time::Instant;
 
-fn compact(value: &str) -> String {
-    value
-        .chars()
-        .filter(|character| character.is_ascii_alphanumeric())
-        .flat_map(char::to_lowercase)
-        .collect()
-}
-
-fn tool_tokens(value: &str) -> Vec<String> {
-    value
-        .split(|character: char| !character.is_ascii_alphanumeric())
-        .filter(|token| !token.is_empty())
-        .map(|token| token.to_ascii_lowercase())
-        .collect()
-}
-
-fn tool_matches(tool: &str, terms: &[&str]) -> bool {
-    let normalized = compact(tool);
-    let tokens = tool_tokens(tool);
-    terms.iter().any(|term| {
-        let normalized_term = compact(term);
-        if normalized == normalized_term {
-            return true;
-        }
-        let term_tokens = tool_tokens(term);
-        !term_tokens.is_empty()
-            && tokens
-                .windows(term_tokens.len())
-                .any(|window| window == term_tokens.as_slice())
-    })
-}
-
-fn is_mcp_tool(tool: &str) -> bool {
-    let lowered = tool.to_ascii_lowercase();
-    lowered.starts_with("mcp__")
-        || lowered.starts_with("mcp_")
-        || lowered == "mcp"
-        || lowered == "mcptool"
-        || lowered == "mcp_tool"
-        || lowered.contains("filesystem__")
-        || (tool.contains('/') && !tool.starts_with('/'))
-}
-
-fn is_package_tool(tool: &str) -> bool {
-    tool_matches(
-        tool,
-        &[
-            "npm",
-            "pnpm",
-            "yarn",
-            "bun",
-            "pip",
-            "pipx",
-            "poetry",
-            "cargo",
-            "gem",
-            "brew",
-            "apt",
-            "dnf",
-            "yum",
-            "apk",
-            "go get",
-            "install package",
-            "package",
-        ],
-    )
-}
-
-fn is_network_tool(tool: &str) -> bool {
-    tool_matches(
-        tool,
-        &[
-            "web_fetch",
-            "web_search",
-            "fetch_web",
-            "http",
-            "request",
-            "network",
-            "open_url",
-            "visit_url",
-            "download",
-        ],
-    )
-}
-
-fn is_browser_tool(tool: &str) -> bool {
-    tool_matches(
-        tool,
-        &[
-            "browser",
-            "navigate",
-            "click",
-            "type",
-            "open_page",
-            "web_browser",
-        ],
-    )
-}
-
-fn is_process_service_tool(tool: &str) -> bool {
-    tool_matches(
-        tool,
-        &[
-            "process",
-            "service",
-            "systemctl",
-            "kill",
-            "terminate",
-            "start_process",
-            "stop_process",
-            "restart_process",
-            "spawn_process",
-        ],
-    )
-}
-
-fn is_config_tool(tool: &str) -> bool {
-    tool_matches(
-        tool,
-        &["config", "settings", "permission", "policy", "preferences"],
-    )
-}
-
-fn is_prompt_tool(tool: &str) -> bool {
-    tool_matches(
-        tool,
-        &[
-            "spawn_subagent",
-            "subagent",
-            "prompt",
-            "message",
-            "ask_user",
-        ],
-    )
-}
-
-fn is_harness_tool(tool: &str) -> bool {
-    tool_matches(
-        tool,
-        &[
-            "harness",
-            "session_start",
-            "session_stop",
-            "hook",
-            "subagent",
-            "agent_context",
-        ],
-    )
-}
-
-fn is_file_write_tool(tool: &str) -> bool {
-    tool_matches(
-        tool,
-        &[
-            "write",
-            "edit",
-            "patch",
-            "replace",
-            "delete",
-            "mkdir",
-            "create_file",
-        ],
-    )
-}
-
-fn is_file_read_tool(tool: &str) -> bool {
-    tool_matches(
-        tool,
-        &[
-            "read",
-            "view",
-            "open_file",
-            "cat",
-            "grep",
-            "rg",
-            "glob",
-            "list_dir",
-            "search",
-        ],
-    )
-}
-
-fn is_command_tool(tool: &str) -> bool {
-    // tool_matches also recognizes namespaced forms such as functions.exec_command.
-    tool_matches(
-        tool,
-        &[
-            "bash",
-            "shell",
-            "terminal",
-            "run_command",
-            "run_commands",
-            "run_terminal_command",
-            "execute_command",
-            "exec_command",
-            "execute_command_line",
-            "exec",
-        ],
-    )
-}
-
-fn package_command(model: &CanonicalCommandV1) -> bool {
-    model
-        .segments
-        .iter()
-        .any(|segment| segment.executable.as_deref().is_some_and(is_package_tool))
-}
-
-fn infer_action_type(
-    event: &str,
-    event_hint: Option<&str>,
-    tool_name: Option<&str>,
-    signals: &GenericSignals,
-) -> (PreToolActionTypeV1, PreToolOperationV1) {
-    let tool = tool_name.unwrap_or_default();
-    let event_compact = compact(event_hint.unwrap_or(event));
-    if event_compact.contains("userprompt") {
-        return (PreToolActionTypeV1::Prompt, PreToolOperationV1::Submit);
-    }
-    if is_mcp_tool(tool) {
-        return (PreToolActionTypeV1::McpTool, PreToolOperationV1::Call);
-    }
-    if event_compact.contains("beforemcpexecution") {
-        return (PreToolActionTypeV1::McpTool, PreToolOperationV1::Call);
-    }
-    if is_prompt_tool(tool) {
-        return (PreToolActionTypeV1::Prompt, PreToolOperationV1::Submit);
-    }
-    if is_harness_tool(tool) {
-        let operation = if tool_matches(tool, &["stop", "end", "close"]) {
-            PreToolOperationV1::Stop
-        } else {
-            PreToolOperationV1::Start
-        };
-        return (PreToolActionTypeV1::Harness, operation);
-    }
-    if is_browser_tool(tool) {
-        return (PreToolActionTypeV1::Browser, PreToolOperationV1::Navigate);
-    }
-    if is_package_tool(tool) || signals.package_present {
-        return (PreToolActionTypeV1::Package, PreToolOperationV1::Install);
-    }
-    if is_process_service_tool(tool) {
-        let operation = if tool_matches(tool, &["kill", "stop", "terminate", "shutdown"]) {
-            PreToolOperationV1::Stop
-        } else {
-            PreToolOperationV1::Start
-        };
-        return (PreToolActionTypeV1::ProcessService, operation);
-    }
-    if is_config_tool(tool) {
-        return (PreToolActionTypeV1::Config, PreToolOperationV1::Set);
-    }
-    if is_file_write_tool(tool) {
-        return (PreToolActionTypeV1::FileWrite, PreToolOperationV1::Write);
-    }
-    if is_file_read_tool(tool) {
-        return (PreToolActionTypeV1::FileRead, PreToolOperationV1::Read);
-    }
-    if signals.prompt_present {
-        return (PreToolActionTypeV1::Prompt, PreToolOperationV1::Submit);
-    }
-    if is_network_tool(tool) || !signals.url_values.is_empty() {
-        return (PreToolActionTypeV1::Network, PreToolOperationV1::Request);
-    }
-    if signals.command.is_some() && (tool.is_empty() || is_command_tool(tool)) {
-        return (PreToolActionTypeV1::Command, PreToolOperationV1::Execute);
-    }
-    if event_compact.contains("beforeshellexecution") {
-        return (PreToolActionTypeV1::Command, PreToolOperationV1::Execute);
-    }
-    if event_compact.contains("beforereadfile") {
-        return (PreToolActionTypeV1::FileRead, PreToolOperationV1::Read);
-    }
-    if event_compact.contains("beforewritefile") {
-        return (PreToolActionTypeV1::FileWrite, PreToolOperationV1::Write);
-    }
-    if !signals.path_values.is_empty() {
-        return (PreToolActionTypeV1::FileRead, PreToolOperationV1::Read);
-    }
-    if signals.command.is_some() && tool.is_empty() {
-        return (PreToolActionTypeV1::Command, PreToolOperationV1::Execute);
-    }
-    if event_compact.contains("session")
-        || event_compact.contains("harness")
-        || event_compact.contains("subagent")
-    {
-        return (PreToolActionTypeV1::Harness, PreToolOperationV1::Start);
-    }
-    (PreToolActionTypeV1::Unknown, PreToolOperationV1::Unknown)
-}
+#[path = "generic_tools.rs"]
+mod tools;
+use tools::{infer_action_type, package_command, tool_matches};
 
 /// Evaluate the complete raw PreToolUse payload in native code. This stays
 /// separate from `evaluate_pre_tool`, the compatibility command-model
@@ -336,18 +48,52 @@ pub fn evaluate_pre_tool_envelope_with_context(
     home_dir: Option<&str>,
     cwd: Option<&str>,
 ) -> PreToolResultV1 {
-    let signals = match extract_generic_signals(payload) {
+    evaluate_pre_tool_envelope_with_execution_context(
+        harness,
+        event,
+        payload,
+        controls,
+        deadline,
+        crate::pretool::PathContext { home_dir, cwd },
+        None,
+    )
+}
+
+pub fn evaluate_pre_tool_envelope_with_execution_context(
+    harness: &str,
+    event: &str,
+    payload: &Value,
+    controls: Option<&CompiledNativeCommandControls>,
+    deadline: Option<Instant>,
+    context: super::PathContext<'_>,
+    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+) -> PreToolResultV1 {
+    let super::PathContext { home_dir, cwd } = context;
+    let mut signals = match extract_generic_signals(payload) {
         Ok(value) => value,
         Err(error) => return generic_error_result(harness, event, error),
     };
     let command_decision = signals.command.as_deref().map(|command| {
-        evaluate_pre_tool(&CommandModelRequestV1 {
-            command: command.to_owned(),
-            dialect: "posix".to_owned(),
-            transport: "shell_string".to_owned(),
-            extraction_provenance: "pre-tool-generic".to_owned(),
-        })
+        evaluate_pre_tool_with_context(
+            &CommandModelRequestV1 {
+                command: command.to_owned(),
+                dialect: "posix".to_owned(),
+                transport: "shell_string".to_owned(),
+                extraction_provenance: "pre-tool-generic".to_owned(),
+            },
+            home_dir,
+            cwd,
+        )
     });
+    // Parsed benign commands may contain credential words as search patterns.
+    // Preserve independent structured-path/content risk, not the raw-text hint.
+    if command_decision.as_ref().is_some_and(|decision| {
+        decision
+            .as_ref()
+            .is_ok_and(|decision| decision.explicitly_benign)
+    }) {
+        signals.sensitive_target = signals.independent_sensitive_target;
+    }
     let mut result = evaluate_signals(
         harness,
         event,
@@ -382,13 +128,18 @@ pub fn evaluate_pre_tool_envelope_with_context(
         }
         result.prompt_risk_classes = classes;
     }
-    match (controls, command_decision) {
-        (Some(controls), Some(Ok(decision))) => controls.apply_with_tool(
-            Some(&decision.command_model),
+    let command_model = command_decision
+        .as_ref()
+        .and_then(|decision| decision.as_ref().ok())
+        .map(|decision| &decision.command_model);
+    let mut result = match (controls, command_model) {
+        (Some(controls), Some(model)) => controls.apply_with_tool_and_context(
+            Some(model),
             result,
             signals.tool_name.as_deref(),
             &signals.package_values,
             deadline,
+            super::PathContext { home_dir, cwd },
         ),
         (Some(controls), _) => controls.apply_with_tool(
             None,
@@ -398,7 +149,127 @@ pub fn evaluate_pre_tool_envelope_with_context(
             deadline,
         ),
         _ => result,
+    };
+    if event == "PreToolUse"
+        // Existing helper-context review may delegate only to enforced
+        // read-only containment below; do not replace that protection.
+        && result.reason_code != "native_git_helper_context_review"
+        && command_model.is_some_and(|model| {
+            let destination =
+                super::segment_proof::verified_cwd_compound_context(model, super::PathContext { home_dir, cwd });
+            let context = super::PathContext { home_dir, cwd: destination.as_deref().or(cwd) };
+            let benign = super::segment_proof::benign_command_segments(model, super::PathContext { home_dir, cwd });
+            model.segments.iter().enumerate().any(|(index, segment)| {
+                segment.executable.as_deref().is_some_and(|executable| {
+                    if super::executable_basename(executable) != "git" {
+                        return false;
+                    }
+                    let inspection = super::git_config::execution_free(
+                        executable,
+                        &segment.arguments,
+                        context,
+                        deadline,
+                        execution_environment,
+                    );
+                    !segment.environment_names.is_empty()
+                        || inspection == Some(false)
+                        // Only inspection operations have a configuration proof
+                        // to invalidate. Other Git operations retain their own
+                        // native review/permission floors, not this read floor.
+                        || (inspection.is_some()
+                            && index > 0
+                            && (0..index).any(|prior| !benign.contains(&prior)))
+                })
+            })
+        })
+        && matches!(
+            result.minimum_action.as_str(),
+            "allow" | "warn" | "review"
+        )
+    {
+        result.minimum_action = "require-reapproval".into();
+        result.policy_action = "require-reapproval".into();
+        result.decision = "deny".into();
+        result.explicitly_benign = false;
+        result.reason_code = "native_git_execution_context_review".into();
+        result.reason = "HOL Guard requires review because this Git read may execute a configured helper, or its effective configuration could not be verified.".into();
     }
+    let contained_test_reason =
+        command_model.and_then(super::restricted_tests::readonly_test_reason);
+    // The read-only credential-filtering backend currently exists on macOS.
+    // Other platforms retain review until they can enforce the same profile.
+    if cfg!(target_os = "macos")
+        && event == "PreToolUse"
+        && matches!(harness, "omp" | "oh-my-pi" | "zcode")
+        && cwd.is_some()
+        && (result.action.action_type == PreToolActionTypeV1::Command
+            || (matches!(
+                contained_test_reason,
+                Some(
+                    "native_vitest_readonly_containment_required"
+                        | "native_package_test_readonly_containment_required"
+                        | "native_node_tool_readonly_containment_required"
+                        | "native_node_build_output_containment_required"
+                )
+            ) && result.action.action_type == PreToolActionTypeV1::Package))
+        && !result.action.sensitive_target
+        && (result.reason_code == "native_command_review_required"
+            || (contained_test_reason == Some("native_git_readonly_containment_required")
+                && result.reason_code == "native_git_helper_context_review")
+            || (matches!(
+                contained_test_reason,
+                Some(
+                    "native_node_tool_readonly_containment_required"
+                        | "native_vitest_readonly_containment_required"
+                        | "native_package_test_readonly_containment_required"
+                        | "native_node_build_output_containment_required"
+                )
+            ) && result.reason_code == "native_package_review"))
+        && result.minimum_action == "review"
+        && result.command_extensions.as_ref().is_none_or(|extensions| {
+            extensions.binding.uncertainty_count == 0
+                && extensions.evaluation_error.is_none()
+                && extensions.observations.iter().all(|observation| {
+                    contained_test_reason == Some("native_git_readonly_containment_required")
+                        && matches!(
+                            observation.rule_id.as_str(),
+                            "command.git.diff" | "command.git.log" | "command.git.show"
+                        )
+                        && observation.uncertainty_reasons.is_empty()
+                        && observation.effective_segment_indexes == [0]
+                })
+                && extensions
+                    .permission_observations
+                    .iter()
+                    .all(|observation| {
+                        matches!(
+                            contained_test_reason,
+                            Some(
+                                "native_vitest_readonly_containment_required"
+                                    | "native_package_test_readonly_containment_required"
+                                    | "native_node_tool_readonly_containment_required"
+                                    | "native_node_build_output_containment_required"
+                            )
+                        ) && observation.extension_id == "command.package.node"
+                            && observation.permission_id
+                                == "command.package.node.permission.package-protection"
+                            && observation.uncertainty_reasons.is_empty()
+                    })
+        })
+        && contained_test_reason.is_some()
+    {
+        result.minimum_action = "sandbox-required".into();
+        result.policy_action = "sandbox-required".into();
+        result.reason_code = contained_test_reason
+            .expect("checked required test profile")
+            .into();
+        result.reason = concat!(
+            "HOL Guard requires protected read-only execution for this repository action. ",
+            "Direct execution remains blocked.",
+        )
+        .into();
+    }
+    result
 }
 
 fn evaluate_signals(
@@ -584,6 +455,28 @@ fn evaluate_signals(
             "allow",
             "native_exact_safe_file_read",
             "The Rust command authority proved this bounded file read explicitly benign.",
+        );
+    }
+    if action_type == PreToolActionTypeV1::FileWrite
+        && signals.tool_name.as_deref().is_some_and(|tool| {
+            tool_matches(tool, &["write", "edit", "patch", "replace", "create_file"])
+                && !tool_matches(tool, &["delete", "remove", "mkdir"])
+        })
+        && !signals.sensitive_target
+        && signals.url_values.is_empty()
+        && signals.command.is_none()
+        && signals.path_values.len() == 1
+        && super::safe_reads::bounded_native_file_write_target(
+            &signals.path_values[0],
+            home_dir,
+            cwd,
+        )
+    {
+        return generic_result(
+            action,
+            "allow",
+            "native_exact_safe_file_write",
+            "The Rust authority proved this ordinary file write targets the verified workspace, a registered worktree, or the verified user home and clears sensitive-path checks.",
         );
     }
     let (reason_code, reason) = review_reason(action_type);

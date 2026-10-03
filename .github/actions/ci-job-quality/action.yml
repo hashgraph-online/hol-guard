@@ -1,0 +1,76 @@
+name: CI quality
+description: Run the quality checks inside the existing CI job.
+runs:
+  using: composite
+  steps:
+  - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+    with:
+      python-version: '3.12'
+  - name: Set up uv
+    id: setup-uv-primary
+    continue-on-error: true
+    uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+    with:
+      version: 0.9.26
+      enable-cache: true
+      cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
+      save-cache: false
+  - name: Retry uv setup after transient download failure
+    if: steps.setup-uv-primary.outcome == 'failure'
+    uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+    with:
+      version: 0.9.26
+      enable-cache: true
+      cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
+      save-cache: false
+  - run: uv sync --frozen --extra dev --python 3.12
+    shell: bash
+  - name: Validate protected test invariants
+    run: uv run --no-sync python scripts/ci/test_inventory.py --output test-inventory.json
+    shell: bash
+  - name: Publish test inventory
+    run: cat test-inventory.json
+    shell: bash
+  - name: Publish exact test-body duplicate candidates
+    run: |
+      uv run --no-sync python scripts/ci/test_duplicate_candidates.py \
+        --output test-duplicate-candidates.json
+      cat test-duplicate-candidates.json
+    shell: bash
+  - name: Lint production sources
+    run: |
+      uv run --no-sync python -m ruff check \
+        src/ \
+        tests/test_guard_durable_io.py \
+        tests/test_guard_managed_install_context.py \
+        tests/test_guard_node_semver.py \
+        tests/test_guard_private_file_io.py
+    shell: bash
+  - name: Check formatting for production sources
+    run: |
+      uv run --no-sync python -m ruff format --check \
+        src/ \
+        tests/test_guard_durable_io.py \
+        tests/test_guard_managed_install_context.py \
+        tests/test_guard_node_semver.py \
+        tests/test_guard_private_file_io.py
+    shell: bash
+  - run: uv run --no-sync basedpyright --level error
+    shell: bash
+  - name: Dead-code scan (L329)
+    run: uv run --no-sync python -m ruff check src/codex_plugin_scanner/guard/ --select=F401,F811,F841
+    shell: bash
+  - name: TODO/FIXME scan (L330)
+    run: |
+      test -d src/codex_plugin_scanner/guard/
+      count=$(
+        { grep -rn "TODO\|FIXME\|HACK\|XXX" src/codex_plugin_scanner/guard/ --include="*.py" || [ "$?" -eq 1 ]; } |
+        { grep -v "# type: ignore" || [ "$?" -eq 1 ]; } |
+        wc -l | tr -d ' '
+      )
+      echo "Guard TODO/FIXME count: $count"
+      if [ "$count" -gt "0" ]; then
+        grep -rn "TODO\|FIXME\|HACK\|XXX" src/codex_plugin_scanner/guard/ --include="*.py" | grep -v "# type: ignore"
+        exit 1
+      fi
+    shell: bash

@@ -128,20 +128,14 @@ def test_exact_cloud_review_resolves_one_request_without_policy_or_memory(tmp_pa
     assert store.get_sync_payload("guard_review_memory_registry") is None
     resolved_at = resolution.resolved_request["resolved_at"]
     assert isinstance(resolved_at, str)
-    authority_lookup = store.resolve_policy_decision_lookup(
-        harness=target.harness,
-        artifact_id=target.artifact_id,
-        artifact_hash=target.artifact_hash,
-        workspace=target.workspace,
-        publisher=target.publisher,
-        now=resolved_at,
-        consume_one_shot=False,
-    )
-    authority = authority_lookup["decision"]
+    assert target_row is not None
+    authority = store.peek_exact_cloud_local_once_approval(request_id=target.request_id, now=resolved_at)
     assert authority is not None
     assert authority["request_id"] == target.request_id
     assert authority["source"] == "approval-gate-once"
-    assert store.claim_approval_reuse_decision(authority, now=resolved_at) is True
+    assert authority["authority_kind"] == "exact-cloud"
+    assert isinstance(authority["approval_id"], str)
+    assert store.claim_local_once_approval(authority["approval_id"], claimed_at=resolved_at) is False
     assert (
         store.peek_local_once_approval(
             harness=target.harness,
@@ -570,6 +564,13 @@ def test_exact_cloud_review_queue_job_requires_no_generic_capability_or_local_ap
     )
     assert request_claim["deviceId"] == oauth_state["device_id"]
     assert request_claim["machineId"] == oauth_state["machine_id"]
+    persisted_request = store.get_raw_approval_request_snapshot(request.request_id)
+    assert isinstance(persisted_request, dict)
+    persisted_claim = build_local_review_request_claim(
+        request_row=persisted_request,
+        oauth=_oauth_metadata(store),
+        store=store,
+    )
     assert command_queue_oauth_target(store) == (oauth_state["device_id"], oauth_state["workspace_id"])
     job = _job(
         store,
@@ -577,7 +578,7 @@ def test_exact_cloud_review_queue_job_requires_no_generic_capability_or_local_ap
             store,
             request.request_id,
             receipt_id="exact-receipt-queue",
-            source_claim=request_claim,
+            source_claim=persisted_claim,
         ),
     )
 

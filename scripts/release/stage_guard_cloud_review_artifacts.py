@@ -20,8 +20,10 @@ _ARTIFACTS = {
     "contributions/extensions/command.probe.json": "extensions/contributions/command.probe.json",
     "contributions/extensions/command.repo2nb.json": "extensions/contributions/command.repo2nb.json",
     "contributions/extensions/command.skill-sunset.json": "extensions/contributions/command.skill-sunset.json",
+    "contributions/extensions/command.tui-runner.json": "extensions/contributions/command.tui-runner.json",
     "contributions/extensions/command.uivoid.json": "extensions/contributions/command.uivoid.json",
     "contracts/mcp-servers/contribution.v1.schema.json": "mcp_servers/contribution.v1.schema.json",
+    "contributions/mcp-servers/mcp.contribos.json": "mcp_servers/contributions/mcp.contribos.json",
     "contributions/mcp-servers/mcp.filesystem.json": "mcp_servers/contributions/mcp.filesystem.json",
     "contributions/mcp-servers/mcp.instapods.json": "mcp_servers/contributions/mcp.instapods.json",
     "contributions/mcp-servers/mcp.pr-ui-compare.json": "mcp_servers/contributions/mcp.pr-ui-compare.json",
@@ -29,11 +31,15 @@ _ARTIFACTS = {
 }
 
 
-def stage_artifacts(source_root: Path) -> tuple[Path, ...]:
+def stage_artifacts(source_root: Path, *, destination_root: Path | None = None) -> tuple[Path, ...]:
     """Copy canonical artifacts into package data and return staged paths."""
 
     source_root = source_root.resolve()
-    data_root = source_root / "src/codex_plugin_scanner/guard/contracts/data"
+    data_root = (
+        destination_root.resolve()
+        if destination_root is not None
+        else source_root / "src/codex_plugin_scanner/guard/contracts/data"
+    )
     staged: list[Path] = []
     for source_name, destination_name in _ARTIFACTS.items():
         source = source_root / source_name
@@ -65,8 +71,9 @@ def main() -> int:
         type=Path,
         default=Path(__file__).resolve().parents[2],
     )
+    parser.add_argument("--destination-root", type=Path)
     args = parser.parse_args()
-    for path in stage_artifacts(args.source_root):
+    for path in stage_artifacts(args.source_root, destination_root=args.destination_root):
         print(path)
     return 0
 

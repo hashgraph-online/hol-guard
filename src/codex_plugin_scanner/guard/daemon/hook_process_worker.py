@@ -15,6 +15,27 @@ from ..codex_hook_windows_job import windows_system_executable_path
 
 _WORKER_RETIRE_JOIN_TIMEOUT_SECONDS = 2.0
 
+HOOK_PROCESS_STARTUP_FAILURE_CODES = frozenset(
+    {
+        "hook_process_isolation_failed",
+        "hook_process_isolation_timeout",
+        "hook_process_isolation_pipe_failed",
+        "hook_process_isolation_protocol",
+        "hook_process_isolation_proof_failed",
+        "hook_process_evaluator_spawn_failed",
+        "hook_process_evaluator_ready_timeout",
+        "hook_process_evaluator_ready_protocol",
+        "hook_process_evaluator_pipe_failed",
+        "hook_process_ready_timeout",
+        "hook_process_ready_pipe_failed",
+        "hook_process_ready_protocol",
+    }
+)
+
+
+def allowlisted_startup_failure_code(value: object) -> str | None:
+    return value if isinstance(value, str) and value in HOOK_PROCESS_STARTUP_FAILURE_CODES else None
+
 
 class WorkerProcess(Protocol):
     @property
@@ -44,6 +65,8 @@ class HookWorkerSlot:
     isolation_ready: bool = False
     pre_isolation_contained: bool = False
     request_exposed: bool = False
+    startup_failure_code: str | None = None
+    startup_failure_lock: threading.Lock = field(default_factory=threading.Lock)
 
 
 @dataclass(frozen=True, slots=True)

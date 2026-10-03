@@ -672,12 +672,19 @@ def test_explicit_github_merge_permission_allows_exact_merge_through_runtime_art
     assert decision_plane["proof_routes"] == ["verified"]
     assert decision_plane["controlling_reasons"] == [
         {
+            "source": "assurance",
+            "reason_code": "native.explicit-benign",
+            "action_floor": "allow",
+            "segment_ref": None,
+            "operation_ref": None,
+        },
+        {
             "source": "control",
             "reason_code": "control.explicitly-enabled-permission",
             "action_floor": "allow",
             "segment_ref": None,
             "operation_ref": None,
-        }
+        },
     ]
 
 

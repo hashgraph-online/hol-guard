@@ -494,10 +494,18 @@ def test_installed_daemon_readiness_requires_workspace_policy() -> None:
     assert deadlines and 0 < deadlines[0] - probe.time.monotonic() <= probe._DAEMON_READINESS_TIMEOUT
 
     class EmptyWorker:
+        policy_snapshot_publisher = SimpleNamespace(last_error="native_policy_snapshot_resident_changed")
+
         def prepare_workspace_policy(self, path: Path, *, deadline: float) -> None:
             return None
 
-    with pytest.raises(ProbeError, match="workspace policy was not ready"):
+    with pytest.raises(ProbeError, match="workspace policy was not ready: native_policy_snapshot_resident_changed"):
+        _prepare_installed_daemon_workspace(
+            SimpleNamespace(_server=SimpleNamespace(hook_worker=EmptyWorker())), workspace
+        )
+
+    EmptyWorker.policy_snapshot_publisher.last_error = None
+    with pytest.raises(ProbeError, match="workspace policy was not ready: readiness_deadline_exceeded"):
         _prepare_installed_daemon_workspace(
             SimpleNamespace(_server=SimpleNamespace(hook_worker=EmptyWorker())), workspace
         )

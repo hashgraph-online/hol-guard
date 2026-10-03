@@ -81,7 +81,7 @@ def test_unsafe_managed_root_never_starts_node(tmp_path, monkeypatch) -> None:
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node is not installed")
-@pytest.mark.parametrize("source,ok", [("module.exports = {};", True), ("function broken( {", False)])
+@pytest.mark.parametrize("source,ok", [("export default {};", True), ("function broken( {", False)])
 def test_real_node_checks_managed_source_without_executing_it(tmp_path, monkeypatch, source, ok) -> None:
     context = _context(tmp_path, monkeypatch)
     path = cline_plugin.cline_plugin_root(context) / "index.js"

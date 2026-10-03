@@ -7,6 +7,8 @@ import weakref
 from pathlib import Path
 from typing import Protocol
 
+from .fork_safety import forget_in_child
+
 
 class ReviewEventWake(Protocol):
     """Minimal wake contract used by the sync worker."""
@@ -49,6 +51,7 @@ class ReviewEventWakeSignal:
 
 _SIGNALS_LOCK = threading.Lock()
 _SIGNALS: weakref.WeakValueDictionary[str, ReviewEventWakeSignal] = weakref.WeakValueDictionary()
+forget_in_child(_SIGNALS)
 
 
 def review_event_wake_signal(database_path: Path) -> ReviewEventWakeSignal:

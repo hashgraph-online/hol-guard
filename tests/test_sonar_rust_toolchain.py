@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
+import coverage
 import pytest
 import yaml
+
+from tests.support.ci_workflow import expand_ci_job_actions
 
 ROOT = Path(__file__).resolve().parents[1]
 PREPARE_SCRIPT = ROOT / "scripts/ci/prepare_sonar_analysis.sh"
@@ -16,7 +21,8 @@ SETUP_SCRIPT = ROOT / "scripts/ci/setup_sonar_rust.sh"
 
 
 def test_sonar_preparation_precedes_analysis_and_fails_closed() -> None:
-    workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
+    """Verify sonar preparation precedes analysis and fails closed."""
+    workflow = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")))
     job = workflow["jobs"]["sonar"]
     steps = job["steps"]
     download_index = next(i for i, step in enumerate(steps) if step.get("name") == "Download pytest coverage data")
@@ -39,7 +45,7 @@ def test_sonar_preparation_precedes_analysis_and_fails_closed() -> None:
     assert steps[0]["id"] == "token-presence"
     assert job["permissions"] == {"contents": "read", "actions": "read"}
     assert wait_index < download_index < setup_index < scan_index
-    assert "wait_for_pytest_shards.py" in steps[wait_index]["run"]
+    assert "select_pytest_coverage.py" in steps[wait_index]["run"]
     assert "SONAR_TOKEN" not in steps[wait_index].get("env", {})
     assert setup["run"] == "bash scripts/ci/prepare_sonar_analysis.sh"
     assert '"rust/rust-toolchain.toml"' in script
@@ -65,7 +71,7 @@ def test_sonar_preparation_precedes_analysis_and_fails_closed() -> None:
 
 
 def _run_preparation(
-    tmp_path: Path, shard_count: int, fail_command: str = "", script: Path = PREPARE_SCRIPT
+    tmp_path: Path, shard_count: int, fail_command: str = "", script: Path = PREPARE_SCRIPT, invalid_inventory: str = ""
 ) -> tuple[subprocess.CompletedProcess[str], list[str]]:
     bash = shutil.which("bash")
     if os.name == "nt" or bash is None:
@@ -80,14 +86,30 @@ def _run_preparation(
             'command="${0##*/} $*"\n'
             'printf "%s\\n" "$command" >> "$COMMAND_LOG"\n'
             'if [[ "$command" == "$FAIL_COMMAND"* && -n "$FAIL_COMMAND" ]]; then exit 7; fi\n'
+            'if [[ "${0##*/}" == "uv" && "${4:-}" == "scripts/ci/select_pytest_coverage.py" ]]; then\n'
+            '  exec "$REAL_PYTHON" "$SELECTOR_SCRIPT" "${@:5}"\n'
+            "fi\n"
             'if [[ "${0##*/}" == "python" ]]; then printf "1.88.0\\n"; fi\n',
             encoding="utf-8",
         )
         stub.chmod(0o700)
     for shard in range(shard_count):
-        directory = tmp_path / "coverage-data" / f"shard-{shard:02d}"
+        directory = tmp_path / "coverage-data" / f"pytest-coverage-1-{shard}"
         directory.mkdir(parents=True)
-        (directory / ".coverage").touch()
+        database = coverage.CoverageData(basename=str(directory / ".coverage"))
+        database.add_lines({str(tmp_path / "example.py"): {1}})
+        database.write()
+    manifest = {
+        "schema": "hol-guard.pytest-coverage-selection.v1",
+        "shards": [{"shard": shard, "name": f"pytest-coverage-1-{shard}"} for shard in range(128)],
+    }
+    if invalid_inventory == "empty":
+        (tmp_path / "coverage-data/pytest-coverage-1-0/.coverage").write_bytes(b"")
+    elif invalid_inventory == "unselected":
+        (tmp_path / "coverage-data/pytest-coverage-1-0").rename(tmp_path / "coverage-data/pytest-coverage-2-0")
+    elif invalid_inventory == "manifest":
+        manifest["shards"].pop()
+    (tmp_path / "coverage-selection.json").write_text(json.dumps(manifest), encoding="utf-8")
     result = subprocess.run(
         [bash, str(script)],
         cwd=tmp_path,
@@ -97,6 +119,8 @@ def _run_preparation(
         env={
             **os.environ,
             "PATH": f"{binaries}{os.pathsep}{os.environ.get('PATH', '')}",
+            "REAL_PYTHON": sys.executable,
+            "SELECTOR_SCRIPT": str(ROOT / "scripts/ci/select_pytest_coverage.py"),
             "COMMAND_LOG": str(log),
             "FAIL_COMMAND": fail_command,
         },
@@ -107,8 +131,11 @@ def _run_preparation(
 def test_preparation_combines_all_shards_before_creating_coverage_xml(tmp_path: Path) -> None:
     result, commands = _run_preparation(tmp_path, 128)
     assert result.returncode == 0, result.stderr
-    assert len(commands) == 2
-    assert commands[0].split() == [
+    assert len(commands) == 3
+    assert (
+        commands[0] == "uv run --no-sync python scripts/ci/select_pytest_coverage.py --verify-downloads coverage-data"
+    )
+    assert commands[1].split() == [
         "uv",
         "run",
         "--no-sync",
@@ -116,14 +143,15 @@ def test_preparation_combines_all_shards_before_creating_coverage_xml(tmp_path: 
         "scripts/ci/parallel_coverage_combine.py",
         "--workers",
         "4",
-        *sorted(f"coverage-data/shard-{shard:02d}/.coverage" for shard in range(128)),
+        *sorted(f"coverage-data/pytest-coverage-1-{shard}/.coverage" for shard in range(128)),
     ]
-    assert commands[1] == "uv run --no-sync python scripts/ci/parallel_coverage_xml.py --workers 4"
+    assert commands[2] == "uv run --no-sync python scripts/ci/parallel_coverage_xml.py --workers 4"
 
 
 @pytest.mark.parametrize("fail_command", ["", "cargo clippy"])
 def test_early_clippy_runs_without_coverage_and_propagates_failure(tmp_path: Path, fail_command: str) -> None:
-    workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
+    """Verify early clippy runs without coverage and propagates failure."""
+    workflow = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")))
     step = next(
         step
         for step in workflow["jobs"]["sonar"]["steps"]
@@ -160,6 +188,7 @@ def test_preparation_rejects_incomplete_or_excess_coverage_before_running_tools(
 @pytest.mark.parametrize(
     "failed_command",
     [
+        "uv run --no-sync python scripts/ci/select_pytest_coverage.py",
         "uv run --no-sync python scripts/ci/parallel_coverage_combine.py",
         "uv run --no-sync python scripts/ci/parallel_coverage_xml.py",
     ],
@@ -175,3 +204,11 @@ def test_setup_stops_at_each_failed_command(tmp_path: Path, failed_command: str)
     result, commands = _run_preparation(tmp_path, 0, failed_command, SETUP_SCRIPT)
     assert result.returncode == 7
     assert commands[-1].startswith(failed_command)
+
+
+@pytest.mark.parametrize("invalid_inventory", ["empty", "unselected", "manifest"])
+def test_preparation_runs_real_download_validation_before_combine(tmp_path: Path, invalid_inventory: str) -> None:
+    result, commands = _run_preparation(tmp_path, 128, invalid_inventory=invalid_inventory)
+    assert result.returncode == 1
+    assert "Coverage selection failed:" in result.stderr
+    assert commands == ["uv run --no-sync python scripts/ci/select_pytest_coverage.py --verify-downloads coverage-data"]

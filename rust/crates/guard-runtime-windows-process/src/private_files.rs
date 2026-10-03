@@ -139,6 +139,28 @@ pub(super) fn open_inspect_private_file(path: &Path) -> io::Result<std::fs::File
     Ok(file)
 }
 
+/// Return whether an existing regular file has exactly one directory entry.
+/// The link count is read from the opened handle so aliases cannot be hidden
+/// by a path-only metadata lookup.
+pub fn is_single_link_file(path: &Path) -> io::Result<bool> {
+    let file = open_raw_with_access(
+        path,
+        false,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+        FILE_READ_ATTRIBUTES,
+    )?;
+    validate_handle(&file, false)?;
+    let mut information = unsafe { zeroed::<BY_HANDLE_FILE_INFORMATION>() };
+    // SAFETY: The output buffer is correctly sized and the handle remains
+    // open for the synchronous query.
+    if unsafe { GetFileInformationByHandle(file.as_raw_handle() as HANDLE, &mut information) }
+        == FALSE
+    {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(information.nNumberOfLinks == 1)
+}
+
 pub(super) fn open_directory_bound(
     path: &Path,
     allow_acl_repair: bool,

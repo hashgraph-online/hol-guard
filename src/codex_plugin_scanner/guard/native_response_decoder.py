@@ -22,6 +22,9 @@ _NATIVE_ERROR_CODES = frozenset(
         "native_request_too_large",
         "native_response_encode_failed",
         "native_runtime_panicked",
+        "native_context_digest_invalid",
+        "native_context_digest_invalid_json",
+        "native_context_digest_schema_mismatch",
     }
 )
 _NATIVE_LIFECYCLE_ERROR_CODES = NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES

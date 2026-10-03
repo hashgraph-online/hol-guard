@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Literal, TypeGuard, cast
 
 from ..file_identity import content_stat_identity
+from ..native_context import _UNBOUND_PREFIX, context_opaque_digest, context_sha256_digest
 from .env_wrapper import parse_env_wrapper
 from .extension_control_runtime import current_extension_control_binding_digest
 
@@ -41,9 +42,6 @@ ApprovalContextValidationFailure = Literal[
 ]
 
 _TOKEN_VERSION = 1
-_TOKEN_DOMAIN = "hol.guard.approval-context"
-_CONFIGURED_ENV_HASH_DOMAIN = b"hol.guard.configured-environment:v1\x00"
-_CONFIGURED_HEADER_HASH_DOMAIN = b"hol.guard.configured-headers:v1\x00"
 _TOKEN_FIELDS = frozenset({"version", "identity", "content", "capabilities", "policy", "sandbox"})
 _ENCODED_PAYLOAD_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
 _SHA256_HEX_PATTERN = re.compile(r"^[0-9a-f]{64}$")
@@ -63,15 +61,85 @@ class ApprovalContextToken:
     policy_hash: str
     sandbox_hash: str
 
-    def _payload(self) -> dict[str, object]:
-        return {
-            "version": _TOKEN_VERSION,
-            "identity": self.identity_hash,
-            "content": self.content_hash,
-            "capabilities": self.capabilities_hash,
-            "policy": self.policy_hash,
-            "sandbox": self.sandbox_hash,
-        }
+
+class NativeContextDigestUnavailableError(RuntimeError):
+    """The native context-digest authority is required but unreachable."""
+
+
+def _unbound_context_digest(label: str, *, material: object) -> str:
+    """Return a degraded sentinel that can never validate as context proof.
+
+    Builders degrade to this when the native digest authority is unreachable
+    (``HOL_GUARD_NATIVE=off``, missing runtime, unprovisioned home).  The
+    ``guard-context-unbound:`` prefix is rejected by token parsing and by
+    ``is_unbound_context_digest`` call sites, so equality between two degraded
+    values can never mint approval reuse or an unchanged-context claim.
+    Determinism over the caller's canonical ``material`` maps identical
+    degraded inputs to one sentinel, so restrictive stored rows (saved
+    blocks) keyed by artifact hash stay reachable, while validation still
+    rejects every unbound value on sight.
+    """
+
+    canonical = json.dumps(
+        {"label": label, "material": material},
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+        allow_nan=False,
+    ).encode("utf-8")
+    return f"{_UNBOUND_PREFIX}{label}:{hashlib.sha256(canonical).hexdigest()}"
+
+
+@lru_cache(maxsize=4)
+def _context_digest_guard_home(home: str) -> Path:
+    """Resolve the resident's guard home, cached per user home."""
+
+    from ..config import resolve_guard_home_for_user_home
+
+    return resolve_guard_home_for_user_home(Path(home))
+
+
+def _context_digest_result(kind: str, fields: dict[str, object]) -> dict[str, object]:
+    """Run one native ``context_digest`` sub-operation.
+
+    The Rust worker owns the canonical encoding and hashing; this wrapper only
+    transports the request and projects the typed result.  ``None`` (runtime
+    unavailable, overloaded, or unbindable) raises the dedicated error, and a
+    worker-side input rejection maps back to the legacy ``TypeError``
+    boundary.
+
+    Enforcement entry points bind their deployment's guard home so digest
+    calls reach that flow's resident; unbound callers resolve the default
+    home for this process.
+    """
+
+    from ..native_context import context_digest_guard_home, native_context_digest
+
+    result = native_context_digest(
+        kind,
+        fields,
+        guard_home=context_digest_guard_home() or _context_digest_guard_home(str(Path.home())),
+    )
+    if result is None:
+        raise NativeContextDigestUnavailableError("native context digest authority unavailable")
+    if result.get("status") != "ok":
+        raise TypeError(f"approval context digest rejected input: {result.get('code')}")
+    return result
+
+
+def _require_json_component(name: str, value: object) -> None:
+    try:
+        json.dumps(value, ensure_ascii=True, allow_nan=False)
+    except (TypeError, ValueError) as exc:
+        raise TypeError(f"approval context component {name!r} must be JSON-compatible") from exc
+
+
+def _json_serializable(value: object) -> bool:
+    try:
+        json.dumps(value, ensure_ascii=True, allow_nan=False)
+    except (TypeError, ValueError):
+        return False
+    return True
 
 
 def build_approval_context_token(
@@ -90,27 +158,34 @@ def build_approval_context_token(
     ``content`` may be any artifact-hash text and is never parsed or embedded.
     """
 
-    parsed = ApprovalContextToken(
-        identity_hash=_component_hash("identity", identity),
-        content_hash=_component_hash("content", content),
-        capabilities_hash=_component_hash("capabilities", capabilities),
-        policy_hash=_component_hash(
-            "policy",
-            {
-                "extension_control_digest": current_extension_control_binding_digest(),
-                "policy": policy,
-            },
-        ),
-        sandbox_hash=_component_hash("sandbox", sandbox),
-    )
-    payload = json.dumps(
-        parsed._payload(),
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=True,
-    ).encode("utf-8")
-    encoded = base64.urlsafe_b64encode(payload).decode("ascii").rstrip("=")
-    return f"{APPROVAL_CONTEXT_TOKEN_PREFIX}{encoded}"
+    for name, value in (
+        ("identity", identity),
+        ("content", content),
+        ("capabilities", capabilities),
+        ("policy", policy),
+        ("sandbox", sandbox),
+    ):
+        _require_json_component(name, value)
+    components: dict[str, object] = {
+        "identity": identity,
+        "content": content,
+        "capabilities": capabilities,
+        "policy": policy,
+        "sandbox": sandbox,
+        "extension_control_digest": current_extension_control_binding_digest(),
+    }
+    try:
+        result = _context_digest_result(
+            "build_approval_context_token",
+            {"components": components},
+        )
+    except NativeContextDigestUnavailableError:
+        # Degrade deterministically over the already-validated components: the
+        # unbound prefix still fails every validation path, but stored
+        # restrictive rows (saved blocks) keyed by this token stay reachable
+        # across identical degraded invocations.
+        return _unbound_context_digest("approval-context-token", material=components)
+    return cast(str, result["token"])
 
 
 def parse_approval_context_token(token: object) -> ApprovalContextToken | None:
@@ -170,14 +245,37 @@ def approval_context_validation_reason(
 ) -> ApprovalContextValidationFailure | None:
     """Return the first changed context dimension for saved approval evidence."""
 
-    current_token = build_approval_context_token(
-        identity=identity,
-        content=content,
-        capabilities=capabilities,
-        policy=policy,
-        sandbox=sandbox,
-    )
-    return approval_context_tokens_validation_reason(saved_token, current_token)
+    for name, value in (
+        ("identity", identity),
+        ("content", content),
+        ("capabilities", capabilities),
+        ("policy", policy),
+        ("sandbox", sandbox),
+    ):
+        _require_json_component(name, value)
+    if not _json_serializable(saved_token):
+        return "approval_reuse_content_changed"
+    try:
+        result = _context_digest_result(
+            "validate_approval_context",
+            {
+                "saved_token": saved_token,
+                "components": {
+                    "identity": identity,
+                    "content": content,
+                    "capabilities": capabilities,
+                    "policy": policy,
+                    "sandbox": sandbox,
+                    "extension_control_digest": current_extension_control_binding_digest(),
+                },
+            },
+        )
+    except (NativeContextDigestUnavailableError, TypeError):
+        # The resident being unreachable — or a component it cannot express —
+        # can never prove context is unchanged.  Deny reuse instead of
+        # crashing the enforcement caller.
+        return "approval_reuse_content_changed"
+    return cast(ApprovalContextValidationFailure | None, result.get("validation_reason"))
 
 
 def approval_context_tokens_validation_reason(
@@ -190,21 +288,16 @@ def approval_context_tokens_validation_reason(
     dimensions are unchanged, so they fail closed as changed content.
     """
 
-    saved = parse_approval_context_token(saved_token)
-    current = parse_approval_context_token(current_token)
-    if saved is None or current is None:
+    if not (_json_serializable(saved_token) and _json_serializable(current_token)):
         return "approval_reuse_content_changed"
-    comparisons: tuple[tuple[str, str, ApprovalContextValidationFailure], ...] = (
-        (saved.identity_hash, current.identity_hash, "approval_reuse_identity_changed"),
-        (saved.content_hash, current.content_hash, "approval_reuse_content_changed"),
-        (saved.capabilities_hash, current.capabilities_hash, "approval_reuse_capability_changed"),
-        (saved.policy_hash, current.policy_hash, "approval_reuse_policy_changed"),
-        (saved.sandbox_hash, current.sandbox_hash, "approval_reuse_sandbox_changed"),
-    )
-    for saved_hash, current_hash, reason in comparisons:
-        if not hmac.compare_digest(saved_hash, current_hash):
-            return reason
-    return None
+    try:
+        result = _context_digest_result(
+            "validate_approval_context_tokens",
+            {"saved_token": saved_token, "current_token": current_token},
+        )
+    except (NativeContextDigestUnavailableError, TypeError):
+        return "approval_reuse_content_changed"
+    return cast(ApprovalContextValidationFailure | None, result.get("validation_reason"))
 
 
 def saved_allow_context_validation_reason(
@@ -311,7 +404,9 @@ def build_runtime_executable_identity(
     if require_executable and os.name != "nt" and metadata.st_mode & 0o111 == 0:
         return with_launch_cwd(_unreusable_executable_identity(command, status="not_executable", path=canonical))
     stat_key = _executable_stat_key(metadata)
-    digest, hash_status, shebang, shebang_status = _cached_executable_hash(str(canonical), stat_key)
+    digest, hash_status, shebang, shebang_status = _cached_executable_hash(
+        str(canonical), stat_key, expected_birthtime_ns=getattr(metadata, "st_birthtime_ns", None)
+    )
     final_path_chain = _executable_path_chain_snapshot(launch_path)
     if final_path_chain is None or final_path_chain != initial_path_chain:
         return with_launch_cwd(_unreusable_executable_identity(command, status="path_changed", path=launch_path))
@@ -341,7 +436,7 @@ def build_runtime_executable_identity(
     else:
         identity["sha256"] = digest
     if shebang is not None:
-        identity["shebang_sha256"] = hashlib.sha256(shebang.encode("utf-8")).hexdigest()
+        identity["shebang_sha256"] = context_opaque_digest(shebang, unbound_label="shebang")
     return with_launch_cwd(identity)
 
 
@@ -391,7 +486,9 @@ def _executable_path_chain_snapshot(path: Path) -> tuple[tuple[tuple[str, object
                 "mode": stat.S_IMODE(metadata.st_mode),
                 "modified_time_ns": metadata.st_mtime_ns,
                 "path": current_text,
-                "target_sha256": hashlib.sha256(target.encode("utf-8")).hexdigest() if target is not None else None,
+                "target_sha256": (
+                    context_opaque_digest(target, unbound_label="path-target") if target is not None else None
+                ),
             }
             snapshots.append(tuple(sorted(snapshot.items())))
     return tuple(snapshots) if snapshots else None
@@ -708,6 +805,34 @@ def runtime_launch_identity_matches(
     )
 
 
+def _configured_values_payload(
+    values: Mapping[str, str] | object,
+    configured_keys: Sequence[str] | None,
+) -> dict[str, object]:
+    """Shape configured values for transport without re-deriving semantics.
+
+    ``str(key)`` mirrors the legacy normalization of non-string mapping keys;
+    the worker applies the authoritative strip/dedup/framing.  Non-mapping
+    inputs pass through so the worker reproduces the legacy failure boundary.
+    """
+
+    # Mappings travel as caller-ordered ["key", value] pairs: distinct raw
+    # keys can collide after the worker strips whitespace, and the legacy dict
+    # comprehension resolved the collision by the last entry in caller order —
+    # an ordering a plain JSON object cannot carry across transport.
+    if not values:
+        pairs: object = []
+    elif isinstance(values, Mapping):
+        pairs = [[str(key), value] for key, value in values.items()]
+    else:
+        # Same boundary the legacy `.items()` AttributeError produced.
+        raise TypeError("configured values must be a mapping or None")
+    return {
+        "values": pairs,
+        "configured_keys": ([str(key) for key in configured_keys] if configured_keys is not None else None),
+    }
+
+
 def build_configured_environment_hash(
     environment: Mapping[str, str] | None,
     *,
@@ -715,11 +840,16 @@ def build_configured_environment_hash(
 ) -> str:
     """Hash configured environment values without exposing or binding ambient values."""
 
-    return _build_configured_values_hash(
-        environment,
-        configured_keys=configured_keys,
-        domain=_CONFIGURED_ENV_HASH_DOMAIN,
-    )
+    try:
+        result = _context_digest_result(
+            "configured_environment_hash",
+            _configured_values_payload(environment, configured_keys),
+        )
+    except NativeContextDigestUnavailableError:
+        # Deterministic so artifact content hashes don't churn; callers must
+        # reject this sentinel rather than treat it as an exact binding.
+        return f"{_UNBOUND_PREFIX}configured-environment"
+    return cast(str, result["digest"])
 
 
 def build_configured_header_values_hash(
@@ -729,37 +859,16 @@ def build_configured_header_values_hash(
 ) -> str:
     """Hash configured header values without retaining or exposing them."""
 
-    return _build_configured_values_hash(
-        headers,
-        configured_keys=configured_keys,
-        domain=_CONFIGURED_HEADER_HASH_DOMAIN,
-    )
-
-
-def _build_configured_values_hash(
-    values: Mapping[str, str] | None,
-    *,
-    configured_keys: Sequence[str] | None,
-    domain: bytes,
-) -> str:
-    """Hash one configured key/value namespace with stable framing."""
-
-    normalized_values = {str(key).strip(): value for key, value in (values or {}).items() if str(key).strip()}
-    keys = normalized_values.keys() if configured_keys is None else (str(key).strip() for key in configured_keys)
-    normalized_keys = sorted({key for key in keys if key})
-    digest = hashlib.sha256(domain)
-    for key in normalized_keys:
-        key_bytes = key.encode("utf-8")
-        digest.update(len(key_bytes).to_bytes(8, "big"))
-        digest.update(key_bytes)
-        if key not in normalized_values:
-            digest.update(b"\x00")
-            continue
-        value_bytes = normalized_values[key].encode("utf-8")
-        digest.update(b"\x01")
-        digest.update(len(value_bytes).to_bytes(8, "big"))
-        digest.update(value_bytes)
-    return digest.hexdigest()
+    try:
+        result = _context_digest_result(
+            "configured_headers_hash",
+            _configured_values_payload(headers, configured_keys),
+        )
+    except NativeContextDigestUnavailableError:
+        # Deterministic so artifact content hashes don't churn; callers must
+        # reject this sentinel rather than treat it as an exact binding.
+        return f"{_UNBOUND_PREFIX}configured-headers"
+    return cast(str, result["digest"])
 
 
 def _normalized_launch_cwd(cwd: Path | None) -> Path:
@@ -770,19 +879,25 @@ def _normalized_launch_cwd(cwd: Path | None) -> Path:
         return candidate.expanduser().absolute()
 
 
-def _launch_argv_digest(argv: Sequence[str]) -> str:
-    material = json.dumps(list(argv), ensure_ascii=True, separators=(",", ":"))
-    return _opaque_identity_digest(material)
-
-
 def _opaque_identity_digest(material: str) -> str:
-    """Return a stable launch-identity digest, not a credential verifier."""
+    """Return a stable launch-identity digest, not a credential verifier.
 
-    # Launch material can contain password-like values, but this digest is used
-    # only for exact approval-context change detection. It is never used to
-    # authenticate a secret, so a password KDF would be the wrong primitive.
-    # codeql[py/weak-sensitive-data-hashing]
-    return hashlib.sha256(material.encode("utf-8")).hexdigest()
+    Launch material can contain password-like values, but this digest is used
+    only for exact approval-context change detection. It is never used to
+    authenticate a secret, so a password KDF would be the wrong primitive.
+    codeql[py/weak-sensitive-data-hashing]
+
+    Hash authority lives in the native ``opaque_material_digest`` op; the
+    unbound degrade still fails every equality/validation check.
+    """
+    return context_opaque_digest(material, unbound_label="opaque-identity")
+
+
+def _launch_argv_digest(argv: Sequence[str]) -> str:
+    # Native ``opaque_material_digest`` over the canonical argv JSON text —
+    # byte-identical to _opaque_identity_digest(json.dumps(argv)).
+    material = json.dumps(list(argv), ensure_ascii=True, separators=(",", ":"))
+    return context_opaque_digest(material, unbound_label="launch-argv")
 
 
 def _runtime_entrypoint_identity(
@@ -939,7 +1054,7 @@ def _direct_executable_runtime_entrypoint_identity(
         "launcher": launcher_identity,
         "script_args_sha256": _launch_argv_digest(launch_args),
         "shebang_args_sha256": _launch_argv_digest(shebang_args),
-        "shebang_sha256": hashlib.sha256(executable_shebang.encode("utf-8")).hexdigest(),
+        "shebang_sha256": context_opaque_digest(executable_shebang, unbound_label="shebang"),
         "status": "verified",
     }
     if launcher_name not in {"env", "env.exe"}:
@@ -992,7 +1107,7 @@ def _direct_executable_runtime_entrypoint_identity(
 
     env_command = _env_shebang_command(shebang_args)
     search_path = launch_env.get("PATH")
-    result["search_path_sha256"] = hashlib.sha256((search_path or "").encode("utf-8")).hexdigest()
+    result["search_path_sha256"] = context_opaque_digest(search_path or "", unbound_label="search-path")
     if env_command is None:
         result.update(
             _unproven_runtime_entrypoint(
@@ -1126,6 +1241,7 @@ def _raw_shebang_for_identity(identity: Mapping[str, object]) -> tuple[str | Non
     digest, hash_status, shebang, shebang_status = _cached_executable_hash(
         path,
         _executable_stat_key(metadata),
+        expected_birthtime_ns=getattr(metadata, "st_birthtime_ns", None),
     )
     if (
         hash_status != "verified"
@@ -1579,19 +1695,19 @@ def _unproven_runtime_entrypoint(
 
 
 def _runtime_launch_verification_digest(identity: object) -> str | None:
-    """Hash launch identity while ignoring only deliberate instability nonces."""
+    """Hash launch identity while ignoring only deliberate instability nonces.
 
+    The canonical-JSON SHA-256 is owned by the native ``canonical_sha256`` op;
+    the serialization-guard stays so non-JSON identity still returns ``None``
+    rather than surfacing a transport error.
+    """
+
+    material = _without_runtime_reuse_nonces(identity)
     try:
-        material = json.dumps(
-            _without_runtime_reuse_nonces(identity),
-            sort_keys=True,
-            separators=(",", ":"),
-            ensure_ascii=True,
-            allow_nan=False,
-        ).encode("utf-8")
+        json.dumps(material, ensure_ascii=True, allow_nan=False)
     except (TypeError, ValueError):
         return None
-    return hashlib.sha256(material).hexdigest()
+    return context_sha256_digest(material, unbound_label="launch-verification")
 
 
 def _runtime_identity_contains_reuse_nonce(value: object) -> bool:
@@ -1630,6 +1746,8 @@ def _without_runtime_reuse_nonces(value: object) -> object:
 def _cached_executable_hash(
     path: str,
     expected_stat: tuple[int, int, int, int, int, int],
+    *,
+    expected_birthtime_ns: int | None = None,
 ) -> tuple[str | None, str, str | None, str]:
     flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
     try:
@@ -1639,7 +1757,21 @@ def _cached_executable_hash(
     try:
         opened_stat = os.fstat(descriptor)
         observed_stat = _executable_stat_key(opened_stat)
-        if observed_stat != expected_stat or not stat.S_ISREG(opened_stat.st_mode):
+        path_stat = expected_stat
+        descriptor_stat = observed_stat
+        opened_birthtime_ns = getattr(opened_stat, "st_birthtime_ns", None)
+        if os.name == "nt":
+            # stat derives executable bits from the filename; fstat cannot.
+            # Keep file type and read/write bits equal across both APIs.
+            path_stat = (*path_stat[:5], path_stat[5] & ~0o111)
+            descriptor_stat = (*descriptor_stat[:5], descriptor_stat[5] & ~0o111)
+        if os.name == "nt" and expected_birthtime_ns is not None and opened_birthtime_ns is not None:
+            # Windows stat reports creation time in ctime, while fstat may
+            # report ChangeTime. Compare birthtime across APIs only; retain
+            # the full descriptor ChangeTime check across the actual read.
+            path_stat = (*path_stat[:4], expected_birthtime_ns, path_stat[5])
+            descriptor_stat = (*descriptor_stat[:4], opened_birthtime_ns, descriptor_stat[5])
+        if descriptor_stat != path_stat or not stat.S_ISREG(opened_stat.st_mode):
             return None, "identity_raced", None, "unverified"
         if opened_stat.st_size > _MAX_EXECUTABLE_HASH_BYTES:
             return None, "too_large", None, "unverified"
@@ -1697,26 +1829,6 @@ def _unreusable_executable_identity(
         "status": status,
         "reuse_nonce": secrets.token_hex(16),
     }
-
-
-def _component_hash(component: str, value: object) -> str:
-    material = {
-        "component": component,
-        "domain": _TOKEN_DOMAIN,
-        "value": value,
-        "version": _TOKEN_VERSION,
-    }
-    try:
-        canonical = json.dumps(
-            material,
-            sort_keys=True,
-            separators=(",", ":"),
-            ensure_ascii=True,
-            allow_nan=False,
-        )
-    except (TypeError, ValueError) as exc:
-        raise TypeError(f"approval context component {component!r} must be JSON-compatible") from exc
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def _is_sha256_hex(value: object) -> TypeGuard[str]:

@@ -47,7 +47,12 @@ from .desktop_notifications import (
     notify_pending_approval_once,
 )
 from .incident import build_incident_context
-from .local_dashboard_session import build_local_dashboard_session_token
+from .local_dashboard_session import (
+    build_approval_browser_url as build_approval_browser_url,
+)
+from .local_dashboard_session import (
+    build_local_dashboard_session_token,
+)
 from .local_supply_chain import build_local_supply_chain_posture
 from .managed_install_proof import verify_managed_install_proof
 from .memory_decision_outbox import enqueue_memory_decision_event
@@ -146,32 +151,6 @@ def build_approval_request_url(approval_center_url: str, request_id: str) -> str
     """Build the canonical local dashboard deep link for one approval request."""
 
     return f"{approval_center_url.rstrip('/')}/requests/{request_id.strip()}"
-
-
-def build_approval_browser_url(
-    approval_url: str | None,
-    *,
-    auth_token: str | None,
-    surface: str = "approval-center",
-) -> str | None:
-    """Build a browser-openable approval URL with a scoped Guard session token."""
-
-    if not approval_url or auth_token is None:
-        return approval_url
-    parsed = urlparse(approval_url)
-    fragment_pairs = [
-        (key, value) for key, value in parse_qsl(parsed.fragment, keep_blank_values=True) if key != "guard-token"
-    ]
-    fragment_pairs.append(
-        (
-            "guard-token",
-            build_local_dashboard_session_token(
-                auth_token=auth_token,
-                surface=surface,
-            ),
-        )
-    )
-    return urlunparse(parsed._replace(fragment=urlencode(fragment_pairs)))
 
 
 def _normalize_harness_slug(harness: str | None) -> str | None:
@@ -832,6 +811,27 @@ def apply_approval_resolution(
                 harness=_approval_policy_harness(request),
                 created_at=resolved_at,
             )
+
+    elif (
+        persist_policy is False
+        and scope == "artifact"
+        and exact_context_allow
+        and temporary_mcp_selection is None
+        and local_tool_selection is None
+    ):
+        # "Do not remember" still authorizes the exact approved retry once.
+        store.ensure_policy_integrity_ready_for_write(
+            harness=decision.harness,
+            approval_gate_grant=resolved_gate_grant,
+            now=resolved_at,
+        )
+        local_once_fallback = _record_local_once_approval(
+            store,
+            request_id=request_id,
+            decision=decision,
+            harness=_approval_policy_harness(request),
+            created_at=resolved_at,
+        )
 
     temporary_mcp_result: dict[str, object] | None = None
     temporary_mcp_resolved_ids: list[str] = []

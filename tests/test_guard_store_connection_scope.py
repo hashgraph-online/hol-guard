@@ -194,7 +194,8 @@ def test_scope_records_pragma_contention_and_closes_failed_connection(tmp_path: 
             return super().execute(statement, *args, **kwargs)
 
     def connect(*args, **kwargs):
-        connection = original_connect(*args, factory=PragmaConnection, **kwargs)
+        kwargs["factory"] = PragmaConnection
+        connection = original_connect(*args, **kwargs)
         opened.append(connection)
         return connection
 

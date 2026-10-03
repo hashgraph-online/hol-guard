@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+import os
+import sys
 import time
 from collections.abc import Mapping
+from contextlib import nullcontext
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 import codex_plugin_scanner.guard.daemon.hook_worker as hook_worker_module
+from codex_plugin_scanner.guard import native_policy_snapshot as snapshot_api
 from codex_plugin_scanner.guard.native_policy_snapshot import native_policy_snapshot_v3
 from codex_plugin_scanner.guard.native_policy_snapshot_acked import acked_snapshot_binding_for_store
 from codex_plugin_scanner.guard.native_policy_snapshot_codec import (
@@ -17,8 +22,10 @@ from codex_plugin_scanner.guard.native_policy_snapshot_codec import (
     derive_native_policy_verifier_key,
 )
 from codex_plugin_scanner.guard.native_policy_snapshot_constants import (
+    POLICY_SNAPSHOT_AUTHORITY_MAX_BYTES,
     POLICY_SNAPSHOT_AUTHORITY_SCHEMA,
 )
+from codex_plugin_scanner.guard.native_policy_snapshot_windows_state import _WindowsDirectoryBinding
 from codex_plugin_scanner.guard.store import GuardStore
 
 from .native_policy_snapshot_test_fixtures import _config
@@ -63,6 +70,23 @@ class _PoisonPublisher(_TimeoutPublisher):
         raise AssertionError("CLI hook workers must not request a competing publish")
 
 
+class _StartupWorkspacePublisher(_TimeoutPublisher):
+    def __init__(self) -> None:
+        self.events: list[tuple[str, Path | None]] = []
+
+    def register_workspace(self, workspace: Path | None) -> bool:
+        self.events.append(("register", workspace))
+        return True
+
+    def start(self) -> None:
+        self.events.append(("start", None))
+
+    def wait_until_ready(self, deadline_monotonic: float) -> bool:
+        del deadline_monotonic
+        self.events.append(("wait", None))
+        return True
+
+
 def _write_resident_authority(guard_home: Path, snapshot: Mapping[str, object], master: bytes) -> None:
     generation = snapshot["generation"]
     digest = snapshot["policy_digest"]
@@ -76,9 +100,27 @@ def _write_resident_authority(guard_home: Path, snapshot: Mapping[str, object], 
         "schema": POLICY_SNAPSHOT_AUTHORITY_SCHEMA,
         "snapshot": snapshot,
     }
+    payload = _canonical_json_bytes_v3(record)
     path = guard_home / "native-runtime" / "policy-snapshot-v3.json"
+    if os.name == "nt":
+        from codex_plugin_scanner.guard import native_policy_snapshot as api
+        from codex_plugin_scanner.guard.native_policy_snapshot_constants import POLICY_SNAPSHOT_AUTHORITY_MAX_BYTES
+
+        # chmod does not create the protected DACL required by the Windows reader.
+        with api._windows_private_state_binding(guard_home) as binding:
+            api._windows_write_private_file_atomic(
+                parent_path=binding.path,
+                parent_handle=binding.handle,
+                directory_handles=binding.handles,
+                temporary_name=".test-resident-authority.tmp",
+                destination_name=path.name,
+                payload=_canonical_json_bytes_v3(record),
+                maximum_bytes=POLICY_SNAPSHOT_AUTHORITY_MAX_BYTES,
+                kind="cache",
+            )
+        return
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(_canonical_json_bytes_v3(record))
+    path.write_bytes(payload)
     path.chmod(0o600)
 
 
@@ -89,6 +131,55 @@ def _write_lifecycle_generation(guard_home: Path, generation: object) -> None:
     (resident / f"generation-{generation:020d}.json").write_text("{}", encoding="utf-8")
 
 
+def test_resident_authority_fixture_uses_private_windows_writer(tmp_path, monkeypatch):
+    master = b"w" * 32
+    snapshot = native_policy_snapshot_v3(
+        config=_config(),
+        guard_home=tmp_path,
+        runtime_identity="a" * 64,
+        rule_digest="b" * 64,
+        policy_integrity_key=master,
+    )
+    binding = _WindowsDirectoryBinding(path=tmp_path / "native-runtime", handles=[(0, 1)])
+    writes = []
+    monkeypatch.setattr(sys.modules[__name__], "os", SimpleNamespace(name="nt"))
+    monkeypatch.setattr(snapshot_api, "_windows_private_state_binding", lambda home: nullcontext(binding))
+    monkeypatch.setattr(snapshot_api, "_windows_write_private_file_atomic", lambda **kwargs: writes.append(kwargs))
+
+    _write_resident_authority(tmp_path, snapshot, master)
+
+    assert len(writes) == 1
+    assert writes[0]["parent_path"] == binding.path
+    assert writes[0]["parent_handle"] == binding.handle
+    assert writes[0]["directory_handles"] == binding.handles
+    assert writes[0]["destination_name"] == "policy-snapshot-v3.json"
+    assert writes[0]["maximum_bytes"] == POLICY_SNAPSHOT_AUTHORITY_MAX_BYTES
+    assert writes[0]["temporary_name"] == ".test-resident-authority.tmp"
+    assert writes[0]["kind"] == "cache"
+    assert b'"schema":"' in writes[0]["payload"]
+
+
+def test_windows_authority_fixture_uses_protected_atomic_file_writer(tmp_path, monkeypatch):
+    from codex_plugin_scanner.guard import native_policy_snapshot as api
+    from codex_plugin_scanner.guard.native_policy_snapshot_constants import POLICY_SNAPSHOT_AUTHORITY_MAX_BYTES
+
+    snapshot = {"generation": 1, "policy_digest": "b" * 64}
+    binding = SimpleNamespace(path=tmp_path / "native-runtime", handle=object(), handles=[])
+    calls = []
+    monkeypatch.setattr("tests.test_native_policy_snapshot_cache_binding.os", SimpleNamespace(name="nt"))
+    monkeypatch.setattr(api, "_windows_private_state_binding", lambda root: nullcontext(binding))
+    monkeypatch.setattr(api, "_windows_write_private_file_atomic", lambda **kwargs: calls.append(kwargs))
+    _write_resident_authority(tmp_path, snapshot, b"m" * 32)
+    assert len(calls) == 1
+    assert calls[0]["parent_path"] == binding.path
+    assert calls[0]["parent_handle"] is binding.handle
+    assert calls[0]["directory_handles"] is binding.handles
+    assert calls[0]["destination_name"] == "policy-snapshot-v3.json"
+    assert calls[0]["maximum_bytes"] == POLICY_SNAPSHOT_AUTHORITY_MAX_BYTES
+    assert b'"floor_mac"' in calls[0]["payload"]
+    assert not binding.path.exists()
+
+
 def _ready_worker(
     guard_home: Path,
     master: bytes,
@@ -96,6 +187,7 @@ def _ready_worker(
     *,
     publisher: object | None = None,
     publish_native_policy: bool = True,
+    workspace: Path | None = None,
 ) -> hook_worker_module.HookWorker:
     store = GuardStore(guard_home)
     monkeypatch.setattr(store, "_policy_integrity_secret_material", lambda *, create: (master, "master-id"))
@@ -105,7 +197,11 @@ def _ready_worker(
         "get_native_policy_snapshot_publisher",
         lambda _store: publisher if publisher is not None else _TimeoutPublisher(),
     )
-    return hook_worker_module.HookWorker(store=store, publish_native_policy=publish_native_policy)
+    return hook_worker_module.HookWorker(
+        store=store,
+        workspace=workspace,
+        publish_native_policy=publish_native_policy,
+    )
 
 
 def test_prepare_workspace_policy_fails_closed_when_publisher_times_out(
@@ -129,6 +225,28 @@ def test_prepare_workspace_policy_fails_closed_when_publisher_times_out(
     binding = worker.prepare_workspace_policy(tmp_path / "workspace")
 
     assert binding is None
+
+
+def test_startup_workspace_is_registered_before_policy_readiness_wait(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    publisher = _StartupWorkspacePublisher()
+    worker = _ready_worker(
+        tmp_path / "guard-home",
+        b"s" * 32,
+        monkeypatch,
+        publisher=publisher,
+        workspace=tmp_path / "workspace",
+    )
+
+    worker.close()
+
+    assert publisher.events == [
+        ("register", tmp_path / "workspace"),
+        ("start", None),
+        ("wait", None),
+    ]
 
 
 def test_prepare_workspace_policy_ignores_publisher_cache_and_lifecycle_generation(

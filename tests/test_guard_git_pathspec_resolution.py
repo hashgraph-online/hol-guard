@@ -31,11 +31,15 @@ def _write(path: Path, text: str) -> None:
 
 
 def _git(repository: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    environment = os.environ.copy()
+    environment["GIT_CONFIG_GLOBAL"] = os.devnull
+    environment["GIT_CONFIG_NOSYSTEM"] = "1"
     return subprocess.run(
         ["git", "-C", str(repository), *args],
         check=True,
         capture_output=True,
         text=True,
+        env=environment,
     )
 
 
@@ -54,10 +58,17 @@ def test_git_helper_suppression_ignores_option_shaped_pathspecs(git_repository: 
 def git_repository(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     if shutil.which("git") is None:
         pytest.skip("Git is unavailable")
-    monkeypatch.delenv("GIT_EXTERNAL_DIFF", raising=False)
-    monkeypatch.delenv("GIT_CONFIG_COUNT", raising=False)
-    monkeypatch.delenv("GIT_CONFIG_PARAMETERS", raising=False)
-    monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
+    # This positive fixture describes a clean Git caller, not the CI runner's
+    # loader settings, pager programs, or global configuration.
+    for name in tuple(os.environ):
+        upper = name.upper()
+        if upper.startswith(("GIT_", "LD_", "DYLD_")) or upper in {"PAGER", "XDG_CONFIG_HOME"}:
+            monkeypatch.delenv(name, raising=False)
+    # Setup and native review must inspect the same clean Git configuration.
+    # Use supported caller fields rather than an unattested config override.
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
     monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
     repository = tmp_path / "repository"
     repository.mkdir()

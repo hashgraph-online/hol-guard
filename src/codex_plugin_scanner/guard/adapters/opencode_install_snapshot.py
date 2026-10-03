@@ -9,7 +9,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
-from ...ecosystems.opencode import _load_json_or_jsonc
+from ...ecosystems.opencode import _load_json_or_jsonc, _load_json_or_jsonc_text
 from ..models import GuardArtifact, HarnessDetection
 from .base import HarnessContext
 from .mcp_servers import (
@@ -82,6 +82,7 @@ def load_opencode_install_snapshot(
     context: HarnessContext,
     *,
     command_available: bool,
+    config_contents: dict[Path, bytes | None] | None = None,
 ) -> OpenCodeInstallSnapshot:
     """Load and normalize every config before deriving managed servers."""
 
@@ -90,9 +91,19 @@ def load_opencode_install_snapshot(
     found_paths: list[str] = []
     seen_artifact_ids: set[str] = set()
     for config_path in config_paths(context):
-        if not config_path.exists():
-            continue
-        payload, parse_error, _parse_reason = _load_json_or_jsonc(config_path)
+        if config_contents is None:
+            if not config_path.exists():
+                continue
+            payload, parse_error, _parse_reason = _load_json_or_jsonc(config_path)
+        else:
+            raw = config_contents[config_path]
+            if raw is None:
+                continue
+            try:
+                text = raw.decode("utf-8")
+            except UnicodeDecodeError as error:
+                raise OpenCodeInstallSnapshotError(f"Invalid OpenCode config encoding at {config_path}.") from error
+            payload, parse_error, _parse_reason = _load_json_or_jsonc_text(config_path, text)
         if parse_error or not isinstance(payload, dict):
             raise OpenCodeInstallSnapshotError(
                 f"Refusing to install with an invalid OpenCode config at {config_path}. Fix its syntax and retry."

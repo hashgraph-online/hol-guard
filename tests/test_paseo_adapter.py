@@ -231,6 +231,25 @@ def test_preflight_checks_every_selected_provider_before_any_write(context: Harn
     assert not context.guard_home.exists()
 
 
+def test_preflight_is_repeated_under_shared_owner_before_native_writes(
+    context: HarnessContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    configure(context, {"claude": {"enabled": True}, "pi": {"enabled": True}})
+    settings = context.home_dir / ".pi/agent/settings.json"
+    preflight = PaseoHarnessAdapter.preflight_management
+
+    def concurrent_edit(self, ctx, *, operation):
+        preflight(self, ctx, operation=operation)
+        settings.parent.mkdir(parents=True, exist_ok=True)
+        settings.write_text("not-json", encoding="utf-8")
+
+    monkeypatch.setattr(PaseoHarnessAdapter, "preflight_management", concurrent_edit)
+    with pytest.raises(ValueError):
+        PaseoHarnessAdapter().install(context)
+    assert not (context.home_dir / ".claude/settings.json").exists()
+    assert settings.read_text(encoding="utf-8") == "not-json"
+
+
 @pytest.mark.parametrize(
     "override",
     [

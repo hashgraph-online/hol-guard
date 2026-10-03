@@ -196,9 +196,7 @@ def _removed_runtime_flags(contract: Mapping[str, object]) -> set[str]:
     return set(flags)
 
 
-def _retired_content_validator(
-    records: list[dict[str, object]], flags: set[str]
-) -> Callable[[str, bytes], None]:
+def _retired_content_validator(records: list[dict[str, object]], flags: set[str]) -> Callable[[str, bytes], None]:
     modules = {str(record["module"]) for record in records}
     symbols = {symbol for record in records for symbol in record["forbidden_symbols"]}
     digests = {str(record["source_sha256"]) for record in records}

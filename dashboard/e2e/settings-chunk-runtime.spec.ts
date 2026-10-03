@@ -49,7 +49,7 @@ const disabledUnconfiguredSettingsPayload = {
   },
 };
 
-async function mountSettingsFixture(page: Page, settingsPayload = gatedSettingsPayload): Promise<{ settingsUpdates: Record<string, unknown>[] }> {
+async function mountSettingsFixture(page: Page, settingsPayload = gatedSettingsPayload, persistWrites = false): Promise<{ settingsUpdates: Record<string, unknown>[] }> {
   const settingsUpdates: Record<string, unknown>[] = [];
   await page.route("**/v1/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
@@ -63,6 +63,9 @@ async function mountSettingsFixture(page: Page, settingsPayload = gatedSettingsP
     else if (path.endsWith("/settings")) {
       if (route.request().method() === "POST") {
         settingsUpdates.push(JSON.parse(route.request().postData() ?? "{}") as Record<string, unknown>);
+        if (persistWrites) {
+          settingsPayload = { ...settingsPayload, settings: { ...settingsPayload.settings, ...settingsUpdates.at(-1)?.settings as object } };
+        }
       }
       body = settingsPayload;
     }
@@ -89,6 +92,29 @@ async function mountSettingsFixture(page: Page, settingsPayload = gatedSettingsP
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
   });
   return { settingsUpdates };
+}
+
+for (const width of [1365, 390]) {
+  test(`blocked request radio controls work at ${width}px`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width, height: 900 });
+    const { settingsUpdates } = await mountSettingsFixture(page, disabledUnconfiguredSettingsPayload, true);
+    await page.goto(`/settings?${DAEMON}&section=approval`);
+    const safe = page.getByRole("radio", { name: /Find a safe alternative/ });
+    const ask = page.getByRole("radio", { name: /Ask me for approval/ });
+    await expect(safe).toBeChecked();
+    await safe.focus();
+    await page.keyboard.press("ArrowDown");
+    await expect(ask).toBeChecked();
+    await page.getByRole("button", { name: "Save settings", exact: true }).click();
+    await expect.poll(() => (settingsUpdates.at(-1)?.settings as Record<string, unknown>)?.blocked_request_mode).toBe("ask");
+    await page.reload();
+    await expect(ask).toBeChecked();
+    await safe.check();
+    await page.getByRole("button", { name: "Save settings", exact: true }).click();
+    await expect.poll(() => (settingsUpdates.at(-1)?.settings as Record<string, unknown>)?.blocked_request_mode).toBe("safe-alternative");
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath(`blocked-request-${width}.png`), fullPage: true });
+  });
 }
 
 test("production Settings password proof submits with Enter without React bridge failures", async ({ page }) => {

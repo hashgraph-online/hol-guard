@@ -37,6 +37,7 @@ from ..cli.commands_support_command_activity import (
 )
 from ..codex_binding_capture_writer import CodexBindingCaptureWriter
 from ..config import load_guard_config
+from ..hook_execution_environment import HOOK_EXECUTION_ENVIRONMENT_KEY
 from ..native_hook_edge import review_raw_hook_native
 from ..native_policy_snapshot import get_native_policy_snapshot_publisher
 from ..native_policy_snapshot_acked import acked_snapshot_binding_for_store
@@ -112,10 +113,12 @@ class HookWorker(HookWorkerNativeMixin):
         self,
         *,
         store: GuardStore,
+        workspace: Path | None = None,
         activity_writer: CommandActivityWriter | None = None,
         capture_writer: CodexBindingCaptureWriter | None = None,
         wait_for_native_policy: bool = True,
         publish_native_policy: bool = True,
+        start_native_policy: bool = True,
     ):
         self.store = store
         self.guard_home = store.guard_home
@@ -129,9 +132,11 @@ class HookWorker(HookWorkerNativeMixin):
         self.policy_snapshot_publisher = get_native_policy_snapshot_publisher(self.store)
         mode = native_mode()
         self._owns_policy_snapshot_publisher = publish_native_policy and mode in {"auto", "force", "shadow"}
-        if self._owns_policy_snapshot_publisher:
+        if self._owns_policy_snapshot_publisher and start_native_policy:
+            if workspace is not None:
+                self.policy_snapshot_publisher.register_workspace(workspace)
             self.policy_snapshot_publisher.start()
-        if wait_for_native_policy and mode in {"auto", "force"}:
+        if wait_for_native_policy and start_native_policy and mode in {"auto", "force"}:
             wait_until_ready = getattr(self.policy_snapshot_publisher, "wait_until_ready", None)
             if callable(wait_until_ready):
                 _ = wait_until_ready(time.monotonic() + _NATIVE_POLICY_STARTUP_READY_TIMEOUT_SECONDS)
@@ -158,6 +163,7 @@ class HookWorker(HookWorkerNativeMixin):
         observe_mode: bool,
         deadline: float | None,
         policy_snapshot: Mapping[str, object] | None = None,
+        request_id: str | None = None,
     ) -> dict[str, object] | None:
         return review_raw_hook_native(
             payload=payload,
@@ -170,16 +176,30 @@ class HookWorker(HookWorkerNativeMixin):
             observe_mode=observe_mode,
             deadline=deadline,
             policy_snapshot=policy_snapshot,
+            **({"request_id": request_id} if request_id is not None else {}),
         )
 
     def _native_runtime_status(self) -> NativeRuntimeStatus:
         return native_runtime_status()
 
-    def close(self) -> None:
+    def close(self, *, deadline_monotonic: float | None = None) -> bool:
         """Stop the publisher only when this worker started publication."""
 
+        return self.close_contained(deadline_monotonic=deadline_monotonic)
+
+    def close_contained(self, *, deadline_monotonic: float | None = None) -> bool:
+        """Confirm this worker's publisher has stopped before releasing ownership."""
+
         if self._owns_policy_snapshot_publisher:
-            self.policy_snapshot_publisher.close()
+            close_contained = getattr(self.policy_snapshot_publisher, "close_contained", None)
+            if callable(close_contained):
+                if deadline_monotonic is None:
+                    return close_contained() is not False
+                return close_contained(deadline_monotonic=deadline_monotonic) is not False
+            if deadline_monotonic is None:
+                return self.policy_snapshot_publisher.close() is not False
+            return self.policy_snapshot_publisher.close(deadline_monotonic=deadline_monotonic) is not False
+        return True
 
     def prepare_workspace_policy(
         self,
@@ -266,6 +286,11 @@ class HookWorker(HookWorkerNativeMixin):
         protection. Local inspection needs the same trusted decision boundary.
         ``off`` and ``shadow`` remain fail-safe without Python semantics.
         """
+        # Keep caller metadata intact across the resident boundary. The outer
+        # hook bridge stamps this field; a direct daemon caller has no trusted
+        # caller context and must not be replaced with the daemon environment.
+        payload = dict(payload)
+        payload.setdefault(HOOK_EXECUTION_ENVIRONMENT_KEY, None)
         self._last_native_decision_receipt = None
         harness = self._runtime_harness(params) or default_harness
         event_name = self._hook_event_name(payload)

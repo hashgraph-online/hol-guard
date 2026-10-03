@@ -162,8 +162,9 @@ def test_failed_start_retains_ownership_when_serve_join_returns_a_live_thread(
     )
     with pytest.raises(RuntimeError, match="startup boom") as caught:
         daemon.start()
-    notes = getattr(caught.value, "__notes__", [])
-    assert any("serve thread did not exit" in note for note in notes)
+    if hasattr(caught.value, "add_note"):
+        notes = getattr(caught.value, "__notes__", [])
+        assert any("serve thread did not exit" in note for note in notes)
     assert finish_calls == []
     assert daemon._owner_lock is not None
     daemon._finish_service = original_finish

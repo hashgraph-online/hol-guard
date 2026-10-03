@@ -15,6 +15,7 @@ import pytest
 import yaml
 
 from scripts.ci import wait_for_pytest_shards as barrier
+from tests.support.ci_workflow import expand_ci_job_actions
 
 _RUN_ID = 123456
 
@@ -83,14 +84,16 @@ def test_waits_through_planning_queue_and_running_then_requires_last_page() -> N
 
 
 def test_default_wait_covers_existing_producer_limits(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify default wait covers existing producer limits."""
     root = Path(__file__).resolve().parents[1]
-    jobs = yaml.safe_load((root / ".github/workflows/ci.yml").read_text())["jobs"]
+    jobs = expand_ci_job_actions(yaml.safe_load((root / ".github/workflows/ci.yml").read_text()))["jobs"]
     producer_limit = 60 * (jobs["coverage-plan"]["timeout-minutes"] + jobs["coverage"]["timeout-minutes"])
     default_timeout = inspect.signature(barrier.wait_for_shards).parameters["timeout_seconds"].default
     assert default_timeout == producer_limit + 60
     captured: dict[str, float] = {}
 
     def capture_wait(_repository: str, _run_id: int, _attempt: int, **kwargs: float) -> None:
+        assert (_repository, _run_id, _attempt) == ("owner/repo", _RUN_ID, 2)
         captured.update(kwargs)
 
     monkeypatch.setattr(barrier, "wait_for_shards", capture_wait)
@@ -113,6 +116,7 @@ def test_cli_accepts_one_second_poll_without_changing_producer_validation(monkey
     captured: dict[str, float] = {}
 
     def capture_wait(_repository: str, _run_id: int, _attempt: int, **kwargs: float) -> None:
+        assert (_repository, _run_id, _attempt) == ("owner/repo", _RUN_ID, 2)
         captured.update(kwargs)
 
     monkeypatch.setattr(barrier, "wait_for_shards", capture_wait)
@@ -408,9 +412,10 @@ def test_api_redirect_is_rejected() -> None:
         barrier._NoRedirect().redirect_request(request, BytesIO(), 302, "", HTTPMessage(), "https://other.example")
 
 
-def test_sonar_accepts_only_complete_coverage_from_successful_current_attempt() -> None:
+def test_sonar_accepts_only_complete_coverage_from_verified_same_run_executions() -> None:
+    """Verify Sonar accepts complete coverage from verified same-run executions."""
     root = Path(__file__).resolve().parents[1]
-    workflow = yaml.safe_load((root / ".github/workflows/ci.yml").read_text())
+    workflow = expand_ci_job_actions(yaml.safe_load((root / ".github/workflows/ci.yml").read_text()))
     jobs = workflow["jobs"]
     assert barrier.SHARD_COUNT == 128
     assert jobs["coverage"]["name"] == "coverage (3.12, ${{ matrix.shard-index }})"
@@ -420,26 +425,28 @@ def test_sonar_accepts_only_complete_coverage_from_successful_current_attempt() 
     )
     sonar_steps = jobs["sonar"]["steps"]
     consumer = next(step for step in sonar_steps if step.get("name") == "Download pytest coverage data")
-    waiter = next(step for step in sonar_steps if "wait_for_pytest_shards.py" in step.get("run", ""))
+    waiter = next(step for step in sonar_steps if "select_pytest_coverage.py" in step.get("run", ""))
 
     assert producer["with"]["name"] == "pytest-coverage-${{ github.run_attempt }}-${{ matrix.shard-index }}"
     assert producer["with"]["if-no-files-found"] == "error"
-    assert consumer["with"]["pattern"] == "pytest-coverage-${{ github.run_attempt }}-*"
+    assert consumer["with"]["artifact-ids"] == "${{ steps.coverage-selection.outputs.artifact-ids }}"
     assert "run-id" not in consumer["with"]  # Download remains scoped to the current workflow run.
     assert sonar_steps.index(waiter) < sonar_steps.index(consumer)
     assert waiter["env"] == {"GITHUB_TOKEN": "${{ github.token }}"}
-    assert waiter["run"].endswith("--poll-seconds 1")
+    assert waiter["run"].endswith("--output coverage-selection.json")
+    assert waiter["id"] == "coverage-selection"
     assert jobs["sonar"]["permissions"] == {"contents": "read", "actions": "read"}
     assert 'test "${#reports[@]}" -eq 128' in (root / "scripts/ci/prepare_sonar_analysis.sh").read_text()
 
 
 def test_sonar_installs_same_pinned_scanner_before_wait_without_analysis_credentials() -> None:
+    """Verify sonar installs same pinned scanner before wait without analysis credentials."""
     root = Path(__file__).resolve().parents[1]
-    workflow = yaml.safe_load((root / ".github/workflows/ci.yml").read_text())
+    workflow = expand_ci_job_actions(yaml.safe_load((root / ".github/workflows/ci.yml").read_text()))
     steps = workflow["jobs"]["sonar"]["steps"]
     installer = next(step for step in steps if step.get("name") == "Install pinned Sonar scanner CLI")
     analysis = next(step for step in steps if step.get("name") == "Analyze with SonarQube Cloud")
-    waiter = next(step for step in steps if "wait_for_pytest_shards.py" in step.get("run", ""))
+    waiter = next(step for step in steps if "select_pytest_coverage.py" in step.get("run", ""))
     assert installer["uses"] == analysis["uses"]
     assert installer["with"] == {"args": "--version"}
     assert installer["env"] == {"SONAR_USER_HOME": analysis["env"]["SONAR_USER_HOME"]}

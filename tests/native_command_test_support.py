@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
@@ -8,6 +9,7 @@ from dataclasses import dataclass, replace
 from itertools import islice
 from pathlib import Path
 
+from codex_plugin_scanner.guard.hook_execution_environment import collect_hook_execution_environment
 from codex_plugin_scanner.guard.native_command_model import _canonical_command_from_native
 from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
@@ -283,11 +285,12 @@ def real_native_review_fixture(
     dedicated batch evaluator now emits every observation without modifying a
     baseline program or rewriting any native response fields.
     """
-    del cwd, home_dir
     missing = [rule_id for rule_id in force_rule_ids if BUILT_IN_COMMAND_EXTENSION_REGISTRY.get_rule(rule_id) is None]
     assert not missing, f"packaged rules are missing: {sorted(missing)}"
     return real_native_review_fixtures(
         (command,),
+        cwd=cwd,
+        home_dir=home_dir,
         controls=controls,
         managed_controls=managed_controls,
         global_lockdown=global_lockdown,
@@ -301,13 +304,28 @@ def iter_native_command_evaluations(
     """Evaluate every corpus case in bounded native batches without subprocess churn."""
     iterator = iter(commands)
     while batch := tuple(islice(iterator, 128)):
-        for fixture in real_native_review_fixtures(batch):
+        for fixture in real_native_review_fixtures(batch, cwd=cwd, home_dir=home_dir):
             yield project_native_review_fixture(fixture, cwd=cwd, home_dir=home_dir)
+
+
+def _native_test_execution_environment(home_dir: Path) -> dict[str, object]:
+    """Bind the native probe to the fixture home, not the test runner home."""
+    context = collect_hook_execution_environment()
+    active = {key: value for key, value in os.environ.items() if value}
+    active["HOME"] = str(home_dir)
+    context["home"] = str(home_dir)
+    context["environment_names"] = sorted(active)
+    context["environment_digest"] = hashlib.sha256(
+        json.dumps(active, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    return context
 
 
 def real_native_review_fixtures(
     commands: Sequence[str],
     *,
+    cwd: Path | None = None,
+    home_dir: Path | None = None,
     controls: tuple[tuple[str, str, str], ...] = (),
     managed_controls: tuple[tuple[str, str, str], ...] = (),
     global_lockdown: bool = False,
@@ -331,6 +349,10 @@ def real_native_review_fixtures(
         **({"managed_global_lockdown": True} if managed_global_lockdown else {}),
         "cases": [{"id": f"case-{index}", "command": command} for index, command in enumerate(commands)],
     }
+    if cwd is not None and home_dir is not None:
+        request["home_dir"] = str(home_dir)
+        request["cwd"] = str(cwd)
+        request["execution_environment"] = _native_test_execution_environment(home_dir)
     completed = subprocess.run(
         [str(compiler), "evaluate-batch"],
         input=json.dumps(request, separators=(",", ":"), ensure_ascii=False).encode(),

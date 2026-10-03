@@ -258,20 +258,29 @@ def test_mcp_targeted_grant_keeps_observed_hashed_tool_choice(tmp_path: Path) ->
     assert tool is not None
     store = GuardStore(tmp_path / "guard-home")
     identity = UnlistedCliIdentity(
-        cli_id=tool.identity.cli_id, name=tool.identity.name, kind=tool.identity.kind,
-        identity_hash=tool.identity.identity_hash, example_label=tool.identity.example_label,
+        cli_id=tool.identity.cli_id,
+        name=tool.identity.name,
+        kind=tool.identity.kind,
+        identity_hash=tool.identity.identity_hash,
+        example_label=tool.identity.example_label,
     )
     store.record_local_cli_observation(
-        identity, seen_at=utc_now(), surface="mcp",
+        identity,
+        seen_at=utc_now(),
+        surface="mcp",
         server_identity_hash=tool.server_identity.identity_hash,
-        server_command=tool.server_identity.command, server_args_hash=tool.server_identity.args_hash,
+        server_command=tool.server_identity.command,
+        server_args_hash=tool.server_identity.args_hash,
     )
     store.replace_local_cli_commands(
         identity.cli_id,
         (LocalCliCommand(tool.command_id, tool.name, tool.qualified_name, "Observed tool"),),
     )
     store.upsert_local_cli_grant(
-        identity=identity, state="allowed", expected_revision=0, updated_at=utc_now(),
+        identity=identity,
+        state="allowed",
+        expected_revision=0,
+        updated_at=utc_now(),
         command_states={tool.command_id: "block"},
     )
     grant = store.read_local_mcp_grant(tool.server_identity.identity_hash, tool_name=tool.qualified_name)
@@ -289,9 +298,11 @@ def test_retired_deny_still_blocks_an_empty_inventory(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     _enroll(store, identity, states={"read_file": "block"})
     store.replace_local_cli_commands(
-        f"local-cli.mcp-{identity.identity_hash[:8]}", (),
+        f"local-cli.mcp-{identity.identity_hash[:8]}",
+        (),
         mcp_catalog=McpCatalogResult(tools=(), complete=True),
-        identity_hash=identity.identity_hash, seen_at=utc_now(),
+        identity_hash=identity.identity_hash,
+        seen_at=utc_now(),
     )
     artifact = _artifact(identity, "read_file")
     assert matching_local_mcp_grant(store=store, artifact=artifact, current_action="allow") == "blocked"
@@ -323,9 +334,12 @@ def test_explicit_ask_reviews_benign_tool(tmp_path: Path) -> None:
     arguments = {"path": "notes.txt"}
     assert matching_local_mcp_grant(store=store, artifact=artifact, current_action="allow") == "review"
     decision = evaluate_tool_call(
-        store=store, config=_config(tmp_path), artifact=artifact,
+        store=store,
+        config=_config(tmp_path),
+        artifact=artifact,
         artifact_hash=build_tool_call_hash(artifact, arguments, workspace=tmp_path, config=_config(tmp_path)),
-        arguments=arguments, claim_saved_approval=False,
+        arguments=arguments,
+        claim_saved_approval=False,
     )
     assert decision.action == "review"
     assert decision.source == "local-mcp-extension"
@@ -388,9 +402,12 @@ def test_unlisted_tools_do_not_inherit_allow(tmp_path: Path, empty_catalog: bool
     assert matching_local_mcp_grant(store=store, artifact=artifact, current_action="review") == "review"
     artifact = _artifact(identity, "new_read_tool")
     decision = evaluate_tool_call(
-        store=store, config=_config(tmp_path), artifact=artifact,
+        store=store,
+        config=_config(tmp_path),
+        artifact=artifact,
         artifact_hash=build_tool_call_hash(artifact, {}, workspace=tmp_path, config=_config(tmp_path)),
-        arguments={}, claim_saved_approval=False,
+        arguments={},
+        claim_saved_approval=False,
     )
     assert decision.action == "review"
 
@@ -408,17 +425,18 @@ def test_composio_wrapper_choice_cannot_grant_inner_actions(tmp_path: Path, choi
     identity = _identity()
     store = GuardStore(tmp_path / "guard-home")
     tool = "composio_multi_execute_tool"
-    _enroll(store, identity, states={tool: choice}, commands=(
-        LocalCliCommand(tool, tool, tool, "Execute a batch"),
-    ))
+    _enroll(store, identity, states={tool: choice}, commands=(LocalCliCommand(tool, tool, tool, "Execute a batch"),))
     artifact = _artifact(identity, tool)
     expected = "blocked" if choice == "block" else None
     assert matching_local_mcp_grant(store=store, artifact=artifact, current_action="review") == expected
     arguments = {"tools": [{"tool_slug": "SLACK_SEND_MESSAGE", "arguments": {"channel": "test"}}]}
     decision = evaluate_tool_call(
-        store=store, config=_config(tmp_path), artifact=artifact,
+        store=store,
+        config=_config(tmp_path),
+        artifact=artifact,
         artifact_hash=build_tool_call_hash(artifact, arguments, workspace=tmp_path, config=_config(tmp_path)),
-        arguments=arguments, claim_saved_approval=False,
+        arguments=arguments,
+        claim_saved_approval=False,
     )
     assert decision.action == ("block" if choice == "block" else "review")
 
@@ -435,6 +453,33 @@ def test_env_drift_cannot_inherit_same_launch_grant(tmp_path: Path) -> None:
         env={"GITHUB_TOKEN": "secret"},
         env_keys=("GITHUB_TOKEN",),
     )
+    assert runtime.identity_hash != identity.identity_hash
+    artifact = _artifact(runtime, "read_file")
+    assert matching_local_mcp_grant(store=store, artifact=artifact, current_action="review") is None
+
+
+def test_unbound_env_hash_cannot_satisfy_package_launcher_binding(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    npx = _clean_npx()
+    if npx is None:
+        pytest.skip("npx is not on PATH")
+    import codex_plugin_scanner.guard.store_local_mcp as store_local_mcp
+
+    sentinel = "guard-context-unbound:configured-environment"
+    # Simulate detection and lookup both running without the native digest
+    # authority: the recorded hash and the recomputed hash share the sentinel.
+    monkeypatch.setattr(store_local_mcp, "build_configured_environment_hash", lambda *_a, **_k: sentinel)
+    identity = _identity()
+    store = GuardStore(tmp_path / "guard-home")
+    _enroll(store, identity, states={"read_file": "allow"})
+    runtime = build_mcp_server_identity(
+        config_path="",
+        command=npx,
+        args=("-y", "@modelcontextprotocol/server-filesystem"),
+        transport="stdio",
+    )
+    runtime = replace(runtime, env_values_hash=sentinel)
     assert runtime.identity_hash != identity.identity_hash
     artifact = _artifact(runtime, "read_file")
     assert matching_local_mcp_grant(store=store, artifact=artifact, current_action="review") is None

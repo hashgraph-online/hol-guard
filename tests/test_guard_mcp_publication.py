@@ -22,12 +22,17 @@ def _publisher(store: GuardStore, monkeypatch: pytest.MonkeyPatch, client):
 
 def _mutate(store: GuardStore) -> int:
     identity = UnlistedCliIdentity(
-        cli_id="local-cli.mcp-fixture", name="Fixture", kind="executable",
-        identity_hash="a" * 64, example_label="fixture-mcp",
+        cli_id="local-cli.mcp-fixture",
+        name="Fixture",
+        kind="executable",
+        identity_hash="a" * 64,
+        example_label="fixture-mcp",
     )
     store.record_local_cli_observation(identity, seen_at="2026-09-27T12:00:00Z", surface="mcp")
     return store.upsert_local_cli_grant(
-        identity=identity, state="blocked", expected_revision=store.read_local_cli_revision(),
+        identity=identity,
+        state="blocked",
+        expected_revision=store.read_local_cli_revision(),
         updated_at="2026-09-27T12:00:00Z",
     )
 
@@ -73,17 +78,24 @@ def test_provider_schema_changed_during_ack_keeps_barrier_closed(tmp_path: Path,
     store = GuardStore(tmp_path / "home")
     source = observed_mcp_tool("codex", "mcp__codex_apps__composio__composio_search_tools")
     assert source is not None
-    store.record_composio_discovery(source, (
-        ComposioActionSchema("slack", "SLACK_SEARCH_MESSAGES", "Search", {"type": "object"}, True),
-    ), seen_at="2026-09-27T12:00:00Z")
+    store.record_composio_discovery(
+        source,
+        (ComposioActionSchema("slack", "SLACK_SEARCH_MESSAGES", "Search", {"type": "object"}, True),),
+        seen_at="2026-09-27T12:00:00Z",
+    )
 
     def client(**kwargs):
         policy = json.loads(kwargs["payload"])["request"]["snapshot"]["effective_policy"]
         assert policy["mcp_provider_catalog_hash"] == store.read_mcp_provider_authority_hash()
-        store.record_composio_discovery(source, (
-            ComposioActionSchema("slack", "SLACK_SEARCH_MESSAGES", "Search",
-                                {"type": "object", "required": ["query"]}, True),
-        ), seen_at="2026-09-27T12:01:00Z")
+        store.record_composio_discovery(
+            source,
+            (
+                ComposioActionSchema(
+                    "slack", "SLACK_SEARCH_MESSAGES", "Search", {"type": "object", "required": ["query"]}, True
+                ),
+            ),
+            seen_at="2026-09-27T12:01:00Z",
+        )
         return _ack(kwargs["payload"])
 
     publisher = _publisher(store, monkeypatch, client)

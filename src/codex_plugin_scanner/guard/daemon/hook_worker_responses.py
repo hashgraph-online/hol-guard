@@ -131,70 +131,9 @@ _SILENT_WARNING_CODES = frozenset({"native_policy_observed"})
 
 
 def harness_json_from_native_pre_tool(harness: str, response: Mapping[str, object]) -> dict[str, object]:
-    action = response.get("minimum_action")
-    reason = str(response.get("reason") or "HOL Guard requires native review before execution.")
-    reason_code = str(response.get("reason_code") or "native_pre_tool_review")
-    canonical = _canonical_hook_harness(harness)
-    if action in {"allow", "warn"} and response.get("decision") == "allow":
-        if canonical in {"pi", "omp"}:
-            output: dict[str, object] = {
-                "decision": "allow",
-                "policy_action": action,
-                "reason_code": reason_code,
-            }
-            if action == "warn" and reason_code not in _SILENT_WARNING_CODES:
-                output["reason"] = reason
-                output["notice"] = "warning"
-            return output
-        hook_specific: dict[str, object] = {
-            "hookEventName": "PreToolUse",
-            "permissionDecision": "allow",
-        }
-        if action == "warn" and reason_code not in _SILENT_WARNING_CODES:
-            hook_specific["permissionDecisionReason"] = reason
-        if canonical in _GROK_DECISION_HARNESSES:
-            grok_allow: dict[str, object] = {
-                "decision": "allow",
-                "policy_action": action,
-                "reason_code": reason_code,
-                "hookSpecificOutput": hook_specific,
-            }
-            if action == "warn" and reason_code not in _SILENT_WARNING_CODES:
-                grok_allow["reason"] = reason
-            return grok_allow
-        return {
-            "continue": True,
-            "policy_action": action,
-            "reason_code": reason_code,
-            "hookSpecificOutput": hook_specific,
-        }
-    if canonical in {"pi", "omp"}:
-        return {
-            "decision": "deny",
-            "reason": reason,
-            "model_output_action": "block",
-            "notice": "warning",
-            "policy_action": "block",
-            "reason_code": reason_code,
-        }
-    hook_specific_deny: dict[str, object] = {
-        "hookEventName": "PreToolUse",
-        "permissionDecision": "deny",
-        "permissionDecisionReason": reason,
-    }
-    if canonical in _GROK_DECISION_HARNESSES:
-        return {
-            "decision": "deny",
-            "reason": reason,
-            "policy_action": "block",
-            "reason_code": reason_code,
-            "hookSpecificOutput": hook_specific_deny,
-        }
-    return {
-        "policy_action": "block",
-        "reason_code": reason_code,
-        "hookSpecificOutput": hook_specific_deny,
-    }
+    from .hook_pretool_rendering import harness_json_from_native_pre_tool as render
+
+    return render(harness, response)
 
 
 def harness_json_from_native_pre_tool_review(
@@ -204,61 +143,9 @@ def harness_json_from_native_pre_tool_review(
     approval: Mapping[str, object] | None,
     guard_home: Path | None = None,
 ) -> dict[str, object]:
-    """Pause a native review without treating it as a terminal block."""
+    from .hook_pretool_rendering import harness_json_from_native_pre_tool_review as render
 
-    reason = str(response.get("reason") or "HOL Guard requires review before this action can execute.")
-    reason_code = str(response.get("reason_code") or "native_pre_tool_review")
-    canonical = _canonical_hook_harness(harness)
-    approval_url = None
-    approval_request_id = None
-    if approval is not None:
-        raw_url = approval.get("approval_url")
-        raw_request_id = approval.get("request_id")
-        if isinstance(raw_url, str) and raw_url.strip():
-            approval_url = raw_url.strip()
-            reason = _native_review_reason(
-                canonical,
-                reason,
-                approval_url,
-                guard_home=guard_home,
-            )
-        if isinstance(raw_request_id, str) and raw_request_id.strip():
-            approval_request_id = raw_request_id.strip()
-    permission_decision = _native_review_permission_decision(harness)
-    if canonical in {"pi", "omp"}:
-        output: dict[str, object] = {
-            "decision": "deny",
-            "reason": reason,
-            "model_output_action": "block",
-            "notice": "warning",
-            "policy_action": "review",
-            "reason_code": reason_code,
-        }
-        if approval_url is not None:
-            output["approval_url"] = approval_url
-        if approval_request_id is not None:
-            output["approval_request_id"] = approval_request_id
-        _attach_native_review_approval_aliases(output, approval_request_id, approval_url)
-        return output
-    hook_specific: dict[str, object] = {
-        "hookEventName": "PreToolUse",
-        "permissionDecision": permission_decision,
-        "permissionDecisionReason": reason,
-    }
-    rendered: dict[str, object] = {
-        "policy_action": "review",
-        "reason_code": reason_code,
-        "reason": reason,
-        "hookSpecificOutput": hook_specific,
-    }
-    if canonical in _GROK_DECISION_HARNESSES:
-        rendered["decision"] = "deny"
-    if approval_url is not None:
-        rendered["approval_url"] = approval_url
-    if approval_request_id is not None:
-        rendered["approval_request_id"] = approval_request_id
-    _attach_native_review_approval_aliases(rendered, approval_request_id, approval_url)
-    return rendered
+    return render(harness, response, approval=approval, guard_home=guard_home)
 
 
 def _native_review_reason(

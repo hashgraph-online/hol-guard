@@ -10200,7 +10200,7 @@
           ],
           "project_markers": [],
           "publisher": {
-            "display_name": "R\u00e9nich Bon \u0106iri\u0107",
+            "display_name": "Rénich Bon Ćirić",
             "id": "community.renich",
             "url": "https://github.com/renich"
           },
@@ -10910,6 +10910,7 @@
           "command.cogext",
           "command.ctty",
           "command.digline",
+          "command.errand",
           "command.genclave",
           "command.gitsync",
           "command.kindling",
@@ -10924,6 +10925,7 @@
           "command.repo2nb",
           "command.skill-base",
           "command.skill-sunset",
+          "command.syngraphe",
           "command.uivoid"
         ],
         "first-party": [

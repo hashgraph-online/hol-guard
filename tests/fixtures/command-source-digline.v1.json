@@ -16546,6 +16546,7 @@
           "command.cogext",
           "command.ctty",
           "command.digline",
+          "command.errand",
           "command.genclave",
           "command.gitsync",
           "command.kindling",
@@ -16560,6 +16561,7 @@
           "command.repo2nb",
           "command.skill-base",
           "command.skill-sunset",
+          "command.syngraphe",
           "command.uivoid"
         ],
         "first-party": [
@@ -16803,11 +16805,11 @@
       "enabled_extensions": [
         "command.digline"
       ],
-      "expected_action": "block",
+      "expected_action": "review",
       "expected_effective_segments": [
         0
       ],
-      "id": "module-promote-blocked",
+      "id": "module-promote-reviewed",
       "rule_id": "command.digline.promote"
     },
     {
@@ -16816,11 +16818,11 @@
       "enabled_extensions": [
         "command.digline"
       ],
-      "expected_action": "block",
+      "expected_action": "review",
       "expected_effective_segments": [
         0
       ],
-      "id": "module-run-blocked",
+      "id": "module-run-reviewed",
       "rule_id": "command.digline.run"
     },
     {

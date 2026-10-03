@@ -52,6 +52,165 @@ fn permits_only_standalone_plain_directory_changes() {
 }
 
 #[test]
+fn read_only_github_predecessor_counts_as_benign_for_git_context() {
+    let model = parse_command(&request(
+        "gh api repos/owner/repo/compare/base...main; git status --short",
+    ))
+    .unwrap();
+    assert_eq!(
+        benign_command_segments(
+            &model,
+            PathContext {
+                home_dir: Some("/tmp"),
+                cwd: Some("/tmp"),
+            },
+        ),
+        vec![0, 1]
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn stderr_null_sink_preserves_each_compound_command_risk() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .canonicalize()
+        .unwrap();
+    let root = root.to_str().unwrap();
+    for command in [
+        "ls -la src 2>/dev/null",
+        "ls -la; echo ---; ls -la src 2>/dev/null; echo done",
+        "grep -n use src/lib.rs 2>/dev/null | head -1",
+    ] {
+        let decision =
+            evaluate_pre_tool_with_context(&request(command), Some(root), Some(root)).unwrap();
+        assert_eq!(
+            decision.minimum_action, "allow",
+            "{command}: {}",
+            decision.reason_code
+        );
+    }
+    for command in [
+        "cat .env 2>/dev/null",
+        "ls src 2>/dev/null; rm -rf src",
+        "cat src/lib.rs 2> .env",
+        "ls src 2>/dev/null; cat .env",
+    ] {
+        let decision =
+            evaluate_pre_tool_with_context(&request(command), Some(root), Some(root)).unwrap();
+        assert_ne!(decision.minimum_action, "allow", "{command}");
+    }
+}
+
+#[test]
+fn git_c_inspections_require_verified_repository_scope() {
+    let repository = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../..")
+        .canonicalize()
+        .unwrap();
+    let repository = repository.to_str().unwrap();
+    let allowed = evaluate_pre_tool_with_context(
+        &request("git -C . status --short"),
+        Some(repository),
+        Some(repository),
+    )
+    .unwrap();
+    assert_eq!(allowed.minimum_action, "allow");
+    assert!(allowed.explicitly_benign);
+
+    for (command, home, cwd) in [
+        ("git -C . status --short", None, None),
+        (
+            "git -C rust status --short",
+            Some(repository),
+            Some(repository),
+        ),
+        (
+            "git -C .. status --short",
+            Some(repository),
+            Some(repository),
+        ),
+    ] {
+        let decision = evaluate_pre_tool_with_context(&request(command), home, cwd).unwrap();
+        if command == "git -C rust status --short" {
+            assert_eq!(decision.minimum_action, "allow", "{command}");
+            assert!(decision.explicitly_benign, "{command}");
+        } else {
+            assert_ne!(decision.minimum_action, "allow", "{command}");
+            assert!(!decision.explicitly_benign, "{command}");
+        }
+    }
+}
+
+#[test]
+fn git_c_rejects_external_gitfile_pointers() {
+    let base = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../target/gitfile-pointer-fixtures");
+    std::fs::create_dir_all(&base).unwrap();
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let fixture = base.join(format!("fixture-{}-{nonce}", std::process::id()));
+    let workspace = fixture.join("workspace");
+    let external = fixture.join("external-admin");
+    std::fs::create_dir_all(workspace.join("nested")).unwrap();
+    std::fs::create_dir_all(&external).unwrap();
+    std::fs::write(
+        workspace.join(".git"),
+        format!("gitdir: {}\n", external.display()),
+    )
+    .unwrap();
+    let workspace = workspace.canonicalize().unwrap();
+    let workspace = workspace.to_str().unwrap();
+    let decision = evaluate_pre_tool_with_context(
+        &request("git -C nested status --short"),
+        Some(workspace),
+        Some(workspace),
+    )
+    .unwrap();
+    assert_ne!(decision.minimum_action, "allow");
+    let _ = std::fs::remove_dir_all(fixture);
+}
+
+#[test]
+fn git_c_rejects_forged_external_linked_worktree_metadata() {
+    let base = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../target/gitfile-pointer-fixtures");
+    std::fs::create_dir_all(&base).unwrap();
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let fixture = base.join(format!("linked-fixture-{}-{nonce}", std::process::id()));
+    let workspace = fixture.join("workspace");
+    let common = fixture.join("external-common/.git");
+    let admin = common.join("worktrees/workspace");
+    std::fs::create_dir_all(workspace.join("nested")).unwrap();
+    std::fs::create_dir_all(&admin).unwrap();
+    std::fs::write(workspace.join("wrong.git"), "forged\n").unwrap();
+    std::fs::write(
+        workspace.join(".git"),
+        "gitdir: ../external-common/.git/worktrees/workspace\n",
+    )
+    .unwrap();
+    std::fs::write(admin.join("commondir"), "../..\n").unwrap();
+    std::fs::write(
+        admin.join("gitdir"),
+        format!("{}\n", workspace.join("wrong.git").display()),
+    )
+    .unwrap();
+    let workspace = workspace.canonicalize().unwrap();
+    let decision = evaluate_pre_tool_with_context(
+        &request("git -C nested status --short"),
+        workspace.to_str(),
+        workspace.to_str(),
+    )
+    .unwrap();
+    assert_ne!(decision.minimum_action, "allow");
+    let _ = std::fs::remove_dir_all(fixture);
+}
+
+#[test]
 fn blocks_destructive_and_device_commands() {
     for command in [
         "rm -rf /",
@@ -227,6 +386,9 @@ fn reviews_date_mutations_and_unbounded_file_reads() {
 
 #[test]
 fn reviews_only_materially_risky_variants_of_safe_commands() {
+    let inert_pattern = evaluate_pre_tool(&request("rg -e '.env.local' src")).unwrap();
+    assert_eq!(inert_pattern.decision, "allow");
+    assert_eq!(inert_pattern.minimum_action, "allow");
     for command in [
             "rg --pre /opt/guard-test/payload authority src",
             "rg --hostname-bin=/opt/guard-test/payload --hyperlink-format='file://{host}{path}' TOKEN src",
@@ -241,7 +403,6 @@ fn reviews_only_materially_risky_variants_of_safe_commands() {
             r"rg --glob 'nested/[\.]env' TOKEN .",
             "rg --glob 'nested/{safe,.env}' TOKEN .",
             "rg TOKEN .env.local",
-            "rg -e '.env.local' src",
             "grep -r password .",
             "rg id_rsa /home",
             "rg --glob 'nested/[.]env.local' TOKEN .",
@@ -304,16 +465,16 @@ fn defers_only_exact_safe_git_helper_context() {
 }
 
 #[test]
-fn denies_uncertain_or_networked_commands() {
-    for command in [
-        "echo $(whoami)",
-        "pwd && rm -rf /",
-        "python -c 'print(1)'",
-        "git push origin main",
-        "PATH=/tmp:$PATH ls",
+fn denies_uncertain_or_networked_commands_but_allows_proven_constant_expression() {
+    for (command, permitted) in [
+        ("echo $(whoami)", false),
+        ("pwd && rm -rf /", false),
+        ("python -c 'print(1)'", true),
+        ("git push origin main", false),
+        ("PATH=/tmp:$PATH ls", false),
     ] {
         let decision = evaluate_pre_tool(&request(command)).unwrap();
-        assert_eq!(decision.decision, "deny", "{command}");
-        assert_ne!(decision.minimum_action, "allow", "{command}");
+        assert_eq!(decision.decision == "allow", permitted, "{command}");
+        assert_eq!(decision.minimum_action == "allow", permitted, "{command}");
     }
 }

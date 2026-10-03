@@ -53,13 +53,19 @@ from tests.update_context_test_support import build_legacy_update_context, stage
 
 
 @pytest.fixture(autouse=True)
-def _use_legacy_update_context(monkeypatch: pytest.MonkeyPatch) -> None:
+def _use_legacy_update_context(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    runtime = tmp_path / "hol-guard-runtime"
+    runtime.write_bytes(b"test-runtime")
+    runtime.chmod(0o700)
     monkeypatch.setattr(
         guard_update_commands_module,
         "build_trusted_update_context",
         build_legacy_update_context,
     )
     monkeypatch.setattr(guard_update_commands_module, "stage_trusted_wheel", stage_legacy_wheel)
+    monkeypatch.setattr(guard_update_commands_module, "_bundled_runtime_candidate", lambda: runtime)
+    monkeypatch.setattr(guard_update_commands_module, "_retire_native_resident_before_update", lambda _guard_home: True)
+    monkeypatch.setattr(guard_update_commands_module, "resolve_guard_home", lambda: tmp_path / "guard-home")
     monkeypatch.setattr(
         guard_update_commands_module,
         "record_local_wheel_receipt",

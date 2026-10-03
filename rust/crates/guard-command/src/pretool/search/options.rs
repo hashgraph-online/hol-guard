@@ -1,4 +1,41 @@
-use super::SearchValueRole;
+use super::{
+    glob_can_select_sensitive_path, sensitive_path_argument, ReadContext, SearchValueRole,
+};
+
+pub(super) fn unsafe_search_value(
+    role: SearchValueRole,
+    value: &str,
+    context: ReadContext<'_>,
+) -> bool {
+    match role {
+        SearchValueRole::Path
+            if (context.home_dir.is_some() || context.cwd.is_some())
+                && !value.contains(['*', '?', '[', ']', '{', '}']) =>
+        {
+            // Recursive searchers walk directories; only prove regular files canonically.
+            !super::super::safe_reads::bounded_read_target(
+                value,
+                context.home_dir,
+                context.cwd,
+                false,
+            ) && (value.starts_with(['/', '~'])
+                || value.split(['/', '\\']).any(|part| part == "..")
+                || sensitive_path_argument(value)
+                || glob_can_select_sensitive_path(value))
+        }
+        SearchValueRole::Glob | SearchValueRole::Path => {
+            value.starts_with(['/', '~'])
+                || value.split(['/', '\\']).any(|part| part == "..")
+                || sensitive_path_argument(value)
+                || glob_can_select_sensitive_path(value)
+        }
+        SearchValueRole::TypeGlob => value.split_once(':').is_none_or(|(_, glob)| {
+            sensitive_path_argument(glob) || glob_can_select_sensitive_path(glob)
+        }),
+        SearchValueRole::DirectoryAction => value.eq_ignore_ascii_case("recurse"),
+        SearchValueRole::Pattern | SearchValueRole::Other => false,
+    }
+}
 
 pub(super) fn rg_value_role(name: &str) -> Option<SearchValueRole> {
     match name {

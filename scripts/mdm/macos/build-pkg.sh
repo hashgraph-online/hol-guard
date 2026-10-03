@@ -17,8 +17,12 @@ mkdir -p "${RUNTIME}" "${STATE}" "${LOGS}" "${STAGE}/Library/LaunchAgents" \
   "${STAGE}/Library/LaunchDaemons" "${OUT}"
 
 typeset -a pyinstaller_args
+uv run --no-sync python "${ROOT}/scripts/release/stage_guard_cloud_review_artifacts.py" \
+  --source-root "${ROOT}" --destination-root "${OUT}/contract-data"
 pyinstaller_args=(--clean --noconfirm --onedir --name hol-guard \
   --collect-submodules codex_plugin_scanner --collect-data codex_plugin_scanner \
+  --add-data "${ROOT}/src/codex_plugin_scanner/version.py:." \
+  --add-data "${OUT}/contract-data:codex_plugin_scanner/guard/contracts/data" \
   --distpath "${RUNTIME}" --workpath "${OUT}/pyinstaller" --specpath "${OUT}" \
   "${ROOT}/scripts/mdm/hol-guard-entry.py")
 if [[ -n "${HOL_GUARD_INSTALLER_SIGN_IDENTITY:-}" ]]; then
