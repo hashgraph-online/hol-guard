@@ -52,6 +52,23 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
     }
     let executable = segment.executable.as_deref()?;
     let arguments = segment.arguments.as_slice();
+    let arguments = if matches!(super::executable_basename(executable), "node" | "nodejs") {
+        match arguments {
+            [flag, rest @ ..] if flag.starts_with("--max-old-space-size=") => {
+                let value = flag.strip_prefix("--max-old-space-size=")?;
+                if value.is_empty()
+                    || !value.bytes().all(|byte| byte.is_ascii_digit())
+                    || !matches!(value.parse::<u32>(), Ok(16..=131072))
+                {
+                    return None;
+                }
+                rest
+            }
+            rest => rest,
+        }
+    } else {
+        arguments
+    };
     match (super::executable_basename(executable), arguments) {
         (name, [flag, _program]) if python_runtime_name(name) && flag == "-c" => {
             return Some("native_python_eval_readonly_containment_required");

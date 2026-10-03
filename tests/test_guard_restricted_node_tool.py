@@ -18,11 +18,29 @@ from codex_plugin_scanner.guard.runtime.restricted_pytest_model import Restricte
         ["bunx", "tsc"],
         ["eslint", "--fix", "src"],
         ["eslint", "--output-file=.env", "src"],
+        ["node", "--max-old-space-size=999999", "typescript/bin/tsc", "--noEmit"],
+        ["node", "--require=evil", "typescript/bin/tsc", "--noEmit"],
+        ["node", "--max-old-space-size=12288", "--require=evil", "typescript/bin/tsc", "--noEmit"],
     ],
 )
 def test_unsupported_or_writing_command_is_not_a_protected_plan(command, tmp_path):
     with pytest.raises(RestrictedPytestError):
         tool.prepare_restricted_node_tool(command, workspace=tmp_path)
+
+
+def test_bounded_heap_option_is_preserved_before_verified_entry(monkeypatch, tmp_path):
+    entry = tmp_path / "node_modules/typescript/bin/tsc"
+    entry.parent.mkdir(parents=True)
+    entry.write_text("// fixture compiler")
+    base = SimpleNamespace(workspace=tmp_path, cwd=tmp_path, executable="/usr/bin/node", denied_capabilities=())
+    monkeypatch.setattr(tool, "prepare_restricted_node_test", lambda *args, **kwargs: base)
+    monkeypatch.setattr(tool, "replace", lambda original, **changes: SimpleNamespace(**{**vars(original), **changes}))
+    plan = tool.prepare_restricted_node_tool(
+        ["node", "--max-old-space-size=12288", str(entry), "--noEmit", "--incremental", "false"],
+        workspace=tmp_path,
+    )
+    assert plan.profile_version == "node-tool-readonly-v1"
+    assert plan.command == ("/usr/bin/node", "--max-old-space-size=12288", str(entry), "--noEmit", "--incremental", "false")
 
 
 @pytest.mark.parametrize("script", ["curl https://example.invalid", "", "eslint src && curl https://example.invalid"])

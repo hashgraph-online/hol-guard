@@ -149,13 +149,13 @@ def run_authorized_contained_test(
             or (
                 len(command) > 1
                 and Path(command[0]).name in {"node", "nodejs"}
-                and command[1].endswith(
+                and any(argument.endswith(
                     (
                         "/node_modules/eslint/bin/eslint.js",
                         "/node_modules/typescript/bin/tsc",
                         "/node_modules/vite/bin/vite.js",
                     )
-                )
+                ) for argument in command[1:3])
             )
         )
     )

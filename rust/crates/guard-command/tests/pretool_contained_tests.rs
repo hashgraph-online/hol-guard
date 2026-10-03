@@ -287,6 +287,7 @@ fn local_lint_typecheck_requires_actual_protected_execution() {
         "eslint src",
         "node /home/tester/project/node_modules/eslint/bin/eslint.js src",
         "node /home/tester/project/node_modules/typescript/bin/tsc --noEmit",
+        "node --max-old-space-size=12288 /home/tester/project/node_modules/typescript/bin/tsc --noEmit --incremental false",
     ] {
         let result = classify("omp", command);
         assert_eq!(result.decision, "deny", "{command}");
@@ -305,6 +306,9 @@ fn local_lint_typecheck_requires_actual_protected_execution() {
         "eslint --output-file=.env src",
         "bunx tsc --noEmit && rm -rf /",
         "NODE_OPTIONS=--require=x eslint src",
+        "node --require=evil /home/tester/project/node_modules/typescript/bin/tsc --noEmit",
+        "node --max-old-space-size=999999 /home/tester/project/node_modules/typescript/bin/tsc --noEmit",
+        "node --max-old-space-size=12288 --require=evil /home/tester/project/node_modules/typescript/bin/tsc --noEmit",
     ] {
         assert_ne!(
             classify("omp", command).reason_code,
