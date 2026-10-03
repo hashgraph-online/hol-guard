@@ -426,7 +426,12 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
     }
     let shadow = repository.join("bin");
     std::fs::create_dir_all(&shadow).unwrap();
-    std::fs::write(shadow.join("git"), b"synthetic executable must never run").unwrap();
+    let shadow_executable = if cfg!(windows) { "git.exe" } else { "git" };
+    std::fs::write(
+        shadow.join(shadow_executable),
+        b"synthetic executable must never run",
+    )
+    .unwrap();
     let shadow_path =
         std::env::join_paths(std::iter::once(shadow).chain(std::env::split_paths(&original_path)))
             .unwrap();
