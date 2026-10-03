@@ -155,7 +155,7 @@ def _groups() -> dict[str, NativeCaseContract]:
             or not 0 <= value.variant_remainder < value.variant_modulus
             or value.original_floor not in _ACTIONS
             or value.expected_floor not in _ACTIONS
-            or value.expected_native_floor not in ("allow", "review", "block")
+            or value.expected_native_floor not in ("allow", "review", "require-reapproval", "block")
             or type(value.expected_explicitly_benign) is not bool
             or value.expected_decision not in ("allow", "deny")
             or (value.expected_native_floor == "allow") != value.expected_explicitly_benign

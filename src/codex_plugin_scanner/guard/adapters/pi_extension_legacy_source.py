@@ -20,6 +20,27 @@ def legacy_managed_extension_source(
         display_name=display_name,
     )
 
+    # Environment attestation was added after the frozen migration snapshot.
+    stamp_start = source.find("  const activeEnvironment = Object.create(null);\n")
+    stamp_end = source.find("  let serializedPayload = '';\n", stamp_start)
+    if stamp_start < 0 or stamp_end < 0:
+        raise RuntimeError("managed Pi extension legacy source contract drifted")
+    source = source[:stamp_start] + "  let payloadToSend = payload;\n" + source[stamp_end:]
+    source = source.replace(
+        "!payloadWithinSerializedBudget(payloadToSend, deadlineAt)",
+        "!payloadWithinSerializedBudget(payload, deadlineAt)",
+        1,
+    )
+
+    reference_environment = (
+        "    ...(Object.prototype.hasOwnProperty.call(payload, 'guard_execution_environment')\n"
+        "      ? { guard_execution_environment: payload.guard_execution_environment }\n"
+        "      : {}),\n"
+    )
+    if source.count(reference_environment) != 1:
+        raise RuntimeError("managed Pi extension legacy source contract drifted")
+    source = source.replace(reference_environment, "", 1)
+
     # The legacy source is a frozen migration artifact.  Remove additions from
     # the current managed source before applying the historical compatibility
     # substitutions below so the old byte contract remains exact.
