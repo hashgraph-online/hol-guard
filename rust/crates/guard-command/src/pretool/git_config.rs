@@ -418,6 +418,7 @@ fn trusted_git(
         if !["ProgramFiles", "ProgramFiles(x86)", "SystemRoot"]
             .iter()
             .filter_map(std::env::var_os)
+            .filter_map(|root| fs::canonicalize(root).ok())
             .any(|root| path.starts_with(root))
         {
             return None;
