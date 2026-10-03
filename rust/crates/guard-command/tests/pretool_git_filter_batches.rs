@@ -4,10 +4,45 @@ use fixture::*;
 use serde_json::json;
 use std::io::Write;
 use std::process::{Command, Stdio};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+fn unique_fixture_root() -> std::path::PathBuf {
+    let base = std::env::temp_dir();
+    let stamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system clock is after the Unix epoch")
+        .as_nanos();
+    for attempt in 0..32 {
+        let root = base.join(format!(
+            "guard-filter-batches-{}-{stamp}-{attempt}",
+            std::process::id()
+        ));
+        match std::fs::create_dir(&root) {
+            Ok(()) => return root,
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => panic!("create isolated fixture root: {error}"),
+        }
+    }
+    panic!("could not allocate an isolated fixture root");
+}
+
+fn assert_fixture_git_dir(repository: &std::path::Path) {
+    let output = Command::new("git")
+        .env_remove("GIT_DIR")
+        .env_remove("GIT_INDEX_FILE")
+        .arg("-C")
+        .arg(repository)
+        .args(["rev-parse", "--absolute-git-dir"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let actual = std::path::PathBuf::from(String::from_utf8(output.stdout).unwrap().trim());
+    assert_eq!(actual, repository.join(".git").canonicalize().unwrap());
+}
 
 #[test]
 fn large_attribute_inventory_is_checked_without_executing_filters() {
-    let root = std::env::temp_dir().join(format!("guard-filter-batches-{}", std::process::id()));
+    let root = unique_fixture_root();
     let _cleanup = FixtureCleanup(root.clone());
     let home = root.join("home");
     let repository = root.join("repository");
@@ -28,12 +63,17 @@ fn large_attribute_inventory_is_checked_without_executing_filters() {
     )
     .unwrap();
     assert!(Command::new("git")
+        .env_remove("GIT_DIR")
+        .env_remove("GIT_INDEX_FILE")
         .args(["init", "--quiet"])
         .arg(&repository)
         .status()
         .unwrap()
         .success());
+    assert_fixture_git_dir(&repository);
     let mut hash = Command::new("git")
+        .env_remove("GIT_DIR")
+        .env_remove("GIT_INDEX_FILE")
         .arg("-C")
         .arg(&repository)
         .args(["hash-object", "-w", "--stdin"])
@@ -62,7 +102,10 @@ fn large_attribute_inventory_is_checked_without_executing_filters() {
     }
     assert!(input_bytes < 1024 * 1024);
     assert!(output_bytes > 1024 * 1024);
+    assert_fixture_git_dir(&repository);
     let mut index = Command::new("git")
+        .env_remove("GIT_DIR")
+        .env_remove("GIT_INDEX_FILE")
         .arg("-C")
         .arg(&repository)
         .args(["update-index", "--index-info"])
