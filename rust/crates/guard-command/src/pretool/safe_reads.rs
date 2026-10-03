@@ -569,17 +569,20 @@ fn home_execution_control_target(
             _ => None,
         })
         .collect();
-    parts.iter().any(|part| part == "bin" || part == "appdata")
-        || parts.windows(2).any(|pair| {
-            matches!(
-                pair,
-                [first, second]
-                    if first == "library"
-                        && matches!(second.as_str(), "application support" | "application scripts")
-                        || (first == ".local" && second == "bin")
-                        || (first == ".github" && second == "workflows")
-            )
-        })
+    parts.iter().any(|part| {
+        matches!(part.as_str(), "bin" | "appdata" | "site-packages" | "dist-packages")
+            || part.ends_with(".pth")
+            || matches!(part.as_str(), "sitecustomize.py" | "usercustomize.py")
+    }) || parts.windows(2).any(|pair| {
+        matches!(
+            pair,
+            [first, second]
+                if first == "library"
+                    && matches!(second.as_str(), "application support" | "application scripts" | "python")
+                    || (first == ".local" && second == "bin")
+                    || (first == ".github" && second == "workflows")
+        )
+    })
 }
 
 fn agent_skill_document(canonical: &std::path::Path, home_dir: Option<&str>) -> bool {
