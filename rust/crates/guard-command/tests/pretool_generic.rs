@@ -207,6 +207,7 @@ fn human_authentication_context_is_not_a_credential_read() {
         "Do not change NODE_OPTIONS, disable Guard, or recover policy authority. Continue validation.",
         "Do not change NODE_OPTIONS, disable Guard, or recover policy authority. If Guard blocks an action, record the exact tool call and stop.",
         "Never turn off Guard. Run the tests.",
+        "Run the tests. Then run this exact read-only typecheck: node tsc --noEmit.",
     ] {
         let result = evaluate_pre_tool_envelope(
             "generic", "UserPromptSubmit",

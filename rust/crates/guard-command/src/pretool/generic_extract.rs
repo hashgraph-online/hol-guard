@@ -467,6 +467,7 @@ fn benign_prompt_text(text: &str) -> bool {
     static DOCUMENT_END: OnceLock<Regex> = OnceLock::new();
     static ENV_TEMPLATE: OnceLock<Regex> = OnceLock::new();
     static RISK_ACTION: OnceLock<Regex> = OnceLock::new();
+    static REFERENTIAL_INSTRUCTION: OnceLock<Regex> = OnceLock::new();
     static REFERENT_ACTION: OnceLock<Regex> = OnceLock::new();
 
     let normalized = text.to_ascii_lowercase();
@@ -477,6 +478,7 @@ fn benign_prompt_text(text: &str) -> bool {
             .replace_all(&normalized, "human authentication")
             .into_owned()
     };
+    let sensitive_antecedent = sensitive_command(&remainder);
     // Mask only the prohibited verb, never its targets or later instructions.
     remainder = mask_destructive_prohibitions(&remainder);
     let documents = [
@@ -536,9 +538,18 @@ fn benign_prompt_text(text: &str) -> bool {
         .get_or_init(|| Regex::new(r"(?i)\.env\.example\b").expect("bounded template reference"));
     remainder = env_template.replace_all(&remainder, " ").into_owned();
     let risky_action = RISK_ACTION.get_or_init(|| {
-        Regex::new(r"(?i)\b(?:rm\s+-[a-z]*[rf]\b|delete\b|erase\b|wipe\b|format\b|kill\b|upload\b|exfiltrat[a-z]*\b|transfer\b|curl\b|wget\b|sudo\b|bash\s+-c\b|sh\s+-c\b|powershell\b|cmd\s+/c\b|subprocess\b|spawn\s*\(|exec\s*\(|send\s+(?:data|payload|file|secret|token|credential)\b|post\s+(?:payload|data|file|secret)\b|sync\s+(?:output|data)\b|(?:send|post|sync|transfer)\s+(?:to|over|via|at)\s+(?:webhook|server|slack|discord|https?://)\b|then\s+(?:read|open|print|summari[sz]e|show|dump|include|use|grab|upload|send)\s+(?:it|them|those|files|secrets)\b|(?:now|then|afterwards|also)\s+(?:do|perform|execute|follow|run|use)\s+(?:it|that|this|them|example)\b)")
+        Regex::new(r"(?i)\b(?:rm\s+-[a-z]*[rf]\b|delete\b|erase\b|wipe\b|format\b|kill\b|upload\b|exfiltrat[a-z]*\b|transfer\b|curl\b|wget\b|sudo\b|bash\s+-c\b|sh\s+-c\b|powershell\b|cmd\s+/c\b|subprocess\b|spawn\s*\(|exec\s*\(|send\s+(?:data|payload|file|secret|token|credential)\b|post\s+(?:payload|data|file|secret)\b|sync\s+(?:output|data)\b|(?:send|post|sync|transfer)\s+(?:to|over|via|at)\s+(?:webhook|server|slack|discord|https?://)\b|then\s+(?:read|open|print|summari[sz]e|show|dump|include|use|grab|upload|send)\s+(?:it|them|those|files|secrets)\b)")
             .expect("bounded risky prompt action")
     });
+    let referential = REFERENTIAL_INSTRUCTION.get_or_init(|| {
+        Regex::new(r"(?i)\b(?:now|then|afterwards|also)\s+(?:do|perform|execute|follow|run|use)\s+(?:it|that|this|them|example)\b")
+            .expect("bounded referential prompt instruction")
+    });
+    if referential.is_match(&remainder)
+        && (sensitive_antecedent || risky_action.is_match(&normalized))
+    {
+        return false;
+    }
     !sensitive_command(&remainder) && !risky_action.is_match(&remainder)
 }
 
