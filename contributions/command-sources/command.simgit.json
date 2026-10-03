@@ -1,0 +1,141 @@
+{
+  "schema": "guard.command-extension-source.v1",
+  "extension": {
+    "extension_id": "command.simgit",
+    "version": "1.0.0",
+    "name": "simgit command protection",
+    "description": "Reviews the two simgit flags that destroy work Git cannot return: discarding a dirty worktree and deleting an unmerged branch.",
+    "action_classes": [
+      "simgit uncommitted worktree discard command",
+      "simgit unmerged branch deletion command"
+    ],
+    "risk_classes": ["destructive_shell"],
+    "safer_alternatives": [
+      "Run the command without --discard-dirty or --delete-unmerged and read what it refuses to touch.",
+      "Commit the worktree's changes with `simgit remove --commit` instead of discarding them."
+    ],
+    "reference_urls": ["https://github.com/abendrothj/simgit"],
+    "required": false,
+    "source": "built-in",
+    "aliases": [],
+    "dependencies": [],
+    "conflicts": [],
+    "ecosystem_ids": ["simgit"],
+    "executables": ["simgit", "sg"],
+    "project_markers": [],
+    "publisher": {
+      "id": "community.abendrothj",
+      "display_name": "Community",
+      "url": "https://github.com/abendrothj"
+    },
+    "homepage": "https://github.com/abendrothj/simgit",
+    "icon": {"kind": "react-icon", "name": "HiMiniCube", "background": "#0F766E"},
+    "license": "Apache-2.0",
+    "permissions": [
+      {
+        "permission_id": "command.simgit.permission.discard-dirty",
+        "implementation_version": "1.0.0",
+        "label": "Discard dirty simgit worktree",
+        "description": "Reviews removal of a worktree with uncommitted or untracked files, which are not recoverable from the source repository.",
+        "risk_tier": "critical",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": ["simgit uncommitted worktree discard command"],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "deprecated": false,
+        "safer_guidance": [
+          "Omit --discard-dirty: simgit refuses a dirty worktree and reports what it kept.",
+          "Use `simgit remove --commit -m <message>` to keep the changes in a commit."
+        ],
+        "example_command": "simgit remove /path/to/worktree --discard-dirty"
+      },
+      {
+        "permission_id": "command.simgit.permission.delete-unmerged",
+        "implementation_version": "1.0.0",
+        "label": "Delete unmerged simgit branch",
+        "description": "Reviews branch deletion past Git's merged check, which can discard commits that were never integrated.",
+        "risk_tier": "high",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": ["simgit unmerged branch deletion command"],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "deprecated": false,
+        "safer_guidance": [
+          "Omit --delete-unmerged: simgit retains an unmerged branch.",
+          "Merge or push the branch before deleting it."
+        ],
+        "example_command": "simgit remove feature-branch --delete-branch --delete-unmerged"
+      }
+    ],
+    "rules": [
+      {
+        "rule_id": "command.simgit.discard-dirty",
+        "rule_version": "1.0.0",
+        "permission_id": "command.simgit.permission.discard-dirty",
+        "title": "simgit uncommitted worktree discard",
+        "description": "Identifies --discard-dirty on simgit remove and gc and unresolved shell expansions that can supply it.",
+        "severity": "critical",
+        "risk_classes": ["destructive_shell"],
+        "action_classes": ["simgit uncommitted worktree discard command"],
+        "safer_alternatives": [
+          "Omit --discard-dirty to preserve a dirty worktree.",
+          "Use `simgit remove --commit -m <message>` to keep the changes.",
+          "Preview a GC selection with `simgit gc --dry-run`."
+        ],
+        "default_mode": "review",
+        "matcher": {"op": "simgit-flag.v1", "config": {"required_flag": "--discard-dirty"}},
+        "safe_variants": [
+          {
+            "variant_id": "dry-run",
+            "title": "simgit gc discard preview",
+            "matcher": {"op": "simgit-flag.v1", "config": {"required_flag": "--discard-dirty", "quiet_flag": "--dry-run"}}
+          },
+          {
+            "variant_id": "help",
+            "title": "simgit command help",
+            "matcher": {"op": "simgit-flag.v1", "config": {"required_flag": "--discard-dirty", "quiet_flag": "--help"}}
+          }
+        ]
+      },
+      {
+        "rule_id": "command.simgit.delete-unmerged",
+        "rule_version": "1.0.0",
+        "permission_id": "command.simgit.permission.delete-unmerged",
+        "title": "simgit unmerged branch deletion",
+        "description": "Identifies --delete-unmerged on simgit remove and gc and unresolved shell expansions that can supply it.",
+        "severity": "high",
+        "risk_classes": ["destructive_shell"],
+        "action_classes": ["simgit unmerged branch deletion command"],
+        "safer_alternatives": [
+          "Omit --delete-unmerged to retain unmerged commits.",
+          "Merge or push the branch before deleting its worktree.",
+          "Preview a GC selection with `simgit gc --dry-run`."
+        ],
+        "default_mode": "review",
+        "matcher": {"op": "simgit-flag.v1", "config": {"required_flag": "--delete-unmerged"}},
+        "safe_variants": [
+          {
+            "variant_id": "dry-run",
+            "title": "simgit gc branch deletion preview",
+            "matcher": {"op": "simgit-flag.v1", "config": {"required_flag": "--delete-unmerged", "quiet_flag": "--dry-run"}}
+          },
+          {
+            "variant_id": "help",
+            "title": "simgit command help",
+            "matcher": {"op": "simgit-flag.v1", "config": {"required_flag": "--delete-unmerged", "quiet_flag": "--help"}}
+          }
+        ]
+      }
+    ]
+  }
+}
