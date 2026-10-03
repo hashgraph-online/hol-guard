@@ -115,8 +115,6 @@ pub struct ProgramMcpLaunch {
     pub url: Option<String>,
     #[serde(rename = "serverNames", default)]
     pub server_names: Vec<String>,
-    #[serde(default)]
-    pub args: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
