@@ -261,6 +261,13 @@ fn clean_environment(
 ) -> bool {
     let names = match execution_environment {
         Some(context) => {
+            let declares_xdg = context
+                .environment_names
+                .iter()
+                .any(|name| name.eq_ignore_ascii_case("XDG_CONFIG_HOME"));
+            if declares_xdg != context.xdg_config_home.is_some() {
+                return false;
+            }
             if context.path.len() > 32768
                 || context.path.contains('\0')
                 || context

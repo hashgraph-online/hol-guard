@@ -56,6 +56,12 @@ def test_execution_lookup_context_is_feature_gated_and_omits_environment_values(
     encoded = json.loads(_encode_hook_envelope(**arguments, execution_context_supported=True))
     assert encoded["source"]["execution_environment"] == forwarded
     assert "guard_execution_environment" not in encoded["raw_payload"]
+    monkeypatch.setenv("XDG_CONFIG_HOME", "")
+    arguments["payload"].pop("guard_execution_environment", None)
+    empty_xdg = json.loads(_encode_hook_envelope(**arguments, execution_context_supported=True))
+    empty_context = empty_xdg["source"]["execution_environment"]
+    assert empty_context["xdg_config_home"] is None
+    assert "XDG_CONFIG_HOME" not in empty_context["environment_names"]
     arguments["payload"]["guard_execution_environment"] = None
     unavailable = json.loads(_encode_hook_envelope(**arguments, execution_context_supported=True))
     assert "execution_environment" not in unavailable["source"]
