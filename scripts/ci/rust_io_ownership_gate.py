@@ -178,6 +178,11 @@ def _calls(record: FunctionRecord) -> tuple[str, ...]:
 
 
 def _category(path: str, kind: str) -> str:
+    # These two decision-time evidence hashes moved from command_evaluation.
+    # Keep their original migration category; they are not asynchronous policy
+    # work and this exception must not admit file reads or decoders.
+    if path == "src/codex_plugin_scanner/guard/runtime/command_native_factors.py" and kind == "hash":
+        return "pending_authority_migration"
     if path in _COMPATIBILITY_PATHS:
         return "compatibility_only"
     if path in _STRUCTURED_OUTPUT_MEDIATION_PATHS and kind in {"hash", "decode"}:

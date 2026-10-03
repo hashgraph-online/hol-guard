@@ -57,3 +57,15 @@ def test_protected_admission_requires_the_exact_containment_route():
     for field, value in [("decision", "allow"), ("required_execution_profile", "wrong-profile")]:
         with pytest.raises(AssertionError, match="vitest"):
             assert_admission([case], [{**result, field: value}])
+
+
+def test_workflow_fixture_removes_only_successful_runs(tmp_path, monkeypatch):
+    from ci.native_runtime.probe_workflow_matrix import workflow_fixture
+
+    monkeypatch.chdir(tmp_path)
+    with workflow_fixture() as successful:
+        assert successful.is_dir()
+    assert not successful.exists()
+    with pytest.raises(RuntimeError, match="cleanup uncertain"), workflow_fixture() as retained:
+        raise RuntimeError("cleanup uncertain")
+    assert retained.is_dir()

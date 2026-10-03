@@ -83,7 +83,9 @@ def read_legacy_codex_probe_receipt(
     if remaining <= 0:
         raise TransitionError("admission_deadline_expired")
     with (
-        sqlite_connect_timeout_override(min(0.1, remaining)),
+        # Keep lock waits short without shrinking the entire receipt query
+        # and connection initialization to the same 100 ms budget.
+        sqlite_connect_timeout_override(min(0.1, remaining), operation_seconds=remaining),
         _deadline_connection(store, deadline_monotonic) as connection,
     ):
         check()

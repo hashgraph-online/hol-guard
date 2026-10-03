@@ -2,6 +2,53 @@ use super::*;
 
 static EDGE_FIXTURE_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
+#[test]
+fn execution_environment_binds_identity_without_rejecting_unrelated_hooks() {
+    let mut request = envelope(
+        "PreToolUse",
+        serde_json::json!({"tool_name":"bash", "command":"git status --short"}),
+    );
+    let original_request = request_identity(&request).unwrap().1;
+    let original_intent = execution_intent_digest(&request).unwrap();
+    request.source.execution_environment = Some(guard_contracts::GuardExecutionEnvironmentV1 {
+        path: "/usr/bin:/bin".into(),
+        environment_names: vec!["PATH".into()],
+        environment_digest: "a".repeat(64),
+        home: None,
+        git_pager_disabled: false,
+        pager_disabled: false,
+        xdg_config_home: None,
+        git_config_no_system: false,
+    });
+    assert!(validate_envelope_shape(&request).is_ok());
+    assert_ne!(original_request, request_identity(&request).unwrap().1);
+    assert_ne!(original_intent, execution_intent_digest(&request).unwrap());
+    let intent = execution_intent_digest(&request).unwrap();
+    request
+        .source
+        .execution_environment
+        .as_mut()
+        .unwrap()
+        .environment_digest = "b".repeat(64);
+    assert_ne!(intent, execution_intent_digest(&request).unwrap());
+    request.source.execution_environment.as_mut().unwrap().path = "x".repeat(MAX_PATH_BYTES + 1);
+    assert!(validate_envelope_shape(&request).is_ok());
+    assert!(!request
+        .source
+        .execution_environment
+        .as_ref()
+        .unwrap()
+        .has_valid_shape());
+    // Core source paths still enforce the transport contract's strict bound.
+    request.source.home_dir = "x".repeat(MAX_PATH_BYTES + 1);
+
+    assert_eq!(
+        validate_envelope_shape(&request).unwrap_err(),
+        "native_hook_source_metadata_invalid"
+    );
+    std::fs::remove_dir_all(&request.source.guard_home).unwrap();
+}
+
 fn write_fixture_file(path: &std::path::Path, bytes: &[u8]) {
     #[cfg(windows)]
     {
@@ -57,6 +104,7 @@ fn envelope(event: &str, payload: Value) -> GuardHookEnvelopeV2 {
             home_dir: "/home/test".to_owned(),
             guard_home: guard_home.to_string_lossy().into_owned(),
             source_ref_external_allowed: false,
+            execution_environment: None,
         },
     }
 }

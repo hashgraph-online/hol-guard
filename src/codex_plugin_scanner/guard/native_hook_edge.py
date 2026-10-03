@@ -257,14 +257,19 @@ def _encode_hook_envelope(
     source_ref_external_allowed: bool,
     deadline_budget_ms: int,
     snapshot: Mapping[str, object],
+    execution_context_supported: bool = False,
     request_id: str | None = None,
 ) -> bytes | None:
+    from .hook_execution_environment import HOOK_EXECUTION_ENVIRONMENT_KEY, collect_hook_execution_environment
+
+    raw_payload = dict(payload)
+    caller_context = raw_payload.pop(HOOK_EXECUTION_ENVIRONMENT_KEY, ...)
     envelope = {
         "schema": "guard-hook-envelope.v2",
         "request_id": request_id,
         "harness": harness,
         "event": event,
-        "raw_payload": payload,
+        "raw_payload": raw_payload,
         "deadline_budget_ms": deadline_budget_ms,
         "policy_generation": snapshot["generation"],
         # The resident already authenticated and cached the full snapshot at
@@ -283,6 +288,15 @@ def _encode_hook_envelope(
             "source_ref_external_allowed": source_ref_external_allowed,
         },
     }
+    if execution_context_supported:
+        # Direct CLI calls capture locally; daemon workers explicitly pass
+        # None when caller context is unavailable instead of using daemon env.
+        if caller_context is ...:
+            caller_context = collect_hook_execution_environment()
+        if caller_context is not None:
+            if not isinstance(caller_context, Mapping):
+                return None
+            cast(dict[str, Any], envelope["source"])["execution_environment"] = dict(caller_context)
     try:
         encoded = json.dumps(
             envelope,
@@ -329,6 +343,8 @@ def review_raw_hook_native(
         "prompt",
     }:
         required_features.add("pre-tool-generic-authority-v1")
+        if event_key not in {"userpromptsubmit", "userpromptsubmitted", "prompt"}:
+            required_features.add("git-execution-context-v1")
     if (
         status.mode not in {"auto", "force"}
         or not status.available
@@ -356,6 +372,7 @@ def review_raw_hook_native(
         source_ref_external_allowed=source_ref_external_allowed,
         deadline_budget_ms=deadline_budget_ms,
         snapshot=snapshot,
+        execution_context_supported="git-execution-context-v1" in status.capabilities.features,
         request_id=request_id,
     )
     if encoded is None:

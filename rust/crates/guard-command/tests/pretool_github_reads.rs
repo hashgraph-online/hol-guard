@@ -23,15 +23,44 @@ fn explicit_github_read_permission_deny_still_wins() {
     })).unwrap();
         binding.effective_digest = binding.compute_effective_digest().unwrap();
         let controls = CompiledNativeCommandControls::new(&binding).unwrap();
+        let denied_command = if permission == "read-local" {
+            "gh auth status"
+        } else {
+            "gh api repos/owner/repo/compare/base...main"
+        };
+        for harness in ["omp", "zcode"] {
+            for operator in [";", "&&", "||", "|"] {
+                for command in [
+                    format!("echo ordinary {operator} {denied_command}"),
+                    format!("{denied_command} {operator} echo ordinary"),
+                ] {
+                    let result = evaluate_pre_tool_envelope_with_context(
+                        harness,
+                        "PreToolUse",
+                        &json!({"tool_name":"bash","tool_input":{"command":command}}),
+                        Some(&controls),
+                        None,
+                        None,
+                        None,
+                    );
+                    assert_eq!(result.minimum_action, "block", "{harness}: {command}");
+                    assert_eq!(result.decision, "deny", "{harness}: {command}");
+                }
+            }
+        }
         for command in [
             "gh api repos/owner/repo/compare/base...main",
             "gh auth status",
             "pwd; gh auth status; echo done",
             "gh auth status | head -1",
+            "gh auth status | jq .",
         ] {
             let exercises_local_permission = matches!(
                 command,
-                "gh auth status" | "pwd; gh auth status; echo done" | "gh auth status | head -1"
+                "gh auth status"
+                    | "pwd; gh auth status; echo done"
+                    | "gh auth status | head -1"
+                    | "gh auth status | jq ."
             );
             if permission == "read-local" && !exercises_local_permission {
                 continue;
@@ -67,7 +96,50 @@ fn github_read_capabilities_have_a_benign_floor_but_mutations_do_not() {
             ("gh run view 1 --json status", true),
             ("gh auth status", true),
             ("pwd; gh pr view 1 --json title; echo done", true),
-            ("git status --short && gh api repos/owner/repo/compare/base...main", true),
+            // This context-free fixture cannot inspect effective Git config.
+            // Verified repository positives live in pretool_git_helper_config.
+            ("git status --short && gh api repos/owner/repo/compare/base...main", false),
+            ("git -C project status --short; echo done", false),
+            ("git --no-pager -C project status --short", false),
+            ("git -C project --no-optional-locks status --short", false),
+            ("git -Cproject status --short", false),
+            ("git -C project rev-parse --show-toplevel", false),
+            ("git -C project -c core.fsmonitor=payload status", false),
+            ("git -C project --config-env=core.fsmonitor=PAYLOAD status", false),
+            ("git -C project -C nested status", false),
+            ("git --exec-path=project -C project status", false),
+            ("git -C .ssh status", false),
+            ("git -C project status; cat .env", false),
+            ("gh pr view 1 --json title || echo unavailable", true),
+            ("gh api repos/owner/repo/compare/base...main | head -1", true),
+            ("gh api repos/owner/repo | jq .name", true),
+            ("gh api repos/owner/repo | jq -r .name", true),
+            ("gh api repos/owner/repo | jq --compact-output '.files[].filename'", true),
+            ("gh api repos/owner/repo | jq '.files[0].filename'", true),
+            ("gh api repos/owner/repo | jq .", true),
+            ("gh api repos/owner/repo | jq .[]", true),
+            ("gh api repos/owner/repo | jq '..name'", false),
+            ("gh api repos/owner/repo | jq '.[0]name'", false),
+            ("gh api repos/owner/repo | jq .name ordinary.json", false),
+            ("gh api repos/owner/repo | jq --rawfile data .env .", false),
+            ("gh api repos/owner/repo | jq --slurpfile data ordinary.json .", false),
+            ("gh api repos/owner/repo | jq --from-file filter.jq", false),
+            ("gh api repos/owner/repo | jq env", false),
+            ("gh api repos/owner/repo | jq '$ENV'", false),
+            ("gh api repos/owner/repo | jq 'include \"payload\"; .'", false),
+            ("cat .env | jq .", false),
+            ("jq .name", false),
+            ("gh api repos/owner/repo | jq .name; cat .env", false),
+            ("sleep 20; gh pr view 1 --json title", true),
+            ("sleep 0.01 && gh pr view 1 --json title", true),
+            ("gh pr view 1 --json title; sleep 1", true),
+            ("sleep 60; gh pr view 1 --json title", true),
+            ("sleep 61; gh pr view 1 --json title", false),
+            ("sleep infinity; gh pr view 1 --json title", false),
+            ("sleep 1 2; gh pr view 1 --json title", false),
+            ("sleep 1; cat .env", false),
+            ("sleep 1; rm -rf src", false),
+            ("sleep $(cat .env); gh pr view 1 --json title", false),
             ("gh pr view 1 --json title || echo unavailable", true),
             ("gh api repos/owner/repo/compare/base...main | head -1", true),
             ("gh pr view 1 --json title; cat .env", false),

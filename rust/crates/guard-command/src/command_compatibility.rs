@@ -24,6 +24,13 @@ pub(crate) fn github_arguments_are_read_only(arguments: &[String]) -> bool {
     github::arguments_are_read_only(arguments)
 }
 
+pub(crate) fn git_inspection_arguments<'a>(
+    arguments: &'a [String],
+    context: crate::pretool::PathContext<'_>,
+) -> Option<&'a [String]> {
+    git::inspection_arguments(arguments, context)
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CompatibilityMatch {
     pub rule_id: &'static str,
@@ -137,6 +144,18 @@ pub fn compatibility_observations(
     command: &CanonicalCommandV1,
     deadline: Option<Instant>,
 ) -> Result<CompatibilityObservations, &'static str> {
+    compatibility_observations_with_context(
+        command,
+        deadline,
+        crate::pretool::PathContext::default(),
+    )
+}
+
+pub fn compatibility_observations_with_context(
+    command: &CanonicalCommandV1,
+    deadline: Option<Instant>,
+    context: crate::pretool::PathContext<'_>,
+) -> Result<CompatibilityObservations, &'static str> {
     deadline_check(deadline)?;
     if command.normalized_text.len() > 32_768
         || command.segments.len() > 128
@@ -197,7 +216,7 @@ pub fn compatibility_observations(
             return Err("native_command_compatibility_context_unsupported");
         }
         match basename(segment).as_str() {
-            "git" => git::observe(segment, index, &mut result),
+            "git" => git::observe_with_context(segment, index, &mut result, context),
             "gh" => github::observe(segment, index, &mut result),
             _ => {}
         }

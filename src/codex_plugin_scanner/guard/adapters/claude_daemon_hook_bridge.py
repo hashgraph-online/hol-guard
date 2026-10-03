@@ -18,6 +18,7 @@ from ..codex_hook_launch_runtime import (
     isolated_hook_environment,
     run_isolated_hook_process,
 )
+from ..hook_execution_environment import stamp_hook_input_text
 from .claude_code import CLAUDE_GUARD_DAEMON_HOOK_MARKER
 from .claude_daemon_hook_transport import authenticated_claude_hook_response
 from .claude_daemon_state import daemon_port_from_state, state_path_for_query
@@ -74,7 +75,7 @@ def main(
             event = "PreToolUse"
         sys.stdout.write(_limit_denied("hook input", event))
     else:
-        data = body.strip() or "{}"
+        data = stamp_hook_input_text(body.strip() or "{}")
         try:
             state_path = state_path_for_query(state_path, query)
         except ValueError as error:

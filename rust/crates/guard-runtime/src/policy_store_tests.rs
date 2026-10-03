@@ -335,6 +335,7 @@ fn restarted_resident_applies_installed_policy_without_request_time_io() {
             home_dir: "/home/test".into(),
             guard_home: root.to_string_lossy().into_owned(),
             source_ref_external_allowed: false,
+            execution_environment: None,
         },
     };
     let result = crate::edge::evaluate_envelope_with_store(envelope, &restarted).unwrap();
@@ -375,6 +376,7 @@ fn authenticated_edge_preserves_clean_default_warning() {
             home_dir: "/home/test".into(),
             guard_home: root.to_string_lossy().into_owned(),
             source_ref_external_allowed: false,
+            execution_environment: None,
         },
     };
     let result = crate::edge::evaluate_envelope_with_store(envelope, &store).unwrap();
@@ -418,6 +420,7 @@ fn authenticated_observe_edge_preserves_intrinsic_pretool_floor() {
             home_dir: "/home/test".into(),
             guard_home: root.to_string_lossy().into_owned(),
             source_ref_external_allowed: false,
+            execution_environment: None,
         },
     };
     let result = crate::edge::evaluate_envelope_with_store(envelope, &store).unwrap();

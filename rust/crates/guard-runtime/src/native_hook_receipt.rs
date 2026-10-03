@@ -219,6 +219,7 @@ mod tests {
                 home_dir: "/home/test".to_owned(),
                 guard_home: "/guard".to_owned(),
                 source_ref_external_allowed: false,
+                execution_environment: None,
             },
         }
     }
