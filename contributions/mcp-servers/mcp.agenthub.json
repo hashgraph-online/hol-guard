@@ -3,7 +3,7 @@
   "id": "mcp.agenthub",
   "version": "1.0.0",
   "name": "AgentHub MCP",
-  "description": "Reviews AgentHub tools that run other coding agents (Codex, Claude Code, Antigravity, Aider, Goose), apply their changes to the working tree, or send code to those agents' providers. Off until you turn it on.",
+  "description": "Reviews AgentHub tools that run other coding agents (Codex, Claude Code, Antigravity, Aider, Goose), change or discard their work, apply it to the working tree, or send code to those agents' providers. Tools not listed are reviewed. Off until you turn it on.",
   "trustClass": "external",
   "activation": "opt-in",
   "publisher": {
@@ -27,9 +27,19 @@
     { "name": "send_message", "state": "review" },
     { "name": "review", "state": "review" },
     { "name": "compare", "state": "review" },
-    { "name": "cancel_task", "state": "inherit" },
-    { "name": "discard_task", "state": "inherit" },
-    { "name": "other", "state": "inherit" }
+    { "name": "cancel_task", "state": "review" },
+    { "name": "discard_task", "state": "review" },
+    { "name": "list_agents", "state": "inherit" },
+    { "name": "get_task", "state": "inherit" },
+    { "name": "wait_task", "state": "inherit" },
+    { "name": "get_task_logs", "state": "inherit" },
+    { "name": "list_tasks", "state": "inherit" },
+    { "name": "get_task_diff", "state": "inherit" },
+    { "name": "list_sessions", "state": "inherit" },
+    { "name": "search_sessions", "state": "inherit" },
+    { "name": "get_transcript", "state": "inherit" },
+    { "name": "list_models", "state": "inherit" },
+    { "name": "other", "state": "review" }
   ],
   "referenceUrls": [
     "https://github.com/premanand8800/agenthub-mcp",
@@ -38,6 +48,6 @@
   ],
   "saferAlternatives": [
     "Use permission_mode read-only, or start_task with isolation worktree so changes stay in a separate checkout until apply_task.",
-    "Use list_agents, get_task, get_task_logs, get_task_diff and the session tools, which only read state."
+    "Use list_agents, get_task, wait_task, get_task_logs, get_task_diff and the session tools, which only read state."
   ]
 }

@@ -29,10 +29,31 @@ from codex_plugin_scanner.guard.runtime.mcp_server_contribution import mcp_tool_
 
 _AGENTHUB = Path(__file__).resolve().parents[1] / "contributions/mcp-servers/mcp.agenthub.json"
 _CATALOG_ID = "command.mcp-agenthub"
-# Tools that start another agent, write to the user's working tree, or send code to a provider.
-_REVIEWED_TOOLS = ("ask", "start_task", "apply_task", "send_message", "review", "compare")
+# Tools that start another agent, stop or discard its work, write to the user's working tree,
+# or send code to a provider.
+_REVIEWED_TOOLS = (
+    "ask",
+    "start_task",
+    "apply_task",
+    "send_message",
+    "review",
+    "compare",
+    "cancel_task",
+    "discard_task",
+)
 # Tools that only read AgentHub state keep Guard's usual handling.
-_READ_ONLY_TOOLS = ("list_agents", "get_task", "wait_task", "get_task_logs", "get_task_diff", "list_sessions")
+_READ_ONLY_TOOLS = (
+    "list_agents",
+    "get_task",
+    "wait_task",
+    "get_task_logs",
+    "list_tasks",
+    "get_task_diff",
+    "list_sessions",
+    "search_sessions",
+    "get_transcript",
+    "list_models",
+)
 
 
 def _payload() -> dict[str, object]:
@@ -145,7 +166,13 @@ def test_read_only_tools_inherit(tool_name: str) -> None:
 
 def test_no_tool_is_allowlisted() -> None:
     assert all(tool["state"] != "allow" for tool in _payload()["tools"])
-    assert mcp_tool_state(_payload(), "unknown_tool") == "inherit"
+
+
+def test_every_agenthub_tool_is_listed_and_unknown_tools_are_reviewed() -> None:
+    listed = {tool["name"] for tool in _payload()["tools"]} - {"other"}
+    assert listed == set(_REVIEWED_TOOLS) | set(_READ_ONLY_TOOLS)
+    # A tool added in a later AgentHub release is reviewed until this contribution lists it.
+    assert mcp_tool_state(_payload(), "unknown_tool") == "review"
 
 
 @pytest.mark.parametrize("tool_name", _REVIEWED_TOOLS)
