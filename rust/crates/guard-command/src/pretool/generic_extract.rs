@@ -321,7 +321,7 @@ fn prompt_sensitive_text(value: &str) -> bool {
     // Authentication requirements are not requests to obtain the credential.
     // Keep explicit targets and referential follow-up reads on the guarded path.
     let followup = REFERENTIAL_ACCESS.get_or_init(|| {
-        Regex::new(r"(?i)\b(?:read|open|print|show|display|disclose|reveal|echo|cat|output|write|type|paste|post|email|forward|share|return|summari[sz]e|dump|copy|retrieve|fetch|obtain|extract|capture|store|save|log|include|grab|access|upload|send|transfer)\s+(?:(?:the\s+)?(?:full\s+)?(?:contents?|value|text|data)\s+(?:of|from)\s+)?(?:it|them|those|these|that|this)\b|\b(?:do|perform|execute|run|use)\s+(?:it|that|this|them)\s+(?:anyway|regardless)\b")
+        Regex::new(r"(?i)\b(?:read|open|print|show|display|disclose|reveal|echo|cat|output|write|type|paste|post|email|forward|share|give|hand|provide|tell|return|summari[sz]e|dump|copy|retrieve|fetch|obtain|extract|capture|store|save|log|include|grab|access|upload|send|transfer)\s+(?:(?:the\s+)?(?:full\s+)?(?:contents?|value|text|data)\s+(?:of|from)\s+)?(?:it|them|those|these|that|this|me|us)\b|\b(?:do|perform|execute|run|use)\s+(?:it|that|this|them)\s+(?:anyway|regardless)\b")
             .expect("bounded credential referential follow-up")
     });
     if followup.is_match(value) {
@@ -383,13 +383,18 @@ fn exfil_prompt_intent(values: &[String]) -> bool {
 
 fn destructive_prompt_intent(values: &[String]) -> bool {
     static PATTERN: OnceLock<Regex> = OnceLock::new();
+    static REFERENTIAL: OnceLock<Regex> = OnceLock::new();
     let pattern = PATTERN.get_or_init(|| {
         Regex::new(r"(?i)(?:\brm\s+-[a-z]*[rf]\b|\b(?:delete|remove|overwrite|truncate|chmod|chown|mv)\b[^.!?;\n]{0,60}\b(?:file|directory|repo|workspace|contents?)\b)")
             .expect("bounded destructive prompt intent")
     });
-    values
-        .iter()
-        .any(|value| pattern.is_match(&mask_destructive_prohibitions(value)))
+    let referential = REFERENTIAL.get_or_init(|| {
+        Regex::new(r"(?i)\b(?:delete|remove|overwrite|truncate|chmod|chown|mv)\b[^.!?;\n]{0,60}\b(?:it|them|those|these|that|this)\b")
+            .expect("bounded referential destructive prompt intent")
+    });
+    values.iter().any(|value| {
+        pattern.is_match(&mask_destructive_prohibitions(value)) || referential.is_match(value)
+    })
 }
 
 fn mask_destructive_prohibitions(value: &str) -> String {
