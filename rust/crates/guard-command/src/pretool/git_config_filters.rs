@@ -79,7 +79,8 @@ pub(super) fn unused(
         .split(|byte| *byte == 0)
         .filter(|path| !path.is_empty())
     {
-        if root.join(std::str::from_utf8(path).ok()?).is_dir() {
+        let path = root.join(std::str::from_utf8(path).ok()?);
+        if path.is_dir() && path.join(".git").exists() {
             return Some(false);
         }
     }
