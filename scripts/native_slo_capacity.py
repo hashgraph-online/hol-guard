@@ -19,9 +19,9 @@ from scripts.native_slo_capacity_support import (
     _diagnostic_route_counters,
     _prime_load_executor,
     _reconcile_wave_routes,
+    _stabilize_ready_hook_workers,
 )
-from scripts.native_slo_contract import SAFE_FAILURE_STAGE_NAMES
-from scripts.native_slo_failure_details import failure_details, summarize_request_failures
+from scripts.native_slo_failure_details import failure_details, report_request_failures
 from scripts.native_slo_preflight import preflight_operation
 from scripts.native_slo_progress import SloProgress
 from scripts.native_slo_session import AdapterSession
@@ -32,7 +32,6 @@ _STEADY_STATE_CONCURRENCY = 16
 # worker is prestarted before a measured wave, and this one-second envelope lets
 # those transport deadlines resolve before the executor-level no-hang bound.
 _CONCURRENT_WAVE_TIMEOUT_SECONDS = 6.0
-_HOOK_WORKER_STABILIZATION_TIMEOUT_SECONDS = 30.0
 
 
 @dataclass(frozen=True)
@@ -127,54 +126,8 @@ def _run_concurrent(
         except Exception as error:
             errors += 1
             failures.append(failure_details(error))
-    if failures:
-        # Preserve the individual failure classes before the caller enforces its
-        # aggregate completeness gate. Do not infer retryability or change counts.
-        print(
-            json.dumps(
-                {
-                    "schema": "hol-guard.native-capacity-request-failures.v1",
-                    "stage": stage if stage in SAFE_FAILURE_STAGE_NAMES else "unknown",
-                    "submitted": len(futures),
-                    "responses": len(observations),
-                    "errors": errors,
-                    **summarize_request_failures(failures),
-                },
-                sort_keys=True,
-            ),
-            file=sys.stderr,
-            flush=True,
-        )
+    report_request_failures(failures, stage=stage, submitted=len(futures), responses=len(observations), errors=errors)
     return observations, errors
-
-
-def _stabilize_ready_hook_workers(session: AdapterSession) -> int:
-    """Bring every configured steady-state hook worker to ready before RSS sampling."""
-
-    runner = session.daemon._server.hook_process_runner
-    runner.notify_queued_work()
-    runner.enable_full_capacity(delay_seconds=0.0, active_deferral_seconds=0.0)
-    target = runner.stats()["target"]
-    _require(
-        isinstance(target, int) and not isinstance(target, bool) and 1 <= target <= _MAX_CONCURRENCY,
-        "hook worker stabilization target was invalid",
-    )
-    _require(
-        runner.wait_for_capacity(
-            minimum_workers=target,
-            timeout_seconds=_HOOK_WORKER_STABILIZATION_TIMEOUT_SECONDS,
-        ),
-        "hook worker stabilization did not reach the configured target",
-    )
-    stabilized = runner.stats()
-    _require(
-        stabilized["target"] == target
-        and stabilized["workers"] == target
-        and stabilized["ready"] == target
-        and stabilized["busy"] == 0,
-        "hook worker capacity changed while stabilizing",
-    )
-    return target
 
 
 def _prewarm_ready_hook_workers(
@@ -187,9 +140,9 @@ def _prewarm_ready_hook_workers(
     on_submitted: ProgressCountCallback | None = None,
     on_cancelled: ProgressCountCallback | None = None,
 ) -> tuple[list[Observation], int]:
-    kwargs: ConcurrentWaveOptions = {}
+    kwargs: ConcurrentWaveOptions = {"stage": "rss_baseline_requests"}
     if observer is not None:
-        kwargs.update(observer=observer, stage="rss_baseline_requests")
+        kwargs["observer"] = observer
     if on_submitted is not None:
         kwargs["on_submitted"] = on_submitted
     if on_cancelled is not None:
@@ -225,9 +178,9 @@ def _measure_classified_wave(
     metrics = session.daemon._server.hook_worker.metrics
     before = route_counts(metrics.snapshot())
     overloads_before = session.native_overload_count()
-    wave_kwargs: ConcurrentWaveOptions = {}
+    wave_kwargs: ConcurrentWaveOptions = {"stage": stage}
     if observer is not None:
-        wave_kwargs.update(observer=observer, stage=stage)
+        wave_kwargs["observer"] = observer
     if on_submitted is not None:
         wave_kwargs["on_submitted"] = on_submitted
     if on_cancelled is not None:
@@ -338,9 +291,9 @@ def _prewarm_capacity_workers(
 
     try:
         _prime_load_executor(executor, _STEADY_STATE_CONCURRENCY)
-        wave_kwargs: ConcurrentWaveOptions = {}
+        wave_kwargs: ConcurrentWaveOptions = {"stage": "capacity_prewarm"}
         if observer is not None:
-            wave_kwargs.update(observer=observer, stage="capacity_prewarm")
+            wave_kwargs["observer"] = observer
         if on_submitted is not None:
             wave_kwargs["on_submitted"] = on_submitted
         if on_cancelled is not None:
