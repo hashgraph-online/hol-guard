@@ -23,13 +23,15 @@ fn safe_arguments(arguments: &[String], context: ReadContext<'_>, stdin_only: bo
     let mut positional_started = false;
     for argument in arguments {
         if let Some(directory) = pending_exclusion.take() {
-            if !exact_exclusion(argument) {
+            if argument.is_empty() {
                 return false;
             }
-            if directory {
-                excluded_directories.push(argument.as_str());
-            } else {
-                excluded_files.push(argument.as_str());
+            if exact_exclusion(argument) {
+                if directory {
+                    excluded_directories.push(argument.as_str());
+                } else {
+                    excluded_files.push(argument.as_str());
+                }
             }
             continue;
         }
