@@ -177,6 +177,7 @@ def run_live(
             text=True,
             capture_output=True,
             timeout=budget_seconds + 30,
+            env={key: value for key, value in os.environ.items() if key != "PYTHONPATH"},
         )
         (output / f"pi-batch-{offset // 8}.log").write_text(result.stdout + "\n" + result.stderr)
         if result.returncode != 0:
