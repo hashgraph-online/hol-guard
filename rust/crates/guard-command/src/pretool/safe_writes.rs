@@ -2,6 +2,8 @@ use super::read_paths::{
     bounded_file_read_target, existing_regular_read_target, expand_home_read_path,
     resolved_path_allowed,
 };
+#[cfg(unix)]
+use super::read_paths::resolved_path_allowed_in_scope;
 
 pub(super) fn bounded_file_write_target(
     value: &str,
