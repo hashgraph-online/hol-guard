@@ -71,6 +71,15 @@ fn recursive_search_exclusions_prove_only_unread_descendants() {
                 "grep -rn --exclude-dir=fixtures ordinary tests/ --exclude",
                 false,
             ),
+            ("grep -rn --exclude-dir= fixtures ordinary tests/", false),
+            (
+                "grep -rn --exclude= test-root-ca.key ordinary tests/",
+                false,
+            ),
+            (
+                "grep -rn --exclude=test-root-ca.key --include=test-root-ca.key ordinary tests/",
+                false,
+            ),
         ] {
             let result = evaluate_pre_tool_envelope_with_context(
                 harness,

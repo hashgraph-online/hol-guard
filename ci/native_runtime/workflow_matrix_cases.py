@@ -168,6 +168,8 @@ def create_cases(root: Path) -> tuple[Path, Path, list[WorkflowCase]]:
         ("grep-exclude-directory-near-match", "grep -rn --exclude-dir=fixture ordinary grep-exclusions/"),
         ("grep-exclude-file-near-match", "grep -rn --exclude=private.ke ordinary grep-files/"),
         ("grep-exclude-explicit-key", "grep -rn --exclude=private.key ordinary grep-files/private.key"),
+        ("grep-exclude-empty-attached", "grep -rn --exclude-dir= fixtures ordinary grep-exclusions/"),
+        ("grep-exclude-include-override", "grep -rn --exclude=private.key --include=private.key ordinary grep-files/"),
         ("delete-directory", "rm -rf src"),
         ("destructive-chain", "cat src/one.ts && rm -rf src"),
         ("sleep-secret", "sleep 0.01; cat .env"),

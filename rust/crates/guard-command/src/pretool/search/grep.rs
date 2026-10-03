@@ -19,6 +19,7 @@ fn safe_arguments(arguments: &[String], context: ReadContext<'_>, stdin_only: bo
     let mut excluded_files = Vec::new();
     let mut excluded_directories = Vec::new();
     let mut pending_exclusion = None;
+    let mut includes_present = false;
     for argument in arguments {
         if let Some(directory) = pending_exclusion.take() {
             if !exact_exclusion(argument) {
@@ -55,6 +56,9 @@ fn safe_arguments(arguments: &[String], context: ReadContext<'_>, stdin_only: bo
             if matches!(name, "--exclude" | "--exclude-dir") {
                 let directory = name == "--exclude-dir";
                 if attached.is_empty() {
+                    if argument.contains('=') {
+                        return false;
+                    }
                     pending_exclusion = Some(directory);
                 } else if !exact_exclusion(attached) {
                     return false;
@@ -65,6 +69,7 @@ fn safe_arguments(arguments: &[String], context: ReadContext<'_>, stdin_only: bo
                 }
                 continue;
             }
+            includes_present |= name == "--include";
             if matches!(name, "--recursive" | "--dereference-recursive") {
                 if !attached.is_empty() {
                     return false;
@@ -147,6 +152,9 @@ fn safe_arguments(arguments: &[String], context: ReadContext<'_>, stdin_only: bo
     }
     pending_value.is_none()
         && pending_exclusion.is_none()
+        // Include/exclude precedence differs across grep implementations. Do not
+        // use exclusions as proof when an include could re-enable a file.
+        && (!includes_present || (excluded_files.is_empty() && excluded_directories.is_empty()))
         && (!stdin_only || (pattern_supplied && !recursive))
         && (!recursive
             || (!targets.is_empty()
