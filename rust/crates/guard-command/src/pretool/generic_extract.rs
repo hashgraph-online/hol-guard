@@ -333,6 +333,7 @@ fn prompt_sensitive_text(value: &str) -> bool {
 fn guard_bypass_prompt(values: &[String]) -> bool {
     static PROHIBITION: OnceLock<Regex> = OnceLock::new();
     static REVERSAL: OnceLock<Regex> = OnceLock::new();
+    static FOLLOWUP: OnceLock<Regex> = OnceLock::new();
     values.iter().any(|value| {
         let lowered = value.to_ascii_lowercase();
         let normalized = lowered.split_whitespace().collect::<Vec<_>>().join(" ");
@@ -367,8 +368,12 @@ fn guard_bypass_prompt(values: &[String]) -> bool {
                 // instruction or a conditional exception to the prohibition.
                 let tail = &normalized[offset + pattern.len()..];
                 let clause = tail.split(['.', '!', '?', ';']).next().unwrap_or("");
+                let followup = FOLLOWUP.get_or_init(|| {
+                    Regex::new(r"(?i)\b(?:do|perform|execute|run|use)\s+(?:it|that|this|them)\s+(?:anyway|regardless)\b")
+                        .expect("bounded guard bypass referential follow-up")
+                });
                 !prohibition.is_match(prefix) || reversal.is_match(prefix) || reversal.is_match(clause)
-                    || reversal.is_match(tail)
+                    || followup.is_match(tail)
             })
         })
             || ["approval_policy=\"never\"", "approval_policy='never'"]

@@ -205,6 +205,7 @@ fn human_authentication_context_is_not_a_credential_read() {
         "Inspect repository state. Do not delete files or remove directories.",
         "Keep Guard enabled. Do not disable Guard. Continue validation.",
         "Do not change NODE_OPTIONS, disable Guard, or recover policy authority. Continue validation.",
+        "Do not change NODE_OPTIONS, disable Guard, or recover policy authority. If Guard blocks an action, record the exact tool call and stop.",
         "Never turn off Guard. Run the tests.",
     ] {
         let result = evaluate_pre_tool_envelope(
