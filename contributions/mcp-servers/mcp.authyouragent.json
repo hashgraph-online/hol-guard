@@ -3,7 +3,7 @@
   "id": "mcp.authyouragent",
   "version": "1.0.0",
   "name": "Auth Your Agent",
-  "description": "Reviews the tools that drive a signed-in browser vault: navigate, click, type_text, fill_secret (types a saved password or TOTP code the agent never sees) and request_approval. Reads, status checks, take over and sign-out stay unattended. The server also holds committing clicks for phone approval. Off until you turn it on.",
+  "description": "Reviews the tools that drive a signed-in browser vault: navigate, click, type_text, fill_secret (types a saved password or TOTP code the agent never sees) and request_approval. Reads, status checks, take over and sign-out follow your normal Guard policy. The server also holds committing clicks for phone approval. Off until you turn it on.",
   "trustClass": "external",
   "activation": "opt-in",
   "publisher": {
@@ -30,13 +30,13 @@
     { "name": "type_text", "state": "review" },
     { "name": "fill_secret", "state": "review" },
     { "name": "request_approval", "state": "review" },
-    { "name": "read_page", "state": "allow" },
-    { "name": "check_login_wall", "state": "allow" },
-    { "name": "list_secrets", "state": "allow" },
-    { "name": "request_takeover", "state": "allow" },
-    { "name": "wait_for_takeover", "state": "allow" },
-    { "name": "check_agent_status", "state": "allow" },
-    { "name": "end_session", "state": "allow" },
+    { "name": "read_page", "state": "inherit" },
+    { "name": "check_login_wall", "state": "inherit" },
+    { "name": "list_secrets", "state": "inherit" },
+    { "name": "request_takeover", "state": "inherit" },
+    { "name": "wait_for_takeover", "state": "inherit" },
+    { "name": "check_agent_status", "state": "inherit" },
+    { "name": "end_session", "state": "inherit" },
     { "name": "report_site", "state": "inherit" },
     { "name": "other", "state": "inherit" }
   ],
@@ -48,6 +48,6 @@
   "saferAlternatives": [
     "Keep fill_secret on Review: it types a stored password or authenticator code into the page, even though the agent never sees the value.",
     "The vault already holds every committing click, Enter and scripted write for phone approval; Review on click adds a second prompt for routine clicks.",
-    "end_session stays on Allow because it signs out and wipes the browser profile; pausing it would leave the owner signed in after the agent stops."
+    "Consider allowing end_session locally: it signs out and wipes the browser profile, and pausing it would leave the owner signed in after the agent stops."
   ]
 }
