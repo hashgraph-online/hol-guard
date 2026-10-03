@@ -46,6 +46,7 @@ def test_execution_lookup_context_is_feature_gated_and_omits_environment_values(
     context = json.loads(encoded)["source"]["execution_environment"]
     assert context["path"] == "/verified/system/bin"
     assert context["xdg_config_home"] == "/verified/user/config"
+    assert context["git_config_no_system"] is False
     assert "GIT_EXTERNAL_DIFF" in context["environment_names"]
     assert b"synthetic-secret-must-not-serialize" not in encoded
     monkeypatch.setenv("GIT_EXTERNAL_DIFF", "different-synthetic-value")
@@ -61,6 +62,7 @@ def test_execution_lookup_context_is_feature_gated_and_omits_environment_values(
     empty_xdg = json.loads(_encode_hook_envelope(**arguments, execution_context_supported=True))
     empty_context = empty_xdg["source"]["execution_environment"]
     assert empty_context["xdg_config_home"] is None
+    assert empty_context["git_config_no_system"] is False
     assert "XDG_CONFIG_HOME" not in empty_context["environment_names"]
     arguments["payload"]["guard_execution_environment"] = None
     unavailable = json.loads(_encode_hook_envelope(**arguments, execution_context_supported=True))

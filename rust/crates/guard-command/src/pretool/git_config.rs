@@ -72,6 +72,9 @@ fn probe(
             command.env("XDG_CONFIG_HOME", directory);
         }
     }
+    if execution_environment.is_some_and(|context| context.git_config_no_system) {
+        command.env("GIT_CONFIG_NOSYSTEM", "1");
+    }
     let git_home = execution_environment
         .and_then(|context| context.home.as_deref())
         .map(Path::new)
@@ -268,6 +271,13 @@ fn clean_environment(
             if declares_xdg != context.xdg_config_home.is_some() {
                 return false;
             }
+            let declares_no_system = context
+                .environment_names
+                .iter()
+                .any(|name| name.eq_ignore_ascii_case("GIT_CONFIG_NOSYSTEM"));
+            if declares_no_system != context.git_config_no_system {
+                return false;
+            }
             if context.path.len() > 32768
                 || context.path.contains('\0')
                 || context
@@ -303,7 +313,9 @@ fn clean_environment(
         key.starts_with("GIT_TRACE")
             || key.starts_with("DYLD_")
             || key.starts_with("LD_")
-            || key.starts_with("GIT_CONFIG")
+            || (key.starts_with("GIT_CONFIG")
+                && !(key == "GIT_CONFIG_NOSYSTEM"
+                    && execution_environment.is_some_and(|context| context.git_config_no_system)))
             || matches!(
                 key.as_str(),
                 "GIT_DIR"

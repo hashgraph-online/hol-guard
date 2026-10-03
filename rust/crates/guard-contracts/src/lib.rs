@@ -60,6 +60,8 @@ pub struct GuardExecutionEnvironmentV1 {
     pub pager_disabled: bool,
     #[serde(default)]
     pub xdg_config_home: Option<String>,
+    #[serde(default)]
+    pub git_config_no_system: bool,
 }
 
 impl GuardExecutionEnvironmentV1 {
@@ -72,6 +74,7 @@ impl GuardExecutionEnvironmentV1 {
             git_pager_disabled: false,
             pager_disabled: false,
             xdg_config_home: None,
+            git_config_no_system: false,
         }
     }
 }

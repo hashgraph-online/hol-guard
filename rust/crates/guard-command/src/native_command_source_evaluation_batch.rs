@@ -13,6 +13,12 @@ struct Request {
     schema: String,
     cases: Vec<Case>,
     #[serde(default)]
+    home_dir: Option<String>,
+    #[serde(default)]
+    cwd: Option<String>,
+    #[serde(default)]
+    execution_environment: Option<guard_contracts::GuardExecutionEnvironmentV1>,
+    #[serde(default)]
     controls: Vec<NativeExtensionControlV1>,
     #[serde(default)]
     managed_controls: Vec<NativeExtensionControlV1>,
@@ -45,6 +51,16 @@ pub fn evaluate_batch(bytes: &[u8]) -> Result<Value, &'static str> {
         || request.cases.len() > MAX_CASES
     {
         return Err("command_source_evaluation_batch_contract_invalid");
+    }
+    for path in [&request.home_dir, &request.cwd].into_iter().flatten() {
+        if path.is_empty() || path.len() > 32_768 || path.contains('\0') {
+            return Err("command_source_evaluation_batch_context_invalid");
+        }
+    }
+    if request.execution_environment.is_some()
+        && (request.home_dir.is_none() || request.cwd.is_none())
+    {
+        return Err("command_source_evaluation_batch_context_invalid");
     }
     let mut ids = BTreeSet::new();
     for case in &request.cases {
@@ -84,12 +100,15 @@ pub fn evaluate_batch(bytes: &[u8]) -> Result<Value, &'static str> {
 
     let mut results = Vec::with_capacity(request.cases.len());
     for case in request.cases {
-        let result = crate::pretool::evaluate_pre_tool_envelope_with_extensions(
+        let result = crate::pretool::evaluate_pre_tool_envelope_with_execution_context(
             "claude-code",
             "PreToolUse",
             &serde_json::json!({"tool_name":"Bash","tool_input":{"command":case.command}}),
             Some(&controls),
             None,
+            request.home_dir.as_deref(),
+            request.cwd.as_deref(),
+            request.execution_environment.as_ref(),
         );
         // This is the same model returned by `hol-guard-runtime pre-tool` for
         // the single-command fixture. Preserve that adapter's provenance.

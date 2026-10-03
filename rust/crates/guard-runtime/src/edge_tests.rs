@@ -18,6 +18,7 @@ fn execution_environment_is_bounded_and_binds_request_and_approval_intent() {
         git_pager_disabled: false,
         pager_disabled: false,
         xdg_config_home: None,
+        git_config_no_system: false,
     });
     assert!(validate_envelope_shape(&request).is_ok());
     assert_ne!(original_request, request_identity(&request).unwrap().1);

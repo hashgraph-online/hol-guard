@@ -233,6 +233,7 @@ def build_extension_source_body(*, harness: str, display_name: str) -> str:
         "      xdg_config_home: typeof process.env.XDG_CONFIG_HOME === 'string'\n"
         "        ? process.env.XDG_CONFIG_HOME\n"
         "        : null,\n"
+        "      git_config_no_system: process.env.GIT_CONFIG_NOSYSTEM === '1',\n"
         "      home: typeof process.env.HOME === 'string' ? process.env.HOME : null,\n"
         "      git_pager_disabled: process.env.GIT_PAGER === '' || process.env.GIT_PAGER === 'cat',\n"
         "      pager_disabled: process.env.PAGER === '' || process.env.PAGER === 'cat',\n"

@@ -18,6 +18,7 @@ def collect_hook_execution_environment() -> dict[str, object]:
         "pager_disabled": "PAGER" in os.environ and os.environ["PAGER"] in {"", "cat"},
         "environment_names": sorted(active),
         "xdg_config_home": os.environ.get("XDG_CONFIG_HOME") or None,
+        "git_config_no_system": os.environ.get("GIT_CONFIG_NOSYSTEM") == "1",
         "environment_digest": hashlib.sha256(
             json.dumps(active, sort_keys=True, separators=(",", ":")).encode()
         ).hexdigest(),

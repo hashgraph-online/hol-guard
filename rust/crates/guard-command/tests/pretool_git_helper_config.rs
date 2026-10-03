@@ -13,12 +13,13 @@ fn evaluate_pre_tool_envelope_with_context(
 ) -> guard_contracts::PreToolResultV1 {
     let context = guard_contracts::GuardExecutionEnvironmentV1 {
         path: std::env::var("PATH").unwrap(),
-        environment_names: vec![],
+        environment_names: vec!["GIT_CONFIG_NOSYSTEM".into()],
         environment_digest: "0".repeat(64),
         home: None,
         git_pager_disabled: false,
         pager_disabled: false,
         xdg_config_home: None,
+        git_config_no_system: true,
     };
     guard_command::pretool::evaluate_pre_tool_envelope_with_execution_context(
         harness,
@@ -156,12 +157,13 @@ fn pager_checks_follow_the_actual_subcommand_and_global_override() {
     std::fs::write(&config, "[pager]\nstatus = true\n").unwrap();
     let context = guard_contracts::GuardExecutionEnvironmentV1 {
         path: std::env::var("PATH").unwrap(),
-        environment_names: vec!["GIT_PAGER".into()],
+        environment_names: vec!["GIT_CONFIG_NOSYSTEM".into(), "GIT_PAGER".into()],
         environment_digest: "0".repeat(64),
         home: None,
         git_pager_disabled: false,
         pager_disabled: false,
         xdg_config_home: None,
+        git_config_no_system: true,
     };
     for (command, expected) in [
         ("git status --short", "deny"),
@@ -196,12 +198,15 @@ fn pager_checks_follow_the_actual_subcommand_and_global_override() {
     ] {
         std::fs::write(&config, settings).unwrap();
         let mut caller = context.clone();
-        caller.environment_names = vec![if git_pager_disabled {
-            "GIT_PAGER"
-        } else {
-            "PAGER"
-        }
-        .into()];
+        caller.environment_names = vec![
+            "GIT_CONFIG_NOSYSTEM".into(),
+            if git_pager_disabled {
+                "GIT_PAGER"
+            } else {
+                "PAGER"
+            }
+            .into(),
+        ];
         caller.git_pager_disabled = git_pager_disabled;
         caller.pager_disabled = pager_disabled;
         let result = guard_command::pretool::evaluate_pre_tool_envelope_with_execution_context(
@@ -252,12 +257,13 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
     };
     let context = GuardExecutionEnvironmentV1 {
         path: original_path.clone(),
-        environment_names: vec![],
+        environment_names: vec!["GIT_CONFIG_NOSYSTEM".into()],
         environment_digest: "0".repeat(64),
         home: None,
         git_pager_disabled: false,
         pager_disabled: false,
         xdg_config_home: None,
+        git_config_no_system: true,
     };
     assert_eq!(evaluate(&context).decision, "allow");
     let caller_home = root.join("actual-caller-home");
@@ -275,7 +281,12 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
         b"[core]\nfsmonitor = false\n",
     )
     .unwrap();
-    assert_eq!(evaluate(&home_routed).decision, "allow");
+    let home_routed_safe = evaluate(&home_routed);
+    assert_eq!(
+        home_routed_safe.decision, "allow",
+        "safe caller home: {} / {}",
+        home_routed_safe.reason_code, home_routed_safe.reason
+    );
     assert_eq!(
         evaluate(&GuardExecutionEnvironmentV1::unavailable()).decision,
         "deny"
@@ -292,7 +303,8 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
     routed.environment_names.push("XDG_CONFIG_HOME".into());
     assert_eq!(evaluate(&routed).decision, "deny");
     std::fs::write(xdg.join("git/config"), b"[core]\nfsmonitor = false\n").unwrap();
-    assert_eq!(evaluate(&routed).decision, "allow");
+    let routed_safe = evaluate(&routed);
+    assert_eq!(routed_safe.decision, "allow");
     for context in [
         GuardExecutionEnvironmentV1 {
             path: "/synthetic-no-git".into(),
@@ -302,6 +314,7 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
             git_pager_disabled: false,
             pager_disabled: false,
             xdg_config_home: None,
+            git_config_no_system: false,
         },
         GuardExecutionEnvironmentV1 {
             path: original_path.clone(),
@@ -311,6 +324,17 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
             git_pager_disabled: false,
             pager_disabled: false,
             xdg_config_home: None,
+            git_config_no_system: false,
+        },
+        GuardExecutionEnvironmentV1 {
+            path: original_path.clone(),
+            environment_names: vec!["GIT_CONFIG_NOSYSTEM".into()],
+            environment_digest: "0".repeat(64),
+            home: None,
+            git_pager_disabled: false,
+            pager_disabled: false,
+            xdg_config_home: None,
+            git_config_no_system: false,
         },
         GuardExecutionEnvironmentV1 {
             path: original_path.clone(),
@@ -320,6 +344,7 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
             git_pager_disabled: false,
             pager_disabled: false,
             xdg_config_home: None,
+            git_config_no_system: false,
         },
         GuardExecutionEnvironmentV1 {
             path: original_path.clone(),
@@ -329,6 +354,7 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
             git_pager_disabled: false,
             pager_disabled: false,
             xdg_config_home: None,
+            git_config_no_system: false,
         },
         GuardExecutionEnvironmentV1 {
             path: original_path.clone(),
@@ -338,6 +364,7 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
             git_pager_disabled: false,
             pager_disabled: false,
             xdg_config_home: Some(xdg.to_string_lossy().into_owned()),
+            git_config_no_system: false,
         },
         GuardExecutionEnvironmentV1 {
             path: original_path.clone(),
@@ -347,6 +374,7 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
             git_pager_disabled: false,
             pager_disabled: false,
             xdg_config_home: None,
+            git_config_no_system: false,
         },
         GuardExecutionEnvironmentV1 {
             path: "x".repeat(32769),
@@ -356,6 +384,7 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
             git_pager_disabled: false,
             pager_disabled: false,
             xdg_config_home: None,
+            git_config_no_system: false,
         },
     ] {
         assert_eq!(evaluate(&context).decision, "deny");
@@ -368,12 +397,13 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
             .unwrap();
     let context = GuardExecutionEnvironmentV1 {
         path: shadow_path.to_string_lossy().into_owned(),
-        environment_names: vec![],
+        environment_names: vec!["GIT_CONFIG_NOSYSTEM".into()],
         environment_digest: "0".repeat(64),
         home: None,
         git_pager_disabled: false,
         pager_disabled: false,
         xdg_config_home: None,
+        git_config_no_system: true,
     };
     assert_eq!(evaluate(&context).decision, "deny");
     std::fs::remove_dir_all(root).unwrap();
