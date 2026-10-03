@@ -217,3 +217,28 @@ def test_sonar_scope_includes_native_rust_workspace() -> None:
     assert "tests/**" in properties["sonar.cpd.exclusions"]
     assert "rust/**/tests/**" in properties["sonar.cpd.exclusions"]
     assert "rust/**/*_tests.rs" in properties["sonar.cpd.exclusions"]
+
+
+def test_native_preflight_stops_known_contract_failures_before_shard_fanout() -> None:
+    document = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
+    producer = document["jobs"]["native-command-evaluators"]
+    steps = producer["steps"]
+    rust = next(step for step in steps if step.get("uses") == "./.github/actions/setup-rust")
+    assert "rustfmt" in rust["with"]["components"].split()
+    formatting = next(i for i, step in enumerate(steps) if "cargo fmt" in step.get("run", ""))
+    compilation = next(i for i, step in enumerate(steps) if "cargo build" in step.get("run", ""))
+    preflight = next(
+        i for i, step in enumerate(steps) if step.get("name") == "Check native contract groups before pytest fan-out"
+    )
+    uploads = [i for i, step in enumerate(steps) if step.get("uses", "").startswith("actions/upload-artifact@")]
+    assert formatting < compilation < preflight < min(uploads)
+    for index in (formatting, preflight):
+        assert "if" not in steps[index]
+        assert not steps[index].get("continue-on-error", False)
+    check = steps[preflight]
+    assert "test_native_contract_validates_every_authored_signature_without_rewriting_evidence" in check["run"]
+    assert "tests/test_pi_legacy_source_contract.py" in check["run"]
+    assert "--ignore" not in check["run"] and "--deselect" not in check["run"]
+    assert check["env"]["HOL_GUARD_NATIVE_REGRESSION"] == "1"
+    assert document["jobs"]["coverage-plan"]["needs"] == "native-command-evaluators"
+    assert len(document["jobs"]["coverage"]["strategy"]["matrix"]["shard-index"]) == 128
