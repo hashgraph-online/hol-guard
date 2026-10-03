@@ -81,11 +81,17 @@ def test_outside_cwd_anchored_edit_uses_actual_host_home(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize("path_key", ("path", "file_path"))
-def test_nonanchored_edit_cannot_bypass_live_anchor_proof(tmp_path, path_key):
+def test_string_replacement_edit_validates_target_and_contents(tmp_path, path_key):
     workspace = prepare_workspace(tmp_path)
     events = file_events()
     events[6]["args"] = {
         path_key: "copy.txt", "old_string": "fixture-before", "new_string": "fixture-after"
     }
-    with pytest.raises(AssertionError, match="anchored"):
+    assert_file_tools(events, workspace)
+    events[6]["args"][path_key] = "other.txt"
+    with pytest.raises(AssertionError, match="target"):
+        assert_file_tools(events, workspace)
+    events[6]["args"][path_key] = "copy.txt"
+    events[6]["args"]["new_string"] = "unexpected"
+    with pytest.raises(AssertionError, match="string-replacement"):
         assert_file_tools(events, workspace)
