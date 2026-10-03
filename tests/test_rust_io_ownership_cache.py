@@ -148,3 +148,47 @@ def test_index_preserves_all_ambiguous_candidates_and_their_order(tmp_path: Path
     with cache.analysis_cache(), pytest.raises(RuntimeError, match="ambiguous helper call") as after:
         resolver.resolve_call(tmp_path, caller, "conflicting", resolver.FunctionIndex(records))
     assert str(before.value) == str(after.value)
+
+
+def test_union_members_are_immutable_and_resolution_preserves_the_ast(tmp_path: Path) -> None:
+    package = tmp_path / "src/codex_plugin_scanner/guard"
+    package.mkdir(parents=True)
+    (package / "one.py").write_text("def exposed():\n    return 1\n", encoding="utf-8")
+    union = package / "union.py"
+    union.write_text("from . import one as _one\n_SOURCE_MODULES = (_one,)\n", encoding="utf-8")
+    path = union.relative_to(tmp_path).as_posix()
+    with cache.analysis_cache():
+        tree = cache.parsed_module(union)
+        before = ast.dump(tree, include_attributes=True)
+        members = resolver._union_source_modules(tmp_path, path, tree)
+        assert members == ("src/codex_plugin_scanner/guard/one.py",)
+        assert isinstance(members, tuple)
+        assert resolver._resolve_exported_symbol(tmp_path, path, "exposed", set()) == members[0]
+        assert ast.dump(tree, include_attributes=True) == before
+
+
+def test_analysis_helpers_and_tests_have_protected_ownership_and_ci_coverage() -> None:
+    import json
+
+    import yaml
+
+    root = Path(__file__).resolve().parents[1]
+    contract = json.loads((root / "docs/guard/contracts/hook-data-plane-ownership.v2.json").read_text())
+    owner = next(item for item in contract["nodes"] if item["id"] == "ownership_governance")
+    paths = [
+        "scripts/ci/rust_io_ownership_cache.py",
+        "scripts/ci/rust_io_ownership_bindings.py",
+        "scripts/ci/rust_io_ownership_policy.py",
+        "tests/test_rust_io_ownership_cache.py",
+    ]
+    for path in paths:
+        assert path in contract["protected_change_globs"]
+        assert path in owner["paths"]
+    workflow = yaml.safe_load((root / ".github/workflows/decision-critical-io.yml").read_text())
+    step = next(
+        item
+        for item in workflow["jobs"]["io-ownership"]["steps"]
+        if "tests/test_rust_io_ownership_gate.py" in item.get("run", "")
+    )
+    assert "tests/test_rust_io_ownership_cache.py" in step["run"]
+    assert not step.get("continue-on-error")

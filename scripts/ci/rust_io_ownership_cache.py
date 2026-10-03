@@ -57,7 +57,11 @@ def cached(function: Callable[P, T]) -> Callable[P, T]:
 
 @cached
 def parsed_module(path: Path) -> ast.Module:
-    """Share the same AST between the inventory and call-graph resolver."""
+    """Share one read-only AST between inventory and call-graph resolution.
+
+    Callers must only traverse it; never mutate nodes or use NodeTransformer.
+    The analysis scope owns the tree, and the next validation reparses it.
+    """
     try:
         source = path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError) as error:

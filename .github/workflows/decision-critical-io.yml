@@ -61,6 +61,7 @@ jobs:
           cargo test --manifest-path rust/Cargo.toml --locked -p guard-secure-fs -p guard-hook-core
           uv run --no-sync pytest -q \
             tests/test_rust_io_ownership_gate.py \
+            tests/test_rust_io_ownership_cache.py \
             tests/test_rust_io_privacy_gate.py \
             tests/test_hook_enrichment_queue.py \
             tests/test_guard_runtime_hook_evidence_writer.py \
