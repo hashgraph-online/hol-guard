@@ -15,6 +15,8 @@ use extract::{extract_generic_signals, GenericSignals};
 use result::{generic_action, generic_error_result, generic_result, review_reason};
 use std::time::Instant;
 
+#[path = "agent_metadata.rs"]
+mod agent_metadata;
 #[path = "generic_tools.rs"]
 mod tools;
 use tools::{infer_action_type, package_command, tool_matches};
@@ -73,6 +75,12 @@ pub fn evaluate_pre_tool_envelope_with_execution_context(
         Ok(value) => value,
         Err(error) => return generic_error_result(harness, event, error),
     };
+    let task_metadata = event == "PreToolUse"
+        && agent_metadata::bounded_task_list(payload, signals.tool_name.as_deref())
+        && signals.command.is_none()
+        && !signals.package_present
+        && signals.path_values.is_empty()
+        && signals.url_values.is_empty();
     let command_decision = signals.command.as_deref().map(|command| {
         evaluate_pre_tool_with_context(
             &CommandModelRequestV1 {
@@ -94,14 +102,21 @@ pub fn evaluate_pre_tool_envelope_with_execution_context(
     }) {
         signals.sensitive_target = signals.independent_sensitive_target;
     }
-    let mut result = evaluate_signals(
-        harness,
-        event,
-        &signals,
-        command_decision.as_ref(),
-        home_dir,
-        cwd,
-    );
+    let mut result = if task_metadata {
+        generic_result(
+            generic_action(harness, event, PreToolActionTypeV1::Harness, PreToolOperationV1::Set, true, false),
+            "allow", "native_agent_task_metadata", "The Rust authority verified a bounded host task-list update with no execution or filesystem effects.",
+        )
+    } else {
+        evaluate_signals(
+            harness,
+            event,
+            &signals,
+            command_decision.as_ref(),
+            home_dir,
+            cwd,
+        )
+    };
     if event == "UserPromptSubmit" {
         let mut classes = Vec::new();
         if result.action.sensitive_target && signals.content_sensitive {
