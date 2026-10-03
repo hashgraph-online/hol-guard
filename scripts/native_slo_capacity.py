@@ -20,6 +20,8 @@ from scripts.native_slo_capacity_support import (
     _prime_load_executor,
     _reconcile_wave_routes,
 )
+from scripts.native_slo_contract import SAFE_FAILURE_STAGE_NAMES
+from scripts.native_slo_failure_details import failure_details, summarize_request_failures
 from scripts.native_slo_preflight import preflight_operation
 from scripts.native_slo_progress import SloProgress
 from scripts.native_slo_session import AdapterSession
@@ -118,11 +120,31 @@ def _run_concurrent(
                 on_transport_observations(finished_observations)
         executor.shutdown(wait=False, cancel_futures=True)
         raise RuntimeError("native_installed_slo_failed: concurrent capacity wave timed out")
+    failures: list[dict[str, str]] = []
     for future in futures:
         try:
             observations.append(future.result())
-        except Exception:
+        except Exception as error:
             errors += 1
+            failures.append(failure_details(error))
+    if failures:
+        # Preserve the individual failure classes before the caller enforces its
+        # aggregate completeness gate. Do not infer retryability or change counts.
+        print(
+            json.dumps(
+                {
+                    "schema": "hol-guard.native-capacity-request-failures.v1",
+                    "stage": stage if stage in SAFE_FAILURE_STAGE_NAMES else "unknown",
+                    "submitted": len(futures),
+                    "responses": len(observations),
+                    "errors": errors,
+                    **summarize_request_failures(failures),
+                },
+                sort_keys=True,
+            ),
+            file=sys.stderr,
+            flush=True,
+        )
     return observations, errors
 
 
