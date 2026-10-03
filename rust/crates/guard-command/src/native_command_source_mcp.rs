@@ -104,7 +104,7 @@ pub(super) fn lower(bytes: &[u8]) -> Result<LoweredMcp, &'static str> {
             }
             (
                 vec![command.clone()],
-                format!("{command} -y {package}"),
+                package_launch_example(command, package),
                 false,
             )
         }
@@ -273,9 +273,38 @@ pub(super) fn validate_inventory(program: &Value) -> Result<(), &'static str> {
     Ok(())
 }
 
+/// Runnable example for a package launcher. `-y` is an npx flag: `uvx -y <pkg>`
+/// fails, so each launcher gets the form Guard's MCP launch parser recognizes.
+fn package_launch_example(command: &str, package: &str) -> String {
+    match command {
+        "npx" => format!("npx -y {package}"),
+        "npm" => format!("npm exec --yes {package}"),
+        "pnpm" => format!("pnpm dlx {package}"),
+        "yarn" => format!("yarn dlx {package}"),
+        "pipx" => format!("pipx run {package}"),
+        _ => format!("{command} {package}"),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn package_launch_examples_use_each_launcher_form() {
+        let cases = [
+            ("npx", "npx -y pkg"),
+            ("npm", "npm exec --yes pkg"),
+            ("pnpm", "pnpm dlx pkg"),
+            ("yarn", "yarn dlx pkg"),
+            ("pipx", "pipx run pkg"),
+            ("uvx", "uvx pkg"),
+            ("bunx", "bunx pkg"),
+        ];
+        for (command, expected) in cases {
+            assert_eq!(package_launch_example(command, "pkg"), expected);
+        }
+    }
 
     #[test]
     fn endpoint_identity_preserves_existing_alias_collision_rules() {
