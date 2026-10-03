@@ -72,12 +72,16 @@ fn probe(
             command.env("XDG_CONFIG_HOME", directory);
         }
     }
+    let git_home = execution_environment
+        .and_then(|context| context.home.as_deref())
+        .map(Path::new)
+        .unwrap_or(&home);
     let mut child = command
         .args(leading)
         .args(["--no-pager", "config", "--null", "--get-regexp", "^(core\\.fsmonitor|core\\.pager|pager\\..*|diff\\.external|diff\\..*\\.(command|textconv)|filter\\..*\\.(process|clean|smudge)|log\\.showsignature|gpg\\.program|gpg\\..*\\.program)$"])
         .current_dir(&cwd)
-        .env("HOME", execution_environment.and_then(|context| context.home.as_deref()).map(Path::new).unwrap_or(&home))
-        .env("USERPROFILE", &home)
+        .env("HOME", git_home)
+        .env("USERPROFILE", git_home)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
