@@ -45,7 +45,7 @@ fn probe(
 ) -> Option<bool> {
     // Configuration plus root, path and attribute inspection share this budget.
     // The caller's overall deadline remains the upper bound.
-    let inspection_deadline = Instant::now() + Duration::from_millis(500);
+    let inspection_deadline = Instant::now() + Duration::from_secs(2);
     let deadline = deadline
         .unwrap_or(inspection_deadline)
         .min(inspection_deadline);
