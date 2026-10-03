@@ -357,7 +357,7 @@ fn guard_bypass_prompt(values: &[String]) -> bool {
                     .map_or(0, |index| index + 1);
                 let prefix = &normalized[start..offset];
                 let prohibition = PROHIBITION.get_or_init(|| {
-                    Regex::new(r"(?i)\b(?:never|do\s+not|don't|dont|must\s+not|should\s+not)\s+(?:[a-z0-9_ -]{1,80},\s*(?:(?:or|and)\s+)?)?$")
+                    Regex::new(r"(?i)\b(?:never|do\s+not|don't|dont|must\s+not|should\s+not)\s+(?:(?:[a-z0-9_ -]{1,80},\s*)+(?:or|and)\s+)?$")
                         .expect("bounded guard bypass prohibition")
                 });
                 let reversal = REVERSAL.get_or_init(|| {
