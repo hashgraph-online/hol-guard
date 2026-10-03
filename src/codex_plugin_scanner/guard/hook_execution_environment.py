@@ -16,6 +16,11 @@ def git_config_no_system_enabled(value: str | None) -> bool:
 
 
 def collect_hook_execution_environment() -> dict[str, object]:
+    """Declare lookup inputs with an opaque sender commitment, not a signature.
+
+    Native contracts own bounds validation. Withheld environment values cannot
+    be recomputed by the receiver, and Unicode names are not silently dropped.
+    """
     active = {key: value for key, value in os.environ.items() if value}
     return {
         "path": os.environ.get("PATH", ""),

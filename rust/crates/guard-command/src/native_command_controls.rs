@@ -195,7 +195,14 @@ impl CompiledNativeCommandControls {
         packages: &[String],
         deadline: Option<Instant>,
     ) -> PreToolResultV1 {
-        self.apply_with_tool_and_context(command, result, tool, packages, deadline, (None, None))
+        self.apply_with_tool_and_context(
+            command,
+            result,
+            tool,
+            packages,
+            deadline,
+            crate::pretool::PathContext::default(),
+        )
     }
 
     pub(crate) fn apply_with_tool_and_context(

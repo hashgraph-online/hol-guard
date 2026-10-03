@@ -2,18 +2,22 @@ use super::ReadContext;
 use std::path::{Path, PathBuf};
 
 pub(super) fn safe_recursive_target(value: &str, context: ReadContext<'_>) -> bool {
-    if !super::super::safe_reads::bounded_read_target(value, context.0, context.1, true) {
+    if !super::super::safe_reads::bounded_read_target(value, context.home_dir, context.cwd, true) {
         return false;
     }
     let expanded = if value == "~" || value.starts_with("~/") {
-        let Some(home) = context.0 else { return false };
+        let Some(home) = context.home_dir else {
+            return false;
+        };
         Path::new(home).join(value.strip_prefix("~/").unwrap_or(""))
     } else if Path::new(value).is_absolute() {
         PathBuf::from(value)
     } else {
-        let Some(cwd) = context.1 else { return false };
+        let Some(cwd) = context.cwd else { return false };
         let expanded_cwd = if cwd == "~" || cwd.starts_with("~/") {
-            let Some(home) = context.0 else { return false };
+            let Some(home) = context.home_dir else {
+                return false;
+            };
             Path::new(home).join(cwd.strip_prefix("~/").unwrap_or(""))
         } else {
             PathBuf::from(cwd)
@@ -33,7 +37,12 @@ pub(super) fn safe_recursive_target(value: &str, context: ReadContext<'_>) -> bo
         let Some(rendered) = path.to_str() else {
             return false;
         };
-        if !super::super::safe_reads::bounded_read_target(rendered, context.0, context.1, true) {
+        if !super::super::safe_reads::bounded_read_target(
+            rendered,
+            context.home_dir,
+            context.cwd,
+            true,
+        ) {
             return false;
         }
         let Ok(metadata) = std::fs::symlink_metadata(&path) else {

@@ -60,7 +60,10 @@ pub(super) fn exact_safe_cwd_compound(
             &operation,
             &operation.segments[0],
             false,
-            (context.0, Some(&cwd)),
+            crate::pretool::PathContext {
+                home_dir: context.home_dir,
+                cwd: Some(&cwd),
+            },
         );
     }
     model.segments[1..].iter().all(|segment| {
@@ -92,7 +95,15 @@ pub(super) fn exact_safe_cwd_compound(
                     | "uniq"
                     | "cut"
             )
-        ) && exact_safe_segment_with_context(model, segment, false, (context.0, Some(&cwd)))
+        ) && exact_safe_segment_with_context(
+            model,
+            segment,
+            false,
+            crate::pretool::PathContext {
+                home_dir: context.home_dir,
+                cwd: Some(&cwd),
+            },
+        )
     })
 }
 
@@ -113,7 +124,10 @@ pub(crate) fn benign_command_segments(
     {
         return Vec::new();
     }
-    let proof_context = (context.0, cwd.as_deref().or(context.1));
+    let proof_context = crate::pretool::PathContext {
+        home_dir: context.home_dir,
+        cwd: cwd.as_deref().or(context.cwd),
+    };
     let segment_benign: Vec<bool> = model
         .segments
         .iter()
@@ -217,7 +231,10 @@ pub(crate) fn benign_command_segments(
             let covered = benign
                 && ls_has_explicit_target
                 && (!requires_path_context
-                    || safe_reads::verified_path_context(proof_context.0, proof_context.1))
+                    || safe_reads::verified_path_context(
+                        proof_context.home_dir,
+                        proof_context.cwd,
+                    ))
                 && (path_free || all_previous_benign);
             all_previous_benign = all_previous_benign && benign;
             covered.then_some(index)
@@ -260,7 +277,7 @@ pub(super) fn exact_safe_segment_with_context(
         "cat" => safe_reads::safe_plain_file_arguments(&segment.arguments, context),
         "stat" => matches!(segment.arguments.as_slice(), [target]
             if !target.starts_with('-')
-                && safe_reads::bounded_read_target(target, context.0, context.1, false)),
+                && safe_reads::bounded_read_target(target, context.home_dir, context.cwd, false)),
         "cp" => {
             model.segments.len() == 1
                 && safe_reads::safe_copy_arguments(&segment.arguments, context)

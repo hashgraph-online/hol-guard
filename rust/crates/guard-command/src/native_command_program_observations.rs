@@ -9,7 +9,12 @@ impl NativeCommandProgram {
         active_extensions: &BTreeSet<String>,
         deadline: Option<Instant>,
     ) -> Result<NativeCommandObservationBatchV1, &'static str> {
-        self.observe_with_context(command, active_extensions, deadline, (None, None))
+        self.observe_with_context(
+            command,
+            active_extensions,
+            deadline,
+            crate::pretool::PathContext::default(),
+        )
     }
 
     pub fn observe_with_context(

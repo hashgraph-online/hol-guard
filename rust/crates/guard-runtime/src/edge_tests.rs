@@ -3,7 +3,7 @@ use super::*;
 static EDGE_FIXTURE_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 #[test]
-fn execution_environment_is_bounded_and_binds_request_and_approval_intent() {
+fn execution_environment_binds_identity_without_rejecting_unrelated_hooks() {
     let mut request = envelope(
         "PreToolUse",
         serde_json::json!({"tool_name":"bash", "command":"git status --short"}),
@@ -32,6 +32,16 @@ fn execution_environment_is_bounded_and_binds_request_and_approval_intent() {
         .environment_digest = "b".repeat(64);
     assert_ne!(intent, execution_intent_digest(&request).unwrap());
     request.source.execution_environment.as_mut().unwrap().path = "x".repeat(MAX_PATH_BYTES + 1);
+    assert!(validate_envelope_shape(&request).is_ok());
+    assert!(!request
+        .source
+        .execution_environment
+        .as_ref()
+        .unwrap()
+        .has_valid_shape());
+    // Core source paths still enforce the transport contract's strict bound.
+    request.source.home_dir = "x".repeat(MAX_PATH_BYTES + 1);
+
     assert_eq!(
         validate_envelope_shape(&request).unwrap_err(),
         "native_hook_source_metadata_invalid"

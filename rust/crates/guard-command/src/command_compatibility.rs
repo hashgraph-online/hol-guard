@@ -144,7 +144,11 @@ pub fn compatibility_observations(
     command: &CanonicalCommandV1,
     deadline: Option<Instant>,
 ) -> Result<CompatibilityObservations, &'static str> {
-    compatibility_observations_with_context(command, deadline, (None, None))
+    compatibility_observations_with_context(
+        command,
+        deadline,
+        crate::pretool::PathContext::default(),
+    )
 }
 
 pub fn compatibility_observations_with_context(

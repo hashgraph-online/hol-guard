@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shlex
 import shutil
 import subprocess
@@ -23,7 +24,12 @@ from codex_plugin_scanner.guard.hook_execution_environment import collect_hook_e
 
 @contextmanager
 def workflow_fixture():
-    root = Path(tempfile.mkdtemp(prefix="guard-workflow-matrix-", dir=Path.cwd())).resolve()
+    root = Path(
+        tempfile.mkdtemp(
+            prefix="guard-workflow-matrix-",
+            dir=os.environ.get("RUNNER_TEMP") or Path.cwd().parent,
+        )
+    ).resolve()
     try:
         yield root
     except BaseException:
@@ -185,8 +191,7 @@ def run_live(
     ):
         raise AssertionError("file workflow side effects were not completed")
     if any(case.name == "cwd-move" for case in quiet) and (
-        not (workspace / "src/cwd-moved.ts").is_file()
-        or (workspace / "src/cwd-move-source.ts").exists()
+        not (workspace / "src/cwd-moved.ts").is_file() or (workspace / "src/cwd-move-source.ts").exists()
     ):
         raise AssertionError("cwd move workflow side effects were not completed")
     return executed

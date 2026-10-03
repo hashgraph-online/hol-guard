@@ -1,7 +1,6 @@
 use std::fs;
-use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Command;
 use std::time::{Duration, Instant};
 
 #[path = "git_config_filters.rs"]
@@ -35,7 +34,6 @@ pub(super) fn execution_free(
     )
 }
 
-#[allow(clippy::too_many_arguments)]
 fn probe(
     executable: &str,
     arguments: &[String],
@@ -54,8 +52,13 @@ fn probe(
     if Instant::now() >= deadline {
         return None;
     }
-    let home = fs::canonicalize(context.0?).ok()?;
-    let cwd = fs::canonicalize(context.1?).ok()?;
+    let declared_home = Path::new(context.home_dir?);
+    let declared_cwd = Path::new(context.cwd?);
+    if !declared_home.is_absolute() || !declared_cwd.is_absolute() {
+        return None;
+    }
+    let home = fs::canonicalize(declared_home).ok()?;
+    let cwd = fs::canonicalize(declared_cwd).ok()?;
     let leading = &arguments[..arguments.len().checked_sub(remaining.len())?];
     if !home.is_dir() || !cwd.is_dir() || !clean_environment(execution_environment) {
         return None;
@@ -84,46 +87,27 @@ fn probe(
     let git_home = execution_environment
         .and_then(|context| context.home.as_deref())
         .map(Path::new)
-        .unwrap_or(&home);
-    let mut child = command
+        // Git for Windows must see the original home spelling, not the
+        // extended-length prefix produced by std::fs::canonicalize.
+        .unwrap_or(declared_home);
+    command
         .args(leading)
+        .current_dir(&cwd)
+        .env("HOME", git_home)
+        .env("USERPROFILE", git_home);
+    let mut query = super::git_probe::copy_command(&command)?;
+    let (status, output) = super::git_probe::output(
+        query
         .args([
             "--no-pager",
             "config",
             "--null",
             "--get-regexp",
-            "^(core\\.fsmonitor|core\\.pager|pager\\..*|diff\\.external|diff\\..*\\.(command|textconv)|filter\\..*\\.(process|clean|smudge)|log\\.showsignature|gpg\\.program|gpg\\..*\\.program)$",
+            "^(core\\.fsmonitor|core\\.pager|pager\\..*|diff\\.external|diff\\..*\\.(command|textconv)|filter\\..*\\.(process|clean|smudge)|log\\.showsignature|gpg\\.program|gpg\\..*\\.program|format\\.pretty|pretty\\..*|extensions\\.partialclone|remote\\..*\\.promisor)$",
         ])
-        .current_dir(&cwd)
-        .env("HOME", git_home)
-        .env("USERPROFILE", git_home)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()
-        .ok()?;
-    let stdout = child.stdout.take()?;
-    let reader = std::thread::spawn(move || {
-        let mut output = Vec::new();
-        stdout
-            .take(CONFIG_LIMIT + 1)
-            .read_to_end(&mut output)
-            .ok()?;
-        (output.len() <= CONFIG_LIMIT as usize).then_some(output)
-    });
-    let status = loop {
-        match child.try_wait() {
-            Ok(Some(status)) => break Some(status),
-            Ok(None) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(1)),
-            _ => {
-                let _ = child.kill();
-                let _ = child.wait();
-                break None;
-            }
-        }
-    };
-    let output = reader.join().ok()??;
-    let status = status?;
+,
+        deadline, CONFIG_LIMIT,
+    )?;
     if !(status.success() || status.code() == Some(1) && output.is_empty()) {
         return None;
     }
@@ -132,10 +116,16 @@ fn probe(
         .iter()
         .skip(1)
         .take_while(|value| value.as_str() != "--");
-    if options
-        .clone()
-        .any(|value| value.as_str() == "--show-signature")
-    {
+    // Deliberately conservative: an explicit signature request always needs
+    // review, even if a later --no-show-signature would disable it. We do not
+    // claim to prove the complete signature-format/helper option grammar.
+    if options.clone().any(|value| {
+        value.as_str() == "--show-signature"
+            || (matches!(operation, "log" | "show") && value.contains("%G"))
+            || value.starts_with("--remerge-diff")
+            || value == "--diff-merges=remerge"
+            || value == "--submodule=diff"
+    }) {
         return Some(false);
     }
     let no_external = options
@@ -182,6 +172,15 @@ fn probe(
     if paging && environment_pager == Some(false) {
         return Some(false);
     }
+    // Attribute and index inspection must not trigger lazy partial-clone fetch.
+    if effective.iter().any(|(key, value)| {
+        (*key == "extensions.partialclone" && !value.is_empty())
+            || (key.starts_with("remote.")
+                && key.ends_with(".promisor")
+                && !disabled_boolean(value))
+    }) {
+        return Some(false);
+    }
     let has_filters = matches!(operation, "status" | "diff")
         && effective
             .iter()
@@ -198,6 +197,8 @@ fn probe(
     for (key, value) in effective {
         let disabled = disabled_boolean(value);
         let unsafe_value = match key {
+            "extensions.partialclone" => !value.is_empty(),
+            key if key.starts_with("remote.") && key.ends_with(".promisor") => !disabled,
             "core.fsmonitor" => matches!(operation, "status" | "diff") && !disabled,
             "core.pager" => {
                 configured_paging
@@ -228,7 +229,13 @@ fn probe(
             key if key.starts_with("filter.") => {
                 matches!(operation, "status" | "diff") && !value.is_empty() && !filters_unused
             }
+            "format.pretty" => matches!(operation, "log" | "show") && value.contains("%G"),
+            key if key.starts_with("pretty.") => {
+                matches!(operation, "log" | "show") && value.contains("%G")
+            }
             "log.showsignature" => matches!(operation, "log" | "show") && !disabled,
+            // Deliberately conservative for custom verification programs:
+            // log/show pretty-format aliases may also invoke a GPG helper.
             key if key.starts_with("gpg.") => {
                 matches!(operation, "log" | "show") && !value.is_empty()
             }
@@ -237,6 +244,11 @@ fn probe(
         if unsafe_value {
             return Some(false);
         }
+    }
+    if matches!(operation, "status" | "diff")
+        && !super::git_probe::submodules_are_inert(&command, remaining, deadline)?
+    {
+        return Some(false);
     }
     Some(true)
 }
@@ -320,27 +332,7 @@ fn clean_environment(
             if declares_no_system != context.git_config_no_system {
                 return false;
             }
-            if context.path.len() > 32768
-                || context.path.contains('\0')
-                || context
-                    .home
-                    .as_ref()
-                    .is_some_and(|path| path.len() > 32768 || path.contains('\0'))
-                || context
-                    .xdg_config_home
-                    .as_ref()
-                    .is_some_and(|path| path.len() > 32768 || path.contains('\0'))
-                || context.environment_names.len() > 512
-                || context.environment_digest.len() != 64
-                || !context
-                    .environment_digest
-                    .bytes()
-                    .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-                || context
-                    .environment_names
-                    .iter()
-                    .any(|name| name.len() > 256 || name.chars().any(char::is_control))
-            {
+            if !context.has_valid_shape() {
                 return false;
             }
             context.environment_names.clone()
@@ -363,6 +355,12 @@ fn clean_environment(
                 "GIT_DIR"
                     | "GIT_EXTERNAL_DIFF"
                     | "GIT_COMMON_DIR"
+                    | "GIT_INDEX_FILE"
+                    | "GIT_OBJECT_DIRECTORY"
+                    | "GIT_ALTERNATE_OBJECT_DIRECTORIES"
+                    | "GIT_NAMESPACE"
+                    | "GIT_REPLACE_REF_BASE"
+                    | "GIT_SHALLOW_FILE"
                     | "GIT_WORK_TREE"
                     | "GIT_EXEC_PATH"
                     | "GIT_DISCOVERY_ACROSS_FILESYSTEM"

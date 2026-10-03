@@ -231,31 +231,9 @@ fn validate_envelope_shape(envelope: &GuardHookEnvelopeV2) -> Result<(), String>
     if encoded.len() > MAX_NATIVE_REQUEST_BYTES {
         return Err("native_hook_request_bounds_exceeded".to_owned());
     }
-    if let Some(context) = &envelope.source.execution_environment {
-        if context.path.len() > MAX_PATH_BYTES
-            || context.path.contains('\0')
-            || context
-                .home
-                .as_ref()
-                .is_some_and(|path| path.len() > MAX_PATH_BYTES || path.contains('\0'))
-            || context
-                .xdg_config_home
-                .as_ref()
-                .is_some_and(|path| path.len() > MAX_PATH_BYTES || path.contains('\0'))
-            || context.environment_names.len() > 512
-            || context
-                .environment_names
-                .iter()
-                .any(|name| name.len() > 256 || name.chars().any(char::is_control))
-            || context.environment_digest.len() != 64
-            || !context
-                .environment_digest
-                .bytes()
-                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-        {
-            return Err("native_hook_source_metadata_invalid".to_owned());
-        }
-    }
+    // Optional lookup context is bounded by the whole-envelope transport cap.
+    // Its tighter Git-specific limits are checked by git_config before quiet
+    // admission; oversized environments must not reject unrelated file hooks.
     let _ = request_identity(envelope)?;
     for path in [
         envelope.source.cwd.as_deref(),
@@ -312,8 +290,10 @@ fn evaluate_validated_envelope(
                             envelope.deadline_budget_ms.unwrap_or(9_000).min(9_000),
                         ),
                 ),
-                Some(envelope.source.home_dir.as_str()),
-                envelope.source.cwd.as_deref(),
+                guard_command::pretool::PathContext {
+                    home_dir: Some(envelope.source.home_dir.as_str()),
+                    cwd: envelope.source.cwd.as_deref(),
+                },
                 Some(
                     envelope
                         .source

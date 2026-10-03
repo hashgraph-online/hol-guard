@@ -12,9 +12,9 @@ The reviewed classifier corrections also remove unrelated uncertain Git owners f
 
 Native Git execution-context hardening separately raises eight exact-review groups (200 cases) to raw `require-reapproval` with `native_git_execution_context_review`: their relative `cd` destinations do not exist in the offline corpus evaluator, so Git execution cannot be authenticated. The host decision-plane expectation remains `review`, and the separate Git pathspec fixture still requires a verified Git home/config context rather than changing its expected `allow` result.
 
-The native contract records stronger behavior than the original oracle for 11,558 cases:
+The native contract records stronger behavior than the original oracle for 11,683 cases:
 
-| Inherited limitation | Affected inputs | Cases above the original floor |
+| Reason for a stronger decision | Affected inputs | Cases above the original floor |
 | --- | --- | ---: |
 | Git compatibility uncertainty | Plain `apply` | 25 |
 | Docker compatibility uncertainty | Container status inspection and `compose ps` | 50 |
@@ -22,8 +22,11 @@ The native contract records stronger behavior than the original oracle for 11,55
 | Unsupported compatibility context | `PATH` override template | 4,167 |
 | Destructive-shell compatibility uncertainty | Adversarial pipeline with a `dd` sink | 1,042 |
 | Unsupported substitution or redirect parsing | Adversarial substitutions and redirected pipeline variants | 6,249 |
+| Unverified Git helper/configuration context | Status, diff, log, show and status-pipeline workflows | 125 |
 
-This includes 100 of the 1,000 benign cases and 11,458 of the 50,000 adversarial cases. Across the full corpus, 27,084 cases retain `native_command_evaluation_failed`; many already have an original oracle floor of `block`. Those errors are counted and reported. A validated, exactly bound native denial may contribute its terminal block to the host decision without inventing rule observations or an allow proof. Compiler, transport, binding or unknown evaluation failures do not qualify as expected inherited behavior.
+This includes 225 of the 1,000 benign cases and 11,458 of the 50,000 adversarial cases. Across the full corpus, 27,084 cases retain `native_command_evaluation_failed`; many already have an original oracle floor of `block`. Those errors are counted and reported. A validated, exactly bound native denial may contribute its terminal block to the host decision without inventing rule observations or an allow proof. Compiler, transport, binding or unknown evaluation failures do not qualify as expected inherited behavior.
+
+The Git helper hardening adds 125 fresh-approval cases across status, diff, log, show and status-pipeline inputs whose directory/configuration context is unverified. Branch inspection, repository-root discovery and patch checking retain their existing review floor. The original corpus and original security oracle are unchanged.
 
 The gates require exact native-contract equality, zero decisions below the original oracle floor, and unchanged decisions when the same native evidence passes through current and proposed effect composition. Reports retain every original-oracle divergence and its case digest. Passing the native contract does not mean equality with the original oracle's empty known-gap set; the report states that original equality is false. These diagnostics also do not establish installed-platform qualification, benign-workflow usability, SLO/soak performance, or release readiness. Improvements to the inherited limitations require a separate reviewed parser or classifier change and an explicit contract update.
 

@@ -53,7 +53,7 @@ def test_every_cdx_060_corpus_case_requires_proof_instead_of_inheriting_allow() 
     )
     assert len(evaluations) == 350
     assert {item.minimum_action for item in evaluations} == {"review"}
-    assert {item.decision_plane.action for item in evaluations} == {"review"}
+    assert {item.decision_plane.action for item in evaluations} == {"review", "require-reapproval"}
     assert all(
         any(reason.reason_code == "verified-read-proof-required" for reason in item.decision_plane.reasons)
         for item in evaluations
@@ -99,7 +99,7 @@ def test_git_read_overlap_reaches_the_frozen_cdx_064_pair_baseline() -> None:
 
     assert verified_read_candidate_operation(evaluation.command) == "workspace-read"
     assert evaluation.minimum_action == "review"
-    assert evaluation.decision_plane.action == "review"
+    assert evaluation.decision_plane.action == "require-reapproval"
     assert evaluation.decision_plane.proof_routes == frozenset()
 
 

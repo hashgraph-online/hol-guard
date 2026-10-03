@@ -219,7 +219,12 @@ mod tests {
         )
         .unwrap();
         let mut result = CompatibilityObservations::default();
-        observe_with_context(&model.segments[0], 0, &mut result, (None, None));
+        observe_with_context(
+            &model.segments[0],
+            0,
+            &mut result,
+            crate::pretool::PathContext::default(),
+        );
         result
     }
 

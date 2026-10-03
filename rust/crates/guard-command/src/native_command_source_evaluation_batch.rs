@@ -106,8 +106,10 @@ pub fn evaluate_batch(bytes: &[u8]) -> Result<Value, &'static str> {
             &serde_json::json!({"tool_name":"Bash","tool_input":{"command":case.command}}),
             Some(&controls),
             None,
-            request.home_dir.as_deref(),
-            request.cwd.as_deref(),
+            crate::pretool::PathContext {
+                home_dir: request.home_dir.as_deref(),
+                cwd: request.cwd.as_deref(),
+            },
             request.execution_environment.as_ref(),
         );
         // This is the same model returned by `hol-guard-runtime pre-tool` for

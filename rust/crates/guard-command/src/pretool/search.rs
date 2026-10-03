@@ -278,7 +278,7 @@ enum SearchValueRole {
     DirectoryAction,
     Other,
 }
-type ReadContext<'a> = (Option<&'a str>, Option<&'a str>);
+type ReadContext<'a> = super::PathContext<'a>;
 fn short_search_option(
     argument: &str,
     dangerous: &[char],
@@ -321,7 +321,7 @@ pub(super) fn safe_grep_stdin_arguments(arguments: &[String]) -> bool {
 }
 
 pub(super) fn safe_rg_stdin_arguments(arguments: &[String]) -> bool {
-    safe_rg_arguments_inner(arguments, (None, None), true)
+    safe_rg_arguments_inner(arguments, crate::pretool::PathContext::default(), true)
 }
 
 fn safe_rg_arguments(arguments: &[String], context: ReadContext<'_>) -> bool {

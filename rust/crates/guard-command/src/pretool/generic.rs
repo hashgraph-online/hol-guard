@@ -49,21 +49,29 @@ pub fn evaluate_pre_tool_envelope_with_context(
     cwd: Option<&str>,
 ) -> PreToolResultV1 {
     evaluate_pre_tool_envelope_with_execution_context(
-        harness, event, payload, controls, deadline, home_dir, cwd, None,
+        harness,
+        event,
+        payload,
+        controls,
+        deadline,
+        crate::pretool::PathContext {
+            home_dir: home_dir,
+            cwd: cwd,
+        },
+        None,
     )
 }
 
-#[allow(clippy::too_many_arguments)]
 pub fn evaluate_pre_tool_envelope_with_execution_context(
     harness: &str,
     event: &str,
     payload: &Value,
     controls: Option<&CompiledNativeCommandControls>,
     deadline: Option<Instant>,
-    home_dir: Option<&str>,
-    cwd: Option<&str>,
+    context: super::PathContext<'_>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
 ) -> PreToolResultV1 {
+    let super::PathContext { home_dir, cwd } = context;
     let mut signals = match extract_generic_signals(payload) {
         Ok(value) => value,
         Err(error) => return generic_error_result(harness, event, error),
@@ -134,7 +142,7 @@ pub fn evaluate_pre_tool_envelope_with_execution_context(
             signals.tool_name.as_deref(),
             &signals.package_values,
             deadline,
-            (home_dir, cwd),
+            super::PathContext { home_dir, cwd },
         ),
         (Some(controls), _) => controls.apply_with_tool(
             None,
@@ -151,9 +159,9 @@ pub fn evaluate_pre_tool_envelope_with_execution_context(
         && result.reason_code != "native_git_helper_context_review"
         && command_model.is_some_and(|model| {
             let destination =
-                super::segment_proof::verified_cwd_compound_context(model, (home_dir, cwd));
-            let context = (home_dir, destination.as_deref().or(cwd));
-            let benign = super::segment_proof::benign_command_segments(model, (home_dir, cwd));
+                super::segment_proof::verified_cwd_compound_context(model, super::PathContext { home_dir, cwd });
+            let context = super::PathContext { home_dir, cwd: destination.as_deref().or(cwd) };
+            let benign = super::segment_proof::benign_command_segments(model, super::PathContext { home_dir, cwd });
             model.segments.iter().enumerate().any(|(index, segment)| {
                 segment.executable.as_deref().is_some_and(|executable| {
                     if super::executable_basename(executable) != "git" {

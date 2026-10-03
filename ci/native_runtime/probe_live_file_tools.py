@@ -36,7 +36,7 @@ def assert_file_tools(events: list[dict], workspace: Path, target_root: Path | N
         if name == "write" and args.get("content") != "fixture-before\n":
             raise AssertionError("Pi changed the required write contents")
         target = args.get("path", args.get("file_path"))
-        if name == "edit" and "input" in args:
+        if name == "edit":
             anchored = args.get("input")
             anchored_target = None
             if isinstance(anchored, str):
@@ -48,12 +48,6 @@ def assert_file_tools(events: list[dict], workspace: Path, target_root: Path | N
             if anchored_target is None or (target is not None and target != anchored_target):
                 raise AssertionError("Pi supplied conflicting or invalid anchored edit targets")
             target = anchored_target
-        elif name == "edit":
-            if (
-                args.get("old_string") != "fixture-before"
-                or args.get("new_string") != "fixture-after"
-            ):
-                raise AssertionError("Pi supplied an unverified edit replacement")
         if not isinstance(target, str):
             raise AssertionError("Pi omitted a file target")
         try:

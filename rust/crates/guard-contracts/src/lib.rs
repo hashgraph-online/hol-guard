@@ -17,6 +17,8 @@ mod workspace_review_contracts;
 pub use workspace_review_contracts::*;
 mod archive_inspection;
 pub use archive_inspection::*;
+mod execution_environment;
+pub use execution_environment::*;
 mod context_digest;
 pub use context_digest::*;
 
@@ -44,39 +46,6 @@ pub struct GuardHookSourceMetadataV2 {
     pub source_ref_external_allowed: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub execution_environment: Option<GuardExecutionEnvironmentV1>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
-pub struct GuardExecutionEnvironmentV1 {
-    pub path: String,
-    pub environment_names: Vec<String>,
-    pub environment_digest: String,
-    #[serde(default)]
-    pub home: Option<String>,
-    #[serde(default)]
-    pub git_pager_disabled: bool,
-    #[serde(default)]
-    pub pager_disabled: bool,
-    #[serde(default)]
-    pub xdg_config_home: Option<String>,
-    #[serde(default)]
-    pub git_config_no_system: bool,
-}
-
-impl GuardExecutionEnvironmentV1 {
-    pub fn unavailable() -> Self {
-        Self {
-            path: String::new(),
-            environment_names: Vec::new(),
-            environment_digest: String::new(),
-            home: None,
-            git_pager_disabled: false,
-            pager_disabled: false,
-            xdg_config_home: None,
-            git_config_no_system: false,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

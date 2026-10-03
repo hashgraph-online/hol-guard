@@ -78,3 +78,14 @@ def test_outside_cwd_anchored_edit_uses_actual_host_home(tmp_path, monkeypatch):
     events[6]["args"] = {"input": "[~/elsewhere/copy.txt#FAE4]\nPUT 1.=1:\n+fixture-after"}
     with pytest.raises(AssertionError, match="target"):
         assert_file_tools(events, workspace, outside)
+
+
+@pytest.mark.parametrize("path_key", ("path", "file_path"))
+def test_nonanchored_edit_cannot_bypass_live_anchor_proof(tmp_path, path_key):
+    workspace = prepare_workspace(tmp_path)
+    events = file_events()
+    events[6]["args"] = {
+        path_key: "copy.txt", "old_string": "fixture-before", "new_string": "fixture-after"
+    }
+    with pytest.raises(AssertionError, match="anchored"):
+        assert_file_tools(events, workspace)

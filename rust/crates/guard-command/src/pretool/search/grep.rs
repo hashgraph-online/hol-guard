@@ -7,7 +7,7 @@ pub(super) fn safe_grep_arguments(arguments: &[String], context: ReadContext<'_>
 }
 
 pub(super) fn safe_stdin_arguments(arguments: &[String]) -> bool {
-    safe_arguments(arguments, (None, None), true)
+    safe_arguments(arguments, crate::pretool::PathContext::default(), true)
 }
 
 fn safe_arguments(arguments: &[String], context: ReadContext<'_>, stdin_only: bool) -> bool {
