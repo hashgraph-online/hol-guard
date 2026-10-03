@@ -146,7 +146,9 @@ fn probe(
     let pager_setting = effective.get(pager_key.as_str()).copied();
     let environment_pager = environment_pager_disabled(execution_environment);
     let git_pager_disabled = git_pager_disabled(execution_environment);
-    let no_pager = leading.iter().any(|argument| argument == "--no-pager");
+    let no_pager = leading
+        .iter()
+        .any(|argument| matches!(argument.as_str(), "-P" | "--no-pager"));
     let configured_paging =
         !no_pager && pager_setting.map_or(operation != "status", |value| !disabled_boolean(value));
     let paging = configured_paging && !environment_pager.is_some_and(|disabled| disabled);

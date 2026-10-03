@@ -116,6 +116,16 @@ fn pager_checks_follow_the_actual_subcommand_and_global_override() {
         ),
         (
             "[core]\npager = ./synthetic-never-execute\n",
+            "git -P diff --no-ext-diff --no-textconv",
+            "allow",
+        ),
+        (
+            "[core]\npager = ./synthetic-never-execute\n",
+            "git diff --no-ext-diff --no-textconv -- -P",
+            "deny",
+        ),
+        (
+            "[core]\npager = ./synthetic-never-execute\n",
             "git diff --no-ext-diff --no-textconv",
             "deny",
         ),
@@ -370,6 +380,8 @@ fn configured_fsmonitor_cannot_be_admitted_as_a_benign_read() {
         for command in [
             "git status --short",
             "git diff --no-ext-diff --no-textconv",
+            "git -P status --short",
+            "git -P diff --no-ext-diff --no-textconv",
             "echo ready && git status --short",
         ] {
             let result = evaluate_pre_tool_envelope_with_context(
@@ -402,6 +414,7 @@ fn configured_fsmonitor_cannot_be_admitted_as_a_benign_read() {
             "git status --short",
             "git -c core.quotepath=false status --short",
             "git -c core.fsmonitor=false status --short",
+            "git -P -c core.quotepath=false -C . status --short",
             "echo ready && git status --short | head -1",
             "git status --short && gh api repos/owner/repo/compare/base...main | head -1",
         ] {
@@ -444,6 +457,7 @@ fn configured_fsmonitor_cannot_be_admitted_as_a_benign_read() {
                 "gh api repos/owner/repo/compare/base...main; git status --short",
                 "git status --short || gh api repos/owner/repo/compare/base...main",
                 "gh api repos/owner/repo/compare/base...main | git status --short",
+                "git -P status --short && gh api repos/owner/repo/compare/base...main",
             ] {
                 let result = evaluate_pre_tool_envelope_with_context(
                     harness,

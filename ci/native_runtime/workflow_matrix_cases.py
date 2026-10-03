@@ -44,6 +44,7 @@ def create_cases(root: Path) -> tuple[Path, Path, list[WorkflowCase]]:
         ("pwd", "pwd"),
         ("sleep-compound", "sleep 0.01; echo ordinary-workflow-fixture"),
         ("git-routed-status", "git -C src status --short; echo done"),
+        ("git-short-no-pager", "git -P -C src status --short"),
         ("git-absolute-status", f"git --no-pager -C {repository} status --short"),
         ("git-routed-root", "git -C src rev-parse --show-toplevel"),
         ("list-source", "ls src"),
