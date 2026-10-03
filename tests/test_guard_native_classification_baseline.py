@@ -22,6 +22,7 @@ from tests.native_command_test_support import real_native_command_evaluation
             "native.classification-block",
             "native_command_evaluation_failed",
         ),
+        ("git status", "require-reapproval", "native.classification-reapproval", None),
         ("printf baseline-proof", "allow", "native.explicit-benign", None),
     ],
 )
