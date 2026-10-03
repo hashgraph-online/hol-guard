@@ -93,6 +93,7 @@
       "command.noodle",
       "command.ollama",
       "command.probe",
+      "command.redpen",
       "command.remote.essh",
       "command.repo2nb",
       "command.skill-base",
