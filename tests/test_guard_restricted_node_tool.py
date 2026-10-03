@@ -51,7 +51,8 @@ def test_manifest_script_is_not_shell_consent(script, tmp_path):
 
 
 @pytest.mark.parametrize("denied", [False, True])
-def test_underlying_native_policy_is_rechecked(monkeypatch, tmp_path, denied):
+@pytest.mark.parametrize("command", ["bun run lint", "node --max-old-space-size=12288 /tmp/project/node_modules/typescript/bin/tsc --noEmit"])
+def test_underlying_native_policy_is_rechecked(monkeypatch, tmp_path, denied, command):
     plan = SimpleNamespace(
         profile_version="node-tool-readonly-v1",
         command=("/usr/bin/node", str(tmp_path / "node_modules/eslint/bin/eslint.js"), "src"),
@@ -71,7 +72,7 @@ def test_underlying_native_policy_is_rechecked(monkeypatch, tmp_path, denied):
             "required_execution_profile": "node-tool-readonly-v1",
         }
 
-    payload = {"tool_input": {"command": "bun run lint"}}
+    payload = {"tool_input": {"command": command}}
     if denied:
         with pytest.raises(RestrictedPytestError):
             sink.run_authorized_contained_test(payload, workspace=tmp_path, authorize=authorize, timeout_seconds=20)
@@ -82,7 +83,7 @@ def test_underlying_native_policy_is_rechecked(monkeypatch, tmp_path, denied):
             == 0
         )
         assert executed == [True]
-    assert authorized[0] == "bun run lint" and authorized[1].startswith("/usr/bin/node ")
+    assert authorized[0] == command and authorized[1].startswith("/usr/bin/node ")
 
 
 @pytest.mark.parametrize(

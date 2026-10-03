@@ -5,6 +5,31 @@ pub(super) fn bounded_task_list(payload: &Value, tool_name: Option<&str>) -> boo
     if tool_name != Some("TodoWrite") {
         return false;
     }
+    let Some(root) = payload.as_object() else {
+        return false;
+    };
+    if root.keys().any(|key| {
+        !matches!(
+            key.as_str(),
+            "tool_name"
+                | "toolName"
+                | "tool_input"
+                | "hook_event_name"
+                | "hookEventName"
+                | "session_id"
+                | "tool_use_id"
+                | "tool_call_id"
+                | "tool_id"
+                | "turn_id"
+                | "cwd"
+                | "transcript_path"
+                | "permission_mode"
+                | "harness"
+                | "guard_execution_environment"
+        )
+    }) {
+        return false;
+    }
     let Some(input) = payload.get("tool_input").and_then(Value::as_object) else {
         return false;
     };

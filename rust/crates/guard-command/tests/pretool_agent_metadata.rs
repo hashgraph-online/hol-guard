@@ -19,6 +19,8 @@ fn host_task_lists_do_not_execute_their_descriptions() {
 fn task_list_proof_rejects_external_aliases_and_executable_inputs() {
     for payload in [
         json!({"tool_name":"mcp__server__TodoWrite", "tool_input":{"todos":[]}}),
+        json!({"tool_name":"TodoWrite", "mcp_server":"external", "tool_input":{"todos":[]}}),
+        json!({"tool_name":"TodoWrite", "command":"echo unsafe", "tool_input":{"todos":[]}}),
         json!({"tool_name":"TodoWrite", "tool_input":{"todos":[], "command":"echo unsafe"}}),
         json!({"tool_name":"TodoWrite", "tool_input":{"todos":[{"content":"Task", "status":"execute"}]}}),
         json!({"tool_name":"TodoWrite", "tool_input":{"todos":[{"content":"Task", "status":"pending", "path":".env"}]}}),
