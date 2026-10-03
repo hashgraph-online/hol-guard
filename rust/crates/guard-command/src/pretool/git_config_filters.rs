@@ -57,7 +57,13 @@ pub(super) fn unused(
     }
     let root = std::fs::canonicalize(root).ok()?;
     let paths = query(
-        &["ls-files", "--cached", "--others", "--exclude-standard", "-z"],
+        &[
+            "ls-files",
+            "--cached",
+            "--others",
+            "--exclude-standard",
+            "-z",
+        ],
         None,
         Some(&root),
     )?;
