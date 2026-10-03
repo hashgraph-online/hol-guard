@@ -283,6 +283,53 @@ fn sensitive_text(values: &[String]) -> bool {
     values.iter().any(|value| sensitive_command(value))
 }
 
+fn authentication_requirement_pattern() -> &'static Regex {
+    static AUTH_REQUIREMENT: OnceLock<Regex> = OnceLock::new();
+    AUTH_REQUIREMENT.get_or_init(|| {
+        Regex::new(
+            r"(?i)\b(?:needs?|requires?)\s+(?:their|your|the user's|the operator's)\s+password\b",
+        )
+        .expect("bounded human authentication requirement")
+    })
+}
+
+fn prompt_sensitive_text(value: &str) -> bool {
+    static AUTH_CONTEXT: OnceLock<Regex> = OnceLock::new();
+    static REFERENTIAL_ACCESS: OnceLock<Regex> = OnceLock::new();
+    let requirement = authentication_requirement_pattern();
+    if !requirement.is_match(value) {
+        return sensitive_command(value);
+    }
+    let context = AUTH_CONTEXT.get_or_init(|| {
+        Regex::new(r"(?i)\b(?:authentication|authenticate|login|log\s+in|sign\s+in|recovery|recover-authority|terminal)\b")
+            .expect("bounded human authentication context")
+    });
+    for (index, matched) in requirement.find_iter(value).enumerate() {
+        if index >= 16 {
+            return true;
+        }
+        let start = value[..matched.start()]
+            .rfind(['.', '!', '?', ';', '\n'])
+            .map_or(0, |offset| offset + 1);
+        let end = value[matched.end()..]
+            .find(['.', '!', '?', ';', '\n'])
+            .map_or(value.len(), |offset| matched.end() + offset);
+        if !context.is_match(&value[start..end]) {
+            return true;
+        }
+    }
+    // Authentication requirements are not requests to obtain the credential.
+    // Keep explicit targets and referential follow-up reads on the guarded path.
+    let followup = REFERENTIAL_ACCESS.get_or_init(|| {
+        Regex::new(r"(?i)\b(?:read|open|print|show|display|disclose|return|summari[sz]e|dump|copy|retrieve|fetch|obtain|extract|capture|store|save|log|include|grab|access|upload|send|transfer)\s+(?:(?:the\s+)?(?:full\s+)?(?:contents?|value|text|data)\s+(?:of|from)\s+)?(?:it|them|those|these|that|this)\b|\b(?:do|perform|execute|run|use)\s+(?:it|that|this|them)\s+(?:anyway|regardless)\b")
+            .expect("bounded credential referential follow-up")
+    });
+    if followup.is_match(value) {
+        return true;
+    }
+    sensitive_command(&requirement.replace_all(value, "human authentication"))
+}
+
 fn guard_bypass_prompt(values: &[String]) -> bool {
     values.iter().any(|value| {
         let lowered = value.to_ascii_lowercase();
@@ -340,7 +387,35 @@ fn destructive_prompt_intent(values: &[String]) -> bool {
         Regex::new(r"(?i)(?:\brm\s+-[a-z]*[rf]\b|\b(?:delete|remove|overwrite|truncate|chmod|chown|mv)\b[^.!?;\n]{0,60}\b(?:file|directory|repo|workspace|contents?)\b)")
             .expect("bounded destructive prompt intent")
     });
-    values.iter().any(|value| pattern.is_match(value))
+    values
+        .iter()
+        .any(|value| pattern.is_match(&mask_destructive_prohibitions(value)))
+}
+
+fn mask_destructive_prohibitions(value: &str) -> String {
+    static PROHIBITION: OnceLock<Regex> = OnceLock::new();
+    static EXCEPTION: OnceLock<Regex> = OnceLock::new();
+    let prohibition = PROHIBITION
+        .get_or_init(|| {
+            Regex::new(r"(?i)\b(?:never|do\s+not|don't|dont|must\s+not|should\s+not)\s+(?:delete|erase|wipe|format|kill|remove|overwrite|truncate|chmod|chown|mv)\b")
+                .expect("bounded destructive action prohibition")
+        });
+    let exception = EXCEPTION.get_or_init(|| {
+        Regex::new(r"(?i)\b(?:except|unless|until|without|if|but)\b")
+            .expect("bounded conditional prohibition")
+    });
+    prohibition
+        .replace_all(value, |captures: &regex::Captures<'_>| {
+            let matched = captures.get(0).expect("matched prohibition");
+            let tail = &value[matched.end()..];
+            let clause = tail.split(['.', '!', '?', ';', '\n']).next().unwrap_or("");
+            if exception.is_match(clause) {
+                matched.as_str().to_owned()
+            } else {
+                "prohibited action".to_owned()
+            }
+        })
+        .into_owned()
 }
 
 fn subprocess_prompt_intent(values: &[String]) -> bool {
@@ -362,7 +437,15 @@ fn benign_prompt_text(text: &str) -> bool {
     static REFERENT_ACTION: OnceLock<Regex> = OnceLock::new();
 
     let normalized = text.to_ascii_lowercase();
-    let mut remainder = normalized.clone();
+    let mut remainder = if prompt_sensitive_text(&normalized) {
+        normalized.clone()
+    } else {
+        authentication_requirement_pattern()
+            .replace_all(&normalized, "human authentication")
+            .into_owned()
+    };
+    // Mask only the prohibited verb, never its targets or later instructions.
+    remainder = mask_destructive_prohibitions(&remainder);
     let documents = [
         "create ",
         "write ",
