@@ -401,7 +401,7 @@ fn mask_destructive_prohibitions(value: &str) -> String {
                 .expect("bounded destructive action prohibition")
         });
     let exception = EXCEPTION.get_or_init(|| {
-            Regex::new(r"(?i)\b(?:except|unless|until|without|if|but|besides|other\s+than|apart\s+from|aside\s+from|save\s+for|instead\s+of)\b")
+        Regex::new(r"(?i)\b(?:except|unless|until|without|if|but|besides|other\s+than|apart\s+from|aside\s+from|save\s+for|instead\s+of)\b")
             .expect("bounded conditional prohibition")
     });
     prohibition
