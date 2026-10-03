@@ -104,7 +104,8 @@ pub fn evaluate_pre_tool_envelope_with_execution_context(
     }
     let mut result = if task_metadata {
         generic_result(
-            generic_action(harness, event, PreToolActionTypeV1::Harness, PreToolOperationV1::Set, true, false),
+            generic_action(harness, event, PreToolActionTypeV1::Harness,
+                if signals.tool_name.as_deref() == Some("TaskOutput") { PreToolOperationV1::Read } else { PreToolOperationV1::Set }, true, false),
             "allow", "native_agent_task_metadata", "The Rust authority verified bounded host task metadata with no new execution or filesystem effects.",
         )
     } else {
