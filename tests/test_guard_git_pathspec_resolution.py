@@ -59,8 +59,9 @@ def git_repository(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     if shutil.which("git") is None:
         pytest.skip("Git is unavailable")
     monkeypatch.delenv("GIT_EXTERNAL_DIFF", raising=False)
-    monkeypatch.delenv("GIT_CONFIG_COUNT", raising=False)
-    monkeypatch.delenv("GIT_CONFIG_PARAMETERS", raising=False)
+    for name in tuple(os.environ):
+        if name.upper().startswith("GIT_CONFIG"):
+            monkeypatch.delenv(name, raising=False)
     repository = tmp_path / "repository"
     repository.mkdir()
     _git(repository, "init", "--quiet")
