@@ -2,8 +2,6 @@ use super::read_paths::{
     bounded_file_read_target, existing_regular_read_target, expand_home_read_path,
     resolved_path_allowed,
 };
-#[cfg(unix)]
-use super::read_paths::resolved_path_allowed_in_scope;
 
 pub(super) fn bounded_file_write_target(
     value: &str,
@@ -180,6 +178,7 @@ fn absent_move_destination(value: &str, context: super::PathContext<'_>) -> bool
 
 #[cfg(unix)]
 fn bounded_temporary_copy_target(value: &str, context: super::PathContext<'_>) -> bool {
+    use super::read_paths::resolved_path_allowed_in_scope;
     use std::os::unix::fs::MetadataExt;
     use std::path::Path;
 

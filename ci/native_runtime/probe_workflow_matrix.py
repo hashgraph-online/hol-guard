@@ -149,7 +149,8 @@ def run_live(
             "Do not infer that an unattempted command is blocked.\n" + "\n".join(case.command for case in batch)
         )
         # Contained calls include launch/attestation overhead for every command.
-        budget_seconds = max(60, len(batch) * 20)
+        seconds_per_call = 35 if any(case.protected_reason for case in batch) else 20
+        budget_seconds = max(60, len(batch) * seconds_per_call)
         result = subprocess.run(
             [
                 executable,
