@@ -187,6 +187,37 @@ def test_evaluator_bootstrap_imports_only_resident_dependencies(monkeypatch: pyt
     connection.send.assert_called_once_with(("ready", None))
 
 
+def test_isolated_requests_reuse_daemon_owned_policy_without_publishing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from codex_plugin_scanner.guard.daemon import hook_worker as worker_module
+
+    store = MagicMock()
+    worker = MagicMock()
+    worker.review_http_payload.return_value = {"decision": "allow"}
+    factory = MagicMock(return_value=worker)
+    monkeypatch.setattr(worker_module, "HookWorker", factory)
+    monkeypatch.setattr(
+        hook_entrypoint_module, "resident_hook_store_and_context", lambda _request, _stores: (store, None)
+    )
+    request = {
+        "payload": {"hook_event_name": "PreToolUse", "tool_name": "bash", "tool_input": {"command": "echo ok"}},
+        "harness": "omp",
+        "home_dir": str(tmp_path),
+        "guard_home": str(tmp_path),
+        "workspace": str(tmp_path),
+    }
+    workers = {}
+    for _ in range(2):
+        result = hook_entrypoint_module._run_resident_hook_request(  # pyright: ignore[reportPrivateUsage]
+            request, stores={}, hook_workers=workers, configured_guard_home=str(tmp_path)
+        )
+        assert result["reason_code"] is None
+    factory.assert_called_once_with(store=store, wait_for_native_policy=False, publish_native_policy=False)
+    assert worker.review_http_payload.call_count == 2
+
+
 def test_evaluator_becomes_ready_when_store_prewarm_fails(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

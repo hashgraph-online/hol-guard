@@ -327,7 +327,10 @@ def _run_resident_hook_request(
     event_name = runtime_hook_event_name(parsed.payload)
     worker = hook_workers.get(store_key)
     if worker is None:
-        worker = HookWorker(store=store, wait_for_native_policy=False)
+        # HTTP admission already waits for the daemon-owned workspace ACK.
+        # Isolated workers consume that authenticated binding instead of
+        # racing another publisher inside the tool's review deadline.
+        worker = HookWorker(store=store, wait_for_native_policy=False, publish_native_policy=False)
         hook_workers[store_key] = worker
     try:
         worker_payload = worker.review_http_payload(
