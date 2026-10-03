@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import http.client
 import json
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from types import SimpleNamespace
 
 import pytest
@@ -112,3 +112,39 @@ def test_unrecognized_stage_is_not_copied_into_diagnostic(capsys) -> None:
     diagnostic = capsys.readouterr().err
     assert "private" not in diagnostic
     assert json.loads(diagnostic)["stage"] == "unknown"
+
+
+@pytest.mark.parametrize("with_observer", [False, True])
+def test_timeout_keeps_completed_failure_evidence_without_waiting(monkeypatch, capsys, with_observer) -> None:
+    completed = Future()
+    completed.set_result(Observation("codex", "PreToolUse", "1k", 1.0, "native_resident", True))
+    failed = Future()
+    failed.set_exception(http.client.IncompleteRead(b"private-content", 12))
+    unfinished = Future()
+    queued = iter([completed, failed, unfinished])
+    shutdowns = []
+    received = []
+    executor = SimpleNamespace(
+        submit=lambda *_: next(queued),
+        shutdown=lambda **kwargs: shutdowns.append(kwargs),
+    )
+    monkeypatch.setattr(capacity, "wait", lambda *_args, **_kwargs: ({completed, failed}, {unfinished}))
+    kwargs = {"on_transport_observations": received.extend} if with_observer else {}
+    with pytest.raises(RuntimeError, match="concurrent capacity wave timed out"):
+        capacity._run_concurrent(
+            SimpleNamespace(),
+            (("codex", "PreToolUse"),),
+            3,
+            executor,
+            stage="capacity_prewarm",
+            **kwargs,
+        )
+    assert unfinished.cancelled()
+    assert shutdowns == [{"wait": False, "cancel_futures": True}]
+    assert received == ([completed.result()] if with_observer else [])
+    diagnostic = json.loads(capsys.readouterr().err)
+    assert diagnostic["submitted"] == 3
+    assert diagnostic["responses"] == diagnostic["errors"] == 1
+    assert diagnostic["stage"] == "capacity_prewarm"
+    assert diagnostic["causes"] == {"http_incomplete_body": 1}
+    assert "private" not in json.dumps(diagnostic)

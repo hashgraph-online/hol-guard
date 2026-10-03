@@ -107,16 +107,24 @@ def _run_concurrent(
             for future in unfinished:
                 if not future.cancelled():
                     future.add_done_callback(record_late)
-            finished_observations: list[Observation] = []
-            for future in finished:
-                if future.cancelled():
-                    continue
-                try:
-                    finished_observations.append(future.result())
-                except Exception:
-                    continue
-            if finished_observations:
-                on_transport_observations(finished_observations)
+        finished_observations: list[Observation] = []
+        completed_failures: list[dict[str, str]] = []
+        for future in finished:
+            if future.cancelled():
+                continue
+            try:
+                finished_observations.append(future.result())
+            except Exception as error:
+                completed_failures.append(failure_details(error))
+        if finished_observations and on_transport_observations is not None:
+            on_transport_observations(finished_observations)
+        report_request_failures(
+            completed_failures,
+            stage=stage,
+            submitted=len(futures),
+            responses=len(finished_observations),
+            errors=len(completed_failures),
+        )
         executor.shutdown(wait=False, cancel_futures=True)
         raise RuntimeError("native_installed_slo_failed: concurrent capacity wave timed out")
     failures: list[dict[str, str]] = []
