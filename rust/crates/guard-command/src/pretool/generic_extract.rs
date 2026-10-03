@@ -394,7 +394,8 @@ fn destructive_prompt_intent(values: &[String]) -> bool {
             .expect("bounded referential destructive prompt intent")
     });
     let fs_noun = FS_NOUN.get_or_init(|| {
-        Regex::new(r"(?i)\b(?:files?|director(?:y|ies)|repo(?:sitory)?|workspace)\b").expect("fs noun")
+        Regex::new(r"(?i)\b(?:files?|director(?:y|ies)|repo(?:sitory)?|workspace)\b")
+            .expect("fs noun")
     });
     values.iter().any(|value| {
         pattern.is_match(&mask_destructive_prohibitions(value))
