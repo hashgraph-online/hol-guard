@@ -1,6 +1,6 @@
 use super::read_paths::{
     bounded_file_read_target, existing_regular_read_target, expand_home_read_path,
-    resolved_path_allowed, resolved_path_allowed_in_scope,
+    resolved_path_allowed,
 };
 
 pub(super) fn bounded_file_write_target(
