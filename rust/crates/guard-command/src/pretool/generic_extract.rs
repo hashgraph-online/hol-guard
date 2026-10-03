@@ -321,7 +321,7 @@ fn prompt_sensitive_text(value: &str) -> bool {
     // Authentication requirements are not requests to obtain the credential.
     // Keep explicit targets and referential follow-up reads on the guarded path.
     let followup = REFERENTIAL_ACCESS.get_or_init(|| {
-        Regex::new(r"(?i)\b(?:read|open|print|show|display|disclose|reveal|echo|cat|output|write|type|paste|post|email|forward|share|give|hand|provide|tell|return|summari[sz]e|dump|copy|retrieve|fetch|obtain|extract|capture|store|save|log|include|grab|access|upload|send|transfer)\s+(?:(?:the\s+)?(?:full\s+)?(?:contents?|value|text|data)\s+(?:of|from)\s+)?(?:it|them|those|these|that|this|me|us)\b|\b(?:do|perform|execute|run|use)\s+(?:it|that|this|them)\s+(?:anyway|regardless)\b")
+        Regex::new(r"(?i)\b(?:read|open|print|show|display|disclose|reveal|echo|cat|output|write|type|paste|post|email|forward|share|give|hand|provide|tell|return|summari[sz]e|dump|copy|retrieve|fetch|obtain|extract|capture|store|save|log|include|grab|access|upload|send|transfer)\s+(?:(?:the\s+)?(?:full\s+)?(?:contents?|value|text|data)\s+(?:of|from)\s+)?(?:it|them|those|these|that|this|me|us)\b|\bhand\s+over\s+(?:it|them|those|these|that|this|me|us)\b|\b(?:do|perform|execute|run|use)\s+(?:it|that|this|them)\s+(?:anyway|regardless)\b")
             .expect("bounded credential referential follow-up")
     });
     if followup.is_match(value) {
