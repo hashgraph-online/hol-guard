@@ -169,6 +169,24 @@ def test_timeout_env_keys_reach_detached_daemon() -> None:
     assert "HOL_GUARD_HOOK_EVALUATOR_READY_TIMEOUT_SECONDS" in allowlist
 
 
+def test_evaluator_bootstrap_imports_only_resident_dependencies(monkeypatch: pytest.MonkeyPatch) -> None:
+    connection = MagicMock()
+    connection.recv.return_value = ("stop", None)
+    imported: list[str] = []
+    monkeypatch.setenv("HOL_GUARD_INTERNAL_HOOK_SQLITE_TIMEOUT_MS", "250")
+    monkeypatch.setattr(hook_entrypoint_module.importlib, "import_module", imported.append)
+
+    hook_entrypoint_module._hook_evaluator_main(connection, None)  # pyright: ignore[reportPrivateUsage]
+
+    assert imported == [
+        "codex_plugin_scanner.guard.adapters.base",
+        "codex_plugin_scanner.guard.config",
+        "codex_plugin_scanner.guard.daemon.hook_worker",
+        "codex_plugin_scanner.guard.store",
+    ]
+    connection.send.assert_called_once_with(("ready", None))
+
+
 def test_evaluator_becomes_ready_when_store_prewarm_fails(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
