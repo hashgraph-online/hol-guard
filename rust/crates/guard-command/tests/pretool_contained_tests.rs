@@ -14,6 +14,28 @@ fn classify(harness: &str, command: &str) -> guard_contracts::PreToolResultV1 {
 }
 
 #[test]
+fn local_transform_service_is_containment_only_and_argv_bounded() {
+    let command = "/home/tester/project/node_modules/@esbuild/darwin-arm64/bin/esbuild --service=0.25.4 --ping";
+    let result = classify("omp", command);
+    assert_ne!(result.decision, "allow");
+    if cfg!(target_os = "macos") {
+        assert_eq!(
+            result.reason_code,
+            "native_vitest_readonly_containment_required"
+        );
+        assert_eq!(result.minimum_action, "sandbox-required");
+    }
+    for command in [
+        "esbuild --service=0.25.4 --ping",
+        "/outside/esbuild --service=0.25.4 --ping",
+        "/home/tester/project/node_modules/@esbuild/darwin-arm64/bin/esbuild --service=evil --ping",
+        "/home/tester/project/node_modules/@esbuild/darwin-arm64/bin/esbuild --service=0.25.4 --ping --outfile=app.js",
+    ] {
+        assert_ne!(classify("omp", command).reason_code, "native_vitest_readonly_containment_required");
+    }
+}
+
+#[test]
 fn direct_pytest_requires_real_containment_never_direct_allow() {
     for command in [
         "python3 -m pytest -q",

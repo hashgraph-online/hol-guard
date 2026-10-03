@@ -40,7 +40,9 @@ pub(super) fn bounded_task_list(payload: &Value, tool_name: Option<&str>) -> boo
         return false;
     };
     if ["toolInput", "arguments"].iter().any(|alias| {
-        payload.get(*alias).is_some_and(|value| value.as_object() != Some(input))
+        payload
+            .get(*alias)
+            .is_some_and(|value| value.as_object() != Some(input))
     }) {
         return false;
     }

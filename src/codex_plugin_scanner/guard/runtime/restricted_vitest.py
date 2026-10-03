@@ -178,6 +178,19 @@ def run_restricted_node_plan(
         home, tmp = root / "home", root / "tmp"
         home.mkdir(mode=0o700)
         tmp.mkdir(mode=0o700)
+        esbuild = None
+        if plan.profile_version == VITEST_READ_ONLY_PROFILE_VERSION:
+            from .restricted_esbuild import snapshot_esbuild
+
+            esbuild = snapshot_esbuild(plan.workspace, root)
+            if esbuild is not None:
+                source, image, version = esbuild
+                if authorize_capability is None:
+                    raise RestrictedPytestError(
+                        "vitest_restricted_esbuild_unavailable", "Transform execution needs native authorization."
+                    )
+                authorize_capability((str(source), f"--service={version}", "--ping"))
+                plan = replace(plan, allowed_executables=(*plan.allowed_executables, image))
         launch_env = _restricted_environment(
             env if env is not None else os.environ,
             workspace=plan.workspace,
@@ -193,6 +206,8 @@ def run_restricted_node_plan(
             timeout_seconds=timeout_seconds,
             authorize_capability=authorize_capability,
         )
+        if esbuild is not None:
+            launch_env["ESBUILD_BINARY_PATH"] = str(esbuild[1])
         return _run_backend_process(
             _backend_argv(plan, private_root=root),
             env=launch_env,

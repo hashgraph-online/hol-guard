@@ -149,13 +149,16 @@ def run_authorized_contained_test(
             or (
                 len(command) > 1
                 and Path(command[0]).name in {"node", "nodejs"}
-                and any(argument.endswith(
-                    (
-                        "/node_modules/eslint/bin/eslint.js",
-                        "/node_modules/typescript/bin/tsc",
-                        "/node_modules/vite/bin/vite.js",
+                and any(
+                    argument.endswith(
+                        (
+                            "/node_modules/eslint/bin/eslint.js",
+                            "/node_modules/typescript/bin/tsc",
+                            "/node_modules/vite/bin/vite.js",
+                        )
                     )
-                ) for argument in command[1:3])
+                    for argument in command[1:3]
+                )
             )
         )
     )
@@ -223,8 +226,10 @@ def run_authorized_contained_test(
             response = authorize({**capability, "cwd": str(directory)})
             if (
                 not isinstance(response, Mapping)
-                or response.get("decision") != "allow"
-                or response.get("policy_action") != "allow"
+                or not (
+                    (response.get("decision") == "allow" and response.get("policy_action") == "allow")
+                    or (vitest_plan is not None and required(response))
+                )
                 or response.get("observe_mode") is True
             ):
                 raise _reject()

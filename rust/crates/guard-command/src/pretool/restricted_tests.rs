@@ -52,6 +52,21 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
     }
     let executable = segment.executable.as_deref()?;
     let arguments = segment.arguments.as_slice();
+    if executable
+        .replace('\\', "/")
+        .contains("/node_modules/@esbuild/")
+        && executable.ends_with("/bin/esbuild")
+        && matches!(arguments, [service, ping] if ping == "--ping"
+        && service.strip_prefix("--service=").is_some_and(|version| {
+            let parts: Vec<_> = version.split('.').collect();
+            parts.len() == 3 && parts.iter().all(|part| !part.is_empty() && part.len() <= 8
+                && part.bytes().all(|byte| byte.is_ascii_digit()))
+        }))
+    {
+        // Delegation only: the sink snapshots this local image and executes it
+        // inside the same credential-filtering, read-only Vitest boundary.
+        return Some("native_vitest_readonly_containment_required");
+    }
     let arguments = if matches!(super::executable_basename(executable), "node" | "nodejs") {
         match arguments {
             [flag, rest @ ..] if flag.starts_with("--max-old-space-size=") => {
