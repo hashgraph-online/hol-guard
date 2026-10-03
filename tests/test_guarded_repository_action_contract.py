@@ -6,6 +6,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 ACTION = ROOT / "guarded-repository" / "action.yml"
 WORKFLOW = ROOT / ".github" / "workflows" / "guarded-repository.yml"
+SECRET_WORD_BOUNDARY_FIX_SHA = "09c6f67cb59c9453981b2ae3f5675155eb003874"
+GUARDED_ACTION_USE = re.compile(r"(?m)^[ \t]+uses: hashgraph-online/hol-guard/guarded-repository@([a-f0-9]{40})$")
 
 
 def test_composite_action_defaults_portal_registration_off() -> None:
@@ -35,8 +37,14 @@ def test_reusable_workflow_is_least_privilege_and_trusted() -> None:
     assert "packages: write" not in text
     assert "register_verification: true" in text
     assert "verification_endpoint: https://hol.org/api/guard/repository-attestations" in text
-    match = re.search(r"uses: hashgraph-online/hol-guard/guarded-repository@([a-f0-9]{40})", text)
-    assert match is not None
+    matches = GUARDED_ACTION_USE.findall(text)
+    assert len(matches) == 1
+
+
+def test_reusable_workflow_pins_action_with_secret_word_boundary_fix() -> None:
+    text = WORKFLOW.read_text(encoding="utf-8")
+    matches = GUARDED_ACTION_USE.findall(text)
+    assert matches == [SECRET_WORD_BOUNDARY_FIX_SHA]
 
 
 def test_reusable_workflow_checkout_does_not_persist_credentials() -> None:
