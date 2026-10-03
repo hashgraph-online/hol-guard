@@ -70,6 +70,23 @@ class _PoisonPublisher(_TimeoutPublisher):
         raise AssertionError("CLI hook workers must not request a competing publish")
 
 
+class _StartupWorkspacePublisher(_TimeoutPublisher):
+    def __init__(self) -> None:
+        self.events: list[tuple[str, Path | None]] = []
+
+    def register_workspace(self, workspace: Path | None) -> bool:
+        self.events.append(("register", workspace))
+        return True
+
+    def start(self) -> None:
+        self.events.append(("start", None))
+
+    def wait_until_ready(self, deadline_monotonic: float) -> bool:
+        del deadline_monotonic
+        self.events.append(("wait", None))
+        return True
+
+
 def _write_resident_authority(guard_home: Path, snapshot: Mapping[str, object], master: bytes) -> None:
     generation = snapshot["generation"]
     digest = snapshot["policy_digest"]
@@ -170,6 +187,7 @@ def _ready_worker(
     *,
     publisher: object | None = None,
     publish_native_policy: bool = True,
+    workspace: Path | None = None,
 ) -> hook_worker_module.HookWorker:
     store = GuardStore(guard_home)
     monkeypatch.setattr(store, "_policy_integrity_secret_material", lambda *, create: (master, "master-id"))
@@ -179,7 +197,11 @@ def _ready_worker(
         "get_native_policy_snapshot_publisher",
         lambda _store: publisher if publisher is not None else _TimeoutPublisher(),
     )
-    return hook_worker_module.HookWorker(store=store, publish_native_policy=publish_native_policy)
+    return hook_worker_module.HookWorker(
+        store=store,
+        workspace=workspace,
+        publish_native_policy=publish_native_policy,
+    )
 
 
 def test_prepare_workspace_policy_fails_closed_when_publisher_times_out(
@@ -203,6 +225,28 @@ def test_prepare_workspace_policy_fails_closed_when_publisher_times_out(
     binding = worker.prepare_workspace_policy(tmp_path / "workspace")
 
     assert binding is None
+
+
+def test_startup_workspace_is_registered_before_policy_readiness_wait(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    publisher = _StartupWorkspacePublisher()
+    worker = _ready_worker(
+        tmp_path / "guard-home",
+        b"s" * 32,
+        monkeypatch,
+        publisher=publisher,
+        workspace=tmp_path / "workspace",
+    )
+
+    worker.close()
+
+    assert publisher.events == [
+        ("register", tmp_path / "workspace"),
+        ("start", None),
+        ("wait", None),
+    ]
 
 
 def test_prepare_workspace_policy_ignores_publisher_cache_and_lifecycle_generation(
