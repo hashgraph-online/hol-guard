@@ -11038,7 +11038,7 @@
       "enabled_extensions": [
         "command.syngraphe"
       ],
-      "expected_action": "allow",
+      "expected_action": "require-reapproval",
       "expected_effective_segments": [],
       "id": "unrelated",
       "rule_id": "command.syngraphe.init"

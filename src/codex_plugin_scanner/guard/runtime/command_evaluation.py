@@ -578,9 +578,9 @@ def _native_classification_factors(
     if not isinstance(value, dict):
         return ()
     blocked = value.get("minimum_action") == "block"
+    native_reapproval = value.get("minimum_action") == "require-reapproval"
     privileged_wrapper_reapproval = (
-        value.get("minimum_action") == "require-reapproval"
-        and value.get("reason_code") == "native_privileged_wrapper_reapproval"
+        native_reapproval and value.get("reason_code") == "native_privileged_wrapper_reapproval"
     )
     explicitly_benign = (
         allow_benign_proof
@@ -589,16 +589,14 @@ def _native_classification_factors(
         and value.get("explicitly_benign") is True
     )
     factors: list[DecisionFactor] = []
-    if blocked or privileged_wrapper_reapproval or explicitly_benign:
+    if blocked or native_reapproval or explicitly_benign:
         digest = hashlib.sha256(
             json.dumps(
                 {
                     "schema": "guard.native-classification-projection.v1",
                     "command_security_identity": command.security_identity,
                     "command_extensions": value["command_extensions"],
-                    "minimum_action": (
-                        "block" if blocked else "require-reapproval" if privileged_wrapper_reapproval else "allow"
-                    ),
+                    "minimum_action": "block" if blocked else "require-reapproval" if native_reapproval else "allow",
                     "explicitly_benign": explicitly_benign,
                 },
                 sort_keys=True,
@@ -615,11 +613,15 @@ def _native_classification_factors(
                     evidence_digest=digest,
                 )
             )
-        elif privileged_wrapper_reapproval:
+        elif native_reapproval:
             factors.append(
                 DecisionFactor(
                     source=DecisionFactorSource.ASSURANCE,
-                    reason_code="native.privileged-wrapper-reapproval",
+                    reason_code=(
+                        "native.privileged-wrapper-reapproval"
+                        if privileged_wrapper_reapproval
+                        else "native.classification-reapproval"
+                    ),
                     basis=DecisionBasis("require-reapproval", None),
                     producer_ref="native:command-classification",
                     evidence_digest=digest,

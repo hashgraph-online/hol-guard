@@ -156,19 +156,24 @@ pub fn evaluate_pre_tool_envelope_with_execution_context(
             let benign = super::segment_proof::benign_command_segments(model, (home_dir, cwd));
             model.segments.iter().enumerate().any(|(index, segment)| {
                 segment.executable.as_deref().is_some_and(|executable| {
-                    super::executable_basename(executable) == "git"
-                        && (!segment.environment_names.is_empty()
-                            || super::git_config::execution_free(
-                            executable,
-                            &segment.arguments,
-                            context,
-                            deadline,
-                            execution_environment,
-                        ) == Some(false)
-                            // A preceding mutation can change config or the
-                            // repository before this read actually executes.
-                            || (index > 0
-                                && (0..index).any(|prior| !benign.contains(&prior))))
+                    if super::executable_basename(executable) != "git" {
+                        return false;
+                    }
+                    let inspection = super::git_config::execution_free(
+                        executable,
+                        &segment.arguments,
+                        context,
+                        deadline,
+                        execution_environment,
+                    );
+                    !segment.environment_names.is_empty()
+                        || inspection == Some(false)
+                        // Only inspection operations have a configuration proof
+                        // to invalidate. Other Git operations retain their own
+                        // native review/permission floors, not this read floor.
+                        || (inspection.is_some()
+                            && index > 0
+                            && (0..index).any(|prior| !benign.contains(&prior)))
                 })
             })
         })

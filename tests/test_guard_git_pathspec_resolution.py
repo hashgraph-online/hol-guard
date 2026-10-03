@@ -58,9 +58,11 @@ def test_git_helper_suppression_ignores_option_shaped_pathspecs(git_repository: 
 def git_repository(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     if shutil.which("git") is None:
         pytest.skip("Git is unavailable")
-    monkeypatch.delenv("GIT_EXTERNAL_DIFF", raising=False)
+    # This positive fixture describes a clean Git caller, not the CI runner's
+    # loader settings, pager programs, or global configuration.
     for name in tuple(os.environ):
-        if name.upper().startswith("GIT_CONFIG"):
+        upper = name.upper()
+        if upper.startswith(("GIT_", "LD_", "DYLD_")) or upper in {"PAGER", "XDG_CONFIG_HOME"}:
             monkeypatch.delenv(name, raising=False)
     # Setup and native review must inspect the same clean Git configuration.
     # Use supported caller fields rather than an unattested config override.
