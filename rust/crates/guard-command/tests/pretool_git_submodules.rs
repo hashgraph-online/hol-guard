@@ -36,11 +36,13 @@ fn indexed_submodules_require_review_unless_all_submodule_processing_is_disabled
         .status()
         .unwrap()
         .success());
+    std::fs::create_dir_all(repository.join("nested")).unwrap();
     let controls = fixture::github_controls("enabled");
     for (command, allowed) in [
         ("git status --short", false),
         ("git diff --no-ext-diff --no-textconv", false),
         ("git -C . status --short", false),
+        ("git -C nested status --short", false),
         ("git status --ignore-submodules=all", true),
         (
             "git diff --ignore-submodules=all --no-ext-diff --no-textconv",
@@ -70,6 +72,17 @@ fn indexed_submodules_require_review_unless_all_submodule_processing_is_disabled
             assert_eq!(result.minimum_action, "require-reapproval");
         }
     }
+    let nested = repository.join("nested");
+    let from_nested = fixture::evaluate_pre_tool_envelope_with_context(
+        "omp",
+        "PreToolUse",
+        &json!({"tool_name":"bash", "tool_input":{"command":"git status --short"}}),
+        Some(&controls),
+        None,
+        home.to_str(),
+        nested.to_str(),
+    );
+    assert_eq!(from_nested.minimum_action, "require-reapproval");
 }
 
 #[test]

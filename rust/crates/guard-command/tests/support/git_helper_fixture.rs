@@ -46,7 +46,7 @@ pub fn evaluate_pre_tool_envelope_with_context(
         deadline,
         guard_command::pretool::PathContext {
             home_dir: home,
-            cwd: cwd,
+            cwd,
         },
         Some(&context),
     )
