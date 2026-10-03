@@ -1,0 +1,49 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.birkin-mnemosyne",
+  "version": "1.0.0",
+  "name": "birkin-mnemosyne MCP",
+  "description": "Local Markdown memory with multilingual BM25 retrieval. Reviews note creation, append/replace, archival, restoration, and curation through mnemosyne-mcp. Recall inherits Guard policy; reading a note records usage, and indexing may write cache files. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.ashmoonori-afk",
+    "displayName": "ashmoonori-afk",
+    "url": "https://github.com/ashmoonori-afk/birkin-mnemosyne"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniFolder", "background": "#1F3A8A" },
+  "homepage": "https://github.com/ashmoonori-afk/birkin-mnemosyne",
+  "license": "MIT",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "uvx",
+    "package": "birkin-mnemosyne[mcp]"
+  },
+  "riskClasses": ["external-filesystem-write", "external-memory-archive", "external-note-rewrite"],
+  "tools": [
+    { "name": "memory_search", "state": "inherit" },
+    { "name": "memory_get_note", "state": "inherit" },
+    { "name": "memory_list", "state": "inherit" },
+    { "name": "memory_remember", "state": "review" },
+    { "name": "memory_related", "state": "inherit" },
+    { "name": "memory_forget", "state": "review" },
+    { "name": "memory_restore", "state": "review" },
+    { "name": "memory_curation_catalog", "state": "inherit" },
+    { "name": "memory_curate", "state": "review" },
+    { "name": "other", "state": "inherit" }
+  ],
+  "referenceUrls": [
+    "https://github.com/ashmoonori-afk/birkin-mnemosyne/blob/3dd7e23d61420b657601a29017368415fa7d72a7/README.md",
+    "https://github.com/ashmoonori-afk/birkin-mnemosyne/blob/3dd7e23d61420b657601a29017368415fa7d72a7/birkin_mnemosyne/_mcp_app.py",
+    "https://github.com/ashmoonori-afk/birkin-mnemosyne/blob/3dd7e23d61420b657601a29017368415fa7d72a7/birkin_mnemosyne/mcp_server.py",
+    "https://github.com/ashmoonori-afk/birkin-mnemosyne/blob/3dd7e23d61420b657601a29017368415fa7d72a7/pyproject.toml",
+    "https://github.com/ashmoonori-afk/birkin-mnemosyne/blob/3dd7e23d61420b657601a29017368415fa7d72a7/benchmarks/retrieval/RESULTS.md"
+  ],
+  "saferAlternatives": [
+    "Configure uvx with --from birkin-mnemosyne[mcp], then mnemosyne-mcp --vault PATH; the console script differs from the package name.",
+    "Inspect memory_search, memory_list, or memory_curation_catalog before approving note changes; memory_get_note also persists usage history.",
+    "Use memory_remember mode=create to avoid overwriting notes; replace requires expected_version from a fresh memory_get_note.",
+    "Preview memory_forget with confirm=false and memory_curate with apply=false before approving archival or curation.",
+    "Use an explicitly selected vault with only intended notes; its path is not an OS sandbox, and existing symlinks can expose other files."
+  ]
+}
