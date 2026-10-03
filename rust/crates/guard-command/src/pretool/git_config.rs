@@ -167,7 +167,13 @@ fn probe(
                     && value != "cat"
             }
             key if key.starts_with("pager.") => {
-                paging && key == pager_key && !disabled && !value.is_empty() && value != "cat"
+                configured_paging
+                    && !git_pager_disabled
+                    && key == pager_key
+                    && !disabled
+                    && !enabled_boolean(value)
+                    && !value.is_empty()
+                    && value != "cat"
             }
             "diff.external" => !no_external && !value.is_empty(),
             key if key.starts_with("diff.") && key.ends_with(".command") => {
