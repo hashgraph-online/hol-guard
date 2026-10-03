@@ -4,6 +4,9 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
+#[path = "git_config_filters.rs"]
+mod filters;
+
 const CONFIG_LIMIT: u64 = 65_536;
 
 pub(super) fn execution_free(
@@ -42,9 +45,12 @@ fn probe(
     deadline: Option<Instant>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
 ) -> Option<bool> {
+    // Configuration plus root, path and attribute inspection share this budget.
+    // The caller's overall deadline remains the upper bound.
+    let inspection_deadline = Instant::now() + Duration::from_millis(500);
     let deadline = deadline
-        .unwrap_or_else(|| Instant::now() + Duration::from_millis(250))
-        .min(Instant::now() + Duration::from_millis(250));
+        .unwrap_or(inspection_deadline)
+        .min(inspection_deadline);
     if Instant::now() >= deadline {
         return None;
     }
@@ -55,7 +61,7 @@ fn probe(
         return None;
     }
     let binary = trusted_git(executable, &home, &cwd, execution_environment)?;
-    let mut command = Command::new(binary);
+    let mut command = Command::new(&binary);
     command.env_clear();
     #[cfg(windows)]
     for key in ["SYSTEMROOT", "WINDIR"] {
@@ -176,6 +182,19 @@ fn probe(
     if paging && environment_pager == Some(false) {
         return Some(false);
     }
+    let has_filters = matches!(operation, "status" | "diff")
+        && effective
+            .iter()
+            .any(|(key, value)| key.starts_with("filter.") && !value.is_empty());
+    let filters_unused = !has_filters
+        || filters::unused(
+            &binary,
+            leading,
+            &cwd,
+            git_home,
+            execution_environment,
+            deadline,
+        )?;
     for (key, value) in effective {
         let disabled = disabled_boolean(value);
         let unsafe_value = match key {
@@ -207,7 +226,7 @@ fn probe(
                 !no_textconv && !value.is_empty()
             }
             key if key.starts_with("filter.") => {
-                matches!(operation, "status" | "diff") && !value.is_empty()
+                matches!(operation, "status" | "diff") && !value.is_empty() && !filters_unused
             }
             "log.showsignature" => matches!(operation, "log" | "show") && !disabled,
             key if key.starts_with("gpg.") => {
