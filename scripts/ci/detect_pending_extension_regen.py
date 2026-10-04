@@ -31,18 +31,11 @@ REGEN_OWNED_PATHS: tuple[str, ...] = (
     "contracts/extensions/native-command-program.v1.json",
     "contracts/extensions/command-catalog.v1.json",
     "contracts/extensions/native-command-control-authority.v1.fixtures.json",
-    "contracts/managed-controls/v1/extension-projection-digest-vector.json",
-    "contracts/managed-controls/v1/policy-bundle-v2-extension-signature-vector.json",
     "docs/guard/extensions/README.md",
     "docs/guard/extensions/catalog.v1.json",
     "docs/guard/extensions/catalog.v2.json",
     "src/codex_plugin_scanner/guard/contracts/data/extensions",
     "src/codex_plugin_scanner/guard/contracts/data/mcp_servers",
-    "tests/fixtures/extension-controls/catalog-baseline.v1.json",
-    "tests/fixtures/guard-command-corpus/decision-diff-report.json",
-    "tests/fixtures/guard-command-corpus/decision-diff-report.framed-sha256",
-    "tests/test_guard_extension_trust.py",
-    "tests/test_policy_bundle_delivery_runtime.py",
 )
 
 # Canonical inputs whose changes can stale the projections above.
@@ -127,7 +120,9 @@ def _contributions_changed(base_sha: str) -> list[str]:
     except subprocess.TimeoutExpired:
         raise ContributionDiffError("Cannot compare contribution sources: Git timed out [git_timeout]") from None
     except UnicodeError:
-        raise ContributionDiffError("Cannot compare contribution sources: Git output unreadable [git_encoding]") from None
+        raise ContributionDiffError(
+            "Cannot compare contribution sources: Git output unreadable [git_encoding]"
+        ) from None
     except OSError:
         raise ContributionDiffError("Cannot compare contribution sources: Git unavailable [git_process]") from None
     if completed.returncode:
@@ -136,10 +131,9 @@ def _contributions_changed(base_sha: str) -> list[str]:
 
 
 def _git(*arguments: str) -> subprocess.CompletedProcess[str]:
+    """Read Git state for projection ownership without modifying the checkout."""
     try:
-        return subprocess.run(
-            ["git", *arguments], cwd=ROOT, check=False, capture_output=True, text=True, timeout=30
-        )
+        return subprocess.run(["git", *arguments], cwd=ROOT, check=False, capture_output=True, text=True, timeout=30)
     except (OSError, subprocess.TimeoutExpired):
         return subprocess.CompletedProcess(["git", *arguments], 1, "", "")
 
@@ -162,16 +156,15 @@ def pr_diff_paths() -> list[str] | None:
             return result.stdout.splitlines() if result.returncode == 0 else None
         return None
     commit = _git("cat-file", "commit", "HEAD")
-    parents = [
-        line.split()[1]
-        for line in commit.stdout.splitlines()
-        if line.startswith("parent ")
-    ]
+    parents = [line.split()[1] for line in commit.stdout.splitlines() if line.startswith("parent ")]
     base_ref = os.environ["GITHUB_BASE_REF"]
     probe = _git("rev-parse", "--is-shallow-repository")
     shallow = probe.returncode != 0 or probe.stdout.strip() == "true"
     fetch = [
-        "fetch", "-q", *(["--depth=1"] if shallow else []), "origin",
+        "fetch",
+        "-q",
+        *(["--depth=1"] if shallow else []),
+        "origin",
         f"+refs/heads/{base_ref}:refs/remotes/pending-diff/base",
     ]
     base_tip = "pending-diff/base"
@@ -186,10 +179,7 @@ def pr_diff_paths() -> list[str] | None:
             head_sha = None
     current = _git("rev-parse", "HEAD")
     synthetic_merge = (
-        len(parents) >= 2
-        and head_sha is not None
-        and current.returncode == 0
-        and current.stdout.strip() != head_sha
+        len(parents) >= 2 and head_sha is not None and current.returncode == 0 and current.stdout.strip() != head_sha
     )
     if synthetic_merge:
         # HEAD is the synthetic refs/pull merge, so its first parent is the
@@ -207,12 +197,10 @@ def pr_diff_paths() -> list[str] | None:
 
 
 def _owned_path(path: str) -> bool:
+    """Recognize product projection paths owned by native artifact generation."""
     if path.endswith(".schema.json"):
         return False
-    return any(
-        path == owned or path.startswith(owned.rstrip("/") + "/")
-        for owned in REGEN_OWNED_PATHS
-    )
+    return any(path == owned or path.startswith(owned.rstrip("/") + "/") for owned in REGEN_OWNED_PATHS)
 
 
 def regen_artifacts_absent_from_diff(diff: list[str] | None = None) -> bool:

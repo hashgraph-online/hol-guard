@@ -709,6 +709,13 @@ def test_manager_recovery_pip_uses_authenticated_python_and_pinned_source(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    trusted_import_root = tmp_path / "trusted-python-import"
+    trusted_import_root.mkdir()
+    monkeypatch.setattr(
+        update_subprocess_module,
+        "_trusted_python_import_paths",
+        lambda: (trusted_import_root,),
+    )
     context, _manager = _build_manager_context(
         tmp_path,
         monkeypatch,

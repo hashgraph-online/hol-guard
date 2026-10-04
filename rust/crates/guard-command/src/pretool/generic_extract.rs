@@ -1,10 +1,8 @@
 use super::super::sensitive_command;
 use crate::MAX_COMMAND_BYTES;
 use regex::Regex;
-use serde::de::{DeserializeSeed, Deserializer, MapAccess, SeqAccess, Visitor};
 use serde_json::{Map, Value};
 use std::collections::HashSet;
-use std::fmt;
 use std::sync::OnceLock;
 
 pub(super) const MAX_PRE_TOOL_DEPTH: usize = 32;
@@ -18,163 +16,6 @@ pub(super) enum GenericExtractionError {
     Malformed,
     Ambiguous,
     Bounds,
-}
-
-#[derive(Clone, Copy)]
-struct StrictNestedJsonSeed {
-    depth: usize,
-}
-
-impl<'de> DeserializeSeed<'de> for StrictNestedJsonSeed {
-    type Value = Value;
-
-    fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        if self.depth > MAX_PRE_TOOL_DEPTH {
-            return Err(serde::de::Error::custom(
-                "native_pre_tool_nested_depth_exceeded",
-            ));
-        }
-        deserializer.deserialize_any(StrictNestedJsonVisitor { depth: self.depth })
-    }
-}
-
-struct StrictNestedJsonVisitor {
-    depth: usize,
-}
-
-impl<'de> Visitor<'de> for StrictNestedJsonVisitor {
-    type Value = Value;
-
-    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("bounded JSON without duplicate object keys")
-    }
-
-    fn visit_bool<E>(self, value: bool) -> Result<Self::Value, E> {
-        Ok(Value::Bool(value))
-    }
-
-    fn visit_i64<E>(self, value: i64) -> Result<Self::Value, E> {
-        Ok(Value::Number(value.into()))
-    }
-
-    fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E> {
-        Ok(Value::Number(value.into()))
-    }
-
-    fn visit_f64<E>(self, value: f64) -> Result<Self::Value, E>
-    where
-        E: serde::de::Error,
-    {
-        serde_json::Number::from_f64(value)
-            .map(Value::Number)
-            .ok_or_else(|| E::custom("native_pre_tool_nested_number_invalid"))
-    }
-
-    fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
-    where
-        E: serde::de::Error,
-    {
-        self.visit_string(value.to_owned())
-    }
-
-    fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
-    where
-        E: serde::de::Error,
-    {
-        if value.len() > MAX_COMMAND_BYTES {
-            return Err(E::custom("native_pre_tool_nested_string_too_large"));
-        }
-        Ok(Value::String(value))
-    }
-
-    fn visit_none<E>(self) -> Result<Self::Value, E> {
-        Ok(Value::Null)
-    }
-
-    fn visit_unit<E>(self) -> Result<Self::Value, E> {
-        Ok(Value::Null)
-    }
-
-    fn visit_some<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        StrictNestedJsonSeed { depth: self.depth }.deserialize(deserializer)
-    }
-
-    fn visit_seq<A>(self, mut sequence: A) -> Result<Self::Value, A::Error>
-    where
-        A: SeqAccess<'de>,
-    {
-        let mut output = Vec::new();
-        while let Some(value) = sequence.next_element_seed(StrictNestedJsonSeed {
-            depth: self.depth.saturating_add(1),
-        })? {
-            if output.len() >= MAX_PRE_TOOL_ARRAY_ITEMS {
-                return Err(serde::de::Error::custom(
-                    "native_pre_tool_nested_array_too_wide",
-                ));
-            }
-            output.push(value);
-        }
-        Ok(Value::Array(output))
-    }
-
-    fn visit_map<A>(self, mut object: A) -> Result<Self::Value, A::Error>
-    where
-        A: MapAccess<'de>,
-    {
-        let mut output = Map::new();
-        let mut seen = HashSet::new();
-        while let Some(key) = object.next_key::<String>()? {
-            if key.len() > MAX_COMMAND_BYTES {
-                return Err(serde::de::Error::custom(
-                    "native_pre_tool_nested_key_too_large",
-                ));
-            }
-            if !seen.insert(key.clone()) {
-                return Err(serde::de::Error::custom(
-                    "native_pre_tool_nested_duplicate_key",
-                ));
-            }
-            if output.len() >= MAX_NESTED_JSON_OBJECT_ITEMS {
-                return Err(serde::de::Error::custom(
-                    "native_pre_tool_nested_object_too_wide",
-                ));
-            }
-            let value = object.next_value_seed(StrictNestedJsonSeed {
-                depth: self.depth.saturating_add(1),
-            })?;
-            output.insert(key, value);
-        }
-        Ok(Value::Object(output))
-    }
-}
-
-fn parse_strict_nested_json(bytes: &[u8]) -> Result<Value, GenericExtractionError> {
-    let mut deserializer = serde_json::Deserializer::from_slice(bytes);
-    let value = StrictNestedJsonSeed { depth: 0 }
-        .deserialize(&mut deserializer)
-        .map_err(|error| {
-            let message = error.to_string();
-            if message.contains("duplicate_key") {
-                GenericExtractionError::Ambiguous
-            } else if message.contains("depth_exceeded")
-                || message.contains("too_wide")
-                || message.contains("too_large")
-            {
-                GenericExtractionError::Bounds
-            } else {
-                GenericExtractionError::Malformed
-            }
-        })?;
-    deserializer
-        .end()
-        .map_err(|_| GenericExtractionError::Malformed)?;
-    Ok(value)
 }
 
 #[derive(Debug, Default)]
@@ -195,6 +36,7 @@ pub(super) struct GenericSignals {
     pub(super) subprocess_intent: bool,
     pub(super) content_sensitive: bool,
     pub(super) sensitive_target: bool,
+    pub(super) independent_sensitive_target: bool,
     pub(super) event_hint: Option<String>,
 }
 
@@ -441,6 +283,53 @@ fn sensitive_text(values: &[String]) -> bool {
     values.iter().any(|value| sensitive_command(value))
 }
 
+fn authentication_requirement_pattern() -> &'static Regex {
+    static AUTH_REQUIREMENT: OnceLock<Regex> = OnceLock::new();
+    AUTH_REQUIREMENT.get_or_init(|| {
+        Regex::new(
+            r"(?i)\b(?:needs?|requires?)\s+(?:their|your|the user's|the operator's)\s+password\b",
+        )
+        .expect("bounded human authentication requirement")
+    })
+}
+
+fn prompt_sensitive_text(value: &str) -> bool {
+    static AUTH_CONTEXT: OnceLock<Regex> = OnceLock::new();
+    static REFERENTIAL_ACCESS: OnceLock<Regex> = OnceLock::new();
+    let requirement = authentication_requirement_pattern();
+    if !requirement.is_match(value) {
+        return sensitive_command(value);
+    }
+    let context = AUTH_CONTEXT.get_or_init(|| {
+        Regex::new(r"(?i)\b(?:authentication|authenticate|login|log\s+in|sign\s+in|recovery|recover-authority|terminal)\b")
+            .expect("bounded human authentication context")
+    });
+    for (index, matched) in requirement.find_iter(value).enumerate() {
+        if index >= 16 {
+            return true;
+        }
+        let start = value[..matched.start()]
+            .rfind(['.', '!', '?', ';', '\n'])
+            .map_or(0, |offset| offset + 1);
+        let end = value[matched.end()..]
+            .find(['.', '!', '?', ';', '\n'])
+            .map_or(value.len(), |offset| matched.end() + offset);
+        if !context.is_match(&value[start..end]) {
+            return true;
+        }
+    }
+    // Authentication requirements are not requests to obtain the credential.
+    // Keep explicit targets and referential follow-up reads on the guarded path.
+    let followup = REFERENTIAL_ACCESS.get_or_init(|| {
+        Regex::new(r"(?i)\b(?:read|open|print|show|display|disclose|reveal|echo|cat|output|write|type|paste|post|email|forward|share|give|hand|provide|tell|return|summari[sz]e|dump|copy|retrieve|fetch|obtain|extract|capture|store|save|log|include|grab|access|upload|send|transfer)\s+(?:(?:the\s+)?(?:full\s+)?(?:contents?|value|text|data)\s+(?:of|from)\s+)?(?:it|them|those|these|that|this|me|us)\b|\bhand\s+over\s+(?:it|them|those|these|that|this|me|us)\b|\b(?:do|perform|execute|run|use)\s+(?:it|that|this|them)\s+(?:anyway|regardless)\b")
+            .expect("bounded credential referential follow-up")
+    });
+    if followup.is_match(value) {
+        return true;
+    }
+    sensitive_command(&requirement.replace_all(value, "human authentication"))
+}
+
 fn guard_bypass_prompt(values: &[String]) -> bool {
     values.iter().any(|value| {
         let lowered = value.to_ascii_lowercase();
@@ -494,11 +383,44 @@ fn exfil_prompt_intent(values: &[String]) -> bool {
 
 fn destructive_prompt_intent(values: &[String]) -> bool {
     static PATTERN: OnceLock<Regex> = OnceLock::new();
+    static REFERENTIAL: OnceLock<Regex> = OnceLock::new();
     let pattern = PATTERN.get_or_init(|| {
         Regex::new(r"(?i)(?:\brm\s+-[a-z]*[rf]\b|\b(?:delete|remove|overwrite|truncate|chmod|chown|mv)\b[^.!?;\n]{0,60}\b(?:file|directory|repo|workspace|contents?)\b)")
             .expect("bounded destructive prompt intent")
     });
-    values.iter().any(|value| pattern.is_match(value))
+    let referential = REFERENTIAL.get_or_init(|| {
+        Regex::new(r"(?i)\b(?:delete|remove|overwrite|truncate|chmod|chown|mv)\s+(?:all\s+of\s+|everything\s+in\s+)?(?:(?:it|them|those|these)\b|(?:this|that)(?:\s*(?:[.!?;,]|$)|\s+(?:files?|director(?:y|ies)|repo(?:sitory)?|workspace|folder)\b))")
+            .expect("bounded referential destructive prompt intent")
+    });
+    values.iter().any(|value| {
+        pattern.is_match(&mask_destructive_prohibitions(value)) || referential.is_match(value)
+    })
+}
+
+fn mask_destructive_prohibitions(value: &str) -> String {
+    static PROHIBITION: OnceLock<Regex> = OnceLock::new();
+    static EXCEPTION: OnceLock<Regex> = OnceLock::new();
+    let prohibition = PROHIBITION
+        .get_or_init(|| {
+            Regex::new(r"(?i)\b(?:never|do\s+not|don't|dont|must\s+not|should\s+not)\s+(?:delete|erase|wipe|format|kill|remove|overwrite|truncate|chmod|chown|mv)\b")
+                .expect("bounded destructive action prohibition")
+        });
+    let exception = EXCEPTION.get_or_init(|| {
+        Regex::new(r"(?i)\b(?:except|unless|until|without|if|but|besides|other\s+than|apart\s+from|aside\s+from|save\s+for|instead\s+of)\b")
+            .expect("bounded conditional prohibition")
+    });
+    prohibition
+        .replace_all(value, |captures: &regex::Captures<'_>| {
+            let matched = captures.get(0).expect("matched prohibition");
+            let tail = &value[matched.end()..];
+            let clause = tail.split(['.', '!', '?', ';', '\n']).next().unwrap_or("");
+            if exception.is_match(clause) {
+                matched.as_str().to_owned()
+            } else {
+                "prohibited action".to_owned()
+            }
+        })
+        .into_owned()
 }
 
 fn subprocess_prompt_intent(values: &[String]) -> bool {
@@ -520,7 +442,15 @@ fn benign_prompt_text(text: &str) -> bool {
     static REFERENT_ACTION: OnceLock<Regex> = OnceLock::new();
 
     let normalized = text.to_ascii_lowercase();
-    let mut remainder = normalized.clone();
+    let mut remainder = if prompt_sensitive_text(&normalized) {
+        normalized.clone()
+    } else {
+        authentication_requirement_pattern()
+            .replace_all(&normalized, "human authentication")
+            .into_owned()
+    };
+    // Mask only the prohibited verb, never its targets or later instructions.
+    remainder = mask_destructive_prohibitions(&remainder);
     let documents = [
         "create ",
         "write ",
@@ -584,140 +514,10 @@ fn benign_prompt_text(text: &str) -> bool {
     !sensitive_command(&remainder) && !risky_action.is_match(&remainder)
 }
 
-pub(super) fn extract_generic_signals(
-    payload: &Value,
-) -> Result<GenericSignals, GenericExtractionError> {
-    let mut keys = 0usize;
-    bounded_payload(payload, 0, &mut keys)?;
-    let Some(root) = payload.as_object() else {
-        return Err(GenericExtractionError::Malformed);
-    };
-    let mut maps = Vec::new();
-    collect_maps(payload, &mut maps);
-    // Some harnesses (for example GitHub Copilot) ship tool arguments as a
-    // JSON-encoded string instead of an object. Decode those strings once so
-    // their nested fields join the same bounded signal surface.
-    let mut embedded = Vec::new();
-    for record in &maps {
-        for key in [
-            "toolArgs",
-            "tool_args",
-            "toolArgsJson",
-            "tool_input",
-            "toolInput",
-            "toolArguments",
-            "tool_arguments",
-            "arguments",
-            "args",
-            "input",
-            "parameters",
-            "params",
-        ] {
-            if let Some(Value::String(text)) = record.get(key) {
-                let trimmed = text.trim();
-                if !(trimmed.starts_with('{') || trimmed.starts_with('['))
-                    || trimmed.len() > MAX_COMMAND_BYTES
-                {
-                    continue;
-                }
-                if let Ok(parsed) = parse_strict_nested_json(trimmed.as_bytes()) {
-                    if embedded.len() >= MAX_PRE_TOOL_STRINGS {
-                        return Err(GenericExtractionError::Bounds);
-                    }
-                    embedded.push(parsed);
-                }
-            }
-        }
-    }
-    for value in &embedded {
-        collect_maps(value, &mut maps);
-    }
-    let command = collect_commands(&maps)?;
-    let tool_name = collect_tool_names(payload)?;
-    let path_values = collect_key_strings(
-        &maps,
-        &[
-            "path",
-            "paths",
-            "file",
-            "files",
-            "file_path",
-            "filePath",
-            "file_paths",
-            "target_file",
-            "targetFile",
-            "target_directory",
-            "targetDirectory",
-        ],
-    )?;
-    let package_values = collect_key_strings(
-        &maps,
-        &[
-            "package",
-            "package_name",
-            "packageName",
-            "package_manager",
-            "packageManager",
-        ],
-    )?;
-    let url_values = collect_key_strings(&maps, &["url", "urls", "uri", "href", "endpoint"])?;
-    let prompt_values = collect_key_strings(
-        &maps,
-        &["prompt", "user_prompt", "userPrompt", "message", "query"],
-    )?;
-    let text_values = collect_key_strings(&maps, &["text"])?;
-    let event_hint = collect_event_hint(root)?;
-    let env_reference = prompt_values.iter().any(|value| {
-        let lowered = value.to_ascii_lowercase();
-        lowered.split(".env").skip(1).any(|suffix| {
-            !suffix.starts_with(".example")
-                && suffix
-                    .chars()
-                    .next()
-                    .is_none_or(|character| !character.is_ascii_alphanumeric() && character != '_')
-        })
-    });
-    let guard_bypass_intent = guard_bypass_prompt(&prompt_values);
-    let prompt_injection_intent = prompt_injection_intent(&prompt_values);
-    let exfil_intent = exfil_prompt_intent(&prompt_values);
-    let destructive_intent = destructive_prompt_intent(&prompt_values);
-    let subprocess_intent = subprocess_prompt_intent(&prompt_values);
-    let benign_prompt = !guard_bypass_intent
-        && !prompt_injection_intent
-        && !exfil_intent
-        && !destructive_intent
-        && !subprocess_intent
-        && prompt_values.len() == 1
-        && command.is_none()
-        && tool_name.is_none()
-        && path_values.is_empty()
-        && package_values.is_empty()
-        && url_values.is_empty()
-        && text_values.is_empty()
-        && benign_prompt_text(&prompt_values[0]);
-    let content_sensitive = sensitive_text(&path_values)
-        || sensitive_text(&url_values)
-        || sensitive_text(&prompt_values)
-        || sensitive_text(&text_values)
-        || command.as_deref().is_some_and(sensitive_command);
-    let sensitive_target = guard_bypass_intent || content_sensitive;
-    Ok(GenericSignals {
-        command,
-        tool_name,
-        package_present: !package_values.is_empty(),
-        package_values,
-        path_values,
-        url_values,
-        prompt_present: !prompt_values.is_empty(),
-        env_reference,
-        benign_prompt,
-        guard_bypass_intent,
-        prompt_injection_intent,
-        exfil_intent,
-        destructive_intent,
-        subprocess_intent,
-        content_sensitive,
-        sensitive_target,
-        event_hint,
-    })
-}
+#[path = "generic_nested_json.rs"]
+mod nested_json;
+use nested_json::parse_strict_nested_json;
+
+#[path = "generic_signals.rs"]
+mod signals;
+pub(super) use signals::extract_generic_signals;

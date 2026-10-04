@@ -17,6 +17,7 @@ from codex_plugin_scanner.guard.adapters.grok_config import (
     remove_managed_block,
     restore_compat_hooks,
 )
+from codex_plugin_scanner.guard.shims import PreparedGuardShim
 
 
 def _ctx(tmp_path: Path) -> HarnessContext:
@@ -65,8 +66,10 @@ class TestGrokManagedCompat:
         managed.parent.mkdir(parents=True, exist_ok=True)
         managed.write_text("[compat.claude]\nskills = true\nhooks = true\n", encoding="utf-8")
         monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.grok.install_guard_shim",
-            lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-grok"), "notes": []},
+            "codex_plugin_scanner.guard.adapters.grok.prepare_guard_shim",
+            lambda *args, **kwargs: PreparedGuardShim(
+                (), {"shim_path": str(ctx.guard_home / "bin" / "guard-grok"), "notes": []}
+            ),
         )
         monkeypatch.setattr(
             "codex_plugin_scanner.guard.adapters.grok.remove_guard_shim",

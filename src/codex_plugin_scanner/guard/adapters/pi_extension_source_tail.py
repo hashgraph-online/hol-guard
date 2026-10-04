@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .pi_extension_contained_tests_source import with_contained_test_routing
 from .pi_extension_source_tail_shared_v1 import build_source_tail_shared_v1
 
 
@@ -12,12 +13,15 @@ def build_extension_source_tail(
     lifecycle_abort_event_source: str,
     tool_approval_continuation_source: str,
 ) -> str:
-    return build_source_tail_shared_v1(
+    shared_source = build_source_tail_shared_v1(
         display_name=display_name,
         harness=harness,
         lifecycle_abort_event_source=lifecycle_abort_event_source,
         tool_approval_continuation_source=tool_approval_continuation_source,
-    ) + (
+    )
+    if harness == "omp":
+        shared_source = with_contained_test_routing(shared_source)
+    return shared_source + (
         "    const hookDeadlineAt = Date.now() + GUARD_TIMEOUT_MS - GUARD_DEADLINE_RESERVE_MS;\n"
         "    const signal = handlerAbortSignal(ctx);\n"
         "    const toolInput =\n"

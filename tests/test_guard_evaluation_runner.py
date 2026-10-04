@@ -25,9 +25,7 @@ def _write_runner_profile(tmp_path: Path, case_ids: tuple[str, ...]) -> tuple[Pa
     executable.write_text("#!/bin/sh\nexit 64\n", encoding="utf-8")
     executable.chmod(0o755)
     profile = _profile(tmp_path, executable)
-    profile["expectedCapabilities"] = [
-        {"capabilityId": case_id, "expectedAction": "block"} for case_id in case_ids
-    ]
+    profile["expectedCapabilities"] = [{"capabilityId": case_id, "expectedAction": "block"} for case_id in case_ids]
     profile_path = tmp_path / "runner-profile.json"
     profile_path.write_text(json.dumps(profile), encoding="utf-8")
     return profile_path, profile
@@ -170,9 +168,7 @@ def test_run_preserves_unrelated_bytes_and_never_invokes_host(tmp_path: Path, ca
     host_path = Path(str(profile["hostIdentity"]["executable"]))  # type: ignore[index]
     marker = tmp_path / "host-ran"
     host_path.write_text(
-        "#!/bin/sh\n"
-        f"touch '{marker}'\n"
-        "exit 0\n",
+        f"#!/bin/sh\ntouch '{marker}'\nexit 0\n",
         encoding="utf-8",
     )
     host_path.chmod(0o755)

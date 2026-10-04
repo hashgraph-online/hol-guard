@@ -112,7 +112,7 @@ def test_cleanup_contract_covers_every_scoped_hook_capability() -> None:
     assert payload["schema"] == "hol-guard.python-capability-cleanup.v1"
     assert payload["status"] == "passed"
     # The combined hook and native modules remain covered by the existing scope globs.
-    assert payload["scope_files"] == 96
+    assert payload["scope_files"] == 99
     assert "legacy_python_resident_transport" not in payload["capabilities"]
     assert payload["candidate_evidence"] == []
     contract = GATE._read_json(ROOT / GATE.CONTRACT)
@@ -337,14 +337,7 @@ def test_cleanup_contract_requires_exclusion_or_physical_retirement_record() -> 
 
 
 def test_retired_python_oracle_compat_loader_is_absent() -> None:
-    retired = (
-        ROOT
-        / "src"
-        / "codex_plugin_scanner"
-        / "guard"
-        / "cli"
-        / "commands_hook_compat_loader.py"
-    )
+    retired = ROOT / "src" / "codex_plugin_scanner" / "guard" / "cli" / "commands_hook_compat_loader.py"
     assert not retired.exists()
 
 

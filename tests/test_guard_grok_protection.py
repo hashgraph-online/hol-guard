@@ -6,7 +6,7 @@ import json
 import sqlite3
 from pathlib import Path
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.adapters.base import HarnessContext, PreparedHarnessInstall
 from codex_plugin_scanner.guard.adapters.contracts import setup_contract_for
 from codex_plugin_scanner.guard.adapters.grok import GrokHarnessAdapter
 from codex_plugin_scanner.guard.cli.install_commands import (
@@ -55,8 +55,10 @@ def test_build_harness_setup_plan_disconnect_confirmation(tmp_path: Path) -> Non
 def test_grok_protection_checks_ready_after_install(tmp_path: Path, monkeypatch) -> None:
     ctx = _ctx(tmp_path)
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.grok.install_guard_shim",
-        lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-grok"), "notes": []},
+        "codex_plugin_scanner.guard.adapters.grok.prepare_guard_shim",
+        lambda *args, **kwargs: PreparedHarnessInstall(
+            (), {"shim_path": str(ctx.guard_home / "bin" / "guard-grok"), "notes": []}
+        ),
     )
     GrokHarnessAdapter().install(ctx)
     (ctx.guard_home / "bin").mkdir(parents=True, exist_ok=True)
@@ -73,8 +75,10 @@ def test_grok_protection_checks_ready_after_install(tmp_path: Path, monkeypatch)
 def test_build_harness_verification_includes_grok_checks(tmp_path: Path, monkeypatch) -> None:
     ctx = _ctx(tmp_path)
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.grok.install_guard_shim",
-        lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-grok"), "notes": []},
+        "codex_plugin_scanner.guard.adapters.grok.prepare_guard_shim",
+        lambda *args, **kwargs: PreparedHarnessInstall(
+            (), {"shim_path": str(ctx.guard_home / "bin" / "guard-grok"), "notes": []}
+        ),
     )
     GrokHarnessAdapter().install(ctx)
     (ctx.guard_home / "bin").mkdir(parents=True, exist_ok=True)
@@ -106,8 +110,10 @@ def test_normalize_harness_payload_supports_grok_bash(tmp_path: Path) -> None:
 def test_grok_protection_checks_flag_stale_matchers(tmp_path: Path, monkeypatch) -> None:
     ctx = _ctx(tmp_path)
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.grok.install_guard_shim",
-        lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-grok"), "notes": []},
+        "codex_plugin_scanner.guard.adapters.grok.prepare_guard_shim",
+        lambda *args, **kwargs: PreparedHarnessInstall(
+            (), {"shim_path": str(ctx.guard_home / "bin" / "guard-grok"), "notes": []}
+        ),
     )
     GrokHarnessAdapter().install(ctx)
     (ctx.guard_home / "bin").mkdir(parents=True, exist_ok=True)
@@ -138,8 +144,10 @@ def test_grok_protection_checks_flag_stale_matchers(tmp_path: Path, monkeypatch)
 def test_grok_protection_checks_reject_empty_catchall(tmp_path: Path, monkeypatch) -> None:
     ctx = _ctx(tmp_path)
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.grok.install_guard_shim",
-        lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-grok"), "notes": []},
+        "codex_plugin_scanner.guard.adapters.grok.prepare_guard_shim",
+        lambda *args, **kwargs: PreparedHarnessInstall(
+            (), {"shim_path": str(ctx.guard_home / "bin" / "guard-grok"), "notes": []}
+        ),
     )
     GrokHarnessAdapter().install(ctx)
     (ctx.guard_home / "bin").mkdir(parents=True, exist_ok=True)
@@ -248,8 +256,10 @@ def test_scoped_grok_approval_keeps_unrelated_queue() -> None:
 def test_grok_protection_checks_flag_literal_home_prefix_deny_rules(tmp_path: Path, monkeypatch) -> None:
     ctx = _ctx(tmp_path)
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.grok.install_guard_shim",
-        lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-grok"), "notes": []},
+        "codex_plugin_scanner.guard.adapters.grok.prepare_guard_shim",
+        lambda *args, **kwargs: PreparedHarnessInstall(
+            (), {"shim_path": str(ctx.guard_home / "bin" / "guard-grok"), "notes": []}
+        ),
     )
     GrokHarnessAdapter().install(ctx)
     (ctx.guard_home / "bin").mkdir(parents=True, exist_ok=True)

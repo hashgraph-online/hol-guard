@@ -77,6 +77,17 @@ def _run_apps_command(
     if not harness:
         print("guard apps requires a harness.", file=sys.stderr)
         return 2
+    if apps_command == "repair" and (
+        bool(getattr(args, "restore_authority", False)) or getattr(args, "authority_request", None)
+        or getattr(args, "authority_request_sha256", None)
+        or getattr(args, "authority_deadline_epoch", None) is not None
+        or getattr(args, "authority_verification_workspace", None) is not None
+    ):
+        from .codex_authority_repair import run_codex_authority_repair
+
+        code, payload = run_codex_authority_repair(args, context, store, Path(workspace) if workspace else None)
+        _emit("apps", payload, getattr(args, "json", False))
+        return code
     if apps_command == "test":
         try:
             payload = build_harness_verification(harness, context, store, surface=getattr(args, "surface", None))
@@ -507,6 +518,9 @@ def _codex_browser_exact_resolution_failure(
     expected_artifact_hash: str | None,
     expected_artifact_id: str | None = None,
 ) -> str | None:
+    from ..native_context import bind_context_digest_home
+
+    bind_context_digest_home(getattr(store, "guard_home", None))
     resolved_by_id = {
         str(item.get("request_id")): item
         for item in resolved_items

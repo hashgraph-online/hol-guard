@@ -29,6 +29,8 @@ from tests.codex_daemon_hook_bridge_fixtures import (
 )
 from tests.test_guard_phase04_harness_ux import _json_line, _run_hook
 
+pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
+
 
 def test_pending_pretool_approval_requires_safe_request_id() -> None:
     assert resume.pending_pretool_approval(

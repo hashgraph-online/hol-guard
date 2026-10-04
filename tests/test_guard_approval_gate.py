@@ -57,6 +57,8 @@ from tests.cloud_exception_bundle_fixtures import build_cloud_exception_policy_b
 from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
 from tests.support.network import stub_authenticated_urlopen
 
+pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
+
 
 @pytest.fixture(autouse=True)
 def _default_store_platform(monkeypatch: pytest.MonkeyPatch) -> None:
