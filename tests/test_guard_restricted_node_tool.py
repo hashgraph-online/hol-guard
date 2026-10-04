@@ -40,7 +40,14 @@ def test_bounded_heap_option_is_preserved_before_verified_entry(monkeypatch, tmp
         workspace=tmp_path,
     )
     assert plan.profile_version == "node-tool-readonly-v1"
-    assert plan.command == ("/usr/bin/node", "--max-old-space-size=12288", str(entry), "--noEmit", "--incremental", "false")
+    assert plan.command == (
+        "/usr/bin/node",
+        "--max-old-space-size=12288",
+        str(entry),
+        "--noEmit",
+        "--incremental",
+        "false",
+    )
 
 
 @pytest.mark.parametrize("script", ["curl https://example.invalid", "", "eslint src && curl https://example.invalid"])
@@ -51,7 +58,9 @@ def test_manifest_script_is_not_shell_consent(script, tmp_path):
 
 
 @pytest.mark.parametrize("denied", [False, True])
-@pytest.mark.parametrize("command", ["bun run lint", "node --max-old-space-size=12288 /tmp/project/node_modules/typescript/bin/tsc --noEmit"])
+@pytest.mark.parametrize(
+    "command", ["bun run lint", "node --max-old-space-size=12288 /tmp/project/node_modules/typescript/bin/tsc --noEmit"]
+)
 def test_underlying_native_policy_is_rechecked(monkeypatch, tmp_path, denied, command):
     plan = SimpleNamespace(
         profile_version="node-tool-readonly-v1",

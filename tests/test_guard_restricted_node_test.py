@@ -85,9 +85,7 @@ def test_non_test_and_shell_forms_are_not_delegated(argv: list[str], tmp_path: P
 
 
 def test_bounded_heap_option_is_preserved_for_direct_node_test() -> None:
-    assert _node_runtime_args(["node", "--max-old-space-size=12288", "--test"]) == (
-        "--max-old-space-size=12288",
-    )
+    assert _node_runtime_args(["node", "--max-old-space-size=12288", "--test"]) == ("--max-old-space-size=12288",)
     with pytest.raises(RestrictedPytestError):
         _node_runtime_args(["node", "--max-old-space-size=999999", "--test"])
 
