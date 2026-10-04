@@ -35,6 +35,7 @@ _NODE_PROBE_TIMEOUT = 5.0
 # Match the production workspace-readiness cap without extending hook budgets.
 _DAEMON_READINESS_TIMEOUT = 25.0
 _DAEMON_CLEANUP_TIMEOUT = 10.0
+_NATIVE_CLEANUP_RETRY_INTERVAL = 0.25
 _NODE_PROBE_SOURCE = 'const typedValue: string = "node-capability-probe";\nprocess.stdout.write(typedValue);\n'
 _ENV_ALLOWLIST = {
     "COMSPEC",
@@ -966,8 +967,15 @@ def _bounded_daemon_finish(daemon: Any) -> bool:
 
 
 def _cleanup_installed_daemon(daemon: Any) -> None:
+    stop_timeout: _DaemonCallTimeoutError | None = None
     try:
-        _bounded_daemon_call(daemon, "stop")
+        try:
+            _bounded_daemon_call(daemon, "stop")
+        except _DaemonCallTimeoutError as exc:
+            # stop() has already requested shutdown before its bounded finish
+            # can be interrupted. Retry the authenticated completion check so
+            # a daemon that actually stopped is not left quarantined.
+            stop_timeout = exc
         if not _bounded_daemon_finish(daemon):
             raise ProbeCleanupUnsafeError("authenticated Guard daemon containment was not confirmed")
         is_quarantined = getattr(daemon, "_is_quarantined", None)
@@ -978,6 +986,10 @@ def _cleanup_installed_daemon(daemon: Any) -> None:
         if callable(is_alive) and is_alive():
             raise ProbeCleanupUnsafeError("authenticated Guard daemon serve thread remained alive")
     except BaseException as exc:
+        if stop_timeout is not None and exc is not stop_timeout:
+            raise ProbeCleanupUnsafeError(
+                "authenticated Guard daemon cleanup did not complete after stop timeout"
+            ) from exc
         if isinstance(exc, ProbeCleanupUnsafeError):
             raise exc
         if isinstance(exc, ProbeError):
@@ -1013,34 +1025,43 @@ def _cleanup_native(identity: Any, guard_home: Path) -> None:
         stop_native_resident,
     )
 
-    cleanup_error: OSError | RuntimeError | None = None
-    try:
-        contained = close_native_residents(guard_home)
-    except (OSError, RuntimeError) as exc:
+    deadline = time.monotonic() + _DAEMON_CLEANUP_TIMEOUT
+    last_error: OSError | RuntimeError | None = None
+    stop_confirmed = True
+    while True:
         contained = False
-        cleanup_error = exc
-    if _native_state_files(guard_home):
+        cleanup_error: OSError | RuntimeError | None = None
         try:
-            if not stop_native_resident(
-                executable=identity.path,
-                state_dir=guard_home / "native-runtime",
-                environment=_native_cleanup_environment(),
-                timeout_seconds=2.0,
-            ):
-                cleanup_error = cleanup_error or RuntimeError("native resident stop did not complete")
-        except (OSError, RuntimeError) as exc:
-            cleanup_error = cleanup_error or exc
-    if cleanup_error is None and not contained:
-        try:
-            contained = close_native_residents(guard_home)
+            contained = close_native_residents(guard_home, deadline_monotonic=deadline)
         except (OSError, RuntimeError) as exc:
             cleanup_error = exc
-    if cleanup_error is None and not contained:
-        cleanup_error = RuntimeError("native resident containment did not complete")
-    if cleanup_error is None and _native_state_files(guard_home):
-        cleanup_error = RuntimeError("native resident state remained after cleanup")
-    if cleanup_error is not None:
-        raise ProbeError(f"authenticated native cleanup failed: {type(cleanup_error).__name__}") from cleanup_error
+        state_files = _native_state_files(guard_home)
+        if state_files:
+            remaining = deadline - time.monotonic()
+            if remaining > 0:
+                stop_confirmed = False
+                try:
+                    if not stop_native_resident(
+                        executable=identity.path,
+                        state_dir=guard_home / "native-runtime",
+                        environment=_native_cleanup_environment(),
+                        timeout_seconds=min(2.0, remaining),
+                        deadline_monotonic=deadline,
+                    ):
+                        cleanup_error = RuntimeError("native resident stop did not complete")
+                    else:
+                        stop_confirmed = True
+                except (OSError, RuntimeError) as exc:
+                    cleanup_error = exc
+                state_files = _native_state_files(guard_home)
+        if cleanup_error is None and contained and not state_files and stop_confirmed:
+            return
+        last_error = cleanup_error or last_error
+        if time.monotonic() >= deadline:
+            if last_error is None:
+                last_error = RuntimeError("native resident containment did not complete")
+            raise ProbeError(f"authenticated native cleanup failed: {type(last_error).__name__}") from last_error
+        time.sleep(min(_NATIVE_CLEANUP_RETRY_INTERVAL, max(0.0, deadline - time.monotonic())))
 
 
 def _remove_probe_path(path: Path) -> bool:

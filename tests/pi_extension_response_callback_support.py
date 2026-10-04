@@ -18,6 +18,9 @@ def _run_generated_callback_payload(
     content: object,
     guard_response: dict[str, object],
     *,
+    tool_name: str = "Bash",
+    tool_input: dict[str, object] | None = None,
+    details: object | None = None,
     include_signal: bool = True,
     abort_before_guard: bool = False,
     abort_during_guard: bool = False,
@@ -34,17 +37,49 @@ def _run_generated_callback_payload(
         "(event as { toolInput?: Record<string, unknown> })": "event",
         "(event as { arguments?: Record<string, unknown> })": "event",
         "event as Record<string, unknown>": "event",
+        " as Record<string, unknown>": "",
         "const guardPayload: Record<string, unknown>": "const guardPayload",
         " as string": "",
     }.items():
         handler = handler.replace(old, new)
 
+    source_path_start = source.index("function sourcePathFromToolInput(")
+    source_path_end = source.index("\n\nfunction isVirtualSourcePath(", source_path_start)
+    source_path = source[source_path_start:source_path_end].replace(
+        "function sourcePathFromToolInput(toolInput: Record<string, unknown>): string | null {",
+        "function sourcePathFromToolInput(toolInput) {",
+    )
+    virtual_start = source.index("function isVirtualSourcePath(")
+    virtual_end = source.index("\n\nfunction sourceFileRefForPostToolUse(", virtual_start)
+    virtual = source[virtual_start:virtual_end].replace(
+        "function isVirtualSourcePath(path: string): boolean {",
+        "function isVirtualSourcePath(path) {",
+    )
+    source_ref_start = source.index("function sourceFileRefForPostToolUse(")
+    source_ref_end = source.index("\n\ntype BoundedValue", source_ref_start)
+    source_ref = source[source_ref_start:source_ref_end].replace(
+        (
+            "function sourceFileRefForPostToolUse(\n"
+            "  event: Record<string, unknown>,\n"
+            "  toolInput: Record<string, unknown>,\n"
+            "  digest: OutputDigest,\n"
+            "): { version: number; kind: string; path: string; tool_input_path: string; "
+            "output_sha256: string; output_chars: number } | null {"
+        ),
+        """function sourceFileRefForPostToolUse(
+  event,
+  toolInput,
+  digest,
+) {""",
+    ).replace("(details as Record<string, unknown>)", "details")
+
     event_json = json.dumps(
         {
             "toolCallId": "fixture-call",
-            "toolName": "Bash",
+            "toolName": tool_name,
+            "input": tool_input or {},
             "content": content,
-            "details": {"source": "fixture"},
+            "details": details if details is not None else {"source": "fixture"},
             "isError": False,
         }
     )
@@ -71,6 +106,9 @@ const GUARD_STRUCTURED_MAX_BYTES = 64 * 1024;
 const GUARD_STRUCTURED_MAX_DEPTH = 8;
 const GUARD_STRUCTURED_MAX_NODES = 128;
 const GUARD_STRUCTURED_MAX_FIELDS = 64;
+const GUARD_SOURCE_REF_ALLOWED_TOOL_NAMES = new Set([
+  "read", "read_file", "open_file", "view", "view_file", "cat_file", "Read", "View"
+]);
 {_generated_output_text_keys(source)}
 const blockedToolResults = new Map();
 const handlers = {{}};
@@ -85,7 +123,9 @@ Date.now = () => forceExpiredDeadline ? realDateNow() + 60_000 : realDateNow();
 {_generated_preprocessing_helper(source)}
 {_generated_structured_helper(source)}
 
-function sourceFileRefForPostToolUse() {{ return null; }}
+{source_path}
+{virtual}
+{source_ref}
 // This fixture executes output mediation only, without a session request map.
 function cleanupContainedTestRequest() {{}}
 function toolCallIdKey(value) {{ return typeof value === "string" && value.trim() ? value.trim() : null; }}
@@ -162,6 +202,8 @@ def _run_generated_source_ref_fixture(
     source: str,
     content: object,
     path: Path,
+    *,
+    details: object | None = None,
 ) -> dict[str, object]:
     source_path_start = source.index("function sourcePathFromToolInput(")
     source_path_end = source.index("\n\nfunction isVirtualSourcePath(", source_path_start)
@@ -191,7 +233,7 @@ def _run_generated_source_ref_fixture(
   toolInput,
   digest,
 ) {""",
-    )
+    ).replace("(details as Record<string, unknown>)", "details")
     javascript = f"""\
 import {{ createHash }} from "node:crypto";
 
@@ -214,7 +256,7 @@ const GUARD_SOURCE_REF_ALLOWED_TOOL_NAMES = new Set(["Read"]);
 {virtual}
 {source_ref}
 
-const event = {{ toolName: "Read" }};
+const event = {{ toolName: "Read", details: {json.dumps(details)} }};
 const toolInput = {{ file_path: {json.dumps(str(path))} }};
 const content = JSON.parse({json.dumps(json.dumps(content))});
 const digest = digestOutputText(content);
