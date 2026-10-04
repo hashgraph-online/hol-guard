@@ -82,6 +82,8 @@ pub(super) fn exact_safe_cwd_compound(
                     | "ls"
                     | "cat"
                     | "stat"
+                    | "test"
+                    | "find"
                     | "head"
                     | "tail"
                     | "git"
@@ -190,6 +192,8 @@ pub(crate) fn benign_command_segments(
                         | "sed"
                         | "wc"
                         | "stat"
+                        | "test"
+                        | "find"
                 );
             let ls_has_explicit_target = basename != "ls" || {
                 let mut skip_next = false;
@@ -274,6 +278,8 @@ pub(super) fn exact_safe_segment_with_context(
         "date" => safe_reads::safe_date_arguments(&segment.arguments),
         "sleep" => safe_reads::safe_sleep_arguments(&segment.arguments),
         "ls" => safe_reads::safe_listing_arguments(&segment.arguments, context),
+        "test" => safe_reads::safe_file_predicate_arguments(&segment.arguments, context),
+        "find" => safe_reads::safe_find_listing_arguments(&segment.arguments, context),
         "cat" => safe_reads::safe_plain_file_arguments(&segment.arguments, context),
         "stat" => matches!(segment.arguments.as_slice(), [target]
             if !target.starts_with('-')
