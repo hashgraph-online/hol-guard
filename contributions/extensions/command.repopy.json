@@ -1,0 +1,35 @@
+{
+  "schemaVersion": "guard.extension-contribution.v1",
+  "id": "command.repopy",
+  "version": "1.0.0",
+  "name": "repopy",
+  "description": "Reviews repopy CLI operations across repository cloning, installations with build hooks, and remote git linkage.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "community.repopy",
+    "displayName": "Community"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniFolder",
+    "background": "#2563EB"
+  },
+  "license": "MIT",
+  "executables": ["repopy"],
+  "ecosystemIds": ["repopy"],
+  "riskClasses": [
+    "destructive_shell",
+    "execution",
+    "network_egress"
+  ],
+  "actionClasses": ["repopy install command", "repopy link command"],
+  "saferAlternatives": [
+    "Run repopy clone without the -i or --install flag and inspect setup scripts first.",
+    "Inspect git remote URLs before running repopy link."
+  ],
+  "detector": {
+    "kind": "python-module",
+    "module": "codex_plugin_scanner.guard.runtime.command_repopy_extensions"
+  }
+}
