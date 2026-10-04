@@ -44,11 +44,12 @@ not copy their registration pattern to add an extension.
 3. Open a PR using the **Command extension** template. Ready PRs receive Gitar's managed label,
    which enables automatic repair for mechanical schema, binding, and generated-projection issues.
 
-The canonical source, portable fixture, and external trust entry are the contributor-owned inputs.
-Generated projections (command catalog, native program, baselines, digest vectors, directory
-render) are maintainer-owned: keep them out of the contribution diff. CI validates sources
-additively while they are pending, and `extension-artifact-regen` regenerates the projections
-on `main` after merge, so projection drift alone never bounces a contribution.
+The canonical source, portable fixture, and external trust entry are contributor-owned inputs.
+The command catalog, native program, descriptors and public directory remain maintainer-published
+at their existing paths. Keep their generated changes out of contribution PRs. CI compiles the
+current sources and validates matching projections on both PRs and main; the publication workflow
+updates Git afterward. It never rewrites portable fixtures, crypto vectors or test assertions.
+See [extension fixture isolation](docs/guard/extension-fixture-isolation.md).
 
 Gitar does not choose command semantics, trust, claim authority, or safe variants. Contributors
 can request analysis without changes at any time with `gitar auto-apply:off`.
@@ -88,15 +89,15 @@ envelopes. Documentation-only edits do not require building the native binaries.
 Build both native executables before running command regression suites:
 
 ```bash
-cargo +1.88.0 build --locked --manifest-path rust/Cargo.toml --release -p guard-command --bin guard-command-source
-cargo +1.88.0 build --locked --manifest-path rust/Cargo.toml --release -p hol-guard-runtime
-uv run --no-sync python scripts/build_native_command_program.py --check --compiler rust/target/release/guard-command-source
+cargo +1.88.0 build --locked --manifest-path rust/Cargo.toml --release -p guard-command -p hol-guard-runtime --bin guard-command-source --bin hol-guard-runtime
+uv run --no-sync python scripts/ci/verify_native_command_program.py --compiler rust/target/release/guard-command-source
 ```
 
 On Windows, use `rust/target/release/guard-command-source.exe` for the explicit compiler path.
 If you change canonical command sources or Rust authoring semantics, follow the regeneration
-sequence in the [source guide](docs/guard/extension-contributions.md#regenerate-repository-projections)
-and rebuild the native binaries before testing their embedded program.
+steps in the [source guide](docs/guard/extension-contributions.md#regenerate-repository-projections).
+Build the native binaries once, then stage and verify their matching projections;
+generated fixtures do not require a second build.
 
 For work on the optional Cisco scanner integrations, use Python 3.11 through 3.14 and install
 those dependencies explicitly:
@@ -164,12 +165,15 @@ checks authoring outside the checkout. Include the relevant CI results in the PR
 2. For a new extension or material authority change, describe the capability boundary and stable
    IDs in a draft pull request using the **Command extension** template. Keep the PR draft until the
    scope is reviewable; maintainers can redirect overlapping IDs there before implementation is complete.
-3. Make one coherent change, with native behavior fixtures when applicable. Never commit
-   regen-owned generated artifacts (catalogs, the native command program, packaged contract
-   copies, digest vectors, the decision-diff report, generated test snapshots): the
-   `generated-artifacts-guard` check rejects them, and `extension-artifact-regen` reproduces them
-   on `main` after merge. (`trust-class-map.v1.json` stays authored — contributions add their
-   `external` entry there; regen only appends unmapped ids.)
+3. Make one coherent change, with native behavior fixtures when applicable. Keep maintainer-owned
+   catalogs, the native command program, packaged contract copies and directory renders out of
+   the contribution diff. Keep meaningful security expectations and portable fixtures under review.
+   Fixed cryptographic vectors do not need to follow changes to the production catalog.
+
+   CI stages matching product projections before testing and packaging, without rewriting test
+   expectations or relying on a later regeneration commit. A source-only PR and its merged main
+   revision receive the same native verification. Invalid source or behavior still fails the build;
+   unrelated fixture edits do not require generated hash updates or native recompilation.
 4. Run the relevant validation and inspect the complete diff.
 5. For a command extension, run `hol-guard extensions handoff` and use the **Command extension**
    PR template. Describe the problem, resulting behavior, exact validation commands, and any

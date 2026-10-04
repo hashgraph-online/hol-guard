@@ -270,6 +270,9 @@ def _native_prompt_context(artifact: GuardArtifact) -> str:
     )
 
 def _runtime_artifact_native_reason(artifact: GuardArtifact, response_payload: dict[str, object]) -> str:
+    guidance = response_payload.get("blocked_request_guidance")
+    if isinstance(guidance, str) and guidance.strip():
+        return guidance.strip()
     decision_message = _decision_v2_harness_message(response_payload)
     if decision_message is not None and _should_use_decision_v2_harness_message(response_payload, decision_message):
         return decision_message

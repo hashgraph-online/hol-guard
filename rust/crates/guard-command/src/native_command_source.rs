@@ -10,6 +10,8 @@ mod catalog;
 mod contract;
 #[path = "native_command_source_evaluation_batch.rs"]
 mod evaluation_batch;
+#[path = "native_command_source_fixture_catalog.rs"]
+mod fixture_catalog;
 #[path = "native_command_source_fixtures.rs"]
 mod fixtures;
 #[path = "native_command_source_hints.rs"]
@@ -53,6 +55,17 @@ enum BaseProgram {
 /// Decode an owned build envelope. Sources cannot contain file/remote includes;
 /// callers supply the separately reviewed trust input outside each source.
 pub fn compile_build_request(bytes: &[u8]) -> Result<CompiledSourceCatalog, &'static str> {
+    compile_owned_request(bytes, false)
+}
+
+fn compile_fixture_build_request(bytes: &[u8]) -> Result<CompiledSourceCatalog, &'static str> {
+    compile_owned_request(bytes, true)
+}
+
+fn compile_owned_request(
+    bytes: &[u8],
+    fixture: bool,
+) -> Result<CompiledSourceCatalog, &'static str> {
     let request: BuildRequest = serde_json::from_value(json::decode(bytes)?)
         .map_err(|_| "command_source_build_contract_invalid")?;
     if request.schema != "guard.command-extension-build.v1" {
@@ -74,6 +87,9 @@ pub fn compile_build_request(bytes: &[u8]) -> Result<CompiledSourceCatalog, &'st
         .map_err(|_| "command_source_encoding_failed")?;
     let mcp_borrowed = mcp_sources.iter().map(Vec::as_slice).collect::<Vec<_>>();
     match request.base {
+        Some(BaseProgram::Packaged) if fixture => {
+            fixture_catalog::compile_fixture_addition(&borrowed, &mcp_borrowed, &trust)
+        }
         Some(BaseProgram::Packaged) => compile_addition_with_mcp(&borrowed, &mcp_borrowed, &trust),
         None => compile_catalog_with_mcp(&borrowed, &mcp_borrowed, &trust),
     }

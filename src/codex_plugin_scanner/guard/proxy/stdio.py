@@ -23,6 +23,7 @@ from ..approvals import (
     first_approval_url,
     queue_blocked_approvals,
 )
+from ..blocked_request_mode import asks_for_approval, safe_alternative_reason
 from ..browser_opener import open_browser_url
 from ..config import GuardConfig, resolve_risk_action
 from ..consumer import artifact_hash
@@ -390,6 +391,10 @@ class StdioGuardProxy:
         self._current_config_provider = current_config_provider
         self._active_launch_identity: dict[str, object] | None = None
         self._active_env_values_hash: str | None = None
+        if guard_store is not None:
+            from ..native_context import bind_context_digest_home
+
+            bind_context_digest_home(getattr(guard_store, "guard_home", None))
 
     def _response_timeout_seconds(self) -> float:
         configured = getattr(self.guard_config, "approval_wait_timeout_seconds", None)
@@ -500,13 +505,15 @@ class StdioGuardProxy:
 
     def _start_process(self) -> subprocess.Popen[str]:
         launch_env = _build_scrubbed_env(self.env)
-        self._active_launch_identity = self._build_launch_identity(launch_env)
-        self._active_env_values_hash = build_configured_environment_hash(
-            launch_env,
-            configured_keys=tuple(self.env),
-        )
         process: subprocess.Popen[str] | None = None
         try:
+            # Digest calls raise when the native resident is unreachable; keep
+            # them inside the failure boundary so partial state is unwound.
+            self._active_launch_identity = self._build_launch_identity(launch_env)
+            self._active_env_values_hash = build_configured_environment_hash(
+                launch_env,
+                configured_keys=tuple(self.env),
+            )
             process = subprocess.Popen(
                 self.command,
                 stdin=subprocess.PIPE,
@@ -814,7 +821,9 @@ class StdioGuardProxy:
                             source_scope=runtime_artifact.source_scope,
                             approval_source=(
                                 "approval_center"
-                                if policy_action == "require-reapproval" and self.approval_center_url is not None
+                                if policy_action == "require-reapproval"
+                                and self.approval_center_url is not None
+                                and asks_for_approval(self.guard_config)
                                 else "policy"
                             ),
                             scanner_evidence=reuse_evidence,
@@ -834,10 +843,20 @@ class StdioGuardProxy:
                         "guardPolicyAction": policy_action,
                         "transportOutcome": "not-forwarded",
                     }
+                    if not asks_for_approval(self.guard_config):
+                        non_forward_message = safe_alternative_reason(
+                            _sensitive_read_non_forward_message(
+                                "block",
+                                tool_name=tool_name,
+                                path_class=sensitive_request.path_match.path_class,
+                            )
+                        )
+                        response_data["guardPolicyAction"] = "block"
                     if (
                         self.guard_store is not None
                         and self.approval_center_url is not None
                         and not terminal_policy_action
+                        and asks_for_approval(self.guard_config)
                     ):
                         event["approval_requests"] = queue_blocked_approvals(
                             redaction_level=getattr(self.guard_config, "receipt_redaction_level", "full"),

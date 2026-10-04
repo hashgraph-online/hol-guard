@@ -2225,6 +2225,7 @@ export async function fetchSettings(): Promise<GuardSettingsPayload> {
         },
         approval_wait_timeout_seconds: 120,
         approval_surface_policy: "attention-aware",
+        blocked_request_mode: "safe-alternative",
         approval_browser_delay_seconds: 20,
         approval_browser_immediate_severity: "critical",
         telemetry: false,

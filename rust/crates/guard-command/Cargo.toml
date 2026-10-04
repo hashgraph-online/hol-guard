@@ -8,6 +8,7 @@ rust-version.workspace = true
 [dependencies]
 guard-secure-fs = { path = "../guard-secure-fs" }
 guard-contracts = { path = "../guard-contracts" }
+guard-runtime-windows-process = { path = "../guard-runtime-windows-process" }
 regex.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -15,6 +16,8 @@ sha2.workspace = true
 hex.workspace = true
 
 [build-dependencies]
+guard-command-build = { path = "../guard-command-build" }
+serde_json.workspace = true
 sha2.workspace = true
 
 [lints]

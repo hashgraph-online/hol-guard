@@ -8,7 +8,7 @@ use guard_rules::{
     OUTPUT_TEXT_KEYS, PAYLOAD_OUTPUT_KEYS, REVIEWED_EXCERPT_CHARS,
 };
 use guard_scanner::scan_text;
-use guard_secure_fs::{classify_source_path, read_bounded, sensitive_path_family};
+use guard_secure_fs::{classify_scannable_source_path, read_bounded, sensitive_path_family};
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
@@ -379,11 +379,12 @@ fn review_source(
     }
     let allow_external =
         matches!(request.harness.as_str(), "pi" | "omp") && request.source_ref_external_allowed;
-    let candidate_decision = classify_source_path(candidate, cwd, Some(home), allow_external);
+    let candidate_decision =
+        classify_scannable_source_path(candidate, cwd, Some(home), allow_external);
     if !candidate_decision.allowed {
         return inconclusive_source();
     }
-    let target_decision = classify_source_path(&target, cwd, Some(home), allow_external);
+    let target_decision = classify_scannable_source_path(&target, cwd, Some(home), allow_external);
     if !target_decision.allowed {
         return inconclusive_source();
     }
@@ -406,9 +407,7 @@ fn review_source(
     let Ok(text) = std::str::from_utf8(&read.bytes) else {
         return inconclusive_source();
     };
-    if !output_equivalent(text, &source.output_sha256, source.output_chars) {
-        return inconclusive_source();
-    }
+    let raw_output_matches = output_equivalent(text, &source.output_sha256, source.output_chars);
     let scan = scan_text(
         text,
         local_samples_should_be_unsuppressed(&source.path),
@@ -424,6 +423,30 @@ fn review_source(
             "source_secret_match",
             "HOL Guard blocked this output because it contains sensitive content.",
         );
+    }
+    if !raw_output_matches {
+        // A logical skill URI claims this exact installed document, rather
+        // than a host-formatted ordinary file presentation.
+        if source.path.starts_with("skill://") {
+            return inconclusive_source();
+        }
+        // Hosts may add line anchors or headers. Scan the entire presentation
+        // independently, but never promote a partial excerpt to original output.
+        let output = extract_payload_output(&request.payload);
+        let excerpt_truncated = request
+            .payload
+            .get("tool_response_summary")
+            .and_then(|summary| summary.get("excerpt_truncated"))
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        if output.truncated
+            || excerpt_truncated
+            || output.text.chars().count() != source.output_chars as usize
+            || sha256_text(&output.text) != source.output_sha256
+        {
+            return inconclusive_source();
+        }
+        return review_inline(request);
     }
     let mut response = HookReviewResponseV1::allow("source_full_scan_allow");
     response.reviewed_output_sha256 = Some(source.output_sha256.clone());

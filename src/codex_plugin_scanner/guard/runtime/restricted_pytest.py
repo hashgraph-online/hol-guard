@@ -8,6 +8,7 @@ execution and intentionally has no unsandboxed fallback.
 from __future__ import annotations
 
 import os
+import shlex
 import sys
 import tempfile
 from collections.abc import Mapping, Sequence
@@ -18,6 +19,7 @@ from .restricted_pytest_model import (
     PYTEST_EXTERNAL_PYTHONPATH_REASON_CODE,
     PYTEST_INVALID_COMMAND_REASON_CODE,
     PYTEST_INVALID_WORKSPACE_REASON_CODE,
+    PYTEST_READ_ONLY_PROFILE_VERSION,
     PYTEST_RESTRICTED_PROFILE_VERSION,
     PYTEST_RESTRICTED_REASON_CODE,
     PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE,
@@ -51,6 +53,7 @@ def prepare_restricted_pytest(
     cwd: Path | None = None,
     platform: str | None = None,
     backend_executable: Path | None = None,
+    read_only_workspace: bool = False,
 ) -> RestrictedPytestPlan:
     """Validate and resolve a pytest argv without executing repository code."""
 
@@ -59,6 +62,12 @@ def prepare_restricted_pytest(
         platform=platform or sys.platform,
         backend_executable=backend_executable,
     )
+    if read_only_workspace and selected_backend not in {"macos-seatbelt", "linux-bubblewrap"}:
+        raise RestrictedPytestError(
+            PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE,
+            "The read-only pytest profile requires enforced workspace credential filtering; "
+            "this backend does not yet provide it. Execution was not started.",
+        )
     resolved_workspace = _resolve_workspace(workspace)
     resolved_cwd = _resolve_cwd(cwd or Path.cwd(), workspace=resolved_workspace)
     launch_executable, executable = _resolve_pytest_executable(
@@ -74,7 +83,9 @@ def prepare_restricted_pytest(
         workspace=resolved_workspace,
     )
     return RestrictedPytestPlan(
-        profile_version=PYTEST_RESTRICTED_PROFILE_VERSION,
+        profile_version=(
+            PYTEST_READ_ONLY_PROFILE_VERSION if read_only_workspace else PYTEST_RESTRICTED_PROFILE_VERSION
+        ),
         backend=selected_backend,
         backend_executable=selected_backend_executable,
         workspace=resolved_workspace,
@@ -90,7 +101,8 @@ def prepare_restricted_pytest(
             "write-outside-workspace-and-private-temp",
             "unapproved-process-exec",
             "privileged-operation",
-        ),
+        )
+        + (("workspace-write", "workspace-credential-read") if read_only_workspace else ()),
     )
 
 
@@ -103,6 +115,7 @@ def run_restricted_pytest(
     timeout_seconds: int = _DEFAULT_TIMEOUT_SECONDS,
     platform: str | None = None,
     backend_executable: Path | None = None,
+    read_only_workspace: bool = False,
 ) -> int:
     """Run pytest inside the default restricted profile, with no fallback."""
 
@@ -117,6 +130,7 @@ def run_restricted_pytest(
         cwd=cwd,
         platform=platform,
         backend_executable=backend_executable,
+        read_only_workspace=read_only_workspace,
     )
     with tempfile.TemporaryDirectory(prefix="hol-guard-pytest-") as temporary_directory:
         private_root = Path(temporary_directory).resolve()
@@ -132,11 +146,16 @@ def run_restricted_pytest(
             private_tmp=private_tmp,
             allowed_executables=plan.allowed_executables,
         )
+        if read_only_workspace:
+            # Normal pytest caches belong to this run, not the protected source tree.
+            launch_env["PYTHONDONTWRITEBYTECODE"] = "1"
+            launch_env["PYTEST_ADDOPTS"] = f"-o cache_dir={shlex.quote(str(private_tmp / 'pytest-cache'))}"
         backend_argv = _backend_argv(plan, private_root=private_root)
         return _run_backend_process(
             backend_argv,
             env=launch_env,
             timeout_seconds=timeout_seconds,
+            cwd=plan.cwd,
         )
 
 

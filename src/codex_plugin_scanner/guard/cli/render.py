@@ -562,6 +562,9 @@ def _render_command_inspection(console: Console, payload: dict[str, object]) -> 
     reason = classification.get("reason")
     if isinstance(reason, str) and reason:
         console.print(Panel(Text(reason), title="Why", border_style=border_style))
+    recovery = classification.get("recovery")
+    if isinstance(recovery, str) and recovery:
+        console.print(Panel(Text(recovery), title="Next step", border_style=border_style))
     if extensions:
         alternatives = _coerce_string_list(extensions[0].get("safer_alternatives"))
         if alternatives:
@@ -644,6 +647,9 @@ def _plain_text_command_inspection(payload: PayloadDict) -> str:
         f"Reason: {classification.get('reason') or ''}",
         "Policy: Not evaluated; this inspection creates no approvals or receipts.",
     ]
+    recovery = classification.get("recovery")
+    if isinstance(recovery, str) and recovery:
+        lines.append(f"Recovery: {recovery}")
     if extensions:
         lines.insert(3, f"Extension: {extensions[0].get('extension_id') or 'unknown'}")
     if rules:

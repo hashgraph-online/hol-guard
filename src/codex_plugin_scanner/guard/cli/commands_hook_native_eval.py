@@ -315,6 +315,9 @@ def evaluate_native_artifact_hook(
     native_edge_receipt: Mapping[str, object] | None = None,
     native_recording_only: bool = False,
 ) -> int | NativeArtifactHookState:
+    from ..native_context import bind_context_digest_home
+
+    bind_context_digest_home(guard_home)
     payload_map = dict(payload)
     workflow_state = prepare_github_workflow_hook_state(
         runtime_artifact,

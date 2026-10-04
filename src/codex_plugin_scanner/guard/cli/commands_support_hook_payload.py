@@ -7,7 +7,9 @@
 
 from __future__ import annotations
 
+import logging
 import re
+import sqlite3
 import sys
 from collections.abc import Mapping
 from typing import TYPE_CHECKING
@@ -251,6 +253,13 @@ def _apply_native_edge_envelope_fields(
         response_payload["native_edge_decision"] = edge_decision
         if project_decision:
             response_payload["decision"] = "block" if edge_decision == "deny" else "allow"
+    structured_content_mediation = native_edge_result.get("structured_content_mediation")
+    if isinstance(structured_content_mediation, Mapping):
+        # The worker already produced the validated mediation contract. Keep
+        # it as an opaque adapter projection so the receiver can validate its
+        # exact schema, action, and fail-closed fields without inventing
+        # native authority here.
+        response_payload["structured_content_mediation"] = dict(structured_content_mediation)
     for source_key, target_key in (
         ("reason", "native_edge_reason"),
         ("reason_code", "native_edge_reason_code"),
@@ -623,6 +632,14 @@ def _mapping_list(value: object | None) -> list[Mapping[str, object]]:
         return []
     return [item for item in value if isinstance(item, Mapping)]
 
+
+def _daemon_failure_reason(error: RuntimeError) -> str:
+    """Preserve the daemon-failure category and, when present, its message."""
+    message = str(error)
+    if message:
+        return f"{type(error).__name__}: {message}"
+    return type(error).__name__
+
 def _headless_approval_resolver(
     *,
     args: argparse.Namespace,
@@ -665,14 +682,26 @@ def _headless_approval_resolver(
             return wait_result
 
         def resolve_from_local_queue():
-            queued = queue_blocked_approvals(
-                redaction_level=config.receipt_redaction_level,
-                detection=detection,
-                evaluation=payload,
-                store=store,
-                approval_center_url=approval_center_url,
-                now=_now(),
-            )
+            try:
+                queued = queue_blocked_approvals(
+                    redaction_level=config.receipt_redaction_level,
+                    detection=detection,
+                    evaluation=payload,
+                    store=store,
+                    approval_center_url=approval_center_url,
+                    now=_now(),
+                )
+            except (sqlite3.Error, OSError) as queue_error:
+                # A fatal store/IO error (e.g. a quarantined SQLite store) must
+                # not abort the deny path: still emit an explicit, empty approval
+                # queue so callers always find the key and the action stays
+                # blocked pending manual resolution. Programming errors
+                # (TypeError/ValueError/AttributeError) still propagate.
+                logging.getLogger(__name__).warning(
+                    "Guard approval queue unavailable: %s", queue_error, exc_info=True
+                )
+                queued = []
+                payload["approval_queue_unavailable"] = type(queue_error).__name__
             payload["approval_requests"] = queued
             _attach_primary_approval_link(
                 payload,
@@ -706,7 +735,11 @@ def _headless_approval_resolver(
 
         try:
             daemon_client = load_guard_surface_daemon_client(context.guard_home)
-        except RuntimeError:
+        except RuntimeError as daemon_load_error:
+            # Preserve the daemon-failure category and message through the
+            # local-queue fallback so the unresolved launch-validation reason
+            # is evidence, not a silently absorbed error.
+            payload["daemon_queue_unavailable"] = _daemon_failure_reason(daemon_load_error)
             return resolve_from_local_queue()
         try:
             session = daemon_client.start_session(
@@ -733,7 +766,8 @@ def _headless_approval_resolver(
                 open_key=None,
                 redaction_level=config.receipt_redaction_level,
             )
-        except RuntimeError:
+        except RuntimeError as daemon_operation_error:
+            payload["daemon_queue_unavailable"] = _daemon_failure_reason(daemon_operation_error)
             return resolve_from_local_queue()
         operation = blocked_operation["operation"] if isinstance(blocked_operation.get("operation"), dict) else {}
         queued = (

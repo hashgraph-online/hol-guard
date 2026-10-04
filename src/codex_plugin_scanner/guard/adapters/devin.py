@@ -23,15 +23,17 @@ import json
 import os
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from ..aibom_detection import extend_detection_with_workspace_aibom
 from ..codex_hook_integrity import atomic_write_text
 from ..config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS, load_guard_config
 from ..models import GuardArtifact, HarnessDetection
-from ..shims import install_guard_shim, remove_guard_shim
+from ..shims import prepare_guard_shim, remove_guard_shim
 from .base import (
     HarnessAdapter,
     HarnessContext,
+    PreparedHarnessInstall,
     _command_available,
     _ensure_path_within_root,
     _json_payload,
@@ -57,12 +59,16 @@ from .devin_config import (
     has_guard_managed_claude_hooks,
     is_guard_managed_hook_command,
     load_devin_jsonc,
+    parse_devin_jsonc,
 )
 from .hook_group_merge import merge_hook_entry, prune_managed_hook_entries
 
 _GUARD_HOOK_INTERNAL_TIMEOUT_SECONDS = 25
 _DEVIN_MANAGED_HOOK_TIMEOUT_SECONDS = 30
 _DEVIN_MANAGED_HOOK_TIMEOUT_GRACE_SECONDS = 5
+
+if TYPE_CHECKING:
+    from ..runtime_transition import TransitionFile
 
 
 def _write_json_atomic(path: Path, payload: dict[str, object]) -> None:
@@ -325,7 +331,9 @@ class DevinHarnessAdapter(HarnessAdapter):
         return state_dir, backup_path, state_path
 
     @staticmethod
-    def _hook_command_parts(context: HarnessContext) -> tuple[str, ...]:
+    def _hook_command_parts(
+        context: HarnessContext, *, prepared_files: list[TransitionFile] | None = None
+    ) -> tuple[str, ...]:
         guard_args = [
             "guard",
             "hook",
@@ -345,6 +353,7 @@ class DevinHarnessAdapter(HarnessAdapter):
             cli_args=guard_args,
             harness="devin",
             timeout_seconds=_GUARD_HOOK_INTERNAL_TIMEOUT_SECONDS,
+            prepared_files=prepared_files,
         )
 
     @staticmethod
@@ -352,6 +361,7 @@ class DevinHarnessAdapter(HarnessAdapter):
         configured_wait_timeout = load_guard_config(
             context.guard_home,
             context.workspace_dir,
+            create_home=False,
         ).approval_wait_timeout_seconds
         return (
             min(
@@ -361,12 +371,25 @@ class DevinHarnessAdapter(HarnessAdapter):
             + _DEVIN_MANAGED_HOOK_TIMEOUT_GRACE_SECONDS
         )
 
-    def install(self, context: HarnessContext) -> dict[str, object]:
+    def prepare_install(self, context: HarnessContext) -> PreparedHarnessInstall:
+        from ..codex_hook_file_integrity import CodexHookIntegrityError
+        from ..codex_hook_recovery import _snapshot
+        from ..runtime_transition import TransitionFile
+
         config_path = self._user_config_path(context)
         _ensure_path_within_root(self._devin_config_dir(context).parent, config_path, label="Devin")
+        try:
+            config_before = _snapshot(config_path)
+        except CodexHookIntegrityError as exc:
+            raise ValueError("Devin config could not be parsed safely; Guard will not rewrite it.") from exc
         payload: dict[str, object] = {}
-        if config_path.is_file():
-            document = load_devin_jsonc(config_path)
+        if config_before is not None:
+            try:
+                document = parse_devin_jsonc(config_before.decode("utf-8"))
+            except UnicodeDecodeError as exc:
+                raise ValueError(
+                    "Devin config could not be parsed as a JSON object; Guard will not rewrite it."
+                ) from exc
             if document.parse_failed:
                 raise ValueError(
                     "Devin config at ~/.config/devin/config.json could not be parsed as a JSON object; "
@@ -382,34 +405,55 @@ class DevinHarnessAdapter(HarnessAdapter):
             existing_hooks = payload.get("hooks")
             if existing_hooks is not None and not isinstance(existing_hooks, dict):
                 raise ValueError("Devin config has a non-object hooks value; Guard will not rewrite it.")
-        shim_manifest = install_guard_shim(
+        prepared_shim = prepare_guard_shim(
             self.harness,
             context,
             launcher_name=self.launcher_name,
             display_name="devin",
         )
-        config_path.parent.mkdir(parents=True, exist_ok=True)
-
-        state_dir, backup_path, state_path = self._managed_state_paths(context)
-        state_dir.mkdir(parents=True, exist_ok=True)
-        # The backup preserves the pre-Guard original so uninstall can restore
-        # it; it is intentionally not refreshed on reinstall.
-        if config_path.is_file() and not backup_path.exists():
-            import shutil
-
-            shutil.copy2(config_path, backup_path)
-
-        hook_command = _shell_command(self._hook_command_parts(context))
+        shim_manifest = prepared_shim.manifest
+        _state_dir, backup_path, state_path = self._managed_state_paths(context)
+        backup_before = _snapshot(backup_path)
+        state_before = _snapshot(state_path)
+        hook_files: list[TransitionFile] = []
+        hook_command = _shell_command(self._hook_command_parts(context, prepared_files=hook_files))
         hooks_value = payload.get("hooks")
         hooks: dict[str, object] = hooks_value if isinstance(hooks_value, dict) else {}
         payload["hooks"] = hooks
 
         self._sync_managed_hook_groups(context, hooks, hook_command)
-        _write_json_atomic(config_path, payload)
-
-        _write_json_atomic(state_path, {"managed_config_path": str(config_path)})
-
-        return _adapter_result(
+        config_mode = config_path.stat().st_mode & 0o777 if config_before is not None else 0o600
+        backup_mode = backup_path.stat().st_mode & 0o777 if backup_before is not None else config_mode
+        state_mode = state_path.stat().st_mode & 0o777 if state_before is not None else 0o600
+        state_after = (json.dumps({"managed_config_path": str(config_path)}, indent=2) + "\n").encode("utf-8")
+        files = (
+            *prepared_shim.files,
+            *hook_files,
+            TransitionFile(
+                backup_path.resolve(strict=False),
+                backup_before,
+                backup_before if backup_before is not None else config_before,
+                before_mode=backup_mode,
+                after_mode=backup_mode,
+            ),
+            TransitionFile(
+                config_path.resolve(strict=False),
+                config_before,
+                (json.dumps(payload, indent=2) + "\n").encode("utf-8"),
+                before_mode=config_mode,
+                after_mode=config_mode,
+            ),
+            TransitionFile(
+                state_path.resolve(strict=False),
+                state_before,
+                state_after,
+                before_mode=state_mode,
+                after_mode=state_mode,
+            ),
+        )
+        for change in files:
+            change.payload()
+        manifest = _adapter_result(
             self.harness,
             active=True,
             config_path=config_path,
@@ -419,6 +463,10 @@ class DevinHarnessAdapter(HarnessAdapter):
                 "User permissions, read_config_from, MCP servers, and any pre-existing hooks were preserved",
             ],
         )
+        return PreparedHarnessInstall(files, manifest)
+
+    def install(self, context: HarnessContext) -> dict[str, object]:
+        return self.prepare_install(context).publish(context.guard_home)
 
     def uninstall(self, context: HarnessContext) -> dict[str, object]:
         shim_manifest = remove_guard_shim(
