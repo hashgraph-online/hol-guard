@@ -16,8 +16,13 @@ from codex_plugin_scanner.guard.approval_gate import ApprovalGateError, Approval
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution, bulk_allow_read_only_once
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
+from codex_plugin_scanner.guard.mcp_fresh_approval import (
+    fresh_claim_allows_reapproval,
+    fresh_local_tool_approval_matches,
+    fresh_lookup_preserves_claim,
+)
 from codex_plugin_scanner.guard.mcp_tool_calls import evaluate_tool_call
-from codex_plugin_scanner.guard.models import PolicyDecision
+from codex_plugin_scanner.guard.models import GuardArtifact, PolicyDecision
 from codex_plugin_scanner.guard.native_resident_client import native_resident_client_failure_code
 from codex_plugin_scanner.guard.proxy import OpenCodeMcpGuardProxy
 from codex_plugin_scanner.guard.proxy import runtime_mcp as runtime
@@ -346,4 +351,61 @@ def test_invalid_review_never_launches(tmp_path, monkeypatch, install_fake_syste
 def test_direct_postclaim_revalidation(tmp_path, monkeypatch, install_fake_system_keyring, grant_kind, mutation):
     test_fresh_opencode_reapproval_runs_exactly_once(
         tmp_path, monkeypatch, install_fake_system_keyring, grant_kind, mutation, direct=True
+    )
+
+
+def test_fresh_approval_helpers_require_exact_proof():
+    artifact = GuardArtifact(
+        artifact_id="artifact-id",
+        name="test-tool",
+        harness="opencode",
+        artifact_type="mcp",
+        source_scope="project",
+        config_path="/workspace/.opencode/opencode.json",
+    )
+    proof = {
+        "source": "approval-gate-once",
+        "approval_id": "approval-id",
+        "action": "allow",
+        "scope": "artifact",
+        "harness": artifact.harness,
+        "artifact_id": artifact.artifact_id,
+        "artifact_hash": "artifact-hash",
+        "expires_at": "2030-01-01T00:00:00+00:00",
+    }
+
+    assert fresh_local_tool_approval_matches(proof, artifact=artifact, artifact_hash="artifact-hash")
+    assert not fresh_local_tool_approval_matches(
+        {**proof, "source": "retained-policy"}, artifact=artifact, artifact_hash="artifact-hash"
+    )
+    assert not fresh_local_tool_approval_matches(
+        {**proof, "source": "approval-gate", "decision_id": True},
+        artifact=artifact,
+        artifact_hash="artifact-hash",
+    )
+    assert not fresh_local_tool_approval_matches(
+        {**proof, "source": "approval-gate", "decision_id": "1"},
+        artifact=artifact,
+        artifact_hash="artifact-hash",
+    )
+    assert fresh_local_tool_approval_matches(
+        {**proof, "source": "approval-gate", "decision_id": 1},
+        artifact=artifact,
+        artifact_hash="artifact-hash",
+    )
+    assert fresh_lookup_preserves_claim(None)
+    assert not fresh_lookup_preserves_claim("unexpected-reason")
+    assert fresh_claim_allows_reapproval(
+        claim_disposition="consumed",
+        reason_code=None,
+        decision=proof,
+        artifact=artifact,
+        artifact_hash="artifact-hash",
+    )
+    assert not fresh_claim_allows_reapproval(
+        claim_disposition="unconsumed",
+        reason_code=None,
+        decision=proof,
+        artifact=artifact,
+        artifact_hash="artifact-hash",
     )
