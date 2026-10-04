@@ -238,6 +238,9 @@ jobs:
                   echo "Could not inspect the GitHub release for ${RELEASE_VERSION}" >&2
                   exit 1
                 fi
+                if jq -e --arg candidate "$RELEASE_VERSION" 'index($candidate) == null' <<< "$PYPI_VERSIONS" >/dev/null; then
+                  REPAIR_ARGS+=(--deferred-pypi)
+                fi
                 if ! uv run --no-sync python scripts/stable_release_asset_repair.py \
                   --requested "$RELEASE_VERSION" \
                   --expected-next "$EXPECTED_VERSION" \
@@ -1525,6 +1528,8 @@ jobs:
       needs.reserve-main-tag.result == 'success' &&
       needs.build.outputs.channel == 'stable'
     needs: [build, assemble-native-guard-distributions, reserve-main-tag]
+    outputs:
+      pypi_deferred: ${{ steps.pypi_quota.outputs.blocked }}
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
@@ -1619,12 +1624,32 @@ jobs:
           [[ "$scanner_status" == "absent" || "$scanner_status" == "exact" ]]
           [[ "$guard_status" == "absent" ]] && echo "hol_guard_upload=true" >> "$GITHUB_OUTPUT" || echo "hol_guard_upload=false" >> "$GITHUB_OUTPUT"
           [[ "$scanner_status" == "absent" ]] && echo "plugin_scanner_upload=true" >> "$GITHUB_OUTPUT" || echo "plugin_scanner_upload=false" >> "$GITHUB_OUTPUT"
-      - name: Refuse PyPI upload when the project is over quota
+      - name: Check PyPI quota admission
+        id: pypi_quota
         if: steps.pypi.outputs.hol_guard_upload == 'true'
-        run: uv run --with packaging==25.0 python scripts/pypi_project_storage.py --fail-if-over-limit --pending-dir dist-hol-guard
+        run: |
+          set -euo pipefail
+          quota_output=""
+          quota_exit=0
+          quota_output=$(uv run --with packaging==25.0 python scripts/pypi_project_storage.py \
+            --fail-if-over-limit --pending-dir dist-hol-guard) || quota_exit=$?
+          printf '%s\n' "$quota_output"
+          if [[ "$quota_exit" == "0" ]]; then
+            echo "blocked=false" >> "$GITHUB_OUTPUT"
+          elif jq -e '.over_limit == true' <<< "$quota_output" >/dev/null 2>&1; then
+            echo "blocked=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "### PyPI publication"
+              echo "PyPI publication was deferred after the quota admission check reported the project limit."
+              echo "The verified GitHub release path continues; PyPI publication remains pending."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "PyPI quota admission check failed without a confirmed quota limit." >&2
+            exit "$quota_exit"
+          fi
       - name: Publish HOL Guard to PyPI
         uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b
-        if: steps.pypi.outputs.hol_guard_upload == 'true'
+        if: steps.pypi.outputs.hol_guard_upload == 'true' && steps.pypi_quota.outputs.blocked != 'true'
         with:
           packages-dir: dist-hol-guard/
       - name: Publish plugin-scanner to PyPI
@@ -1635,9 +1660,11 @@ jobs:
       - name: Remove generated upload attestations
         run: rm -f dist-hol-guard/*.publish.attestation dist-plugin-scanner/*.publish.attestation
       - name: Download and verify exact PyPI artifacts
+        if: steps.pypi_quota.outputs.blocked != 'true' || steps.pypi.outputs.plugin_scanner_upload == 'true'
         env:
           SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
           VERSION: ${{ needs.build.outputs.version }}
+          GUARD_QUOTA_BLOCKED: ${{ steps.pypi_quota.outputs.blocked }}
         run: |
           for attempt in {1..60}; do
             if ! guard_result=$(uv run --with packaging==25.0 python scripts/verify_release_registry.py \
@@ -1652,11 +1679,19 @@ jobs:
             fi
             guard_status=$(jq -r '.status' <<< "$guard_result")
             scanner_status=$(jq -r '.status' <<< "$scanner_result")
-            if [[ "$guard_status" == "exact" && "$scanner_status" == "exact" ]]; then
-              uv run --with packaging==25.0 python scripts/retry_verify_published.py --registry pypi --version "$VERSION" --source-sha "$SOURCE_SHA" --dist-dir dist-hol-guard --artifact-set full || exit 1
+            guard_ready=false
+            if [[ "$GUARD_QUOTA_BLOCKED" == "true" ]]; then
+              [[ "$guard_status" == "absent" || "$guard_status" == "exact" ]] && guard_ready=true
+            elif [[ "$guard_status" == "exact" ]]; then
+              guard_ready=true
+            fi
+            if [[ "$guard_ready" == "true" && "$scanner_status" == "exact" ]]; then
+              if [[ "$GUARD_QUOTA_BLOCKED" != "true" ]]; then
+                uv run --with packaging==25.0 python scripts/retry_verify_published.py --registry pypi --version "$VERSION" --source-sha "$SOURCE_SHA" --dist-dir dist-hol-guard --artifact-set full || exit 1
+              fi
               break
             fi
-            if [[ "$guard_status" != "absent" && "$guard_status" != "exact" ]] || \
+            if [[ "$GUARD_QUOTA_BLOCKED" != "true" && "$guard_status" != "absent" && "$guard_status" != "exact" ]] || \
               [[ "$scanner_status" != "absent" && "$scanner_status" != "exact" ]] || \
               [[ "$attempt" == "60" ]]; then
               echo "PyPI did not expose the exact release artifacts" >&2
@@ -1664,17 +1699,20 @@ jobs:
             fi
             sleep 5
           done
-          mapfile -t guard_wheels < <(
-            jq -r '.install_paths[] | select(endswith("-py3-none-any.whl"))' <<< "$guard_result"
-          )
           mapfile -t scanner_wheels < <(
             jq -r '.install_paths[] | select(endswith(".whl"))' <<< "$scanner_result"
           )
-          [[ "${#guard_wheels[@]}" == "1" && "${#scanner_wheels[@]}" == "1" ]]
-          guard_wheel="${guard_wheels[0]}"
+          [[ "${#scanner_wheels[@]}" == "1" ]]
           scanner_wheel="${scanner_wheels[0]}"
-          [[ "$(uv tool run --from "$guard_wheel" hol-guard --version)" == "hol-guard $VERSION" ]]
           [[ "$(uv tool run --from "$scanner_wheel" plugin-scanner --version)" == "plugin-scanner $VERSION" ]]
+          if [[ "$GUARD_QUOTA_BLOCKED" != "true" ]]; then
+            mapfile -t guard_wheels < <(
+              jq -r '.install_paths[] | select(endswith("-py3-none-any.whl"))' <<< "$guard_result"
+            )
+            [[ "${#guard_wheels[@]}" == "1" ]]
+            guard_wheel="${guard_wheels[0]}"
+            [[ "$(uv tool run --from "$guard_wheel" hol-guard --version)" == "hol-guard $VERSION" ]]
+          fi
 
   release-main:
     name: Create main GitHub release
@@ -1733,13 +1771,21 @@ jobs:
           VERSION: ${{ needs.build.outputs.version }}
           CHANNEL: ${{ needs.build.outputs.channel }}
           SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
-        run: python3 scripts/ci/generate_release_notes.py --version "$VERSION" --channel "$CHANNEL" --repo "$GITHUB_REPOSITORY" --source-sha "$SOURCE_SHA" --output "$RUNNER_TEMP/release-notes.md"
+          PYPI_DEFERRED: ${{ needs.publish-main-pypi.outputs.pypi_deferred }}
+        run: |
+          deferred_args=()
+          [[ "$PYPI_DEFERRED" == "true" ]] && deferred_args+=(--pypi-deferred)
+          python3 scripts/ci/generate_release_notes.py \
+            --version "$VERSION" --channel "$CHANNEL" --repo "$GITHUB_REPOSITORY" \
+            --source-sha "$SOURCE_SHA" --output "$RUNNER_TEMP/release-notes.md" \
+            "${deferred_args[@]}"
       - name: Create discoverable main release
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
           VERSION: ${{ needs.build.outputs.version }}
           RELEASE_REPAIR: ${{ needs.build.outputs.release_repair }}
+          PYPI_DEFERRED: ${{ needs.publish-main-pypi.outputs.pypi_deferred }}
           GITHUB_SHA: ${{ github.sha }}
         run: |
           tag="v${VERSION}"
@@ -1795,6 +1841,9 @@ jobs:
                   --source-digest "$GITHUB_SHA" >/dev/null
               fi
             done
+            if [[ -s "$RUNNER_TEMP/release-notes.md" ]]; then
+              gh release edit "$tag" --notes-file "$RUNNER_TEMP/release-notes.md"
+            fi
             exit 0
           fi
           body_file="$RUNNER_TEMP/release-notes.md"
