@@ -265,7 +265,13 @@ def test_installed_pi_runner_cancels_generated_pending_tool_call(tmp_path: Path)
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir()
     (guard_home / "daemon-state.json").write_text(
-        json.dumps({"compatibility_version": GUARD_DAEMON_COMPATIBILITY_VERSION, "port": 1}),
+        json.dumps(
+            {
+                "compatibility_version": GUARD_DAEMON_COMPATIBILITY_VERSION,
+                "port": 1,
+                "state_id": "fixture-generation",
+            }
+        ),
         encoding="utf-8",
     )
     (guard_home / "daemon-auth-token").write_text("fixture-token", encoding="utf-8")
@@ -290,6 +296,9 @@ const {{ ExtensionRunner, createExtensionRuntime }} = await import(
 let guardCalls = 0;
 let pollCalls = 0;
 globalThis.fetch = async (url) => {{
+  if (String(url).includes('/readiness')) {{
+    return new Response(JSON.stringify({{ ready: true }}), {{ status: 200 }});
+  }}
   if (String(url).includes('/v1/hooks/')) {{
     guardCalls += 1;
     return new Response(JSON.stringify({{
@@ -309,11 +318,16 @@ installGuard({{
   sendMessage: (...args) => sentMessages.push(args),
 }});
 const handler = handlers.get('tool_call');
+const extensionHandlers = new Map();
+for (const event of ['session_start', 'agent_start', 'tool_call']) {{
+  const registered = handlers.get(event);
+  if (registered) extensionHandlers.set(event, [registered]);
+}}
 const extension = {{
   path: 'fixture',
   resolvedPath: 'fixture',
   sourceInfo: {{}},
-  handlers: new Map([['tool_call', [handler]]]),
+  handlers: extensionHandlers,
   tools: new Map(),
   messageRenderers: new Map(),
   commands: new Map(),
@@ -341,6 +355,7 @@ runner.bindCore(
     compact: () => {{}}, getSystemPrompt: () => '',
   }},
 );
+await runner.emit({{ type: 'session_start' }});
 const event = {{
   type: 'tool_call', toolCallId: 'call-fixture', toolName: 'read',
   input: {{ path: 'original.txt', offset: 304, limit: 243 }},
@@ -612,6 +627,8 @@ async function runGuard(payload) {{
     activeScenario.guardResponses.length - 1,
   )];
 }}
+async function ensureGuardWorkspaceReady() {{ return {{ ready: true }}; }}
+function readinessFailureReason(readiness) {{ return `readiness-${{readiness.reasonCode}}`; }}
 
 {handler}
 
@@ -751,7 +768,13 @@ def test_actual_omp_runner_executes_original_once_and_blocks_late_continuation(t
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir()
     (guard_home / "daemon-state.json").write_text(
-        json.dumps({"compatibility_version": GUARD_DAEMON_COMPATIBILITY_VERSION, "port": 1}),
+        json.dumps(
+            {
+                "compatibility_version": GUARD_DAEMON_COMPATIBILITY_VERSION,
+                "port": 1,
+                "state_id": "fixture-generation",
+            }
+        ),
         encoding="utf-8",
     )
     (guard_home / "daemon-auth-token").write_text("fixture-token", encoding="utf-8")
@@ -895,6 +918,9 @@ async function runScenario(name, config) {
   let activeController;
   globalThis.fetch = async (url) => {
     const text = String(url);
+    if (text.includes("/readiness")) {
+      return new Response(JSON.stringify({ ready: true }), { status: 200 });
+    }
     if (text.includes("/v1/hooks/")) {
       const response = config.guardResponses[Math.min(guardCalls, config.guardResponses.length - 1)];
       guardCalls += 1;
@@ -926,6 +952,7 @@ async function runScenario(name, config) {
   };
 
   const { runner, sentMessages } = makeRunner(scenario);
+  await runner.emit({ type: "session_start" });
   event = {
     type: "tool_call",
     toolCallId: `call-${name}`,
