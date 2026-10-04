@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Older releases are preserved in the [changelog archive](docs/changelog-archive.md).
 
+## [3.24.2](https://github.com/hashgraph-online/hol-guard/compare/v3.24.1...v3.24.2) (2026-10-04)
+
+
+### Bug Fixes
+
+* **scanner:** add bounded context checks and a contributor review pathway ([#3553](https://github.com/hashgraph-online/hol-guard/issues/3553)) ([6eb834e](https://github.com/hashgraph-online/hol-guard/commit/6eb834e4f45617cddd7cae7f9db1c1e055dc440f))
+
 ## [3.24.1](https://github.com/hashgraph-online/hol-guard/compare/v3.24.0...v3.24.1) (2026-10-04)
 
 
