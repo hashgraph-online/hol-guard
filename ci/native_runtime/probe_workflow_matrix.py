@@ -107,6 +107,38 @@ def validate_contained_dependencies(project: Path) -> None:
             raise AssertionError(f"contained-test fixture dependency escapes {label}: {relative}")
 
 
+CONTAINED_VITEST_PROTECTED_REASON = "native_vitest_readonly_containment_required"
+
+
+def contained_vitest_cases(project: Path) -> list[WorkflowCase]:
+    """Return the seven reviewed Bun/Vitest commands for one explicit project."""
+    resolved_project = project.resolve(strict=True)
+    validate_contained_dependencies(resolved_project)
+    required_files = ("tests/workflow.test.mjs", "tests/secondary.test.mjs")
+    if not all((resolved_project / relative).is_file() for relative in required_files):
+        raise AssertionError("test project lacks required two-file synthetic Vitest fixtures")
+    protected_reason = CONTAINED_VITEST_PROTECTED_REASON
+    return [
+        WorkflowCase(name, command, protected_reason=protected_reason)
+        for name, command in [
+            ("bunx-vitest", "bunx vitest run tests/workflow.test.mjs tests/secondary.test.mjs"),
+            ("bun-x-vitest", "bun x vitest run tests/workflow.test.mjs"),
+            ("bun-no-install", "bun x --no-install vitest run tests/secondary.test.mjs"),
+            ("bun-cwd", f"bun --cwd {shlex.quote(str(resolved_project))} x vitest run tests/workflow.test.mjs"),
+            ("bun-cwd-equals", "bun --cwd=. x --no-install vitest run tests/secondary.test.mjs"),
+            (
+                "bun-cross-project",
+                f"bun --cwd {shlex.quote(str(resolved_project))} x vitest run tests/workflow.test.mjs",
+            ),
+            (
+                "bun-cross-project-equals",
+                f"bun --cwd={shlex.quote(str(resolved_project))} x --no-install vitest run "
+                "tests/secondary.test.mjs",
+            ),
+        ]
+    ]
+
+
 def decode_events(output: str) -> list[dict[str, object]]:
     try:
         return [_event_object(json.loads(line), "event") for line in output.splitlines() if line.startswith("{")]
@@ -316,22 +348,8 @@ def main() -> int:
             )
             if args.test_project:
                 project = args.test_project.resolve(strict=True)
-                if (
-                    not (project / "tests/workflow.test.mjs").is_file()
-                    or not (project / "tests/zcode-multi.test.mjs").is_file()
-                ):
-                    raise AssertionError("test project lacks required two-file synthetic Vitest fixtures")
-                reason = "native_vitest_readonly_containment_required"
-                protected = [
-                    WorkflowCase(name, command, protected_reason=reason)
-                    for name, command in [
-                        ("bunx-vitest", "bunx vitest run tests/workflow.test.mjs tests/zcode-multi.test.mjs"),
-                        ("bun-x-vitest", "bun x vitest run tests/workflow.test.mjs"),
-                        ("bun-no-install", "bun x --no-install vitest run tests/zcode-multi.test.mjs"),
-                        ("bun-cwd", f"bun --cwd {shlex.quote(str(project))} x vitest run tests/workflow.test.mjs"),
-                        ("bun-cwd-equals", "bun --cwd=. x --no-install vitest run tests/zcode-multi.test.mjs"),
-                    ]
-                ]
+                contained = contained_vitest_cases(project)
+                protected = contained[:5]
                 probe._prepare_installed_daemon_workspace(daemon, project)
                 protected_results = [
                     _review(
@@ -360,20 +378,7 @@ def main() -> int:
                 results.extend(protected_results)
                 # The reported --cwd regression crossed hook and test-project scopes.
                 # Same-directory --cwd alone cannot establish this invariant.
-                cross = [
-                    WorkflowCase(name, command, protected_reason=reason)
-                    for name, command in [
-                        (
-                            "bun-cross-project",
-                            f"bun --cwd {shlex.quote(str(project))} x vitest run tests/workflow.test.mjs",
-                        ),
-                        (
-                            "bun-cross-project-equals",
-                            f"bun --cwd={shlex.quote(str(project))} x --no-install vitest run "
-                            "tests/zcode-multi.test.mjs",
-                        ),
-                    ]
-                ]
+                cross = contained[5:]
                 cross_results = [
                     _review(
                         worker,
