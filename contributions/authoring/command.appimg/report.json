@@ -173,12 +173,7 @@
       "untrustedHints": []
     },
     {
-      "exactSafeInvocations": [
-        [
-          "notify",
-          "status"
-        ]
-      ],
+      "exactSafeInvocations": [],
       "id": "op-b4d1dad95db6f6d7",
       "path": [
         "notify",
@@ -252,7 +247,7 @@
     }
   ],
   "reviewedOperations": 16,
-  "revisionDigest": "330dd504b6a68a60bb4cce53a650259eb68ae450fa22a617b6ef7336af5833ec",
+  "revisionDigest": "158ebd042c173ed94619f2d93692ca6b24c3ac3c236e9870e2b7a0bc435adf97",
   "schemaVersion": "guard.extension-coverage-report.v1",
   "unknownOperationBehavior": "review",
   "upstreamVersion": "0.4.1"

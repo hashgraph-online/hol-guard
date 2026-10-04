@@ -195,12 +195,7 @@
       "riskClasses": [
         "execution"
       ],
-      "safeArgv": [
-        [
-          "notify",
-          "status"
-        ]
-      ],
+      "safeArgv": [],
       "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
       "state": "review"
     },

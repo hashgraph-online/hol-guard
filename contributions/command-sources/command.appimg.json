@@ -32,7 +32,7 @@
         "description": "Reviews inventoried operations; unknown invocations also require review.",
         "example_command": "appimg",
         "fixed_reason": "Unknown operations retain review.",
-        "implementation_version": "1.0.3678830686852516448",
+        "implementation_version": "1.0.1553386747106639577",
         "implied_permissions": [],
         "introduced_version": "1.0.0",
         "label": "Unclassified invocation",
@@ -56,7 +56,7 @@
         "description": "Reviews inventoried operations; unknown invocations also require review.",
         "example_command": "appimg",
         "fixed_reason": null,
-        "implementation_version": "1.0.3678830686852516448",
+        "implementation_version": "1.0.1553386747106639577",
         "implied_permissions": [],
         "introduced_version": "1.0.0",
         "label": "Root invocation",
@@ -80,7 +80,7 @@
         "description": "Reviews inventoried operations; unknown invocations also require review.",
         "example_command": "appimg adopt",
         "fixed_reason": null,
-        "implementation_version": "1.0.3678830686852516448",
+        "implementation_version": "1.0.1553386747106639577",
         "implied_permissions": [],
         "introduced_version": "1.0.0",
         "label": "adopt",
@@ -104,7 +104,7 @@
         "description": "Reviews inventoried operations; unknown invocations also require review.",
         "example_command": "appimg completions",
         "fixed_reason": null,
-        "implementation_version": "1.0.3678830686852516448",
+        "implementation_version": "1.0.1553386747106639577",
         "implied_permissions": [],
         "introduced_version": "1.0.0",
         "label": "completions",
@@ -128,7 +128,7 @@
         "description": "Reviews inventoried operations; unknown invocations also require review.",
         "example_command": "appimg doctor",
         "fixed_reason": null,
-        "implementation_version": "1.0.3678830686852516448",
+        "implementation_version": "1.0.1553386747106639577",
         "implied_permissions": [],
         "introduced_version": "1.0.0",
         "label": "doctor",
@@ -152,7 +152,7 @@
         "description": "Reviews inventoried operations; unknown invocations also require review.",
         "example_command": "appimg edit",
         "fixed_reason": null,
-        "implementation_version": "1.0.3678830686852516448",
+        "implementation_version": "1.0.1553386747106639577",
         "implied_permissions": [],
         "introduced_version": "1.0.0",
         "label": "edit",
@@ -176,7 +176,7 @@
         "description": "Reviews inventoried operations; unknown invocations also require review.",
         "example_command": "appimg export",
         "fixed_reason": null,
-        "implementation_version": "1.0.3678830686852516448",
+        "implementation_version": "1.0.1553386747106639577",
         "implied_permissions": [],
         "introduced_version": "1.0.0",
         "label": "export",
@@ -200,7 +200,7 @@
         "description": "Reviews inventoried operations; unknown invocations also require review.",
         "example_command": "appimg import",
         "fixed_reason": null,
-        "implementation_version": "1.0.3678830686852516448",
+        "implementation_version": "1.0.1553386747106639577",
         "implied_permissions": [],
         "introduced_version": "1.0.0",
         "label": "import",
@@ -224,7 +224,7 @@
         "description": "Reviews inventoried operations; unknown invocations also require review.",
         "example_command": "appimg install",
         "fixed_reason": null,
-        "implementation_version": "1.0.3678830686852516448",
+        "implementation_version": "1.0.1553386747106639577",
         "implied_permissions": [],
         "introduced_version": "1.0.0",
         "label": "install",
@@ -248,7 +248,7 @@
         "description": "Reviews inventoried operations; unknown invocations also require review.",
         "example_command": "appimg list",
         "fixed_reason": null,
-        "implementation_version": "1.0.3678830686852516448",
+        "implementation_version": "1.0.1553386747106639577",
         "implied_permissions": [],
         "introduced_version": "1.0.0",
         "label": "list",
@@ -272,7 +272,7 @@
         "description": "Reviews inventoried operations; unknown invocations also require review.",
         "example_command": "appimg notify disable",
         "fixed_reason": null,
-        "implementation_version": "1.0.3678830686852516448",
+        "implementation_version": "1.0.1553386747106639577",
         "implied_permissions": [],
         "introduced_version": "1.0.0",
         "label": "notify disable",
@@ -296,7 +296,7 @@
         "description": "Reviews inventoried operations; unknown invocations also require review.",
         "example_command": "appimg notify enable",
         "fixed_reason": null,
-        "implementation_version": "1.0.3678830686852516448",
+        "implementation_version": "1.0.1553386747106639577",
         "implied_permissions": [],
         "introduced_version": "1.0.0",
         "label": "notify enable",
@@ -320,7 +320,7 @@
         "description": "Reviews inventoried operations; unknown invocations also require review.",
         "example_command": "appimg notify status",
         "fixed_reason": null,
-        "implementation_version": "1.0.3678830686852516448",
+        "implementation_version": "1.0.1553386747106639577",
         "implied_permissions": [],
         "introduced_version": "1.0.0",
         "label": "notify status",
@@ -344,7 +344,7 @@
         "description": "Reviews inventoried operations; unknown invocations also require review.",
         "example_command": "appimg notify test",
         "fixed_reason": null,
-        "implementation_version": "1.0.3678830686852516448",
+        "implementation_version": "1.0.1553386747106639577",
         "implied_permissions": [],
         "introduced_version": "1.0.0",
         "label": "notify test",
@@ -368,7 +368,7 @@
         "description": "Reviews inventoried operations; unknown invocations also require review.",
         "example_command": "appimg remove",
         "fixed_reason": null,
-        "implementation_version": "1.0.3678830686852516448",
+        "implementation_version": "1.0.1553386747106639577",
         "implied_permissions": [],
         "introduced_version": "1.0.0",
         "label": "remove",
@@ -392,7 +392,7 @@
         "description": "Reviews inventoried operations; unknown invocations also require review.",
         "example_command": "appimg update",
         "fixed_reason": null,
-        "implementation_version": "1.0.3678830686852516448",
+        "implementation_version": "1.0.1553386747106639577",
         "implied_permissions": [],
         "introduced_version": "1.0.0",
         "label": "update",
@@ -416,7 +416,7 @@
         "description": "Reviews inventoried operations; unknown invocations also require review.",
         "example_command": "appimg update-source",
         "fixed_reason": null,
-        "implementation_version": "1.0.3678830686852516448",
+        "implementation_version": "1.0.1553386747106639577",
         "implied_permissions": [],
         "introduced_version": "1.0.0",
         "label": "update-source",
@@ -475,7 +475,7 @@
           "execution"
         ],
         "rule_id": "command.appimg.unclassified",
-        "rule_version": "1.0.3678830686852516448",
+        "rule_version": "1.0.1553386747106639577",
         "safe_variants": [],
         "safer_alternatives": [
           "Inspect the exact target and required permissions before running this operation."
@@ -491,20 +491,38 @@
         "description": "Reviews inventoried operations; unknown invocations also require review.",
         "matcher": {
           "config": {
+            "allow_leading_options": false,
             "executables": [
               "appimg"
             ],
+            "fail_secure_unknown_options": false,
+            "forbidden_flags": [],
+            "interspersed_flags": [
+              "--help",
+              "--no-color",
+              "--version",
+              "--yes",
+              "-V",
+              "-h",
+              "-y"
+            ],
+            "interspersed_options_with_values": [],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [],
             "options_with_values": [],
-            "required_flags": []
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": []
           },
-          "op": "zero-operand-flags.v1"
+          "op": "executable.v1"
         },
         "permission_id": "command.appimg.permission.op-75eb278d6a9fb4cf",
         "risk_classes": [
           "execution"
         ],
         "rule_id": "command.appimg.op-75eb278d6a9fb4cf",
-        "rule_version": "1.0.3678830686852516448",
+        "rule_version": "1.0.1553386747106639577",
         "safe_variants": [
           {
             "matcher": {
@@ -625,7 +643,7 @@
           "execution"
         ],
         "rule_id": "command.appimg.op-1a83df11ee5b78cd",
-        "rule_version": "1.0.3678830686852516448",
+        "rule_version": "1.0.1553386747106639577",
         "safe_variants": [
           {
             "matcher": {
@@ -687,7 +705,7 @@
           "execution"
         ],
         "rule_id": "command.appimg.op-1d8f2e3384b44038",
-        "rule_version": "1.0.3678830686852516448",
+        "rule_version": "1.0.1553386747106639577",
         "safe_variants": [
           {
             "matcher": {
@@ -791,7 +809,7 @@
           "execution"
         ],
         "rule_id": "command.appimg.op-2e390f4b1131c34a",
-        "rule_version": "1.0.3678830686852516448",
+        "rule_version": "1.0.1553386747106639577",
         "safe_variants": [],
         "safer_alternatives": [
           "Inspect the exact target and required permissions before running this operation."
@@ -838,7 +856,7 @@
           "execution"
         ],
         "rule_id": "command.appimg.op-66ac10fbbea895e4",
-        "rule_version": "1.0.3678830686852516448",
+        "rule_version": "1.0.1553386747106639577",
         "safe_variants": [],
         "safer_alternatives": [
           "Inspect the desktop entry in $XDG_DATA_HOME/applications before editing it."
@@ -885,7 +903,7 @@
           "execution"
         ],
         "rule_id": "command.appimg.op-d76e96e3251de015",
-        "rule_version": "1.0.3678830686852516448",
+        "rule_version": "1.0.1553386747106639577",
         "safe_variants": [],
         "safer_alternatives": [
           "Run appimg export without a file to print the export to standard output instead of writing a file."
@@ -934,7 +952,7 @@
           "network_egress"
         ],
         "rule_id": "command.appimg.op-bb0b400368c64a1a",
-        "rule_version": "1.0.3678830686852516448",
+        "rule_version": "1.0.1553386747106639577",
         "safe_variants": [],
         "safer_alternatives": [
           "Read the export file and confirm every listed source first. From appimg 0.4.1 on, import --dry-run shows what would be installed and from where."
@@ -1000,7 +1018,7 @@
           "network_egress"
         ],
         "rule_id": "command.appimg.op-6c69101a5444aed0",
-        "rule_version": "1.0.3678830686852516448",
+        "rule_version": "1.0.1553386747106639577",
         "safe_variants": [],
         "safer_alternatives": [
           "Inspect the AppImage offline first, for example list its squashfs contents with unsquashfs -l (add -o with the offset past the ELF runtime). appimg install --dry-run is safe only from appimg 0.4.1 on; earlier versions run the AppImage."
@@ -1048,7 +1066,7 @@
           "execution"
         ],
         "rule_id": "command.appimg.op-28e623ce1c945c32",
-        "rule_version": "1.0.3678830686852516448",
+        "rule_version": "1.0.1553386747106639577",
         "safe_variants": [
           {
             "matcher": {
@@ -1111,7 +1129,7 @@
           "execution"
         ],
         "rule_id": "command.appimg.op-6df54ad180aab1a8",
-        "rule_version": "1.0.3678830686852516448",
+        "rule_version": "1.0.1553386747106639577",
         "safe_variants": [],
         "safer_alternatives": [
           "Run appimg notify status first to see which timer would be stopped and removed."
@@ -1159,7 +1177,7 @@
           "execution"
         ],
         "rule_id": "command.appimg.op-c1ecd601718bd5de",
-        "rule_version": "1.0.3678830686852516448",
+        "rule_version": "1.0.1553386747106639577",
         "safe_variants": [],
         "safer_alternatives": [
           "Run appimg notify status first; enabling writes and starts a persistent systemd user timer."
@@ -1207,23 +1225,8 @@
           "execution"
         ],
         "rule_id": "command.appimg.op-b4d1dad95db6f6d7",
-        "rule_version": "1.0.3678830686852516448",
-        "safe_variants": [
-          {
-            "matcher": {
-              "config": {
-                "arguments": [
-                  "notify",
-                  "status"
-                ],
-                "executable": "appimg"
-              },
-              "op": "reviewed-literal.v1"
-            },
-            "title": "Explicitly reviewed literal invocation",
-            "variant_id": "literal-800b9203039f351e"
-          }
-        ],
+        "rule_version": "1.0.1553386747106639577",
+        "safe_variants": [],
         "safer_alternatives": [
           "Inspect the exact target and required permissions before running this operation."
         ],
@@ -1270,7 +1273,7 @@
           "execution"
         ],
         "rule_id": "command.appimg.op-3c5f7f4c2183d9b4",
-        "rule_version": "1.0.3678830686852516448",
+        "rule_version": "1.0.1553386747106639577",
         "safe_variants": [],
         "safer_alternatives": [
           "Run appimg notify status to check the notification setup without showing a notification."
@@ -1318,7 +1321,7 @@
           "execution"
         ],
         "rule_id": "command.appimg.op-98ae7de9f4921295",
-        "rule_version": "1.0.3678830686852516448",
+        "rule_version": "1.0.1553386747106639577",
         "safe_variants": [],
         "safer_alternatives": [
           "Run appimg list first to confirm the exact application name."
@@ -1369,7 +1372,7 @@
           "network_egress"
         ],
         "rule_id": "command.appimg.op-227d251131facfdb",
-        "rule_version": "1.0.3678830686852516448",
+        "rule_version": "1.0.1553386747106639577",
         "safe_variants": [
           {
             "matcher": {
@@ -1453,7 +1456,7 @@
           "execution"
         ],
         "rule_id": "command.appimg.op-08443d1c3be6e196",
-        "rule_version": "1.0.3678830686852516448",
+        "rule_version": "1.0.1553386747106639577",
         "safe_variants": [],
         "safer_alternatives": [
           "Run appimg update-source NAME without a source first, and confirm a new URL or github:owner/repo belongs to the application's publisher."
