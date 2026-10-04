@@ -29,7 +29,9 @@ def _run_installed_worker(worker_index: int) -> runner.WorkerReport:
         check=False,
         capture_output=True,
         text=True,
-        timeout=runner.WORKER_TIMEOUT_SECONDS,
+        # Installed Windows batches include process/ACL overhead absent from
+        # the source runner's POSIX budget; keep the full corpus and a hard cap.
+        timeout=180 if sys.platform == "win32" else runner.WORKER_TIMEOUT_SECONDS,
     )
     if completed.returncode != 0:
         raise ValueError(f"installed native corpus worker {worker_index} failed: {completed.stderr[-1200:]}")

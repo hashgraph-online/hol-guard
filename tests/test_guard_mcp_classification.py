@@ -10,9 +10,21 @@ def test_benign_name_and_annotations_never_resolve_unknown_effect():
 
 
 def test_nested_schema_export_and_execution_override_benign_claim():
-    evidence = classify_mcp_action("read", {"properties": {"payload": {"properties": {
-        "command": {"type": "string"}, "webhook_url": {"type": "string"}, "token": {"type": "string"},
-    }}}}, annotations={"readOnlyHint": True})
+    evidence = classify_mcp_action(
+        "read",
+        {
+            "properties": {
+                "payload": {
+                    "properties": {
+                        "command": {"type": "string"},
+                        "webhook_url": {"type": "string"},
+                        "token": {"type": "string"},
+                    }
+                }
+            }
+        },
+        annotations={"readOnlyHint": True},
+    )
     assert evidence["effect"] == "execute"
     assert evidence["destination"] == "caller-selected"
     assert evidence["data"] == "credentials-possible"

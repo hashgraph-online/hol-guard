@@ -1,111 +1,58 @@
-"""Keep contribution validation distinct from strict generated-file freshness."""
+"""Every event verifies the same native source tree without fixture rebuilds."""
 
 from __future__ import annotations
 
 import sys
-from types import ModuleType
 
 import pytest
 
-from scripts.ci import detect_pending_extension_regen as real_detector
 from scripts.ci import verify_native_command_program as verifier
 
 
-@pytest.mark.parametrize("base_sha", [None, "a" * 40])
-@pytest.mark.parametrize("pending,changed", [(False, False), (True, False), (False, True)])
-def test_shared_verifier_compiles_pending_pr_sources_and_keeps_other_runs_strict(
-    monkeypatch: pytest.MonkeyPatch, base_sha: str | None, pending: bool, changed: bool
-) -> None:
-    """Compile pending PR contributions while retaining strict checks for other runs."""
-    detector = ModuleType("detect_pending_extension_regen")
-    detector.ContributionDiffError = real_detector.ContributionDiffError
-    detector.contribution_ids = lambda: {"command.fixture"} if pending else set()
-    detector.catalog_ids = set
-    detector._contributions_changed = (
-        lambda _sha: ["contributions/command-sources/command.fixture.json"] if changed else []
-    )
-    detector.REGEN_INPUT_PREFIXES = real_detector.REGEN_INPUT_PREFIXES
-    detector.regen_artifacts_absent_from_diff = lambda _diff=None: True
-    detector.pr_diff_paths = lambda: (
-        ["contributions/command-sources/command.fixture.json"] if (pending or changed) else ["README.md"]
-    )
-    monkeypatch.setitem(sys.modules, "detect_pending_extension_regen", detector)
-    monkeypatch.setattr(sys, "path", list(sys.path))
+@pytest.mark.parametrize("event", ["pull_request", "push", "schedule", "workflow_dispatch"])
+@pytest.mark.parametrize("base", [None, "a" * 40])
+def test_every_event_stages_then_strictly_verifies_current_sources(monkeypatch, event, base):
+    """Verify every event stages then strictly verifies current sources."""
     compiler = "rust/target/release/guard-command-source"
     arguments = ["verify", "--compiler", compiler]
-    if base_sha:
-        arguments += ["--changed-from", base_sha]
+    if base:
+        arguments += ["--changed-from", base]
+    monkeypatch.setenv("GITHUB_EVENT_NAME", event)
     monkeypatch.setattr(sys, "argv", arguments)
-    calls: list[list[str]] = []
+    calls = []
     monkeypatch.setattr(verifier, "_run", calls.append)
-
     assert verifier.main() == 0
-
     generate = [sys.executable, "scripts/build_native_command_program.py", "--compiler", compiler]
-    if base_sha and (pending or changed):
-        assert calls == [
-            generate,
-            verifier._rebuild_command(compiler),
-            [*generate, "--check"],
-        ]
-    elif base_sha:
-        # Unrelated PR diff: freshness is regen-owned, so verification defers.
-        assert calls == []
-    else:
-        assert calls == [[*generate, "--check"]]
+    assert calls == [generate, [*generate, "--check"]]
+    assert all(command[0] not in {"cargo", "git"} for command in calls)
 
 
-def test_invalid_pending_source_stays_a_failure(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Propagate a compiler rejection without proceeding to the next command."""
-    detector = ModuleType("detect_pending_extension_regen")
-    detector.ContributionDiffError = real_detector.ContributionDiffError
-    detector.contribution_ids = lambda: {"command.fixture"}
-    detector.catalog_ids = set
-    detector._contributions_changed = lambda _sha: []
-    detector.REGEN_INPUT_PREFIXES = real_detector.REGEN_INPUT_PREFIXES
-    detector.regen_artifacts_absent_from_diff = lambda _diff=None: True
-    detector.pr_diff_paths = lambda: ["contributions/command-sources/command.fixture.json"]
-    monkeypatch.setitem(sys.modules, "detect_pending_extension_regen", detector)
-    monkeypatch.setattr(sys, "path", list(sys.path))
-    compiler = "rust/target/release/guard-command-source"
-    monkeypatch.setattr(sys, "argv", ["verify", "--compiler", compiler, "--changed-from", "a" * 40])
-    calls: list[list[str]] = []
+@pytest.mark.parametrize("failed_stage", [0, 1])
+def test_compilation_or_verification_failure_is_not_retried_or_ignored(monkeypatch, failed_stage):
+    """Verify compilation or verification failure is not retried or ignored."""
+    monkeypatch.setattr(sys, "argv", ["verify", "--compiler", "compiler"])
+    calls = []
 
-    def invalid_source(command: list[str]) -> None:
-        """Simulate a source compiler rejecting an invalid contribution."""
+    def execute(command):
+        """Capture invoked commands and simulate the subprocess outcome required by this case."""
         calls.append(command)
-        raise SystemExit(37)
+        if len(calls) - 1 == failed_stage:
+            raise SystemExit(37)
 
-    monkeypatch.setattr(verifier, "_run", invalid_source)
+    monkeypatch.setattr(verifier, "_run", execute)
     with pytest.raises(SystemExit) as failure:
         verifier.main()
     assert failure.value.code == 37
-    assert calls == [[sys.executable, "scripts/build_native_command_program.py", "--compiler", compiler]]
+    assert len(calls) == failed_stage + 1
 
 
-@pytest.mark.parametrize("pending", [False, True])
-def test_unavailable_base_stops_before_generation_or_freshness_checks(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture, pending: bool
-) -> None:
-    """Neither verification mode may be selected from a failed base comparison."""
-    detector = ModuleType("detect_pending_extension_regen")
-    detector.ContributionDiffError = real_detector.ContributionDiffError
-    detector.contribution_ids = lambda: {"command.fixture"} if pending else set()
-    detector.catalog_ids = set
-
-    def unavailable(_sha: str) -> list[str]:
-        """Simulate the shared detector's explicit comparison failure."""
-        raise real_detector.ContributionDiffError("Cannot compare contribution sources: fetching the PR base failed")
-
-    detector._contributions_changed = unavailable
-    detector.REGEN_INPUT_PREFIXES = real_detector.REGEN_INPUT_PREFIXES
-    detector.regen_artifacts_absent_from_diff = lambda _diff=None: True
-    detector.pr_diff_paths = lambda: ["contributions/command-sources/command.fixture.json"]
-    monkeypatch.setitem(sys.modules, "detect_pending_extension_regen", detector)
-    monkeypatch.setattr(sys, "path", list(sys.path))
-    monkeypatch.setattr(sys, "argv", ["verify", "--compiler", "fixture", "--changed-from", "a" * 40])
-    monkeypatch.setattr(verifier, "_run", lambda _command: pytest.fail("Verification must not run"))
-    assert verifier.main() == 1
-    output = capsys.readouterr()
-    assert output.out == ""
-    assert "Cannot compare contribution sources" in output.err
+def test_unavailable_pr_base_cannot_change_full_source_validation(monkeypatch):
+    # Full-tree compilation has no Git-diff selection. Missing history cannot
+    # make any source disappear from validation or select a permissive mode.
+    """Verify unavailable pr base cannot change full source validation."""
+    monkeypatch.setattr(sys, "argv", ["verify", "--compiler", "compiler", "--changed-from", "b" * 40])
+    calls = []
+    monkeypatch.setattr(verifier, "_run", calls.append)
+    assert verifier.main() == 0
+    assert len(calls) == 2
+    assert calls[-1][-1] == "--check"

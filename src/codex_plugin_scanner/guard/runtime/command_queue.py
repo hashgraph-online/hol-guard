@@ -55,24 +55,12 @@ from .command_queue_state import (
     default_command_context,  # noqa: F401 - public compatibility export
     repair_command_queue_state,  # noqa: F401 - public compatibility export
 )
-from .command_queue_state import (
-    clear_exact_route_failure as _clear_exact_route_failure,
-)
-from .command_queue_state import (
-    command_queue_now as _now,
-)
-from .command_queue_state import (
-    command_queue_status as _state_command_queue_status,
-)
-from .command_queue_state import (
-    load_command_queue_state as _load_state,
-)
-from .command_queue_state import (
-    record_exact_route_failure as _record_exact_route_failure,
-)
-from .command_queue_state import (
-    save_command_queue_state as _save_state,
-)
+from .command_queue_state import clear_exact_route_failure as _clear_exact_route_failure
+from .command_queue_state import command_queue_now as _now
+from .command_queue_state import command_queue_status as _state_command_queue_status
+from .command_queue_state import load_command_queue_state as _load_state
+from .command_queue_state import record_exact_route_failure as _record_exact_route_failure
+from .command_queue_state import save_command_queue_state as _save_state
 from .exact_cloud_review import (
     EXACT_CLOUD_REVIEW_OPERATION,
     EXACT_CLOUD_REVIEW_PROTOCOL_VERSION,
@@ -83,6 +71,7 @@ from .exact_cloud_review_transport import (
     lease_next_job,
     uses_exact_transport,
 )
+from .native_workspace_review_queue import is_native_workspace_review_job, native_workspace_review_transport_candidate
 from .runner import _resolve_guard_sync_auth_context, repair_guard_cloud_connect_storage
 
 _LOGGER = logging.getLogger(__name__)
@@ -97,7 +86,7 @@ def command_queue_operations(store: GuardStore) -> tuple[str, ...]:
 
 def lease_ready_operations(store: GuardStore) -> tuple[str, ...]:
     operations = command_queue_operations(store)
-    if review_verification_keyring_ready(store):
+    if review_verification_keyring_ready(store) or native_workspace_review_transport_candidate(store):
         return operations
     return tuple(operation for operation in operations if operation != EXACT_CLOUD_REVIEW_OPERATION)
 
@@ -414,7 +403,8 @@ def poll_command_queue_once(store: GuardStore, context: HarnessContext) -> dict[
                 reason="local_approval_required",
             )
         else:
-            mark_command_job_consumed(store, authorized)
+            if not is_native_workspace_review_job(item):
+                mark_command_job_consumed(store, authorized)
             audit_command_decision(
                 store,
                 "cloud_command.accepted",

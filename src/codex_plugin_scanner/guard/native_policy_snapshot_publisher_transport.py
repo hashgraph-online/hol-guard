@@ -9,6 +9,7 @@ from typing import Any
 from .native_policy_snapshot_codec import _strict_json_loads_v3, _valid_digest_v3
 from .native_policy_snapshot_constants import (
     _MAX_ACK_BYTES,
+    _PUBLISH_STARTUP_TIMEOUT_SECONDS,
     _PUBLISH_TIMEOUT_SECONDS,
     POLICY_SNAPSHOT_ACK_REQUIRES_NEW_GENERATION,
     NativePolicySnapshotError,
@@ -88,6 +89,18 @@ def _publish_snapshot_v3(
 
     recovery_attempted = False
     while True:
+        # A cold or replacement resident needs the Rust startup allowance.
+        # The warm publication deadline cannot truncate startup and then
+        # consume the restart circuit on otherwise valid policy pushes.
+        publish_timeout = (
+            _PUBLISH_STARTUP_TIMEOUT_SECONDS
+            if (
+                getattr(publisher, "_snapshot", None) is None
+                or getattr(publisher, "_resident_startup_required", False)
+                or renew_after_generation is not None
+            )
+            else _PUBLISH_TIMEOUT_SECONDS
+        )
         snapshot = native_policy_snapshot_v3(
             config=config,
             guard_home=publisher.guard_home,
@@ -95,17 +108,17 @@ def _publish_snapshot_v3(
             rule_digest=capabilities.rule_digest,
             policy_integrity_key=master_key,
             issued_at_ms=int(publisher._wall_clock() * 1_000),
-            deadline_monotonic=publisher._monotonic_clock() + _PUBLISH_TIMEOUT_SECONDS,
+            deadline_monotonic=publisher._monotonic_clock() + publish_timeout,
             renew_after_generation=renew_after_generation,
             command_extensions=command_extensions,
         )
-        encoded = _policy_snapshot_push_bytes_v3(snapshot)
+        encoded = _policy_snapshot_push_bytes_v3(snapshot, deadline_budget_ms=int(publish_timeout * 1_000))
         output = client(
             executable=identity.path,
             guard_home=publisher.guard_home,
             environment=_isolated_environment(),
             payload=encoded,
-            deadline_monotonic=time.monotonic() + _PUBLISH_TIMEOUT_SECONDS,
+            deadline_monotonic=time.monotonic() + publish_timeout,
         )
         ack = _ack_from_resident_output(output)
         if ack is None:

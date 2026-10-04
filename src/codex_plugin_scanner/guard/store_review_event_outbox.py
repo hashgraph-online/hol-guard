@@ -16,6 +16,7 @@ from .store_review_event_outbox_binding import (
     refresh_same_subject_binding,
 )
 from .store_review_event_outbox_writes import requeue_pending_request_events
+from .store_review_pending_requests import list_pending_review_request_ids
 from .store_review_retry_identity import repair_rejected_review_correlation
 
 
@@ -42,7 +43,13 @@ class StoreReviewEventOutboxMixin:
             )
 
     def requeue_pending_review_events(
-        self, *, changed_at: str, require_binding: bool = False, snapshot_repair_sequences: dict[str, int] | None = None
+        self,
+        *,
+        changed_at: str,
+        require_binding: bool = False,
+        snapshot_repair_sequences: dict[str, int] | None = None,
+        request_ids: set[str] | None = None,
+        request_snapshots: Mapping[str, Mapping[str, object]] | None = None,
     ) -> int:
         with self._connect() as connection:
             return requeue_pending_request_events(
@@ -51,6 +58,8 @@ class StoreReviewEventOutboxMixin:
                 changed_at=changed_at,
                 require_binding=require_binding,
                 snapshot_repair_sequences=snapshot_repair_sequences,
+                request_ids=request_ids,
+                request_snapshots=request_snapshots,
             )
 
     def requeue_pending_review_events_with_marker(
@@ -61,6 +70,8 @@ class StoreReviewEventOutboxMixin:
         marker_payload: Mapping[str, object],
         require_binding: bool = False,
         only_retry_identity_drift: bool = False,
+        request_ids: set[str] | None = None,
+        request_snapshots: Mapping[str, Mapping[str, object]] | None = None,
     ) -> int:
         with self._connect() as connection:
             count = requeue_pending_request_events(
@@ -69,6 +80,10 @@ class StoreReviewEventOutboxMixin:
                 changed_at=changed_at,
                 require_binding=require_binding,
                 only_retry_identity_drift=only_retry_identity_drift,
+                request_ids=request_ids,
+                request_snapshots=request_snapshots,
+                native_replay=marker_payload.get("native_replay") is True
+                or marker_payload.get("schema") == "guard-cloud-review-native-workspace-review-request.v1",
             )
             connection.execute(
                 """
@@ -81,6 +96,51 @@ class StoreReviewEventOutboxMixin:
                 (marker_key, json.dumps({**marker_payload, "requeued": count}), changed_at),
             )
             return count
+
+    def list_pending_review_request_ids(
+        self,
+        *,
+        binding: Mapping[str, str],
+        limit: int,
+        after_request_id: str | None = None,
+        through_request_id: str | None = None,
+        descending: bool = False,
+    ) -> list[str]:
+        with self._connect() as connection:
+            return list_pending_review_request_ids(
+                connection,
+                source=self._guard_source,
+                binding=binding,
+                limit=limit,
+                after_request_id=after_request_id,
+                through_request_id=through_request_id,
+                descending=descending,
+            )
+
+    def list_review_event_snapshots(self, request_id: str) -> list[dict[str, object]]:
+        from .runtime.review_event_delivery import StoredReviewEventError, decode_stored_review_event
+
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                select stream_sequence, event_id, local_request_id, request_sequence,
+                       event_type, event_schema_version, payload_json, payload_hash,
+                       occurred_at, oauth_source, oauth_subject_hash, workspace_id,
+                       machine_id, machine_installation_id
+                from guard_review_outbox_events
+                where local_request_id = ? and oauth_source = ? and binding_status = 'ready'
+                order by request_sequence desc, stream_sequence desc
+                """,
+                (request_id, self._guard_source),
+            ).fetchall()
+        snapshots: list[dict[str, object]] = []
+        for row in rows:
+            try:
+                stored_event = decode_stored_review_event(dict(row))
+            except (StoredReviewEventError, TypeError, ValueError):
+                continue
+            snapshots.append(stored_event.snapshot)
+        return snapshots
 
     def get_review_event_oauth_binding(self) -> dict[str, str] | None:
         with self._connect() as connection:
@@ -95,8 +155,6 @@ class StoreReviewEventOutboxMixin:
         machine_id: str,
         machine_installation_id: str,
     ) -> int:
-        """Refresh an established same-subject binding; never adopt unknown identity."""
-
         supplied = normalized_delivery_binding(
             oauth_subject_hash=oauth_subject_hash,
             workspace_id=workspace_id,
@@ -155,8 +213,6 @@ class StoreReviewEventOutboxMixin:
         machine_installation_id: str | None = None,
         newest_first: bool = False,
     ) -> list[dict[str, object]]:
-        """List the oldest unacknowledged events; ordering is never lossy."""
-
         del newest_first
         query = """
             select stream_sequence, event_id, local_request_id, request_sequence,

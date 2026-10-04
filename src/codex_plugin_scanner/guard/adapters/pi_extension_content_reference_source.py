@@ -123,6 +123,9 @@ function referencedPayload(payload: Record<string, unknown>, serializedPayload: 
     config_path: payload.config_path,
     tool_name: payload.tool_name,
     is_error: payload.is_error,
+    ...(Object.prototype.hasOwnProperty.call(payload, 'guard_execution_environment')
+      ? { guard_execution_environment: payload.guard_execution_environment }
+      : {}),
     ...(typeof payload.structured_output_json === 'string'
       ? { structured_output_json: payload.structured_output_json }
       : {}),

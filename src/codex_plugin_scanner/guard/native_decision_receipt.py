@@ -29,7 +29,9 @@ _PROMPT_RISK_CLASSES = (
     "guard_bypass_intent",
     "prompt_injection_intent",
 )
-_OPTIONAL_FIELDS = frozenset({"command_extensions", "prompt_risk_classes"})
+_OPTIONAL_FIELDS = frozenset(
+    {"command_extensions", "origin_authentication", "execution_intent_digest", "prompt_risk_classes"}
+)
 _REQUIRED_FIELDS = frozenset(
     {
         "schema",
@@ -178,7 +180,14 @@ def _validate_receipt_policy(receipt: dict[str, object]) -> bool:
         pattern=_IDENTIFIER,
         maximum=NATIVE_HOOK_DECISION_RECEIPT_MAX_STRING_BYTES,
     )
-    return reason_code is not None
+    if reason_code is None:
+        return False
+    for field in ("origin_authentication", "execution_intent_digest"):
+        if field in receipt:
+            digest = receipt[field]
+            if not isinstance(digest, str) or _HEX64.fullmatch(digest) is None:
+                return False
+    return True
 
 
 def _validate_receipt_limits(receipt: dict[str, object]) -> bool:
@@ -201,7 +210,8 @@ def validate_native_decision_receipt(value: object) -> dict[str, object] | None:
     if not isinstance(value, Mapping):
         return None
     receipt = dict(cast(Mapping[str, object], value))
-    if not set(receipt).issuperset(_REQUIRED_FIELDS) or set(receipt) - _REQUIRED_FIELDS - _OPTIONAL_FIELDS:
+    fields = set(receipt)
+    if not _REQUIRED_FIELDS.issubset(fields) or not fields - _REQUIRED_FIELDS <= _OPTIONAL_FIELDS:
         return None
     if "command_extensions" in receipt and not valid_native_command_receipt_binding(receipt["command_extensions"]):
         return None
