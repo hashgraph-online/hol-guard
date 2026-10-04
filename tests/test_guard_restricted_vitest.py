@@ -54,6 +54,16 @@ def test_local_vitest_run_arguments(command: list[str]) -> None:
     assert vitest.vitest_arguments(command)[0] == "run"
 
 
+def test_node_vitest_preserves_bounded_heap_option() -> None:
+    command = [
+        "node",
+        "--max-old-space-size=12288",
+        "/project/node_modules/vitest/vitest.mjs",
+        "run",
+    ]
+    assert vitest.vitest_arguments(command) == ("run",)
+
+
 @pytest.mark.parametrize(
     "command",
     [
@@ -161,6 +171,42 @@ def test_selected_vitest_capabilities_respect_both_project_policies(tmp_path, mo
             == 0
         )
         assert checked == [str(tmp_path), str(selected)]
+        assert executed == [True]
+
+
+@pytest.mark.parametrize("blocked", [False, True])
+def test_transform_capability_requires_the_same_native_profile(tmp_path, monkeypatch, blocked):
+    plan = SimpleNamespace(command=("/usr/bin/node", "/local/vitest.mjs", "run"), cwd=tmp_path)
+    monkeypatch.setattr(vitest, "prepare_restricted_vitest", lambda *args, **kwargs: plan)
+    executed = []
+
+    def authorize(request):
+        child = "--service=" in request["tool_input"]["command"]
+        return {
+            "decision": "deny",
+            "policy_action": "block" if child and blocked else "sandbox-required",
+            "reason_code": "native_vitest_readonly_containment_required",
+            "required_execution_profile": "vitest-readonly-v1",
+        }
+
+    def execute(*args, authorize_capability, **kwargs):
+        authorize_capability(
+            (str(tmp_path / "node_modules/@esbuild/darwin-arm64/bin/esbuild"), "--service=0.25.4", "--ping")
+        )
+        executed.append(True)
+        return 0
+
+    monkeypatch.setattr(vitest, "run_restricted_vitest", execute)
+    payload = {"tool_name": "bash", "tool_input": {"command": "bunx vitest run"}}
+    if blocked:
+        with pytest.raises(RestrictedPytestError):
+            sink.run_authorized_contained_test(payload, workspace=tmp_path, timeout_seconds=20, authorize=authorize)
+        assert executed == []
+    else:
+        assert (
+            sink.run_authorized_contained_test(payload, workspace=tmp_path, timeout_seconds=20, authorize=authorize)
+            == 0
+        )
         assert executed == [True]
 
 

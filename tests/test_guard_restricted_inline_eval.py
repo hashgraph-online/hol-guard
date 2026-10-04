@@ -28,6 +28,13 @@ def test_other_execution_shapes_do_not_inherit_inline_profile(argv, tmp_path):
         inline.prepare_restricted_inline_eval(argv, workspace=tmp_path)
 
 
+def test_node_inline_eval_preserves_bounded_heap_option() -> None:
+    assert inline.is_inline_eval(["node", "--max-old-space-size=12288", "-e", "1+1"])
+    assert inline.is_inline_eval(["nodejs", "--max-old-space-size=12288", "--eval", "1+1"])
+    with pytest.raises(RestrictedPytestError):
+        inline.is_inline_eval(["node", "--max-old-space-size=999999", "-e", "1+1"])
+
+
 @pytest.mark.parametrize(
     "runtime,flag,profile",
     [
