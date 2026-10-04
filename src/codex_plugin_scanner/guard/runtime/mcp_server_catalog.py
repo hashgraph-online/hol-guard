@@ -13,6 +13,21 @@ from .mcp_server_contribution import (
     remote_mcp_endpoint_identity,
 )
 
+# Runnable example per package launcher. `-y` is an npx flag (`uvx -y <pkg>` fails);
+# the other forms match the launcher subcommands mcp_protection recognizes.
+# Keep in sync with package_launch_example in native_command_source_mcp.rs.
+_PACKAGE_LAUNCH_PREFIX: Final[dict[str, str]] = {
+    "npx": "npx -y",
+    "npm": "npm exec --yes",
+    "pnpm": "pnpm dlx",
+    "yarn": "yarn dlx",
+    "pipx": "pipx run",
+}
+
+
+def package_launch_example(command: str, package: str) -> str:
+    return f"{_PACKAGE_LAUNCH_PREFIX.get(command, command)} {package}"
+
 
 def _string_tuple(value: object) -> tuple[str, ...]:
     if not isinstance(value, list):
@@ -54,7 +69,7 @@ def _values_for_payload(payload: Mapping[str, object]) -> CommandExtensionValues
             raise ValueError(f"{mcp_id} launch command is invalid")
         if not isinstance(package, str) or not package.strip():
             raise ValueError(f"{mcp_id} launch package is invalid")
-        example = f"{command} -y {package}"
+        example = package_launch_example(command, package)
         executables = (command,)
     elif launch_kind == "remote-http":
         remote_url = launch.get("url")

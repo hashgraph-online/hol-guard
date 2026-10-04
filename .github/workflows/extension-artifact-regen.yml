@@ -1,8 +1,8 @@
 name: Extension artifact regen
 
 # Contributors own canonical contribution sources. The generated projections
-# derived from them (command catalog, native command program, trust map,
-# baselines, digest vectors, directory render) are maintainer-owned and
+# derived from them (command catalog, native command program, descriptors
+# and directory render) are maintainer-owned and
 # regenerated here after merges so contribution PRs never conflict on them.
 #
 # NOTE: the main-branch ruleset requires every change to arrive through a
@@ -19,10 +19,18 @@ on:
   push:
     branches: [main]
     paths:
+      # Product/catalog inputs only. Per-run reports and independent test
+      # fixtures do not schedule native compilation or publication.
       - contributions/**
+      - rust/**
       - contracts/extensions/**
-      - tests/fixtures/command-source-*.v1.json
+      - contracts/mcp-servers/**
+      - src/codex_plugin_scanner/guard/**
       - scripts/refresh_extension_artifacts.py
+      - scripts/build_native_command_program.py
+      - scripts/prepare_extension_contribution.py
+      - scripts/export_extension_directory.py
+      - scripts/render_command_extension_directory.py
       - .github/workflows/extension-artifact-regen.yml
   workflow_dispatch:
 
@@ -84,14 +92,9 @@ jobs:
           git fetch origin main
           git reset --hard origin/main
           uv run --no-sync python scripts/refresh_extension_artifacts.py
-          git add -A contracts/extensions contracts/managed-controls docs/guard/extensions \
-            contributions/extensions \
-            src/codex_plugin_scanner/guard/contracts/data/extensions \
-            src/codex_plugin_scanner/guard/extension_builder tests/fixtures/extension-controls \
-            tests/fixtures/command-source-*.v1.json \
-            tests/fixtures/guard-command-corpus/decision-diff-report.json \
-            tests/fixtures/guard-command-corpus/decision-diff-report.framed-sha256 \
-            tests/test_guard_extension_trust.py tests/test_policy_bundle_delivery_runtime.py
+          # Test expectations and fixture trust are authored inputs, never outputs.
+          git add -A contracts/extensions docs/guard/extensions contributions/extensions \
+            src/codex_plugin_scanner/guard/contracts/data/extensions
           close_superseded() {
             stale_prs=$(gh pr list --repo "${GH_REPO}" --state open --limit 200 \
               --search "head:regen/artifacts-" \

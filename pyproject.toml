@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "hol-guard"
-version = "3.16.1"
+version = "3.19.0"
 description = "Open-source antivirus and runtime protection for AI agents, tools, MCP servers, plugins, skills, and package installs."
 readme = "README.md"
 license = "Apache-2.0"
@@ -146,19 +146,9 @@ packages = ["src/codex_plugin_scanner"]
 "contracts/extensions/trust-class-map.v1.json" = "codex_plugin_scanner/guard/contracts/data/extensions/trust-class-map.v1.json"
 "contracts/extensions/contribution.v1.schema.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contribution.v1.schema.json"
 "contracts/extensions/contribution.v2.schema.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contribution.v2.schema.json"
-"contributions/extensions/command.blitcp.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contributions/command.blitcp.json"
-"contributions/extensions/command.noodle.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contributions/command.noodle.json"
-"contributions/extensions/command.ollama.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contributions/command.ollama.json"
-"contributions/extensions/command.probe.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contributions/command.probe.json"
-"contributions/extensions/command.remote.essh.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contributions/command.remote.essh.json"
-"contributions/extensions/command.repo2nb.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contributions/command.repo2nb.json"
-"contributions/extensions/command.skill-sunset.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contributions/command.skill-sunset.json"
-"contributions/extensions/command.uivoid.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contributions/command.uivoid.json"
+"contributions/extensions" = "codex_plugin_scanner/guard/contracts/data/extensions/contributions"
 "contracts/mcp-servers/contribution.v1.schema.json" = "codex_plugin_scanner/guard/contracts/data/mcp_servers/contribution.v1.schema.json"
-"contributions/mcp-servers/mcp.filesystem.json" = "codex_plugin_scanner/guard/contracts/data/mcp_servers/contributions/mcp.filesystem.json"
-"contributions/mcp-servers/mcp.instapods.json" = "codex_plugin_scanner/guard/contracts/data/mcp_servers/contributions/mcp.instapods.json"
-"contributions/mcp-servers/mcp.pr-ui-compare.json" = "codex_plugin_scanner/guard/contracts/data/mcp_servers/contributions/mcp.pr-ui-compare.json"
-"contributions/mcp-servers/mcp.reaper.json" = "codex_plugin_scanner/guard/contracts/data/mcp_servers/contributions/mcp.reaper.json"
+"contributions/mcp-servers" = "codex_plugin_scanner/guard/contracts/data/mcp_servers/contributions"
 
 [tool.hatch.build]
 artifacts = [
@@ -227,7 +217,8 @@ also_copy = [
   "src/codex_plugin_scanner",
   "contracts/extensions",
   "contracts/guard-cloud-review",
-  "docs/guard/contracts/guard-cloud-review.md",
+  "docs/guard/contracts",
+  "rust/crates/guard-command/src",
 ]
 pytest_add_cli_args_test_selection = [
   "tests/test_guard_command_model.py",

@@ -13,7 +13,6 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
-from ..daemon.hook_availability_policy import availability_harness_response
 from ..daemon.hook_request_parsing import runtime_hook_event_name
 from ..runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from ..runtime.extension_control_runtime import (
@@ -26,6 +25,7 @@ if TYPE_CHECKING:
     from ._commands_shared import _now
 
 from ._commands_shared import *
+from .commands_hook_native_availability import _emit_native_unavailable
 from .commands_hook_native_claude import (
     run_native_claude_permission_prompt_notification,
     run_native_claude_permission_request,
@@ -50,7 +50,6 @@ from .commands_support_claude_approval import (
 from .commands_support_connect import _synced_policy_payload
 from .commands_support_hook_payload import _hook_action_envelope, _normalize_hook_payload
 from .commands_support_hook_state import _load_single_claude_pending_permission
-from .commands_support_interaction import _emit
 from .commands_support_permission_store import _discard_claude_pending_permissions
 from .commands_support_runtime_artifacts import _hook_event_name, _hook_runtime_artifact
 from .commands_support_runtime_policy import _runtime_action_data_flow_signals
@@ -65,32 +64,6 @@ from .commands_support_runtime_resolution import (
 from .commands_support_workspace import _workspace_from_hook_payload
 
 _NATIVE_EDGE_EVENTS = frozenset({"PreToolUse", "PostToolUse", "UserPromptSubmit"})
-
-
-def _emit_native_unavailable(
-    args: argparse.Namespace,
-    *,
-    payload: Mapping[str, object],
-    workspace: Path | None,
-    context: HarnessContext,
-    event_name: str,
-    reason_code: str,
-) -> int:
-    _emit(
-        "hook",
-        availability_harness_response(
-            dict(payload),
-            harness=args.harness,
-            event_name=event_name,
-            reason_code=reason_code,
-            reason="HOL Guard could not complete the native hook decision safely.",
-            workspace=workspace,
-            home_dir=context.home_dir,
-            guard_home=context.guard_home,
-        ),
-        True,
-    )
-    return 0
 
 
 def run_native_hook_pipeline(
@@ -172,6 +145,8 @@ def run_native_hook_pipeline(
             context=context,
             event_name=event_name,
             reason_code=str(edge_failure or "native_hook_event_unavailable"),
+            worker=worker,
+            recording_only=bool(edge.get("recording_only")) if isinstance(edge, Mapping) else False,
         )
 
     def fresh_copilot_tool_call_authority():

@@ -69,7 +69,7 @@ def installed_hook_request(
         method="POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=5) as response:
+        with urllib.request.urlopen(request, timeout=10) as response:
             decoded = json.loads(response.read().decode("utf-8"))
             return decoded if isinstance(decoded, dict) else None
     except urllib.error.HTTPError as error:
