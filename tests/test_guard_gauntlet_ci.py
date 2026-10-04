@@ -454,19 +454,27 @@ def test_evidence_jobs_run_only_from_trusted_default_or_pinned_bootstrap():
         assert "GUARD_GAUNTLET_BOOTSTRAP_VERIFIER_SHA" in workflow["jobs"][name]["env"]
 
 
-def test_required_ci_uses_trusted_base_or_exact_initial_verifier():
-    """Check that required CI invokes the verifier from its trusted checkout and pinned bootstrap."""
+def test_gauntlet_qualification_is_optional_and_separate_from_required_ci():
+    """Missing live evidence must not fail the required Python CI aggregate."""
     from pathlib import Path
 
     import yaml
 
-    path = Path(__file__).resolve().parents[1] / ".github/workflows/ci.yml"
-    job = yaml.safe_load(path.read_text())["jobs"]["ci-python-312"]
-    checkouts = [step["with"] for step in job["steps"] if step.get("uses", "").startswith("actions/checkout@")]
-    assert checkouts == [
-        {"ref": "${{ github.event.pull_request.base.sha }}", "path": "gauntlet-trusted", "persist-credentials": False},
-        {"ref": "69de8c263514933786d5816b7a4ae8b239326a65", "path": "gauntlet-trusted", "persist-credentials": False},
-    ]
-    requirement = next(step for step in job["steps"] if step.get("run") == "python3 -m ci.gauntlet.github_ci require")
-    assert requirement["working-directory"] == "gauntlet-trusted"
-    assert requirement["env"]["GUARD_GAUNTLET_BOOTSTRAP_VERIFIER_SHA"] == checkouts[1]["ref"]
+    root = Path(__file__).resolve().parents[1]
+    ci = yaml.safe_load((root / ".github/workflows/ci.yml").read_text())
+    job = ci["jobs"]["ci-python-312"]
+    for step in job["steps"]:
+        assert step.get("with", {}).get("path") != "gauntlet-trusted"
+        assert "ci.gauntlet.github_ci require" not in step.get("run", "")
+    assert "initialize" not in job["needs"]
+    optional = yaml.safe_load((root / ".github/workflows/guard-gauntlet-gate.yml").read_text())["jobs"]["initialize"]
+    assert not optional.get("continue-on-error", False)
+    assert "github.event_name == 'pull_request_target'" in optional["if"]
+    checkout = next(step for step in optional["steps"] if step.get("uses", "").startswith("actions/checkout@"))
+    assert checkout["with"] == {"persist-credentials": False}
+    requirement = next(
+        step for step in optional["steps"] if step.get("run") == "python -m ci.gauntlet.github_ci require"
+    )
+    assert requirement["if"] == (
+        "github.event_name == 'pull_request_target' && hashFiles('ci/gauntlet/pr_requirement.py') != ''"
+    )
