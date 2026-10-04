@@ -281,6 +281,72 @@ pub(super) fn safe_word_count_stdin_arguments(arguments: &[String]) -> bool {
     safe_word_count_with_targets(arguments, true, super::PathContext::default(), false)
 }
 
+pub(super) fn safe_byte_dump_arguments(
+    arguments: &[String],
+    piped_input: bool,
+    context: super::PathContext<'_>,
+) -> bool {
+    safe_byte_dump_with_targets(arguments, piped_input, context, true)
+}
+
+pub(super) fn safe_byte_dump_stdin_arguments(arguments: &[String]) -> bool {
+    safe_byte_dump_with_targets(arguments, true, super::PathContext::default(), false)
+}
+
+fn safe_byte_dump_with_targets(
+    arguments: &[String],
+    piped_input: bool,
+    context: super::PathContext<'_>,
+    allow_targets: bool,
+) -> bool {
+    let mut options = true;
+    let mut target = false;
+    for argument in arguments {
+        if options && argument == "--" {
+            options = false;
+            continue;
+        }
+        if options
+            && matches!(
+                argument.as_str(),
+                "-a" | "-b"
+                    | "-c"
+                    | "-d"
+                    | "-f"
+                    | "-o"
+                    | "-s"
+                    | "-v"
+                    | "-x"
+                    | "-An"
+                    | "-Ad"
+                    | "-Ao"
+                    | "-Ax"
+                    | "-tc"
+                    | "-tx1"
+            )
+        {
+            continue;
+        }
+        if target {
+            return false;
+        }
+        if argument == "-" {
+            if !piped_input {
+                return false;
+            }
+        } else if argument.starts_with('-')
+            || !allow_targets
+            || !verified_path_context(context.home_dir, context.cwd)
+            || !command_read_target(argument, context, false)
+        {
+            return false;
+        }
+        options = false;
+        target = true;
+    }
+    target || piped_input
+}
+
 fn safe_word_count_with_targets(
     arguments: &[String],
     piped_input: bool,
