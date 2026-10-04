@@ -85,6 +85,28 @@ def _event_object(value: object, label: str) -> dict:
     return value
 
 
+def validate_contained_dependencies(project: Path) -> None:
+    """Reject fixture dependencies that the project-scoped sandbox cannot read."""
+    resolved_project = project.resolve(strict=True)
+    try:
+        dependency_root = (resolved_project / "node_modules").resolve(strict=True)
+    except OSError as error:
+        raise AssertionError("contained-test fixture lacks local node_modules") from error
+    if not dependency_root.is_dir() or not dependency_root.is_relative_to(resolved_project):
+        raise AssertionError("contained-test fixture dependency root escapes project")
+    # The matrix fixture is intentionally pinned to the Vitest entry points used by its runner.
+    for relative, root, label in (
+        ("node_modules/.bin/vitest", resolved_project, "project"),
+        ("node_modules/vitest/vitest.mjs", dependency_root, "node_modules"),
+    ):
+        try:
+            target = (resolved_project / relative).resolve(strict=True)
+        except OSError as error:
+            raise AssertionError(f"contained-test fixture lacks local {relative}") from error
+        if not target.is_file() or not target.is_relative_to(root):
+            raise AssertionError(f"contained-test fixture dependency escapes {label}: {relative}")
+
+
 def decode_events(output: str) -> list[dict[str, object]]:
     try:
         return [_event_object(json.loads(line), "event") for line in output.splitlines() if line.startswith("{")]
@@ -106,6 +128,11 @@ def assert_execution(cases: list[WorkflowCase], events: list[dict[str, object]])
             details = _event_object(result.get("details"), f"{case.name}.details")
             proof = _event_object(details.get("holGuardContainedTest"), f"{case.name}.proof")
             original = _event_object(proof.get("input"), f"{case.name}.input")
+            # Pinned OMP omits exitCode on success; contained wrappers can retain
+            # isError=False even when OMP reports a nonzero process exit.
+            # bool is an int subclass; only a JSON integer zero proves success here.
+            if "exitCode" in details and (type(details["exitCode"]) is not int or details["exitCode"] != 0):
+                raise AssertionError(f"protected tests did not exit successfully: {case.name}")
             if not isinstance(args.get("command"), str) or "execute-contained-test" not in args["command"]:
                 raise AssertionError("protected workflow did not use the execution sink")
             commands.append(original.get("command"))
@@ -224,6 +251,8 @@ def main() -> int:
     args = parser.parse_args()
     if args.live_omp and args.test_project and sys.platform != "darwin":
         parser.error("live protected-test proofs require the macOS containment adapter")
+    if args.test_project:
+        validate_contained_dependencies(args.test_project)
     args.output.mkdir(mode=0o700, parents=True, exist_ok=True)
     _, identity, capabilities = probe._probe_native_identity()
     if args.expected_source_sha and capabilities.build_sha != args.expected_source_sha:
