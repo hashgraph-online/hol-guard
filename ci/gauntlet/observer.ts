@@ -64,10 +64,11 @@ function isGuard(input: RequestInfo | URL): boolean {
 globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
   if (!isGuard(input)) return actualFetch(input, init);
   let forwardedInit = init;
+  let request: JsonRecord = {};
   let probe: { operation_id: string; request_id: string } | undefined;
   try {
     const rawBody = init?.body;
-    const request = JSON.parse(typeof rawBody === "string" ? rawBody : "") as JsonRecord;
+    request = JSON.parse(typeof rawBody === "string" ? rawBody : "") as JsonRecord;
     if (!request || typeof request !== "object" || Array.isArray(request)) throw new Error("invalid hook request");
     probe = transitionProbe();
     request.guard_transition_probe = {
@@ -79,13 +80,21 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promis
     record({ observer_error: true, observer_error_code: "probe_injection_failed" });
   }
   const started = performance.now();
-  const response = await actualFetch(input, forwardedInit);
+  // Capture the event before transport so timeouts retain their event group.
+  const event = request?.hook_event_name;
+  const elapsed = () => Number((performance.now() - started).toFixed(3));
+  let response: Response;
   try {
-    const request = JSON.parse(typeof forwardedInit?.body === "string" ? forwardedInit.body : "{}");
+    response = await actualFetch(input, forwardedInit);
+  } catch (error) {
+    record({ transport_error: true, event, elapsed_ms: elapsed() });
+    throw error;
+  }
+  try {
     const body = await response.clone().json();
     const nativeObservation = publicNativeObservation(body);
     record({
-      event: request.hook_event_name,
+      event,
       tool: request.tool_name,
       tool_call_id: request.tool_call_id,
       input_json: JSON.stringify(request.tool_input ?? null),
@@ -97,12 +106,12 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promis
       model_output_action: body.model_output_action,
       reviewed_output_sha256: body.reviewed_output_sha256,
       response_sha256: createHash("sha256").update(JSON.stringify(body)).digest("hex"),
-      elapsed_ms: Math.round((performance.now() - started) * 1000) / 1000,
+      elapsed_ms: elapsed(),
       ...(probe ? { probe_operation_id: probe.operation_id, probe_request_id: probe.request_id } : {}),
       ...(nativeObservation ? { native_observation: nativeObservation } : {}),
     });
   } catch {
-    record({ observer_error: true });
+    record({ observer_error: true, event, elapsed_ms: elapsed() });
   }
   return response;
 }) as typeof fetch;
