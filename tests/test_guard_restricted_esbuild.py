@@ -56,3 +56,47 @@ def test_invalid_or_external_transform_image_is_rejected(tmp_path, monkeypatch, 
 
 def test_missing_dependency_does_not_download_or_grant_an_image(tmp_path):
     assert module.snapshot_esbuild(tmp_path, tmp_path) is None
+
+
+def test_runner_keeps_authorized_image_outside_writable_ancestors(tmp_path, monkeypatch):
+    from pathlib import Path
+
+    from codex_plugin_scanner.guard.runtime import restricted_vitest as vitest
+    from codex_plugin_scanner.guard.runtime.restricted_pytest_model import RestrictedPytestPlan
+
+    source, _ = fixture(tmp_path, monkeypatch)
+    plan = RestrictedPytestPlan(
+        profile_version="vitest-readonly-v1",
+        backend="macos-seatbelt",
+        backend_executable=Path("/usr/bin/sandbox-exec"),
+        workspace=tmp_path,
+        cwd=tmp_path,
+        command=("/usr/bin/node", "vitest.mjs", "run"),
+        executable=Path("/usr/bin/node"),
+        allowed_executables=(Path("/usr/bin/node"),),
+        denied_capabilities=(),
+    )
+    checked, launched = [], []
+
+    def launch(argv, *, env, **kwargs):
+        image = Path(env["ESBUILD_BINARY_PATH"])
+        scratch = Path(env["HOME"]).parent
+        assert image.is_file()
+        assert not image.is_relative_to(scratch)
+        assert not image.is_relative_to(tmp_path)
+        assert image.read_bytes() == source.read_bytes()
+        profile = argv[2]
+        writes = next(line for line in profile.splitlines() if line.startswith("(allow file-write*"))
+        assert f'(subpath "{scratch}")' in writes
+        assert str(image.parent) not in writes
+        assert f'(literal "{image}")' in profile
+        assert any(str(image) in line for line in profile.splitlines() if line.startswith("(deny file-write*"))
+        launched.append(image)
+        return 0
+
+    monkeypatch.setattr(vitest, "_run_backend_process", launch)
+    assert vitest.run_restricted_node_plan(plan, env={}, authorize_capability=checked.append) == 0
+    assert checked == [(str(source), "--service=0.25.4", "--ping")]
+    assert len(launched) == 1
+    assert not launched[0].exists()
+    assert not launched[0].parent.exists()

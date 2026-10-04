@@ -183,7 +183,10 @@ def run_restricted_node_plan(
         raise RestrictedPytestError(
             "vitest_restricted_invalid_command", "Protected Vitest requires its validated OS plan."
         )
-    with tempfile.TemporaryDirectory(prefix="hol-guard-vitest-") as temporary:
+    with (
+        tempfile.TemporaryDirectory(prefix="hol-guard-vitest-") as temporary,
+        tempfile.TemporaryDirectory(prefix="hol-guard-vitest-images-") as images,
+    ):
         root = Path(temporary).resolve()
         home, tmp = root / "home", root / "tmp"
         home.mkdir(mode=0o700)
@@ -192,7 +195,9 @@ def run_restricted_node_plan(
         if plan.profile_version == VITEST_READ_ONLY_PROFILE_VERSION:
             from .restricted_esbuild import snapshot_esbuild
 
-            esbuild = snapshot_esbuild(plan.workspace, root)
+            # Executable images have a separate read-only tree. A child cannot
+            # replace the image by renaming a writable scratch ancestor.
+            esbuild = snapshot_esbuild(plan.workspace, Path(images).resolve())
             if esbuild is not None:
                 source, image, version = esbuild
                 if authorize_capability is None:
