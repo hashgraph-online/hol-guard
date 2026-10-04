@@ -84,9 +84,6 @@ jobs:
             src/codex_plugin_scanner/guard/store_receipts.py \
             tests/test_guard_desktop_contract.py
 
-      - name: Run Desktop contract tests
-        run: uv run --no-sync pytest tests/test_guard_desktop_contract.py --tb=short
-
       - name: Set up Rust
         uses: ./.github/actions/setup-rust
         with:
@@ -105,6 +102,9 @@ jobs:
             arguments+=(--changed-from "${{ github.event.pull_request.base.sha }}")
           fi
           uv run --no-sync python scripts/ci/verify_native_command_program.py "${arguments[@]}"
+
+      - name: Run Desktop contract tests
+        run: uv run --no-sync pytest tests/test_guard_desktop_contract.py --tb=short
 
       - name: Validate source-bound decision evidence
         run: |
