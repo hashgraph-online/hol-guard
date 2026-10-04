@@ -93,7 +93,6 @@
       "command.mcp-instapods",
       "command.mcp-pr-ui-compare",
       "command.mcp-reaper",
-      "command.mcp-vome-home-assistant",
       "command.noodle",
       "command.ollama",
       "command.probe",
