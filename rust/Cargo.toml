@@ -28,6 +28,7 @@ rust-version = "1.88"
 
 [workspace.dependencies]
 base64 = "=0.22.1"
+mailparse = "=0.17.0"
 hex = "0.4.3"
 fs2 = "0.4.3"
 ring = "0.17.14"
