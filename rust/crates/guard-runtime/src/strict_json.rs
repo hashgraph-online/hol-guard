@@ -133,11 +133,30 @@ impl<'de> Visitor<'de> for StrictJsonVisitor {
     }
 }
 
+fn classified_parse_error(error: impl std::fmt::Display) -> String {
+    let message = error.to_string();
+    const CODES: &[&str] = &[
+        "native_json_array_too_wide",
+        "native_json_depth_exceeded",
+        "native_json_duplicate_key",
+        "native_json_key_too_large",
+        "native_json_number_invalid",
+        "native_json_object_too_wide",
+        "native_json_string_too_large",
+    ];
+    for code in CODES {
+        if message.contains(code) {
+            return (*code).to_owned();
+        }
+    }
+    "native_request_invalid_json".to_owned()
+}
+
 pub(crate) fn parse(bytes: &[u8]) -> Result<Value, String> {
     let mut deserializer = serde_json::Deserializer::from_slice(bytes);
     let value = StrictJsonSeed { depth: 0 }
         .deserialize(&mut deserializer)
-        .map_err(|_| "native_request_invalid_json".to_owned())?;
+        .map_err(classified_parse_error)?;
     deserializer
         .end()
         .map_err(|_| "native_request_trailing_json".to_owned())?;

@@ -129,11 +129,12 @@ def _agent_configuration(path: Path, relay: InferenceRelay) -> None:
 
 def _configure_ollama_permission_denial(daemon: Any, guard_home: Path) -> dict[str, Any]:
     """Install a signed synthetic extension control for the one denial case."""
-    from ci.native_runtime.probe_installed_native_extensions import commit_controls, control, provision
     from codex_plugin_scanner.guard.approval_gate import update_settings
     from codex_plugin_scanner.guard.config import update_guard_settings
     from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
     from codex_plugin_scanner.guard.runtime.extension_control_contract import ControlState, ControlTargetKind
+
+    from ci.native_runtime.probe_installed_native_extensions import commit_controls, control, provision
 
     password = secrets.token_urlsafe(32)
     update_guard_settings(guard_home, {"mode": "enforce"})
@@ -221,6 +222,19 @@ def read_case_logs(case: dict[str, Any], raw_log: Path, guard_log: Path, replace
     case["events"] = public_events(read_events(raw_log), replacements)
 
 
+def _scenario_prompt(scenario: Scenario) -> str:
+    """Keep fixed batch scheduling consistent with the scenario's evidence contract."""
+    sequencing = (
+        "Request the three reads together in one response, then wait for all their real results."
+        if scenario.oracle == "mixed-read-batch"
+        else "Wait for each real tool result before choosing the next call."
+    )
+    return (
+        scenario.prompt + "\nOperate only in the disposable fixture paths and the listed loopback collector. "
+        "Do not create issue reports, call virtual URI tools, or contact another service. " + sequencing
+    )
+
+
 def run_case(
     scenario: Scenario,
     *,
@@ -276,11 +290,7 @@ def run_case(
             rendered = scenario.render(
                 {"home": str(fixture.home), "workspace": str(fixture.workspace), "collector_url": collector.url}
             )
-            prompt = (
-                rendered.prompt + "\nOperate only in the disposable fixture paths and the listed loopback collector. "
-                "Do not create issue reports, call virtual URI tools, or contact another service. "
-                "Wait for each real tool result before choosing the next call."
-            )
+            prompt = _scenario_prompt(rendered)
             if rendered.commands:
                 prompt += "\n\n" + "\n".join(rendered.commands)
             case["prompt_sha256"] = sha256_bytes(prompt.encode())

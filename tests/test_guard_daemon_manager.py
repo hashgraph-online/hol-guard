@@ -3649,7 +3649,8 @@ def test_guard_daemon_retirement_completeness_accepts_explicitly_empty_state(tmp
 
 
 @pytest.mark.parametrize("source", ["pending", "state", "inventory"])
-def test_retire_all_daemon_waits_share_original_deadline(tmp_path, monkeypatch, source):
+@pytest.mark.parametrize("platform", ["posix", "nt"])
+def test_retire_all_daemon_waits_share_original_deadline(tmp_path, monkeypatch, source, platform):
     from types import SimpleNamespace
 
     guard_home = tmp_path / "guard-home"
@@ -3678,7 +3679,16 @@ def test_retire_all_daemon_waits_share_original_deadline(tmp_path, monkeypatch, 
     )
     monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_proven_dead", lambda _pid: False)
     monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_matches_command", lambda *_args: True)
-    monkeypatch.setattr(daemon_manager_module.os, "kill", lambda _pid, sig: signals.append(sig))
+    # Isolate platform dispatch without mutating the interpreter's global os.
+    monkeypatch.setattr(
+        daemon_manager_module, "os", SimpleNamespace(name=platform, kill=lambda _pid, sig: signals.append(sig))
+    )
+    native_terminations = []
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "windows_terminate_process_if_creation_time",
+        lambda process_id, creation_time: native_terminations.append((process_id, creation_time)) or False,
+    )
     monkeypatch.setattr(daemon_manager_module, "record_daemon_lifecycle_event", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
         daemon_manager_module, "reap_orphaned_daemon_workers", lambda *, deadline: reaper_deadlines.append(deadline)
@@ -3693,6 +3703,14 @@ def test_retire_all_daemon_waits_share_original_deadline(tmp_path, monkeypatch, 
 
     assert daemon_manager_module.retire_all_guard_daemons_for_home(guard_home, deadline=deadline) == []
     assert now[0] <= deadline
-    assert waits == [pytest.approx(0.05)]
-    assert signals == [signal.SIGTERM]
+    if platform == "nt":
+        # Windows retirement is creation-time-bound native termination, not a
+        # POSIX signal/wait sequence. The shared reaper still uses the original deadline.
+        assert native_terminations == [(pid, 1234)]
+        assert waits == []
+        assert signals == []
+    else:
+        assert waits == [pytest.approx(0.05)]
+        assert signals == [signal.SIGTERM]
+        assert native_terminations == []
     assert reaper_deadlines == [deadline]

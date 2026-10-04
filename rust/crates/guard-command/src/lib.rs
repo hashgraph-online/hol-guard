@@ -1,21 +1,93 @@
 #![forbid(unsafe_code)]
+pub mod action_lattice;
+pub mod approval_reuse;
 pub mod business_gmail_plain;
 pub mod business_gmail_wire;
 pub mod business_gws_command;
 pub mod business_input;
+pub mod canonical_command;
 mod command_ascii_comparison;
+mod command_candidate_common;
 mod command_common_cli_matchers;
 pub mod command_compatibility;
+mod command_contained_routine_candidates;
+mod command_critical_floors;
+#[cfg(test)]
+mod command_critical_floors_tests;
 mod command_database_matchers;
+pub mod command_decision_adapter;
+pub mod command_evaluation;
+#[cfg(test)]
+mod command_evaluation_tests;
+mod command_launcher_floors;
+pub mod command_model;
 mod command_operand_matchers;
 mod command_option_parsing;
+mod command_segment_parsing;
+#[cfg(unix)]
+pub mod command_shell_read_factors;
 mod command_specialized_matchers;
+mod command_structure;
 mod command_structured_matchers;
+mod command_tokens;
+mod command_verified_read_candidates;
+#[cfg(test)]
+mod command_verified_read_candidates_tests;
+mod command_workspace_write_candidates;
+mod data_flow;
+pub mod effect_decision;
+mod env_wrapper;
 mod executable_flag_contract;
+pub mod extension_control;
+pub mod extension_evidence;
+pub mod extension_trust;
+mod github_capability_contract;
+#[cfg(test)]
+mod github_capability_contract_tests;
+mod github_capability_interaction;
+mod github_command_capabilities;
+#[cfg(test)]
+mod github_command_capabilities_tests;
+pub mod github_workflow_approval_record;
+pub mod github_workflow_authorization;
+pub mod github_workflow_operations;
+mod home_path_text;
+pub mod homebrew_intent;
+pub mod jsonc;
+#[cfg(unix)]
+pub mod launch_identity;
+#[cfg(unix)]
+pub mod launch_identity_binding;
+pub mod launch_identity_environment;
+pub mod native_command_catalog;
 pub mod native_command_controls;
+pub mod native_command_extension_evidence;
+#[cfg(test)]
+mod native_command_extension_evidence_tests;
 pub mod native_command_program;
+pub mod npm_source_spec;
+pub mod package_execution_context;
+pub mod package_intent_common;
+pub mod package_intent_parser;
+pub mod package_manager_command;
+pub mod package_manifest_diff;
 mod parser_wrappers;
 pub mod pretool;
+#[cfg(unix)]
+mod runtime_read_paths;
+mod shell_command_wrappers;
+mod shell_execution_context;
+mod shell_execution_context_support;
+mod shell_read_literal_wrapper;
+mod shell_secret_read_flow;
+mod shell_secret_read_support;
+#[cfg(unix)]
+pub mod shell_secret_reads;
+mod shell_structure;
+pub mod typescript_launch_evidence;
+
+pub use command_evaluation::{evaluate_command, CompositeCommandEvaluation};
+pub use command_model::parse_shell_command;
 
 use serde::{Deserialize, Serialize};
 
@@ -81,6 +153,13 @@ pub struct CanonicalCommandV1 {
     pub uncertainty_reason: Option<String>,
     pub path_overridden: bool,
     pub parser_profile: String,
+    /// Python `CanonicalCommand.security_identity` — the authoritative
+    /// `command-security-v2:` digest serialized on `to_dict`. The wire omits
+    /// embedded-command `text` and redirect spans, so the identity cannot be
+    /// re-derived from the public model; the resident path supplies it. Empty
+    /// string on the pure-native path → `from_v1` recomputes it.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub security_identity: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -228,6 +307,7 @@ pub fn parse_command(request: &CommandModelRequestV1) -> Result<CanonicalCommand
         uncertainty_reason: None,
         path_overridden,
         parser_profile: parser_profile.to_owned(),
+        security_identity: String::new(),
     })
 }
 
@@ -244,6 +324,7 @@ fn uncertain(request: &CommandModelRequestV1, raw: &str, reason: &str) -> Canoni
         uncertainty_reason: Some(reason.to_owned()),
         path_overridden: false,
         parser_profile: "posix-simple-v1".to_owned(),
+        security_identity: String::new(),
     }
 }
 
@@ -533,7 +614,10 @@ fn push_segment(
     Ok(())
 }
 
-fn shell_tokens(command: &str, preserve_backslash: bool) -> Result<Vec<String>, &'static str> {
+pub(crate) fn shell_tokens(
+    command: &str,
+    preserve_backslash: bool,
+) -> Result<Vec<String>, &'static str> {
     let mut tokens = Vec::new();
     let mut token = String::new();
     let mut token_started = false;
@@ -976,3 +1060,53 @@ mod tests {
         assert!(parsed.segments.is_empty());
     }
 }
+
+// RTM-019 pending modules — compile signal only until legs complete
+pub mod audit_receipt;
+pub mod cloud_audit_sync;
+#[cfg(unix)]
+pub mod guard_run_launch;
+pub mod install_time_event;
+pub mod local_supply_chain;
+pub mod package_approval;
+pub mod package_policy_override;
+pub mod package_protect_projection;
+pub mod prompt_analysis;
+pub mod redacted_command_tokens;
+pub mod supply_chain_package_eval;
+pub mod target_identities;
+pub mod workspace_inventory;
+
+// RTM-014/017/020/023 pending modules — compile signal only until legs complete.
+pub mod aibom_reporting;
+pub mod aibom_trust_metadata;
+pub mod archive_inspection;
+pub mod command_operation_classification;
+pub mod composition_rules;
+#[cfg(unix)]
+pub mod contained_execution;
+pub mod data_flow_rules;
+pub mod decisions;
+pub mod detectors;
+#[cfg(unix)]
+pub mod direct_vitest;
+pub mod false_positive_rules;
+pub mod hook_evidence_writer;
+pub mod hook_responses;
+pub mod inventory_contract;
+pub mod linux_artifact_supply_chain;
+pub mod local_mcp_stdio;
+pub mod mcp_decision;
+pub mod restricted_archive;
+#[cfg(unix)]
+pub mod restricted_pytest;
+pub mod resume_template;
+pub mod review_event_outbox;
+pub mod review_event_outbox_schema;
+#[cfg(unix)]
+pub mod sandbox;
+pub mod shims;
+pub mod signals;
+pub mod supply_chain_bundle;
+pub mod supply_chain_package_identity;
+pub mod supply_chain_support;

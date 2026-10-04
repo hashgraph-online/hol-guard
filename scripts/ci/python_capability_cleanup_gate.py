@@ -24,8 +24,6 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from scripts.ci.runtime_retirement_ledger import validate_retirement_ledger  # noqa: E402
-
 from scripts.ci.python_capability_cleanup_analysis import (  # noqa: E402
     DynamicImport as _DynamicImport,
 )
@@ -54,6 +52,7 @@ from scripts.ci.python_runtime_retirement import (  # noqa: E402
     validate_retired_artifacts,
     validate_retired_modules,
 )
+from scripts.ci.runtime_retirement_ledger import validate_retirement_ledger  # noqa: E402
 
 SCHEMA: Final = "hol-guard.python-capability-cleanup.v1"
 CONTRACT: Final = "docs/guard/contracts/python-capability-ownership.v1.json"

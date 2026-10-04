@@ -41,6 +41,7 @@ from ..local_supply_chain import (
     _resolve_stored_package_policy_override,
     _verified_external_archive_replacements,
     compose_current_package_policy_action,
+    evaluate_package_request_artifact,
     package_request_policy_hash,
 )
 from ..mcp_fresh_approval import fresh_claim_allows_reapproval
@@ -74,7 +75,6 @@ from ..runtime.mcp_protection import McpServerIdentity, build_mcp_server_identit
 from ..runtime.package_execution_policy import is_execution_permitted
 from ..runtime.package_intent import build_package_request_artifact, extract_package_intent_request
 from ..runtime.signals import RiskSeverityLabel, RiskSignalV2
-from ..runtime.supply_chain_package_eval import evaluate_package_request_artifact
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..store import GuardStore
 from ..tool_decision_evidence import tool_decision_scanner_evidence as _tool_decision_scanner_evidence

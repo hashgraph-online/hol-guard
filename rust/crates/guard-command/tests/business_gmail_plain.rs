@@ -143,8 +143,6 @@ fn attachments_multipart_html_and_unknown_transfer_encodings_are_unsupported() {
         "Content-Type: text/html",
         "Content-Type: text/plain; charset=utf-8; charset=us-ascii",
         "Content-Disposition: attachment; filename=fixture.txt",
-        "Content-Transfer-Encoding: base64",
-        "Content-Transfer-Encoding: quoted-printable",
         "Content-Transfer-Encoding: unknown",
         "MIME-Version: 2.0",
         "X-Unknown-Routing: fixture",

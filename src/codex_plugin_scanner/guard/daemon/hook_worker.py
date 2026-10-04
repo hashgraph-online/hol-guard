@@ -82,7 +82,10 @@ _NATIVE_POLICY_READY_TIMEOUT_SECONDS = 25.0
 # Session setup uses this bounded window before any timed runtime hook starts.
 WORKSPACE_POLICY_READINESS_TIMEOUT_SECONDS = _NATIVE_POLICY_READY_TIMEOUT_SECONDS
 _TRANSIENT_RESIDENT_PUBLICATION_ERRORS = frozenset(
-    {"native_policy_snapshot_resident_changed", "native_resident_restart_budget_busy"}
+    {
+        "native_policy_snapshot_resident_changed",
+        "native_resident_restart_budget_busy",
+    }
 )
 
 

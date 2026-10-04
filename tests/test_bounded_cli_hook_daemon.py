@@ -52,9 +52,9 @@ def test_frozen_grok_transport_budget_and_failure(tmp_path: Path, event: str) ->
     )
     assert result is None
     payload, code = failure_payload(harness="grok", event_name=event, reason="unavailable", recording_only=False)
-    if event == "PreToolUse":
+    if event in {"PreToolUse", "UserPromptSubmit"}:
         assert 4 < captured[0] <= 5
-        assert payload["decision"] == "deny"
+        assert payload["decision"] == ("block" if event == "UserPromptSubmit" else "deny")
     else:
         assert 0 < captured[0] <= 1
         assert payload == {}
@@ -78,7 +78,7 @@ def test_unavailable_posttool_observation_preserves_explicit_decision(harness: s
 def test_grok_should_block_respects_guard_event_contract() -> None:
     from codex_plugin_scanner.guard.adapters.grok_hooks import grok_hook_should_block
 
-    assert grok_hook_should_block(policy_action="block", event_name="UserPromptSubmit") is False
+    assert grok_hook_should_block(policy_action="block", event_name="UserPromptSubmit") is True
     assert grok_hook_should_block(policy_action="block", event_name="PreToolUse") is True
     assert grok_hook_should_block(policy_action="allow", event_name="PreToolUse") is False
 
@@ -163,7 +163,7 @@ def test_grok_daemon_empty_observe_response_matches_native_success(event_name: s
 
 
 @pytest.mark.parametrize("use_daemon", [True, False])
-def test_grok_benign_prompt_succeeds_via_daemon_and_subprocess(
+def test_grok_benign_prompt_requires_successful_daemon_review(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     use_daemon: bool,
@@ -212,7 +212,10 @@ def test_grok_benign_prompt_succeeds_via_daemon_and_subprocess(
         )
 
     assert returncode == 0
-    assert json.loads(output.getvalue()) == {}
+    if use_daemon:
+        assert json.loads(output.getvalue()) == {}
+    else:
+        assert json.loads(output.getvalue())["decision"] == "block"
 
 
 def test_grok_daemon_prompt_native_block_is_preserved() -> None:
