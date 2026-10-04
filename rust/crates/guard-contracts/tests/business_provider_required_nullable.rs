@@ -20,7 +20,9 @@ fn missing_binding_is_rejected_for_every_identity_state() {
             value.as_object_mut().unwrap().remove(field);
             let error = serde_json::from_value::<BusinessProviderV1>(value).unwrap_err();
             assert!(
-                error.to_string().contains(&format!("missing field `{field}`")),
+                error
+                    .to_string()
+                    .contains(&format!("missing field `{field}`")),
                 "{state}.{field}: {error}"
             );
         }
