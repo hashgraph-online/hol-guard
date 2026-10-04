@@ -88,7 +88,9 @@ def _restricted_environment(
             continue
         if key in _SAFE_ENV_KEYS or key.startswith("LC_"):
             result[key] = value
-    executable_dirs = list(dict.fromkeys(str(path.parent) for path in allowed_executables))
+    executable_dirs = list(
+        dict.fromkeys(str(path.parent) for path in allowed_executables)
+    )
     result.update(
         {
             "HOME": str(private_home),
@@ -106,13 +108,17 @@ def _restricted_environment(
 def _backend_argv(plan: RestrictedPytestPlan, *, private_root: Path) -> list[str]:
     if plan.output_roots:
         if plan.profile_version != "node-build-output-v1":
-            raise RestrictedPytestError(PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE, "Unexpected output grants.")
+            raise RestrictedPytestError(
+                PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE, "Unexpected output grants."
+            )
         from .restricted_node_tool import validate_build_output_root
 
         for path in plan.output_roots:
             validate_build_output_root(path, workspace=plan.workspace)
     if plan.read_only_roots and plan.profile_version != "git-readonly-v1":
-        raise RestrictedPytestError(PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE, "Unexpected extra read grants.")
+        raise RestrictedPytestError(
+            PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE, "Unexpected extra read grants."
+        )
     if plan.backend == "macos-seatbelt":
         profile = _macos_profile(plan, private_root=private_root)
         return [str(plan.backend_executable), "-p", profile, "--", *plan.command]
@@ -141,8 +147,12 @@ def _macos_profile(plan: RestrictedPytestPlan, *, private_root: Path) -> str:
             )
             if path.is_file()
         )
-    read_filters = " ".join(f"(subpath {_seatbelt_string(path)})" for path in read_roots)
-    read_file_filters = " ".join(f"(literal {_seatbelt_string(path)})" for path in read_files)
+    read_filters = " ".join(
+        f"(subpath {_seatbelt_string(path)})" for path in read_roots
+    )
+    read_file_filters = " ".join(
+        f"(literal {_seatbelt_string(path)})" for path in read_files
+    )
     collection_targets = ()
     if plan.profile_version == PYTEST_READ_ONLY_PROFILE_VERSION:
         collection_targets = _collection_link_metadata(plan)
@@ -151,12 +161,20 @@ def _macos_profile(plan: RestrictedPytestPlan, *, private_root: Path) -> str:
         *collection_targets,
         *_ancestor_paths((*read_roots, *plan.allowed_executables, *collection_targets)),
     )
-    metadata_filters = " ".join(f"(literal {_seatbelt_string(path)})" for path in metadata_paths)
-    executable_filters = " ".join(f"(literal {_seatbelt_string(path)})" for path in plan.allowed_executables)
+    metadata_filters = " ".join(
+        f"(literal {_seatbelt_string(path)})" for path in metadata_paths
+    )
+    executable_filters = " ".join(
+        f"(literal {_seatbelt_string(path)})" for path in plan.allowed_executables
+    )
     read_only_workspace = plan.profile_version in READ_ONLY_TEST_PROFILES
     write_filters = " ".join(
         (
-            *(() if read_only_workspace else (f"(subpath {_seatbelt_string(plan.workspace)})",)),
+            *(
+                ()
+                if read_only_workspace
+                else (f"(subpath {_seatbelt_string(plan.workspace)})",)
+            ),
             *(f"(subpath {_seatbelt_string(path)})" for path in plan.output_roots),
             f"(subpath {_seatbelt_string(private_root)})",
             '(literal "/dev/null")',
@@ -167,7 +185,9 @@ def _macos_profile(plan: RestrictedPytestPlan, *, private_root: Path) -> str:
         for path in plan.allowed_executables
         if not _path_is_within(path, plan.workspace)
     )
-    immutable_executable_denial = f"(deny file-write* {immutable_executables})" if immutable_executables else ""
+    immutable_executable_denial = (
+        f"(deny file-write* {immutable_executables})" if immutable_executables else ""
+    )
     return "\n".join(
         (
             "(version 1)",
@@ -186,7 +206,8 @@ def _macos_profile(plan: RestrictedPytestPlan, *, private_root: Path) -> str:
             *([immutable_executable_denial] if immutable_executable_denial else ()),
             *(
                 _read_only_credential_denials(
-                    hide_metadata=plan.profile_version in {"vitest-readonly-v1", "node-build-output-v1"}
+                    hide_metadata=plan.profile_version
+                    in {"vitest-readonly-v1", "node-build-output-v1"}
                 )
                 if read_only_workspace
                 else ()
@@ -197,7 +218,12 @@ def _macos_profile(plan: RestrictedPytestPlan, *, private_root: Path) -> str:
 
 def _seatbelt_string(path: Path | str) -> str:
     value = str(path)
-    escaped = value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r")
+    escaped = (
+        value.replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("\n", "\\n")
+        .replace("\r", "\\r")
+    )
     return f'"{escaped}"'
 
 
@@ -206,11 +232,11 @@ def _read_only_credential_patterns() -> tuple[str, ...]:
     # through symlinks. Match case variants consistently with native path policy.
     def literal(value: str) -> str:
         return "".join(
-            f"[{character.lower()}{character.upper()}]"
-            if character.isascii() and character.isalpha()
-            else "\\" + character
-            if character in ".-"
-            else character
+            (
+                f"[{character.lower()}{character.upper()}]"
+                if character.isascii() and character.isalpha()
+                else "\\" + character if character in ".-" else character
+            )
             for character in value
         )
 
@@ -260,7 +286,8 @@ def _read_only_credential_patterns() -> tuple[str, ...]:
 def _read_only_credential_denials(*, hide_metadata: bool = False) -> tuple[str, ...]:
     operation = "file-read*" if hide_metadata else "file-read-data"
     return tuple(
-        f"(deny {operation} (regex {_seatbelt_string(pattern)}))" for pattern in _read_only_credential_patterns()
+        f"(deny {operation} (regex {_seatbelt_string(pattern)}))"
+        for pattern in _read_only_credential_patterns()
     )
 
 
@@ -300,9 +327,15 @@ def _bubblewrap_argv(plan: RestrictedPytestPlan, *, private_root: Path) -> list[
         "--tmpfs",
         "/tmp",
     ]
-    readonly_paths = [path for path in (*_LINUX_READ_ROOTS, *_LINUX_READ_FILES) if path.exists()]
+    readonly_paths = [
+        path for path in (*_LINUX_READ_ROOTS, *_LINUX_READ_FILES) if path.exists()
+    ]
     readonly_paths.extend(_runtime_read_roots(plan, private_root=private_root))
-    readonly_paths.extend(path for path in plan.allowed_executables if not _path_is_within(path, plan.workspace))
+    readonly_paths.extend(
+        path
+        for path in plan.allowed_executables
+        if not _path_is_within(path, plan.workspace)
+    )
     argv.extend(("--bind", str(plan.workspace), str(plan.workspace)))
     argv.extend(("--dir", str(private_root)))
     argv.extend(("--bind", str(private_root), str(private_root)))
@@ -314,7 +347,10 @@ def _bubblewrap_argv(plan: RestrictedPytestPlan, *, private_root: Path) -> list[
 
 def _dedupe_parent_paths(paths: Sequence[Path]) -> tuple[Path, ...]:
     resolved: list[Path] = []
-    for path in sorted({item.resolve(strict=False) for item in paths}, key=lambda item: (len(item.parts), str(item))):
+    for path in sorted(
+        {item.resolve(strict=False) for item in paths},
+        key=lambda item: (len(item.parts), str(item)),
+    ):
         if any(_path_is_within(path, parent) for parent in resolved):
             continue
         resolved.append(path)
@@ -332,7 +368,9 @@ def _ancestor_paths(paths: Sequence[Path]) -> tuple[Path, ...]:
     return tuple(ancestors)
 
 
-def _runtime_read_roots(plan: RestrictedPytestPlan, *, private_root: Path | None = None) -> tuple[Path, ...]:
+def _runtime_read_roots(
+    plan: RestrictedPytestPlan, *, private_root: Path | None = None
+) -> tuple[Path, ...]:
     roots: list[Path] = []
     for executable in plan.allowed_executables:
         if private_root is not None and _path_is_within(executable, private_root):
@@ -347,7 +385,11 @@ def _runtime_read_roots(plan: RestrictedPytestPlan, *, private_root: Path | None
             executable, _SEALED_SYSTEM_EXECUTABLE_ROOTS
         ):
             continue
-        root = executable.parent.parent if executable.parent.name == "bin" else executable.parent
+        root = (
+            executable.parent.parent
+            if executable.parent.name == "bin"
+            else executable.parent
+        )
         if root not in roots:
             roots.append(root)
     return tuple(roots)
@@ -386,7 +428,13 @@ def _current_user_process_ceiling() -> int:
     try:
         with tempfile.TemporaryFile(mode="w+b") as output:
             result = subprocess.run(
-                ["/bin/ps", "-U", str(os.getuid()), "-o", "nlwp=" if sys.platform == "linux" else "pid="],
+                [
+                    "/bin/ps",
+                    "-U",
+                    str(os.getuid()),
+                    "-o",
+                    "nlwp=" if sys.platform == "linux" else "pid=",
+                ],
                 stdin=subprocess.DEVNULL,
                 stdout=output,
                 stderr=subprocess.DEVNULL,
@@ -397,10 +445,19 @@ def _current_user_process_ceiling() -> int:
             output.seek(0)
             raw = output.read(1_048_577)
         rows = raw.splitlines()
-        if result.returncode != 0 or len(raw) > 1_048_576 or not rows or any(not row.strip().isdigit() for row in rows):
+        if (
+            result.returncode != 0
+            or len(raw) > 1_048_576
+            or not rows
+            or any(not row.strip().isdigit() for row in rows)
+        ):
             raise ValueError("invalid bounded process count")
         # Linux counts threads against RLIMIT_NPROC, not just process leaders.
-        current = sum(int(row.strip()) for row in rows) if sys.platform == "linux" else len(rows)
+        current = (
+            sum(int(row.strip()) for row in rows)
+            if sys.platform == "linux"
+            else len(rows)
+        )
         if current <= 0:
             raise ValueError("invalid bounded thread count")
         return current + _DEFAULT_PROCESSES
@@ -423,7 +480,11 @@ def _run_backend_process(
     if (
         node_virtual_address_space
         and sys.platform == "linux"
-        and (not _RESOURCE_AVAILABLE or _resource is None or not hasattr(_resource, "RLIMIT_DATA"))
+        and (
+            not _RESOURCE_AVAILABLE
+            or _resource is None
+            or not hasattr(_resource, "RLIMIT_DATA")
+        )
     ):
         raise RestrictedPytestError(
             PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE,
@@ -431,7 +492,9 @@ def _run_backend_process(
         )
     # RLIMIT_NPROC counts the whole user, not this run. A static 64-process
     # ceiling prevents Node from spawning even one test worker on busy desktops.
-    process_ceiling = _current_user_process_ceiling() if _RESOURCE_AVAILABLE else _DEFAULT_PROCESSES
+    process_ceiling = (
+        _current_user_process_ceiling() if _RESOURCE_AVAILABLE else _DEFAULT_PROCESSES
+    )
 
     def apply_limits() -> None:
         resource_module = _resource
@@ -444,8 +507,12 @@ def _run_backend_process(
             # it is not an aggregate RSS/cgroup limit. Never widen AS without it.
             if not hasattr(resource_module, "RLIMIT_DATA"):
                 raise RuntimeError("Linux Node data limits are unavailable.")
-            _set_resource_limit(resource_module.RLIMIT_DATA, _DEFAULT_MEMORY_BYTES, required=True)
-            _set_resource_limit(resource_module.RLIMIT_AS, _NODE_VIRTUAL_ADDRESS_BYTES, required=True)
+            _set_resource_limit(
+                resource_module.RLIMIT_DATA, _DEFAULT_MEMORY_BYTES, required=True
+            )
+            _set_resource_limit(
+                resource_module.RLIMIT_AS, _NODE_VIRTUAL_ADDRESS_BYTES, required=True
+            )
         else:
             _set_resource_limit(resource_module.RLIMIT_AS, _DEFAULT_MEMORY_BYTES)
         _set_resource_limit(resource_module.RLIMIT_FSIZE, _DEFAULT_FILE_BYTES)
@@ -453,7 +520,10 @@ def _run_backend_process(
         if hasattr(resource_module, "RLIMIT_NPROC"):
             _set_resource_limit(resource_module.RLIMIT_NPROC, process_ceiling)
 
-    with tempfile.TemporaryFile(mode="w+b") as stdout_file, tempfile.TemporaryFile(mode="w+b") as stderr_file:
+    with (
+        tempfile.TemporaryFile(mode="w+b") as stdout_file,
+        tempfile.TemporaryFile(mode="w+b") as stderr_file,
+    ):
         try:
             process = subprocess.Popen(
                 list(argv),
@@ -472,7 +542,10 @@ def _run_backend_process(
                 f"Restricted pytest sandbox could not start; execution was not started: {error}",
             ) from error
 
-        previous_handlers: dict[int, int | signal.Handlers | Callable[[int, FrameType | None], object] | None] = {}
+        previous_handlers: dict[
+            int,
+            int | signal.Handlers | Callable[[int, FrameType | None], object] | None,
+        ] = {}
 
         def forward_signal(signum: int, _frame: object) -> None:
             with contextlib.suppress(OSError):
@@ -514,14 +587,19 @@ def _replay_sandbox_output(source: BinaryIO, destination: TextIO) -> None:
     raw = source.read(_MAX_REPLAY_BYTES + 1)
     truncated = len(raw) > _MAX_REPLAY_BYTES
     text = raw[:_MAX_REPLAY_BYTES].decode("utf-8", errors="replace")
-    safe_text = "".join(character if character in {"\n", "\t"} or ord(character) >= 32 else "�" for character in text)
+    safe_text = "".join(
+        character if character in {"\n", "\t"} or ord(character) >= 32 else "�"
+        for character in text
+    )
     if truncated:
         safe_text += "\n[HOL Guard truncated restricted pytest output]\n"
     destination.write(safe_text)
     destination.flush()
 
 
-def _set_resource_limit(resource_name: int, requested: int, *, required: bool = False) -> None:
+def _set_resource_limit(
+    resource_name: int, requested: int, *, required: bool = False
+) -> None:
     resource_module = _resource
     if resource_module is None:
         if required:
@@ -532,9 +610,14 @@ def _set_resource_limit(resource_name: int, requested: int, *, required: bool = 
         hard = requested if current_hard < 0 else min(requested, current_hard)
         soft = hard if current_soft < 0 else min(requested, current_soft, hard)
         resource_module.setrlimit(resource_name, (soft, hard))
-        if required and any(value < 0 or value > requested for value in resource_module.getrlimit(resource_name)):
+        if required and any(
+            value < 0 or value > requested
+            for value in resource_module.getrlimit(resource_name)
+        ):
             raise RuntimeError("Required resource limits were not enforced.")
     except (OSError, ValueError) as error:
         if required:
-            raise RuntimeError("Required resource limits could not be enforced.") from error
+            raise RuntimeError(
+                "Required resource limits could not be enforced."
+            ) from error
         return
