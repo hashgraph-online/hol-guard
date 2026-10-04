@@ -10,6 +10,42 @@ fn request(command: &str) -> CommandModelRequestV1 {
 }
 
 #[test]
+fn bounded_file_predicates_preserve_compound_path_and_command_risks() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .canonicalize()
+        .unwrap();
+    let root = root.to_str().unwrap();
+    for command in [
+        "test -f src/lib.rs && cat src/lib.rs",
+        "test -d src && ls src",
+        "test -e src/lib.rs; echo done",
+        "test -r src/lib.rs && head -1 src/lib.rs",
+    ] {
+        let decision =
+            evaluate_pre_tool_with_context(&request(command), Some(root), Some(root)).unwrap();
+        assert_eq!(decision.minimum_action, "allow", "{command}");
+        assert_ne!(
+            evaluate_pre_tool(&request(command)).unwrap().minimum_action,
+            "allow"
+        );
+    }
+    for command in [
+        "test -f .env && cat .env",
+        "test -e ~/.ssh/id_rsa",
+        "test -f src/lib.rs && rm -rf src",
+        "test -f src/lib.rs -o -f .env",
+        "test -f $(echo src/lib.rs)",
+        "test -x src/lib.rs",
+    ] {
+        let decision = evaluate_pre_tool_with_context(&request(command), Some(root), Some(root));
+        assert!(
+            decision.is_err() || decision.unwrap().minimum_action != "allow",
+            "{command}"
+        );
+    }
+}
+
+#[test]
 fn permits_only_standalone_plain_directory_changes() {
     assert!(!safe_directory_target(r"~/.ss\h"));
     for command in [

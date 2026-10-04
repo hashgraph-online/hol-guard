@@ -6,6 +6,24 @@ pub(super) use super::safe_writes::{
     bounded_native_file_write_target, safe_copy_arguments, safe_file_mutation_arguments,
 };
 
+pub(super) fn safe_file_predicate_arguments(
+    arguments: &[String],
+    context: super::PathContext<'_>,
+) -> bool {
+    let [predicate, target] = arguments else {
+        return false;
+    };
+    verified_path_context(context.home_dir, context.cwd)
+        && matches!(predicate.as_str(), "-f" | "-d" | "-e" | "-r")
+        && !target.starts_with('-')
+        && bounded_read_target(
+            target,
+            context.home_dir,
+            context.cwd,
+            matches!(predicate.as_str(), "-d" | "-e"),
+        )
+}
+
 pub(super) fn safe_sleep_arguments(arguments: &[String]) -> bool {
     const MAX_SAFE_SLEEP_SECONDS: f64 = 60.0;
 

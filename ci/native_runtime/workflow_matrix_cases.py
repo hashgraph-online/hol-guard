@@ -71,6 +71,10 @@ def create_cases(root: Path) -> tuple[Path, Path, list[WorkflowCase]]:
             else []
         ),
         ("read-relative", "cat src/one.ts"),
+        ("file-predicate-read", "test -f src/one.ts && cat src/one.ts"),
+        ("directory-predicate-list", "test -d src && ls src"),
+        ("exists-predicate-echo", "test -e src/one.ts; echo done"),
+        ("readable-predicate-head", "test -r src/one.ts && head -1 src/one.ts"),
         ("read-absolute", f"cat {file}"),
         ("read-quoted", 'cat "src/path with spaces.ts"'),
         ("read-outside", f"cat {outside}"),
@@ -161,6 +165,11 @@ def create_cases(root: Path) -> tuple[Path, Path, list[WorkflowCase]]:
     ]
     negatives = [
         ("secret-read", "cat .env"),
+        ("predicate-secret-read", "test -f .env && cat .env"),
+        ("predicate-secret-alias", "test -f unsafe-tests/alias.ts"),
+        ("predicate-destructive-neighbor", "test -f src/one.ts && rm -rf src"),
+        ("predicate-complex-expression", "test -f src/one.ts -o -f .env"),
+        ("predicate-command-substitution", "test -f $(echo src/one.ts)"),
         ("secret-read-stderr-null", "cat .env 2>/dev/null"),
         ("list-stderr-null-secret-compound", "ls src 2>/dev/null; cat .env"),
         ("stderr-secret-write", "ls src 2> .env"),
