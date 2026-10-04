@@ -206,7 +206,7 @@ def test_native_hook_client_recovers_after_exact_managed_process_exit(
     tmp_path: Path,
 ) -> None:
     runtime, state_dir = native_runtime
-    request = _request(runtime, tmp_path)
+    request = _request(runtime, tmp_path, deadline_budget_ms=2_500)
     _invoke(runtime, state_dir, request)
     initial_state = _state_files(state_dir)[0]
     _terminate_state_process(initial_state)
