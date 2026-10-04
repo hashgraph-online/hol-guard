@@ -27,6 +27,11 @@ def create_cases(root: Path) -> tuple[Path, Path, list[WorkflowCase]]:
         (workspace / "src" / name).write_text(source)
     (workspace / "__tests__/nested/one.test.ts").write_text(source)
     (home / "notes.txt").write_text(source)
+    output_root = home / ".agent-state/cli/exec/sess_6f77a76f-0997-4644-b4db-19dae37b96a4"
+    output_root.mkdir(parents=True)
+    output_log = output_root / "call_fd767b64352243ab8094f19b-stdout.log"
+    output_log.write_text(source)
+    (home / ".agent-state/cli/setting.json").write_text("{}\n")
     # Synthetic secrets only; negative cases never execute their commands.
     (workspace / ".env").write_text("SYNTHETIC_ONLY=not-a-real-secret\n")
     (workspace / "unsafe-tests").mkdir()
@@ -39,12 +44,14 @@ def create_cases(root: Path) -> tuple[Path, Path, list[WorkflowCase]]:
     (workspace / "grep-files/private.key").write_text("ordinary-key-only\n")
     try:
         (workspace / "unsafe-tests/alias.ts").symlink_to(workspace / ".env")
+        (output_root / "call_aaaaaaaaaaaaaaaaaaaaaaaa-stderr.log").symlink_to(workspace / ".env")
     except OSError as error:
         raise RuntimeError("workflow matrix requires permission to create symbolic links") from error
     file = shlex.quote(str(workspace / "src/one.ts"))
     directory = shlex.quote(str(workspace / "__tests__") + "/")
     outside = shlex.quote(str(home / "notes.txt"))
     repository = shlex.quote(str(workspace))
+    execution_output = shlex.quote(str(output_log))
     positives = [
         ("echo", "echo ordinary-workflow-fixture"),
         ("printf", "printf '%s\\n' ordinary-workflow-fixture"),
@@ -67,6 +74,10 @@ def create_cases(root: Path) -> tuple[Path, Path, list[WorkflowCase]]:
         ("read-absolute", f"cat {file}"),
         ("read-quoted", 'cat "src/path with spaces.ts"'),
         ("read-outside", f"cat {outside}"),
+        ("read-execution-output", f"cat {execution_output}"),
+        ("grep-execution-output", f"grep -n ordinary {execution_output}"),
+        ("execution-output-pipeline", f"cat {execution_output} | tail -1"),
+        ("execution-output-count", f"wc -l {execution_output}"),
         ("head", "head -n 1 src/one.ts"),
         ("tail", "tail -n 1 src/one.ts"),
         ("head-shorthand", "head -1 src/one.ts"),
@@ -162,6 +173,9 @@ def create_cases(root: Path) -> tuple[Path, Path, list[WorkflowCase]]:
         ("cwd-copy-metadata", f"cd {repository} && cp src/one.ts .git/config"),
         ("cwd-mutation-chain", f"cd {repository} && cp src/one.ts src/copied.ts && cat src/copied.ts"),
         ("secret-copy", "cp .env src/copied.ts"),
+        ("overwrite-execution-output", f"cp src/one.ts {execution_output}"),
+        ("read-host-configuration", f"cat {shlex.quote(str(home / '.agent-state/cli/setting.json'))}"),
+        ("execution-output-secret-alias", f"cat {shlex.quote(str(output_root / 'call_aaaaaaaaaaaaaaaaaaaaaaaa-stderr.log'))}"),
         ("secret-alias", "cat unsafe-tests/alias.ts"),
         ("secret-recursion", "grep -rn SYNTHETIC_ONLY unsafe-tests/"),
         ("secret-recursion-alias", "grep -Rn SYNTHETIC_ONLY unsafe-tests/"),
