@@ -99,7 +99,7 @@ def test_signed_backup_inverse_preserves_prior_generation(
     transition,
     tmp_path,
     monkeypatch,
-    existing,  # noqa: F811 -- shared pytest fixture
+    existing,
 ):
     runtime, plan, _bindings, _pointer = transition
     context = _context(tmp_path, monkeypatch)

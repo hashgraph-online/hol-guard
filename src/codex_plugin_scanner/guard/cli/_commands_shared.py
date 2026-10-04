@@ -121,6 +121,7 @@ from ..local_supply_chain import (
     build_supply_chain_status_payload,
     build_workspace_audit_payload,
     build_workspace_scan_payload,
+    evaluate_package_request_artifact,
     package_request_policy_hash,
     resolve_package_firewall_entitlement_with_refresh,
     sync_supply_chain_cloud_state,
@@ -201,7 +202,6 @@ from ..runtime.secret_sensitivity import (
 )
 from ..runtime.sed_scripts import sed_script_is_bounded_print
 from ..runtime.signals import RiskSignalV2
-from ..runtime.supply_chain_package_eval import evaluate_package_request_artifact
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..shims import activate_package_shims, package_shim_status, uninstall_package_shims
 from ..store import GuardStore

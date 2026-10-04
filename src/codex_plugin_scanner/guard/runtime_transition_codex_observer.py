@@ -17,9 +17,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import tomllib
-
 from .adapters.codex import _CODEX_GUARD_TOOL_MATCHER, _payload_has_hooks_feature_enabled
+from .codex_config import tomllib
 from .codex_hook_bridge_runtime import bridge_config_from_argv, trusted_hook_launch
 from .codex_hook_file_integrity import CodexHookIntegrityError, hook_validation_deadline, split_hook_command
 from .codex_hook_integrity import hook_manifest_path, load_authenticated_hook_manifest

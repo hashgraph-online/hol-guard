@@ -42,7 +42,8 @@ mod private_files;
 #[path = "process_lifecycle.rs"]
 mod process_lifecycle;
 pub use directory_binding::{
-    bind_directory, bind_private_directory, create_private_directory, PrivateDirectoryBinding,
+    bind_directory, bind_private_directory, create_private_directory, path_is_within,
+    PrivateDirectoryBinding,
 };
 pub use private_files::{
     create_private_file, delete_private_file_handle, is_single_link_file, open_private_directory,
@@ -294,11 +295,45 @@ fn create_null_handle(
     }
 }
 
+/// `MAX_PATH` includes the terminating NUL. A path already at that limit
+/// cannot be opened unless `CreateFileW` receives the `\\?\` prefix. Shorter
+/// paths stay in Win32 form: the prefix disables 8.3 expansion.
+pub(crate) const MAX_PATH: usize = 260;
+
 fn wide_path(path: &Path) -> io::Result<Vec<u16>> {
     if path.as_os_str().encode_wide().any(|unit| unit == 0) {
         return Err(io::Error::new(io::ErrorKind::InvalidInput, "NUL in path"));
     }
-    Ok(path.as_os_str().encode_wide().chain([0]).collect())
+    let wide = path.as_os_str().encode_wide().collect::<Vec<_>>();
+    let mut wide = extend_over_max_path(wide, path.is_absolute());
+    wide.push(0);
+    Ok(wide)
+}
+
+fn extend_over_max_path(wide: Vec<u16>, absolute: bool) -> Vec<u16> {
+    const EXTENDED_PREFIX: &[u16] = &[92, 92, 63, 92];
+    const DEVICE_PREFIX: &[u16] = &[92, 92, 46, 92];
+    if wide.len() < MAX_PATH
+        || wide.starts_with(EXTENDED_PREFIX)
+        || wide.starts_with(DEVICE_PREFIX)
+        || !absolute
+    {
+        return wide;
+    }
+    // The verbatim prefix disables Win32 slash conversion.
+    let wide = wide
+        .into_iter()
+        .map(|unit| if unit == 47 { 92 } else { unit })
+        .collect::<Vec<_>>();
+    let mut extended = Vec::with_capacity(wide.len() + 8);
+    if wide.starts_with(&[92, 92]) {
+        extended.extend_from_slice(&[92, 92, 63, 92, 85, 78, 67, 92]);
+        extended.extend_from_slice(&wide[2..]);
+    } else {
+        extended.extend_from_slice(EXTENDED_PREFIX);
+        extended.extend_from_slice(&wide);
+    }
+    extended
 }
 
 fn command_line(executable: &OsStr, args: &[&OsStr]) -> io::Result<Vec<u16>> {
@@ -415,6 +450,82 @@ mod tests {
     use std::io::Write;
 
     const SENTINEL_ENV: &str = "HOL_GUARD_TEST_UNLISTED_HANDLE";
+
+    #[test]
+    fn short_win32_path_keeps_8_3_form() {
+        let encoded = wide_path(Path::new(r"C:\Users\runneradmin\native-runtime")).unwrap();
+        assert!(!encoded.starts_with(&[92, 92, 63, 92]));
+    }
+
+    #[test]
+    fn over_max_path_drive_path_uses_verbatim_prefix() {
+        let long = format!(r"C:\Users\runneradmin\{}", "long-private-home-".repeat(14));
+        assert!(long.encode_utf16().count() >= MAX_PATH);
+        let encoded = wide_path(Path::new(&long)).unwrap();
+        let prefix: Vec<u16> = r"\\?\".encode_utf16().collect();
+        assert!(encoded.starts_with(&prefix));
+        assert!(!encoded[prefix.len()..].starts_with(&prefix));
+        assert_eq!(encoded.last().copied(), Some(0));
+    }
+
+    #[test]
+    fn over_max_path_unc_uses_unc_verbatim_prefix() {
+        let long = format!(r"\\server\share\{}", "long-private-home-".repeat(14));
+        assert!(long.encode_utf16().count() >= MAX_PATH);
+        let encoded = wide_path(Path::new(&long)).unwrap();
+        let prefix: Vec<u16> = r"\\?\UNC\".encode_utf16().collect();
+        assert!(encoded.starts_with(&prefix));
+        let tail: Vec<u16> = format!(r"server\share\{}", "long-private-home-".repeat(14))
+            .encode_utf16()
+            .chain([0])
+            .collect();
+        assert_eq!(&encoded[prefix.len()..], tail.as_slice());
+    }
+
+    #[test]
+    fn over_max_path_forward_slashes_are_normalized() {
+        let long = format!("C:/Users/runneradmin/{}", "long-private-home-".repeat(14));
+        assert!(long.encode_utf16().count() >= MAX_PATH);
+        let encoded = wide_path(Path::new(&long)).unwrap();
+        let prefix: Vec<u16> = r"\\?\".encode_utf16().collect();
+        let expected: Vec<u16> =
+            format!(r"C:\Users\runneradmin\{}", "long-private-home-".repeat(14))
+                .encode_utf16()
+                .chain([0])
+                .collect();
+        assert_eq!(&encoded[..prefix.len()], prefix.as_slice());
+        assert_eq!(&encoded[prefix.len()..], expected.as_slice());
+    }
+
+    #[test]
+    fn already_verbatim_long_path_is_not_reprefixed() {
+        let long = format!(
+            r"\\?\C:\Users\runneradmin\{}",
+            "long-private-home-".repeat(12)
+        );
+        let encoded = wide_path(Path::new(&long)).unwrap();
+        let expected: Vec<u16> = long.encode_utf16().chain([0]).collect();
+        assert_eq!(encoded, expected);
+    }
+
+    #[test]
+    fn long_device_path_is_not_rewritten() {
+        let long = format!(
+            r"\\.\C:\Users\runneradmin\{}",
+            "long-private-home-".repeat(12)
+        );
+        let encoded = wide_path(Path::new(&long)).unwrap();
+        let expected: Vec<u16> = long.encode_utf16().chain([0]).collect();
+        assert_eq!(encoded, expected);
+    }
+
+    #[test]
+    fn long_relative_path_is_not_verbatim() {
+        let long = "long-private-home-".repeat(20);
+        assert!(long.encode_utf16().count() >= MAX_PATH);
+        let encoded = wide_path(Path::new(&long)).unwrap();
+        assert!(!encoded.starts_with(&[92, 92, 63, 92]));
+    }
 
     #[test]
     fn inherited_handle_is_not_leaked() {

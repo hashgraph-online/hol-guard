@@ -179,7 +179,7 @@ def select_previous_tag(tags: Iterable[str], current_version: str, channel: str)
     return max(candidates)[1] if candidates else None
 
 
-def resolve_previous_release(repo: str, tag: str) -> "PreviousRelease":
+def resolve_previous_release(repo: str, tag: str) -> PreviousRelease:
     """Authoritative per-tag lookup via the GitHub CLI.
 
     One API call, no pagination window: asking about the specific candidate
