@@ -1,6 +1,42 @@
 use super::*;
 
 #[test]
+fn scanned_structured_edit_output_does_not_invent_a_persistence_review() {
+    let request = post_request(json!({
+        "tool_name": "Edit", "tool_input": {"file_path": "src/ordinary.ts"},
+        "tool_response": {
+            "originalFile": "export const value = 1;",
+            "oldString": "value = 1", "newString": "value = 2",
+            "structuredPatch": [{"lines": ["-value = 1", "+value = 2"]}]
+        }
+    }));
+    let mut effective = policy("warn");
+    effective
+        .risk_actions
+        .insert("persistence".into(), "require-reapproval".into());
+    let native = guard_hook_core::review_post_tool(&request);
+    assert_eq!(native.reason_code, "output_scan_allow");
+    let result = apply_post_tool_policy(
+        &snapshot(effective.clone()),
+        &request,
+        GuardHookPayloadKindV2::Inline,
+        native,
+    )
+    .unwrap();
+    assert_eq!(result.decision, "allow");
+    assert_eq!(result.policy_action.as_deref(), Some("warn"));
+    effective.default_action = "block".into();
+    let denied = apply_post_tool_policy(
+        &snapshot(effective),
+        &request,
+        GuardHookPayloadKindV2::Inline,
+        guard_hook_core::review_post_tool(&request),
+    )
+    .unwrap();
+    assert_eq!(denied.decision, "deny");
+}
+
+#[test]
 fn bounded_task_outputs_keep_input_proof_without_lowering_security_floors() {
     let payload = json!({
         "tool_name": "TodoWrite",
