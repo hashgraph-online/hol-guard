@@ -126,7 +126,9 @@ DANGEROUS_MCP_PATTERNS: list[re.Pattern[str]] = [
 
 RISKY_APPROVAL_PATTERNS: list[re.Pattern[str]] = [
     # Assignment only. A bare enum value in generated API docs is not a default.
-    re.compile(r"""(?:^|[\s{\[,])(?:["']?[A-Za-z_][\w.-]*["']?\s*)?[:=]\s*["']danger-full-access["']"""),
+    re.compile(
+        r"""(?:^|[\s{\[,])(?:["']?[A-Za-z_][\w.-]*["']?\s*)?[:=]\s*["']?danger-full-access(?![\w-])["']?"""
+    ),
     re.compile(r'approval[_ -]?policy["\']?\s*[:=]\s*["\']never["\']', re.I),
     re.compile(r'approvalMode["\']?\s*[:=]\s*["\']bypass["\']', re.I),
 ]
@@ -947,10 +949,7 @@ def check_no_approval_bypass_defaults(plugin_dir: Path, files: tuple[Path, ...] 
                     max_points=3,
                     path=relative_path.as_posix(),
                 )
-            risky_patterns = RISKY_APPROVAL_PATTERNS
-            if relative_path.suffix.lower() in DOCUMENTATION_EXTS:
-                risky_patterns = RISKY_APPROVAL_PATTERNS[1:]
-            if any(pattern.search(content) for pattern in risky_patterns):
+            if any(pattern.search(content) for pattern in RISKY_APPROVAL_PATTERNS):
                 findings.append(relative_path.as_posix())
     except ScanInputUnreadableError as exc:
         return unreadable_scan_input_failure(
