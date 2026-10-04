@@ -14,6 +14,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from contextlib import suppress
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
@@ -68,6 +69,7 @@ class InferenceRelay:
         self.model = model
         self.identity = identity
         self._api_key = api_key
+        self._session_id = str(uuid.uuid4())
         self._canary = canary
         self.max_rounds = max_rounds
         self.timeout = timeout
@@ -117,10 +119,9 @@ class InferenceRelay:
                     payload["model"] = relay.model
                     payload["stream"] = True
                     forwarded = json.dumps(payload, ensure_ascii=False).encode()
-                    headers = {"Content-Type": "application/json", "Accept": "text/event-stream"}
-                    if relay._api_key:
-                        headers["Authorization"] = "Bearer " + relay._api_key
-                    request = urllib.request.Request(relay.endpoint, data=forwarded, headers=headers, method="POST")
+                    request = urllib.request.Request(
+                        relay.endpoint, data=forwarded, headers=relay._request_headers(), method="POST"
+                    )
                     started = time.monotonic()
                     digest = hashlib.sha256()
                     size = 0
@@ -177,6 +178,18 @@ class InferenceRelay:
     def base_url(self) -> str:
         """Return the local OpenAI-compatible API base URL for the agent."""
         return f"http://127.0.0.1:{self.server.server_port}/v1"
+
+    def _request_headers(self) -> dict[str, str]:
+        """Identify the real client and keep routing stable within one scenario."""
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "text/event-stream",
+            "User-Agent": "hol-guard-gauntlet/1.0",
+            "x-opencode-session": self._session_id,
+        }
+        if self._api_key:
+            headers["Authorization"] = "Bearer " + self._api_key
+        return headers
 
     def __enter__(self):
         """Start serving inference requests and return this relay."""
