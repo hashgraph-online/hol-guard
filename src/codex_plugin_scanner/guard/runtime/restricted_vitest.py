@@ -227,6 +227,9 @@ def run_restricted_node_plan(
             from .restricted_localhost import prepare_localhost_resolver
 
             plan = prepare_localhost_resolver(plan, root)
+            launch_env["NODE_OPTIONS"] = (
+                f"{launch_env.get('NODE_OPTIONS', '')} --require {root / 'localhost-resolution.cjs'}"
+            ).strip()
         return _run_backend_process(
             _backend_argv(plan, private_root=root),
             env=launch_env,
