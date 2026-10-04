@@ -74,6 +74,7 @@ pub struct BusinessProviderV1 {
     /// The business_provider_required_nullable tests pin this wire distinction.
     #[serde(deserialize_with = "required_nullable")]
     pub account_binding: Option<String>, // NOSONAR: rust:S9334; required key, nullable value.
+    /// Explicit nullable tenant commitment. Missing is invalid.
     #[serde(deserialize_with = "required_nullable")]
     pub tenant_binding: Option<String>, // NOSONAR: rust:S9334; required key, nullable value.
     pub identity_state: BusinessFactStateV1,
@@ -256,12 +257,9 @@ impl BusinessActionV1 {
         ]
         .iter()
         .all(|value| digest(value))
-            || ![
-                &self.provider.account_binding,
-                &self.provider.tenant_binding,
-            ]
-            .iter()
-            .all(|value| value.as_deref().is_none_or(digest))
+            || ![&self.provider.account_binding, &self.provider.tenant_binding]
+                .iter()
+                .all(|value| value.as_deref().is_none_or(digest))
             || !self
                 .content
                 .attachment_digests
