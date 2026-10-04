@@ -257,9 +257,12 @@ impl BusinessActionV1 {
         ]
         .iter()
         .all(|value| digest(value))
-            || ![&self.provider.account_binding, &self.provider.tenant_binding]
-                .iter()
-                .all(|value| value.as_deref().is_none_or(digest))
+            || ![
+                &self.provider.account_binding,
+                &self.provider.tenant_binding,
+            ]
+            .iter()
+            .all(|value| value.as_deref().is_none_or(digest))
             || !self
                 .content
                 .attachment_digests
