@@ -1,11 +1,17 @@
 import pytest
 
-from ci.native_runtime.probe_workflow_matrix import assert_admission, assert_execution, decode_events
+from ci.native_runtime.probe_workflow_matrix import (
+    assert_admission,
+    assert_execution,
+    decode_events,
+    validate_contained_dependencies,
+)
 from ci.native_runtime.workflow_matrix_cases import WorkflowCase
 
 
 def test_workflow_prompt_preserves_compound_commands_as_atomic_json_elements():
     import json
+
     from ci.native_runtime.probe_workflow_matrix import _workflow_prompt
 
     commands = ["pwd; gh api repos/hashgraph-online/hol-guard --jq '.name'", "echo first && echo second"]
@@ -81,6 +87,58 @@ def test_protected_admission_requires_the_exact_containment_route():
     for field, value in [("decision", "allow"), ("required_execution_profile", "wrong-profile")]:
         with pytest.raises(AssertionError, match="vitest"):
             assert_admission([case], [{**result, field: value}])
+
+
+@pytest.mark.parametrize("exit_code", [1, None, False, "0"])
+def test_contained_execution_rejects_failed_or_unproven_exit_even_with_passing_output(exit_code):
+    case = WorkflowCase("vitest", "bunx vitest run", protected_reason="contained")
+    events = [
+        {"type": "tool_execution_start", "args": {"command": "hol-guard execute-contained-test"}},
+        {
+            "type": "tool_execution_end",
+            "isError": False,
+            "result": {
+                "details": {
+                    "exitCode": exit_code,
+                    "holGuardContainedTest": {"input": {"command": case.command}},
+                },
+                "content": [{"type": "text", "text": "1 passed, 1 failed"}],
+            },
+        },
+    ]
+    with pytest.raises(AssertionError, match="did not exit successfully"):
+        assert_execution([case], events)
+    events[1]["result"]["details"]["exitCode"] = 0
+    events[1]["result"]["content"][0]["text"] = "2 passed"
+    assert_execution([case], events)
+    events[1]["result"]["details"].pop("exitCode")
+    assert_execution([case], events)
+
+
+def test_contained_fixture_requires_project_local_dependencies(tmp_path):
+    project = tmp_path / "project"
+    package = project / "node_modules/vitest"
+    package.mkdir(parents=True)
+    binary = project / "node_modules/.bin"
+    binary.mkdir()
+    entry = package / "vitest.mjs"
+    entry.write_text("// fixture entry point\n")
+    (binary / "vitest").symlink_to("../vitest/vitest.mjs")
+    validate_contained_dependencies(project)
+    entry.unlink()
+    with pytest.raises(AssertionError, match="lacks local"):
+        validate_contained_dependencies(project)
+    project_entry = project / "fixture-vitest.mjs"
+    project_entry.write_text("// project-local but not dependency-local\n")
+    entry.symlink_to(project_entry)
+    with pytest.raises(AssertionError, match="escapes node_modules"):
+        validate_contained_dependencies(project)
+    entry.unlink()
+    outside = tmp_path / "outside.mjs"
+    outside.write_text("// outside dependency\n")
+    entry.symlink_to(outside)
+    with pytest.raises(AssertionError, match="escapes project"):
+        validate_contained_dependencies(project)
 
 
 def test_workflow_fixture_removes_only_successful_runs(tmp_path, monkeypatch):
