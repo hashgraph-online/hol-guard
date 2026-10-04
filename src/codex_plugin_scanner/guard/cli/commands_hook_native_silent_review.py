@@ -23,6 +23,7 @@ def apply_unprompted_native_review(
 ) -> None:
     """Block the harness and keep a review-tier denial in the inbox."""
 
+    risk_summary = state.risk_summary
     if policy_action in {"review", "require-reapproval"}:
         package_evaluation = state.package_evaluation
         package_evaluation_to_dict = getattr(package_evaluation, "to_dict", None)
@@ -40,7 +41,7 @@ def apply_unprompted_native_review(
                         "source_scope": state.runtime_artifact.source_scope,
                         "config_path": state.runtime_artifact.config_path,
                         "launch_target": _runtime_request_summary(state.runtime_artifact),
-                        "risk_summary": state.risk_summary,
+                        "risk_summary": risk_summary,
                         "action_envelope_json": _action_envelope_json(state.action_envelope),
                         "decision_v2_json": state.decision_v2_payload,
                         "scanner_evidence": list(state.scanner_evidence_payload),
@@ -55,7 +56,7 @@ def apply_unprompted_native_review(
         )
     set_native_artifact_hook_final_action(state, "block")
     state.approval_prompted = False
-    guidance = safe_alternative_reason(f"HOL Guard blocked this action. {state.risk_summary}")
+    guidance = safe_alternative_reason(f"HOL Guard blocked this action. {risk_summary}")
     _terminalize_runtime_action_copy(state.response_payload)
     state.response_payload.update(
         terminal_action="block",

@@ -82,8 +82,10 @@ def test_native_package_denial_clears_approval_copy(tmp_path, harness):
     copy = payload["supply_chain_evaluation"]["user_copy"]
     assert copy["dashboard_url"] is None
     assert "safe, permitted alternative" in copy["next_step"]
-    assert "safe, permitted alternative" in copy["harness_message"]
-    assert "safe, permitted alternative" in payload["decision_v2_json"]["harness_message"]
+    assert "Package integrity changed." in copy["harness_message"]
+    assert "Package integrity changed." in payload["review_hint"]
+    assert "Package integrity changed." in payload["blocked_request_guidance"]
+    assert "Package integrity changed." in payload["decision_v2_json"]["harness_message"]
     record_native_artifact_hook_receipt(state, store)
     with sqlite3.connect(store.path) as connection:
         row = connection.execute("select policy_action, prompted from command_activity").fetchone()
