@@ -48,7 +48,7 @@ def test_gate_rejects_python_content_read_on_native_edge(tmp_path: Path) -> None
     _copy_gate_sources(tmp_path)
     edge = tmp_path / "src/codex_plugin_scanner/guard/native_hook_edge.py"
     source = edge.read_text(encoding="utf-8")
-    marker = "    status = native_runtime_status()\n"
+    marker = "    status = runtime_status if runtime_status is not None else native_runtime_status()\n"
     assert marker in source
     edge.write_text(source.replace(marker, marker + '    open("source.rs")\n', 1), encoding="utf-8")
 
@@ -172,7 +172,7 @@ def test_validation_reloads_sources_between_passes(tmp_path: Path, mutation: str
         with pytest.raises(SyntaxError):
             MODULE.validate(tmp_path)
     else:
-        marker = "    status = native_runtime_status()\n"
+        marker = "    status = runtime_status if runtime_status is not None else native_runtime_status()\n"
         assert marker in original
         edge.write_text(original.replace(marker, marker + '    open("new-secret.txt")\n', 1), encoding="utf-8")
         with pytest.raises(RuntimeError, match="reachable unclassified Python I/O"):

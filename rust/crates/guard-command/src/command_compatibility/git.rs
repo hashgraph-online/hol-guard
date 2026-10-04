@@ -2,6 +2,7 @@ use super::{CommandSegmentV1, CompatibilityObservations};
 
 const RULES: &[(&str, &str)] = &[
     ("branch", "command.git.branch"),
+    ("worktree", "command.git.worktree"),
     ("pull", "command.git.pull"),
     ("push", "command.git.push"),
     ("clone", "command.git.clone"),
@@ -178,7 +179,6 @@ pub(super) fn observe_with_context(
             | "commit"
             | "mv"
             | "rm"
-            | "worktree"
             | "tag"
             | "clean"
             | "rebase"

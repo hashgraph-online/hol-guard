@@ -29,7 +29,7 @@ import time
 from collections.abc import Mapping
 from contextlib import suppress
 from pathlib import Path
-from typing import TYPE_CHECKING, Protocol, final
+from typing import TYPE_CHECKING, Protocol, cast, final
 
 from ..cli.commands_support_command_activity import (
     hook_post_succeeded,
@@ -136,6 +136,13 @@ class HookWorker(HookWorkerNativeMixin):
         self.metrics = HookMetricsRecorder()
         self.policy_snapshot_publisher = get_native_policy_snapshot_publisher(self.store)
         mode = native_mode()
+        if mode in {"auto", "force", "shadow"}:
+            # Resolve adapter modules before a managed hook request starts
+            # its deadline. This lookup grants no authority; native policy
+            # readiness remains the enforcement barrier.
+            from ..adapters import list_adapters
+
+            _ = list_adapters()
         self._owns_policy_snapshot_publisher = publish_native_policy and mode in {"auto", "force", "shadow"}
         if self._owns_policy_snapshot_publisher and start_native_policy:
             if workspace is not None:
@@ -170,6 +177,7 @@ class HookWorker(HookWorkerNativeMixin):
         policy_snapshot: Mapping[str, object] | None = None,
         request_id: str | None = None,
     ) -> dict[str, object] | None:
+        runtime_status = self._native_runtime_status()
         return review_raw_hook_native(
             payload=payload,
             harness=harness,
@@ -181,10 +189,16 @@ class HookWorker(HookWorkerNativeMixin):
             observe_mode=observe_mode,
             deadline=deadline,
             policy_snapshot=policy_snapshot,
+            runtime_status=runtime_status,
             **({"request_id": request_id} if request_id is not None else {}),
         )
 
     def _native_runtime_status(self) -> NativeRuntimeStatus:
+        current_runtime_status = getattr(self.policy_snapshot_publisher, "current_runtime_status", None)
+        if callable(current_runtime_status):
+            status = current_runtime_status()
+            if status is not None:
+                return cast(NativeRuntimeStatus, status)
         return native_runtime_status()
 
     def close(self, *, deadline_monotonic: float | None = None) -> bool:
