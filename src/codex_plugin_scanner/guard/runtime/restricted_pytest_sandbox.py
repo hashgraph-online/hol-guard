@@ -123,7 +123,7 @@ def _macos_profile(plan: RestrictedPytestPlan, *, private_root: Path) -> str:
     read_roots = [plan.workspace, private_root]
     read_roots.extend(plan.read_only_roots)
     read_roots.extend(path for path in _MACOS_READ_ROOTS if path.exists())
-    read_roots.extend(_runtime_read_roots(plan))
+    read_roots.extend(_runtime_read_roots(plan, private_root=private_root))
     read_files = [path for path in _MACOS_READ_FILES if path.exists()]
     if plan.profile_version in {
         "node-test-readonly-v1",
@@ -162,6 +162,14 @@ def _macos_profile(plan: RestrictedPytestPlan, *, private_root: Path) -> str:
             '(literal "/dev/null")',
         )
     )
+    immutable_executables = " ".join(
+        f"(literal {_seatbelt_string(path)})"
+        for path in plan.allowed_executables
+        if not _path_is_within(path, plan.workspace)
+    )
+    immutable_executable_denial = (
+        f"(deny file-write* {immutable_executables})" if immutable_executables else ""
+    )
     return "\n".join(
         (
             "(version 1)",
@@ -177,6 +185,7 @@ def _macos_profile(plan: RestrictedPytestPlan, *, private_root: Path) -> str:
             # their contents and unrelated external metadata remain unavailable.
             f"(allow file-read* {read_filters} {read_file_filters})",
             f"(allow file-write* {write_filters})",
+            *([immutable_executable_denial] if immutable_executable_denial else ()),
             *(
                 _read_only_credential_denials(
                     hide_metadata=plan.profile_version in {"vitest-readonly-v1", "node-build-output-v1"}
@@ -294,13 +303,13 @@ def _bubblewrap_argv(plan: RestrictedPytestPlan, *, private_root: Path) -> list[
         "/tmp",
     ]
     readonly_paths = [path for path in (*_LINUX_READ_ROOTS, *_LINUX_READ_FILES) if path.exists()]
-    readonly_paths.extend(_runtime_read_roots(plan))
+    readonly_paths.extend(_runtime_read_roots(plan, private_root=private_root))
     readonly_paths.extend(path for path in plan.allowed_executables if not _path_is_within(path, plan.workspace))
-    for path in _dedupe_parent_paths(readonly_paths):
-        argv.extend(("--ro-bind", str(path), str(path)))
     argv.extend(("--bind", str(plan.workspace), str(plan.workspace)))
     argv.extend(("--dir", str(private_root)))
     argv.extend(("--bind", str(private_root), str(private_root)))
+    for path in _dedupe_parent_paths(readonly_paths):
+        argv.extend(("--ro-bind", str(path), str(path)))
     argv.extend(("--chdir", str(plan.cwd), "--", *plan.command))
     return argv
 
@@ -325,9 +334,11 @@ def _ancestor_paths(paths: Sequence[Path]) -> tuple[Path, ...]:
     return tuple(ancestors)
 
 
-def _runtime_read_roots(plan: RestrictedPytestPlan) -> tuple[Path, ...]:
+def _runtime_read_roots(plan: RestrictedPytestPlan, *, private_root: Path | None = None) -> tuple[Path, ...]:
     roots: list[Path] = []
     for executable in plan.allowed_executables:
+        if private_root is not None and _path_is_within(executable, private_root):
+            continue
         symlink_runtime_roots = _symlink_runtime_roots(executable)
         for symlink_runtime_root in symlink_runtime_roots:
             if symlink_runtime_root not in roots:

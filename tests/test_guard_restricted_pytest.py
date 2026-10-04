@@ -8,6 +8,7 @@ import shlex
 import socket
 import sys
 import tempfile
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -266,6 +267,10 @@ def test_macos_profile_grants_only_root_metadata_and_bounded_runtime_reads(tmp_p
     assert f'(subpath "{Path.home()}")' not in profile
     process_exec_rule = next(line for line in profile.splitlines() if line.startswith("(allow process-exec "))
     assert "(subpath " not in process_exec_rule
+
+    image = tmp_path / "esbuild"
+    profile = _macos_profile(replace(plan, allowed_executables=(image,)), private_root=tmp_path)
+    assert f'(deny file-write* (literal "{image}"))' in profile
 
 
 def test_prepare_restricted_pytest_rejects_non_pytest_command() -> None:
