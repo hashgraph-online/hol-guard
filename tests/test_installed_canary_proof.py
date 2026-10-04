@@ -73,18 +73,21 @@ def test_installed_corpus_reports_malformed_json_clearly(tmp_path: Path, monkeyp
         _run_corpus(tmp_path)
 
 
-def test_disabled_native_harness_records_prevention(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_disabled_native_harness_records_prevention(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     # The runner must establish its outage even when the parent uses auto and
     # diagnostic shortcuts; none of these settings may leak into the child.
     monkeypatch.setenv("HOL_GUARD_NATIVE", "auto")
     monkeypatch.setenv("HOL_GUARD_PYTHON_ORACLE", "1")
     monkeypatch.setenv("HOL_GUARD_NATIVE_DIAGNOSTIC", "1")
+    cache_prefix = str(tmp_path / "child-bytecode-cache")
+    monkeypatch.setattr(sys, "pycache_prefix", cache_prefix)
     run = subprocess.run
     hook_responses: list[dict[str, object]] = []
 
     def capture_native_hook(command: list[str], **kwargs):
         is_hook = command[:3] == [sys.executable, "-m", "codex_plugin_scanner.cli"]
         if is_hook:
+            assert kwargs["env"]["PYTHONPYCACHEPREFIX"] == cache_prefix
             assert kwargs["env"]["HOL_GUARD_NATIVE"] == "off"
             assert kwargs["env"]["PYTHONPATH"] == ""
             assert "HOL_GUARD_PYTHON_ORACLE" not in kwargs["env"]
@@ -288,6 +291,10 @@ def test_verified_wheel_detects_payload_tamper_even_when_installed_record_is_rew
     cache_dir = package / "__pycache__"
     cache_dir.mkdir()
     malicious_cache = cache_dir / f"__init__.{sys.implementation.cache_tag}.pyc"
+    import py_compile
+
+    py_compile.compile(str(module), cfile=str(malicious_cache), doraise=True)
+    assert verify_wheel_payloads(distribution, wheel) == 2
     source_stat = module.stat()
     malicious_code = compile("INJECTED = True\n", str(module), "exec")
     header = importlib.util.MAGIC_NUMBER + struct.pack("<III", 0, int(source_stat.st_mtime), source_stat.st_size)

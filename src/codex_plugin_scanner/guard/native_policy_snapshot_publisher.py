@@ -106,6 +106,7 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
         self._started = False
         self._thread: threading.Thread | None = None
         self._snapshot: dict[str, object] | None = None
+        self._resident_startup_required = True
         self._acked = False
         self._epoch = 0
         self._last_error: str | None = None
@@ -155,30 +156,49 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
             self._thread.start()
         self.request_publish()
 
-    def close(self, *, timeout_seconds: float = 1.0) -> None:
-        _ = self.close_contained(timeout_seconds=timeout_seconds)
+    def close(self, *, timeout_seconds: float = 1.0, deadline_monotonic: float | None = None) -> bool:
+        return self.close_contained(timeout_seconds=timeout_seconds, deadline_monotonic=deadline_monotonic)
 
-    def close_contained(self, *, timeout_seconds: float = 1.0) -> bool:
+    def close_contained(self, *, timeout_seconds: float = 1.0, deadline_monotonic: float | None = None) -> bool:
         """Retain publication ownership until the publisher thread exits."""
+        deadline = self._monotonic_clock() + max(0.0, timeout_seconds)
+        if deadline_monotonic is not None:
+            deadline = min(deadline, deadline_monotonic)
 
-        with self._condition:
-            self._closed = True
+        def remaining() -> float:
+            return max(0.0, deadline - self._monotonic_clock())
+
+        # Retire before waiting for a contended condition. A failed bounded
+        # close must not permit another publication or a new start.
+        self._closed = True
+        self._publish_event.set()
+        if not self._condition.acquire(timeout=remaining()):
+            return False
+        try:
             self._acked = False
             self._condition.notify_all()
-        self._publish_event.set()
+        finally:
+            self._condition.release()
         thread = self._thread
         if thread is not None and thread is not threading.current_thread():
-            thread.join(timeout=max(0.0, timeout_seconds))
+            thread.join(timeout=remaining())
         if thread is not None and thread.is_alive():
+            # Keep the registry and thread handles until a recovery close
+            # confirms retirement; callers must retain the isolated home.
             return False
         api = _snapshot_api()
-        with api._PUBLISHER_LOCK:
+        if not api._PUBLISHER_LOCK.acquire(timeout=remaining()):
+            return False
+        try:
             publishers = api._PUBLISHERS.get(api._publisher_key(self.guard_home))
             if publishers is not None:
                 publishers.discard(self)
                 if not publishers:
                     api._PUBLISHERS.pop(api._publisher_key(self.guard_home), None)
-        return True
+            self._thread = None
+            return True
+        finally:
+            api._PUBLISHER_LOCK.release()
 
     def request_publish(self) -> None:
         with self._condition:
@@ -236,6 +256,9 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
             self._input_fingerprint = fingerprint
             return
         same_resident = _same_resident_paths(self._input_fingerprint[1], fingerprint[1])
+        if not same_resident:
+            with self._condition:
+                self._resident_startup_required = True
         previous_inputs = dict(self._input_fingerprint[0])
         current_inputs = dict(fingerprint[0])
         changed_paths = {
@@ -602,6 +625,7 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
                 if self._input_fingerprint is not None:
                     self._input_fingerprint = (self._input_fingerprint[0], resident_fingerprint_confirmed)
                 self._snapshot = snapshot
+                self._resident_startup_required = False
                 self._published_config_digest = cast(str, snapshot["config_digest"])
                 self._published_local_cli_revision = local_cli_revision
                 self._published_policy_fingerprint = (

@@ -23,10 +23,36 @@ from .restricted_pytest_sandbox import _backend_argv, _restricted_environment, _
 from .restricted_pytest_validation import _normalized_command, _path_is_within
 
 
+def bun_vitest_invocation(command: Sequence[str]) -> tuple[str | None, tuple[str, ...]] | None:
+    """Recognize only Bun's direct x wrapper, optionally with a leading cwd."""
+    if not command or Path(command[0]).name != "bun":
+        return None
+    args = tuple(command[1:])
+    directory = None
+    if args and args[0] == "--cwd":
+        if len(args) < 2 or not args[1] or args[1].startswith("-"):
+            return None
+        directory, args = args[1], args[2:]
+    elif args and args[0].startswith("--cwd="):
+        directory, args = args[0][6:], args[1:]
+        if not directory:
+            return None
+    if not args or args[0] != "x":
+        return None
+    args = args[1:]
+    if args and args[0] == "--no-install":
+        args = args[1:]
+    if len(args) < 2 or args[:2] != ("vitest", "run"):
+        return None
+    return directory, args[1:]
+
+
 def vitest_arguments(command: Sequence[str]) -> tuple[str, ...]:
     argv = _normalized_command(command)
     name = Path(argv[0]).name
-    if name in {"bunx", "npx"}:
+    if name == "bun" and (invocation := bun_vitest_invocation(argv)) is not None:
+        args = invocation[1]
+    elif name in {"bunx", "npx"}:
         args = argv[1:]
         if args and args[0] == "--no-install":
             args = args[1:]
@@ -48,6 +74,21 @@ def prepare_restricted_vitest(
     command: Sequence[str], *, workspace: Path, cwd: Path | None = None
 ) -> RestrictedPytestPlan:
     args = vitest_arguments(command)
+    invocation = bun_vitest_invocation(command)
+    if invocation is not None and invocation[0] is not None:
+        # Resolve against the original hook cwd, not the daemon's process cwd.
+        target = Path(invocation[0]).expanduser()
+        if not target.is_absolute():
+            target = (cwd or workspace) / target
+        try:
+            workspace = target.resolve(strict=True)
+            if not workspace.is_dir():
+                raise OSError("not a directory")
+        except (OSError, RuntimeError) as error:
+            raise RestrictedPytestError(
+                "vitest_restricted_invalid_command", "Vitest working directory is unavailable."
+            ) from error
+        cwd = workspace
     plan = prepare_restricted_node_test(["node", "--test"], workspace=workspace, cwd=cwd)
     lexical = plan.workspace / "node_modules" / "vitest" / "vitest.mjs"
     try:

@@ -88,7 +88,7 @@ def build_harness_shim(
     )
 
 
-def build_windows_script(executable: str, posix_path: Path) -> str:
+def build_windows_script(executable: str, posix_path: Path, *, source: str | None = None) -> str:
     if is_transient_appimage_path(executable):
         return "\r\n".join(
             (
@@ -98,7 +98,7 @@ def build_windows_script(executable: str, posix_path: Path) -> str:
                 "",
             )
         )
-    harness_command = _generated_harness_command(posix_path)
+    harness_command = _generated_harness_command(posix_path, source=source)
     if harness_command is not None:
         guard_cli, _, harness, *context_args = harness_command
         command = [guard_cli, "run-shim", *context_args, harness, "--"]
@@ -129,13 +129,14 @@ def _cmd_quote_fixed_argument(value: str) -> str:
     return "".join(result)
 
 
-def _generated_harness_command(posix_path: Path) -> list[str] | None:
+def _generated_harness_command(posix_path: Path, *, source: str | None = None) -> list[str] | None:
     if not posix_path.name.startswith("guard-"):
         return None
-    try:
-        source = posix_path.read_text(encoding="utf-8")
-    except OSError:
-        return None
+    if source is None:
+        try:
+            source = posix_path.read_text(encoding="utf-8")
+        except OSError:
+            return None
     prefix = "# base_command = "
     command_line = next((line[len(prefix) :] for line in source.splitlines() if line.startswith(prefix)), None)
     if command_line is None:

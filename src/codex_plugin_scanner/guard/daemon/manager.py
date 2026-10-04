@@ -5,6 +5,7 @@ from __future__ import annotations
 import dataclasses
 import hashlib
 import json
+import math
 import ntpath
 import os
 import re
@@ -23,6 +24,7 @@ import urllib.parse
 import urllib.request
 from contextlib import contextmanager, suppress
 from datetime import datetime, timezone
+from functools import partial
 from pathlib import Path
 from typing import BinaryIO, Literal, TypedDict, cast
 
@@ -416,37 +418,53 @@ def ensure_guard_daemon(
     preferred_port: int | None = None,
     allow_windows_job_breakaway: bool = False,
     executable: Path | None = None,
+    deadline_monotonic: float | None = None,
+    background_maintenance: bool = True,
 ) -> str:
     if desktop_preflight_requested():
         raise RuntimeError("Guard daemon start is disabled during Desktop preflight.")
     timeout = _default_guard_daemon_start_timeout() if start_timeout is None else start_timeout
     start_deadline = time.monotonic() + max(0.0, timeout)
+    if deadline_monotonic is not None:
+        if isinstance(deadline_monotonic, bool) or not math.isfinite(deadline_monotonic):
+            raise ValueError("Guard daemon operation deadline is invalid.")
+        start_deadline = min(start_deadline, deadline_monotonic)
+        if time.monotonic() >= start_deadline:
+            raise TimeoutError("Guard daemon operation deadline exceeded.")
     launch_cwd = _trusted_daemon_home(home_dir)
-    _schedule_stale_ephemeral_guard_daemon_reap(exclude_guard_home=guard_home)
+    if background_maintenance:
+        _schedule_stale_ephemeral_guard_daemon_reap(exclude_guard_home=guard_home)
     state_path = _state_path(guard_home)
     existing_url = _live_or_newer_daemon_url(guard_home, executable=executable, preferred_port=preferred_port)
     if existing_url is not None:
-        _schedule_duplicate_guard_daemon_retirement(guard_home)
+        if background_maintenance:
+            _schedule_duplicate_guard_daemon_retirement(guard_home)
         return existing_url
     with _guard_daemon_start_lock(guard_home, deadline=start_deadline):
         if executable is not None:
             existing_url = _live_or_newer_daemon_url(guard_home, executable=executable, preferred_port=preferred_port)
             if existing_url is not None:
-                _schedule_duplicate_guard_daemon_retirement(guard_home)
+                if background_maintenance:
+                    _schedule_duplicate_guard_daemon_retirement(guard_home)
                 return existing_url
         else:
             existing_url = load_guard_daemon_url(guard_home)
             if existing_url is not None and (
                 preferred_port is None or _guard_daemon_url_port(existing_url) == preferred_port
             ):
-                _schedule_duplicate_guard_daemon_retirement(guard_home)
+                if background_maintenance:
+                    _schedule_duplicate_guard_daemon_retirement(guard_home)
                 return existing_url
             if existing_url is not None:
                 retire_all_guard_daemons_for_home(guard_home, deadline=start_deadline)
                 if not guard_daemon_retirement_is_complete(guard_home):
                     raise RuntimeError("Existing Guard daemon could not be retired safely.")
                 clear_guard_daemon_state(guard_home)
-        if state_path.is_file() and _load_authenticated_daemon_identity(guard_home) is None:
+        if (
+            state_path.is_file()
+            and _load_authenticated_daemon_identity(guard_home) is None
+            and (background_maintenance or not _daemon_lifecycle_artifact_is_exact_tombstone(state_path))
+        ):
             retire_all_guard_daemons_for_home(guard_home, deadline=start_deadline)
             if not _daemon_lifecycle_artifact_is_exact_tombstone(state_path):
                 raise RuntimeError("Untrusted Guard daemon state could not be retired safely.")
@@ -455,7 +473,8 @@ def ensure_guard_daemon(
             None if executable is not None else _adopt_existing_guard_daemon(guard_home, preferred_port=preferred_port)
         )
         if adopted_url is not None:
-            _schedule_duplicate_guard_daemon_retirement(guard_home)
+            if background_maintenance:
+                _schedule_duplicate_guard_daemon_retirement(guard_home)
             return adopted_url
         stale_state = _load_state(guard_home)
         if isinstance(stale_state, dict) and not _guard_daemon_state_matches_current_runtime(stale_state):
@@ -469,7 +488,8 @@ def ensure_guard_daemon(
         if _guard_daemon_start_in_progress(guard_home):
             inflight_url = _wait_for_guard_daemon_url(guard_home, timeout=max(0.0, start_deadline - time.monotonic()))
             if inflight_url is not None:
-                _schedule_duplicate_guard_daemon_retirement(guard_home)
+                if background_maintenance:
+                    _schedule_duplicate_guard_daemon_retirement(guard_home)
                 return inflight_url
             retire_all_guard_daemons_for_home(guard_home, deadline=start_deadline)
             if not guard_daemon_retirement_is_complete(guard_home):
@@ -490,7 +510,8 @@ def ensure_guard_daemon(
             )
             if adopted_url is not None:
                 _clear_guard_daemon_start_progress(guard_home)
-                _schedule_duplicate_guard_daemon_retirement(guard_home)
+                if background_maintenance:
+                    _schedule_duplicate_guard_daemon_retirement(guard_home)
                 return adopted_url
             if _guard_daemon_pid_is_running(progress_pid) and daemon_still_starting_evidence_present(
                 guard_home,
@@ -511,7 +532,8 @@ def ensure_guard_daemon(
         clear_guard_daemon_state(guard_home)
         # setsid() keeps hook workers alive after the daemon exits. They hold
         # the local store, so the replacement never publishes daemon state.
-        reap_orphaned_daemon_workers(deadline=start_deadline)
+        if background_maintenance:
+            reap_orphaned_daemon_workers(deadline=start_deadline)
         for candidate_port in _candidate_ports(guard_home, preferred_port=preferred_port):
             remaining_start_time = start_deadline - time.monotonic()
             if remaining_start_time <= 0:
@@ -537,6 +559,8 @@ def ensure_guard_daemon(
                     guard_home=guard_home,
                     executable=executable,
                 )
+            if time.monotonic() >= start_deadline:
+                break
             spawned_at_ns = time.time_ns()
             if os.name == "nt":
                 process = subprocess.Popen(
@@ -561,6 +585,7 @@ def ensure_guard_daemon(
                     start_new_session=True,
                 )
             pending_creation_time: int | None = None
+            retirement_attempted = False
             try:
                 pending_creation_time = _record_guard_daemon_pending_launch(
                     guard_home,
@@ -580,7 +605,8 @@ def ensure_guard_daemon(
                         guard_home, process=process, creation_time=pending_creation_time
                     ):
                         raise RuntimeError("Guard daemon pending launch state could not be cleared safely.")
-                    _schedule_duplicate_guard_daemon_retirement(guard_home)
+                    if background_maintenance:
+                        _schedule_duplicate_guard_daemon_retirement(guard_home)
                     return url
                 signals = (
                     collect_spawned_daemon_signals(
@@ -611,7 +637,8 @@ def ensure_guard_daemon(
                     raise GuardDaemonStillStartingError(
                         f"Guard daemon is still starting; retry shortly. Expected state file at {state_path}."
                     )
-                if not _terminate_spawned_guard_daemon(process):
+                retirement_attempted = True
+                if not _terminate_spawned_guard_daemon(process, deadline_monotonic=start_deadline):
                     raise RuntimeError("Guard daemon startup process could not be retired safely.")
                 if not _clear_spawned_guard_daemon_pending_launch(
                     guard_home, process=process, creation_time=pending_creation_time
@@ -620,7 +647,10 @@ def ensure_guard_daemon(
             except GuardDaemonStillStartingError:
                 raise
             except BaseException:
-                if _terminate_spawned_guard_daemon(process):
+                if not retirement_attempted and _terminate_spawned_guard_daemon(
+                    process,
+                    deadline_monotonic=start_deadline,
+                ):
                     _clear_spawned_guard_daemon_pending_launch(
                         guard_home, process=process, creation_time=pending_creation_time
                     )
@@ -740,6 +770,9 @@ def retire_all_guard_daemons_for_home(
     deadline: float | None = None,
 ) -> list[int]:
     """Stop Guard daemon processes for one guard home, optionally keeping one port alive."""
+    retire_pid = (
+        _retire_guard_daemon_pid if deadline is None else partial(_retire_guard_daemon_pid, deadline_monotonic=deadline)
+    )
     retired: list[int] = []
     handled_pids: set[int] = set()
     pending_launch = load_authenticated_guard_daemon_pending_launch(guard_home)
@@ -754,7 +787,7 @@ def retire_all_guard_daemons_for_home(
                 actual_creation_time = windows_process_creation_time(pending_pid)
                 if actual_creation_time == pending_creation_time:
                     handled_pids.add(pending_pid)
-                    if _retire_guard_daemon_pid(
+                    if retire_pid(
                         pending_pid,
                         expected_guard_home=guard_home,
                         expected_creation_time=pending_creation_time,
@@ -797,7 +830,7 @@ def retire_all_guard_daemons_for_home(
                         pid=state_pid,
                         session_id=state_id if isinstance(state_id, str) else None,
                     )
-                retirement_succeeded = _retire_guard_daemon_pid(
+                retirement_succeeded = retire_pid(
                     state_pid,
                     expected_guard_home=guard_home,
                 )
@@ -826,7 +859,7 @@ def retire_all_guard_daemons_for_home(
         for pid, port in inventory:
             if pid in handled_pids or (keep_port is not None and port == keep_port):
                 continue
-            if _retire_guard_daemon_pid(pid, expected_guard_home=guard_home) and _guard_daemon_pid_is_proven_dead(pid):
+            if retire_pid(pid, expected_guard_home=guard_home) and _guard_daemon_pid_is_proven_dead(pid):
                 handled_pids.add(pid)
                 if pid not in retired:
                     retired.append(pid)
@@ -2920,6 +2953,17 @@ def _guard_daemon_process_inventory_for_guard_home(
             continue
         port = _guard_daemon_port_from_command(command_line)
         if port is None:
+            # A serving process may request the OS-assigned port (or omit it).
+            # It cannot compete with itself; other unresolved PIDs remain unknown.
+            if pid == os.getpid():
+                continue
+            if bool(getattr(sys, "frozen", False)) and pid == os.getppid():
+                from ..frozen_daemon_runtime import _trusted_frozen_bootloader_parent_pid
+
+                # Apply the existing exact executable/home bootloader proof
+                # before port decoding can turn the parent's dynamic port unknown.
+                if _trusted_frozen_bootloader_parent_pid(guard_home) == pid:
+                    continue
             return None
         processes.append((pid, port))
     return sorted(processes, key=lambda item: item[1])
@@ -3183,6 +3227,10 @@ def _guard_daemon_child_has_exited(pid: int) -> bool:
     """Observe an exited child without consuming its owner's process status."""
     required = ("waitid", "P_PID", "WEXITED", "WNOHANG", "WNOWAIT", "CLD_EXITED", "CLD_KILLED", "CLD_DUMPED")
     if pid <= 0 or not all(hasattr(os, name) for name in required):
+        if pid > 0 and sys.platform == "darwin":
+            from ..runtime_transition_native_capture import darwin_child_has_exited
+
+            return darwin_child_has_exited(pid)
         return False
     try:
         result = os.waitid(os.P_PID, pid, os.WEXITED | os.WNOHANG | os.WNOWAIT)
@@ -3199,7 +3247,7 @@ def _wait_for_guard_daemon_pid_death(pid: int, *, timeout: float = 1.0) -> bool:
     while time.monotonic() < deadline:
         if _guard_daemon_pid_is_proven_dead(pid):
             return True
-        time.sleep(GUARD_DAEMON_POLL_INTERVAL_SECONDS)
+        time.sleep(min(GUARD_DAEMON_POLL_INTERVAL_SECONDS, max(0.0, deadline - time.monotonic())))
     return _guard_daemon_pid_is_proven_dead(pid)
 
 
@@ -3260,9 +3308,16 @@ def _retire_guard_daemon_process(payload: dict[str, object]) -> bool:
     return _retire_guard_daemon_pid(pid, expected_guard_home=expected_guard_home)
 
 
-def _terminate_spawned_guard_daemon(process: subprocess.Popen[bytes]) -> bool:
+def _terminate_spawned_guard_daemon(
+    process: subprocess.Popen[bytes],
+    *,
+    deadline_monotonic: float | None = None,
+) -> bool:
     """Terminate and reap the exact child handle after startup fails."""
 
+    deadline = time.monotonic() + 2.0
+    if deadline_monotonic is not None:
+        deadline = min(deadline, deadline_monotonic)
     process_stdin = getattr(process, "stdin", None)
     if process_stdin is not None:
         with suppress(OSError, ValueError):
@@ -3272,12 +3327,12 @@ def _terminate_spawned_guard_daemon(process: subprocess.Popen[bytes]) -> bool:
     with suppress(OSError):
         process.terminate()
     try:
-        process.wait(timeout=1.0)
+        process.wait(timeout=min(1.0, max(0.0, deadline - time.monotonic())))
     except subprocess.TimeoutExpired:
         with suppress(OSError):
             process.kill()
         try:
-            process.wait(timeout=1.0)
+            process.wait(timeout=min(1.0, max(0.0, deadline - time.monotonic())))
         except subprocess.TimeoutExpired:
             return False
     return process.poll() is not None
@@ -3303,9 +3358,33 @@ def _retire_guard_daemon_pid(
     *,
     expected_guard_home: Path | None = None,
     expected_creation_time: int | None = None,
+    deadline_monotonic: float | None = None,
+    expected_start_token: str | None = None,
 ) -> bool:
+    from ..live_process_identity import process_start_token
+
+    def admitted() -> bool:
+        if deadline_monotonic is not None and time.monotonic() >= deadline_monotonic:
+            return False
+        if expected_start_token is not None:
+            token = (
+                process_start_token(pid)
+                if deadline_monotonic is None
+                else process_start_token(pid, deadline_monotonic=deadline_monotonic)
+            )
+            if token != expected_start_token:
+                return False
+        return deadline_monotonic is None or time.monotonic() < deadline_monotonic
+
+    def wait_for_death() -> bool:
+        if deadline_monotonic is None:
+            return _wait_for_guard_daemon_pid_death(pid)
+        return _wait_for_guard_daemon_pid_death(pid, timeout=min(1.0, max(0.0, deadline_monotonic - time.monotonic())))
+
     if _guard_daemon_pid_is_proven_dead(pid):
         return True
+    if not admitted():
+        return False
     if os.name == "nt" and expected_creation_time is not None:
         return windows_terminate_process_if_creation_time(pid, expected_creation_time)
     observed_creation_time: int | None = None
@@ -3322,17 +3401,23 @@ def _retire_guard_daemon_pid(
         return identity is False
     if os.name == "nt":
         assert observed_creation_time is not None
+        if not admitted():
+            return False
         return windows_terminate_process_if_creation_time(pid, observed_creation_time)
+    if not admitted():
+        return False
     try:
         os.kill(pid, signal.SIGTERM)
     except ProcessLookupError:
         return True
     except OSError:
         return _guard_daemon_pid_is_proven_dead(pid)
-    if _wait_for_guard_daemon_pid_death(pid):
+    if wait_for_death():
         return True
     sigkill = getattr(signal, "SIGKILL", None)
     if sigkill is None:
+        return False
+    if not admitted():
         return False
     try:
         os.kill(pid, sigkill)
@@ -3340,7 +3425,7 @@ def _retire_guard_daemon_pid(
         return True
     except OSError:
         return _guard_daemon_pid_is_proven_dead(pid)
-    return _wait_for_guard_daemon_pid_death(pid)
+    return wait_for_death()
 
 
 def _wait_for_started_guard_daemon_url(

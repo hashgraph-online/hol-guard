@@ -114,7 +114,7 @@ fn shell_read_commands_share_the_structured_file_risk_boundary() {
 }
 
 #[test]
-fn zcode_home_relative_edits_accept_only_registered_repository_worktrees() {
+fn zcode_home_relative_edits_accept_verified_home_and_preserve_sensitive_boundaries() {
     let fixture = TestRoot::new("worktree-write-fixtures");
     let home = &fixture.0;
     let workspace = home.join("project");
@@ -177,7 +177,7 @@ fn zcode_home_relative_edits_accept_only_registered_repository_worktrees() {
         ("~/linked/.ssh/new/id_rsa", false),
         ("~/linked/.env", false),
         ("~/linked/.git", false),
-        ("~/unrelated/src/example.ts", false),
+        ("~/unrelated/src/example.ts", true),
         ("~other/project/src/example.ts", false),
     ] {
         let result = evaluate_pre_tool_envelope_with_context(

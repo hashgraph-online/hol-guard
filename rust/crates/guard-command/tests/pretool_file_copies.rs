@@ -110,7 +110,7 @@ fn ordinary_copies_keep_source_and_destination_risk_boundaries() {
         "cp source.ts .git/config",
         "cp -r source.ts copied.ts",
         "cp -f source.ts copied.ts",
-        "cp source.ts .",
+        "cp . copied.ts",
         "cp source.ts one.ts two.ts",
         "cp source.ts copied.ts > output.txt",
         "cp source.ts copied.ts && echo done",

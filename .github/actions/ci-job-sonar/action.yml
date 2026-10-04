@@ -64,15 +64,16 @@ runs:
       SONAR_USER_HOME: ${{ runner.temp }}/sonar
     if: inputs.has-token == 'true'
   - name: Wait for successful pytest coverage producers
+    id: coverage-selection
     env:
       GITHUB_TOKEN: ${{ github.token }}
-    run: uv run --no-sync python scripts/ci/wait_for_pytest_shards.py --poll-seconds 1
+    run: uv run --no-sync python scripts/ci/select_pytest_coverage.py --output coverage-selection.json
     if: inputs.has-token == 'true'
     shell: bash
   - name: Download pytest coverage data
     uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
     with:
-      pattern: pytest-coverage-${{ github.run_attempt }}-*
+      artifact-ids: ${{ steps.coverage-selection.outputs.artifact-ids }}
       path: coverage-data
     if: inputs.has-token == 'true'
   - name: Prepare Python coverage
