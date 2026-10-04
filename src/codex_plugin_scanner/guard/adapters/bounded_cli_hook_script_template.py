@@ -44,6 +44,7 @@ _EVENT_NAME_KEYS = ("hook_event_name", "hookEventName", "event", "eventName", "h
 _GROK_OBSERVE_EVENTS = frozenset(
     {
         "userpromptsubmit",
+        "userpromptsubmitted",
         "sessionstart",
         "sessionend",
         "subagentstart",
@@ -143,6 +144,15 @@ def _stamp_hook_input(text: str) -> str:
 
 def _compact(event_name: str) -> str:
     return event_name.replace("_", "").replace("-", "").lower()
+
+
+def _grok_pretool_event_conflict(input_text: str) -> bool:
+    payload = _json_object(input_text) or {}
+    events = {_compact(value.strip()) for key in _EVENT_NAME_KEYS if isinstance(value := payload.get(key), str)}
+    if "pretoolcall" in events:
+        events.discard("pretoolcall")
+        events.add("pretooluse")
+    return "pretooluse" in events and len(events) > 1
 
 
 def _event_name(input_text: str) -> str:
@@ -431,11 +441,11 @@ def _to_native(daemon_response: dict[str, object], event_name: str) -> tuple[str
 
 
 def _failure_payload(event_name: str, reason: str) -> tuple[dict[str, object], int]:
+    if HARNESS == "grok" and _compact(event_name) in _GROK_OBSERVE_EVENTS:
+        return {}, 0
     # Local configuration cannot authenticate the mode of an unavailable evaluator.
     prompt_event = _compact(event_name) in {"userpromptsubmit", "userpromptsubmitted"}
     if prompt_event:
-        if HARNESS == "grok":
-            return {}, 0
         prompt_reason = "HOL Guard could not complete native prompt review safely."
         if HARNESS == "copilot":
             return {"behavior": "deny", "message": prompt_reason, "interrupt": False}, 0
@@ -481,6 +491,8 @@ def _failure_payload(event_name: str, reason: str) -> tuple[dict[str, object], i
 
 def _fail(input_text: str, *, reason: str = _FAILURE_REASON) -> int:
     event_name = _event_name(input_text)
+    if HARNESS == "grok" and _grok_pretool_event_conflict(input_text):
+        event_name = "PreToolUse"
     payload, exit_code = _failure_payload(event_name, reason)
     sys.stdout.write(json.dumps(payload, ensure_ascii=True, separators=(",", ":")) + "\\n")
     if exit_code == 2 and HARNESS in {"kimi", "zcode", "devin"}:
@@ -617,6 +629,10 @@ def _post_hook(input_text: str) -> tuple[str, str, int] | None:
     host, port, token = auth
     url = _loopback_url(host, port, f"/v1/hooks/{HARNESS}")
     timeout = min(float(TIMEOUT_SECONDS) * 0.5, 5.0, _HOOK_DEADLINE_MONOTONIC - time.monotonic())
+    if HARNESS == "grok" and _compact(_event_name(input_text)) in _GROK_OBSERVE_EVENTS:
+        # Keep the daemon request within 1s of Grok's 15s outer hook lifetime.
+        # Observations must not hold up a session on an unavailable daemon.
+        timeout = min(timeout, 1.0)
     if timeout <= 0:
         return None
     parsed = _http_json(url, token, data=input_text.encode("utf-8"), timeout=timeout)
@@ -635,6 +651,8 @@ def main() -> int:
         )
     except (TimeoutError, OSError, ValueError):
         return _fail("{}")
+    if HARNESS == "grok" and _grok_pretool_event_conflict(prefix):
+        return _fail(prefix, reason="HOL Guard blocked this action because hook event labels conflict.")
     stamped_prefix = _stamp_hook_input(prefix)
     result = _post_hook(stamped_prefix)
     if result is None or time.monotonic() >= _HOOK_DEADLINE_MONOTONIC:
