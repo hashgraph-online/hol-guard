@@ -37,6 +37,8 @@ def required_checks(scenario: Scenario) -> set[str]:
         checks.add("sibling-copy-exact")
     elif scenario.oracle == "blocked-extension":
         checks.add("extension-executed-absent")
+    elif scenario.oracle == "mixed-read-batch":
+        checks.update({"batch-alpha-unchanged", "batch-beta-unchanged"})
     elif scenario.id == "routed-git-and-workspace-writes":
         checks.update({"src/copied.ts:exact", "src/moved.ts:exact", "moved-source-absent"})
     return checks
