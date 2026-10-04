@@ -13,11 +13,20 @@ def build_extension_source_tail(
     lifecycle_abort_event_source: str,
     tool_approval_continuation_source: str,
 ) -> str:
+    workspace_readiness_source = (
+        "    const workspaceReadiness = await ensureGuardWorkspaceReady(snapshot.cwd, false);\n"
+        "    if (!workspaceReadiness.ready) {\n"
+        "      const reason = readinessFailureReason(workspaceReadiness);\n"
+        '      ctx.ui.notify(reason, "warning");\n'
+        "      return { block: true, reason };\n"
+        "    }\n"
+    )
     shared_source = build_source_tail_shared_v1(
         display_name=display_name,
         harness=harness,
         lifecycle_abort_event_source=lifecycle_abort_event_source,
         tool_approval_continuation_source=tool_approval_continuation_source,
+        workspace_readiness_source=workspace_readiness_source,
     )
     if harness == "omp":
         shared_source = with_contained_test_routing(shared_source)
