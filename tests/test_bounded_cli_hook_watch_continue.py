@@ -212,4 +212,4 @@ def test_timeout_continues_post_tool_for_grok(
 
     payload = _json_object(output.getvalue())
     assert returncode == 0
-    assert payload["decision"] == "allow"
+    assert payload == {}

@@ -264,7 +264,7 @@ fn collect_tool_names(payload: &Value) -> Result<Option<String>, GenericExtracti
 }
 
 fn collect_event_hint(root: &Map<String, Value>) -> Result<Option<String>, GenericExtractionError> {
-    unique_string(collect_key_strings(
+    let values = collect_key_strings(
         &[root],
         &[
             "event",
@@ -274,7 +274,28 @@ fn collect_event_hint(root: &Map<String, Value>) -> Result<Option<String>, Gener
             "hook_name",
             "hookName",
         ],
-    )?)
+    )?;
+    // Grok sends both PascalCase and snake_case labels for the same event.
+    // Canonicalize known spelling aliases before checking for conflicts;
+    // distinct events and unknown selectors must still fail closed.
+    unique_string(
+        values
+            .into_iter()
+            .map(|value| {
+                let compact = value.replace(['_', '-'], "").to_ascii_lowercase();
+                match compact.as_str() {
+                    "pretooluse" => "PreToolUse".to_owned(),
+                    "posttooluse" => "PostToolUse".to_owned(),
+                    "userpromptsubmit" => "UserPromptSubmit".to_owned(),
+                    "sessionstart" => "SessionStart".to_owned(),
+                    "sessionend" => "SessionEnd".to_owned(),
+                    "subagentstart" => "SubagentStart".to_owned(),
+                    "subagentstop" => "SubagentStop".to_owned(),
+                    _ => value,
+                }
+            })
+            .collect(),
+    )
 }
 
 fn sensitive_text(values: &[String]) -> bool {
