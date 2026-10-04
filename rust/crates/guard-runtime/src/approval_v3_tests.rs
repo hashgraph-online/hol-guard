@@ -168,6 +168,7 @@ fn store_and_envelope_with_runtime(
             home_dir: root.to_string_lossy().into_owned(),
             guard_home: root.to_string_lossy().into_owned(),
             source_ref_external_allowed: false,
+            execution_environment: None,
         },
     };
     (root, store, envelope)
@@ -349,7 +350,6 @@ fn binding_mutations_are_rejected_even_when_resigned() {
     let challenge = challenge_for(&store, &envelope);
     let key = store.test_approval_signing_seed();
     let base = artifact_from_challenge(&challenge, &key);
-
     macro_rules! assert_rejected {
         ($mutation:expr) => {{
             let mut artifact = base.clone();
@@ -366,8 +366,8 @@ fn binding_mutations_are_rejected_even_when_resigned() {
     assert_rejected!(|artifact| artifact.action_digest = "b".repeat(64));
     assert_rejected!(|artifact| artifact.action_type = PreToolActionTypeV1::FileRead);
     assert_rejected!(|artifact| artifact.operation = PreToolOperationV1::Read);
-    assert_rejected!(|artifact| artifact.intrinsic_action = "require-reapproval".into());
-    assert_rejected!(|artifact| artifact.minimum_action = "require-reapproval".into());
+    assert_rejected!(|artifact| artifact.intrinsic_action = "allow".into());
+    assert_rejected!(|artifact| artifact.minimum_action = "allow".into());
     assert_rejected!(|artifact| artifact.policy_generation = 2);
     assert_rejected!(|artifact| artifact.policy_digest = "b".repeat(64));
     assert_rejected!(|artifact| artifact.rule_digest = "b".repeat(64));
@@ -386,7 +386,7 @@ fn binding_mutations_are_rejected_even_when_resigned() {
     assert_rejected!(|artifact| artifact.scope_contract_digest = "b".repeat(64));
     assert_rejected!(|artifact| artifact.scope_binding = Some("b".repeat(64)));
     assert_rejected!(|artifact| artifact.resident_epoch = "b".repeat(64));
-    assert_rejected!(|artifact| artifact.requested_action = "require-reapproval".into());
+    assert_rejected!(|artifact| artifact.requested_action = "allow".into());
     assert_rejected!(|artifact| artifact.approved_action = "block".into());
 }
 

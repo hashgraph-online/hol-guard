@@ -296,7 +296,11 @@ def _load_yaml(content: str) -> object:
                 nodes += 1
             if nodes > HERMES_CONFIG_MAX_NODES:
                 raise _HermesConfigLimitError("config_node_limit_exceeded")
-        return yaml.load(content, Loader=_UniqueKeySafeLoader)
+        loader = _UniqueKeySafeLoader(content)
+        try:
+            return loader.get_single_data()
+        finally:
+            loader.dispose()
     except _HermesConfigLimitError:
         raise
     except yaml.YAMLError as exc:

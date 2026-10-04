@@ -8,6 +8,26 @@ from pathlib import Path
 from typing import Literal
 
 PYTEST_RESTRICTED_PROFILE_VERSION = "pytest-restricted-v1"
+PYTEST_READ_ONLY_PROFILE_VERSION = "pytest-readonly-v2"
+NODE_TEST_READ_ONLY_PROFILE_VERSION = "node-test-readonly-v1"
+VITEST_READ_ONLY_PROFILE_VERSION = "vitest-readonly-v1"
+GIT_READ_ONLY_PROFILE_VERSION = "git-readonly-v1"
+NODE_TOOL_READ_ONLY_PROFILE_VERSION = "node-tool-readonly-v1"
+NODE_BUILD_OUTPUT_PROFILE_VERSION = "node-build-output-v1"
+PYTHON_EVAL_READ_ONLY_PROFILE_VERSION = "python-eval-readonly-v1"
+NODE_EVAL_READ_ONLY_PROFILE_VERSION = "node-eval-readonly-v1"
+READ_ONLY_TEST_PROFILES = frozenset(
+    {
+        PYTEST_READ_ONLY_PROFILE_VERSION,
+        NODE_TEST_READ_ONLY_PROFILE_VERSION,
+        VITEST_READ_ONLY_PROFILE_VERSION,
+        GIT_READ_ONLY_PROFILE_VERSION,
+        NODE_TOOL_READ_ONLY_PROFILE_VERSION,
+        NODE_BUILD_OUTPUT_PROFILE_VERSION,
+        PYTHON_EVAL_READ_ONLY_PROFILE_VERSION,
+        NODE_EVAL_READ_ONLY_PROFILE_VERSION,
+    }
+)
 PYTEST_RESTRICTED_REASON_CODE = "pytest_restricted_profile_required"
 PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE = "pytest_restricted_sandbox_unavailable"
 PYTEST_INVALID_COMMAND_REASON_CODE = "pytest_restricted_invalid_command"
@@ -34,6 +54,7 @@ _PROJECT_WORKSPACE_MARKERS = (
     "setup.cfg",
     "setup.py",
     "tox.ini",
+    "package.json",
 )
 _SENSITIVE_HOME_ROOT_NAMES = frozenset(
     {
@@ -219,6 +240,8 @@ class RestrictedPytestPlan:
     executable: Path
     allowed_executables: tuple[Path, ...]
     denied_capabilities: tuple[str, ...]
+    read_only_roots: tuple[Path, ...] = ()
+    output_roots: tuple[Path, ...] = ()
 
     def to_evidence(self) -> dict[str, object]:
         return {
@@ -232,5 +255,9 @@ class RestrictedPytestPlan:
             "denied_capabilities": list(self.denied_capabilities),
             "network": "denied",
             "host_home": "unmounted-or-denied",
-            "writes": ["workspace", "private-temporary-directory"],
+            "writes": (
+                ["private-temporary-directory", *(str(path) for path in self.output_roots)]
+                if self.profile_version in READ_ONLY_TEST_PROFILES
+                else ["workspace", "private-temporary-directory"]
+            ),
         }

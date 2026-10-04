@@ -335,12 +335,15 @@ fn restarted_resident_applies_installed_policy_without_request_time_io() {
             home_dir: "/home/test".into(),
             guard_home: root.to_string_lossy().into_owned(),
             source_ref_external_allowed: false,
+            execution_environment: None,
         },
     };
     let result = crate::edge::evaluate_envelope_with_store(envelope, &restarted).unwrap();
     let result: GuardHookEdgeResultV2 = serde_json::from_slice(&result).unwrap();
     assert_eq!(result.result["minimum_action"], "block");
     assert_eq!(result.result["authority"], "rust");
+    assert!(result.receipt.origin_authentication.is_some());
+    crate::policy_store::native_review_origin::verify(&restarted, &result.receipt).unwrap();
     fs::remove_dir_all(root).unwrap();
 }
 
@@ -373,6 +376,7 @@ fn authenticated_edge_preserves_clean_default_warning() {
             home_dir: "/home/test".into(),
             guard_home: root.to_string_lossy().into_owned(),
             source_ref_external_allowed: false,
+            execution_environment: None,
         },
     };
     let result = crate::edge::evaluate_envelope_with_store(envelope, &store).unwrap();
@@ -416,6 +420,7 @@ fn authenticated_observe_edge_preserves_intrinsic_pretool_floor() {
             home_dir: "/home/test".into(),
             guard_home: root.to_string_lossy().into_owned(),
             source_ref_external_allowed: false,
+            execution_environment: None,
         },
     };
     let result = crate::edge::evaluate_envelope_with_store(envelope, &store).unwrap();

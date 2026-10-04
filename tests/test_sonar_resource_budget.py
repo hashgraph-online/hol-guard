@@ -7,12 +7,14 @@ from pathlib import Path
 
 import yaml
 
+from tests.support.ci_workflow import expand_ci_job_actions
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_sonar_analysis_uses_bounded_resources_only_in_its_dedicated_job() -> None:
     """Use all four public-runner CPUs without changing the runner cost or scan scope."""
-    workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
+    workflow = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")))
     job = workflow["jobs"]["sonar"]
     scan = next(step for step in job["steps"] if step.get("name") == "Analyze with SonarQube Cloud")
 
@@ -28,7 +30,7 @@ def test_sonar_analysis_uses_bounded_resources_only_in_its_dedicated_job() -> No
 
 def test_resource_tuning_keeps_current_attempt_coverage_and_quality_gate() -> None:
     """The tuned scanner still follows complete coverage and precedes a blocking gate."""
-    workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
+    workflow = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")))
     job = workflow["jobs"]["sonar"]
     steps = job["steps"]
     names = [step.get("name", "") for step in steps]
@@ -42,7 +44,7 @@ def test_resource_tuning_keeps_current_attempt_coverage_and_quality_gate() -> No
     indices = [names.index(name) for name in ordered]
     assert indices == sorted(indices)
     download = steps[indices[1]]
-    assert download["with"]["pattern"] == "pytest-coverage-${{ github.run_attempt }}-*"
+    assert download["with"]["artifact-ids"] == "${{ steps.coverage-selection.outputs.artifact-ids }}"
     for index in indices:
         assert not steps[index].get("continue-on-error", False)
         assert steps[index]["if"] == "steps.token-presence.outputs.has-token == 'true'"

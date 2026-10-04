@@ -147,7 +147,9 @@ def _resolve_copilot_tool(
     return resolved
 
 
-def test_copilot_mcp_exact_allow_is_invalid_after_server_executable_bytes_change(tmp_path: Path) -> None:
+def test_copilot_mcp_exact_allow_is_invalid_after_server_executable_bytes_change(
+    tmp_path: Path, native_context_digest: Path
+) -> None:
     home_dir = tmp_path / "home"
     workspace = tmp_path / "workspace"
     workspace.mkdir()
@@ -233,6 +235,7 @@ def test_copilot_mcp_exact_allow_is_invalid_after_server_executable_bytes_change
 
 def test_copilot_mcp_exact_allow_is_invalid_after_only_python_entrypoint_bytes_change(
     tmp_path: Path,
+    native_context_digest: Path,
 ) -> None:
     home_dir = tmp_path / "home"
     workspace = tmp_path / "workspace"
@@ -328,6 +331,7 @@ def test_copilot_mcp_exact_allow_is_invalid_after_only_python_entrypoint_bytes_c
 def test_copilot_mcp_server_and_tool_configuration_changes_invalidate_identity(
     tmp_path: Path,
     change: str,
+    native_context_digest: Path,
 ) -> None:
     home_dir = tmp_path / "home"
     workspace = tmp_path / "workspace"

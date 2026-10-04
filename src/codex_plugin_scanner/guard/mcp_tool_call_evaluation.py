@@ -160,6 +160,12 @@ def _evaluate_tool_call(
         saved_action,
         saved_decision_present=True,
         validation_reason=validation_reason,
+        fresh_local_approval=(
+            validation_reason is None
+            and saved_decision is not None
+            and store.approval_reuse_claim_disposition(saved_decision) == "consumed"
+            and calls.fresh_local_tool_approval_matches(saved_decision, artifact=artifact, artifact_hash=artifact_hash)
+        ),
     )
     pending_decision: Mapping[str, object] | None = None
     claim_disposition: ApprovalReuseClaimDisposition | None = None

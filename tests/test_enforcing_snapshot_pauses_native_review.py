@@ -42,7 +42,7 @@ def test_protected_config_still_pauses_under_enforcing_snapshot(
     worker, store = _worker(tmp_path, monkeypatch, edge)
     guard_home = tmp_path / "guard-home"
     (guard_home / "config.toml").write_text(
-        'mode = "enforce"\nprotection_posture = "protected"\n',
+        'mode = "enforce"\nprotection_posture = "protected"\nblocked_request_mode = "ask"\n',
         encoding="utf-8",
     )
     monkeypatch.setattr(worker, "_native_policy_snapshot", lambda *_args, **_kwargs: {"mode": "enforce"})
@@ -72,7 +72,7 @@ def test_watch_config_still_pauses_while_acknowledged_snapshot_enforces(
     worker, store = _worker(tmp_path, monkeypatch, edge)
     guard_home = tmp_path / "guard-home"
     (guard_home / "config.toml").write_text(
-        'mode = "observe"\nprotection_posture = "watch"\n',
+        'mode = "observe"\nprotection_posture = "watch"\nblocked_request_mode = "ask"\n',
         encoding="utf-8",
     )
     monkeypatch.setattr(worker, "_native_policy_snapshot", lambda *_args, **_kwargs: {"mode": "enforce"})
