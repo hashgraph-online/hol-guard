@@ -24,6 +24,31 @@ pub(super) fn safe_file_predicate_arguments(
         )
 }
 
+pub(super) fn safe_find_listing_arguments(
+    arguments: &[String],
+    context: super::PathContext<'_>,
+) -> bool {
+    let arguments = arguments
+        .strip_prefix(&["-P".to_owned()])
+        .unwrap_or(arguments);
+    let (target, valid) = match arguments {
+        [target, kind, file] => (target, kind == "-type" && file == "f"),
+        [target, depth_option, depth, kind, file] => (
+            target,
+            depth_option == "-maxdepth"
+                && depth.bytes().all(|byte| byte.is_ascii_digit())
+                && depth.parse::<u8>().is_ok_and(|value| value <= 32)
+                && kind == "-type"
+                && file == "f",
+        ),
+        _ => return false,
+    };
+    valid
+        && verified_path_context(context.home_dir, context.cwd)
+        && !target.starts_with('-')
+        && bounded_read_target(target, context.home_dir, context.cwd, true)
+}
+
 pub(super) fn safe_sleep_arguments(arguments: &[String]) -> bool {
     const MAX_SAFE_SLEEP_SECONDS: f64 = 60.0;
 

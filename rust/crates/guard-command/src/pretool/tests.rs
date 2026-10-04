@@ -10,6 +10,46 @@ fn request(command: &str) -> CommandModelRequestV1 {
 }
 
 #[test]
+fn bounded_find_listings_do_not_admit_actions_or_sensitive_targets() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .canonicalize()
+        .unwrap();
+    let root = root.to_str().unwrap();
+    for command in [
+        "find src -type f",
+        "find -P src -maxdepth 3 -type f",
+        "find src -type f | head -5",
+    ] {
+        let decision =
+            evaluate_pre_tool_with_context(&request(command), Some(root), Some(root)).unwrap();
+        assert_eq!(decision.minimum_action, "allow", "{command}");
+    }
+    for command in [
+        "find .env -type f",
+        "find ~/.ssh -type f",
+        "find -L src -type f",
+        "find src -type f -delete",
+        "find src -type f -exec sh {} ;",
+        "find src -type f -fprint output.txt",
+        "find src .env -type f",
+        "find src -maxdepth 999 -type f",
+        "find src -type f && cat .env",
+    ] {
+        let decision = evaluate_pre_tool_with_context(&request(command), Some(root), Some(root));
+        assert!(
+            decision.is_err() || decision.unwrap().minimum_action != "allow",
+            "{command}"
+        );
+    }
+    assert_ne!(
+        evaluate_pre_tool(&request("find src -type f"))
+            .unwrap()
+            .minimum_action,
+        "allow"
+    );
+}
+
+#[test]
 fn bounded_file_predicates_preserve_compound_path_and_command_risks() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .canonicalize()
