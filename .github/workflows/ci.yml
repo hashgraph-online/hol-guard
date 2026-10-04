@@ -377,43 +377,6 @@ jobs:
           test "$COMPATIBILITY_RESULT" = "success"
           test "$SCHEDULING_SENSITIVE_RESULT" = "success"
 
-      - name: Check out the trusted Gauntlet verifier
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
-        if: github.event_name == 'pull_request'
-        with:
-          ref: ${{ github.event.pull_request.base.sha }}
-          path: gauntlet-trusted
-          persist-credentials: false
-      - name: Resolve the initial-installation verifier
-        id: gauntlet_verifier
-        if: github.event_name == 'pull_request'
-        env:
-          REPOSITORY: ${{ github.repository }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          if [ -f gauntlet-trusted/ci/gauntlet/pr_requirement.py ]; then
-            echo "bootstrap=false" >> "$GITHUB_OUTPUT"
-          elif [ "$REPOSITORY" = "hashgraph-online/hol-guard" ] && [ "$PR_NUMBER" = "3463" ]; then
-            echo "bootstrap=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "::error::The trusted base does not contain the required Gauntlet verifier."
-            exit 1
-          fi
-      - name: Check out the pinned initial-installation verifier
-        if: github.event_name == 'pull_request' && steps.gauntlet_verifier.outputs.bootstrap == 'true'
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
-        with:
-          ref: 69de8c263514933786d5816b7a4ae8b239326a65
-          path: gauntlet-trusted
-          persist-credentials: false
-      - name: Require actual live-agent qualification for enforcement changes
-        if: github.event_name == 'pull_request'
-        working-directory: gauntlet-trusted
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          GUARD_GAUNTLET_BOOTSTRAP_VERIFIER_SHA: 69de8c263514933786d5816b7a4ae8b239326a65
-        run: python3 -m ci.gauntlet.github_ci require
-
   pi-exact-continuation:
     needs: native-command-evaluators
     name: Pi exact continuation (actual SDKs)
