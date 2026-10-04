@@ -1266,9 +1266,12 @@ def _load_authenticated_daemon_identity(guard_home: Path) -> tuple[dict[str, obj
         return None
     auth_token = load_guard_daemon_auth_token(guard_home)
     expected_token_id = payload.get("auth_token_id")
+    state_id = payload.get("state_id")
     if (
         auth_token is None
         or not isinstance(expected_token_id, str)
+        or not isinstance(state_id, str)
+        or not state_id
         or not secrets.compare_digest(
             hashlib.sha256(auth_token.encode("utf-8")).hexdigest(),
             expected_token_id,
