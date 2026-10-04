@@ -15,6 +15,11 @@ from pathlib import Path
 from types import FrameType
 from typing import BinaryIO, TextIO
 
+from .restricted_credential_patterns import (
+    _read_only_credential_denials,
+    _read_only_credential_patterns,
+    _seatbelt_string,
+)
 from .restricted_pytest_model import (
     _DEFAULT_CPU_SECONDS,
     _DEFAULT_FILE_BYTES,
@@ -192,77 +197,6 @@ def _macos_profile(plan: RestrictedPytestPlan, *, private_root: Path) -> str:
                 else ()
             ),
         )
-    )
-
-
-def _seatbelt_string(path: Path | str) -> str:
-    value = str(path)
-    escaped = value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r")
-    return f'"{escaped}"'
-
-
-def _read_only_credential_patterns() -> tuple[str, ...]:
-    # Deny rules dominate workspace/runtime read grants, including paths reached
-    # through symlinks. Match case variants consistently with native path policy.
-    def literal(value: str) -> str:
-        return "".join(
-            (
-                f"[{character.lower()}{character.upper()}]"
-                if character.isascii() and character.isalpha()
-                else "\\" + character
-                if character in ".-"
-                else character
-            )
-            for character in value
-        )
-
-    names = (
-        ".envrc",
-        ".authrc",
-        ".npmrc",
-        ".pypirc",
-        ".netrc",
-        ".git-credentials",
-        "terraform.tfvars",
-        "private.key",
-        "wallet.key",
-    )
-    return (
-        f"(^|/){literal('.env')}($|[./])",
-        f"(^|/)[^/]*{literal('.key')}$",
-        f"(^|/){literal('krb5cc_')}[^/]*$",
-        "(^|/)(" + "|".join(literal(name) for name in names) + ")$",
-        "(^|/)[^/]*("
-        + "|".join(
-            literal(name)
-            for name in (
-                "private-key",
-                "private_key",
-                "wallet-key",
-                "wallet_key",
-            )
-        )
-        + ")[^/]*$",
-        "(^|/)("
-        + "|".join(
-            literal(name)
-            for name in (
-                ".ssh",
-                ".aws",
-                ".docker",
-                ".kube",
-                ".gnupg",
-                ".hol-guard",
-            )
-        )
-        + ")(/|$)",
-    )
-
-
-def _read_only_credential_denials(*, hide_metadata: bool = False) -> tuple[str, ...]:
-    operation = "file-read*" if hide_metadata else "file-read-data"
-    return tuple(
-        f"(deny {operation} (regex {_seatbelt_string(pattern)}))" for pattern in _read_only_credential_patterns()
     )
 
 
